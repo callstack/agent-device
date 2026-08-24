@@ -333,6 +333,24 @@ class WebDriverInteractor implements Interactor {
     this.unsupported('settings');
   }
 
+  // The four alert legs share one declared capability: a driver that cannot read a native alert
+  // cannot press its buttons either, and no provider in this family declares either half.
+  async readAlert(): Promise<Record<string, unknown>> {
+    this.unsupported('alert');
+  }
+
+  async awaitAlert(): Promise<Record<string, unknown>> {
+    this.unsupported('alert');
+  }
+
+  async acceptAlert(): Promise<Record<string, unknown>> {
+    this.unsupported('alert');
+  }
+
+  async dismissAlert(): Promise<Record<string, unknown>> {
+    this.unsupported('alert');
+  }
+
   /**
    * The cloud twin of the local Apple runner's focus -> readiness -> type
    * pipeline (RunnerTests+TextEntry.swift). A WebView input does not take first

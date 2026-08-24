@@ -117,6 +117,7 @@ export {
   TEXT_ENTRY_ROUTES,
 } from '../interactor-types.ts';
 export type {
+  AlertInteractorOptions,
   CloudTextEntryReadiness,
   ElementSelectorKey,
   ElementSelectorTapOptions,

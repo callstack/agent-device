@@ -10,7 +10,7 @@ import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts
 import { expireRefFrame } from '../../ref-frame.ts';
 import { setSessionSnapshot, STALE_SNAPSHOT_REFS_WARNING } from '../../session-snapshot.ts';
 import { handleInteractionCommands } from '../interaction.ts';
-import { buildSnapshotState } from '../../snapshot-state.ts';
+import { buildSnapshotState } from '../../../core/snapshot-state.ts';
 import {
   contextFromFlags,
   makeSession,
@@ -25,13 +25,6 @@ import {
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return {
-    ...actual,
-  };
-});
 
 vi.mock('../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../__tests__/legacy-snapshot-capture-fixture.ts');

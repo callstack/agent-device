@@ -19,6 +19,7 @@ import {
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
+import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
@@ -270,6 +271,28 @@ export function limrunClipboardOperationFacts(
   const cell =
     liveSessionUnavailable ?? (device.platform === 'android' ? available : clipboardUnavailableIos);
   return Object.freeze({ ...clipboardRuntimeOperationFacts({ read: cell, write: cell }) });
+}
+
+const alertUnavailableIos = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun iOS direct sessions do not expose alert inspection yet.',
+} as const);
+
+/**
+ * `alert` splits like every other interaction leaf: the Android leg rides the local family's own
+ * interactor factory, which reads the same accessibility dump it always did; the iOS direct
+ * session has no XCUITest runner to read a sheet from, so all four legs refuse together.
+ */
+export function limrunAlertOperationFacts(
+  device: DeviceInfo,
+  liveSessionUnavailable?: RuntimeOperationUnavailability,
+) {
+  const cell =
+    liveSessionUnavailable ?? (device.platform === 'android' ? available : alertUnavailableIos);
+  return Object.freeze({
+    ...alertRuntimeOperationFacts({ read: cell, wait: cell, accept: cell, dismiss: cell }),
+  });
 }
 
 /**

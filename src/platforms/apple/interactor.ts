@@ -11,6 +11,7 @@ import { captureScreenshotViaRunner } from './core/screenshot.ts';
 import { iosRunnerOverrides, resolveAppleBackRunnerCommand } from './interactions.ts';
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
 import { runMacOsScreenshotAction } from './os/macos/helper.ts';
+import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from './alert.ts';
 import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
 import { queryAppleRunnerSelector } from './core/runner/runner-selector-query.ts';
 import {
@@ -194,6 +195,10 @@ export function createAppleInteractor(
     writeClipboard: (text) => writeIosClipboardText(device, text),
     setSetting: (setting, state, appId, options) =>
       setIosSetting(device, setting, state, appId, options),
+    readAlert: (options) => readAppleAlert(device, runnerOpts, options),
+    awaitAlert: (options) => awaitAppleAlert(device, runnerOpts, options),
+    acceptAlert: (options) => actOnAppleAlert(device, runnerOpts, 'accept', options),
+    dismissAlert: (options) => actOnAppleAlert(device, runnerOpts, 'dismiss', options),
     ...overrides,
   };
   if (!runnerProvider) return interactor;

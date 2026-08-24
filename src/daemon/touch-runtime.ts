@@ -25,12 +25,16 @@ import { requireIntInRange } from '../utils/validation.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { DirectIosSelectorTarget } from './direct-ios-selector.ts';
 import type { DaemonFailureResponse } from './handlers/response.ts';
-import { admitRuntimeOperations, type RuntimeAdmissionBindings } from './runtime-admission.ts';
+import {
+  admitRuntimeOperations,
+  type RuntimeAdmissionBindings,
+  type UnavailableRuntimeResponse,
+} from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
 
 export type TouchRuntimeCommand = 'click' | 'press' | 'fill' | 'longpress' | 'hover';
 
-type BoundTouchRuntime =
+export type BoundTouchRuntime =
   | Readonly<{ kind: 'tap'; captured: false; runtime: BoundDeviceRuntime<typeof tapPointUse> }>
   | Readonly<{ kind: 'tap'; captured: true; runtime: BoundDeviceRuntime<typeof capturedTapUse> }>
   | Readonly<{
@@ -71,6 +75,8 @@ export async function resolveBoundTouchRuntime(
     device: DeviceInfo;
     command: TouchRuntimeCommand;
     requiresCapture: boolean;
+    /** A caller whose command is not the touch leaf itself supplies its own refusal wording. */
+    unavailableResponse?: UnavailableRuntimeResponse;
   } & RuntimeAdmissionBindings,
 ): Promise<ResolvedTouchRuntime> {
   const shared = {
@@ -82,6 +88,7 @@ export async function resolveBoundTouchRuntime(
   const admission = await admitRuntimeOperations({
     command: params.command,
     required: plan.use.required,
+    ...(params.unavailableResponse ? { unavailableResponse: params.unavailableResponse } : {}),
     ...shared,
   });
   if (admission.type === 'response') return { ok: false, response: admission.response };

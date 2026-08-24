@@ -48,6 +48,7 @@ import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime'
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
+import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
@@ -408,6 +409,12 @@ function webRuntimeFacts(
       ...appSwitcherRuntimeOperationFacts({ appSwitcher: navigationUnavailable }),
       ...appEventRuntimeOperationFacts({ triggerAppEvent: navigationUnavailable }),
       ...settingsRuntimeOperationFacts({ setSetting: navigationUnavailable }),
+      ...alertRuntimeOperationFacts({
+        read: navigationUnavailable,
+        wait: navigationUnavailable,
+        accept: navigationUnavailable,
+        dismiss: navigationUnavailable,
+      }),
       ensureReady: readinessUnavailable,
       bootTarget: readinessUnavailable,
       bootTargetHeadless: readinessUnavailable,

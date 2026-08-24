@@ -11,7 +11,7 @@ import type { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import { getRuntimeBindings } from './interaction-get-runtime-fixture.ts';
-import { buildSnapshotState } from '../../snapshot-state.ts';
+import { buildSnapshotState } from '../../../core/snapshot-state.ts';
 
 /**
  * Shared factories for the interaction touch handler tests. Named pure

@@ -30,8 +30,9 @@ import { retiredDispatchProjectionViolations } from './runtime-command-cutover-d
  * leaves follow: back at R42, home at R43, orientation at R44, tv-remote at R45, and the
  * action-selected keyboard at R46.
  * The gesture cluster follows the touch leaves: gesture at R52, scroll at R53, swipe at R54.
- * Wave 6 closure starts at R55 clipboard, then R56 app-switcher, R57 trigger-app-event, and
- * R58 settings — the arm that retires the legacy dispatcher itself.
+ * Wave 6 closure starts at R55 clipboard, then R56 app-switcher, R57 trigger-app-event,
+ * R58 settings — the arm that retires the legacy dispatcher itself — R59 alert and
+ * R61 react-native.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -1195,7 +1196,84 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
     },
     extensions: [settingsRetiredDispatchProjectionProof],
   },
+  {
+    rule: 'R59 alert-runtime-cutover',
+    command: 'alert',
+    subject: 'native alert handling',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // `alert` never had a dispatch-table arm: its daemon route called the Apple runner, the
+      // macOS helper and the Android alert module directly, and owned their poll and retry
+      // windows itself. Those four names are what R59 retires, and with the Apple closure gone
+      // the per-AppleOS capability table lost its last reader and went too.
+      routeNames: [
+        'handleNativeAlertCommand',
+        'waitForNativeAlert',
+        'handleNativeAlertAction',
+        'supportsAlertSurface',
+      ],
+      modulePaths: ['src/platforms/apple/capabilities.ts'],
+    },
+    admissionMember: {
+      forms: ['computed-property'],
+      files: ['src/platforms/apple/plugin.ts'],
+      message: 'Apple plugin retains a legacy alert support or hint closure',
+    },
+    runtimeTypeNames: ['AlertRuntimeOperations'],
+    operations: { names: ['readAlert', 'awaitAlert', 'acceptAlert', 'dismissAlert'] },
+    singularExecution: {
+      // Action-selected (R35's lesson): the snapshot route resolves exactly one of the four legs
+      // per request, binds once, and never two together.
+      routes: ['resolveBoundAlertRuntime'],
+      operations: ['readAlert', 'awaitAlert', 'acceptAlert', 'dismissAlert'],
+      operationOwners: {
+        readAlert: ['executeReadAlert'],
+        awaitAlert: ['executeAwaitAlert'],
+        acceptAlert: ['executeAcceptAlert'],
+        dismissAlert: ['executeDismissAlert'],
+      },
+    },
+    extensions: [alertRetiredDispatchProjectionProof],
+  },
+  {
+    rule: 'R61 react-native-runtime-cutover',
+    command: 'react-native',
+    subject: 'React Native overlay dismissal',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The command's device work moved onto a bound `tapPoint` with R48; what R61 retires is the
+      // capability gate that still stood in front of it (proved by this table's own admission
+      // check) and the resolve-then-execute shape that gate implied. The dismissal function was
+      // renamed to `executeReactNativeOverlayDismiss` to record that: it no longer resolves
+      // anything, so the old name is genuinely absent rather than shadowed by a namesake.
+      routeNames: ['dismissReactNativeOverlayTarget'],
+    },
+    runtimeTypeNames: ['BoundTouchRuntime'],
+    operations: { names: ['tapPoint'] },
+    singularExecution: {
+      // Admission happens once, before the observing capture; the dismissal reuses that binding
+      // rather than admitting a second time after the overlay is known.
+      routes: ['executeReactNativeOverlayDismiss'],
+      operations: ['tapPoint'],
+      operationOwners: { tapPoint: ['createTapTouchExecutor'] },
+    },
+    extensions: [reactNativeRetiredDispatchProjectionProof],
+  },
 ];
+
+function reactNativeRetiredDispatchProjectionProof(
+  sources: ReadonlyMap<string, string>,
+): UnruledViolation[] {
+  return retiredDispatchProjectionViolations(sources, 'react-native');
+}
+
+function alertRetiredDispatchProjectionProof(
+  sources: ReadonlyMap<string, string>,
+): UnruledViolation[] {
+  return retiredDispatchProjectionViolations(sources, 'alert');
+}
 
 function settingsRetiredDispatchProjectionProof(
   sources: ReadonlyMap<string, string>,

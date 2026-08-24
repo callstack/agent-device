@@ -5,7 +5,7 @@ import { handleInteractionCommands } from '../interaction.ts';
 import type { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
 import type { SnapshotBackend } from '@agent-device/kernel/snapshot';
-import { buildSnapshotState } from '../../snapshot-state.ts';
+import { buildSnapshotState } from '../../../core/snapshot-state.ts';
 import { setSessionSnapshot } from '../../session-snapshot.ts';
 import { activateCompleteRefFrame } from '../../ref-frame.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
@@ -25,13 +25,6 @@ import {
 // diff-carrying settle response is ref-issuing (activates a partial frame).
 // Quiet windows are tuned down (--settle-quiet 25) so no test waits real time
 // beyond a few poll ticks.
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return {
-    ...actual,
-  };
-});
 
 vi.mock('../interaction-snapshot.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../interaction-snapshot.ts')>();

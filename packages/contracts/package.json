@@ -15,6 +15,10 @@
       "types": "./src/alert-contract.ts",
       "default": "./src/alert-contract.ts"
     },
+    "./alert-runtime": {
+      "types": "./src/alert-runtime.ts",
+      "default": "./src/alert-runtime.ts"
+    },
     "./android-input-ownership": {
       "types": "./src/android-input-ownership.ts",
       "default": "./src/android-input-ownership.ts"

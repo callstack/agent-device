@@ -206,6 +206,14 @@ test.each([
       hint: 'settings is not supported on Vega OS.',
     });
     expect(binding.operations.setSetting).toBeUndefined();
+    for (const operation of ['readAlert', 'awaitAlert', 'acceptAlert', 'dismissAlert'] as const) {
+      expect(binding.facts.operations[operation]).toMatchObject({
+        available: false,
+        reason: 'unsupported-platform-leaf',
+        hint: 'alert is not supported on Vega OS.',
+      });
+      expect(binding.operations[operation]).toBeUndefined();
+    }
     expectLifecycleFacts(binding, legacy);
   },
 );

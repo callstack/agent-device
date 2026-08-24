@@ -185,6 +185,12 @@ async function runReactNativeHandler(
       logPath: params.logPath,
       sessionStore: params.sessionStore,
       contextFromFlags: params.contextFromFlags,
+      // R61: overlay dismissal admits and binds the owner's own `tapPoint`. The chain has never
+      // passed these through, so the dismissal leg has been reaching a missing gateway ever since
+      // R48 moved it off the retired dispatcher — the provider scenario only ever exercised the
+      // no-overlay-detected path, which returned before the bind.
+      inspectFacts: params.inspectFacts,
+      bindDevice: params.bindDevice,
     }),
   );
 }

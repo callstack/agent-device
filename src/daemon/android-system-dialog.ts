@@ -12,7 +12,7 @@ import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { centerOfRect, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { sleep } from '../utils/timeouts.ts';
-import { buildSnapshotState } from './snapshot-state.ts';
+import { buildSnapshotState } from '../core/snapshot-state.ts';
 import { isSnapshotNodeInteractionBlocked } from '../snapshot/snapshot-occlusion.ts';
 import { expireRefFrame } from './ref-frame.ts';
 import type { SessionState } from './types.ts';

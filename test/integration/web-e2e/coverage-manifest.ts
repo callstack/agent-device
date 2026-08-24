@@ -140,7 +140,7 @@ export const WEB_PLATFORM_COVERAGE = {
   ),
   [C.clipboard]: contract(
     'packages/platform-web/src/runtime.test.ts',
-    'clipboard, the app switcher, app events and settings carry no web capability bucket',
+    'clipboard, the app switcher, app events, settings and alerts carry no web bucket',
     'the exact-owner runtime fact rejects native clipboard operations on the web target',
   ),
   [C.keyboard]: contract(
@@ -165,7 +165,7 @@ export const WEB_PLATFORM_COVERAGE = {
   ),
   [C.triggerAppEvent]: contract(
     'packages/platform-web/src/runtime.test.ts',
-    'clipboard, the app switcher, app events and settings carry no web capability bucket',
+    'clipboard, the app switcher, app events, settings and alerts carry no web bucket',
     'the exact-owner runtime fact rejects native app-event delivery on the web target',
   ),
   [C.open]: live('the managed browser opens the local fixture page'),
@@ -187,13 +187,23 @@ export const WEB_PLATFORM_COVERAGE = {
     'web diff shares the browser-admitted snapshot capture that backs the live snapshot command',
   ),
   [C.wait]: live('wait observes ready text and post-interaction fixture state'),
-  [C.alert]: denial('Web capability model rejects native alert operations'),
+  [C.alert]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'clipboard, the app switcher, app events, settings and alerts carry no web bucket',
+    'the exact-owner runtime fact rejects native alert handling on the web target',
+  ),
   [C.settings]: contract(
     'packages/platform-web/src/runtime.test.ts',
-    'clipboard, the app switcher, app events and settings carry no web capability bucket',
+    'clipboard, the app switcher, app events, settings and alerts carry no web bucket',
     'the exact-owner runtime fact rejects native device settings on the web target',
   ),
-  [C.reactNative]: denial('Web capability model rejects React Native inspection'),
+  // R61: no owner fact refuses this command on a browser — its whole device work is one bound
+  // `tapPoint` the web target admits — so it now runs and reports that no overlay is present.
+  [C.reactNative]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'press shares the admitted tapPoint fact that live click, press and react-native require',
+    'React Native overlay dismissal binds the same browser tap the live click command does',
+  ),
   [C.record]: contract(
     'test/integration/provider-scenarios/web-desktop.test.ts',
     'start web recording',
@@ -219,7 +229,7 @@ export const WEB_PLATFORM_COVERAGE = {
   ),
   [C.press]: contract(
     'packages/platform-web/src/runtime.test.ts',
-    'press shares the admitted tapPoint fact that live click and press both require',
+    'press shares the admitted tapPoint fact that live click, press and react-native require',
     'web press shares the browser-admitted tap operation that backs the live click command',
   ),
   [C.type]: contract(
@@ -275,7 +285,7 @@ export const WEB_PLATFORM_COVERAGE = {
   [C.viewport]: live('viewport resizes the browser and the PNG reports 640x480 dimensions'),
   [C.appSwitcher]: contract(
     'packages/platform-web/src/runtime.test.ts',
-    'clipboard, the app switcher, app events and settings carry no web capability bucket',
+    'clipboard, the app switcher, app events, settings and alerts carry no web bucket',
     'the exact-owner runtime fact rejects native app-switcher navigation on the web target',
   ),
   [C.installFromSource]: contract(

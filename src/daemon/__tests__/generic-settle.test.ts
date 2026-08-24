@@ -7,20 +7,13 @@ import { activateCompleteRefFrame } from '../ref-frame.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { buildSnapshotState } from '../snapshot-state.ts';
+import { buildSnapshotState } from '../../core/snapshot-state.ts';
 
 // #1638 `--settle` on the GENERIC daemon route (scroll/back): the settled diff,
 // its refs, and the ref-frame/generation dance are the same contract the touch
 // commands get — but the baseline is the session's stored pre-action tree, not
 // a resolution, and the observation must run after the deferred-outcome
 // markers. Quiet windows are tuned down so no test waits real time.
-
-vi.mock('../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
-  return {
-    ...actual,
-  };
-});
 
 vi.mock('../handlers/interaction-snapshot.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../handlers/interaction-snapshot.ts')>();

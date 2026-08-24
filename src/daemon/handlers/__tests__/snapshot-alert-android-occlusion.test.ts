@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 
 vi.mock('../../../platforms/android/snapshot.ts', () => ({ snapshotAndroid: vi.fn() }));
@@ -10,11 +9,15 @@ vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) =>
 
 import { snapshotAndroid } from '../../../platforms/android/snapshot.ts';
 import { pressAndroid } from '../../../platforms/android/input-actions.ts';
-import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
-import { SessionStore } from '../../session-store.ts';
-import { handleAlertCommand } from '../snapshot-alert.ts';
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { createAndroidInteractor } from '../../../core/interactors/android.ts';
 import { makeAndroidSnapshotCapture } from '../../../__tests__/test-utils/android-snapshot-capture.ts';
-import type { DaemonRequest } from '../../types.ts';
+
+// R59 moved the alert legs onto the Android interactor, which is where the occlusion reading
+// they depend on lives: the legs capture through the same presentation pass `snapshot` publishes,
+// and only a presented tree annotates a candidate as covered. The daemon route above them now
+// only admits and forwards, so this suite drives the owner directly.
+const alertLegs = () => createAndroidInteractor(ANDROID_EMULATOR);
 
 afterEach(() => {
   vi.useRealTimers();
@@ -25,9 +28,9 @@ afterEach(() => {
 test('Android alert get does not choose an exactly covered candidate', async () => {
   vi.mocked(snapshotAndroid).mockResolvedValue(coveredAlertCapture() as never);
 
-  const response = await handleAlertCommand(alertParams('get'));
+  const result = await alertLegs().readAlert();
 
-  expect(response).toMatchObject({ ok: true, data: { action: 'get', alert: null } });
+  expect(result).toMatchObject({ action: 'get', alert: null });
   expect(pressAndroid).not.toHaveBeenCalled();
 });
 
@@ -35,11 +38,12 @@ test('Android alert accept does not tap an exactly covered candidate', async () 
   vi.useFakeTimers();
   vi.mocked(snapshotAndroid).mockResolvedValue(coveredAlertCapture() as never);
 
-  const response = handleAlertCommand(alertParams('accept'));
-  const outcome = response.then(
-    () => undefined,
-    (error: unknown) => error,
-  );
+  const outcome = alertLegs()
+    .acceptAlert()
+    .then(
+      () => undefined,
+      (error: unknown) => error,
+    );
   await vi.advanceTimersByTimeAsync(3_500);
   const error = await outcome;
   expect(error).toBeInstanceOf(Error);
@@ -47,23 +51,6 @@ test('Android alert accept does not tap an exactly covered candidate', async () 
 
   expect(pressAndroid).not.toHaveBeenCalled();
 });
-
-function alertParams(action: 'get' | 'accept') {
-  const session = makeAndroidSession(`covered-alert-${action}`);
-  const sessionStore = new SessionStore(path.join('/tmp', `covered-alert-${action}`));
-  return {
-    req: {
-      token: 'test-token',
-      session: session.name,
-      command: 'alert',
-      positionals: [action],
-    } satisfies DaemonRequest,
-    logPath: path.join('/tmp', `covered-alert-${action}.log`),
-    sessionStore,
-    session,
-    device: session.device,
-  };
-}
 
 function coveredAlertCapture() {
   const nodes = [

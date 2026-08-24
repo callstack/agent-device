@@ -347,4 +347,25 @@ export type Interactor = {
     appId?: string,
     options?: SettingOptions,
   ): Promise<Record<string, unknown> | void>;
+  /**
+   * The four alert legs. Each owner runs its own observation and, where it needs one, its own
+   * poll: an alert is a transient device surface, and how long to look for it — and how to press
+   * its buttons — is family mechanics, not something a caller can supply. `timeoutMs` is the
+   * whole window the caller allows; the owner spends it however its backend requires.
+   */
+  readAlert(options?: AlertInteractorOptions): Promise<Record<string, unknown>>;
+  awaitAlert(options?: AlertInteractorOptions): Promise<Record<string, unknown>>;
+  acceptAlert(options?: AlertInteractorOptions): Promise<Record<string, unknown>>;
+  dismissAlert(options?: AlertInteractorOptions): Promise<Record<string, unknown>>;
+};
+
+/**
+ * The session-derived target one alert leg acts on. `appBundleId` is separate from the runner
+ * context's because the macOS helper reads a frontmost-app surface with no bundle at all, and
+ * the two must not collapse into one field that means both.
+ */
+export type AlertInteractorOptions = {
+  timeoutMs?: number;
+  appBundleId?: string;
+  surface?: SessionSurface;
 };

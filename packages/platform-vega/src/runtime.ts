@@ -131,6 +131,10 @@ const keyboardUnavailable = vegaUnavailable(
   'unsupported-platform-leaf',
   'keyboard is not supported on Vega OS.',
 );
+const alertUnavailable = vegaUnavailable(
+  'unsupported-platform-leaf',
+  'alert is not supported on Vega OS.',
+);
 const settingsUnavailable = vegaUnavailable(
   'unsupported-platform-leaf',
   'settings is not supported on Vega OS.',
@@ -188,6 +192,10 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     appSwitcher: appSwitcherUnavailable,
     triggerAppEvent: appEventUnavailable,
     setSetting: settingsUnavailable,
+    readAlert: alertUnavailable,
+    awaitAlert: alertUnavailable,
+    acceptAlert: alertUnavailable,
+    dismissAlert: alertUnavailable,
     keyboardStatus: keyboardUnavailable,
     keyboardDismiss: keyboardUnavailable,
     keyboardEnter: keyboardUnavailable,

@@ -21,7 +21,7 @@ import {
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
 import type { DaemonCommandContext } from './context.ts';
 import { captureSnapshotData } from './handlers/snapshot-capture.ts';
-import { buildSnapshotState } from './snapshot-state.ts';
+import { buildSnapshotState } from '../core/snapshot-state.ts';
 import type {
   RecordedGenericRequest,
   ResolvedGenericExecution,

@@ -49,6 +49,10 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
     appSwitcher: { available: false, reason: 'unsupported-provider-mode' },
     triggerAppEvent: { available: false, reason: 'unsupported-provider-mode' },
     setSetting: { available: false, reason: 'unsupported-provider-mode' },
+    readAlert: { available: false, reason: 'unsupported-provider-mode' },
+    awaitAlert: { available: false, reason: 'unsupported-provider-mode' },
+    acceptAlert: { available: false, reason: 'unsupported-provider-mode' },
+    dismissAlert: { available: false, reason: 'unsupported-provider-mode' },
     lifecycle,
   });
 

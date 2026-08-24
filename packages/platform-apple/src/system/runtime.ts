@@ -1,3 +1,4 @@
+import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
@@ -39,7 +40,7 @@ const clipboardLeafUnavailable = Object.freeze({
  * `appleBackFact` takes, and for the same reason: facts are the support authority, not a mirror
  * of a capability table that never modeled interactor constructibility.
  */
-const clipboardOsUnavailable = Object.freeze({
+const appleWatchOsUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
 } as const);
@@ -57,7 +58,7 @@ function appleHostOrSimulatorFact(
 ): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return kindUnavailable;
   const os = resolveDeviceAppleOs(device);
-  if (os === 'watchos') return clipboardOsUnavailable;
+  if (os === 'watchos') return appleWatchOsUnavailable;
   if (device.kind === 'simulator') return available;
   return os === 'macos' ? available : leafUnavailable;
 }
@@ -77,6 +78,31 @@ const appEventKindUnavailable = Object.freeze({
   hint: 'trigger-app-event is supported on Apple simulators and physical devices.',
 } as const);
 
+const alertKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'alert is supported on Apple simulators and physical devices.',
+} as const);
+const alertLeafUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'alert is supported on Apple simulators, the macOS host, and physical iOS devices.',
+} as const);
+
+/**
+ * Parity with the retired `supportsAlertSurface` closure, which was the host-or-simulator reading
+ * widened by one leaf: physical iOS, whose XCTest alert path is device-verified. iPadOS,
+ * tvOS and visionOS devices stay closed exactly as that closure left them — not because the
+ * runner could not reach them, but because nobody has verified it there.
+ */
+function appleAlertFact(device: DeviceInfo): RuntimeOperationFact {
+  if (device.kind !== 'simulator' && device.kind !== 'device') return alertKindUnavailable;
+  const os = resolveDeviceAppleOs(device);
+  if (os === 'watchos') return appleWatchOsUnavailable;
+  if (device.kind === 'simulator' || os === 'ios' || os === 'macos') return available;
+  return alertLeafUnavailable;
+}
+
 /**
  * No apple-family closure ever gated `trigger-app-event` beyond its capability bucket
  * (`{ simulator, device }`): the deep link opens through the same interactor `open` every Apple
@@ -84,14 +110,18 @@ const appEventKindUnavailable = Object.freeze({
  */
 function appleAppEventFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return appEventKindUnavailable;
-  return resolveDeviceAppleOs(device) === 'watchos' ? clipboardOsUnavailable : available;
+  return resolveDeviceAppleOs(device) === 'watchos' ? appleWatchOsUnavailable : available;
 }
 
-/** The system-surface cells: clipboard read/write, app-event delivery, and settings. */
+/** The system-surface cells: clipboard read/write, app-event delivery, settings, and alerts. */
 export function appleSystemFacts(device: DeviceInfo) {
   const clipboard = appleClipboardFact(device);
+  // The four alert legs share one cell: an Apple leaf whose backend can read an alert can also
+  // press its buttons, so splitting them would invent a cell no Apple owner is ever in.
+  const alert = appleAlertFact(device);
   return Object.freeze({
     ...clipboardRuntimeOperationFacts({ read: clipboard, write: clipboard }),
+    ...alertRuntimeOperationFacts({ read: alert, wait: alert, accept: alert, dismiss: alert }),
     ...appEventRuntimeOperationFacts({ triggerAppEvent: appleAppEventFact(device) }),
     ...settingsRuntimeOperationFacts({
       setSetting: appleHostOrSimulatorFact(

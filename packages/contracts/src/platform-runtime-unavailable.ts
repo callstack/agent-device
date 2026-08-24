@@ -28,6 +28,7 @@ import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
 import { appSwitcherRuntimeOperationFacts } from './app-switcher-runtime.ts';
 import { appEventRuntimeOperationFacts } from './app-event-runtime.ts';
 import { settingsRuntimeOperationFacts } from './settings-runtime.ts';
+import { alertRuntimeOperationFacts } from './alert-runtime.ts';
 import { touchRuntimeOperationFacts } from './touch-runtime.ts';
 
 /**
@@ -62,6 +63,10 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   appSwitcher: RuntimeOperationUnavailability;
   triggerAppEvent: RuntimeOperationUnavailability;
   setSetting: RuntimeOperationUnavailability;
+  readAlert: RuntimeOperationUnavailability;
+  awaitAlert: RuntimeOperationUnavailability;
+  acceptAlert: RuntimeOperationUnavailability;
+  dismissAlert: RuntimeOperationUnavailability;
   readiness?: RuntimeOperationUnavailability;
   shutdown?: RuntimeOperationUnavailability;
   lifecycle: ApplicationLifecycleOperationFacts;
@@ -123,6 +128,10 @@ export function createUnavailablePlatformRuntimeFacts(
     appSwitcher,
     triggerAppEvent,
     setSetting,
+    readAlert,
+    awaitAlert,
+    acceptAlert,
+    dismissAlert,
     readiness,
     shutdown,
     lifecycle,
@@ -196,6 +205,12 @@ export function createUnavailablePlatformRuntimeFacts(
       ...appSwitcherRuntimeOperationFacts({ appSwitcher }),
       ...appEventRuntimeOperationFacts({ triggerAppEvent }),
       ...settingsRuntimeOperationFacts({ setSetting }),
+      ...alertRuntimeOperationFacts({
+        read: readAlert,
+        wait: awaitAlert,
+        accept: acceptAlert,
+        dismiss: dismissAlert,
+      }),
       ensureReady: readiness,
       bootTarget: readiness,
       bootTargetHeadless: readiness,
@@ -257,6 +272,10 @@ function freezeUnavailableFacts(
     // Device settings differ by leaf and kind the way the pasteboard does, and a provider can
     // own a device without exposing any settings API at all, so each owner states its own cell.
     setSetting: Object.freeze({ ...unavailable.setSetting }),
+    readAlert: Object.freeze({ ...unavailable.readAlert }),
+    awaitAlert: Object.freeze({ ...unavailable.awaitAlert }),
+    acceptAlert: Object.freeze({ ...unavailable.acceptAlert }),
+    dismissAlert: Object.freeze({ ...unavailable.dismissAlert }),
     lifecycle: applicationLifecycleOperationFacts(unavailable.lifecycle),
   });
 }

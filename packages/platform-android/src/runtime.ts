@@ -34,6 +34,7 @@ import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtim
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
@@ -285,6 +286,15 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // Settings run over adb (`appops`, `settings put`, `pm clear`, …) on every real kind, so
         // the cell is the retired `ANDROID_ALL` bucket verbatim.
         ...settingsRuntimeOperationFacts({ setSetting: androidTouchFact(device) }),
+        // R59: Android reads alerts out of the same accessibility dump every interaction cell
+        // depends on and presses their buttons with the same `input tap`, so all four legs take
+        // that cell — the retired `ANDROID_ALL` bucket verbatim.
+        ...alertRuntimeOperationFacts({
+          read: androidTouchFact(device),
+          wait: androidTouchFact(device),
+          accept: androidTouchFact(device),
+          dismiss: androidTouchFact(device),
+        }),
         ...orientationRuntimeOperationFacts({ orientation: androidTouchFact(device) }),
         ...tvRemoteRuntimeOperationFacts({ tvRemote: androidTvRemoteFact(device) }),
         // The only owner with a live IME status read; dismiss/enter share every other

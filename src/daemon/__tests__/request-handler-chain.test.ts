@@ -20,6 +20,7 @@ import {
 import {
   unavailableBindDevice,
   unavailableBindExactDevice,
+  unavailableDeviceRuntimeGateway,
   unavailableInspectFacts,
 } from './test-device-runtime-gateway.ts';
 import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
@@ -98,6 +99,31 @@ test('request handler chain routes trace commands to the record-trace family', a
 
   assert.equal(response?.ok, true);
   assert.equal(response?.data?.trace, 'started');
+});
+
+// R61 put `react-native dismiss-overlay` behind the owner's own `tapPoint` admission, and the
+// chain had never forwarded the request's runtime bindings to that route — so the dismissal leg
+// had been reaching a missing gateway ever since R48 moved it off the retired dispatcher. Only
+// the no-overlay path returned early enough to hide it, which is why no suite caught it.
+test('request handler chain forwards the request runtime bindings to react-native', async () => {
+  const inspected: string[] = [];
+  const params = makeChainParams(makeRequest('react-native', ['dismiss-overlay']));
+
+  const response = await runRequestHandlerChain({
+    ...params,
+    inspectFacts: async (device) => {
+      inspected.push(device.id);
+      return await unavailableDeviceRuntimeGateway.inspectFacts(device);
+    },
+  });
+
+  // The bindings reached the route, and the owner's refusal — not a missing gateway — is what
+  // came back. A chain that dropped them would answer `runtime-gateway-missing` instead.
+  assert.equal(inspected.length, 1);
+  assert.equal(response?.ok, false);
+  if (response?.ok === false) {
+    assert.match(response.error.message, /react-native dismiss-overlay is not supported/);
+  }
 });
 
 test('request handler chain leaves generic commands for fallback dispatch', async () => {

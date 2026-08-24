@@ -176,15 +176,23 @@ export const LINUX_PLATFORM_COVERAGE = {
     'the command-evidence lane observes a non-empty calculator snapshot mutation',
   ),
   [C.wait]: live('the existing Linux replay waits for an observable calculator landmark'),
-  [C.alert]: denial('alert', 'Linux capability declaration rejects native alert operations'),
+  [C.alert]: contract(
+    LINUX_RUNTIME_EVIDENCE.path,
+    LINUX_RUNTIME_EVIDENCE.test,
+    'the exact-owner runtime fact rejects native alert handling on Linux',
+  ),
   [C.settings]: contract(
     LINUX_RUNTIME_EVIDENCE.path,
     LINUX_RUNTIME_EVIDENCE.test,
     'the exact-owner runtime fact rejects native device settings on Linux',
   ),
-  [C.reactNative]: denial(
-    'react-native',
-    'Linux capability declaration rejects React Native inspection',
+  // R61: no owner fact refuses this command on Linux — its whole device work is one bound
+  // `tapPoint`, the same cell the live click leg uses — so it now runs and reports truthfully
+  // that no React Native overlay is present on a GTK desktop.
+  [C.reactNative]: contract(
+    LINUX_PROVIDER_EVIDENCE.path,
+    LINUX_PROVIDER_EVIDENCE.test,
+    'React Native overlay dismissal binds the same desktop tap the press leg does',
   ),
   [C.record]: gap('No Linux-specific recording command evidence exists yet'),
   [C.trace]: gap('No Linux-specific trace command evidence exists yet'),

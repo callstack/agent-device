@@ -48,6 +48,7 @@ const contracts: WorkspacePackage = {
 const ALL = [kernel, contracts];
 const CONTRACT_EXPORTS = [
   '@agent-device/contracts/alert-contract',
+  '@agent-device/contracts/alert-runtime',
   '@agent-device/contracts/android-input-ownership',
   '@agent-device/contracts/android-snapshot-quality',
   '@agent-device/contracts/android-system-chrome',

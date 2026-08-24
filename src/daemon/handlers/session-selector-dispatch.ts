@@ -15,6 +15,7 @@ import {
   resolveSessionAppBundleIdForTarget,
 } from '../../platform-runtime-open-target.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
+import type { DaemonCommandContext } from '../context.ts';
 
 /**
  * What `runSessionOrSelectorDispatch`'s `prepare` thunk reports: either the early-exit response an
@@ -120,116 +121,100 @@ function requireForegroundIosKeyboardSession(
   );
 }
 
-/**
- * `keyboard`'s migrated `prepare` thunk (ADR 0019 §9): bind whichever action-selected use the
- * parsed action names — admission only, no device I/O yet — and defer the bound runtime's own
- * `execute` as the invocation `runSessionOrSelectorDispatch` runs after expiring the frame.
- * Replaces the resolve-then-record shape `runSessionOrSelectorDispatch` now owns — this only
- * supplies what the generic route's `dispatchCommand` cannot: the bound runtime and the
- * action-specific execution context.
- */
-function keyboardSessionExecute(
-  positionals: string[],
-  inspectFacts: InspectDeviceRuntimeFacts | undefined,
-  bindDevice: BindDeviceRuntime | undefined,
-  req: DaemonRequest,
-  logPath: string,
-): (
-  device: DeviceInfo,
-  session: SessionState | undefined,
-) => Promise<SessionCommandPrepareOutcome> {
-  return async (device, session) => {
-    const bound = await resolveBoundKeyboardRuntime({
-      device,
-      positionals,
-      inspectFacts,
-      bindDevice,
-    });
-    if (!bound.ok) return { ok: false, response: bound.response };
-    const dispatchContext = {
-      ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
-      surface: session?.surface,
-    };
-    return { ok: true, execute: () => bound.execute(dispatchContext) };
-  };
-}
-
-export async function handleKeyboardCommand(params: {
+/** The params every migrated session-route handler takes; identical across the leaves. */
+type SessionRouteHandlerParams = Readonly<{
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
-}): Promise<DaemonResponse> {
+}>;
+
+type SessionRouteRuntimeResolver = (
+  params: Readonly<{
+    device: DeviceInfo;
+    positionals: string[];
+    inspectFacts?: InspectDeviceRuntimeFacts;
+    bindDevice?: BindDeviceRuntime;
+  }>,
+) => Promise<
+  | Readonly<{ ok: false; response: DaemonResponse }>
+  | Readonly<{
+      ok: true;
+      execute: (context: DaemonCommandContext) => Promise<Record<string, unknown> | void>;
+    }>
+>;
+
+/**
+ * The whole shape a migrated session-route leaf needs: admit and bind through the caller's own
+ * resolver, then hand `runSessionOrSelectorDispatch` the bound runtime's `execute` to invoke after
+ * expiring the frame. Only the resolver, the command name and the optional session derivation
+ * differ per leaf, so one entry point here is what keeps `keyboard` and `trigger-app-event` from
+ * drifting into two copies of the same wiring.
+ */
+async function runBoundSessionRoute(
+  params: SessionRouteHandlerParams &
+    Readonly<{
+      command: string;
+      /**
+       * Written as a call at each leaf rather than passed by reference: the resolver call site is
+       * this command's own single-bind evidence (ADR 0019 §9), and the cutover gate reads it
+       * lexically. A bare reference would dedupe the wiring and delete the proof with it.
+       */
+      resolveRuntime: SessionRouteRuntimeResolver;
+      deriveNextSession?: Parameters<typeof runSessionOrSelectorDispatch>[0]['deriveNextSession'];
+    }>,
+): Promise<DaemonResponse> {
   const { req, sessionName, logPath, sessionStore, inspectFacts, bindDevice } = params;
   const positionals = req.positionals ?? [];
-
-  const foregroundGuard = requireForegroundIosKeyboardSession(
-    sessionStore.get(sessionName),
-    positionals[0]?.trim().toLowerCase(),
-    req.flags ?? {},
-  );
-  if (foregroundGuard) return foregroundGuard;
-
   return await runSessionOrSelectorDispatch({
     req,
     sessionName,
     sessionStore,
-    command: PUBLIC_COMMANDS.keyboard,
+    command: params.command,
     positionals,
-    prepare: keyboardSessionExecute(positionals, inspectFacts, bindDevice, req, logPath),
+    ...(params.deriveNextSession ? { deriveNextSession: params.deriveNextSession } : {}),
+    prepare: async (device, session) => {
+      const bound = await params.resolveRuntime({
+        device,
+        positionals,
+        inspectFacts,
+        bindDevice,
+      });
+      if (!bound.ok) return { ok: false, response: bound.response };
+      const dispatchContext = {
+        ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
+        surface: session?.surface,
+      };
+      return { ok: true, execute: () => bound.execute(dispatchContext) };
+    },
   });
 }
 
-/**
- * `trigger-app-event`'s migrated `prepare` thunk (ADR 0019 §9): bind the one use its fact admits —
- * admission only, no device I/O and no argument read yet — and defer the bound runtime's own
- * `execute` as the invocation `runSessionOrSelectorDispatch` runs after expiring the frame.
- */
-function appEventSessionExecute(
-  positionals: string[],
-  inspectFacts: InspectDeviceRuntimeFacts | undefined,
-  bindDevice: BindDeviceRuntime | undefined,
-  req: DaemonRequest,
-  logPath: string,
-): (
-  device: DeviceInfo,
-  session: SessionState | undefined,
-) => Promise<SessionCommandPrepareOutcome> {
-  return async (device, session) => {
-    const bound = await resolveBoundAppEventRuntime({
-      device,
-      positionals,
-      inspectFacts,
-      bindDevice,
-    });
-    if (!bound.ok) return { ok: false, response: bound.response };
-    const dispatchContext = {
-      ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
-      surface: session?.surface,
-    };
-    return { ok: true, execute: () => bound.execute(dispatchContext) };
-  };
+export async function handleKeyboardCommand(
+  params: SessionRouteHandlerParams,
+): Promise<DaemonResponse> {
+  const foregroundGuard = requireForegroundIosKeyboardSession(
+    params.sessionStore.get(params.sessionName),
+    params.req.positionals?.[0]?.trim().toLowerCase(),
+    params.req.flags ?? {},
+  );
+  if (foregroundGuard) return foregroundGuard;
+  return await runBoundSessionRoute({
+    ...params,
+    command: PUBLIC_COMMANDS.keyboard,
+    resolveRuntime: (runtimeParams) => resolveBoundKeyboardRuntime(runtimeParams),
+  });
 }
 
-export async function handleAppEventCommand(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath: string;
-  sessionStore: SessionStore;
-  inspectFacts?: InspectDeviceRuntimeFacts;
-  bindDevice?: BindDeviceRuntime;
-}): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, sessionStore, inspectFacts, bindDevice } = params;
-  const positionals = req.positionals ?? [];
-  return await runSessionOrSelectorDispatch({
-    req,
-    sessionName,
-    sessionStore,
+export async function handleAppEventCommand(
+  params: SessionRouteHandlerParams,
+): Promise<DaemonResponse> {
+  return await runBoundSessionRoute({
+    ...params,
     command: PUBLIC_COMMANDS.triggerAppEvent,
-    positionals,
-    prepare: appEventSessionExecute(positionals, inspectFacts, bindDevice, req, logPath),
+    resolveRuntime: (runtimeParams) => resolveBoundAppEventRuntime(runtimeParams),
     deriveNextSession: async (session, result) => {
       const eventUrl = typeof result?.eventUrl === 'string' ? result.eventUrl : undefined;
       const nextAppBundleId = eventUrl

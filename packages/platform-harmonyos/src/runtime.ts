@@ -25,6 +25,7 @@ import {
 } from '@agent-device/contracts/scroll-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
@@ -283,6 +284,14 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // Parity with the retired `HARMONYOS_SUPPORTED_COMMANDS` overlay, which listed `settings`
         // for both HarmonyOS kinds; the hdc-driven settings surface shares the interaction gate.
         ...settingsRuntimeOperationFacts({ setSetting: harmonyFocusFact(device) }),
+        // R59: the retired `alert` descriptor declared no HarmonyOS leaf and the overlay set
+        // never listed it, so no HarmonyOS cell was ever admitted.
+        ...alertRuntimeOperationFacts({
+          read: harmonyPlatformLeafUnavailable,
+          wait: harmonyPlatformLeafUnavailable,
+          accept: harmonyPlatformLeafUnavailable,
+          dismiss: harmonyPlatformLeafUnavailable,
+        }),
         ...orientationRuntimeOperationFacts({ orientation: harmonyPlatformLeafUnavailable }),
         ...tvRemoteRuntimeOperationFacts({ tvRemote: harmonyPlatformLeafUnavailable }),
         ...keyboardRuntimeOperationFacts({

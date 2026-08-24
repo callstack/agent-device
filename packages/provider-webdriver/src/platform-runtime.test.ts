@@ -270,6 +270,10 @@ test('captures through only the active exact WebDriver interactor', async () => 
   for (const operation of [
     'tvRemote',
     'setSetting',
+    'readAlert',
+    'awaitAlert',
+    'acceptAlert',
+    'dismissAlert',
     'keyboardStatus',
     'keyboardDismiss',
     'keyboardEnter',
@@ -332,6 +336,10 @@ test.each([
   for (const operation of [
     'tvRemote',
     'setSetting',
+    'readAlert',
+    'awaitAlert',
+    'acceptAlert',
+    'dismissAlert',
     'keyboardStatus',
     'keyboardDismiss',
     'keyboardEnter',

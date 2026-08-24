@@ -2,11 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { isAudioProbeSupportedDevice } from '@agent-device/contracts/audio-probe-support';
 import {
-  isMacOs,
   resolveDeviceAppleOs,
   DEVICE_TARGETS,
   PLATFORMS,
-  type AppleOS,
   type DeviceInfo,
   type DeviceKind,
   type DeviceTarget,
@@ -23,19 +21,17 @@ import {
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
 } from '../test-utils/device-fixtures.ts';
-import { APPLE_OS_CAPABILITIES } from '../../platforms/apple/capabilities.ts';
 import { getPlugin } from '../../core/platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 
-// Phase 3 step d.5 table-equivalence gate. The AppleOS-axis predicates
-// (`target !== 'tv'` / `platform !== 'macos'` / `isTvOsDevice`) that used to be
-// open-coded in the Apple capability closures now READ the per-`AppleOS` data table
-// (`apple-os-capabilities.ts`). This test pins that the swap is byte-for-byte
-// behaviorless: the closures now living on the Apple plugin return an identical
-// boolean / identical hint STRING to an INDEPENDENT verbatim copy of the ORIGINAL
-// predicates plus intentional backend-specific gates, across the full
-// {command x sample-device} matrix — real discovery shapes
-// for iOS/iPadOS/tvOS/macOS/visionOS plus the exhaustive synthetic cross-product.
+// The equivalence gate for whatever Apple capability closures still exist. It began as the
+// ADR-0009 step d.5 table-equivalence test, pinning closures that had been rewritten to read a
+// per-`AppleOS` data table; R59 retired that table with its last reader (`alert`), so what
+// remains are the two closures that were never table-driven. The shape of the check is unchanged:
+// each closure on the Apple plugin must return an identical boolean / identical hint STRING to an
+// INDEPENDENT verbatim copy of its contract, across the full {command x sample-device} matrix —
+// real discovery shapes for iOS/iPadOS/tvOS/macOS/visionOS plus the exhaustive synthetic
+// cross-product.
 
 registerBuiltinPlatformPlugins();
 
@@ -44,11 +40,6 @@ registerBuiltinPlatformPlugins();
 // AppleOS predicates and current backend-specific gates. This oracle stays independent
 // of the table it pins (mirrors capability-plugin-routing-parity.test.ts).
 // ---------------------------------------------------------------------------
-const isMacOsOrAppleSimulator = (device: DeviceInfo): boolean =>
-  isMacOs(device) || device.kind === 'simulator';
-const isIosOs = (device: DeviceInfo): boolean =>
-  device.platform === 'apple' &&
-  (device.appleOs ? device.appleOs === 'ios' : device.target !== 'tv');
 const supportsCoreDevicePhysicalOperation = (device: DeviceInfo): boolean =>
   device.platform !== 'apple' ||
   device.kind !== 'device' ||
@@ -57,18 +48,16 @@ const coreDeviceOnlyPhysicalOperationHint = (device: DeviceInfo): string | undef
   supportsCoreDevicePhysicalOperation(device)
     ? undefined
     : 'This command requires a CoreDevice-backed physical iOS device. The selected XCTest backend supports open, close, interactions, snapshots, and screenshots.';
-// `home`/`keyboard`/`orientation`/`tv-remote` are gone from this table (R42/R43/R44/R45/R46
-// retired their AppleOS-table-reading closures along with their descriptor capability buckets),
-// and `clipboard` left with R55; their per-AppleOS admission now lives as owner facts in
-// `packages/platform-apple/src/runtime.ts` and its `system/`, `navigation/` siblings.
+// `home`/`keyboard`/`orientation`/`tv-remote` left with R42-R46, `clipboard` with R55,
+// `app-switcher` with R56, `settings` with R58 and `alert` with R59 — each cutover retiring its
+// AppleOS-table-reading closure along with its descriptor capability bucket. `alert` was the
+// table's last reader, so the table went with it; per-AppleOS admission now lives as owner facts
+// in `packages/platform-apple/src/runtime.ts` and its `system/`, `navigation/` siblings.
 const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   perf: supportsCoreDevicePhysicalOperation,
-  alert: (device) =>
-    device.platform === 'android' || isIosOs(device) || isMacOsOrAppleSimulator(device),
-  // `audio` is NOT part of the AppleOS-table relocation — it stays the standalone
-  // `isAudioProbeSupportedDevice` predicate. Included here only so the key-set
-  // assertion stays strict (catches a dropped command) and confirms the rebase
-  // did not alter it.
+  // `audio` was never part of the AppleOS-table relocation — it is the standalone
+  // `isAudioProbeSupportedDevice` predicate. Included here so the key-set assertion stays strict
+  // (it catches a dropped command) and confirms no rebase altered it.
   audio: isAudioProbeSupportedDevice,
 };
 const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
@@ -127,15 +116,6 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
   ...APPLE_FIXTURES.flatMap(withKinds),
   ...buildSyntheticMatrix(),
 ];
-
-test('the per-AppleOS capability table row keys are exhaustive', () => {
-  const rows: AppleOS[] = ['ios', 'ipados', 'tvos', 'watchos', 'visionos', 'macos'];
-  for (const os of rows) {
-    assert.ok(APPLE_OS_CAPABILITIES[os], `capability row present for ${os}`);
-  }
-  // iOS/iPadOS share the same platform capability profile.
-  assert.equal(APPLE_OS_CAPABILITIES.ios, APPLE_OS_CAPABILITIES.ipados);
-});
 
 test('resolveDeviceAppleOs prefers the stored discriminant, else infers from target', () => {
   // Stored `appleOs` wins.

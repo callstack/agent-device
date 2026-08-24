@@ -22,6 +22,7 @@ export type CloudWebDriverOperation =
   | 'clipboard.read'
   | 'clipboard.write'
   | 'settings'
+  | 'alert'
   | 'pinch'
   | 'rotateGesture'
   | 'transformGesture'
@@ -106,6 +107,7 @@ const BASE_WEBDRIVER_CAPABILITIES: CloudWebDriverCapabilityMap = {
     note: 'Uses provider/Appium clipboard extension support where available.',
   },
   settings: unsupported,
+  alert: unsupported,
   pinch: unsupported,
   rotateGesture: unsupported,
   transformGesture: unsupported,

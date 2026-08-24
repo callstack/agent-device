@@ -72,12 +72,12 @@ const mockStopIosRunnerSession = vi.mocked(stopIosRunnerSession);
 const mockCloseIosApp = vi.mocked(closeIosApp);
 const mockBuildIosOpenCommandHint = vi.mocked(buildIosOpenCommandHint);
 
-const SNAPSHOT_ROUTE_RUNTIME_COMMANDS = new Set(['snapshot', 'diff', 'settings']);
+const SNAPSHOT_ROUTE_RUNTIME_COMMANDS = new Set(['snapshot', 'diff', 'settings', 'alert']);
 
 function handleSnapshotCommands(
   params: Parameters<typeof handleProductionSnapshotCommands>[0],
 ): ReturnType<typeof handleProductionSnapshotCommands> {
-  // R58 put `settings` on a bound operation too, so the snapshot-route fixture serves it as well.
+  // R58/R59 bound `settings` and `alert` too, so the fixture serves those commands as well.
   if (!SNAPSHOT_ROUTE_RUNTIME_COMMANDS.has(params.req.command)) {
     return handleProductionSnapshotCommands(params);
   }

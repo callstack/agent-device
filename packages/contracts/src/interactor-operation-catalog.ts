@@ -35,6 +35,16 @@ import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import { bindLocalSettingsInteractor, bindProviderSettingsInteractor } from './settings-runtime.ts';
 import {
+  bindLocalAlertAcceptInteractor,
+  bindLocalAlertDismissInteractor,
+  bindLocalAlertReadInteractor,
+  bindLocalAlertWaitInteractor,
+  bindProviderAlertAcceptInteractor,
+  bindProviderAlertDismissInteractor,
+  bindProviderAlertReadInteractor,
+  bindProviderAlertWaitInteractor,
+} from './alert-runtime.ts';
+import {
   bindLocalTvRemoteInteractor,
   bindProviderTvRemoteInteractor,
 } from './tv-remote-runtime.ts';
@@ -64,6 +74,10 @@ const CATALOG_INTERACTOR_OPERATIONS = [
   'appSwitcher',
   'triggerAppEvent',
   'setSetting',
+  'readAlert',
+  'awaitAlert',
+  'acceptAlert',
+  'dismissAlert',
 ] as const;
 
 export type CatalogInteractorOperation = (typeof CATALOG_INTERACTOR_OPERATIONS)[number];
@@ -97,6 +111,10 @@ const LOCAL_BINDERS: Readonly<
   appSwitcher: bindLocalAppSwitcherInteractor,
   triggerAppEvent: bindLocalAppEventInteractor,
   setSetting: bindLocalSettingsInteractor,
+  readAlert: bindLocalAlertReadInteractor,
+  awaitAlert: bindLocalAlertWaitInteractor,
+  acceptAlert: bindLocalAlertAcceptInteractor,
+  dismissAlert: bindLocalAlertDismissInteractor,
 });
 
 const PROVIDER_BINDERS: Readonly<
@@ -117,6 +135,10 @@ const PROVIDER_BINDERS: Readonly<
   appSwitcher: bindProviderAppSwitcherInteractor,
   triggerAppEvent: bindProviderAppEventInteractor,
   setSetting: bindProviderSettingsInteractor,
+  readAlert: bindProviderAlertReadInteractor,
+  awaitAlert: bindProviderAlertWaitInteractor,
+  acceptAlert: bindProviderAlertAcceptInteractor,
+  dismissAlert: bindProviderAlertDismissInteractor,
 });
 
 /**

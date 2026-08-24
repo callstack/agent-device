@@ -99,6 +99,33 @@ test('a physical non-macOS Apple device refuses settings as a platform leaf', ()
   });
 });
 
+/**
+ * `alert`'s retired admission was the host-or-simulator closure widened by one leaf: physical
+ * iOS, whose XCTest alert path is device-verified. Every other physical Apple leaf stays closed
+ * exactly as `supportsAlertSurface` left it, and watchOS narrows for want of an interactor.
+ */
+test.each([
+  { appleOs: 'ios', kind: 'simulator', expected: true },
+  { appleOs: 'ios', kind: 'device', expected: true },
+  { appleOs: 'ipados', kind: 'simulator', expected: true },
+  { appleOs: 'ipados', kind: 'device', expected: false },
+  { appleOs: 'tvos', kind: 'simulator', expected: true },
+  { appleOs: 'tvos', kind: 'device', expected: false },
+  { appleOs: 'visionos', kind: 'simulator', expected: true },
+  { appleOs: 'visionos', kind: 'device', expected: false },
+  { appleOs: 'macos', kind: 'device', expected: true },
+  { appleOs: 'watchos', kind: 'simulator', expected: false },
+] as const)(
+  'alert on an Apple $appleOs $kind is available: $expected',
+  ({ appleOs, kind, expected }) => {
+    const facts = appleSystemFacts(appleDevice(appleOs, kind));
+    // One cell, four legs: an Apple backend that can read a sheet can press its buttons too.
+    for (const leg of ['readAlert', 'awaitAlert', 'acceptAlert', 'dismissAlert'] as const) {
+      expect(facts[leg].available).toBe(expected);
+    }
+  },
+);
+
 test('a non-simulator, non-device Apple kind is refused by kind, with its own reason', () => {
   const facts = appleSystemFacts(appleDevice('ios', 'emulator'));
   expect(facts.readClipboard).toEqual({
@@ -110,6 +137,11 @@ test('a non-simulator, non-device Apple kind is refused by kind, with its own re
     available: false,
     reason: 'unsupported-device-kind',
     hint: 'settings is supported on Apple simulators and the macOS host.',
+  });
+  expect(facts.readAlert).toEqual({
+    available: false,
+    reason: 'unsupported-device-kind',
+    hint: 'alert is supported on Apple simulators and physical devices.',
   });
 });
 
@@ -126,6 +158,8 @@ test('binds the system operations for an admitted cell and none for a refused on
   expect(admitted.readClipboard).toBeTypeOf('function');
   expect(admitted.writeClipboard).toBeTypeOf('function');
   expect(admitted.setSetting).toBeTypeOf('function');
+  expect(admitted.readAlert).toBeTypeOf('function');
+  expect(admitted.acceptAlert).toBeTypeOf('function');
 
   const refused = createAppleSystemOperations({
     host,
@@ -135,5 +169,8 @@ test('binds the system operations for an admitted cell and none for a refused on
   expect(refused.readClipboard).toBeUndefined();
   expect(refused.writeClipboard).toBeUndefined();
   expect(refused.setSetting).toBeUndefined();
+  // The refused cell here is clipboard's and settings' — a physical iOS device, which `alert`
+  // deliberately still admits, so its legs stay bound.
+  expect(refused.readAlert).toBeTypeOf('function');
   expect(resolve).not.toHaveBeenCalled();
 });

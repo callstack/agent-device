@@ -52,7 +52,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
       inspectFacts,
       bindDevice,
     }),
-  alert: async ({ req, sessionName, logPath, sessionStore }) => {
+  alert: async ({ req, sessionName, logPath, sessionStore, inspectFacts, bindDevice }) => {
     const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
     return await withSessionlessRunnerCleanup(session, device, async () => {
       return await handleAlertCommand({
@@ -61,6 +61,8 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
         sessionStore,
         session,
         device,
+        inspectFacts,
+        bindDevice,
       });
     });
   },

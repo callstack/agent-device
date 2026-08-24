@@ -4,6 +4,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test } from 'vitest';
 import {
   limrunAppEventOperationFacts,
+  limrunAlertOperationFacts,
   limrunSettingsOperationFacts,
   limrunAppSwitcherOperationFacts,
   limrunClipboardOperationFacts,
@@ -115,6 +116,22 @@ test('settings ride the Android interactor and are refused on the iOS leg', () =
   expect(
     limrunSettingsOperationFacts(androidMobileDevice, liveSessionUnavailable).setSetting,
   ).toEqual(liveSessionUnavailable);
+});
+
+// R59: same split again — the Android leg reuses the local family's interactor, and the iOS
+// direct session has no XCUITest runner to read a sheet from.
+test('alert legs ride the Android interactor and are refused on the iOS leg', () => {
+  for (const leg of ['readAlert', 'awaitAlert', 'acceptAlert', 'dismissAlert'] as const) {
+    expect(limrunAlertOperationFacts(androidMobileDevice)[leg]).toEqual({ available: true });
+    expect(limrunAlertOperationFacts(iosDevice)[leg]).toEqual({
+      available: false,
+      reason: 'unsupported-provider-mode',
+      hint: 'Limrun iOS direct sessions do not expose alert inspection yet.',
+    });
+    expect(limrunAlertOperationFacts(androidMobileDevice, liveSessionUnavailable)[leg]).toEqual(
+      liveSessionUnavailable,
+    );
+  }
 });
 
 test('the iOS leg admits back/orientation but explicitly refuses home and tv-remote', () => {

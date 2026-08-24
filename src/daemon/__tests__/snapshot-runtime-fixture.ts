@@ -7,6 +7,10 @@ import {
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import {
+  type AlertRuntimeInput,
+  alertRuntimeOperationFacts,
+} from '@agent-device/contracts/alert-runtime';
+import {
   type SetSettingInput,
   settingsRuntimeOperationFacts,
 } from '@agent-device/contracts/settings-runtime';
@@ -19,7 +23,14 @@ import {
   type SnapshotResult,
   snapshotRuntimeOperationFacts,
 } from '@agent-device/contracts/snapshot-runtime';
-import { deviceShape, isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  deviceShape,
+  isApplePlatform,
+  isIosFamily,
+  isMacOs,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
+import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from '../../platforms/apple/alert.ts';
 import { type DispatchContext } from '../../core/dispatch.ts';
 import { getRequestSignal } from '../../request/cancel.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
@@ -68,6 +79,15 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
       fixtureSettingsMutations.push(input);
       return {};
     };
+    // R59: the alert legs delegate to the Apple owner's own module, so the poll and retry windows
+    // these suites exercise are the shipped ones rather than a fixture's imitation of them. The
+    // runner underneath is the suite's own mock.
+    const runnerOptions = { signal: requestSignal };
+    const alertOptions = (input: AlertRuntimeInput) => ({
+      ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
+      ...(input.appBundleId === undefined ? {} : { appBundleId: input.appBundleId }),
+      ...(input.surface === undefined ? {} : { surface: input.surface }),
+    });
     return narrowDeviceBinding(
       {
         device,
@@ -81,6 +101,18 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
           captureSnapshotWithoutActiveApp: captureSnapshot,
           captureScreenshot,
           setSetting,
+          ...(isApplePlatform(device.platform)
+            ? {
+                readAlert: async (input: AlertRuntimeInput) =>
+                  await readAppleAlert(device, runnerOptions, alertOptions(input)),
+                awaitAlert: async (input: AlertRuntimeInput) =>
+                  await awaitAppleAlert(device, runnerOptions, alertOptions(input)),
+                acceptAlert: async (input: AlertRuntimeInput) =>
+                  await actOnAppleAlert(device, runnerOptions, 'accept', alertOptions(input)),
+                dismissAlert: async (input: AlertRuntimeInput) =>
+                  await actOnAppleAlert(device, runnerOptions, 'dismiss', alertOptions(input)),
+              }
+            : {}),
         },
         [Symbol.asyncDispose]: async () => {},
       },
@@ -101,6 +133,16 @@ const settingsUnavailable = {
   reason: 'unsupported-platform-leaf',
   hint: 'settings is supported on Apple simulators and the macOS host, not on physical devices of this OS.',
 } as const;
+
+const alertUnavailable = {
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'This fixture models the Apple alert legs only.',
+} as const;
+
+function alertCell(device: DeviceInfo) {
+  return isApplePlatform(device.platform) ? ({ available: true } as const) : alertUnavailable;
+}
 
 async function snapshotFacts(device: DeviceInfo): Promise<RuntimeFacts<PlatformRuntimeOperations>> {
   const base = await unavailableDeviceRuntimeGateway.inspectFacts(device);
@@ -136,6 +178,15 @@ async function snapshotFacts(device: DeviceInfo): Promise<RuntimeFacts<PlatformR
       // `platform-apple/src/system/runtime.test.ts`.
       ...settingsRuntimeOperationFacts({
         setSetting: appleHostOrSimulatorOnly(device) ? settingsUnavailable : available,
+      }),
+      // R59: `alert` runs on the snapshot route too. Only the Apple legs are modeled — every
+      // alert suite that reaches this fixture drives an Apple session — and the full per-owner
+      // cell tables are pinned where they belong, in each platform package's runtime test.
+      ...alertRuntimeOperationFacts({
+        read: alertCell(device),
+        wait: alertCell(device),
+        accept: alertCell(device),
+        dismiss: alertCell(device),
       }),
     },
   };

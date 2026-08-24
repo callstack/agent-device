@@ -28,15 +28,21 @@ import type {
 } from '../../request-runtime-binding.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
 
+/** The system leaves this owner refuses: the retired fallback listed them unconditionally. */
+const ANDROID_REFUSED_SYSTEM_COMMANDS = ['clipboard', 'alert', 'settings', 'app-switcher'];
+
 function assertAndroidCapabilityHonesty(availableCommands: unknown): void {
+  for (const command of ANDROID_REFUSED_SYSTEM_COMMANDS) {
+    expect(availableCommands).not.toContain(command);
+  }
   expect(availableCommands).toContain(PUBLIC_COMMANDS.open);
   expect(availableCommands).toContain(PUBLIC_COMMANDS.close);
   expect(availableCommands).not.toContain(PUBLIC_COMMANDS.prepare);
   expect(availableCommands).not.toContain(PUBLIC_COMMANDS.viewport);
 }
 
-test('capabilities reports supported commands for the selected session device', async () => {
-  const sessionName = 'android-capabilities';
+/** The one interaction-capable Android owner both projection tests below read. */
+async function projectAndroidCapabilities(sessionName: string) {
   const sessionStore = makeSessionStore('agent-device-capabilities-');
   sessionStore.set(sessionName, makeAndroidSession(sessionName));
   const runtime = createAdmissionRuntime({
@@ -44,9 +50,9 @@ test('capabilities reports supported commands for the selected session device', 
     ensureReadyAvailable: true,
     networkAvailable: true,
     appsAvailable: true,
+    interactionAvailable: true,
     providerMode: 'local',
   });
-
   const response = await handleSessionCommands({
     req: {
       token: 't',
@@ -62,15 +68,21 @@ test('capabilities reports supported commands for the selected session device', 
     bindDevice: runtime.bindDevice,
     invoke: async () => ({ ok: true, data: {} }),
   });
-
   expect(response?.ok).toBe(true);
-  if (!response?.ok) return;
+  const data = response?.ok ? response.data : undefined;
+  return { runtime, device: data?.device, availableCommands: data?.availableCommands };
+}
 
-  expect(response.data?.device).toMatchObject({
-    platform: 'android',
-    kind: 'emulator',
-  });
-  expect(response.data?.availableCommands).toEqual(
+test('capabilities reports supported commands for the selected session device', async () => {
+  const { runtime, device, availableCommands } =
+    await projectAndroidCapabilities('android-capabilities');
+
+  expect(device).toMatchObject({ platform: 'android', kind: 'emulator' });
+  // R63: every one of these comes from a declared use this owner's facts admit — the
+  // `interactionAvailable` cells are what put `snapshot`, `press`, `fill` and `gesture` in the
+  // list, and dropping them drops the commands (proved by the stopped-AVD case below).
+  // `react-native` rides the same admitted `tapPoint`, so it is listed here too.
+  expect(availableCommands).toEqual(
     expect.arrayContaining([
       'open',
       'screenshot',
@@ -83,17 +95,23 @@ test('capabilities reports supported commands for the selected session device', 
       'perf',
       PUBLIC_COMMANDS.logs,
       PUBLIC_COMMANDS.gesture,
+      PUBLIC_COMMANDS.reactNative,
     ]),
   );
-  expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.capabilities);
-  expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.devices);
-  assertAndroidCapabilityHonesty(response.data?.availableCommands);
   expect(runtime.inspections).toHaveLength(1);
   expect(runtime.uses).toEqual([
     { required: [], preferred: ['appLogInspect'] },
     { required: [], preferred: ['networkDump'] },
     { required: [], preferred: ['screenRecordingStart'] },
   ]);
+});
+
+test('capabilities omits the commands this Android owner does not admit', async () => {
+  const { availableCommands } = await projectAndroidCapabilities('android-capabilities-honesty');
+
+  expect(availableCommands).not.toContain(PUBLIC_COMMANDS.capabilities);
+  expect(availableCommands).not.toContain(PUBLIC_COMMANDS.devices);
+  assertAndroidCapabilityHonesty(availableCommands);
 });
 
 test('capabilities excludes logs from an unavailable provider-mode XCTest runtime fact', async () => {
@@ -488,21 +506,20 @@ test('capabilities accepts a stopped Android AVD placeholder for explicit platfo
     kind: 'emulator',
     booted: false,
   });
+  // R63: the projection reads each migrated command's declared uses, so a STOPPED AVD no longer
+  // advertises the interaction commands it cannot run. `open`/`screenshot` stay because the
+  // Android owner admits them on a placeholder (it boots the AVD first); `snapshot`, `press` and
+  // `fill` need a live adb connection this device does not have. Before this unit the projection
+  // read "no capability bucket" as "supported everywhere" and listed all three.
   expect(response.data?.availableCommands).toEqual(
-    expect.arrayContaining(['open', 'screenshot', 'snapshot', 'press', 'fill']),
+    expect.arrayContaining(['open', 'screenshot', PUBLIC_COMMANDS.shutdown]),
   );
-  expect(response.data?.availableCommands).toContain(PUBLIC_COMMANDS.shutdown);
+  for (const command of ['snapshot', 'press', 'fill']) {
+    expect(response.data?.availableCommands).not.toContain(command);
+  }
 });
 
-function createAdmissionRuntime(options: {
-  appLogAvailable: boolean;
-  appStateAvailable?: boolean;
-  ensureReadyAvailable?: boolean;
-  networkAvailable: boolean;
-  appsAvailable?: boolean;
-  screenshotAvailable?: boolean;
-  providerMode: RuntimeProviderMode;
-}) {
+function createAdmissionRuntime(options: AdmissionRuntimeOptions) {
   const uses: Array<{
     required: readonly string[];
     preferred: readonly string[];
@@ -532,6 +549,13 @@ type AdmissionRuntimeOptions = Readonly<{
   appsAvailable?: boolean;
   /** `screenshot` is fact-owned since R39; the projection reads this cell, not a bucket. */
   screenshotAvailable?: boolean;
+  /**
+   * R63 made the projection read every migrated command's declared uses, so a fixture that leaves
+   * the interaction cells unavailable now correctly answers that `snapshot`, `press`, `fill` and
+   * `gesture` are NOT available — where the retired fallback used to list all four unconditionally.
+   * Opt in to model an owner that can actually drive them.
+   */
+  interactionAvailable?: boolean;
   providerMode: RuntimeProviderMode;
 }>;
 
@@ -592,11 +616,16 @@ function createAdmissionOperationFacts(
   appsFact: ReturnType<typeof appsOperationFact>,
   lifecycleAvailable: boolean,
 ) {
+  const interaction = options.interactionAvailable ? ({ available: true } as const) : unavailable;
   return {
     ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
     ...screenshotRuntimeOperationFacts({
       capture: options.screenshotAvailable === false ? unavailable : { available: true as const },
     }),
+    captureSnapshot: interaction,
+    tapPoint: interaction,
+    fillPoint: interaction,
+    performGesturePlan: interaction,
     appLogInspect: options.appLogAvailable ? { available: true as const } : unavailable,
     appLogDoctor: unavailable,
     appLogStart: unavailable,

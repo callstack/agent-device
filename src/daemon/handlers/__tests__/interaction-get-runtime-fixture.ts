@@ -175,6 +175,10 @@ function elementReadFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOpera
     appSwitcher: unavailable,
     triggerAppEvent: unavailable,
     setSetting: unavailable,
+    readAlert: unavailable,
+    awaitAlert: unavailable,
+    acceptAlert: unavailable,
+    dismissAlert: unavailable,
     screenshot: unavailable,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: unavailable,

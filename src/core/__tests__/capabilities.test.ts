@@ -24,14 +24,6 @@ const xctestIosDevice: DeviceInfo = {
   iosPhysicalDeviceBackend: 'xctest',
 };
 
-const iPadOsDevice: DeviceInfo = {
-  platform: 'apple',
-  appleOs: 'ipados',
-  id: 'ipad-dev-1',
-  name: 'iPad',
-  kind: 'device',
-};
-
 const androidDevice: DeviceInfo = {
   platform: 'android',
   id: 'and-1',
@@ -93,16 +85,6 @@ function assertCommandSupport(commands: string[], checks: SupportCheck[]): void 
 
 test('device capability matrix stays consistent across shared command groups', () => {
   const scenarios: Array<{ commands: string[]; checks: SupportCheck[] }> = [
-    {
-      commands: ['alert'],
-      checks: [
-        { device: iosSimulator, expected: true, label: 'on iOS sim' },
-        { device: iosDevice, expected: true, label: 'on iOS device' },
-        { device: iPadOsDevice, expected: false, label: 'on iPadOS device' },
-        { device: androidDevice, expected: true, label: 'on Android' },
-        { device: macOsDevice, expected: true, label: 'on macOS' },
-      ],
-    },
     {
       commands: ['gesture', 'swipe'],
       checks: [
@@ -190,7 +172,6 @@ test('capabilities reject CoreDevice-only commands for XCTest-backed devices', (
 test('macOS supports the Apple runner interaction core but excludes mobile-only commands', () => {
   assertCommandSupport(
     [
-      'alert',
       'back',
       'click',
       'fill',
@@ -241,10 +222,6 @@ test('tvOS follows iOS capability matrix by device kind', () => {
     ],
     [{ device: tvOsSimulator, expected: true, label: 'on tvOS' }],
   );
-  assertCommandSupport(
-    ['alert'],
-    [{ device: tvOsSimulator, expected: true, label: 'on tvOS simulator' }],
-  );
 });
 
 test('Linux supports desktop interaction commands and blocks mobile/unsupported ones', () => {
@@ -252,6 +229,7 @@ test('Linux supports desktop interaction commands and blocks mobile/unsupported 
   // session-capabilities.test.ts, not through this legacy matrix projection.
   assertCommandSupport(
     [
+      'alert',
       'back',
       'click',
       'clipboard',
@@ -273,10 +251,7 @@ test('Linux supports desktop interaction commands and blocks mobile/unsupported 
     ],
     [{ device: linuxDevice, expected: true, label: 'on Linux' }],
   );
-  assertCommandSupport(
-    ['alert', 'perf'],
-    [{ device: linuxDevice, expected: false, label: 'on Linux' }],
-  );
+  assertCommandSupport(['perf'], [{ device: linuxDevice, expected: false, label: 'on Linux' }]);
 });
 
 test('web supports only the initial browser interaction slice', () => {
@@ -287,12 +262,13 @@ test('web supports only the initial browser interaction slice', () => {
       'fill',
       'focus',
       'find',
-      // `clipboard` (R55), `gesture` and `swipe` (R42/R44) join the migrated commands here for
-      // the same reason `focus`, `find`, `screenshot`, `scroll`, `snapshot`, `type` and `wait`
-      // already do: a command whose admission comes from exact owner facts carries no
-      // capability-matrix row, and a command with no row is not decided by this matrix at all.
-      // The web owner refuses every gesture tier and both clipboard halves —
-      // `platform-web/src/runtime.test.ts` is where those cells are pinned.
+      // `clipboard` (R55), `gesture` and `swipe` (R42/R44), and `alert` (R59) join the migrated
+      // commands here for the same reason `focus`, `find`, `screenshot`, `scroll`, `snapshot`,
+      // `type` and `wait` already do: a command whose admission comes from exact owner facts
+      // carries no capability-matrix row, and a command with no row is not decided by this matrix
+      // at all. The web owner refuses every gesture tier, both clipboard halves and all four
+      // alert legs — `platform-web/src/runtime.test.ts` is where those cells are pinned.
+      'alert',
       'app-switcher',
       'clipboard',
       'gesture',
@@ -311,10 +287,7 @@ test('web supports only the initial browser interaction slice', () => {
     ],
     [{ device: webDevice, expected: true, label: 'on web' }],
   );
-  assertCommandSupport(
-    ['alert', 'perf'],
-    [{ device: webDevice, expected: false, label: 'on web' }],
-  );
+  assertCommandSupport(['perf'], [{ device: webDevice, expected: false, label: 'on web' }]);
   assertCommandSupport(
     ['longpress'],
     [{ device: webDevice, expected: true, label: 'through runtime admission on web' }],

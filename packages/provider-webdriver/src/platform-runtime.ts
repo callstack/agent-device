@@ -25,6 +25,7 @@ import {
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
+import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
@@ -229,6 +230,17 @@ const appSwitcherUnavailable = Object.freeze({
  * declares `settings: unsupported`), so this cell is unavailable unconditionally rather than
  * gated by interactor reachability — the same shape `tvRemote` takes.
  */
+/**
+ * Same shape as `settings`: the WebDriver interactor's own alert legs always throw unsupported
+ * (its capability map declares `alert: unsupported`), so this cell is unavailable unconditionally
+ * rather than gated by interactor reachability.
+ */
+const alertUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'WebDriver provider runtimes do not expose native alert handling.',
+} as const);
+
 const settingsUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -470,6 +482,10 @@ function webDriverFacts(
       appSwitcher: inactiveSession,
       triggerAppEvent: inactiveSession,
       setSetting: inactiveSession,
+      readAlert: inactiveSession,
+      awaitAlert: inactiveSession,
+      acceptAlert: inactiveSession,
+      dismissAlert: inactiveSession,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: inactiveSession,
         prepareApplicationOpen: inactiveSession,
@@ -509,6 +525,10 @@ function webDriverFacts(
     appSwitcher: appSwitcherUnavailable,
     triggerAppEvent: appEventUnavailable,
     setSetting: settingsUnavailable,
+    readAlert: alertUnavailable,
+    awaitAlert: alertUnavailable,
+    acceptAlert: alertUnavailable,
+    dismissAlert: alertUnavailable,
     lifecycle: webDriverLifecycleFacts(device),
   });
   // Both capture cells need the same reachability: an interactor this provider can drive, on a
@@ -588,6 +608,12 @@ function webDriverFacts(
         triggerAppEvent: interactorCell(reachable, appEventUnavailable),
       }),
       ...settingsRuntimeOperationFacts({ setSetting: settingsUnavailable }),
+      ...alertRuntimeOperationFacts({
+        read: alertUnavailable,
+        wait: alertUnavailable,
+        accept: alertUnavailable,
+        dismiss: alertUnavailable,
+      }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       ensureReady: available,
       bootTarget: available,

@@ -144,7 +144,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/facades/divergence.ts': 3,
   'packages/contracts/src/facades/interaction.ts': 25,
   'packages/contracts/src/facades/observability.ts': 7,
-  'packages/contracts/src/facades/platform.ts': 55,
+  'packages/contracts/src/facades/platform.ts': 56,
   'packages/contracts/src/facades/progress.ts': 1,
   'packages/contracts/src/facades/recording.ts': 3,
   'packages/contracts/src/facades/remote.ts': 2,
@@ -168,7 +168,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/platform-module.ts': 5,
   'packages/contracts/src/platform-runtime-host.ts': 1,
   'packages/contracts/src/platform-runtime-operations.ts': 2,
-  'packages/contracts/src/platform-runtime-unavailable.ts': 27,
+  'packages/contracts/src/platform-runtime-unavailable.ts': 28,
   'packages/contracts/src/platform-runtime.ts': 6,
   'packages/contracts/src/record-runtime-cutover.ts': 7,
   'packages/contracts/src/react-native-overlay.ts': 1,
@@ -243,17 +243,19 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
 
   // Added by #1993 (device-inventory context moved out of core).
   'packages/contracts/src/back-runtime.ts': 4,
-  // Added by Wave 6 R55/R56/R57/R58: the clipboard, app-switcher, app-event and settings facets,
+  // Added by Wave 6 R55/R56/R57/R58/R59: the clipboard, app-switcher, app-event, settings and
+  // alert facets,
   // plus the local interaction set Android and Linux used to hold a byte-identical copy of each.
   // The set is its own module rather than part of the interactor catalog so the catalog's closure
   // stays leaf-thin -- every module the set pulls in is one its two consumers already evaluate.
+  'packages/contracts/src/alert-runtime.ts': 4,
   'packages/contracts/src/app-event-runtime.ts': 4,
   'packages/contracts/src/app-switcher-runtime.ts': 4,
   'packages/contracts/src/clipboard-runtime.ts': 4,
   'packages/contracts/src/settings-runtime.ts': 4,
-  'packages/contracts/src/local-interactor-operation-set.ts': 25,
+  'packages/contracts/src/local-interactor-operation-set.ts': 26,
   'packages/contracts/src/home-runtime.ts': 4,
-  'packages/contracts/src/interactor-operation-catalog.ts': 13,
+  'packages/contracts/src/interactor-operation-catalog.ts': 14,
   'packages/contracts/src/keyboard-runtime.ts': 4,
   'packages/contracts/src/orientation-runtime.ts': 4,
   'packages/contracts/src/tv-remote-runtime.ts': 4,
@@ -284,12 +286,12 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // the same PR added and only a source checkout reaches, and which therefore loads on demand
   // (`resolveLocalDaemonCodeSignature`) rather than appearing here.
   'src/cli.ts': 365,
-  'src/platform-runtime.ts': 43,
-  'src/core/dispatch.ts': 80,
-  'src/core/capabilities.ts': 75,
+  'src/platform-runtime.ts': 44,
+  'src/core/dispatch.ts': 79,
+  'src/core/capabilities.ts': 74,
   'src/core/command-descriptor/registry.ts': 66,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,
-  'src/core/interactors/register-builtins.ts': 73,
+  'src/core/interactors/register-builtins.ts': 72,
   'src/daemon/session-teardown.ts': 90,
 });
 

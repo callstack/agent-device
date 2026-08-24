@@ -115,7 +115,16 @@ test.each([
   expect(binding.operations.keyboardStatus).toBeUndefined();
   // R55: HarmonyOS never carried a `clipboard` bucket and is absent from the HarmonyOS overlay
   // set, so neither half was ever admitted here.
-  for (const operation of ['readClipboard', 'writeClipboard', 'triggerAppEvent'] as const) {
+  for (const operation of [
+    'readClipboard',
+    'writeClipboard',
+    'triggerAppEvent',
+    // R59: `alert` never had a HarmonyOS leaf either — hdc exposes no dialog surface.
+    'readAlert',
+    'awaitAlert',
+    'acceptAlert',
+    'dismissAlert',
+  ] as const) {
     expect(facts.operations[operation]).toEqual({
       available: false,
       reason: 'unsupported-platform-leaf',
@@ -176,6 +185,10 @@ test('rejects the non-discovered HarmonyOS simulator cell for appstate', async (
     'appSwitcher',
     'triggerAppEvent',
     'setSetting',
+    'readAlert',
+    'awaitAlert',
+    'acceptAlert',
+    'dismissAlert',
   ] as const) {
     expect(binding.facts.operations[operation].available).toBe(false);
     expect(binding.operations[operation]).toBeUndefined();

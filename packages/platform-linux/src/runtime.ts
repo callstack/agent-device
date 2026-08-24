@@ -201,6 +201,11 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     triggerAppEvent: linuxPlatformLeafUnavailable,
     // The retired `settings` descriptor declared `linux: {}` too.
     setSetting: linuxPlatformLeafUnavailable,
+    // R59: `alert` declared `linux: {}` too — AT-SPI exposes no dialog affordance to act on.
+    readAlert: linuxPlatformLeafUnavailable,
+    awaitAlert: linuxPlatformLeafUnavailable,
+    acceptAlert: linuxPlatformLeafUnavailable,
+    dismissAlert: linuxPlatformLeafUnavailable,
     keyboardStatus: linuxPlatformLeafUnavailable,
     keyboardDismiss: linuxPlatformLeafUnavailable,
     keyboardEnter: linuxPlatformLeafUnavailable,

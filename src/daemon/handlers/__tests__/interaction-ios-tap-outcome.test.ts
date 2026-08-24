@@ -31,13 +31,6 @@ import {
 } from './interaction-get-runtime-fixture.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return {
-    ...actual,
-  };
-});
-
 vi.mock('../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../__tests__/legacy-snapshot-capture-fixture.ts');
   return {

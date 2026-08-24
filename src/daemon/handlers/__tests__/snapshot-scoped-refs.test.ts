@@ -1,4 +1,4 @@
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeEach, expect, test } from 'vitest';
 import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../snapshot.ts';
 import type { RawSnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
@@ -6,13 +6,6 @@ import { makeAndroidSession } from '../../../__tests__/test-utils/session-factor
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
 import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return {
-    ...actual,
-  };
-});
 
 const ANDROID_SCRIPT_ERROR = 'Unable to load script. Make sure you are running Metro.';
 

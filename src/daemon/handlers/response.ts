@@ -33,15 +33,16 @@ export function noActiveSessionError(): DaemonFailureResponse {
 }
 
 /**
- * Capability guard: returns an `UNSUPPORTED_OPERATION` failure when `command` is not
- * supported on `device`, otherwise `null`. Pass `message` to override the default
- * "<command> is not supported on this device" text, or `hint: true` to attach the
- * device-specific unsupported hint (as generic command dispatch does).
+ * Capability guard: returns an `UNSUPPORTED_OPERATION` failure when `command` is not supported on
+ * `device`, otherwise `null`. Pass `hint: true` to attach the device-specific unsupported hint.
+ *
+ * The `message` override left with R61: `react-native` was its only caller, and a migrated command
+ * states its own refusal through the admission seam's `unavailableResponse` instead.
  */
 export function requireCommandSupported(
   command: string,
   device: DeviceInfo,
-  options?: { message?: string; hint?: boolean },
+  options?: { hint?: boolean },
 ): DaemonFailureResponse | null {
   if (isCommandSupportedOnDevice(command, device)) return null;
   const hint = options?.hint ? unsupportedHintForDevice(command, device) : undefined;
@@ -49,7 +50,7 @@ export function requireCommandSupported(
     ok: false,
     error: {
       code: 'UNSUPPORTED_OPERATION',
-      message: options?.message ?? `${command} is not supported on this device`,
+      message: `${command} is not supported on this device`,
       ...(hint ? { hint } : {}),
     },
   };

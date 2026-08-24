@@ -70,6 +70,13 @@ const RUNNER_TRANSPORT_METHODS: Record<
   tvRemote: { invoke: (i) => i.tvRemote('select'), runnerCommand: 'remotePress' },
   keyboardDismiss: { invoke: (i) => i.keyboardDismiss!(), runnerCommand: 'keyboardDismiss' },
   keyboardEnter: { invoke: (i) => i.keyboardEnter!(), runnerCommand: 'keyboardReturn' },
+  // R59: same reading as `readTextAtPoint` — the macOS-helper branch is reachable only for a
+  // local desktop surface, which a provider-owned mobile device never carries, so every
+  // provider-backed alert leg rides the runner. Each spends one runner call when it succeeds.
+  readAlert: { invoke: (i) => i.readAlert(), runnerCommand: 'alert' },
+  awaitAlert: { invoke: (i) => i.awaitAlert(), runnerCommand: 'alert' },
+  acceptAlert: { invoke: (i) => i.acceptAlert(), runnerCommand: 'alert' },
+  dismissAlert: { invoke: (i) => i.dismissAlert(), runnerCommand: 'alert' },
 };
 
 const LOCAL_TOOL_METHODS: Record<string, (interactor: Interactor) => Promise<unknown>> = {

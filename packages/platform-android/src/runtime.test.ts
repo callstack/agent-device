@@ -317,6 +317,11 @@ test('admits both clipboard halves and the app switcher on every real Android ki
     // R58: settings run over adb (`appops`, `settings put`, `pm clear`, …) on that cell too.
     expect(binding.facts.operations.setSetting).toEqual({ available: true });
     expect(binding.operations.setSetting).toBeTypeOf('function');
+    // R59: all four alert legs read the same dump and tap with the same `input tap`.
+    for (const operation of ['readAlert', 'awaitAlert', 'acceptAlert', 'dismissAlert'] as const) {
+      expect(binding.facts.operations[operation]).toEqual({ available: true });
+      expect(binding.operations[operation]).toBeTypeOf('function');
+    }
   }
 });
 
@@ -346,6 +351,10 @@ test('the synthetic Android simulator cell refuses back/home/orientation/keyboar
     'appSwitcher',
     'triggerAppEvent',
     'setSetting',
+    'readAlert',
+    'awaitAlert',
+    'acceptAlert',
+    'dismissAlert',
   ] as const) {
     expect(facts.operations[operation].available).toBe(false);
     expect(binding.operations[operation]).toBeUndefined();

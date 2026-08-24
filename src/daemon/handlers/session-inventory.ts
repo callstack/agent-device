@@ -1,4 +1,8 @@
-import { isCommandSupportedOnDevice, listCapabilityCommands } from '../../core/capabilities.ts';
+import {
+  commandRuntimeUseRequirements,
+  isCommandSupportedOnDevice,
+  listCapabilityCommands,
+} from '../../core/capabilities.ts';
 import { listDeviceInventory } from '../../request/device-inventory-context.ts';
 import { assertResolvedAppsFilter } from '@agent-device/contracts/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
@@ -270,32 +274,36 @@ function hasMacSessionSurface(
 }
 
 /**
- * Every command whose availability is a runtime fact, and the exact operations it needs. A command
- * absent from this record is not fact-owned, so its availability is decided elsewhere.
+ * The three durable-resource commands whose availability is a BIND-time fact, not an inspection
+ * one: their owner resolves an adopted resource while binding, so the inspected snapshot cannot
+ * answer for them. They are read through `bindDevice` above and skipped here.
  */
-const factOwnedCapabilityOperations: Readonly<
-  Record<string, readonly RuntimeOperationKey<PlatformRuntimeOperations>[] | undefined>
-> = Object.freeze({
-  apps: ['ensureReady', 'listApps'],
-  appstate: ['ensureReady', 'appState'],
-  shutdown: ['shutdownTarget'],
-  open: ['resolveOpenTarget', 'prepareApplicationOpen', 'openApplication'],
-  close: ['closeApplication', 'finalizeApplicationClose'],
-  prepare: ['prepareAppleRunner'],
-  runtime: ['clearRuntimeHints'],
-  screenshot: ['captureScreenshot'],
-  viewport: ['setViewport'],
-});
+const BIND_ADMITTED_CAPABILITY_COMMANDS = new Set(['logs', 'network', 'record']);
 
+/**
+ * Whether the exact device admits any of `command`'s declared runtime uses, or `undefined` when
+ * the command is not fact-owned at all.
+ *
+ * R63 reads the requirement straight off the descriptor (`commandRuntimeUseRequirements`), so a
+ * command cannot be migrated in one place and left projecting from a stale list in another —
+ * which is precisely how a real Vega VVD came to advertise `snapshot diff get is wait focus` it
+ * cannot run.
+ */
 function factOwnedCapabilityAvailable(
   command: string,
   facts: RuntimeFacts<PlatformRuntimeOperations> | undefined,
 ): boolean | undefined {
-  const requiredOperations = factOwnedCapabilityOperations[command];
-  if (!requiredOperations) return undefined;
-  return facts
-    ? requiredOperations.every((operation) => facts.operations[operation].available)
-    : false;
+  if (BIND_ADMITTED_CAPABILITY_COMMANDS.has(command)) return undefined;
+  const declaredUses = commandRuntimeUseRequirements(command);
+  if (!declaredUses) return undefined;
+  if (!facts) return false;
+  // A request names exactly one action, so one fully admitted use is enough.
+  return declaredUses.some((required) =>
+    required.every(
+      (operation) =>
+        facts.operations[operation as RuntimeOperationKey<PlatformRuntimeOperations>].available,
+    ),
+  );
 }
 
 async function handleAppsInventory(params: {

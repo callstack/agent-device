@@ -327,6 +327,10 @@ function unavailableProviderBinding(
     appSwitcher: unavailable,
     triggerAppEvent: unavailable,
     setSetting: unavailable,
+    readAlert: unavailable,
+    awaitAlert: unavailable,
+    acceptAlert: unavailable,
+    dismissAlert: unavailable,
     lifecycle: unavailableProviderLifecycleFacts(unavailable),
   });
 }
@@ -363,6 +367,10 @@ function unavailableProviderFacts(runtime: ProviderDeviceRuntime, device: Device
       appSwitcher: unavailable,
       triggerAppEvent: unavailable,
       setSetting: unavailable,
+      readAlert: unavailable,
+      awaitAlert: unavailable,
+      acceptAlert: unavailable,
+      dismissAlert: unavailable,
       readiness: unavailable,
       lifecycle: unavailableProviderLifecycleFacts(unavailable),
     },

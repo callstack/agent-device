@@ -66,6 +66,10 @@ test('boot rejects --headless outside Android directly', async () => {
             appSwitcher: { available: false, reason: 'owner-capability-missing' },
             triggerAppEvent: { available: false, reason: 'owner-capability-missing' },
             setSetting: { available: false, reason: 'owner-capability-missing' },
+            readAlert: { available: false, reason: 'owner-capability-missing' },
+            awaitAlert: { available: false, reason: 'owner-capability-missing' },
+            acceptAlert: { available: false, reason: 'owner-capability-missing' },
+            dismissAlert: { available: false, reason: 'owner-capability-missing' },
             readiness: { available: false, reason: 'unsupported-device-kind' },
             lifecycle: applicationLifecycleOperationFacts({
               resolveOpenTarget: { available: false, reason: 'owner-capability-missing' },
@@ -169,6 +173,10 @@ test('appstate rejects web before Android app-state backend dispatch', async () 
             appSwitcher: { available: false, reason: 'unsupported-platform-leaf' },
             triggerAppEvent: { available: false, reason: 'unsupported-platform-leaf' },
             setSetting: { available: false, reason: 'unsupported-platform-leaf' },
+            readAlert: { available: false, reason: 'unsupported-platform-leaf' },
+            awaitAlert: { available: false, reason: 'unsupported-platform-leaf' },
+            acceptAlert: { available: false, reason: 'unsupported-platform-leaf' },
+            dismissAlert: { available: false, reason: 'unsupported-platform-leaf' },
             readiness: { available: false, reason: 'unsupported-platform-leaf' },
             lifecycle: applicationLifecycleOperationFacts({
               resolveOpenTarget: { available: false, reason: 'unsupported-platform-leaf' },

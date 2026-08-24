@@ -1,6 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeEach, expect, test } from 'vitest';
 import {
   makeIosSession,
   makeAuthoringSession,
@@ -16,13 +16,6 @@ import {
   mockFillPoint,
   resetGetRuntimeFixture,
 } from './interaction-get-runtime-fixture.ts';
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return {
-    ...actual,
-  };
-});
 
 const contextFromFlags = (_flags: CommandFlags | undefined) => ({});
 

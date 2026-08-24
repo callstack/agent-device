@@ -45,6 +45,7 @@ const UNROUTED_PUBLIC_COMMANDS = new Set<string>([PUBLIC_COMMANDS.installFromSou
 // pure control-plane or always-admitted commands; migrated runtime commands are admitted from
 // exact runtime facts and therefore belong to the capability catalog without matrix rows.
 const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
+  PUBLIC_COMMANDS.alert,
   PUBLIC_COMMANDS.appState,
   PUBLIC_COMMANDS.apps,
   PUBLIC_COMMANDS.appSwitcher,
@@ -74,6 +75,7 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.orientation,
   PUBLIC_COMMANDS.prepare,
   PUBLIC_COMMANDS.push,
+  PUBLIC_COMMANDS.reactNative,
   PUBLIC_COMMANDS.record,
   PUBLIC_COMMANDS.reinstall,
   PUBLIC_COMMANDS.replay,

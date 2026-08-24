@@ -106,6 +106,10 @@ function createAdmissionFacts(
       appSwitcher: unavailable,
       triggerAppEvent: unavailable,
       setSetting: unavailable,
+      readAlert: unavailable,
+      awaitAlert: unavailable,
+      acceptAlert: unavailable,
+      dismissAlert: unavailable,
       ...touchRuntimeOperationFacts({
         tap: unavailable,
         longPress: unavailable,

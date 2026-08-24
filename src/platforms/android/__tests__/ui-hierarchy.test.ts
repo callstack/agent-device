@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { buildSnapshotState } from '../../../daemon/snapshot-state.ts';
+import { buildSnapshotState } from '../../../core/snapshot-state.ts';
 import { isNodeVisibleOnScreen } from '@agent-device/contracts/snapshot';
 import { androidUiNodes, parseUiHierarchyTree } from '../ui-hierarchy.ts';
 import { parseUiHierarchy } from './ui-hierarchy-fixtures.ts';

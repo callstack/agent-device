@@ -52,8 +52,9 @@ test('Linux coverage report has the expected classification counts', () => {
     // than catalog denials; R56 moves app-switcher the same way, for the same reason.
     // R57 moves trigger-app-event from capability-denial to command-contract: it is fact-owned now.
     // R58 moves settings from capability-denial to command-contract: it is fact-owned now.
-    capabilityDenial: 4,
-    contract: 24,
+    // R59/R61 moves alert and react-native from capability-denial to command-contract: it is fact-owned now.
+    capabilityDenial: 2,
+    contract: 26,
     gap: 9,
     live: 17,
     total: 54,

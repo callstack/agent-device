@@ -3,7 +3,7 @@ import { afterEach, test, vi } from 'vitest';
 import { readSnapshotOcclusionContextEvidence } from '@agent-device/contracts/capture';
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../__tests__/test-utils/android-snapshot-helper.ts';
-import { buildSnapshotState } from '../../../daemon/snapshot-state.ts';
+import { buildSnapshotState } from '../../../core/snapshot-state.ts';
 import { coveredAndroidReplacementNodeIndexes } from '../../../snapshot/android-replacement-surface-occlusion.ts';
 import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-install.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';

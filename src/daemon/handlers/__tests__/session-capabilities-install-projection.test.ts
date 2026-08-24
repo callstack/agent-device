@@ -68,9 +68,10 @@ test('capabilities keeps legacy runtime commands outside the install-family fact
 
   expect(response).toMatchObject({ ok: true });
   if (!response?.ok) return;
-  // `bootTarget` facts are unavailable in this fixture. A global descriptor projection
-  // would hide boot; only this unit's install family is authorized to consume facts.
-  expect(response.data?.availableCommands).toContain(PUBLIC_COMMANDS.boot);
+  // R63 made the projection global: it reads every migrated command's declared uses, so
+  // `bootTarget`/`bootTargetHeadless` being unavailable in this fixture now hides `boot` — where
+  // this test previously pinned the opposite, because only the install family consumed facts.
+  expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.boot);
   expect(runtime.inspections).toHaveLength(1);
   expect(runtime.uses).toEqual(legacyCapabilityUses);
 });
@@ -94,7 +95,10 @@ test('capabilities fails closed only for install-family projection when facts in
 
   expect(response).toMatchObject({ ok: true });
   if (!response?.ok) return;
-  expect(response.data?.availableCommands).toContain(PUBLIC_COMMANDS.boot);
+  // R63: with no facts at all, every fact-owned command fails closed rather than being
+  // advertised on faith. `logs` survives because its availability is a BIND-time fact, and the
+  // binding here still succeeds.
+  expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.boot);
   expect(response.data?.availableCommands).toContain(PUBLIC_COMMANDS.logs);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.install);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.reinstall);

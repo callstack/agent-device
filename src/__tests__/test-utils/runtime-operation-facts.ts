@@ -67,6 +67,10 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   appSwitcher: unavailable,
   triggerAppEvent: unavailable,
   setSetting: unavailable,
+  readAlert: unavailable,
+  awaitAlert: unavailable,
+  acceptAlert: unavailable,
+  dismissAlert: unavailable,
 });
 
 /** Default facts for tests that are unrelated to application lifecycle commands. */

@@ -39,6 +39,8 @@ import { withMethodScope } from '../../utils/method-scope.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
 import { androidSnapshotPublicationInput } from '../../platforms/android/snapshot-capture.ts';
+import { handleAndroidAlert } from '../../platforms/android/alert.ts';
+import { buildSnapshotState } from '../snapshot-state.ts';
 
 /**
  * `appBundleId` is present exactly for app-backed daemon sessions, whose teardown releases the
@@ -55,6 +57,13 @@ export function createAndroidInteractor(
   runnerContext?: Pick<RunnerContext, 'signal' | 'appBundleId'>,
 ): Interactor {
   const helperSessionScope = androidHelperSessionScope(runnerContext?.appBundleId);
+  const alertOptions = (timeoutMs?: number) => ({
+    ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    captureNodes: async () => {
+      const capture = await snapshotAndroid(device, { includeHiddenContentHints: false });
+      return buildSnapshotState(androidSnapshotPublicationInput(capture), undefined).nodes;
+    },
+  });
   const interactor: Interactor = {
     open: (app, options) =>
       openAndroidApp(device, app, {
@@ -122,6 +131,15 @@ export function createAndroidInteractor(
     writeClipboard: (text) => writeAndroidClipboardText(device, text),
     setSetting: (setting, state, appId, options) =>
       setAndroidSetting(device, setting, state, appId, options),
+    // R59: Android's alert legs read the same presented accessibility tree `snapshot` publishes
+    // and own their own polling, so the family supplies the node capture rather than the daemon.
+    // The presentation pass matters: alert candidacy skips occlusion-blocked nodes, and only a
+    // presented tree carries that annotation.
+    readAlert: async () => await handleAndroidAlert(device, 'get', alertOptions()),
+    awaitAlert: async (options) =>
+      await handleAndroidAlert(device, 'wait', alertOptions(options?.timeoutMs)),
+    acceptAlert: async () => await handleAndroidAlert(device, 'accept', alertOptions()),
+    dismissAlert: async () => await handleAndroidAlert(device, 'dismiss', alertOptions()),
   };
   if (!provider) return interactor;
   return withMethodScope(interactor, (task) =>

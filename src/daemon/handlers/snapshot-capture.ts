@@ -15,7 +15,7 @@ import {
 } from '@agent-device/kernel/snapshot';
 import { resolveRefLabel } from '../../core/snapshot-node-lookup.ts';
 import { captureSnapshotWithInteractor } from './snapshot-interactor-capture.ts';
-import { buildSnapshotState } from '../snapshot-state.ts';
+import { buildSnapshotState } from '../../core/snapshot-state.ts';
 import { clearAndroidSnapshotFreshness } from '../session-snapshot-freshness.ts';
 import type { SnapshotFreshnessMode } from '../../snapshot/snapshot-freshness/index.ts';
 import { contextFromFlags } from '../context.ts';
