@@ -63,32 +63,12 @@ test(
   PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
 );
 
-// Permission is not usage: with the fallback allowed but the runner hitting
-// the element normally ("tapped"), the dispatch is the direct-ios path and
-// must disclose not-observed, not classify as the maestro-fallback cell.
-test('maestro-non-hittable-fallback resolutionDisclosure: allowed-but-not-taken discloses direct-ios not-observed', async () => {
-  await withIosContractDaemon(
-    [runnerTapEntry({ x: 50, y: 60, message: 'tapped' })],
-    async (daemon, transcript) => {
-      const click = await daemon.callCommand('click', ['label=Pin'], MAESTRO_FLAGS);
-      const data = assertRpcOk(click);
-
-      const tapRequest = transcript.calls[0]?.request as Record<string, unknown> | undefined;
-      assert.equal(tapRequest?.allowNonHittableCoordinateFallback, true);
-
-      assert.equal(data.maestroNonHittableCoordinateFallbackAllowed, true);
-      assert.equal(data.maestroNonHittableCoordinateFallbackUsed, false);
-      assert.deepEqual(data.resolution, { source: 'direct-ios', kind: 'not-observed' });
-    },
-  );
-});
-
-// The fourth cell of the resolution-suppression matrix. The other three are
-// above: runner-payload/taken (no resolution), runner-payload/not-taken
-// (direct-ios not-observed), runtime/taken (no resolution). Suppression is
-// keyed on the dispatch that RAN — a runtime fill the fallback never touched
-// still discloses how the daemon resolved it, whether or not the request
-// carried the Maestro permission.
+// The fourth cell of the resolution-suppression matrix. Runner-payload/taken
+// and runtime/taken are covered here; runner-payload/not-taken belongs to the
+// sibling maestro-direct-selector contract. Suppression is keyed on the
+// dispatch that RAN — a runtime fill the fallback never touched still
+// discloses how the daemon resolved it, whether or not the request carried the
+// Maestro permission.
 test('runtime fill the coordinate fallback did not execute keeps its resolution disclosure', async () => {
   await withIosContractDaemon(
     [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTypeEntry({ x: 200, y: 322 })],

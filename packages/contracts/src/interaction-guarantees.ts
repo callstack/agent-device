@@ -80,6 +80,7 @@ export const INTERACTION_PATH_IDS = [
   'target-drag',
   'native-ref',
   'coordinate',
+  'maestro-direct-selector',
   'maestro-non-hittable-fallback',
 ] as const;
 
@@ -407,6 +408,63 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       resolutionDisclosure: {
         kind: 'inapplicable',
         reason: 'Coordinates name a point; no element was resolved to disclose.',
+      },
+    },
+  },
+  'maestro-direct-selector': {
+    description:
+      'An explicit Maestro-compatible simple-selector click completed as an XCTest element tap. This path is selected only when the runner was allowed to use the non-hittable coordinate fallback but reported that it did not use it.',
+    commands: ['click'],
+    guarantees: {
+      disambiguation: {
+        kind: 'waived',
+        reason:
+          'Intentional: Maestro replay uses its expected-point compatibility scan rather than runtime structural-equivalence-or-reject semantics.',
+      },
+      occlusion: {
+        kind: 'waived',
+        reason:
+          'Intentional: the direct element-tap outcome relies on XCTest hittability instead of the daemon snapshot occlusion classifier.',
+      },
+      parentOwnedTouchPoint: {
+        kind: 'waived',
+        reason:
+          'gap: the runner has the matched element but no daemon snapshot tree from which to exclude independently interactive descendants.',
+        trackingIssue: PARENT_OWNED_TOUCH_POINT_GAP_ISSUE,
+      },
+      offscreen: {
+        kind: 'waived',
+        reason:
+          'Intentional: successful direct element taps rely on XCTest hittability instead of the daemon viewport rule.',
+      },
+      nonHittable: {
+        kind: 'inapplicable',
+        reason:
+          'A non-hittable candidate that succeeds does so through the separate maestro-non-hittable-fallback path.',
+      },
+      responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
+      responseIdentity: {
+        kind: 'waived',
+        reason:
+          'gap: the fused runner request does not return daemon refLabel or selectorChain fields.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
+      },
+      verifyEvidence: {
+        kind: 'inapplicable',
+        reason: 'The eligibility gate excludes --verify from this replay-only route.',
+      },
+      settleObservation: {
+        kind: 'inapplicable',
+        reason: 'The eligibility gate excludes --settle from this replay-only route.',
+      },
+      errorTaxonomy: {
+        kind: 'waived',
+        reason: 'gap: Maestro preserves the runner-native direct-selector error shapes.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
+      },
+      resolutionDisclosure: {
+        kind: 'runtime',
+        via: 'src/daemon/handlers/interaction-touch-response.ts#buildInteractionResponseData',
       },
     },
   },

@@ -8,6 +8,7 @@ import type {
   RecordingTargetOverride,
   ResolutionDisclosure,
   SettleObservation,
+  InteractionPathId,
 } from '@agent-device/contracts/interaction';
 import { isApplePlatform } from '@agent-device/kernel/device';
 import {
@@ -45,20 +46,19 @@ type InteractionRuntimeResult =
   | LongPressCommandResult
   | HoverCommandResult;
 
+const MAESTRO_DIRECT_SELECTOR_PATH = 'maestro-direct-selector' satisfies InteractionPathId;
+const MAESTRO_COORDINATE_FALLBACK_PATH =
+  'maestro-non-hittable-fallback' satisfies InteractionPathId;
+
 type InteractionResponseSourceBase = {
   publicData?: Record<string, unknown>;
-  /**
-   * The runner EXECUTED its Maestro non-hittable coordinate fallback, never the
-   * mere permission to. Names the dispatch path that ran, not a request flag —
-   * see {@link suppressesResolutionDisclosure}.
-   */
-  maestroCoordinateFallbackDispatched?: boolean;
 };
 
 export type InteractionResponseSource =
   | (InteractionResponseSourceBase & {
       kind: 'runtime';
       result: InteractionRuntimeResult;
+      dispatchPath?: typeof MAESTRO_COORDINATE_FALLBACK_PATH;
     })
   | (InteractionResponseSourceBase & {
       // Direct iOS selector dispatch: no runtime result exists, only the raw
@@ -67,6 +67,8 @@ export type InteractionResponseSource =
       targetKind: InteractionRuntimeResult['kind'];
       data: Record<string, unknown>;
       point: { x: number; y: number };
+      /** The runner outcome, not the request's fallback permission. */
+      dispatchPath: typeof MAESTRO_DIRECT_SELECTOR_PATH | typeof MAESTRO_COORDINATE_FALLBACK_PATH;
     })
   | (InteractionResponseSourceBase & {
       // An XCTest mutation failure was corroborated by a changed same-scope
@@ -111,7 +113,7 @@ function applyResolutionDisclosurePolicy<TExtra extends { resolution?: unknown }
 }
 
 function suppressesResolutionDisclosure(source: InteractionResponseSource): boolean {
-  return source.maestroCoordinateFallbackDispatched === true;
+  return 'dispatchPath' in source && source.dispatchPath === MAESTRO_COORDINATE_FALLBACK_PATH;
 }
 
 export type InteractionResponsePayloads = {

@@ -169,7 +169,7 @@ function buildFillResponsePayloads(params: {
         flags: params.flags,
         data: result.backendResult,
       }),
-      maestroCoordinateFallbackDispatched: maestroFallback.used,
+      ...(maestroFallback.used ? { dispatchPath: 'maestro-non-hittable-fallback' as const } : {}),
     },
     referenceFrame,
     extra: { text: params.text, ...maestroFallback.extra },

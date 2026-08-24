@@ -62,7 +62,9 @@ export async function dispatchDirectIosSelectorTap(
         data,
         publicData,
         point,
-        maestroCoordinateFallbackDispatched: maestroFallback.used,
+        dispatchPath: maestroFallback.used
+          ? 'maestro-non-hittable-fallback'
+          : 'maestro-direct-selector',
       },
       referenceFrame: readReferenceFrameFromDirectSelectorTapResult(data),
       extra: {
