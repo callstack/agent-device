@@ -24,6 +24,8 @@ import {
 } from './interaction-touch-response.ts';
 import { dispatchRuntimeInteraction } from './interaction-touch-runtime.ts';
 import { formatTouchTargetLabel } from './interaction-touch-targets.ts';
+import { refreshAndroidRefSnapshotIfFreshnessActive } from './interaction-touch-android-freshness.ts';
+import { prepareTouchDispatch } from './interaction-touch-prepare.ts';
 
 /**
  * How an admitted targeted `press`/`click`/`longpress`/`hover` executes: the direct-iOS
@@ -38,6 +40,22 @@ export async function dispatchTargetedTouchViaRuntime(
   const admission = await admitTargetedTouch(params, command);
   if ('response' in admission) return admission.response;
   const { admitted } = admission;
+  const prepared = await prepareTouchDispatch(
+    params,
+    admitted.session,
+    command,
+    admitted.target.kind !== 'point',
+  );
+  if (!prepared.ok) return prepared.response;
+  const { touchExecutor } = prepared;
+  const androidFreshnessBaseline =
+    admitted.target.kind === 'ref'
+      ? await refreshAndroidRefSnapshotIfFreshnessActive(params, admitted.session)
+      : undefined;
+  const boundAdmitted = {
+    ...admitted,
+    androidFreshnessBaseline,
+  };
 
   // ADR 0012 step 4: a guarded replay dispatch must resolve through the
   // runtime tree path so the post-resolution identity guard runs — the
@@ -45,31 +63,35 @@ export async function dispatchTargetedTouchViaRuntime(
   const directSelector = params.req.internal?.replayTargetGuard
     ? null
     : readDirectIosSelectorTapTarget({
-        session: admitted.session,
-        commandLabel: admitted.commandLabel,
-        target: admitted.target,
+        session: boundAdmitted.session,
+        commandLabel: boundAdmitted.commandLabel,
+        target: boundAdmitted.target,
         flags: params.req.flags,
+        tapElementSelectorAvailable: touchExecutor.tapElementSelector !== undefined,
       });
-  if (directSelector) {
+  if (directSelector && touchExecutor.tapElementSelector) {
     const directResponse = await dispatchDirectIosSelectorTap(
       params,
-      admitted.session,
+      boundAdmitted.session,
       directSelector,
+      touchExecutor.tapElementSelector,
     );
     if (directResponse) return directResponse;
   }
 
-  return await dispatchRuntimeInteraction(
-    params,
-    buildTargetedRuntimeOptions(params, command, admitted),
-  );
+  return await dispatchRuntimeInteraction(params, {
+    ...buildTargetedRuntimeOptions(params, command, boundAdmitted),
+    touchExecutor,
+  });
 }
 
 function buildTargetedRuntimeOptions(
   params: TargetedTouchParams,
   command: TargetedTouchCommand,
-  admitted: AdmittedTargetedTouch,
-): Parameters<typeof dispatchRuntimeInteraction<TargetedTouchResult>>[1] {
+  admitted: AdmittedTargetedTouch & {
+    androidFreshnessBaseline: AdmittedTargetedTouch['session']['snapshot'];
+  },
+): Omit<Parameters<typeof dispatchRuntimeInteraction<TargetedTouchResult>>[1], 'touchExecutor'> {
   const { req, sessionName } = params;
   const { session, target, durationMs, staleRefsWarning, resultButtonTag } = admitted;
   const targetedExtra =

@@ -134,7 +134,11 @@ export const WEB_PLATFORM_COVERAGE = {
   [C.find]: live('find locates the ready marker through text and selector expressions'),
   [C.click]: live('click changes the fixture status to Submitted'),
   [C.fill]: live('fill updates the accessible email value and fixture status'),
-  [C.longPress]: denial('Web capability model rejects touch long-press input'),
+  [C.longPress]: contract(
+    'packages/platform-web/src/runtime.ts',
+    'longPress: readinessUnavailable',
+    'the web runtime fact rejects touch long-press input',
+  ),
   [C.hover]: contract(
     'test/integration/provider-scenarios/web-desktop.test.ts',
     'hover submit ref',

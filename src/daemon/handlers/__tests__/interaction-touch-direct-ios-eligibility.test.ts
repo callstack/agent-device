@@ -3,6 +3,13 @@ import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction.ts';
+import {
+  getRuntimeBindings,
+  mockFillPoint,
+  mockTapElementSelector,
+  mockTapPoint,
+  resetGetRuntimeFixture,
+} from './interaction-get-runtime-fixture.ts';
 import { contextFromFlags } from './interaction-touch-fixtures.ts';
 
 // Whether a click may take the direct iOS selector fast path: which selector
@@ -12,11 +19,6 @@ import { contextFromFlags } from './interaction-touch-fixtures.ts';
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
 
 vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
   const actual =
@@ -44,24 +46,19 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   getAndroidAppState,
   getAndroidBlockingDialogFocus,
 } from '../../../platforms/android/app-lifecycle.ts';
 import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
-
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  resetGetRuntimeFixture();
   mockGetAndroidAppState.mockReset();
   mockGetAndroidAppState.mockResolvedValue({});
   mockGetAndroidBlockingDialogFocus.mockReset();
@@ -69,7 +66,6 @@ beforeEach(() => {
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
-  mockCaptureSnapshotForSession.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
@@ -79,7 +75,7 @@ test('click simple iOS id selector uses direct runner selector tap without snaps
   const sessionName = 'ios-direct-selector';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
 
-  mockDispatch.mockResolvedValue({
+  mockTapElementSelector.mockResolvedValue({
     message: 'tapped',
     x: 80,
     y: 100,
@@ -98,19 +94,17 @@ test('click simple iOS id selector uses direct runner selector tap without snaps
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
   expect(mockRunAppleRunnerCommand).not.toHaveBeenCalled();
-  expect(mockDispatch).toHaveBeenCalledTimes(1);
-  const pressCalls = mockDispatch.mock.calls.filter((call) => call[1] === 'press');
-  expect(pressCalls.length).toBe(1);
-  expect(pressCalls[0]?.[2]).toEqual([]);
-  expect((pressCalls[0]?.[4] as Record<string, unknown>)?.directElementSelector).toEqual({
-    key: 'id',
-    value: 'submit',
-    raw: 'id="submit"',
-  });
+  expect(mockTapElementSelector).toHaveBeenCalledWith(
+    expect.objectContaining({
+      selector: { key: 'id', value: 'submit', raw: 'id="submit"' },
+    }),
+  );
+  expect(mockCaptureSnapshotForSession).not.toHaveBeenCalled();
   if (response?.ok) {
     expect(response.data?.selector).toBe('id="submit"');
   }
@@ -141,7 +135,7 @@ test('fill simple iOS id selector resolves runtime text input evidence before co
     ]),
     backend: 'xctest',
   });
-  mockDispatch.mockResolvedValueOnce({
+  mockFillPoint.mockResolvedValueOnce({
     message: 'filled',
     x: 190,
     y: 102,
@@ -160,16 +154,19 @@ test('fill simple iOS id selector resolves runtime text input evidence before co
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
   expect(mockCaptureSnapshotForSession).toHaveBeenCalledTimes(1);
-  expect(mockDispatch).toHaveBeenCalledTimes(1);
-  expect(mockDispatch.mock.calls[0]?.[1]).toBe('fill');
-  expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['190', '102', 'ada@example.com']);
-  const context = mockDispatch.mock.calls[0]?.[4] as Record<string, unknown>;
-  expect(context.directElementSelector).toBeUndefined();
-  expect(context.delayMs).toBe(25);
+  expect(mockFillPoint).toHaveBeenCalledWith(
+    expect.objectContaining({
+      point: { x: 190, y: 102 },
+      text: 'ada@example.com',
+      delayMs: 25,
+    }),
+  );
+  expect(mockTapElementSelector).not.toHaveBeenCalled();
   if (response?.ok) {
     expect(response.data?.selector).toBe('id="email"');
     expect(response.data?.text).toBe('ada@example.com');
@@ -181,7 +178,7 @@ test('click simple iOS selector forwards Maestro non-hittable coordinate fallbac
   const sessionName = 'ios-maestro-selector-fallback';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
 
-  mockDispatch.mockResolvedValue({
+  mockTapElementSelector.mockResolvedValue({
     message: 'tapped via non-hittable coordinate fallback',
     maestroNonHittableCoordinateFallbackUsed: true,
     x: 439.5,
@@ -201,17 +198,20 @@ test('click simple iOS selector forwards Maestro non-hittable coordinate fallbac
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
-  const pressCalls = mockDispatch.mock.calls.filter((call) => call[1] === 'press');
-  expect(pressCalls.length).toBe(1);
-  expect((pressCalls[0]?.[4] as Record<string, unknown>)?.directElementSelector).toEqual({
-    key: 'id',
-    value: 'hiddenTestLogin',
-    raw: 'id="hiddenTestLogin"',
-    allowNonHittableCoordinateFallback: true,
-  });
+  expect(mockTapElementSelector).toHaveBeenCalledWith(
+    expect.objectContaining({
+      selector: {
+        key: 'id',
+        value: 'hiddenTestLogin',
+        raw: 'id="hiddenTestLogin"',
+        allowNonHittableCoordinateFallback: true,
+      },
+    }),
+  );
   if (response?.ok) {
     expect(response.data?.maestroNonHittableCoordinateFallbackAllowed).toBe(true);
     expect(response.data?.maestroNonHittableCoordinateFallbackUsed).toBe(true);
@@ -226,32 +226,24 @@ test('click simple iOS id selector waits for snapshot path after pending gesture
   session.postGestureStabilization = { action: 'swipe', positionals: [], markedAt: Date.now() };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockImplementation(async (_device, command, positionals) => {
-    if (command === 'snapshot') {
-      return {
-        nodes: attachRefs([
-          {
-            index: 0,
-            type: 'Window',
-            rect: { x: 0, y: 0, width: 390, height: 844 },
-          },
-          {
-            index: 1,
-            parentIndex: 0,
-            type: 'XCUIElementTypeButton',
-            identifier: 'shipping-pickup',
-            rect: { x: 126, y: 555, width: 75, height: 38 },
-            enabled: true,
-            hittable: true,
-          },
-        ]),
-        backend: 'xctest',
-      };
-    }
-    if (command === 'press') {
-      return { x: Number(positionals[0]), y: Number(positionals[1]), pressed: true };
-    }
-    return {};
+  mockCaptureSnapshotForSession.mockResolvedValue({
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'Window',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'XCUIElementTypeButton',
+        identifier: 'shipping-pickup',
+        rect: { x: 126, y: 555, width: 75, height: 38 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    backend: 'xctest',
   });
 
   const response = await handleInteractionCommands({
@@ -265,11 +257,10 @@ test('click simple iOS id selector waits for snapshot path after pending gesture
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
-  const pressCalls = mockDispatch.mock.calls.filter((call) => call[1] === 'press');
-  expect(pressCalls.length).toBe(1);
-  expect((pressCalls[0]?.[4] as Record<string, unknown>)?.directElementSelector).toBeUndefined();
-  expect(pressCalls[0]?.[2]).toEqual(['164', '574']);
+  expect(mockTapElementSelector).not.toHaveBeenCalled();
+  expect(mockTapPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 164, y: 574 } }));
 });

@@ -179,7 +179,11 @@ export const LINUX_PLATFORM_COVERAGE = {
     LINUX_PROVIDER_EVIDENCE.test,
     'Linux provider scenario executes a coordinate long press',
   ),
-  [C.hover]: denial('hover', 'Linux capability declaration rejects pointer-only hover input'),
+  [C.hover]: contract(
+    'packages/platform-linux/src/runtime.ts',
+    'hover: unsupportedPlatformLeaf',
+    'the Linux runtime fact rejects pointer-only hover input',
+  ),
   [C.press]: contract(
     LINUX_PROVIDER_EVIDENCE.path,
     LINUX_PROVIDER_EVIDENCE.test,

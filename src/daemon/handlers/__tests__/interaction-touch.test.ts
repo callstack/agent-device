@@ -2,8 +2,16 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
-import { withWebProvider, type WebProvider } from '../../../platforms/web/provider.ts';
 import { handleInteractionCommands } from '../interaction.ts';
+import {
+  getRuntimeBindings,
+  mockHoverPoint,
+  mockHoverRef,
+  mockLongPressPoint,
+  mockTapPoint,
+  resetGetRuntimeFixture,
+  runtimeBindingSpies,
+} from './interaction-get-runtime-fixture.ts';
 import {
   contextFromFlags,
   makeMacOsDesktopSession,
@@ -17,11 +25,6 @@ import {
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
 
 vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
   const actual =
@@ -49,24 +52,19 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   getAndroidAppState,
   getAndroidBlockingDialogFocus,
 } from '../../../platforms/android/app-lifecycle.ts';
 import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
-
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  resetGetRuntimeFixture();
   mockGetAndroidAppState.mockReset();
   mockGetAndroidAppState.mockResolvedValue({});
   mockGetAndroidBlockingDialogFocus.mockReset();
@@ -74,7 +72,6 @@ beforeEach(() => {
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
-  mockCaptureSnapshotForSession.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
@@ -84,8 +81,6 @@ test('press coordinates dispatches press and records as press', async () => {
   const sessionName = 'default';
   const storedSession = makeSession(sessionName);
   sessionStore.set(sessionName, storedSession);
-
-  mockDispatch.mockResolvedValue({ ok: true });
 
   const response = await handleInteractionCommands({
     req: {
@@ -98,17 +93,16 @@ test('press coordinates dispatches press and records as press', async () => {
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  expect(mockDispatch).toHaveBeenCalledTimes(1);
-  expect(mockDispatch.mock.calls[0]?.[1]).toBe('press');
-  expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['100', '200']);
-  const context = mockDispatch.mock.calls[0]?.[4] as Record<string, unknown> | undefined;
-  expect(context?.count).toBe(3);
-  expect(context?.intervalMs).toBe(1);
-  expect(context?.doubleTap).toBe(true);
+  expect(mockTapPoint).toHaveBeenCalledOnce();
+  expect(mockTapPoint.mock.calls[0]?.[0]).toMatchObject({
+    point: { x: 100, y: 200 },
+    options: { count: 3, intervalMs: 1, doubleTap: true },
+  });
 
   const session = sessionStore.get(sessionName);
   expect(session).toBeTruthy();
@@ -117,12 +111,36 @@ test('press coordinates dispatches press and records as press', async () => {
   expect(session?.actions[0]?.positionals).toEqual(['100', '200']);
 });
 
+test.each([
+  ['click', ['100', '200'], false],
+  ['press', ['100', '200'], false],
+  ['longpress', ['100', '200', '800'], false],
+  ['hover', ['100', '200'], true],
+  ['fill', ['100', '200', 'hello'], false],
+] as const)('%s inspects once and binds once', async (command, positionals, web) => {
+  const sessionStore = makeSessionStore();
+  const sessionName = `single-bind-${command}`;
+  const session = makeSession(sessionName);
+  if (web) session.device = WEB_DESKTOP_DEVICE;
+  sessionStore.set(sessionName, session);
+
+  const response = await handleInteractionCommands({
+    req: { token: 't', session: sessionName, command, positionals: [...positionals], flags: {} },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+    ...getRuntimeBindings(),
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(runtimeBindingSpies().inspectFacts).toHaveBeenCalledOnce();
+  expect(runtimeBindingSpies().bindDevice).toHaveBeenCalledOnce();
+});
+
 test('click rejects macOS desktop surface interactions until helper routing exists', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'macos-desktop-click';
   sessionStore.set(sessionName, makeMacOsDesktopSession(sessionName));
-
-  mockDispatch.mockRejectedValue(new Error('dispatch should not be called'));
 
   const response = await handleInteractionCommands({
     req: {
@@ -135,6 +153,7 @@ test('click rejects macOS desktop surface interactions until helper routing exis
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(false);
@@ -149,8 +168,6 @@ test('fill rejects macOS menubar surface interactions until helper routing exist
   const sessionName = 'macos-menubar-fill';
   sessionStore.set(sessionName, makeMacOsMenubarSession(sessionName));
 
-  mockDispatch.mockRejectedValue(new Error('dispatch should not be called'));
-
   const response = await handleInteractionCommands({
     req: {
       token: 't',
@@ -162,6 +179,7 @@ test('fill rejects macOS menubar surface interactions until helper routing exist
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(false);
@@ -191,8 +209,6 @@ test('longpress @ref resolves the target and dispatches coordinate longpress', a
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({ native: true });
-
   const response = await handleInteractionCommands({
     req: {
       token: 't',
@@ -204,6 +220,7 @@ test('longpress @ref resolves the target and dispatches coordinate longpress', a
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -213,9 +230,9 @@ test('longpress @ref resolves the target and dispatches coordinate longpress', a
     expect(response.data?.durationMs).toBe(800);
     expect(response.data?.message).toMatch(/Long pressed @e1/);
   }
-  expect(mockDispatch).toHaveBeenCalledTimes(1);
-  expect(mockDispatch.mock.calls[0]?.[1]).toBe('longpress');
-  expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['60', '40', '800']);
+  expect(mockLongPressPoint).toHaveBeenCalledWith(
+    expect.objectContaining({ point: { x: 60, y: 40 }, durationMs: 800 }),
+  );
   expect(sessionStore.get(sessionName)?.actions[0]?.command).toBe('longpress');
 });
 
@@ -237,34 +254,25 @@ test('hover @ref on web dispatches through the provider hoverRef route, not coor
     backend: 'web',
   };
   sessionStore.set(sessionName, session);
-  const hoveredRefs: string[] = [];
-  const provider = makeWebProvider({
-    hoverRef: async (ref) => {
-      hoveredRefs.push(ref);
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'hover',
+      positionals: ['@e1'],
+      flags: {},
     },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+    ...getRuntimeBindings(),
   });
-
-  const response = await withWebProvider(provider, async () =>
-    handleInteractionCommands({
-      req: {
-        token: 't',
-        session: sessionName,
-        command: 'hover',
-        positionals: ['@e1'],
-        flags: {},
-      },
-      sessionName,
-      sessionStore,
-      contextFromFlags,
-    }),
-  );
 
   expect(response).toMatchObject({
     ok: true,
     data: { ref: 'e1', gesture: 'hover', message: expect.stringMatching(/Hovered @e1/) },
   });
-  expect(hoveredRefs).toEqual(['@e1']);
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(mockHoverRef).toHaveBeenCalledWith(expect.objectContaining({ ref: '@e1' }));
   expect(sessionStore.get(sessionName)?.actions[0]?.command).toBe('hover');
 });
 
@@ -299,15 +307,14 @@ test('hover selector on web resolves the target and dispatches coordinate hover'
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toMatchObject({
     ok: true,
     data: { x: 60, y: 40, gesture: 'hover', message: expect.stringMatching(/Hovered label/) },
   });
-  expect(mockDispatch.mock.calls).toEqual([
-    [expect.anything(), 'hover', ['60', '40'], undefined, expect.anything()],
-  ]);
+  expect(mockHoverPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 60, y: 40 } }));
 });
 
 test('hover is refused by capability on touch platforms before any dispatch', async () => {
@@ -326,29 +333,15 @@ test('hover is refused by capability on touch platforms before any dispatch', as
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toMatchObject({
     ok: false,
     error: {
       code: 'UNSUPPORTED_OPERATION',
-      message: expect.stringMatching(/--platform web/),
+      message: 'hover is not supported on this device',
+      hint: 'hover raises pointer hover state and is available on web targets only. On touch platforms use longpress for hold gestures.',
     },
   });
-  expect(mockDispatch).not.toHaveBeenCalled();
 });
-
-function makeWebProvider(overrides: Partial<WebProvider>): WebProvider {
-  return {
-    open: async () => {},
-    close: async () => {},
-    snapshot: async () => ({ nodes: [] }),
-    screenshot: async () => {},
-    setViewport: async () => {},
-    click: async () => {},
-    fill: async () => {},
-    typeText: async () => {},
-    scroll: async () => {},
-    ...overrides,
-  };
-}

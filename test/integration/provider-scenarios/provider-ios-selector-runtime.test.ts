@@ -194,7 +194,9 @@ function createProviderInteractor(calls: {
         if (
           property === 'then' ||
           property === 'tapElementSelector' ||
-          property === 'fillElementSelector'
+          property === 'fillElementSelector' ||
+          property === 'pressPoint' ||
+          property === 'alternateClick'
         ) {
           return undefined;
         }

@@ -43,8 +43,8 @@ test('Linux coverage report has the expected classification counts', () => {
     // digit button, and the typed calculation's result is now selectable (see the manifest
     // entries for the platform defects this fixed). keyboard/orientation/tv-remote moved from
     // capability-denial to command-contract: they're fact-owned now, not catalog-owned.
-    capabilityDenial: 8,
-    contract: 20,
+    capabilityDenial: 7,
+    contract: 21,
     gap: 18,
     live: 8,
     total: 54,

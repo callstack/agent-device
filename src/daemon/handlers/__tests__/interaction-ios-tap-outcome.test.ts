@@ -23,6 +23,13 @@ import {
   snapshotPayload,
 } from './interaction-ios-tap-outcome-fixtures.ts';
 import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';
+import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
+import {
+  getRuntimeBindings,
+  mockTapElementSelector,
+  mockTapPoint,
+  resetGetRuntimeFixture,
+} from './interaction-get-runtime-fixture.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -68,10 +75,33 @@ async function runClick(
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 }
 
-beforeEach(() => mockDispatch.mockReset());
+beforeEach(() => {
+  resetGetRuntimeFixture();
+  mockDispatch.mockReset();
+  mockTapPoint.mockImplementation(async (input) => {
+    return await mockDispatch(
+      IOS_SIMULATOR,
+      'press',
+      [String(input.point.x), String(input.point.y)],
+      undefined,
+      input.execution,
+    );
+  });
+  mockTapElementSelector.mockImplementation(
+    async (input) =>
+      (await mockDispatch(
+        IOS_SIMULATOR,
+        'press',
+        [`${input.selector.key}="${input.selector.value}"`],
+        undefined,
+        input.execution,
+      )) ?? {},
+  );
+});
 
 test('a changed post-action capture corroborates a direct iOS tap reported as failed', async () => {
   const sessionName = 'ios-direct-tap-corroboration';
@@ -388,6 +418,7 @@ test('corroborates a tap when the request carries no flags and the baseline used
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -665,6 +696,7 @@ test('corroborated runtime taps retain target evidence through save and replay',
         sessionName: replaySessionName,
         sessionStore: replayStore,
         contextFromFlags,
+        ...getRuntimeBindings(),
       });
       if (!response) throw new Error(`unexpected empty response for ${req.command}`);
       return response;

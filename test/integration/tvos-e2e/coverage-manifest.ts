@@ -69,10 +69,6 @@ const contract = (
   owner: { path, test },
   ...(admission ? { admission } : {}),
 });
-const denial = (assertion: string): TvOsPlatformCoverageEntry => ({
-  assertion,
-  level: 'capability-denial',
-});
 const gap = (assertion: string): TvOsPlatformCoverageEntry => ({
   assertion,
   level: 'known-gap',
@@ -162,7 +158,11 @@ export const TVOS_PLATFORM_COVERAGE = {
   [C.click]: gap('No tvOS-specific click command evidence exists yet'),
   [C.fill]: gap('No tvOS-specific fill command evidence exists yet'),
   [C.longPress]: gap('No tvOS-specific long-press command evidence exists yet'),
-  [C.hover]: denial('tvOS capability admission rejects pointer-only hover input'),
+  [C.hover]: contract(
+    'packages/platform-apple/src/runtime.ts',
+    'hover: unavailable',
+    'the Apple runtime fact rejects pointer-only hover input on tvOS',
+  ),
   [C.press]: gap('No tvOS-specific press command evidence exists yet'),
   [C.type]: gap('No tvOS-specific type command evidence exists yet'),
   [C.get]: gap('No tvOS-specific get command evidence exists yet'),

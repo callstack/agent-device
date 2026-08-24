@@ -5,6 +5,11 @@ import { activateCompleteRefFrame } from '../../ref-frame.ts';
 import { setSessionSnapshot, STALE_SNAPSHOT_REFS_WARNING } from '../../session-snapshot.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import {
+  getRuntimeBindings,
+  mockTapPoint,
+  resetGetRuntimeFixture,
+} from './interaction-get-runtime-fixture.ts';
+import {
   contextFromFlags,
   findResolvedTarget,
   makeFindPreresolvedTree,
@@ -23,11 +28,6 @@ import {
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
 
 vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
   const actual =
@@ -55,24 +55,19 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   getAndroidAppState,
   getAndroidBlockingDialogFocus,
 } from '../../../platforms/android/app-lifecycle.ts';
 import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
-
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  resetGetRuntimeFixture();
   mockGetAndroidAppState.mockReset();
   mockGetAndroidAppState.mockResolvedValue({});
   mockGetAndroidBlockingDialogFocus.mockReset();
@@ -80,7 +75,6 @@ beforeEach(() => {
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
-  mockCaptureSnapshotForSession.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
@@ -99,7 +93,7 @@ test('click --button middle on macOS fails with an explicit unsupported-operatio
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockRejectedValue(
+  mockTapPoint.mockRejectedValue(
     new Error('dispatch should not be called for unsupported middle click'),
   );
 
@@ -114,6 +108,7 @@ test('click --button middle on macOS fails with an explicit unsupported-operatio
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toBeTruthy();
@@ -129,8 +124,6 @@ test('press coordinates does not treat extra trailing args as selector', async (
   const sessionName = 'default';
   sessionStore.set(sessionName, makeSession(sessionName));
 
-  mockDispatch.mockResolvedValue({ ok: true });
-
   const response = await handleInteractionCommands({
     req: {
       token: 't',
@@ -142,13 +135,12 @@ test('press coordinates does not treat extra trailing args as selector', async (
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  expect(mockDispatch).toHaveBeenCalledTimes(1);
-  expect(mockDispatch.mock.calls[0]?.[1]).toBe('press');
-  expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['100', '200']);
+  expect(mockTapPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 100, y: 200 } }));
   expect(sessionStore.get(sessionName)?.actions.length).toBe(1);
 });
 
@@ -156,7 +148,6 @@ test('#1654: the resolved-target payload fails closed when its ref provenance di
   const sessionStore = makeSessionStore();
   const sessionName = 'find-preresolved-mismatched-ref';
   sessionStore.set(sessionName, makeStaleRefSession(sessionName));
-  mockDispatch.mockResolvedValue({});
   const preresolved = makeFindPreresolvedTree();
 
   const response = await runFindInternalClick(sessionStore, sessionName, {
@@ -168,7 +159,7 @@ test('#1654: the resolved-target payload fails closed when its ref provenance di
     expect(response.error.code).toBe('COMMAND_FAILED');
     expect(response.error.message).toContain('provenance does not match');
   }
-  expect(readPressPoint(mockDispatch)).toBeUndefined();
+  expect(readPressPoint(mockTapPoint)).toBeUndefined();
 });
 
 test('press selector then press @ref rejects refs that outlived the stored snapshot before dispatch', async () => {
@@ -176,9 +167,10 @@ test('press selector then press @ref rejects refs that outlived the stored snaps
   const sessionName = 'stale-ref-warns';
   const session = makeStaleRefSession(sessionName);
   sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) =>
-    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
-  );
+  mockCaptureSnapshotForSession.mockResolvedValue({
+    nodes: makeTwoButtonNodes(),
+    backend: 'xctest',
+  });
 
   // Selector press: its resolution capture replaces the stored snapshot
   // without handing the new refs back to the client.
@@ -193,7 +185,7 @@ test('press selector then press @ref rejects refs that outlived the stored snaps
   // ADR 0014: the selector press crossed the side-effect seam and expired the
   // frame, so the ref that outlived it is rejected before dispatch.
   expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
-  const dispatchCallsBeforeStaleRef = mockDispatch.mock.calls.length;
+  const touchCallsBeforeStaleRef = mockTapPoint.mock.calls.length;
   const refPress = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
   expect(refPress?.ok).toBe(false);
   if (refPress && !refPress.ok) {
@@ -202,7 +194,7 @@ test('press selector then press @ref rejects refs that outlived the stored snaps
     expect(refPress.error.details?.reason).toBe('ref_frame_expired');
     expect(refPress.error.details?.hint).toBe(STALE_SNAPSHOT_REFS_WARNING);
   }
-  expect(mockDispatch).toHaveBeenCalledTimes(dispatchCallsBeforeStaleRef);
+  expect(mockTapPoint).toHaveBeenCalledTimes(touchCallsBeforeStaleRef);
 });
 
 test('a ref press crosses the ADR 0014 side-effect seam and expires the ref frame', async () => {
@@ -210,9 +202,10 @@ test('a ref press crosses the ADR 0014 side-effect seam and expires the ref fram
   const sessionName = 'seam-expiry';
   const session = makeStaleRefSession(sessionName);
   sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) =>
-    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
-  );
+  mockCaptureSnapshotForSession.mockResolvedValue({
+    nodes: makeTwoButtonNodes(),
+    backend: 'xctest',
+  });
 
   // A freshly issued complete frame is active.
   expect(sessionStore.get(sessionName)?.refFrameState).toBe('active');
@@ -231,9 +224,10 @@ test('ADR 0014 evidence #1: a second ref mutation rejects (bare and pinned) unti
   // A complete snapshot issued the frame at generation 500.
   activateCompleteRefFrame(session);
   sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) =>
-    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
-  );
+  mockCaptureSnapshotForSession.mockResolvedValue({
+    nodes: makeTwoButtonNodes(),
+    backend: 'xctest',
+  });
 
   // `snapshot -> press @e1`: admitted; crosses the seam and expires the frame.
   const first = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
@@ -274,9 +268,10 @@ test('re-issuing a complete frame lets press @ref succeed again without warning'
   const sessionName = 'reissued-refs-no-warning';
   const session = makeStaleRefSession(sessionName);
   sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) =>
-    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
-  );
+  mockCaptureSnapshotForSession.mockResolvedValue({
+    nodes: makeTwoButtonNodes(),
+    backend: 'xctest',
+  });
 
   const selectorPress = await runInteraction(sessionStore, sessionName, 'press', [
     'label=Continue',
@@ -321,7 +316,7 @@ test('press with a pinned ref from an older generation rejects with the precise 
   const session = makeStaleRefSession(sessionName);
   session.snapshotGeneration = 15;
   sessionStore.set(sessionName, session);
-  mockDispatch.mockRejectedValue(new Error('dispatch should not be called for a stale iOS ref'));
+  mockTapPoint.mockRejectedValue(new Error('touch should not be called for a stale iOS ref'));
 
   const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1~s12']);
   expect(response?.ok).toBe(false);
@@ -331,7 +326,7 @@ test('press with a pinned ref from an older generation rejects with the precise 
       "Ref @e1 was minted from snapshot s12 but the session's ref frame is now s15 — re-run snapshot -i.",
     );
   }
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(mockTapPoint).not.toHaveBeenCalled();
 });
 
 test('ADR 0014 evidence #6: a read-only capture does not invalidate a mutation ref', async () => {
@@ -351,11 +346,11 @@ test('ADR 0014 evidence #6: a read-only capture does not invalidate a mutation r
   });
   expect(session.refFrameState).toBe('active');
   sessionStore.set(sessionName, session);
-  mockDispatch.mockResolvedValue({ pressed: true });
+  mockTapPoint.mockResolvedValue({ pressed: true });
 
   const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
   expect(response?.ok).toBe(true);
-  expect(mockDispatch).toHaveBeenCalled();
+  expect(mockTapPoint).toHaveBeenCalled();
   // Crossing the seam expired the frame, so a SECOND plain ref is now rejected.
   expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
   const second = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
@@ -402,7 +397,7 @@ test('after a session reopen, a pin from the previous lifetime rejects (reseeded
   sessionStore.set(sessionName, reopened);
   // Probabilistic (~1/900000 collision) — accepted residual risk.
   expect(reopened.snapshotGeneration).not.toBe(oldGeneration);
-  mockDispatch.mockRejectedValue(new Error('dispatch should not be called for a stale iOS ref'));
+  mockTapPoint.mockRejectedValue(new Error('touch should not be called for a stale iOS ref'));
 
   const response = await runInteraction(sessionStore, sessionName, 'press', [
     `@e1~s${oldGeneration}`,
@@ -414,5 +409,5 @@ test('after a session reopen, a pin from the previous lifetime rejects (reseeded
       `minted from snapshot s${oldGeneration}`,
     );
   }
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(mockTapPoint).not.toHaveBeenCalled();
 });

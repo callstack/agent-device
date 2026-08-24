@@ -24,6 +24,7 @@ import type { HomeRuntimeOperations } from './home-runtime.ts';
 import type { OrientationRuntimeOperations } from './orientation-runtime.ts';
 import type { TvRemoteRuntimeOperations } from './tv-remote-runtime.ts';
 import type { KeyboardRuntimeOperations } from './keyboard-runtime.ts';
+import type { TouchRuntimeOperations } from './touch-runtime.ts';
 import type {
   DeviceReadinessRuntimeHost,
   DeviceReadinessRuntimeOperations,
@@ -65,6 +66,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   OrientationRuntimeOperations &
   TvRemoteRuntimeOperations &
   KeyboardRuntimeOperations &
+  TouchRuntimeOperations &
   DeviceReadinessRuntimeOperations &
   DeviceShutdownRuntimeOperations &
   ApplicationLifecycleRuntimeOperations;
@@ -93,6 +95,81 @@ export const tvRemoteRuntimeUse = defineUse({ required: ['tvRemote'] });
 export const keyboardStatusUse = defineUse({ required: ['keyboardStatus'] });
 export const keyboardDismissUse = defineUse({ required: ['keyboardDismiss'] });
 export const keyboardEnterUse = defineUse({ required: ['keyboardEnter'] });
+export const tapPointUse = defineUse({ required: ['tapPoint'] });
+export const capturedTapUse = defineUse({
+  required: ['captureSnapshot', 'tapPoint'],
+  preferred: ['tapElementSelector', 'tapRef'],
+});
+export const longPressPointUse = defineUse({ required: ['longPressPoint'] });
+export const capturedLongPressUse = defineUse({
+  required: ['captureSnapshot', 'longPressPoint'],
+});
+export const hoverPointUse = defineUse({ required: ['hoverPoint'] });
+export const capturedHoverUse = defineUse({
+  required: ['captureSnapshot', 'hoverPoint'],
+  preferred: ['hoverRef'],
+});
+export const fillPointUse = defineUse({ required: ['fillPoint'] });
+export const capturedFillUse = defineUse({
+  required: ['captureSnapshot', 'fillPoint'],
+  preferred: ['fillRef'],
+});
+
+export const clickRuntimeUses = Object.freeze([tapPointUse, capturedTapUse] as const);
+export const pressRuntimeUses = clickRuntimeUses;
+export const longPressRuntimeUses = Object.freeze([
+  longPressPointUse,
+  capturedLongPressUse,
+] as const);
+export const hoverRuntimeUses = Object.freeze([hoverPointUse, capturedHoverUse] as const);
+export const fillRuntimeUses = Object.freeze([fillPointUse, capturedFillUse] as const);
+
+export type TouchRuntimePlan =
+  | Readonly<{ kind: 'tap-point'; operation: 'tapPoint'; use: typeof tapPointUse }>
+  | Readonly<{ kind: 'captured-tap'; operation: 'tapPoint'; use: typeof capturedTapUse }>
+  | Readonly<{
+      kind: 'long-press-point';
+      operation: 'longPressPoint';
+      use: typeof longPressPointUse;
+    }>
+  | Readonly<{
+      kind: 'captured-long-press';
+      operation: 'longPressPoint';
+      use: typeof capturedLongPressUse;
+    }>
+  | Readonly<{ kind: 'hover-point'; operation: 'hoverPoint'; use: typeof hoverPointUse }>
+  | Readonly<{
+      kind: 'captured-hover';
+      operation: 'hoverPoint';
+      use: typeof capturedHoverUse;
+    }>
+  | Readonly<{ kind: 'fill-point'; operation: 'fillPoint'; use: typeof fillPointUse }>
+  | Readonly<{ kind: 'captured-fill'; operation: 'fillPoint'; use: typeof capturedFillUse }>;
+
+export function resolveTouchRuntimePlan(
+  command: 'click' | 'press' | 'fill' | 'longpress' | 'hover',
+  requiresCapture: boolean,
+): TouchRuntimePlan {
+  switch (command) {
+    case 'click':
+    case 'press':
+      return requiresCapture
+        ? { kind: 'captured-tap', operation: 'tapPoint', use: capturedTapUse }
+        : { kind: 'tap-point', operation: 'tapPoint', use: tapPointUse };
+    case 'fill':
+      return requiresCapture
+        ? { kind: 'captured-fill', operation: 'fillPoint', use: capturedFillUse }
+        : { kind: 'fill-point', operation: 'fillPoint', use: fillPointUse };
+    case 'longpress':
+      return requiresCapture
+        ? { kind: 'captured-long-press', operation: 'longPressPoint', use: capturedLongPressUse }
+        : { kind: 'long-press-point', operation: 'longPressPoint', use: longPressPointUse };
+    case 'hover':
+      return requiresCapture
+        ? { kind: 'captured-hover', operation: 'hoverPoint', use: capturedHoverUse }
+        : { kind: 'hover-point', operation: 'hoverPoint', use: hoverPointUse };
+  }
+}
 const captureSnapshotWithCustomActionsUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithCustomActions'],
 });

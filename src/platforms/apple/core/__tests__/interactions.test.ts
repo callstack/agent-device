@@ -6,6 +6,7 @@ import { iosRunnerOverrides, performGestureApple } from '../../interactions.ts';
 import { runAppleRunnerCommand } from '../runner/runner-client.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import type { RunnerCommand } from '../runner/runner-contract.ts';
 import { TEXT_ENTRY_ROUTES } from '@agent-device/contracts/interactor-types';
 import { requireGestureSupported } from '../../../../core/capabilities.ts';
 import {
@@ -126,6 +127,116 @@ test('iosRunnerOverrides uses synthesized iOS coordinate taps for selectors', as
     synthesized: true,
     appBundleId: 'com.example.App',
   });
+});
+
+test('iosRunnerOverrides owns fused repeated presses with deterministic jitter', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({
+    completedSteps: 3,
+    sequenceResults: Array.from({ length: 3 }, () => ({ ok: true, kind: 'tap' })),
+  });
+  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
+    appBundleId: 'com.example.App',
+  });
+
+  await overrides.pressPoint!(
+    { x: 100, y: 200 },
+    {
+      button: 'primary',
+      count: 3,
+      intervalMs: 40,
+      holdMs: 0,
+      jitterPx: 2,
+      doubleTap: false,
+    },
+  );
+
+  const command = mockRunAppleRunnerCommand.mock.calls[0]?.[1] as RunnerCommand;
+  assert.equal(command.command, 'sequence');
+  assert.deepEqual(command.steps, [
+    { kind: 'tap', x: 100, y: 200, synthesized: true, pauseMs: 40 },
+    { kind: 'tap', x: 102, y: 200, synthesized: true, pauseMs: 40 },
+    { kind: 'tap', x: 100, y: 202, synthesized: true },
+  ]);
+});
+
+test('iosRunnerOverrides owns alternate-button presses', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({ clicked: true });
+  const { overrides } = iosRunnerOverrides(MACOS_TEST_DEVICE, {
+    appBundleId: 'com.example.App',
+  });
+
+  await overrides.pressPoint!(
+    { x: 100, y: 200 },
+    {
+      button: 'secondary',
+      count: 1,
+      intervalMs: 0,
+      holdMs: 0,
+      jitterPx: 0,
+      doubleTap: false,
+    },
+  );
+
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
+    command: 'mouseClick',
+    x: 100,
+    y: 200,
+    button: 'secondary',
+    appBundleId: 'com.example.App',
+  });
+});
+
+test('iosRunnerOverrides remaps a later chunk failure to global press indices', async () => {
+  mockRunAppleRunnerCommand
+    .mockResolvedValueOnce({
+      completedSteps: 20,
+      sequenceResults: Array.from({ length: 20 }, () => ({ ok: true, kind: 'tap' })),
+    })
+    .mockResolvedValueOnce({
+      completedSteps: 2,
+      failedStepIndex: 2,
+      sequenceResults: [
+        { ok: true, kind: 'tap' },
+        { ok: true, kind: 'tap' },
+        {
+          ok: false,
+          kind: 'tap',
+          errorCode: 'UNSUPPORTED_OPERATION',
+          errorMessage: 'tap blocked',
+        },
+      ],
+    });
+  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {});
+
+  await assert.rejects(
+    () =>
+      overrides.pressPoint!(
+        { x: 100, y: 200 },
+        {
+          button: 'primary',
+          count: 25,
+          intervalMs: 0,
+          holdMs: 0,
+          jitterPx: 0,
+          doubleTap: false,
+        },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.failedStepIndex, 22);
+      assert.equal(error.details?.completedSteps, 22);
+      assert.equal(error.details?.chunkStepIndex, 2);
+      return true;
+    },
+  );
+  assert.deepEqual(
+    mockRunAppleRunnerCommand.mock.calls.map((call) =>
+      (call[1] as RunnerCommand).command === 'sequence'
+        ? (call[1] as RunnerCommand & { steps: unknown[] }).steps.length
+        : 0,
+    ),
+    [20, 5],
+  );
 });
 
 test('iosRunnerOverrides reads and validates the fresh gesture viewport', async () => {

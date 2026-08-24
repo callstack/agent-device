@@ -21,8 +21,16 @@ import { vi, type Mock } from 'vitest';
 import { PNG } from '../../utils/png.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { unavailableDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
+import {
+  type TapPointInput,
+  touchRuntimeOperationFacts,
+} from '@agent-device/contracts/touch-runtime';
 
 const available = Object.freeze({ available: true } as const);
+const unavailable = Object.freeze({
+  available: false,
+  reason: 'owner-capability-missing',
+} as const);
 
 export type ScreenshotRuntimeFixtureOptions = Readonly<{
   /** The exact-owner `captureScreenshot` fact this fake device reports. */
@@ -40,6 +48,7 @@ export type ScreenshotRuntimeFixture = Readonly<{
   bindDevice: BindDeviceRuntime;
   captureScreenshot: Mock<(input: CaptureScreenshotInput) => Promise<void>>;
   captureSnapshot: Mock<(input: CaptureSnapshotInput) => Promise<SnapshotResult>>;
+  tapPoint: Mock<(input: TapPointInput) => Promise<Record<string, unknown>>>;
   /** Every `(device, use)` the route bound, so a test can prove exactly one bind happened. */
   binds: Array<Readonly<{ device: DeviceInfo }>>;
 }>;
@@ -64,6 +73,7 @@ export function screenshotRuntimeFixture(
     async (input: CaptureSnapshotInput): Promise<SnapshotResult> =>
       options.snapshotResult?.(input) ?? { nodes: [], backend: 'android' },
   );
+  const tapPoint = vi.fn(async (_input: TapPointInput) => ({}));
 
   // The unavailable gateway is the exhaustive fact catalog; only the capture cells are overridden.
   const facts = async (device: DeviceInfo): Promise<RuntimeFacts<PlatformRuntimeOperations>> => {
@@ -77,6 +87,13 @@ export function screenshotRuntimeFixture(
           capture: options.snapshot ?? available,
           customActions: options.snapshot ?? available,
           withoutActiveApp: options.snapshot ?? available,
+        }),
+        ...touchRuntimeOperationFacts({
+          tap: available,
+          longPress: unavailable,
+          hover: unavailable,
+          fill: unavailable,
+          tapElementSelector: unavailable,
         }),
       },
     };
@@ -93,6 +110,7 @@ export function screenshotRuntimeFixture(
         captureSnapshot,
         captureSnapshotWithCustomActions: captureSnapshot,
         captureSnapshotWithoutActiveApp: captureSnapshot,
+        tapPoint,
       },
       [Symbol.asyncDispose]: async () => {},
     };
@@ -112,6 +130,7 @@ export function screenshotRuntimeFixture(
     bindDevice,
     captureScreenshot,
     captureSnapshot,
+    tapPoint,
     binds,
   };
 }

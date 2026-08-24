@@ -23,6 +23,7 @@ import {
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
+import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import { deviceShape, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { beforeEach, vi } from 'vitest';
@@ -149,6 +150,13 @@ function readinessFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperati
       setViewport: unavailable,
       focusPoint: unavailable,
       typeText: unavailable,
+      ...touchRuntimeOperationFacts({
+        tap: unavailable,
+        longPress: unavailable,
+        hover: unavailable,
+        fill: unavailable,
+        tapElementSelector: unavailable,
+      }),
       readTextAtPoint: unavailable,
       back: unavailable,
       home: unavailable,

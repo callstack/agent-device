@@ -1,4 +1,8 @@
 import { AppError } from '@agent-device/kernel/errors';
+
+export function stripAtPrefix(ref: string | undefined): string | undefined {
+  return ref?.startsWith('@') ? ref.slice(1) : ref;
+}
 import {
   detectUnknownSelectorKeyToken,
   isRoleHintWord,

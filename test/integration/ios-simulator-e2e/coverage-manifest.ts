@@ -193,11 +193,11 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
     'AX-independent first-responder typing appends and is read back from a focused fixture field',
   ),
   [C.hover]: {
-    assertion: 'iOS simulator capability model rejects hover, a pointer-only web contract',
-    level: 'capability-denial',
+    assertion: 'the Apple runtime fact rejects hover, a pointer-only web contract',
+    level: 'command-contract',
     owner: {
-      path: 'test/integration/smoke-ios-simulator-coverage.test.ts',
-      test: 'capability classifications match executable simulator behavior',
+      path: 'packages/platform-apple/src/runtime.ts',
+      test: 'hover: unavailable',
     },
   },
   [C.viewport]: contract(

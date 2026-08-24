@@ -65,6 +65,16 @@ export type ElementSelectorTapOptions = {
   expectedPoint?: Point;
 };
 
+export type PressPointOptions = Readonly<{
+  button: 'primary' | 'secondary' | 'middle';
+  count: number;
+  intervalMs: number;
+  holdMs: number;
+  jitterPx: number;
+  doubleTap: boolean;
+  surface?: SessionSurface;
+}>;
+
 /**
  * Legacy success text retained for compatibility when the XCTest runner used
  * the Maestro non-hittable coordinate fallback. Usage itself is carried by
@@ -126,7 +136,7 @@ export type TypeTextBackendResult = {
  *   to enter text unwitnessed.
  *
  * Closed set: the cloud interactor is its only producer and the boundary that
- * narrows it (readFillBackendResult, src/core/dispatch-interactions.ts) drops a
+ * narrows it (readFillBackendResult in the touch handler) drops a
  * value it cannot name.
  */
 export const CLOUD_TEXT_ENTRY_READINESS = ['focused-element', 'keyboard-shown'] as const;
@@ -252,6 +262,15 @@ export type Interactor = {
   openDevice(): Promise<void>;
   close(app: string): Promise<void>;
   tap(x: number, y: number): Promise<Record<string, unknown> | void>;
+  /** Complete point-press semantics for owners with fused series, alternate buttons, or surfaces. */
+  pressPoint?(point: Point, options: PressPointOptions): Promise<Record<string, unknown> | void>;
+  /** Alternate mouse buttons for owners that otherwise use the shared point-press series. */
+  alternateClick?(
+    point: Point,
+    button: 'secondary' | 'middle',
+  ): Promise<Record<string, unknown> | void>;
+  /** Owner-native ref routes; currently the managed web runtime is their only local owner. */
+  tapRef?(ref: string): Promise<Record<string, unknown> | void>;
   tapElementSelector?(selector: ElementSelectorTapOptions): Promise<Record<string, unknown> | void>;
   doubleTap(x: number, y: number): Promise<Record<string, unknown> | void>;
   longPress(x: number, y: number, durationMs?: number): Promise<Record<string, unknown> | void>;
@@ -261,13 +280,9 @@ export type Interactor = {
    * and leave it undefined, which the `hover` command reports as unsupported.
    */
   hover?(x: number, y: number): Promise<Record<string, unknown> | void>;
+  hoverRef?(ref: string): Promise<Record<string, unknown> | void>;
   focus(x: number, y: number): Promise<Record<string, unknown> | void>;
   type(text: string, delayMs?: number): Promise<TypeTextBackendResult | void>;
-  fillElementSelector?(
-    selector: ElementSelectorTapOptions,
-    text: string,
-    delayMs?: number,
-  ): Promise<Record<string, unknown> | void>;
   fill(
     x: number,
     y: number,
@@ -275,6 +290,7 @@ export type Interactor = {
     delayMs?: number,
     options?: { allowNonHittableCoordinateFallback?: boolean },
   ): Promise<Record<string, unknown> | void>;
+  fillRef?(ref: string, text: string, delayMs?: number): Promise<Record<string, unknown> | void>;
   scroll(
     direction: ScrollDirection,
     options?: ScrollExecutionOptions,

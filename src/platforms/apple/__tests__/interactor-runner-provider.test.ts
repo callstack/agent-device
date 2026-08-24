@@ -21,6 +21,21 @@ const RUNNER_TRANSPORT_METHODS: Record<
   { invoke: (interactor: Interactor) => Promise<unknown>; runnerCommand: string }
 > = {
   tap: { invoke: (i) => i.tap(10, 20), runnerCommand: 'tap' },
+  pressPoint: {
+    invoke: (i) =>
+      i.pressPoint!(
+        { x: 10, y: 20 },
+        {
+          count: 1,
+          intervalMs: 0,
+          holdMs: 0,
+          jitterPx: 0,
+          doubleTap: false,
+          button: 'primary',
+        },
+      ),
+    runnerCommand: 'tap',
+  },
   tapElementSelector: {
     invoke: (i) => i.tapElementSelector!({ key: 'label', value: 'Go' }),
     runnerCommand: 'tap',
@@ -29,10 +44,6 @@ const RUNNER_TRANSPORT_METHODS: Record<
   longPress: { invoke: (i) => i.longPress(10, 20, 600), runnerCommand: 'longPress' },
   focus: { invoke: (i) => i.focus(10, 20), runnerCommand: 'tap' },
   type: { invoke: (i) => i.type('hi'), runnerCommand: 'type' },
-  fillElementSelector: {
-    invoke: (i) => i.fillElementSelector!({ key: 'label', value: 'Go' }, 'hi'),
-    runnerCommand: 'type',
-  },
   fill: { invoke: (i) => i.fill(10, 20, 'hi'), runnerCommand: 'type' },
   scroll: { invoke: (i) => i.scroll('down'), runnerCommand: 'scroll' },
   performGesture: {

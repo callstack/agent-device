@@ -300,6 +300,10 @@
       "types": "./src/type-text-runtime.ts",
       "default": "./src/type-text-runtime.ts"
     },
+    "./touch-runtime": {
+      "types": "./src/touch-runtime.ts",
+      "default": "./src/touch-runtime.ts"
+    },
     "./viewport-runtime": {
       "types": "./src/viewport-runtime.ts",
       "default": "./src/viewport-runtime.ts"

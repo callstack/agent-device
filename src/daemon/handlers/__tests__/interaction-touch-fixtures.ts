@@ -178,13 +178,19 @@ export async function runFindInternalClick(
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 }
 
-/** The coordinates the leaf dispatched a press against, per the caller's mocked dispatch. */
-export function readPressPoint(mockDispatch: {
+/** The coordinates the leaf handed to the bound point-tap operation. */
+export function readPressPoint(mockTapPoint: {
   mock: { calls: unknown[][] };
 }): string[] | undefined {
-  const call = mockDispatch.mock.calls.find((entry) => entry[1] === 'press');
-  return call?.[2] as string[] | undefined;
+  const input = mockTapPoint.mock.calls[0]?.[0] as
+    | { point?: { x?: unknown; y?: unknown } }
+    | undefined;
+  const point = input?.point;
+  return typeof point?.x === 'number' && typeof point.y === 'number'
+    ? [String(point.x), String(point.y)]
+    : undefined;
 }

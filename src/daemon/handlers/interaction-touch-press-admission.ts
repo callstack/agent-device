@@ -12,7 +12,6 @@ import type { InteractionHandlerParams } from './interaction-common.ts';
 import { settleFlagGuardResponse, type RefSnapshotFlagGuardResponse } from './interaction-flags.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
 import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
-import { refreshAndroidRefSnapshotIfFreshnessActive } from './interaction-touch-android-freshness.ts';
 import type { RefAdmissionContext } from './interaction-touch-android-readiness.ts';
 import { unsupportedMacOsDesktopSurfaceInteraction } from './interaction-touch-policy.ts';
 import {
@@ -21,7 +20,7 @@ import {
   type ParsedLongPressTarget,
   type ParsedTouchTarget,
 } from './interaction-touch-targets.ts';
-import { errorResponse, noActiveSessionError, requireCommandSupported } from './response.ts';
+import { errorResponse, noActiveSessionError } from './response.ts';
 
 /**
  * Whether a targeted `press`/`click`/`longpress`/`hover` may act, and on what: macOS
@@ -33,9 +32,6 @@ export type TargetedTouchCommand = 'press' | 'click' | 'longpress' | 'hover';
 
 /** The family members that take `--button`; longpress and hover have no button. */
 const CLICK_BUTTON_COMMANDS: ReadonlySet<TargetedTouchCommand> = new Set(['press', 'click']);
-
-const HOVER_UNSUPPORTED_MESSAGE =
-  'hover is not supported on this device: hover is a pointer state that only web targets have (--platform web). Touch platforms have no hover; use longpress for hold gestures.';
 
 export type TargetedTouchParams = InteractionHandlerParams & {
   captureSnapshotForSession: CaptureSnapshotForSession;
@@ -51,7 +47,6 @@ export type AdmittedTargetedTouch = {
   target: InteractionTarget;
   durationMs: number | undefined;
   staleRefsWarning: string | undefined;
-  androidFreshnessBaseline: SessionState['snapshot'];
   refContext: RefAdmissionContext | undefined;
 };
 
@@ -76,7 +71,7 @@ export async function admitTargetedTouch(
       : parseTouchTarget(positionals, commandLabel);
   if (!parsedTarget.ok) return { response: parsedTarget.response };
   const staleRefsWarning = readTargetedTouchStalenessWarning(session, req, parsedTarget);
-  const refAdmission = await admitTargetedTouchRef(
+  const refAdmission = admitTargetedTouchRef(
     params,
     session,
     command,
@@ -95,7 +90,6 @@ export async function admitTargetedTouch(
       target: parsedTarget.target,
       durationMs: command === 'longpress' ? parsedTarget.durationMs : undefined,
       staleRefsWarning,
-      androidFreshnessBaseline: refAdmission.androidFreshnessBaseline,
       refContext: readRefAdmissionContext(req, parsedTarget, staleRefsWarning),
     },
   };
@@ -108,18 +102,11 @@ function targetedTouchPolicyResponse(
   commandLabel: TargetedTouchCommand,
   flags: CommandFlags | undefined,
 ): DaemonResponse | undefined {
-  const capabilityCommand = command === 'click' ? 'press' : command;
   const unsupportedSurfaceResponse = unsupportedMacOsDesktopSurfaceInteraction(
     session,
     commandLabel,
   );
   if (unsupportedSurfaceResponse) return unsupportedSurfaceResponse;
-  const unsupported = requireCommandSupported(
-    capabilityCommand,
-    session.device,
-    command === 'hover' ? { message: HOVER_UNSUPPORTED_MESSAGE } : undefined,
-  );
-  if (unsupported) return unsupported;
   const invalidSettleFlags = settleFlagGuardResponse(command, flags);
   if (invalidSettleFlags) return invalidSettleFlags;
   return clickButtonValidationResponse(session, command, commandLabel, flags);
@@ -184,13 +171,13 @@ function readRefAdmissionContext(
   };
 }
 
-async function admitTargetedTouchRef(
+function admitTargetedTouchRef(
   params: TargetedTouchParams,
   session: SessionState,
   command: TargetedTouchCommand,
   parsedTarget: ParsedTargetedTouch,
   staleRefsWarning: string | undefined,
-): Promise<{ response?: DaemonResponse; androidFreshnessBaseline?: SessionState['snapshot'] }> {
+): { response?: DaemonResponse } {
   const { req } = params;
   if (parsedTarget.target.kind !== 'ref') return {};
   const invalidRefFlagsResponse = params.refSnapshotFlagGuardResponse(
@@ -207,7 +194,5 @@ async function admitTargetedTouchRef(
         staleRefsWarning,
       });
   if (admissionResponse) return { response: admissionResponse };
-  return {
-    androidFreshnessBaseline: await refreshAndroidRefSnapshotIfFreshnessActive(params, session),
-  };
+  return {};
 }

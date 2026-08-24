@@ -16,6 +16,17 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
 import type { TypeTextInput } from '@agent-device/contracts/type-text-runtime';
+import type {
+  FillPointInput,
+  FillRefInput,
+  HoverPointInput,
+  HoverRefInput,
+  LongPressPointInput,
+  TapElementSelectorInput,
+  TapPointInput,
+  TapRefInput,
+} from '@agent-device/contracts/touch-runtime';
+import { HOVER_UNAVAILABLE_HINT } from '@agent-device/contracts/touch-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type {
   BindDeviceRuntime,
@@ -46,6 +57,39 @@ export const mockFocusPoint = vi.fn(async (_input: FocusPointInput): Promise<voi
 export const mockTypeText = vi.fn(
   async (_input: TypeTextInput): Promise<TypeTextBackendResult | void> => undefined,
 );
+export const mockTapPoint = vi.fn(
+  async (input: TapPointInput): Promise<Record<string, unknown> | void> => ({
+    x: input.point.x,
+    y: input.point.y,
+  }),
+);
+const mockTapRef = vi.fn(async (input: TapRefInput) => ({
+  ref: input.ref.replace(/^@/, ''),
+}));
+export const mockLongPressPoint = vi.fn(async (input: LongPressPointInput) => ({
+  x: input.point.x,
+  y: input.point.y,
+  durationMs: input.durationMs,
+}));
+export const mockHoverPoint = vi.fn(async (input: HoverPointInput) => ({
+  x: input.point.x,
+  y: input.point.y,
+}));
+export const mockHoverRef = vi.fn(async (input: HoverRefInput) => ({
+  ref: input.ref.replace(/^@/, ''),
+}));
+export const mockFillPoint = vi.fn(
+  async (input: FillPointInput): Promise<Record<string, unknown> | void> => ({
+    x: input.point.x,
+    y: input.point.y,
+  }),
+);
+const mockFillRef = vi.fn(async (input: FillRefInput) => ({
+  ref: input.ref.replace(/^@/, ''),
+  text: input.text,
+  delayMs: input.delayMs,
+}));
+export const mockTapElementSelector = vi.fn(async (_input: TapElementSelectorInput) => ({}));
 
 /**
  * Flip to model an exact owner cell: no live element read (web, HarmonyOS, provider), no capture
@@ -68,6 +112,30 @@ export function resetGetRuntimeFixture(): void {
   mockFocusPoint.mockResolvedValue(undefined);
   mockTypeText.mockReset();
   mockTypeText.mockResolvedValue(undefined);
+  mockTapPoint.mockReset();
+  mockTapPoint.mockImplementation(async (input) => ({ x: input.point.x, y: input.point.y }));
+  mockTapRef.mockReset();
+  mockTapRef.mockImplementation(async (input) => ({ ref: input.ref.replace(/^@/, '') }));
+  mockLongPressPoint.mockReset();
+  mockLongPressPoint.mockImplementation(async (input) => ({
+    x: input.point.x,
+    y: input.point.y,
+    durationMs: input.durationMs,
+  }));
+  mockHoverPoint.mockReset();
+  mockHoverPoint.mockImplementation(async (input) => ({ x: input.point.x, y: input.point.y }));
+  mockHoverRef.mockReset();
+  mockHoverRef.mockImplementation(async (input) => ({ ref: input.ref.replace(/^@/, '') }));
+  mockFillPoint.mockReset();
+  mockFillPoint.mockImplementation(async (input) => ({ x: input.point.x, y: input.point.y }));
+  mockFillRef.mockReset();
+  mockFillRef.mockImplementation(async (input) => ({
+    ref: input.ref.replace(/^@/, ''),
+    text: input.text,
+    delayMs: input.delayMs,
+  }));
+  mockTapElementSelector.mockReset();
+  mockTapElementSelector.mockResolvedValue({});
   (mockInspectElementReadFacts as unknown as ReturnType<typeof vi.fn>).mockClear();
   (mockBindElementReadRuntime as unknown as ReturnType<typeof vi.fn>).mockClear();
   elementReadFixtureState.readTextAtPointAvailable = true;
@@ -89,6 +157,7 @@ function elementReadFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOpera
     viewport: unavailable,
     focus: unavailable,
     typeText: unavailable,
+    touch: unavailable,
     elementText: unavailable,
     back: unavailable,
     home: unavailable,
@@ -122,8 +191,26 @@ function elementReadFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOpera
       readTextAtPoint: elementReadFixtureState.readTextAtPointAvailable ? available : unavailable,
       focusPoint: elementReadFixtureState.focusPointAvailable ? available : unavailable,
       typeText: elementReadFixtureState.typeTextAvailable ? available : unavailable,
+      ...fixtureTouchFacts(device),
     },
   });
+}
+
+function fixtureTouchFacts(device: DeviceInfo) {
+  const ref = device.platform === 'web' ? available : unavailable;
+  return {
+    tapPoint: available,
+    tapRef: ref,
+    longPressPoint: available,
+    hoverPoint:
+      device.platform === 'web'
+        ? available
+        : Object.freeze({ ...unavailable, hint: HOVER_UNAVAILABLE_HINT }),
+    hoverRef: ref,
+    fillPoint: available,
+    fillRef: ref,
+    tapElementSelector: available,
+  };
 }
 
 const mockInspectElementReadFacts: InspectDeviceRuntimeFacts = vi.fn(async (device: DeviceInfo) =>
@@ -154,6 +241,14 @@ const mockBindElementReadRuntime: BindDeviceRuntime = vi.fn(async (device: Devic
         : {}),
       ...(elementReadFixtureState.focusPointAvailable ? { focusPoint: mockFocusPoint } : {}),
       ...(elementReadFixtureState.typeTextAvailable ? { typeText: mockTypeText } : {}),
+      tapPoint: mockTapPoint,
+      ...(device.platform === 'web' ? { tapRef: mockTapRef } : {}),
+      longPressPoint: mockLongPressPoint,
+      hoverPoint: mockHoverPoint,
+      ...(device.platform === 'web' ? { hoverRef: mockHoverRef } : {}),
+      fillPoint: mockFillPoint,
+      ...(device.platform === 'web' ? { fillRef: mockFillRef } : {}),
+      tapElementSelector: mockTapElementSelector,
     }),
     [Symbol.asyncDispose]: async () => undefined,
   }) as DeviceBinding<PlatformRuntimeOperations>;

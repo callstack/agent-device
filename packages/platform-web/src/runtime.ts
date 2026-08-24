@@ -4,6 +4,7 @@ import type {
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
   RuntimeFacts,
+  RuntimeOperationFact,
 } from '@agent-device/contracts/platform';
 import {
   applicationLifecycleOperationFacts,
@@ -14,7 +15,11 @@ import {
   bindLocalFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
-import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import {
+  localRuntimeOwner,
+  sameRuntimeOwner,
+  whenAdmitted,
+} from '@agent-device/contracts/platform-runtime';
 import {
   bindLocalScreenshotInteractor,
   screenshotRuntimeOperationFacts,
@@ -28,6 +33,10 @@ import {
   bindLocalTypeTextInteractor,
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
+import {
+  bindLocalTouchInteractor,
+  touchRuntimeOperationFacts,
+} from '@agent-device/contracts/touch-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
@@ -36,6 +45,7 @@ import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import type { Interactor } from '@agent-device/contracts/interaction';
 import { bindWebScreenRecordingRuntime } from './recording/runtime.ts';
 import { bindWebApplicationLifecycle } from './lifecycle.ts';
 
@@ -85,6 +95,18 @@ const prepareUnavailable = Object.freeze({
   reason: 'unsupported-platform-leaf',
   hint: 'Apple runner preparation is supported only for Apple targets.',
 } as const);
+const nativeRefUnavailable = Object.freeze({
+  available: false,
+  reason: 'owner-capability-missing',
+} as const);
+
+function webRefFact(operation: unknown, browserDevice: RuntimeOperationFact) {
+  return typeof operation === 'function' ? browserDevice : nativeRefUnavailable;
+}
+
+function webAvailableFact(condition: boolean, unavailable: RuntimeOperationFact) {
+  return condition ? available : unavailable;
+}
 
 const openTargetKindUnavailable = Object.freeze({
   available: false,
@@ -135,7 +157,9 @@ export function createWebPlatformRuntime(host: PlatformRuntimeHost): PlatformRun
       owner,
       signal: new AbortController().signal,
     });
-    return webRuntimeFacts(device, transport, recording.available);
+    const interactor =
+      device.kind === 'device' ? await host.localInteractors.resolve(device, {}) : undefined;
+    return webRuntimeFacts(device, transport, recording.available, interactor);
   };
   return Object.freeze({
     owner,
@@ -158,13 +182,17 @@ export function createWebPlatformRuntime(host: PlatformRuntimeHost): PlatformRun
         owner,
         signal: request.scope.signal,
       });
+      const interactor =
+        request.device.kind === 'device'
+          ? await host.localInteractors.resolve(request.device, { signal: request.scope.signal })
+          : undefined;
       return bindWebRuntime(
         host,
         request.device,
         request.scope.signal,
         transport,
         recording,
-        webRuntimeFacts(request.device, transport, recording.available),
+        webRuntimeFacts(request.device, transport, recording.available, interactor),
       );
     },
     shutdown: async () => undefined,
@@ -221,6 +249,15 @@ function bindWebRuntime(
           resolveInteractor: host.localInteractors.resolve,
         })
       : {}),
+    ...whenAdmitted(facts.operations.tapPoint, () =>
+      bindLocalTouchInteractor({
+        device,
+        signal,
+        resolveInteractor: host.localInteractors.resolve,
+        facts: facts.operations,
+        pause: async (milliseconds) => await host.clock.sleep(milliseconds, signal),
+      }),
+    ),
     ...(facts.operations.setViewport.available
       ? {
           setViewport: async (input) => {
@@ -255,6 +292,7 @@ function webRuntimeFacts(
   device: DeviceInfo,
   transport: Awaited<ReturnType<PlatformRuntimeHost['networkTransports']['resolve']>>,
   recordingAvailable: boolean,
+  interactor: Interactor | undefined,
 ): RuntimeFacts<PlatformRuntimeOperations> {
   const networkUnavailable = Object.freeze({
     available: false,
@@ -262,7 +300,7 @@ function webRuntimeFacts(
     hint: 'network is not supported by this web provider',
   } as const);
   // One browser-device cell, read by every operation this runtime binds through the interactor.
-  const browserDevice = device.kind === 'device' ? available : openTargetKindUnavailable;
+  const browserDevice = webAvailableFact(device.kind === 'device', openTargetKindUnavailable);
   return Object.freeze({
     device: {
       family: 'web',
@@ -277,10 +315,10 @@ function webRuntimeFacts(
       appLogReattach: appLogUnavailable,
       appLogCleanup: appLogUnavailable,
       appState: appStateUnavailable,
-      networkDump: transport.dump ? available : networkUnavailable,
-      screenRecordingStart: recordingAvailable ? available : recordingUnavailable,
-      screenRecordingReattach: recordingAvailable ? available : recordingUnavailable,
-      screenRecordingCleanup: recordingAvailable ? available : recordingUnavailable,
+      networkDump: webAvailableFact(Boolean(transport.dump), networkUnavailable),
+      screenRecordingStart: webAvailableFact(recordingAvailable, recordingUnavailable),
+      screenRecordingReattach: webAvailableFact(recordingAvailable, recordingUnavailable),
+      screenRecordingCleanup: webAvailableFact(recordingAvailable, recordingUnavailable),
       ...snapshotRuntimeOperationFacts({
         capture: browserDevice,
         customActions: snapshotCustomActionsUnavailable,
@@ -299,6 +337,16 @@ function webRuntimeFacts(
       // Text entry shares focus's cell: the browser device is the only web cell with an
       // interactor to drive (parity with the retired `type` overlay membership).
       ...typeTextRuntimeOperationFacts({ type: browserDevice }),
+      ...touchRuntimeOperationFacts({
+        tap: browserDevice,
+        tapRef: webRefFact(interactor?.tapRef, browserDevice),
+        longPress: readinessUnavailable,
+        hover: browserDevice,
+        hoverRef: webRefFact(interactor?.hoverRef, browserDevice),
+        fill: browserDevice,
+        fillRef: webRefFact(interactor?.fillRef, browserDevice),
+        tapElementSelector: readinessUnavailable,
+      }),
       ...viewportRuntimeOperationFacts({ setViewport: browserDevice }),
       // The web backend has no point-addressed read: `get` answers from the captured DOM tree,
       // which is what the legacy dispatch already did once its Apple-runner attempt failed.

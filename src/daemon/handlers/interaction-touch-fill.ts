@@ -22,7 +22,8 @@ import {
 } from './interaction-touch-response.ts';
 import { dispatchRuntimeInteraction } from './interaction-touch-runtime.ts';
 import { parseFillTarget } from './interaction-touch-targets.ts';
-import { noActiveSessionError, requireCommandSupported } from './response.ts';
+import { noActiveSessionError } from './response.ts';
+import { prepareTouchDispatch } from './interaction-touch-prepare.ts';
 
 /**
  * How `fill` is admitted, parameterized, executed, and projected: surface and
@@ -41,10 +42,18 @@ export async function dispatchFillViaRuntime(
   if (session) {
     const unsupportedSurfaceResponse = unsupportedMacOsDesktopSurfaceInteraction(session, 'fill');
     if (unsupportedSurfaceResponse) return unsupportedSurfaceResponse;
-    const unsupported = requireCommandSupported('fill', session.device);
-    if (unsupported) return unsupported;
   }
   if (!session) return noActiveSessionError();
+  const parsedTarget = parseFillTarget(req.positionals ?? []);
+  if (!parsedTarget.ok) return parsedTarget.response;
+  const prepared = await prepareTouchDispatch(
+    params,
+    session,
+    'fill',
+    parsedTarget.target.kind !== 'point',
+  );
+  if (!prepared.ok) return prepared.response;
+  const { touchExecutor } = prepared;
   assertRecordedFillParameterization({
     session,
     flags: req.flags,
@@ -53,8 +62,6 @@ export async function dispatchFillViaRuntime(
   const invalidSettleFlags = settleFlagGuardResponse('fill', req.flags);
   if (invalidSettleFlags) return invalidSettleFlags;
 
-  const parsedTarget = parseFillTarget(req.positionals ?? []);
-  if (!parsedTarget.ok) return parsedTarget.response;
   const refPreamble = await prepareFillRefTarget(
     params,
     session,
@@ -66,6 +73,7 @@ export async function dispatchFillViaRuntime(
   const replayTargetGuard = req.internal?.replayTargetGuard;
 
   return await dispatchRuntimeInteraction(params, {
+    touchExecutor,
     refContext:
       parsedTarget.target.kind === 'ref' && req.internal?.findResolvedTarget === undefined
         ? {

@@ -628,9 +628,9 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       // name — what changed is what it calls: the same `resolveBoundFocusRuntime` the generic
       // route binds, which is why `focusPoint` still has exactly one owner below.
       routeNames: ['handleFocusCommand'],
-      // `focus` also leaves the two hand-maintained overlays that granted it a capability
-      // bucket on families the descriptor never listed.
-      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS', 'WEB_INTERACTION_COMMANDS'],
+      // `focus` also leaves the HarmonyOS overlay that granted it a capability bucket the
+      // descriptor never listed.
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
     },
     runtimeTypeNames: ['FocusRuntimeOperations'],
     operations: { names: ['focusPoint'] },
@@ -653,9 +653,9 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       // member and find's type leg keep their names — what changed is what they call: the same
       // `resolveBoundTypeTextRuntime`, which is why `typeText` has exactly one owner below.
       routeNames: ['handleTypeCommand', 'typeTextCommand'],
-      // `type` also leaves the two hand-maintained overlays that granted it a capability
-      // bucket on families the descriptor never listed.
-      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS', 'WEB_INTERACTION_COMMANDS'],
+      // `type` also leaves the HarmonyOS overlay that granted it a capability bucket the
+      // descriptor never listed.
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
     },
     runtimeTypeNames: ['TypeTextRuntimeOperations'],
     operations: { names: ['typeText'] },
@@ -774,6 +774,113 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
         keyboardStatus: ['executeKeyboardStatus'],
         keyboardDismiss: ['executeKeyboardDismiss'],
         keyboardEnter: ['executeKeyboardEnter'],
+      },
+    },
+  },
+  {
+    rule: 'R47 click-runtime-cutover',
+    command: 'click',
+    subject: 'targeted tap',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      modulePaths: ['src/core/dispatch-interactions.ts', 'src/core/dispatch-series.ts'],
+      routeNames: ['handlePressCommand', 'handleDirectElementSelectorPress'],
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
+    },
+    runtimeTypeNames: ['TouchRuntimeOperations', 'SnapshotRuntimeOperations'],
+    operations: { names: ['captureSnapshot', 'tapPoint', 'tapElementSelector'] },
+    singularExecution: {
+      routes: ['handleTouchInteractionCommands'],
+      operations: ['captureSnapshot', 'tapPoint', 'tapElementSelector'],
+      operationOwners: {
+        captureSnapshot: ['readCaptureSnapshot'],
+        tapPoint: ['createTapTouchExecutor'],
+        tapElementSelector: ['createTapTouchExecutor'],
+      },
+    },
+  },
+  {
+    rule: 'R48 press-runtime-cutover',
+    command: 'press',
+    subject: 'point press',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      routeNames: ['handlePressCommand'],
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
+    },
+    runtimeTypeNames: ['TouchRuntimeOperations', 'SnapshotRuntimeOperations'],
+    operations: { names: ['captureSnapshot', 'tapPoint', 'tapElementSelector'] },
+    singularExecution: {
+      routes: ['handleTouchInteractionCommands'],
+      operations: ['captureSnapshot', 'tapPoint', 'tapElementSelector'],
+      operationOwners: {
+        captureSnapshot: ['readCaptureSnapshot'],
+        tapPoint: ['createTapTouchExecutor'],
+        tapElementSelector: ['createTapTouchExecutor'],
+      },
+    },
+  },
+  {
+    rule: 'R49 fill-runtime-cutover',
+    command: 'fill',
+    subject: 'replacement text entry',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      routeNames: ['handleFillCommand', 'handleDirectElementSelectorFill'],
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
+    },
+    runtimeTypeNames: ['TouchRuntimeOperations', 'SnapshotRuntimeOperations'],
+    operations: { names: ['captureSnapshot', 'fillPoint'] },
+    singularExecution: {
+      routes: ['handleTouchInteractionCommands'],
+      operations: ['captureSnapshot', 'fillPoint'],
+      operationOwners: {
+        captureSnapshot: ['readCaptureSnapshot'],
+        fillPoint: ['createFillTouchExecutor'],
+      },
+    },
+  },
+  {
+    rule: 'R50 longpress-runtime-cutover',
+    command: 'longpress',
+    subject: 'long press',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      routeNames: ['handleLongPressCommand'],
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
+    },
+    runtimeTypeNames: ['TouchRuntimeOperations', 'SnapshotRuntimeOperations'],
+    operations: { names: ['captureSnapshot', 'longPressPoint'] },
+    singularExecution: {
+      routes: ['handleTouchInteractionCommands'],
+      operations: ['captureSnapshot', 'longPressPoint'],
+      operationOwners: {
+        captureSnapshot: ['readCaptureSnapshot'],
+        longPressPoint: ['createLongPressTouchExecutor'],
+      },
+    },
+  },
+  {
+    rule: 'R51 hover-runtime-cutover',
+    command: 'hover',
+    subject: 'pointer hover',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      routeNames: ['handleHoverCommand'],
+    },
+    runtimeTypeNames: ['TouchRuntimeOperations', 'SnapshotRuntimeOperations'],
+    operations: { names: ['captureSnapshot', 'hoverPoint'] },
+    singularExecution: {
+      routes: ['handleTouchInteractionCommands'],
+      operations: ['captureSnapshot', 'hoverPoint'],
+      operationOwners: {
+        captureSnapshot: ['readCaptureSnapshot'],
+        hoverPoint: ['createHoverTouchExecutor'],
       },
     },
   },

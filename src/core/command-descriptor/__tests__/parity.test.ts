@@ -264,8 +264,9 @@ test('capability matrix holds its admission invariants', () => {
   }
 
   const covered = new Set(Object.keys(BASE_COMMAND_CAPABILITY_MATRIX));
+  const runtimeAdmitted = new Set(['click', 'fill', 'hover', 'longpress', 'press']);
   for (const command of Object.values(PUBLIC_COMMANDS)) {
-    if (NO_CAPABILITY_PUBLIC_COMMANDS.has(command)) continue;
+    if (NO_CAPABILITY_PUBLIC_COMMANDS.has(command) || runtimeAdmitted.has(command)) continue;
     assert.ok(covered.has(command), `capability matrix covers public command ${command}`);
   }
 });

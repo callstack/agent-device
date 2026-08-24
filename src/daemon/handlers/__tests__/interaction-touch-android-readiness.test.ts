@@ -3,6 +3,11 @@ import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
 import { handleInteractionCommands } from '../interaction.ts';
+import {
+  getRuntimeBindings,
+  mockTapPoint,
+  resetGetRuntimeFixture,
+} from './interaction-get-runtime-fixture.ts';
 import { contextFromFlags, makeAndroidSession } from './interaction-touch-fixtures.ts';
 
 // The Android device state a dispatch has to survive: an escape to launcher or
@@ -22,11 +27,6 @@ const { androidDialogReadiness } = vi.hoisted(() => ({
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
 
 vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
   const actual =
@@ -62,24 +62,19 @@ vi.mock('../../android-system-dialog.ts', async (importOriginal) => {
   return { ...actual, ensureAndroidBlockingSystemDialogReady: androidDialogReadiness.spy };
 });
 
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   getAndroidAppState,
   getAndroidBlockingDialogFocus,
 } from '../../../platforms/android/app-lifecycle.ts';
 import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
-
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  resetGetRuntimeFixture();
   mockGetAndroidAppState.mockReset();
   mockGetAndroidAppState.mockResolvedValue({});
   mockGetAndroidBlockingDialogFocus.mockReset();
@@ -87,7 +82,6 @@ beforeEach(() => {
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
-  mockCaptureSnapshotForSession.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
   androidDialogReadiness.spy.mockReset();
@@ -114,7 +108,7 @@ test('press @ref fails when Android tap escapes to launcher', async () => {
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({ pressed: true });
+  mockTapPoint.mockResolvedValue({ pressed: true });
   mockGetAndroidAppState.mockResolvedValue({
     package: 'com.google.android.apps.nexuslauncher',
     activity: 'Launcher',
@@ -132,6 +126,7 @@ test('press @ref fails when Android tap escapes to launcher', async () => {
       sessionName,
       sessionStore,
       contextFromFlags,
+      ...getRuntimeBindings(),
     }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
@@ -161,7 +156,7 @@ test('press @ref fails when Android tap escapes to Settings', async () => {
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({ pressed: true });
+  mockTapPoint.mockResolvedValue({ pressed: true });
   mockGetAndroidAppState.mockResolvedValue({
     package: 'com.android.settings',
     activity: 'Settings',
@@ -179,6 +174,7 @@ test('press @ref fails when Android tap escapes to Settings', async () => {
       sessionName,
       sessionStore,
       contextFromFlags,
+      ...getRuntimeBindings(),
     }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
@@ -215,7 +211,7 @@ test.each(ANDROID_PERMISSION_PROMPT_PACKAGES)(
     };
     sessionStore.set(sessionName, session);
 
-    mockDispatch.mockResolvedValue({ pressed: true });
+    mockTapPoint.mockResolvedValue({ pressed: true });
     mockGetAndroidAppState.mockResolvedValue({
       package: packageName,
       activity: 'com.android.permissioncontroller.permission.ui.GrantPermissionsActivity',
@@ -232,6 +228,7 @@ test.each(ANDROID_PERMISSION_PROMPT_PACKAGES)(
       sessionName,
       sessionStore,
       contextFromFlags,
+      ...getRuntimeBindings(),
     });
 
     expect(response?.ok).toBe(true);
@@ -284,6 +281,7 @@ test('a ref action aborts with the shared ref_frame_expired rejection after Andr
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(false);
@@ -297,5 +295,5 @@ test('a ref action aborts with the shared ref_frame_expired rejection after Andr
     expect(details?.scope).toBe('all');
   }
   // The outstanding ref action never dispatched a press against the recovered UI.
-  expect(mockDispatch.mock.calls.some((call) => call[1] === 'press')).toBe(false);
+  expect(mockTapPoint).not.toHaveBeenCalled();
 });

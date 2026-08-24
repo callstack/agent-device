@@ -136,6 +136,7 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     // Vega exposes remote navigation only; it never carried a `focus` capability bucket.
     focus: focusUnavailable,
     typeText: typeUnavailable,
+    touch: unsupportedPlatformLeaf,
     elementText: unsupportedPlatformLeaf,
     back: backUnavailable,
     home: homeUnavailable,

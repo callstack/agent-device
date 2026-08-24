@@ -7,6 +7,13 @@ import { captureSnapshot } from './snapshot-capture.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
 import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
 import { snapshotOptionsToFlags } from '../../backend-snapshot-options.ts';
+import type {
+  CaptureSnapshotInput,
+  SnapshotResult,
+} from '@agent-device/contracts/snapshot-runtime';
+import { buildRuntimeCaptureInput } from '../snapshot-runtime-capture-input.ts';
+
+export type BoundInteractionCapture = (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
 
 export type CaptureSnapshotForSession = (
   session: SessionState,
@@ -19,6 +26,7 @@ export type CaptureSnapshotForSession = (
     androidFreshnessMode?: 'ref-refresh';
     includeRects?: boolean;
     signal?: AbortSignal;
+    boundCapture?: BoundInteractionCapture;
   },
 ) => Promise<SnapshotState>;
 
@@ -33,6 +41,7 @@ export async function captureSnapshotForSession(
     androidFreshnessMode?: 'ref-refresh';
     includeRects?: boolean;
     signal?: AbortSignal;
+    boundCapture?: BoundInteractionCapture;
   },
 ): Promise<SnapshotState> {
   const effectiveFlags = {
@@ -44,6 +53,7 @@ export async function captureSnapshotForSession(
     session.appBundleId,
     session.trace?.outPath,
   );
+  const boundCapture = options.boundCapture;
   const { snapshot } = await captureSnapshot({
     device: session.device,
     session,
@@ -53,6 +63,21 @@ export async function captureSnapshotForSession(
     includeRects: options.includeRects,
     androidFreshnessMode: options.androidFreshnessMode,
     signal: options.signal,
+    ...(boundCapture
+      ? {
+          captureData: async () =>
+            await boundCapture(
+              buildRuntimeCaptureInput({
+                flags: effectiveFlags,
+                session,
+                snapshotScope: effectiveFlags.snapshotScope,
+                includeRects: options.includeRects,
+                signal: options.signal,
+                context: dispatchContext,
+              }),
+            ),
+        }
+      : {}),
   });
   if (!isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)) {
     setSessionSnapshot(session, snapshot);

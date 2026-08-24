@@ -24,7 +24,11 @@ import {
 } from '@agent-device/contracts/focus-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
-import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import {
+  localRuntimeOwner,
+  sameRuntimeOwner,
+  whenAdmitted,
+} from '@agent-device/contracts/platform-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import {
   bindLocalScreenshotInteractor,
@@ -39,6 +43,10 @@ import {
   bindLocalTypeTextInteractor,
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
+import {
+  bindLocalTouchInteractor,
+  touchRuntimeOperationFacts,
+} from '@agent-device/contracts/touch-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { bindLinuxApplicationLifecycle } from './lifecycle.ts';
@@ -129,6 +137,16 @@ export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformR
             ? linuxSnapshotOperations(host, request)
             : {}),
           ...linuxInteractionOperations(host, request, facts),
+          ...whenAdmitted(facts.operations.tapPoint, () =>
+            bindLocalTouchInteractor({
+              facts: facts.operations,
+              device: request.device,
+              signal: request.scope.signal,
+              resolveInteractor: host.localInteractors.resolve,
+              pause: async (milliseconds) =>
+                await host.clock.sleep(milliseconds, request.scope.signal),
+            }),
+          ),
         }),
         [Symbol.asyncDispose]: async () => undefined,
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;
@@ -173,6 +191,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     viewport: unsupportedPlatformLeaf,
     focus: focusKindUnavailable,
     typeText: typeKindUnavailable,
+    touch: focusKindUnavailable,
     elementText: elementTextKindUnavailable,
     back: backKindUnavailable,
     home: homeKindUnavailable,
@@ -211,6 +230,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
       ...focusRuntimeOperationFacts({ focus: linuxDesktopFact(device, focusKindUnavailable) }),
       // Text entry shares focus's cell: ydotool drives both on the desktop device only.
       ...typeTextRuntimeOperationFacts({ type: linuxDesktopFact(device, typeKindUnavailable) }),
+      ...linuxTouchFacts(device),
       // The Linux read is value-first (AXValue/title/description) where the captured tree is
       // label-first, so the desktop row genuinely reads differently from its snapshot text.
       ...elementTextRuntimeOperationFacts({
@@ -230,6 +250,20 @@ function linuxDesktopFact(
   whenUnavailable: RuntimeOperationUnavailability,
 ): RuntimeOperationFact {
   return device.kind === 'device' ? supported : whenUnavailable;
+}
+
+function linuxTouchFacts(device: DeviceInfo) {
+  const point = device.kind === 'device' ? supported : focusKindUnavailable;
+  return touchRuntimeOperationFacts({
+    tap: point,
+    tapRef: unsupportedPlatformLeaf,
+    longPress: point,
+    hover: unsupportedPlatformLeaf,
+    hoverRef: unsupportedPlatformLeaf,
+    fill: point,
+    fillRef: unsupportedPlatformLeaf,
+    tapElementSelector: unsupportedPlatformLeaf,
+  });
 }
 
 function linuxSnapshotOperations(

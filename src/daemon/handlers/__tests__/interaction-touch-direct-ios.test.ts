@@ -5,6 +5,12 @@ import { makeIosSession } from '../../../__tests__/test-utils/session-factories.
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import {
+  getRuntimeBindings,
+  mockTapElementSelector,
+  mockTapPoint,
+  resetGetRuntimeFixture,
+} from './interaction-get-runtime-fixture.ts';
+import {
   contextFromFlags,
   makeStaleRefSession,
   makeTwoButtonNodes,
@@ -18,11 +24,6 @@ import {
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
 
 vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
   const actual =
@@ -50,24 +51,19 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   getAndroidAppState,
   getAndroidBlockingDialogFocus,
 } from '../../../platforms/android/app-lifecycle.ts';
 import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
-
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  resetGetRuntimeFixture();
   mockGetAndroidAppState.mockReset();
   mockGetAndroidAppState.mockResolvedValue({});
   mockGetAndroidBlockingDialogFocus.mockReset();
@@ -75,7 +71,6 @@ beforeEach(() => {
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
-  mockCaptureSnapshotForSession.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
@@ -85,35 +80,25 @@ test('click simple iOS id selector falls back to snapshot coordinates on transpo
   const sessionName = 'ios-direct-selector-fallback-transport';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
 
-  mockDispatch.mockImplementation(async (_device, command, positionals, _out, context) => {
-    if (command === 'press' && (context as Record<string, unknown>)?.directElementSelector) {
-      throw new AppError('COMMAND_FAILED', 'fetch failed');
-    }
-    if (command === 'snapshot') {
-      return {
-        nodes: attachRefs([
-          {
-            index: 0,
-            type: 'Window',
-            rect: { x: 0, y: 0, width: 390, height: 844 },
-          },
-          {
-            index: 1,
-            parentIndex: 0,
-            type: 'XCUIElementTypeButton',
-            identifier: 'submit',
-            rect: { x: 20, y: 80, width: 120, height: 40 },
-            enabled: true,
-            hittable: true,
-          },
-        ]),
-        backend: 'xctest',
-      };
-    }
-    if (command === 'press') {
-      return { x: Number(positionals[0]), y: Number(positionals[1]), pressed: true };
-    }
-    return {};
+  mockTapElementSelector.mockRejectedValue(new AppError('COMMAND_FAILED', 'fetch failed'));
+  mockCaptureSnapshotForSession.mockResolvedValue({
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'Window',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'XCUIElementTypeButton',
+        identifier: 'submit',
+        rect: { x: 20, y: 80, width: 120, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    backend: 'xctest',
   });
 
   const response = await handleInteractionCommands({
@@ -127,13 +112,12 @@ test('click simple iOS id selector falls back to snapshot coordinates on transpo
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
-  const pressCalls = mockDispatch.mock.calls.filter((call) => call[1] === 'press');
-  expect(pressCalls.length).toBe(2);
-  expect(pressCalls[0]?.[2]).toEqual([]);
-  expect(pressCalls[1]?.[2]).toEqual(['80', '100']);
+  expect(mockTapElementSelector).toHaveBeenCalledOnce();
+  expect(mockTapPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 80, y: 100 } }));
   if (response?.ok) {
     expect(response.data?.selectorChain).toContain('id="submit"');
   }
@@ -144,35 +128,25 @@ test('click simple iOS id selector falls back to snapshot resolution on runner e
   const sessionName = 'ios-direct-selector-element-miss';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
 
-  mockDispatch.mockImplementation(async (_device, command, positionals, _out, context) => {
-    if (command === 'press' && (context as Record<string, unknown>)?.directElementSelector) {
-      throw new AppError('ELEMENT_NOT_FOUND', 'element not found');
-    }
-    if (command === 'snapshot') {
-      return {
-        nodes: attachRefs([
-          {
-            index: 0,
-            type: 'Window',
-            rect: { x: 0, y: 0, width: 390, height: 844 },
-          },
-          {
-            index: 1,
-            parentIndex: 0,
-            type: 'XCUIElementTypeButton',
-            identifier: 'submit',
-            rect: { x: 20, y: 80, width: 120, height: 40 },
-            enabled: true,
-            hittable: true,
-          },
-        ]),
-        backend: 'xctest',
-      };
-    }
-    if (command === 'press') {
-      return { x: Number(positionals[0]), y: Number(positionals[1]), pressed: true };
-    }
-    return {};
+  mockTapElementSelector.mockRejectedValue(new AppError('ELEMENT_NOT_FOUND', 'element not found'));
+  mockCaptureSnapshotForSession.mockResolvedValue({
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'Window',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'XCUIElementTypeButton',
+        identifier: 'submit',
+        rect: { x: 20, y: 80, width: 120, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    backend: 'xctest',
   });
 
   const response = await handleInteractionCommands({
@@ -186,12 +160,12 @@ test('click simple iOS id selector falls back to snapshot resolution on runner e
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
-  const pressCalls = mockDispatch.mock.calls.filter((call) => call[1] === 'press');
-  expect(pressCalls.length).toBe(2);
-  expect(pressCalls[1]?.[2]).toEqual(['80', '100']);
+  expect(mockTapElementSelector).toHaveBeenCalledOnce();
+  expect(mockTapPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 80, y: 100 } }));
   if (response?.ok) {
     expect(response.data?.selectorChain).toContain('id="submit"');
   }
@@ -202,46 +176,38 @@ test('click simple iOS id selector rejects distinct runtime candidates after amb
   const sessionName = 'ios-direct-selector-ambiguous';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
 
-  mockDispatch.mockImplementation(async (_device, command, positionals, _out, context) => {
-    if (command === 'press' && (context as Record<string, unknown>)?.directElementSelector) {
-      throw new AppError('AMBIGUOUS_MATCH', 'Selector matched multiple elements');
-    }
-    if (command === 'snapshot') {
-      return {
-        nodes: attachRefs([
-          {
-            index: 0,
-            type: 'Window',
-            rect: { x: 0, y: 0, width: 390, height: 844 },
-          },
-          // Geometry must not choose the visible twin across distinct
-          // subtrees after the direct runner delegates ambiguity.
-          {
-            index: 1,
-            parentIndex: 0,
-            type: 'XCUIElementTypeButton',
-            identifier: 'submit',
-            rect: { x: -300, y: 80, width: 120, height: 40 },
-            enabled: true,
-            hittable: true,
-          },
-          {
-            index: 2,
-            parentIndex: 0,
-            type: 'XCUIElementTypeButton',
-            identifier: 'submit',
-            rect: { x: 20, y: 80, width: 120, height: 40 },
-            enabled: true,
-            hittable: true,
-          },
-        ]),
-        backend: 'xctest',
-      };
-    }
-    if (command === 'press') {
-      return { x: Number(positionals[0]), y: Number(positionals[1]), pressed: true };
-    }
-    return {};
+  mockTapElementSelector.mockRejectedValue(
+    new AppError('AMBIGUOUS_MATCH', 'Selector matched multiple elements'),
+  );
+  mockCaptureSnapshotForSession.mockResolvedValue({
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'Window',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+      // Geometry must not choose the visible twin across distinct
+      // subtrees after the direct runner delegates ambiguity.
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'XCUIElementTypeButton',
+        identifier: 'submit',
+        rect: { x: -300, y: 80, width: 120, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+      {
+        index: 2,
+        parentIndex: 0,
+        type: 'XCUIElementTypeButton',
+        identifier: 'submit',
+        rect: { x: 20, y: 80, width: 120, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    backend: 'xctest',
   });
 
   const response = await handleInteractionCommands({
@@ -255,11 +221,12 @@ test('click simple iOS id selector rejects distinct runtime candidates after amb
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(false);
-  const pressCalls = mockDispatch.mock.calls.filter((call) => call[1] === 'press');
-  expect(pressCalls.length).toBe(1);
+  expect(mockTapElementSelector).toHaveBeenCalledOnce();
+  expect(mockTapPoint).not.toHaveBeenCalled();
   if (response && !response.ok) {
     expect(response.error.code).toBe('AMBIGUOUS_MATCH');
     expect(response.error.details?.matches).toBe(2);
@@ -281,15 +248,10 @@ test.each([
     const sessionName = `ios-maestro-direct-selector-${code}`;
     sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
 
-    mockDispatch.mockImplementation(async (_device, command, _positionals, _out, context) => {
-      if (command === 'press' && (context as Record<string, unknown>)?.directElementSelector) {
-        throw new AppError(code, message);
-      }
-      if (command === 'snapshot') {
-        throw new Error('snapshot fallback should not run for maestro replay dispatches');
-      }
-      return {};
-    });
+    mockTapElementSelector.mockRejectedValue(new AppError(code, message));
+    mockCaptureSnapshotForSession.mockRejectedValue(
+      new Error('snapshot fallback should not run for maestro replay dispatches'),
+    );
 
     const response = await handleInteractionCommands({
       req: {
@@ -302,13 +264,14 @@ test.each([
       sessionName,
       sessionStore,
       contextFromFlags,
+      ...getRuntimeBindings(),
     });
 
     expect(response?.ok).toBe(false);
     if (response?.ok === false) {
       expect(response.error.code).toBe(code);
     }
-    expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(0);
+    expect(mockCaptureSnapshotForSession).not.toHaveBeenCalled();
   },
 );
 
@@ -317,17 +280,15 @@ test('direct iOS selector click crosses the ADR 0014 fused seam and expires the 
   const sessionName = 'direct-ios-seam';
   const session = makeStaleRefSession(sessionName);
   sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) =>
-    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
-  );
+  mockCaptureSnapshotForSession.mockResolvedValue({
+    nodes: makeTwoButtonNodes(),
+    backend: 'xctest',
+  });
 
   // click + a simple selector on a non-recording iOS session takes the direct
   // iOS selector fast path (no daemon-tree resolution).
   const click = await runInteraction(sessionStore, sessionName, 'click', ['label=Continue']);
   expect(click?.ok).toBe(true);
-  const tookDirectPath = mockDispatch.mock.calls.some(
-    (call) => (call[4] as { directElementSelector?: unknown })?.directElementSelector !== undefined,
-  );
-  expect(tookDirectPath).toBe(true);
+  expect(mockTapElementSelector).toHaveBeenCalledOnce();
   expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
 });

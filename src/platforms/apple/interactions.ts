@@ -3,6 +3,7 @@ import { singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import {
   type Interactor,
+  type PressPointOptions,
   type RunnerCallOptions,
   type RunnerContext,
   TEXT_ENTRY_ROUTES,
@@ -25,6 +26,7 @@ import type { RunnerCommand } from './core/runner/runner-contract.ts';
 import {
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
+  runApplePressSeries,
 } from './core/runner/runner-sequence.ts';
 import {
   materializeIosScrollOptions,
@@ -43,12 +45,12 @@ type RunnerOpts = RunnerCallOptions;
 type IosRunnerOverrides = Pick<
   Interactor,
   | 'tap'
+  | 'pressPoint'
   | 'tapElementSelector'
   | 'doubleTap'
   | 'longPress'
   | 'focus'
   | 'type'
-  | 'fillElementSelector'
   | 'fill'
   | 'scroll'
   | 'performGesture'
@@ -84,6 +86,8 @@ export function iosRunnerOverrides(
       tap: async (x, y) => {
         return await runAppleRunnerCommand(device, iosTapCommand(device, ctx, x, y), runnerOpts);
       },
+      pressPoint: async (point, options) =>
+        await runApplePressPoint(device, ctx, runnerOpts, point, options),
       tapElementSelector: async (selector) => {
         return await runAppleRunnerCommand(
           device,
@@ -137,22 +141,6 @@ export function iosRunnerOverrides(
           ),
         );
       },
-      fillElementSelector: async (selector, text, delayMs) => {
-        return await runAppleRunnerCommand(
-          device,
-          {
-            command: 'type',
-            selectorKey: selector.key,
-            selectorValue: selector.value,
-            allowNonHittableCoordinateFallback: selector.allowNonHittableCoordinateFallback,
-            text,
-            delayMs,
-            textEntryMode: 'replace',
-            appBundleId: ctx.appBundleId,
-          },
-          runnerOpts,
-        );
-      },
       fill: async (x, y, text, delayMs, options) => {
         return await runAppleRunnerCommand(
           device,
@@ -194,10 +182,113 @@ export function iosRunnerOverrides(
   };
 }
 
+async function runApplePressPoint(
+  device: DeviceInfo,
+  context: RunnerContext,
+  runnerOpts: RunnerOpts,
+  point: { x: number; y: number },
+  options: PressPointOptions,
+): Promise<Record<string, unknown>> {
+  if (isMacOs(device) && options.surface && options.surface !== 'app') {
+    return await runMacOsSurfacePress(context, point, options);
+  }
+  if (options.button !== 'primary') {
+    return await runAppleAlternateClick(device, context, runnerOpts, point, options.button);
+  }
+  if (options.count === 1) {
+    return await runSingleApplePress(device, context, runnerOpts, point, options);
+  }
+  return await runApplePressSeries(
+    device,
+    point,
+    options,
+    context.appBundleId,
+    async (command) => await runAppleRunnerCommand(device, command, runnerOpts),
+  );
+}
+
+async function runMacOsSurfacePress(
+  context: RunnerContext,
+  point: { x: number; y: number },
+  options: PressPointOptions,
+): Promise<Record<string, unknown>> {
+  if (options.button !== 'primary') {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      `${options.button} click is not supported on macOS ${options.surface} sessions.`,
+    );
+  }
+  const { runMacOsPressAction } = await import('./os/macos/helper.ts');
+  await runMacOsPressAction(point.x, point.y, {
+    bundleId: context.appBundleId,
+    surface: options.surface,
+  });
+  return {};
+}
+
+async function runAppleAlternateClick(
+  device: DeviceInfo,
+  context: RunnerContext,
+  runnerOpts: RunnerOpts,
+  point: { x: number; y: number },
+  button: 'secondary' | 'middle',
+) {
+  return await runAppleRunnerCommand(
+    device,
+    {
+      command: 'mouseClick',
+      x: point.x,
+      y: point.y,
+      button,
+      appBundleId: context.appBundleId,
+    },
+    runnerOpts,
+  );
+}
+
+async function runSingleApplePress(
+  device: DeviceInfo,
+  context: RunnerContext,
+  runnerOpts: RunnerOpts,
+  point: { x: number; y: number },
+  options: PressPointOptions,
+) {
+  if (options.doubleTap) {
+    const result = await runAppleRunnerCommand(
+      device,
+      buildRunnerSequenceCommand(
+        [{ kind: 'doubleTap', x: point.x, y: point.y }],
+        context.appBundleId,
+      ),
+      runnerOpts,
+    );
+    parseRunnerSequenceResult(result);
+    return result;
+  }
+  if (options.holdMs > 0) {
+    return await runAppleRunnerCommand(
+      device,
+      {
+        command: 'longPress',
+        x: point.x,
+        y: point.y,
+        durationMs: options.holdMs,
+        appBundleId: context.appBundleId,
+      },
+      runnerOpts,
+    );
+  }
+  return await runAppleRunnerCommand(
+    device,
+    iosTapCommand(device, context, point.x, point.y),
+    runnerOpts,
+  );
+}
+
 /**
  * The runner wire payload is untrusted JSON; this is the one place a `type`
  * response becomes the typed {@link TypeTextBackendResult} its only consumer
- * (handleTypeCommand, src/core/dispatch-interactions.ts) reads.
+ * (the bound type-text runtime operation) reads.
  */
 function readTypeTextBackendResult(result: Record<string, unknown>): TypeTextBackendResult {
   const route = result.textEntryRoute;

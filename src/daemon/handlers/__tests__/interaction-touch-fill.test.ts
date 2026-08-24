@@ -5,6 +5,11 @@ import { activateCompleteRefFrame, expireRefFrame } from '../../ref-frame.ts';
 import { STALE_SNAPSHOT_REFS_WARNING } from '../../session-snapshot.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import {
+  getRuntimeBindings,
+  mockFillPoint,
+  resetGetRuntimeFixture,
+} from './interaction-get-runtime-fixture.ts';
+import {
   contextFromFlags,
   makeSession,
   makeStaleRefSession,
@@ -17,11 +22,6 @@ import {
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
 
 vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
   const actual =
@@ -49,24 +49,19 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   getAndroidAppState,
   getAndroidBlockingDialogFocus,
 } from '../../../platforms/android/app-lifecycle.ts';
 import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
-
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  resetGetRuntimeFixture();
   mockGetAndroidAppState.mockReset();
   mockGetAndroidAppState.mockResolvedValue({});
   mockGetAndroidBlockingDialogFocus.mockReset();
@@ -74,7 +69,6 @@ beforeEach(() => {
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
-  mockCaptureSnapshotForSession.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
@@ -116,11 +110,12 @@ test('fill @ref fails fast when the target is off-screen', async () => {
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(false);
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(mockFillPoint).not.toHaveBeenCalled();
   if (response && !response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
     expect(response.error.message).toMatch(/off-screen/i);
@@ -159,7 +154,7 @@ test('fill @ref fails closed when stored ref bounds are invalid (ADR 0014)', asy
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockRejectedValue(
+  mockFillPoint.mockRejectedValue(
     new Error('dispatch must not run: no positional recapture on unusable frame evidence'),
   );
 
@@ -174,6 +169,7 @@ test('fill @ref fails closed when stored ref bounds are invalid (ADR 0014)', asy
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   // ADR 0014: the authorized frame's @e1 has an unusable rect, so the fill FAILS
@@ -183,7 +179,7 @@ test('fill @ref fails closed when stored ref bounds are invalid (ADR 0014)', asy
     expect(response.error.code).toBe('COMMAND_FAILED');
     expect(response.error.message).toMatch(/not found or has no bounds/);
   }
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(mockFillPoint).not.toHaveBeenCalled();
 });
 
 test('fill @ref rejects after a device action expired the frame', async () => {
@@ -207,7 +203,7 @@ test('fill @ref rejects after a device action expired the frame', async () => {
   // ADR 0014: an unobserved device action expired the frame.
   expireRefFrame(session);
   sessionStore.set(sessionName, session);
-  mockDispatch.mockRejectedValue(
+  mockFillPoint.mockRejectedValue(
     new Error('dispatch should not be called for an expired-frame ref'),
   );
 
@@ -222,7 +218,7 @@ test('fill @ref rejects after a device action expired the frame', async () => {
     expect(response.error.details?.reason).toBe('ref_frame_expired');
     expect(response.error.details?.hint).toBe(STALE_SNAPSHOT_REFS_WARNING);
   }
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(mockFillPoint).not.toHaveBeenCalled();
 });
 
 test('fill with a pinned stale ref rejects; pinned current is clean', async () => {
@@ -256,7 +252,7 @@ test('fill with a pinned stale ref rejects; pinned current is clean', async () =
       "Ref @e1 was minted from snapshot s2 but the session's ref frame is now s3 — re-run snapshot -i.",
     );
   }
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(mockFillPoint).not.toHaveBeenCalled();
 
   const current = await runInteraction(sessionStore, sessionName, 'fill', ['@e1~s3', 'hello']);
   expect(current?.ok).toBe(true);
@@ -293,7 +289,7 @@ test("ADR 0014 blocker-2: a mutating find's internal fill from an expired frame 
   activateCompleteRefFrame(session);
   expireRefFrame(session);
   sessionStore.set(sessionName, session);
-  mockDispatch.mockResolvedValue({ filled: true });
+  mockFillPoint.mockResolvedValue({ filled: true });
 
   // Contrast: a user-supplied `@ref` against the expired frame rejects before
   // dispatch (it consumed a stale ref).
@@ -321,6 +317,7 @@ test("ADR 0014 blocker-2: a mutating find's internal fill from an expired frame 
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
   expect(internal?.ok).toBe(true);
   if (internal?.ok) {
@@ -358,7 +355,7 @@ test('fill @ref keeps the original editable node when its parent is the hittable
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({ filled: true });
+  mockFillPoint.mockResolvedValue({ filled: true });
 
   const response = await handleInteractionCommands({
     req: {
@@ -371,13 +368,17 @@ test('fill @ref keeps the original editable node when its parent is the hittable
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  const fillCalls = mockDispatch.mock.calls.filter((c) => c[1] === 'fill');
-  expect(fillCalls.length).toBe(1);
-  expect(fillCalls[0]?.[2]).toEqual(['144', '136', 'hello@example.com']);
+  expect(mockFillPoint).toHaveBeenCalledWith(
+    expect.objectContaining({
+      point: { x: 144, y: 136 },
+      text: 'hello@example.com',
+    }),
+  );
 
   const stored = sessionStore.get(sessionName);
   const result = (stored?.actions[0]?.result ?? {}) as Record<string, unknown>;

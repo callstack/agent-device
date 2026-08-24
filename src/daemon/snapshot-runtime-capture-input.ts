@@ -4,6 +4,7 @@ import type {
   SnapshotRuntimeExecution,
 } from '@agent-device/contracts/platform';
 import { contextFromFlags } from './context.ts';
+import type { DaemonCommandContext } from './context.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 
 /**
@@ -14,7 +15,9 @@ import type { DaemonRequest, SessionState } from './types.ts';
 export function buildRuntimeCaptureInput(
   params: Readonly<{
     flags: CommandFlags | undefined;
-    logPath: string;
+    logPath?: string;
+    /** Already-resolved context for repeated captures whose effective flags were composed upstream. */
+    context?: DaemonCommandContext;
     meta?: DaemonRequest['meta'];
     session: SessionState | undefined;
     snapshotScope: string | undefined;
@@ -29,14 +32,9 @@ export function buildRuntimeCaptureInput(
 ): CaptureSnapshotInput {
   const { flags, logPath, meta, session, snapshotScope } = params;
   const { appBundleId, trace, surface } = session ?? {};
-  const context = contextFromFlags(
-    logPath,
-    flags,
-    appBundleId,
-    trace?.outPath,
-    meta?.requestId,
-    meta,
-  );
+  const context =
+    params.context ??
+    contextFromFlags(logPath ?? '', flags, appBundleId, trace?.outPath, meta?.requestId, meta);
   return {
     options: {
       appBundleId,

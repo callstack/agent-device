@@ -1,8 +1,4 @@
-import {
-  dispatchCommand,
-  dispatchGesturePlan,
-  dispatchGestureViewport,
-} from '../../core/dispatch.ts';
+import { dispatchGesturePlan, dispatchGestureViewport } from '../../core/dispatch.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import type {
   AgentDeviceBackend,
@@ -18,18 +14,18 @@ import type { InteractionHandlerParams } from './interaction-common.ts';
 import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
 import { createDaemonRuntimePolicy } from '../runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from '../runtime-session.ts';
-import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
-import { stripAtPrefix } from './interaction-touch-targets.ts';
 import { NO_ACTIVE_SESSION_MESSAGE } from './response.ts';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { getRequestSignal } from '../../request/cancel.ts';
 import { buildAppleRunnerRequestOptions } from '../apple-runner-options.ts';
 import { isLocalIosRunnerSession } from '../direct-ios-selector.ts';
 import { confirmIosOffscreenTargetVisible } from '../offscreen-target-probe.ts';
+import type { BoundTouchExecutor } from '../touch-runtime.ts';
 
 type InteractionRuntimeParams = InteractionHandlerParams & {
   captureSnapshotForSession: CaptureSnapshotForSession;
   pairedGestureViewport?: Rect;
+  touchExecutor?: BoundTouchExecutor;
 };
 
 export function createInteractionRuntime(params: InteractionRuntimeParams) {
@@ -62,7 +58,6 @@ function createInteractionBackend(
   params: InteractionRuntimeParams & { session: SessionState },
 ): AgentDeviceBackend {
   const { req, session } = params;
-  const webProvider = resolveNativeWebInteractionProvider(session);
   return {
     platform: publicPlatformString(session.device),
     captureSnapshot: async (context, options): Promise<BackendSnapshotResult> => ({
@@ -76,6 +71,7 @@ function createInteractionBackend(
           preferredBackend: options?.preferredBackend,
           includeRects: options?.includeRects === true,
           signal: context.signal,
+          boundCapture: params.touchExecutor?.captureSnapshot,
         },
       ),
     }),
@@ -106,88 +102,7 @@ function createInteractionBackend(
             }),
           })
       : undefined,
-    tap: async (_context, point): Promise<BackendActionResult> => {
-      // ADR 0014 side-effect seam: the point is resolved; expire the ref frame
-      // synchronously before dispatching so a later step cannot reuse it.
-      expireRefFrame(session);
-      return toBackendActionResult(
-        await dispatchCommand(
-          session.device,
-          'press',
-          [String(point.x), String(point.y)],
-          req.flags?.out,
-          params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
-        ),
-      );
-    },
-    tapTarget: webProvider?.clickRef
-      ? async (_context, target): Promise<BackendActionResult> => {
-          expireRefFrame(session);
-          await webProvider.clickRef?.(target.ref);
-          return { ref: stripAtPrefix(target.ref) };
-        }
-      : undefined,
-    fill: async (_context, point, text, options): Promise<BackendActionResult> => {
-      expireRefFrame(session);
-      return toBackendActionResult(
-        await dispatchCommand(
-          session.device,
-          'fill',
-          [String(point.x), String(point.y), text],
-          req.flags?.out,
-          {
-            ...params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
-            allowNonHittableCoordinateFallback: options?.allowNonHittableCoordinateFallback,
-          },
-        ),
-      );
-    },
-    fillTarget: webProvider?.fillRef
-      ? async (_context, target, text, options): Promise<BackendActionResult> => {
-          expireRefFrame(session);
-          await webProvider.fillRef?.(target.ref, text, options);
-          return {
-            ref: stripAtPrefix(target.ref),
-            text,
-            delayMs: options?.delayMs ?? 0,
-          };
-        }
-      : undefined,
-    longPress: async (_context, point, options): Promise<BackendActionResult> => {
-      expireRefFrame(session);
-      return toBackendActionResult(
-        await dispatchCommand(
-          session.device,
-          'longpress',
-          [
-            String(point.x),
-            String(point.y),
-            ...(options?.durationMs === undefined ? [] : [String(options.durationMs)]),
-          ],
-          req.flags?.out,
-          params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
-        ),
-      );
-    },
-    hoverTarget: webProvider?.hoverRef
-      ? async (_context, target): Promise<BackendActionResult> => {
-          expireRefFrame(session);
-          await webProvider.hoverRef?.(target.ref);
-          return { ref: stripAtPrefix(target.ref) };
-        }
-      : undefined,
-    hover: async (_context, point): Promise<BackendActionResult> => {
-      expireRefFrame(session);
-      return toBackendActionResult(
-        await dispatchCommand(
-          session.device,
-          'hover',
-          [String(point.x), String(point.y)],
-          req.flags?.out,
-          params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
-        ),
-      );
-    },
+    ...touchBackendMembers(params.touchExecutor, session, req.flags),
     performGesture: async (_context, plan): Promise<BackendActionResult> => {
       expireRefFrame(session);
       return toBackendActionResult(
@@ -201,10 +116,58 @@ function createInteractionBackend(
   };
 }
 
-function resolveNativeWebInteractionProvider(session: SessionState): WebProvider | undefined {
-  if (session.device.platform !== 'web') return undefined;
-  const provider = resolveWebProvider();
-  return provider.clickRef || provider.fillRef || provider.hoverRef ? provider : undefined;
+function touchBackendMembers(
+  executor: BoundTouchExecutor | undefined,
+  session: SessionState,
+  flags: InteractionRuntimeParams['req']['flags'],
+): Partial<AgentDeviceBackend> {
+  if (!executor) return {};
+  const expire = () => expireRefFrame(session);
+  const { tapPoint, tapRef, fillPoint, fillRef, longPressPoint, hoverPoint, hoverRef } = executor;
+  return {
+    tap: tapPoint
+      ? async (_context, point) => {
+          expire();
+          return toBackendActionResult(await tapPoint(point, flags));
+        }
+      : undefined,
+    tapTarget: tapRef
+      ? async (_context, target) => {
+          expire();
+          return toBackendActionResult(await tapRef(target.ref));
+        }
+      : undefined,
+    fill: fillPoint
+      ? async (_context, point, text, options) => {
+          expire();
+          return toBackendActionResult(await fillPoint(point, text, options));
+        }
+      : undefined,
+    fillTarget: fillRef
+      ? async (_context, target, text, options) => {
+          expire();
+          return toBackendActionResult(await fillRef(target.ref, text, options));
+        }
+      : undefined,
+    longPress: longPressPoint
+      ? async (_context, point, options) => {
+          expire();
+          return toBackendActionResult(await longPressPoint(point, options?.durationMs));
+        }
+      : undefined,
+    hover: hoverPoint
+      ? async (_context, point) => {
+          expire();
+          return toBackendActionResult(await hoverPoint(point));
+        }
+      : undefined,
+    hoverTarget: hoverRef
+      ? async (_context, target) => {
+          expire();
+          return toBackendActionResult(await hoverRef(target.ref));
+        }
+      : undefined,
+  };
 }
 
 function toBackendActionResult(data: unknown): BackendActionResult {

@@ -245,13 +245,6 @@ class LimrunIosInteractor implements Interactor {
     await this.session.client.typeText(text);
   }
 
-  async fillElementSelector(
-    selector: { key: 'id' | 'label' | 'text' | 'value'; value: string },
-    text: string,
-  ): Promise<void> {
-    await this.session.client.setElementValue(text, toIosSelector(selector));
-  }
-
   async scroll(direction: 'up' | 'down' | 'left' | 'right', options?: { pixels?: number }) {
     await this.session.client.scroll(direction, options?.pixels ?? 300);
   }

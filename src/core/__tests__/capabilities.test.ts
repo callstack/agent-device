@@ -161,20 +161,20 @@ test('core commands support iOS simulator, iOS device, and Android', () => {
   );
 });
 
-// #1783: hover is a pointer state, so it is admitted exactly where a pointer
-// exists (the web backend's mouse move) and denied on every touch platform.
-test('hover is admitted only on web, where a pointer backend exists', () => {
+// Runtime-backed touch commands bypass this legacy matrix; exact owner facts
+// decide whether hover exists after device resolution.
+test('hover bypasses legacy capability admission on every platform', () => {
   assertCommandSupport(
     ['hover'],
     [
       { device: webDevice, expected: true, label: 'on web' },
-      { device: iosSimulator, expected: false, label: 'on iOS simulator' },
-      { device: iosDevice, expected: false, label: 'on iOS device' },
-      { device: macOsDevice, expected: false, label: 'on macOS' },
-      { device: tvOsSimulator, expected: false, label: 'on tvOS simulator' },
-      { device: androidDevice, expected: false, label: 'on Android device' },
-      { device: androidEmulator, expected: false, label: 'on Android emulator' },
-      { device: linuxDevice, expected: false, label: 'on linux' },
+      { device: iosSimulator, expected: true, label: 'on iOS simulator' },
+      { device: iosDevice, expected: true, label: 'on iOS device' },
+      { device: macOsDevice, expected: true, label: 'on macOS' },
+      { device: tvOsSimulator, expected: true, label: 'on tvOS simulator' },
+      { device: androidDevice, expected: true, label: 'on Android device' },
+      { device: androidEmulator, expected: true, label: 'on Android emulator' },
+      { device: linuxDevice, expected: true, label: 'on linux' },
     ],
   );
 });
@@ -206,7 +206,6 @@ test('macOS supports the Apple runner interaction core but excludes mobile-only 
       'find',
       'focus',
       'get',
-      'longpress',
       'logs',
       'perf',
       'press',
@@ -312,13 +311,16 @@ test('web supports only the initial browser interaction slice', () => {
       'app-switcher',
       'clipboard',
       'gesture',
-      'longpress',
       'perf',
       'settings',
       'swipe',
       'trigger-app-event',
     ],
     [{ device: webDevice, expected: false, label: 'on web' }],
+  );
+  assertCommandSupport(
+    ['longpress'],
+    [{ device: webDevice, expected: true, label: 'through runtime admission on web' }],
   );
 });
 

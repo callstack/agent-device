@@ -15,6 +15,7 @@ import {
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
+import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
@@ -357,6 +358,13 @@ function sourceRuntimeFacts(
       setViewport: unavailable,
       focusPoint: unavailable,
       typeText: unavailable,
+      ...touchRuntimeOperationFacts({
+        tap: unavailable,
+        longPress: unavailable,
+        hover: unavailable,
+        fill: unavailable,
+        tapElementSelector: unavailable,
+      }),
       readTextAtPoint: unavailable,
       back: unavailable,
       home: unavailable,

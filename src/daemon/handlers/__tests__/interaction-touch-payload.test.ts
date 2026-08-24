@@ -3,6 +3,11 @@ import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import {
+  getRuntimeBindings,
+  mockTapPoint,
+  resetGetRuntimeFixture,
+} from './interaction-get-runtime-fixture.ts';
+import {
   contextFromFlags,
   installTestScreenRecording,
   makeAndroidSession,
@@ -16,11 +21,6 @@ import {
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
 
 vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
   const actual =
@@ -48,24 +48,19 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   getAndroidAppState,
   getAndroidBlockingDialogFocus,
 } from '../../../platforms/android/app-lifecycle.ts';
 import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
-
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  resetGetRuntimeFixture();
   mockGetAndroidAppState.mockReset();
   mockGetAndroidAppState.mockResolvedValue({});
   mockGetAndroidBlockingDialogFocus.mockReset();
@@ -73,7 +68,6 @@ beforeEach(() => {
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
-  mockCaptureSnapshotForSession.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
@@ -102,7 +96,7 @@ test('press coordinates appends touch-visualization events while recording', asy
   });
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({
+  mockTapPoint.mockResolvedValue({
     ok: true,
     videoPath: '/tmp/demo.mp4',
     artifactUri: 'agent-device://artifacts/demo.mp4',
@@ -119,6 +113,7 @@ test('press coordinates appends touch-visualization events while recording', asy
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -152,7 +147,7 @@ test('press coordinates on iOS recording captures a full snapshot for the touch 
   });
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({ x: 220, y: 600 });
+  mockTapPoint.mockResolvedValue({ x: 220, y: 600 });
   // Regression: a filtered snapshot has no Application/Window node, so viewport inference would
   // return a leaf-element bounding box and the recording overlay would misplace tap markers.
   mockCaptureSnapshotForSession.mockResolvedValueOnce({
@@ -183,6 +178,7 @@ test('press coordinates on iOS recording captures a full snapshot for the touch 
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -209,7 +205,7 @@ test('press coordinates on Android recording uses physical screen size when no s
   session.snapshot = undefined;
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({ x: 300, y: 2300 });
+  mockTapPoint.mockResolvedValue({ x: 300, y: 2300 });
 
   const response = await handleInteractionCommands({
     req: {
@@ -222,6 +218,7 @@ test('press coordinates on Android recording uses physical screen size when no s
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -244,7 +241,7 @@ test('press coordinates on Android recording caches physical screen size across 
   session.snapshot = undefined;
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({ x: 300, y: 2300 });
+  mockTapPoint.mockResolvedValue({ x: 300, y: 2300 });
 
   await handleInteractionCommands({
     req: {
@@ -257,9 +254,10 @@ test('press coordinates on Android recording caches physical screen size across 
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
-  mockDispatch.mockResolvedValue({ x: 320, y: 2200 });
+  mockTapPoint.mockResolvedValue({ x: 320, y: 2200 });
 
   await handleInteractionCommands({
     req: {
@@ -272,6 +270,7 @@ test('press coordinates on Android recording caches physical screen size across 
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(mockGetAndroidScreenSize).toHaveBeenCalledTimes(1);
@@ -289,7 +288,7 @@ test('press coordinates without recording skips Android screen-size lookup', asy
   session.snapshot = undefined;
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({ x: 300, y: 2300 });
+  mockTapPoint.mockResolvedValue({ x: 300, y: 2300 });
 
   const response = await handleInteractionCommands({
     req: {
@@ -302,6 +301,7 @@ test('press coordinates without recording skips Android screen-size lookup', asy
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -321,7 +321,7 @@ test('press coordinates during recording still dispatches when Android screen-si
   session.snapshot = undefined;
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({ x: 300, y: 2300 });
+  mockTapPoint.mockResolvedValue({ x: 300, y: 2300 });
   mockGetAndroidScreenSize.mockRejectedValue(new Error('adb unavailable'));
 
   const response = await handleInteractionCommands({
@@ -335,10 +335,11 @@ test('press coordinates during recording still dispatches when Android screen-si
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockDispatch).toHaveBeenCalledTimes(1);
+  expect(mockTapPoint).toHaveBeenCalledTimes(1);
   const event = sessionStore.get(sessionName)?.screenRecording?.handle.inspect().gestureEvents[0];
   expect(event?.kind).toBe('tap');
   expect(event?.x).toBe(300);
@@ -379,7 +380,7 @@ test('press @ref preserves native timing in recorded result and touch visualizat
   Date.now = () => now;
 
   try {
-    mockDispatch.mockImplementation(async () => {
+    mockTapPoint.mockImplementation(async () => {
       now = 1_650;
       return {
         gestureStartUptimeMs: 5_100,
@@ -398,6 +399,7 @@ test('press @ref preserves native timing in recorded result and touch visualizat
       sessionName,
       sessionStore,
       contextFromFlags,
+      ...getRuntimeBindings(),
     });
 
     expect(response?.ok).toBe(true);

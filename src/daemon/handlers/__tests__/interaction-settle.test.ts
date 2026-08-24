@@ -11,6 +11,13 @@ import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { createInteractionRuntime } from '../interaction-runtime.ts';
 import { clearRequestAbortRegistration, registerRequestAbort } from '../../../request/cancel.ts';
+import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
+import {
+  getRuntimeBindings,
+  mockFillPoint,
+  mockTapPoint,
+  resetGetRuntimeFixture,
+} from './interaction-get-runtime-fixture.ts';
 
 // #1101 --settle daemon response shape: the settle payload (diff + settled +
 // refsGeneration) rides the wire response through the shared builder, and a
@@ -146,8 +153,27 @@ function mockCommandDispatch(params: { snapshots: Array<typeof BEFORE_NODES> }) 
 const contextFromFlags = () => ({});
 
 beforeEach(() => {
+  resetGetRuntimeFixture();
   mockDispatch.mockReset();
   mockDispatch.mockResolvedValue({});
+  mockTapPoint.mockImplementation(async (input) => {
+    return await mockDispatch(
+      IOS_SIMULATOR,
+      'press',
+      [String(input.point.x), String(input.point.y)],
+      undefined,
+      input.execution,
+    );
+  });
+  mockFillPoint.mockImplementation(async (input) => {
+    return await mockDispatch(
+      IOS_SIMULATOR,
+      'fill',
+      [String(input.point.x), String(input.point.y), input.text],
+      undefined,
+      input.execution,
+    );
+  });
   mockCaptureSnapshotForSession.mockReset();
   mockCaptureSnapshotForSession.mockImplementation(emulateCaptureSnapshotForSession);
 });
@@ -205,6 +231,7 @@ test('press --settle responds with the settled diff, refsGeneration, and activat
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   const data = expectOkData(response);
@@ -280,6 +307,7 @@ test('press --settle on a removals-only diff attaches the unchanged interactive 
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   const data = expectOkData(response);
@@ -315,6 +343,7 @@ test('press --settle rejects an expired-frame ref before dispatch or observation
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(false);
@@ -353,6 +382,7 @@ test('a settle observation without a diff leaves ref staleness untouched', async
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   // The press still succeeds; the observation reports its own failure.
@@ -406,6 +436,7 @@ test('a stalled settle capture receives its deadline signal and leaves the inter
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   const data = expectOkData(response);
@@ -434,6 +465,7 @@ test('bare timeout without --settle stays compatible', async () => {
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   const data = expectOkData(compatible);
@@ -457,6 +489,7 @@ test('settle-specific tuning flags without --settle are rejected', async () => {
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   const error = expectInvalidArgs(response);
@@ -480,6 +513,7 @@ test('fill @ref --settle carries the settle payload on the ref wire shape', asyn
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   const data = expectOkData(response);

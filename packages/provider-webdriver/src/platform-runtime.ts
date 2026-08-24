@@ -25,6 +25,7 @@ import {
   type RuntimeOperationUnavailability,
   type RuntimeOwnerRef,
   sameRuntimeOwner,
+  whenAdmitted,
 } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
@@ -44,6 +45,10 @@ import {
   bindProviderTypeTextInteractor,
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
+import {
+  bindProviderTouchInteractor,
+  touchRuntimeOperationFacts,
+} from '@agent-device/contracts/touch-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
 import { readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
@@ -287,6 +292,13 @@ function webDriverInteractionOperations(
       ...resolver,
       facts: facts.operations,
     }),
+    ...whenAdmitted(facts.operations.tapPoint, () =>
+      bindProviderTouchInteractor({
+        ...resolver,
+        facts: facts.operations,
+        pause: async (milliseconds) => await options.host.clock.sleep(milliseconds, signal),
+      }),
+    ),
   };
 }
 
@@ -372,6 +384,7 @@ function webDriverFacts(
       viewport: inactiveSession,
       focus: inactiveSession,
       typeText: inactiveSession,
+      touch: inactiveSession,
       elementText: inactiveSession,
       back: inactiveSession,
       home: inactiveSession,
@@ -403,6 +416,7 @@ function webDriverFacts(
     viewport: viewportUnavailable,
     focus: focusUnavailable,
     typeText: typeUnavailable,
+    touch: typeUnavailable,
     elementText: elementTextUnavailable,
     back: backUnavailable,
     home: homeUnavailable,
@@ -440,6 +454,16 @@ function webDriverFacts(
       // reachability and nothing more: this provider drives touch wherever it can drive a capture.
       ...focusRuntimeOperationFacts({ focus: interactorCell(reachable, focusUnavailable) }),
       ...typeTextRuntimeOperationFacts({ type: interactorCell(reachable, typeUnavailable) }),
+      ...touchRuntimeOperationFacts({
+        tap: interactorCell(reachable, focusUnavailable),
+        tapRef: focusUnavailable,
+        longPress: interactorCell(reachable, focusUnavailable),
+        hover: focusUnavailable,
+        hoverRef: focusUnavailable,
+        fill: interactorCell(reachable, typeUnavailable),
+        fillRef: typeUnavailable,
+        tapElementSelector: focusUnavailable,
+      }),
       // `back`/`home`/`orientation` ride the same reachable interactor; `tvRemote` always throws
       // unsupported in this interactor regardless of reachability (no capability declares it).
       ...backRuntimeOperationFacts({ back: interactorCell(reachable, backUnavailable) }),

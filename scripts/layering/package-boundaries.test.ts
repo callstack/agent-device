@@ -117,6 +117,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/snapshot',
   '@agent-device/contracts/snapshot-runtime',
   '@agent-device/contracts/startup-recovery-fence',
+  '@agent-device/contracts/touch-runtime',
   '@agent-device/contracts/tv-remote',
   '@agent-device/contracts/tv-remote-runtime',
   '@agent-device/contracts/type-text-runtime',

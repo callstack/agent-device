@@ -235,17 +235,13 @@ test('HarmonyOS static capabilities omit runtime-backed command admissions', () 
     .filter((command) => isCommandSupportedOnDevice(command, HARMONYOS_EMULATOR))
     .sort();
 
-  // `back`/`home`/`keyboard` dropped out of the matrix entirely (R42/R43/R46 deleted their
+  // Runtime-backed navigation, keyboard, and touch commands dropped out of the matrix entirely:
   // capability buckets), so they are absent here — not because HarmonyOS admission changed, but
   // because there is no bucket left for `isCommandSupportedOnDevice` to consult at all.
   assert.deepEqual(availableCommands, [
     'app-switcher',
-    'click',
-    'fill',
     'gesture',
-    'longpress',
     'perf',
-    'press',
     'scroll',
     'settings',
     'swipe',

@@ -8,13 +8,7 @@ import { successText, withSuccessText } from '../utils/success-text.ts';
 import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
 import type { DescriptorDispatchCommandName } from './command-descriptor/registry.ts';
 import type { DispatchContext } from './dispatch-context.ts';
-import {
-  handleFillCommand,
-  handleHoverCommand,
-  handleLongPressCommand,
-  handlePressCommand,
-  handleScrollCommand,
-} from './dispatch-interactions.ts';
+import { handleScrollCommand } from './dispatch-scroll.ts';
 import { getInteractor } from './interactors.ts';
 
 export type { DispatchContext } from './dispatch-context.ts';
@@ -135,12 +129,6 @@ type DispatchHandler = (args: DispatchHandlerArgs) => Promise<Record<string, unk
  * behaviorless.
  */
 const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
-  press: ({ device, interactor, positionals, context }) =>
-    handlePressCommand(device, interactor, positionals, context),
-  longpress: ({ interactor, positionals }) => handleLongPressCommand(interactor, positionals),
-  hover: ({ interactor, positionals }) => handleHoverCommand(interactor, positionals),
-  fill: ({ interactor, positionals, context }) =>
-    handleFillCommand(interactor, positionals, context),
   scroll: ({ interactor, positionals, context }) =>
     handleScrollCommand(interactor, positionals, context),
   'trigger-app-event': ({ device, interactor, positionals, context }) =>

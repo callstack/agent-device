@@ -3,6 +3,7 @@ import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/elemen
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
+import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 
 const unavailable: RuntimeOperationFact = Object.freeze({
   available: false,
@@ -36,6 +37,13 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   setViewport: unavailable,
   focusPoint: unavailable,
   typeText: unavailable,
+  ...touchRuntimeOperationFacts({
+    tap: unavailable,
+    longPress: unavailable,
+    hover: unavailable,
+    fill: unavailable,
+    tapElementSelector: unavailable,
+  }),
   ...elementTextRuntimeOperationFacts({ readTextAtPoint: unavailable }),
   back: unavailable,
   home: unavailable,

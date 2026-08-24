@@ -313,3 +313,11 @@ function unsupportedRuntimeOperation(key: string, fact: RuntimeOperationUnavaila
     hint: fact.hint,
   });
 }
+
+/** Include an operation binding only when the owning runtime's published fact admits it. */
+export function whenAdmitted<T extends object>(
+  fact: RuntimeOperationFact,
+  build: () => T,
+): T | Record<string, never> {
+  return fact.available ? build() : {};
+}

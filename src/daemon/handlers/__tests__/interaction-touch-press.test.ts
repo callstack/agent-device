@@ -3,6 +3,11 @@ import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import {
+  getRuntimeBindings,
+  mockTapPoint,
+  resetGetRuntimeFixture,
+} from './interaction-get-runtime-fixture.ts';
+import {
   contextFromFlags,
   findResolvedTarget,
   makeFindPreresolvedTree,
@@ -20,11 +25,6 @@ import {
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
 
 vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
   const actual =
@@ -52,24 +52,19 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   getAndroidAppState,
   getAndroidBlockingDialogFocus,
 } from '../../../platforms/android/app-lifecycle.ts';
 import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
-
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  resetGetRuntimeFixture();
   mockGetAndroidAppState.mockReset();
   mockGetAndroidAppState.mockResolvedValue({});
   mockGetAndroidBlockingDialogFocus.mockReset();
@@ -77,7 +72,6 @@ beforeEach(() => {
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
-  mockCaptureSnapshotForSession.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
@@ -131,12 +125,11 @@ test('click on a macOS menubar wrapper ref promotes to the same-rect menu bar it
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockDispatch).toHaveBeenCalledTimes(1);
-  expect(mockDispatch.mock.calls[0]?.[1]).toBe('press');
-  expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['1004', '17']);
+  expect(readPressPoint(mockTapPoint)).toEqual(['1004', '17']);
   if (response?.ok) {
     expect(response.data?.selectorChain).toEqual(['role="menubaritem"']);
   }
@@ -171,7 +164,7 @@ test('press @ref promotes a non-hittable node to its hittable ancestor before ta
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({ pressed: true });
+  mockTapPoint.mockResolvedValue({ pressed: true });
 
   const response = await handleInteractionCommands({
     req: {
@@ -184,6 +177,7 @@ test('press @ref promotes a non-hittable node to its hittable ancestor before ta
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toBeTruthy();
@@ -196,9 +190,7 @@ test('press @ref promotes a non-hittable node to its hittable ancestor before ta
     expect(response.data?.targetHittable).toBeUndefined();
     expect(response.data?.hint).toBeUndefined();
   }
-  expect(mockDispatch).toHaveBeenCalledTimes(1);
-  expect(mockDispatch.mock.calls[0]?.[1]).toBe('press');
-  expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['180', '136']);
+  expect(readPressPoint(mockTapPoint)).toEqual(['180', '136']);
 
   const stored = sessionStore.get(sessionName);
   const result = (stored?.actions[0]?.result ?? {}) as Record<string, unknown>;
@@ -234,7 +226,7 @@ test('press @ref does not promote to a full-screen hittable ancestor', async () 
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({ pressed: true });
+  mockTapPoint.mockResolvedValue({ pressed: true });
 
   const response = await handleInteractionCommands({
     req: {
@@ -247,6 +239,7 @@ test('press @ref does not promote to a full-screen hittable ancestor', async () 
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toBeTruthy();
@@ -261,8 +254,7 @@ test('press @ref does not promote to a full-screen hittable ancestor', async () 
     expect(typeof response.data?.hint).toBe('string');
     expect(response.data?.hint as string).toMatch(/hittable: false/);
   }
-  expect(mockDispatch).toHaveBeenCalledTimes(1);
-  expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['201', '319']);
+  expect(readPressPoint(mockTapPoint)).toEqual(['201', '319']);
 });
 
 test('click --button secondary on @ref dispatches a secondary press on macOS and records click', async () => {
@@ -293,7 +285,7 @@ test('click --button secondary on @ref dispatches a secondary press on macOS and
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({ button: 'secondary' });
+  mockTapPoint.mockResolvedValue({ button: 'secondary' });
 
   const response = await handleInteractionCommands({
     req: {
@@ -306,15 +298,13 @@ test('click --button secondary on @ref dispatches a secondary press on macOS and
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  expect(mockDispatch).toHaveBeenCalledTimes(1);
-  expect(mockDispatch.mock.calls[0]?.[1]).toBe('press');
-  expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['500', '510']);
-  const context = mockDispatch.mock.calls[0]?.[4] as Record<string, unknown> | undefined;
-  expect(context?.clickButton).toBe('secondary');
+  expect(readPressPoint(mockTapPoint)).toEqual(['500', '510']);
+  expect(mockTapPoint.mock.calls[0]?.[0].options.button).toBe('secondary');
   if (response?.ok) {
     expect(response.data?.button).toBe('secondary');
     expect(response.data?.ref).toBe('e1');
@@ -330,7 +320,6 @@ test('#1654: a mutating find click acts on the node find resolved, not a re-reso
   const sessionStore = makeSessionStore();
   const sessionName = 'find-preresolved-click';
   sessionStore.set(sessionName, makeStaleRefSession(sessionName));
-  mockDispatch.mockResolvedValue({});
   const preresolved = makeFindPreresolvedTree();
 
   const response = await runFindInternalClick(sessionStore, sessionName, {
@@ -340,20 +329,19 @@ test('#1654: a mutating find click acts on the node find resolved, not a re-reso
   expect(response?.ok).toBe(true);
   // find's node — (300,500,20,20) → (310, 510). A second resolution would read
   // @e2 out of the SESSION frame tree instead and tap (60, 40).
-  expect(readPressPoint(mockDispatch)).toEqual(['310', '510']);
+  expect(readPressPoint(mockTapPoint)).toEqual(['310', '510']);
 });
 
 test('#1654 control: without the resolved-target payload the same click still resolves @ref from the session tree', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'find-preresolved-control';
   sessionStore.set(sessionName, makeStaleRefSession(sessionName));
-  mockDispatch.mockResolvedValue({});
 
   const response = await runFindInternalClick(sessionStore, sessionName, {});
 
   // The ordinary ref path is untouched: @e1 is "Continue" at (10,20,100,40).
   expect(response?.ok).toBe(true);
-  expect(readPressPoint(mockDispatch)).toEqual(['60', '40']);
+  expect(readPressPoint(mockTapPoint)).toEqual(['60', '40']);
 });
 
 test('#1654: the leaf performs no ref lookup at all — a session that could not resolve @e2 still acts', async () => {
@@ -366,7 +354,6 @@ test('#1654: the leaf performs no ref lookup at all — a session that could not
   const session = makeSession(sessionName);
   session.snapshot = undefined;
   sessionStore.set(sessionName, session);
-  mockDispatch.mockResolvedValue({});
   const preresolved = makeFindPreresolvedTree();
 
   const withoutPreresolution = await runFindInternalClick(sessionStore, sessionName, {});
@@ -377,7 +364,7 @@ test('#1654: the leaf performs no ref lookup at all — a session that could not
   });
 
   expect(response?.ok).toBe(true);
-  expect(readPressPoint(mockDispatch)).toEqual(['310', '510']);
+  expect(readPressPoint(mockTapPoint)).toEqual(['310', '510']);
 });
 
 test('#1654: the shared guards still run on the pre-resolved node', async () => {
@@ -386,7 +373,6 @@ test('#1654: the shared guards still run on the pre-resolved node', async () => 
   const sessionStore = makeSessionStore();
   const sessionName = 'find-preresolved-occluded';
   sessionStore.set(sessionName, makeStaleRefSession(sessionName));
-  mockDispatch.mockResolvedValue({});
   const preresolved = makeFindPreresolvedTree();
   const blocked = {
     ...preresolved.node,
@@ -402,5 +388,5 @@ test('#1654: the shared guards still run on the pre-resolved node', async () => 
     expect(response.error.code).toBe('COMMAND_FAILED');
     expect(response.error.message).toContain('covered by another visible element');
   }
-  expect(readPressPoint(mockDispatch)).toBeUndefined();
+  expect(readPressPoint(mockTapPoint)).toBeUndefined();
 });

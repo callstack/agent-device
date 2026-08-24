@@ -18,7 +18,7 @@ import {
   bindLocalFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
-import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { localRuntimeOwner, whenAdmitted } from '@agent-device/contracts/platform-runtime';
 import {
   bindLocalScreenshotInteractor,
   screenshotRuntimeOperationFacts,
@@ -29,6 +29,10 @@ import {
   bindLocalTypeTextInteractor,
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
+import {
+  bindLocalTouchInteractor,
+  touchRuntimeOperationFacts,
+} from '@agent-device/contracts/touch-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import {
   isIosFamily,
@@ -281,6 +285,16 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         // Text entry rides the same interactor authority the point focus does, so it shares the
         // exact kind cell (parity with the retired `type` bucket, `{ simulator, device }`).
         ...typeTextRuntimeOperationFacts({ type: appleFocusFact(device) }),
+        ...touchRuntimeOperationFacts({
+          tap: appleFocusFact(device),
+          tapRef: unavailable,
+          longPress: appleFocusFact(device),
+          hover: unavailable,
+          hoverRef: unavailable,
+          fill: appleFocusFact(device),
+          fillRef: unavailable,
+          tapElementSelector: isIosFamily(device) ? appleFocusFact(device) : unavailable,
+        }),
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
         ...appleNavigationFacts(device),
         ensureReady: readiness,
@@ -342,6 +356,16 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             device: request.device,
             signal: request.scope.signal,
             resolveInteractor: host.localInteractors.resolve,
+          }),
+        ),
+        ...whenAdmitted(facts.operations.tapPoint, () =>
+          bindLocalTouchInteractor({
+            device: request.device,
+            signal: request.scope.signal,
+            resolveInteractor: host.localInteractors.resolve,
+            facts: facts.operations,
+            pause: async (milliseconds) =>
+              await host.clock.sleep(milliseconds, request.scope.signal),
           }),
         ),
         ...whenAdmitted(facts.operations.readTextAtPoint, () =>
@@ -461,9 +485,3 @@ function appleSnapshotFacts(device: DeviceInfo) {
  * the binding below reads as a list of admitted operations rather than a chain of branches — and
  * so the next operation added here costs no additional complexity.
  */
-function whenAdmitted<T extends object>(
-  fact: RuntimeOperationFact,
-  build: () => T,
-): T | Record<string, never> {
-  return fact.available ? build() : {};
-}

@@ -56,6 +56,7 @@ describe('composed platform runtime gateway', () => {
       keyboardStatus: unavailable,
       keyboardDismiss: unavailable,
       keyboardEnter: unavailable,
+      touch: unavailable,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,
         prepareApplicationOpen: unavailable,
@@ -134,6 +135,7 @@ describe('composed platform runtime gateway', () => {
       viewport: unavailable,
       focus: unavailable,
       typeText: unavailable,
+      touch: unavailable,
       elementText: unavailable,
       back: unavailable,
       home: unavailable,

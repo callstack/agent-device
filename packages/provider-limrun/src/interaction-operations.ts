@@ -13,9 +13,14 @@ import {
   bindProviderTypeTextInteractor,
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
+import {
+  bindProviderTouchInteractor,
+  touchRuntimeOperationFacts,
+} from '@agent-device/contracts/touch-runtime';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
 import type { RuntimeOperationUnavailability } from '@agent-device/contracts/platform-runtime';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 const available = Object.freeze({ available: true } as const);
 const homeUnavailableIos = Object.freeze({
@@ -53,12 +58,31 @@ const keyboardUnavailableIos = Object.freeze({
  * behavior — the owner module composes this, it does not define it.
  */
 export function limrunInteractionOperationFacts(
+  device: DeviceInfo,
   liveSessionUnavailable?: RuntimeOperationUnavailability,
 ) {
   const cell = liveSessionUnavailable ?? available;
+  const unsupportedTouch = Object.freeze({
+    available: false,
+    reason: 'unsupported-provider-mode',
+  } as const);
   return Object.freeze({
     ...focusRuntimeOperationFacts({ focus: cell }),
     ...typeTextRuntimeOperationFacts({ type: cell }),
+    ...touchRuntimeOperationFacts({
+      tap: cell,
+      tapRef: unsupportedTouch,
+      longPress: liveSessionUnavailable ?? (isIosFamily(device) ? unsupportedTouch : cell),
+      hover: liveSessionUnavailable ?? {
+        available: false,
+        reason: 'unsupported-provider-mode',
+        hint: 'hover raises pointer hover state and is available on web targets only. On touch platforms use longpress for hold gestures.',
+      },
+      hoverRef: unsupportedTouch,
+      fill: cell,
+      fillRef: unsupportedTouch,
+      tapElementSelector: liveSessionUnavailable ?? (isIosFamily(device) ? cell : unsupportedTouch),
+    }),
   });
 }
 
@@ -76,6 +100,13 @@ export function bindLimrunInteractionOperations(
     ...bindProviderSnapshotInteractor({ device, signal, resolveInteractor }),
     ...bindProviderFocusInteractor({ device, signal, resolveInteractor }),
     ...bindProviderTypeTextInteractor({ device, signal, resolveInteractor }),
+    ...bindProviderTouchInteractor({
+      device,
+      signal,
+      resolveInteractor,
+      facts: limrunInteractionOperationFacts(device),
+      pause: async (milliseconds) => await sleep(milliseconds, undefined, { signal }),
+    }),
     ...bindProviderScreenshotInteractor({ device, signal, resolveInteractor }),
   });
 }

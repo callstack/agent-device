@@ -2,6 +2,11 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction.ts';
+import {
+  getRuntimeBindings,
+  mockTapPoint,
+  resetGetRuntimeFixture,
+} from './interaction-get-runtime-fixture.ts';
 import { contextFromFlags, makeSession } from './interaction-touch-fixtures.ts';
 
 // What the shared runtime dispatch does with the resolved target: refuse
@@ -11,11 +16,6 @@ import { contextFromFlags, makeSession } from './interaction-touch-fixtures.ts';
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
 
 vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
   const actual =
@@ -43,24 +43,19 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   getAndroidAppState,
   getAndroidBlockingDialogFocus,
 } from '../../../platforms/android/app-lifecycle.ts';
 import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
-
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  resetGetRuntimeFixture();
   mockGetAndroidAppState.mockReset();
   mockGetAndroidAppState.mockResolvedValue({});
   mockGetAndroidBlockingDialogFocus.mockReset();
@@ -68,7 +63,6 @@ beforeEach(() => {
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
-  mockCaptureSnapshotForSession.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
@@ -93,7 +87,6 @@ test('press @ref stores resolved coordinate retry payload for lazy outcome retry
     backend: 'xctest',
   };
   sessionStore.set(sessionName, session);
-  mockDispatch.mockResolvedValue({});
 
   const response = await handleInteractionCommands({
     req: {
@@ -106,6 +99,7 @@ test('press @ref stores resolved coordinate retry payload for lazy outcome retry
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -135,7 +129,7 @@ test('press @ref fails closed when the authorized ref has no usable bounds (ADR 
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockRejectedValue(
+  mockTapPoint.mockRejectedValue(
     new Error('dispatch must not run: no positional recapture on missing frame evidence'),
   );
 
@@ -150,6 +144,7 @@ test('press @ref fails closed when the authorized ref has no usable bounds (ADR 
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   // ADR 0014: the authorized frame's @e1 has no usable rect, so the ref FAILS
@@ -160,7 +155,7 @@ test('press @ref fails closed when the authorized ref has no usable bounds (ADR 
     expect(response.error.code).toBe('COMMAND_FAILED');
     expect(response.error.message).toMatch(/not found or has no bounds/);
   }
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(mockTapPoint).not.toHaveBeenCalled();
 });
 
 test('press @ref fails closed when stored ref bounds are invalid (ADR 0014)', async () => {
@@ -190,7 +185,7 @@ test('press @ref fails closed when stored ref bounds are invalid (ADR 0014)', as
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockRejectedValue(
+  mockTapPoint.mockRejectedValue(
     new Error('dispatch must not run: no positional recapture on unusable frame evidence'),
   );
 
@@ -205,6 +200,7 @@ test('press @ref fails closed when stored ref bounds are invalid (ADR 0014)', as
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   // ADR 0014: the authorized frame's @e1 has an unusable rect (NaN), so it FAILS
@@ -214,7 +210,7 @@ test('press @ref fails closed when stored ref bounds are invalid (ADR 0014)', as
     expect(response.error.code).toBe('COMMAND_FAILED');
     expect(response.error.message).toMatch(/not found or has no bounds/);
   }
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(mockTapPoint).not.toHaveBeenCalled();
 });
 
 test('press @ref fails fast when the target is off-screen', async () => {
@@ -255,11 +251,12 @@ test('press @ref fails fast when the target is off-screen', async () => {
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(false);
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(mockTapPoint).not.toHaveBeenCalled();
   if (response && !response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
     expect(response.error.message).toMatch(/off-screen/i);
@@ -313,10 +310,10 @@ test('press @ref with a trailing label recovers within the authorized frame (no 
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockImplementation(async (_device, command) => {
-    if (command === 'snapshot') throw new Error('no positional recapture: recovery stays in-frame');
-    return { pressed: true };
-  });
+  mockCaptureSnapshotForSession.mockRejectedValue(
+    new Error('no positional recapture: recovery stays in-frame'),
+  );
+  mockTapPoint.mockResolvedValue({ pressed: true });
 
   const response = await handleInteractionCommands({
     req: {
@@ -329,13 +326,12 @@ test('press @ref with a trailing label recovers within the authorized frame (no 
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  const pressCalls = mockDispatch.mock.calls.filter((c) => c[1] === 'press');
-  expect(pressCalls.length).toBe(1);
-  expect(pressCalls[0]?.[2]).toEqual(['140', '220']);
+  expect(mockTapPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 140, y: 220 } }));
   if (response?.ok) {
     expect(response.data?.x).toBe(140);
     expect(response.data?.y).toBe(220);

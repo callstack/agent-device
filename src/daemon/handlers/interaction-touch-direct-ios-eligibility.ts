@@ -22,8 +22,10 @@ export function readDirectIosSelectorTapTarget(params: {
   commandLabel: string;
   target: InteractionTarget;
   flags: CommandFlags | undefined;
+  tapElementSelectorAvailable: boolean;
 }): DirectIosSelectorTarget | null {
   const { session, commandLabel, target, flags } = params;
+  if (!params.tapElementSelectorAvailable) return null;
   if (commandLabel !== 'click') return null;
   if (target.kind !== 'selector') return null;
   if (isSessionRecording(session)) return null;

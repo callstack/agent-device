@@ -22,6 +22,7 @@ import { homeRuntimeOperationFacts } from './home-runtime.ts';
 import { orientationRuntimeOperationFacts } from './orientation-runtime.ts';
 import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
 import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
+import { touchRuntimeOperationFacts } from './touch-runtime.ts';
 
 /**
  * A runtime-contract helper for provider ownership gaps. It never assigns lifecycle semantics:
@@ -39,6 +40,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   viewport: RuntimeOperationUnavailability;
   focus: RuntimeOperationUnavailability;
   typeText: RuntimeOperationUnavailability;
+  touch: RuntimeOperationUnavailability;
   elementText: RuntimeOperationUnavailability;
   back: RuntimeOperationUnavailability;
   home: RuntimeOperationUnavailability;
@@ -92,6 +94,7 @@ export function createUnavailablePlatformRuntimeFacts(
     viewport,
     focus,
     typeText,
+    touch,
     elementText,
     back,
     home,
@@ -141,6 +144,16 @@ export function createUnavailablePlatformRuntimeFacts(
       ...viewportRuntimeOperationFacts({ setViewport: viewport }),
       ...focusRuntimeOperationFacts({ focus }),
       ...typeTextRuntimeOperationFacts({ type: typeText }),
+      ...touchRuntimeOperationFacts({
+        tap: touch,
+        tapRef: touch,
+        longPress: touch,
+        hover: touch,
+        hoverRef: touch,
+        fill: touch,
+        fillRef: touch,
+        tapElementSelector: touch,
+      }),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementText }),
       ...backRuntimeOperationFacts({ back }),
       ...homeRuntimeOperationFacts({ home }),
@@ -182,6 +195,7 @@ function freezeUnavailableFacts(
     // exact kinds, and one that cannot must say why rather than inherit a transport gap.
     focus: Object.freeze({ ...unavailable.focus }),
     typeText: Object.freeze({ ...unavailable.typeText }),
+    touch: Object.freeze({ ...unavailable.touch }),
     readiness: orNetwork(unavailable.readiness),
     shutdown: orNetwork(unavailable.shutdown),
     elementText: Object.freeze({ ...unavailable.elementText }),

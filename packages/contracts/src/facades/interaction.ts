@@ -14,6 +14,7 @@ export {
   resolveClickButton,
 } from '../click-button.ts';
 export type { ClickButton } from '../click-button.ts';
+export type { PressPointOptions } from '../interactor-types.ts';
 export type { ClipboardCommandResult } from '../clipboard.ts';
 export { COORDINATE_GESTURE_KINDS, GESTURE_KINDS, readGesturePayload } from '../gesture-input.ts';
 export type {

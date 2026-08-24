@@ -153,7 +153,6 @@ test('optional Vega operations stay absent so shared dispatch keeps its fallback
   const interactor = createVegaInteractor(VEGA_VVD, {});
   const optionalOperations: Array<keyof Interactor> = [
     'tapElementSelector',
-    'fillElementSelector',
     'setViewport',
     'gestureViewport',
     'performGesture',

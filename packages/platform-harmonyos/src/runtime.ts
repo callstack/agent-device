@@ -18,7 +18,7 @@ import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime'
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
-import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { localRuntimeOwner, whenAdmitted } from '@agent-device/contracts/platform-runtime';
 import {
   bindLocalScreenshotInteractor,
   screenshotRuntimeOperationFacts,
@@ -33,6 +33,10 @@ import {
   bindLocalTypeTextInteractor,
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
+import {
+  bindLocalTouchInteractor,
+  touchRuntimeOperationFacts,
+} from '@agent-device/contracts/touch-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHarmonyAppLogRuntime } from './logs/runtime.ts';
@@ -207,6 +211,16 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         ...focusRuntimeOperationFacts({ focus: harmonyFocusFact(device) }),
         // Text entry shares focus's cell: hdc drives both on the same two kinds.
         ...typeTextRuntimeOperationFacts({ type: harmonyFocusFact(device) }),
+        ...touchRuntimeOperationFacts({
+          tap: harmonyFocusFact(device),
+          tapRef: unavailable,
+          longPress: harmonyFocusFact(device),
+          hover: unavailable,
+          hoverRef: unavailable,
+          fill: harmonyFocusFact(device),
+          fillRef: unavailable,
+          tapElementSelector: unavailable,
+        }),
         // HarmonyOS has no point-read tool: `get` answers from the captured tree, which is what
         // the legacy dispatch already did after its Apple-runner attempt failed.
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
@@ -300,6 +314,16 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
             resolveInteractor: host.localInteractors.resolve,
             facts: facts.operations,
           }),
+          ...whenAdmitted(facts.operations.tapPoint, () =>
+            bindLocalTouchInteractor({
+              device: request.device,
+              signal: request.scope.signal,
+              resolveInteractor: host.localInteractors.resolve,
+              facts: facts.operations,
+              pause: async (milliseconds) =>
+                await host.clock.sleep(milliseconds, request.scope.signal),
+            }),
+          ),
           listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
             await host.appInventory.harmonyos.listApps(
               input.device,

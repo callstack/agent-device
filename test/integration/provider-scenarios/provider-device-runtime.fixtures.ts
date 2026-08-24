@@ -18,6 +18,7 @@ import {
   bindProviderKeyboardDismissInteractor,
   bindProviderKeyboardEnterInteractor,
   bindProviderSnapshotInteractor,
+  bindProviderTouchInteractor,
   invokeApplicationClose,
   invokeApplicationOpen,
   providerRuntimeOwner,
@@ -31,6 +32,7 @@ import {
   type PlatformRuntimeOwner,
   type PlatformRuntimeProviderModule,
   type RuntimeFacts,
+  touchRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../src/__tests__/test-utils/runtime-operation-facts.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
@@ -44,6 +46,8 @@ const ABSENT_FAKE_PROVIDER_INTERACTOR_PROPERTIES = new Set([
   'then',
   'tapElementSelector',
   'fillElementSelector',
+  'pressPoint',
+  'alternateClick',
   'setViewport',
 ]);
 
@@ -163,6 +167,13 @@ async function bindProviderScenarioPlatformRuntime(
         signal: request.scope.signal,
         resolveInteractor: (runner) => runtime.getInteractor(request.device, runner),
       }),
+      ...bindProviderTouchInteractor({
+        device: request.device,
+        signal: request.scope.signal,
+        resolveInteractor: (runner) => runtime.getInteractor(request.device, runner),
+        pause: async () => undefined,
+        facts: facts.operations,
+      }),
       deployApp: async (input: AppDeploymentInput): Promise<AppDeploymentResult> => {
         const result = await runtime.installApp?.(request.device, input.app, input.appPath);
         if (result) return result;
@@ -252,6 +263,13 @@ function providerScenarioRuntimeFacts(
       // does (#1297): a fixture scenario that can drive the interactor at all can drive these.
       keyboardDismiss: fakeProviderAvailable,
       keyboardEnter: fakeProviderAvailable,
+      ...touchRuntimeOperationFacts({
+        tap: fakeProviderAvailable,
+        longPress: fakeProviderAvailable,
+        hover: fakeProviderUnavailable,
+        fill: fakeProviderAvailable,
+        tapElementSelector: fakeProviderUnavailable,
+      }),
       deployApp: runtime.installApp ? fakeProviderAvailable : fakeProviderUnavailable,
       ...applicationLifecycleOperationFacts({
         resolveOpenTarget: fakeProviderAvailable,

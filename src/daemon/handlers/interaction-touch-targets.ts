@@ -6,6 +6,7 @@ import type {
 } from '@agent-device/contracts/interaction';
 import {
   readFillTargetFromPositionals,
+  stripAtPrefix,
   type DecodedFillTarget,
 } from '../../core/interaction-positionals.ts';
 import type { DaemonResponse } from '../types.ts';
@@ -215,10 +216,6 @@ export function formatTouchTargetLabel(
   if (result.kind === 'selector' && result.target?.kind === 'selector')
     return result.target.selector;
   return 'target';
-}
-
-export function stripAtPrefix(ref: string | undefined): string | undefined {
-  return ref?.startsWith('@') ? ref.slice(1) : ref;
 }
 
 function readRefFallbackLabel(positionals: string[]): string {

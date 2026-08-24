@@ -28,6 +28,7 @@ import {
   type InteractionResponsePayloads,
 } from './interaction-touch-response.ts';
 import { noActiveSessionError } from './response.ts';
+import type { BoundTouchExecutor } from '../touch-runtime.ts';
 
 /**
  * The lifecycle every tree-resolved touch dispatch shares: Android readiness
@@ -42,6 +43,7 @@ export async function dispatchRuntimeInteraction<
     captureSnapshotForSession: CaptureSnapshotForSession;
   },
   options: {
+    touchExecutor: BoundTouchExecutor;
     androidFreshnessBaseline?: SessionState['snapshot'];
     /**
      * Present when the action targets a `@ref`: if Android dialog recovery
@@ -64,7 +66,7 @@ export async function dispatchRuntimeInteraction<
 ): Promise<DaemonResponse> {
   const session = params.sessionStore.get(params.sessionName);
   if (!session) return noActiveSessionError();
-  const runtime = createInteractionRuntime(params);
+  const runtime = createInteractionRuntime({ ...params, touchExecutor: options.touchExecutor });
   const actionStartedAt = Date.now();
   try {
     let afterRunWarning: string | undefined;

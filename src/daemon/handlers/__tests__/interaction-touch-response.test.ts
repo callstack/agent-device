@@ -3,6 +3,12 @@ import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import {
+  getRuntimeBindings,
+  mockFillPoint,
+  mockTapPoint,
+  resetGetRuntimeFixture,
+} from './interaction-get-runtime-fixture.ts';
+import {
   contextFromFlags,
   installTestScreenRecording,
   makeSession,
@@ -15,11 +21,6 @@ import {
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
 
 vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
   const actual =
@@ -47,24 +48,19 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   getAndroidAppState,
   getAndroidBlockingDialogFocus,
 } from '../../../platforms/android/app-lifecycle.ts';
 import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
-
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  resetGetRuntimeFixture();
   mockGetAndroidAppState.mockReset();
   mockGetAndroidAppState.mockResolvedValue({});
   mockGetAndroidBlockingDialogFocus.mockReset();
@@ -72,7 +68,6 @@ beforeEach(() => {
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
-  mockCaptureSnapshotForSession.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
@@ -97,33 +92,28 @@ test('press @ref --verify surfaces evidence through the interactionResultExtra a
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockImplementation(async (_device, command) => {
-    if (command === 'snapshot') {
-      // Post-action capture reports an extra node, so changedFromBefore should
-      // read true against the pre-action (stored) snapshot's single node.
-      return {
-        nodes: [
-          {
-            index: 0,
-            type: 'XCUIElementTypeButton',
-            label: 'Continue',
-            rect: { x: 10, y: 20, width: 100, height: 40 },
-            enabled: true,
-            hittable: true,
-          },
-          {
-            index: 1,
-            type: 'XCUIElementTypeStaticText',
-            label: 'Loaded',
-            rect: { x: 10, y: 80, width: 100, height: 20 },
-            enabled: true,
-            hittable: true,
-          },
-        ],
-        backend: 'xctest',
-      };
-    }
-    return { pressed: true };
+  // Post-action capture reports an extra node, so changedFromBefore should
+  // read true against the pre-action (stored) snapshot's single node.
+  mockCaptureSnapshotForSession.mockResolvedValue({
+    nodes: [
+      {
+        index: 0,
+        type: 'XCUIElementTypeButton',
+        label: 'Continue',
+        rect: { x: 10, y: 20, width: 100, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+      {
+        index: 1,
+        type: 'XCUIElementTypeStaticText',
+        label: 'Loaded',
+        rect: { x: 10, y: 80, width: 100, height: 20 },
+        enabled: true,
+        hittable: true,
+      },
+    ],
+    backend: 'xctest',
   });
 
   const response = await handleInteractionCommands({
@@ -137,6 +127,7 @@ test('press @ref --verify surfaces evidence through the interactionResultExtra a
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -158,7 +149,8 @@ test('press @ref --verify surfaces evidence through the interactionResultExtra a
   // The stored ref snapshot already had a valid rect, so resolution reused it
   // without a fresh pre-action capture (zero extra cost, per #1047's design) —
   // only the post-action verify capture issues a 'snapshot' dispatch, after 'press'.
-  expect(mockDispatch.mock.calls.map((call) => call[1])).toEqual(['press', 'snapshot']);
+  expect(mockTapPoint).toHaveBeenCalledOnce();
+  expect(mockCaptureSnapshotForSession).toHaveBeenCalledOnce();
 });
 
 test('press @ref without --verify never includes an evidence field', async () => {
@@ -180,7 +172,7 @@ test('press @ref without --verify never includes an evidence field', async () =>
     backend: 'xctest',
   };
   sessionStore.set(sessionName, session);
-  mockDispatch.mockResolvedValue({ pressed: true });
+  mockTapPoint.mockResolvedValue({ pressed: true });
 
   const response = await handleInteractionCommands({
     req: {
@@ -193,6 +185,7 @@ test('press @ref without --verify never includes an evidence field', async () =>
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -200,7 +193,8 @@ test('press @ref without --verify never includes an evidence field', async () =>
     expect(response.data?.evidence).toBeUndefined();
   }
   // No verify flag means no post-action snapshot capture at all.
-  expect(mockDispatch.mock.calls.map((call) => call[1])).toEqual(['press']);
+  expect(mockTapPoint).toHaveBeenCalledOnce();
+  expect(mockCaptureSnapshotForSession).not.toHaveBeenCalled();
 });
 
 test('fill selector --verify surfaces evidence through the interactionResultExtra allowlist', async () => {
@@ -223,23 +217,18 @@ test('fill selector --verify surfaces evidence through the interactionResultExtr
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockImplementation(async (_device, command) => {
-    if (command === 'snapshot') {
-      return {
-        nodes: [
-          {
-            index: 0,
-            type: 'XCUIElementTypeTextField',
-            label: 'Email',
-            rect: { x: 10, y: 20, width: 100, height: 40 },
-            enabled: true,
-            hittable: true,
-          },
-        ],
-        backend: 'xctest',
-      };
-    }
-    return {};
+  mockCaptureSnapshotForSession.mockResolvedValue({
+    nodes: [
+      {
+        index: 0,
+        type: 'XCUIElementTypeTextField',
+        label: 'Email',
+        rect: { x: 10, y: 20, width: 100, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ],
+    backend: 'xctest',
   });
 
   const response = await handleInteractionCommands({
@@ -253,6 +242,7 @@ test('fill selector --verify surfaces evidence through the interactionResultExtr
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -287,31 +277,26 @@ test('fill @ref --verify surfaces evidence in the ref response branch', async ()
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockImplementation(async (_device, command) => {
-    if (command === 'snapshot') {
-      return {
-        nodes: [
-          {
-            index: 0,
-            type: 'XCUIElementTypeTextField',
-            label: 'Email',
-            rect: { x: 10, y: 20, width: 100, height: 40 },
-            enabled: true,
-            hittable: true,
-          },
-          {
-            index: 1,
-            type: 'XCUIElementTypeButton',
-            label: 'Submit',
-            rect: { x: 10, y: 80, width: 100, height: 40 },
-            enabled: true,
-            hittable: true,
-          },
-        ],
-        backend: 'xctest',
-      };
-    }
-    return {};
+  mockCaptureSnapshotForSession.mockResolvedValue({
+    nodes: [
+      {
+        index: 0,
+        type: 'XCUIElementTypeTextField',
+        label: 'Email',
+        rect: { x: 10, y: 20, width: 100, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+      {
+        index: 1,
+        type: 'XCUIElementTypeButton',
+        label: 'Submit',
+        rect: { x: 10, y: 80, width: 100, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ],
+    backend: 'xctest',
   });
 
   const response = await handleInteractionCommands({
@@ -325,6 +310,7 @@ test('fill @ref --verify surfaces evidence in the ref response branch', async ()
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -358,7 +344,6 @@ test('fill @ref without --verify never includes an evidence field', async () => 
     backend: 'xctest',
   };
   sessionStore.set(sessionName, session);
-  mockDispatch.mockResolvedValue({});
 
   const response = await handleInteractionCommands({
     req: {
@@ -371,6 +356,7 @@ test('fill @ref without --verify never includes an evidence field', async () => 
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -378,7 +364,7 @@ test('fill @ref without --verify never includes an evidence field', async () => 
     expect(response.data?.evidence).toBeUndefined();
   }
   // No verify flag means no post-action snapshot capture at all.
-  expect(mockDispatch.mock.calls.map((call) => call[1])).not.toContain('snapshot');
+  expect(mockCaptureSnapshotForSession).not.toHaveBeenCalled();
 });
 
 test('fill @ref preserves fallback coordinates for recording when platform result is sparse', async () => {
@@ -408,7 +394,7 @@ test('fill @ref preserves fallback coordinates for recording when platform resul
   });
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({ filled: true });
+  mockFillPoint.mockResolvedValue({ filled: true });
   const response = await handleInteractionCommands({
     req: {
       token: 't',
@@ -420,19 +406,15 @@ test('fill @ref preserves fallback coordinates for recording when platform resul
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  if (response?.ok) {
-    expect(response.data?.filled).toBe(true);
-  }
 
   const stored = sessionStore.get(sessionName);
   expect(stored).toBeTruthy();
-  const fillCalls = mockDispatch.mock.calls.filter((c) => c[1] === 'fill');
-  expect(fillCalls.length).toBe(1);
-  expect((fillCalls[0]?.[4] as Record<string, unknown> | undefined)?.delayMs).toBe(55);
+  expect(mockFillPoint).toHaveBeenCalledWith(expect.objectContaining({ delayMs: 55 }));
   const result = (stored?.actions[0]?.result ?? {}) as Record<string, unknown>;
   expect(result.ref).toBe('e1');
   expect(result.x).toBe(60);

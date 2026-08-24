@@ -72,6 +72,7 @@ export {
   providerRuntimeOwner,
   runtimeOwnerKey,
   sameRuntimeOwner,
+  whenAdmitted,
 } from '../platform-runtime.ts';
 export type {
   BoundDeviceRuntime,
@@ -252,13 +253,30 @@ export type {
 export {
   bootTargetHeadlessUse,
   bootTargetUse,
+  capturedFillUse,
+  capturedHoverUse,
+  capturedLongPressUse,
+  capturedTapUse,
+  clickRuntimeUses,
   deviceBootRuntimeUses,
+  fillPointUse,
+  fillRuntimeUses,
+  hoverPointUse,
+  hoverRuntimeUses,
+  longPressPointUse,
+  longPressRuntimeUses,
+  pressRuntimeUses,
   resolveDeviceReadinessRuntimePlan,
+  resolveTouchRuntimePlan,
   appStateRuntimeUses,
   appStateUse,
   shutdownTargetUse,
+  tapPointUse,
 } from '../platform-runtime-operations.ts';
-export type { DeviceReadinessRuntimePlan } from '../platform-runtime-operations.ts';
+export type {
+  DeviceReadinessRuntimePlan,
+  TouchRuntimePlan,
+} from '../platform-runtime-operations.ts';
 export {
   bindLocalScreenshotInteractor,
   bindProviderScreenshotInteractor,
@@ -316,6 +334,25 @@ export {
   bindProviderTypeTextInteractor,
   typeTextRuntimeOperationFacts,
 } from '../type-text-runtime.ts';
+export {
+  bindLocalTouchInteractor,
+  bindProviderTouchInteractor,
+  HOVER_UNAVAILABLE_HINT,
+  pressJitter,
+  touchRuntimeOperationFacts,
+} from '../touch-runtime.ts';
+export type {
+  FillPointInput,
+  FillRefInput,
+  HoverPointInput,
+  HoverRefInput,
+  LongPressPointInput,
+  TapElementSelectorInput,
+  TapPointInput,
+  TapRefInput,
+  TouchRuntimeOperationFacts,
+  TouchRuntimeOperations,
+} from '../touch-runtime.ts';
 export type {
   LocalTypeTextInteractorResolver,
   ProviderTypeTextInteractorResolver,

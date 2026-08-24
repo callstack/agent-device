@@ -26,19 +26,16 @@ vi.mock('../snapshot-interactor-capture.ts', async () => {
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
-import { dispatchCommand } from '../../../core/dispatch.ts';
-
-import { mockFocusPoint, resetGetRuntimeFixture } from './interaction-get-runtime-fixture.ts';
+import {
+  findTouchRuntimeBindings,
+  mockDispatch,
+  mockFocusPoint,
+  resetFindTouchRuntimeFixture,
+} from './find-touch-runtime-fixture.ts';
 import { invokeFindHandler } from './find-handler-fixture.ts';
 
-const mockDispatch = vi.mocked(dispatchCommand);
-
 beforeEach(() => {
-  resetGetRuntimeFixture();
-  mockDispatch.mockReset();
-  mockDispatch.mockImplementation(async (_device: unknown, command: string) => {
-    return command === 'snapshot' ? { nodes: [] } : {};
-  });
+  resetFindTouchRuntimeFixture();
 });
 
 async function runFindClickScenario(options: {
@@ -1142,6 +1139,7 @@ async function runFindThroughLeaf(options: {
           sessionName,
           sessionStore,
           contextFromFlags: findRouteContextFromFlags,
+          ...findTouchRuntimeBindings(),
         })) ?? { ok: false, error: { code: 'COMMAND_FAILED', message: 'no interaction handler' } }
       );
     },

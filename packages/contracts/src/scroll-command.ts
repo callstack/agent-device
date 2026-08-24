@@ -72,7 +72,7 @@ export function honoredScrollDurationMs(
 
 /**
  * `scroll` — the generic-route result built by `buildDispatchedScrollResult`
- * (src/core/dispatch-interactions.ts): the resolved direction, the edge-pass
+ * (src/core/dispatch-scroll.ts): the resolved direction, the edge-pass
  * bookkeeping for `top`/`bottom` scrolls, the honored distance/timing echo,
  * and the success message. Platform leaves add gesture-plan coordinates
  * (`x1`/`y1`/`x2`/`y2`, reference frame) on top; the output schema stays

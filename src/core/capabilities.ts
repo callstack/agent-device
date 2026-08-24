@@ -39,21 +39,13 @@ const HARMONYOS_ALL: KindMatrix = { emulator: true, device: true };
 const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
   'perf',
   'app-switcher',
-  'click',
-  'fill',
   'gesture',
-  'longpress',
-  'press',
   'scroll',
   'settings',
   'swipe',
 ]);
 const WEB_QUERY_COMMANDS = ['audio'] as const;
-const WEB_INTERACTION_COMMANDS = ['click', 'fill', 'hover', 'press', 'scroll'] as const;
-const WEB_SUPPORTED_COMMANDS = new Set<string>([
-  ...WEB_QUERY_COMMANDS,
-  ...WEB_INTERACTION_COMMANDS,
-]);
+const WEB_SUPPORTED_COMMANDS = new Set<string>([...WEB_QUERY_COMMANDS, 'scroll']);
 // Built from the additive command-descriptor registry (ADR-0008, Phase 1 step 3).
 // The hand-authored literal was deleted after #906 proved deriveCapabilityMatrix is
 // byte-equal to it (platform/kind buckets). The per-command `supports()` /

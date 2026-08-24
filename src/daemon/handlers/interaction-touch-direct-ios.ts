@@ -1,6 +1,5 @@
 import type { GestureReferenceFrame } from '@agent-device/contracts/interaction';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { dispatchCommand } from '../../core/dispatch.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import {
   isDirectIosSelectorFallbackError,
@@ -11,6 +10,7 @@ import type { DaemonResponse, SessionState } from '../types.ts';
 import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
 import { corroborateIosTapFailure } from './interaction-ios-tap-outcome.ts';
 import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
+import type { BoundTouchExecutor } from '../touch-runtime.ts';
 import {
   buildCorroboratedTapResponseData,
   buildInteractionResponseData,
@@ -31,36 +31,10 @@ export async function dispatchDirectIosSelectorTap(
   params: InteractionHandlerParams & { captureSnapshotForSession: CaptureSnapshotForSession },
   session: SessionState,
   selector: DirectIosSelectorTarget,
+  tapElementSelector: NonNullable<BoundTouchExecutor['tapElementSelector']>,
 ): Promise<DaemonResponse | null> {
-  return await dispatchDirectIosSelectorInteraction({
-    params,
-    session,
-    selector,
-    command: 'press',
-    positionals: [],
-    extra: { selector: selector.raw },
-    fallbackPhase: 'ios_direct_selector_tap_fallback',
-  });
-}
-
-async function dispatchDirectIosSelectorInteraction(params: {
-  params: InteractionHandlerParams & { captureSnapshotForSession: CaptureSnapshotForSession };
-  session: SessionState;
-  selector: DirectIosSelectorTarget;
-  command: 'press' | 'fill';
-  positionals: string[];
-  extra: Record<string, unknown>;
-  fallbackPhase: string;
-}): Promise<DaemonResponse | null> {
-  const {
-    params: handlerParams,
-    session,
-    selector,
-    command,
-    positionals,
-    extra,
-    fallbackPhase,
-  } = params;
+  const handlerParams = params;
+  const extra = { selector: selector.raw };
   const actionStartedAt = Date.now();
   // ADR 0014 side-effect seam: the direct iOS selector path fuses its final
   // status/target check and mutation into one runner request and consumes no
@@ -68,21 +42,12 @@ async function dispatchDirectIosSelectorInteraction(params: {
   // not-found/timeout is post-seam and does not restore the frame.
   expireRefFrame(session);
   try {
-    const data =
-      (await dispatchCommand(session.device, command, positionals, handlerParams.req.flags?.out, {
-        ...handlerParams.contextFromFlags(
-          handlerParams.req.flags,
-          session.appBundleId,
-          session.trace?.outPath,
-        ),
-        directElementSelector: selector,
-        surface: session.surface,
-      })) ?? {};
+    const data = (await tapElementSelector(selector)) ?? {};
     const actionFinishedAt = Date.now();
     const point = readPointFromDirectSelectorTapResult(data);
     const publicData = transformTouchResponseData({
       session,
-      command: readInteractionResponseDataTransformCommand(handlerParams.req.command, command),
+      command: readInteractionResponseDataTransformCommand(handlerParams.req.command, 'press'),
       flags: handlerParams.req.flags,
       data,
     });
@@ -123,7 +88,7 @@ async function dispatchDirectIosSelectorInteraction(params: {
       handlerParams,
       session,
       extra,
-      positionals,
+      positionals: [],
       actionStartedAt,
     });
     if (corroboratedResponse) return corroboratedResponse;
@@ -138,7 +103,7 @@ async function dispatchDirectIosSelectorInteraction(params: {
     }
     emitDiagnostic({
       level: 'debug',
-      phase: fallbackPhase,
+      phase: 'ios_direct_selector_tap_fallback',
       data: {
         selector: selector.raw,
         error: error instanceof Error ? error.message : String(error),

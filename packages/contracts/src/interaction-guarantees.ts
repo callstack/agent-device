@@ -298,8 +298,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
   },
   'direct-ios-selector': {
     description:
-      'Simple press selectors on iOS are sent to the XCTest runner, which queries and taps natively without a daemon tree capture. Fill deliberately resolves through the runtime tree so AX-hostile text inputs carry typed target evidence into coordinate entry.',
-    commands: ['press'],
+      'Simple press and click selectors use the bound owner preferred tapElementSelector operation when its exact facts advertise it, querying and tapping without a daemon tree capture. Fill deliberately resolves through the runtime tree so AX-hostile text inputs carry typed target evidence into coordinate entry.',
+    commands: ['press', 'click'],
     guarantees: {
       disambiguation: {
         kind: 'delegated',
@@ -366,7 +366,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
     // 2026-07-04 while designing the #1088 retirement experiment, which this
     // finding dissolved: there is no iOS runner round trip to retire.
     description:
-      'click @ref / fill @ref / hover @ref dispatch to backend.tapTarget/fillTarget/hoverTarget (web provider clickRef/fillRef/hoverRef only; no mobile backend implements these) without runtime resolution when no non-default options are set. A zero-round-trip preflight (preflightNativeRefInteraction) runs the shared guards against the stored session snapshot node first; no snapshot / no usable rect makes the preflight a no-op.',
+      'click @ref / fill @ref / hover @ref dispatch through the bound touch operation, whose web runtime owner selects clickRef/fillRef/hoverRef internally; no mobile owner advertises native-ref support. The route bypasses runtime resolution when no non-default options are set. A zero-round-trip preflight (preflightNativeRefInteraction) runs the shared guards against the stored session snapshot node first; no snapshot / no usable rect makes the preflight a no-op.',
     commands: ['click', 'fill', 'hover'],
     guarantees: {
       disambiguation: {

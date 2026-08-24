@@ -2,6 +2,11 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction.ts';
+import {
+  getRuntimeBindings,
+  mockTapPoint,
+  resetGetRuntimeFixture,
+} from './interaction-get-runtime-fixture.ts';
 import { contextFromFlags, makeAndroidSession } from './interaction-touch-fixtures.ts';
 
 // The Android ref-refresh capture a @ref mutation takes before dispatch: when
@@ -11,11 +16,6 @@ import { contextFromFlags, makeAndroidSession } from './interaction-touch-fixtur
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
 
 vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
   const actual =
@@ -43,24 +43,19 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   getAndroidAppState,
   getAndroidBlockingDialogFocus,
 } from '../../../platforms/android/app-lifecycle.ts';
 import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
-
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  resetGetRuntimeFixture();
   mockGetAndroidAppState.mockReset();
   mockGetAndroidAppState.mockResolvedValue({});
   mockGetAndroidBlockingDialogFocus.mockReset();
@@ -68,7 +63,6 @@ beforeEach(() => {
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
-  mockCaptureSnapshotForSession.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
@@ -100,23 +94,18 @@ test('press @ref refreshes Android snapshot when freshness tracking is active', 
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockImplementation(async (_device, command, args) => {
-    if (command === 'snapshot') {
-      return {
-        nodes: [
-          {
-            index: 0,
-            type: 'android.widget.Button',
-            label: 'Continue',
-            rect: { x: 100, y: 200, width: 80, height: 40 },
-            enabled: true,
-            hittable: true,
-          },
-        ],
-        backend: 'android',
-      };
-    }
-    return { pressed: true, args };
+  mockCaptureSnapshotForSession.mockResolvedValue({
+    nodes: [
+      {
+        index: 0,
+        type: 'android.widget.Button',
+        label: 'Continue',
+        rect: { x: 100, y: 200, width: 80, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ],
+    backend: 'android',
   });
 
   const response = await handleInteractionCommands({
@@ -130,6 +119,7 @@ test('press @ref refreshes Android snapshot when freshness tracking is active', 
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
@@ -137,8 +127,7 @@ test('press @ref refreshes Android snapshot when freshness tracking is active', 
   expect(mockCaptureSnapshotForSession.mock.calls[0]?.[0].options).toMatchObject({
     interactiveOnly: true,
   });
-  expect(mockDispatch.mock.calls.map((call) => call[1])).toEqual(['snapshot', 'press']);
-  expect(mockDispatch.mock.calls[1]?.[2]).toEqual(['140', '220']);
+  expect(mockTapPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 140, y: 220 } }));
   expect(sessionStore.get(sessionName)?.androidSnapshotFreshness).toMatchObject({
     action: 'press',
     baselineCount: 1,
@@ -178,23 +167,18 @@ test('ADR 0014: Android freshness cannot retarget an admitted ref by positional 
 
   // The freshness refresh returns a DIFFERENT element at @e1's index — after
   // navigation the button at that position is now "Cancel", not "Continue".
-  mockDispatch.mockImplementation(async (_device, command, args) => {
-    if (command === 'snapshot') {
-      return {
-        nodes: [
-          {
-            index: 0,
-            type: 'android.widget.Button',
-            label: 'Cancel',
-            rect: { x: 100, y: 200, width: 80, height: 40 },
-            enabled: true,
-            hittable: true,
-          },
-        ],
-        backend: 'android',
-      };
-    }
-    return { pressed: true, args };
+  mockCaptureSnapshotForSession.mockResolvedValue({
+    nodes: [
+      {
+        index: 0,
+        type: 'android.widget.Button',
+        label: 'Cancel',
+        rect: { x: 100, y: 200, width: 80, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ],
+    backend: 'android',
   });
 
   const response = await handleInteractionCommands({
@@ -208,14 +192,14 @@ test('ADR 0014: Android freshness cannot retarget an admitted ref by positional 
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
   // The identity at @e1 changed (Continue -> Cancel), so the refreshed
   // observation must NOT redefine the target: the press stays on the frame
   // node's coordinates (center of {0,0,40,40}), never the fresh (140, 220).
-  expect(mockDispatch.mock.calls.map((call) => call[1])).toEqual(['snapshot', 'press']);
-  expect(mockDispatch.mock.calls[1]?.[2]).toEqual(['20', '20']);
+  expect(mockTapPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 20, y: 20 } }));
 });
 
 test('press @ref falls back to cached Android ref when freshness refresh fails', async () => {
@@ -246,7 +230,6 @@ test('press @ref falls back to cached Android ref when freshness refresh fails',
   sessionStore.set(sessionName, session);
 
   mockCaptureSnapshotForSession.mockRejectedValueOnce(new Error('uiautomator timeout'));
-  mockDispatch.mockResolvedValue({ pressed: true });
 
   const response = await handleInteractionCommands({
     req: {
@@ -259,12 +242,12 @@ test('press @ref falls back to cached Android ref when freshness refresh fails',
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);
   expect(mockCaptureSnapshotForSession).toHaveBeenCalledTimes(1);
-  expect(mockDispatch.mock.calls.map((call) => call[1])).toEqual(['press']);
-  expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['60', '40']);
+  expect(mockTapPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 60, y: 40 } }));
   expect(sessionStore.get(sessionName)?.androidSnapshotFreshness).toMatchObject({
     action: 'press',
     baselineCount: 1,
@@ -314,7 +297,6 @@ test('coordinate press preserves Android route freshness from last comparable sn
     comparisonSafe: false,
   };
   sessionStore.set(sessionName, session);
-  mockDispatch.mockResolvedValue({ pressed: true });
 
   const response = await handleInteractionCommands({
     req: {
@@ -327,6 +309,7 @@ test('coordinate press preserves Android route freshness from last comparable sn
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);

@@ -96,6 +96,7 @@ export function createLimrunPlatformRuntimeOwner(
             viewport: liveSessionUnavailable,
             focus: liveSessionUnavailable,
             typeText: liveSessionUnavailable,
+            touch: liveSessionUnavailable,
             elementText: liveSessionUnavailable,
             back: liveSessionUnavailable,
             home: liveSessionUnavailable,

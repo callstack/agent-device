@@ -4,6 +4,7 @@ import { makeIosSession } from '../../../__tests__/test-utils/session-factories.
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { contextFromFlags as buildDaemonContext } from '../../context.ts';
 import { handleInteractionCommands } from '../interaction.ts';
+import { getRuntimeBindings } from './interaction-get-runtime-fixture.ts';
 
 vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
   const actual =
@@ -76,6 +77,7 @@ test('daemon press --settle pins private-ax on emitted snapshot runner requests'
     sessionStore,
     contextFromFlags: (flags, appBundleId, traceLogPath) =>
       buildDaemonContext('', flags, appBundleId, traceLogPath),
+    ...getRuntimeBindings(),
   });
 
   expect(response?.ok).toBe(true);

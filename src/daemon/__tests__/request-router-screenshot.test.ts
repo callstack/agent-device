@@ -5,8 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-// `click` and `scroll` still execute through legacy platform dispatch; `screenshot` does not, and
-// binds its fake at the facts/bind seam below instead (ADR 0019).
+// `scroll` still executes through legacy platform dispatch; screenshot and click bind their fake
+// at the facts/bind seam below instead (ADR 0019).
 vi.mock('../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
   return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
@@ -189,8 +189,8 @@ test('screenshot forwards macOS session surface to the bound capture', async () 
   });
 });
 
-test('click forwards macOS menubar session surface to dispatch', async () => {
-  const { handler } = screenshotRouter(makeMacOsMenubarSession('default'));
+test('click forwards macOS menubar session surface to the bound runtime', async () => {
+  const { handler, runtime } = screenshotRouter(makeMacOsMenubarSession('default'));
 
   await handler({
     token: 'test-token',
@@ -200,10 +200,9 @@ test('click forwards macOS menubar session surface to dispatch', async () => {
     meta: { requestId: 'req-surface-click' },
   });
 
-  expect(mockDispatch.mock.calls[0]?.[1]).toBe('press');
-  expect(mockDispatch.mock.calls[0]?.[4]).toMatchObject({
-    surface: 'menubar',
+  expect(runtime.tapPoint.mock.calls[0]?.[0]).toMatchObject({
     appBundleId: 'com.example.menubarapp',
+    options: { surface: 'menubar' },
   });
 });
 

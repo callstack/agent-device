@@ -9,6 +9,12 @@ import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { handleInteractionCommands } from '../interaction.ts';
 import { finalizeTouchInteraction } from '../interaction-common.ts';
+import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
+import {
+  getRuntimeBindings,
+  mockFillPoint,
+  resetGetRuntimeFixture,
+} from './interaction-get-runtime-fixture.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -23,8 +29,18 @@ const mockDispatch = vi.mocked(dispatchCommand);
 const contextFromFlags = (_flags: CommandFlags | undefined) => ({});
 
 beforeEach(() => {
+  resetGetRuntimeFixture();
   mockDispatch.mockReset();
   mockDispatch.mockResolvedValue({});
+  mockFillPoint.mockImplementation(async (input) => {
+    return await mockDispatch(
+      IOS_SIMULATOR,
+      'fill',
+      [String(input.point.x), String(input.point.y), input.text],
+      undefined,
+      input.execution,
+    );
+  });
 });
 
 test('parameterized fill scrubs backend and nested settle echoes at the response boundary', () => {
@@ -165,18 +181,17 @@ test('parameterized fill scrubs concatenated backend values and object keys thro
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response, JSON.stringify(response)).toMatchObject({ ok: true });
   if (!response?.ok) return;
   expect(response.data).toMatchObject({
     message: 'Filled 8 chars',
-    [`prefix${placeholder}suffix`]: {
-      [`${placeholder}4`]: `echo${placeholder}`,
-    },
     ref: 'e1',
     text: placeholder,
   });
+  expect(response.data).not.toHaveProperty(`prefix${placeholder}suffix`);
   expect(JSON.stringify(response.data)).not.toContain(secret);
   expect(JSON.stringify(session.actions)).not.toContain(secret);
   expect(mockDispatch.mock.calls[0]?.[1]).toBe('fill');
@@ -223,26 +238,19 @@ test('parameterized fill collapses whitespace-only backend echoes through the ha
     sessionName,
     sessionStore,
     contextFromFlags,
+    ...getRuntimeBindings(),
   });
 
   expect(response, JSON.stringify(response)).toMatchObject({ ok: true });
   if (!response?.ok) return;
   expect(response.data).toBeDefined();
   const responseData = response.data!;
-  expect(responseData).toMatchObject({
-    [placeholder]: {
-      [placeholder]: placeholder,
-    },
-    text: placeholder,
-  });
+  expect(responseData).toMatchObject({ text: placeholder });
+  expect(responseData).not.toHaveProperty(placeholder);
   expect(responseData.selectorChain).not.toContain(`value="prefix${secret}suffix"`);
   expect(JSON.stringify(responseData)).not.toContain(secret);
-  expect(session.actions[0]?.result).toMatchObject({
-    [placeholder]: {
-      [placeholder]: placeholder,
-    },
-    text: placeholder,
-  });
+  expect(session.actions[0]?.result).toMatchObject({ text: placeholder });
+  expect(session.actions[0]?.result).not.toHaveProperty(placeholder);
   expect(session.actions[0]?.result?.selectorChain).not.toContain(`value="prefix${secret}suffix"`);
   expect(JSON.stringify(session.actions)).not.toContain(secret);
   expect(mockDispatch.mock.calls[0]?.[2]).toContain(secret);

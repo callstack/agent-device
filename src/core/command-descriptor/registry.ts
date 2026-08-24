@@ -31,12 +31,17 @@ import {
   appsRuntimeUse,
   appStateRuntimeUses,
   backRuntimeUse,
+  clickRuntimeUses,
   deviceBootRuntimeUses,
+  fillRuntimeUses,
   findRuntimePlanUses,
   focusRuntimeUse,
   homeRuntimeUse,
+  hoverRuntimeUses,
   keyboardRuntimePlanUses,
+  longPressRuntimeUses,
   orientationRuntimeUse,
+  pressRuntimeUses,
   screenshotRuntimePlanUses,
   selectorCaptureRuntimePlanUses,
   selectorTextCaptureRuntimePlanUses,
@@ -311,8 +316,6 @@ const TARGETED_TOUCH_INTERACTION_TRAITS = {
     refFrameEffect: 'may-invalidate',
     androidBlockingDialogGuard: true,
   },
-  dispatch: {},
-  capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
 } as const satisfies Pick<
   Extract<CommandDescriptor, { recordsSessionAction: true }>,
   | 'targetIdentityVerification'
@@ -321,8 +324,6 @@ const TARGETED_TOUCH_INTERACTION_TRAITS = {
   | 'recordingEffect'
   | 'deviceClaimPolicy'
   | 'daemon'
-  | 'dispatch'
-  | 'capability'
 >;
 
 // ---------------------------------------------------------------------------
@@ -766,12 +767,12 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'session', refFrameEffect: 'preserve' },
-    dispatch: {},
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
       linux: LINUX_DEVICE,
     },
+    dispatch: {},
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
     platformExecution: LEGACY_PLATFORM_EXECUTION,
@@ -1126,12 +1127,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
       refFrameEffect: 'may-invalidate',
       androidBlockingDialogGuard: true,
     },
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: postActionObservationTimeoutPolicy('click', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('click'),
     responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: clickRuntimeUses },
   },
   {
     name: 'fill',
@@ -1142,7 +1142,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     postActionObservation: postActionObservation('fill'),
     responseDataTransform: FILL_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: fillRuntimeUses },
   },
   {
     name: 'longpress',
@@ -1159,7 +1159,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     postActionObservation: postActionObservation('longpress'),
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: longPressRuntimeUses },
   },
   {
     name: 'hover',
@@ -1174,16 +1174,14 @@ export const RAW_COMMAND_DESCRIPTORS = [
       route: 'interaction',
       refFrameEffect: 'may-invalidate',
     },
-    dispatch: {},
     // Hover is a pointer-only state (#1783): the web provider moves the mouse
     // without pressing. Touch platforms have no hover, so no device bucket
     // admits it; `WEB_INTERACTION_COMMANDS` in src/core/capabilities.ts adds the
     // web bucket; runtime-owned web-only commands use exact operation facts instead.
-    capability: { apple: {}, android: {}, linux: LINUX_NONE },
     timeoutPolicy: postActionObservationTimeoutPolicy('hover', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('hover'),
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: hoverRuntimeUses },
   },
   {
     name: 'press',
@@ -1194,7 +1192,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     postActionObservation: postActionObservation('press'),
     responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: pressRuntimeUses },
   },
   {
     name: 'type',

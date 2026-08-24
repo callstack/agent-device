@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { dispatchCommand } from '../dispatch.ts';
-import { handleLongPressCommand, handleScrollCommand } from '../dispatch-interactions.ts';
+import { handleScrollCommand } from '../dispatch-scroll.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Interactor } from '@agent-device/contracts/interaction';
 import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
@@ -93,20 +93,6 @@ test('dispatch scroll bottom rejects blind scrolling without snapshot support', 
   );
 
   assert.equal(calls.length, 0);
-});
-
-test('dispatch longpress explains direct platform coordinate requirement', async () => {
-  const interactor = {} as unknown as Interactor;
-
-  await assert.rejects(
-    () => handleLongPressCommand(interactor, ['@e40', '900']),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'INVALID_ARGS' &&
-      /longpress requires x y/i.test(error.message) &&
-      /open daemon session/i.test(String(error.details?.hint)) &&
-      /snapshot -i/i.test(String(error.details?.hint)),
-  );
 });
 
 test('dispatch scroll bottom does not scroll when no hidden content is below', async () => {

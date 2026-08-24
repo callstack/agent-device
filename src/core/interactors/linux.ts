@@ -13,6 +13,8 @@ import {
   focusLinux,
   longPressLinux,
   pressLinux,
+  rightClickLinux,
+  middleClickLinux,
   scrollLinux,
   swipeLinux,
   typeLinux,
@@ -28,6 +30,10 @@ export function createLinuxInteractor(): Interactor {
     openDevice: () => Promise.resolve(),
     close: (app) => closeLinuxApp(app),
     tap: (x, y) => pressLinux(x, y),
+    alternateClick: async (point, button) =>
+      button === 'secondary'
+        ? await rightClickLinux(point.x, point.y)
+        : await middleClickLinux(point.x, point.y),
     doubleTap: (x, y) => doubleClickLinux(x, y),
     longPress: (x, y, durationMs) => longPressLinux(x, y, durationMs),
     focus: (x, y) => focusLinux(x, y),

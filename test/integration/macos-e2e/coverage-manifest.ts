@@ -176,10 +176,10 @@ export const MACOS_PLATFORM_COVERAGE = {
   ),
   [C.fill]: gap('No command-specific macOS fill evidence exists yet'),
   [C.longPress]: gap('No command-specific macOS long-press evidence exists yet'),
-  [C.hover]: denial(
-    'src/core/command-descriptor/registry.ts',
-    'capability: { apple: {}, android: {}, linux: LINUX_NONE }',
-    'the command capability declaration has no Apple hover bucket on macOS',
+  [C.hover]: contract(
+    'packages/platform-apple/src/runtime.ts',
+    'hover: unavailable',
+    'the Apple runtime fact rejects pointer-only hover input on macOS',
   ),
   [C.press]: live(
     'provider:macos-desktop',

@@ -181,7 +181,7 @@ export function limrunAppLogFacts(
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       // Focus rides the same provider interactor the captures do, and a live-session Limrun
       // device always has one, so it is available wherever a capture is.
-      ...limrunInteractionOperationFacts(),
+      ...limrunInteractionOperationFacts(device),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
       ...limrunNavigationOperationFacts(device),
       ...limrunKeyboardOperationFacts(device),
@@ -229,7 +229,7 @@ export function limrunAppLogRecoveryFacts(
         findSelector: liveSessionUnavailable,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: liveSessionUnavailable }),
-      ...limrunInteractionOperationFacts(liveSessionUnavailable),
+      ...limrunInteractionOperationFacts(device, liveSessionUnavailable),
       ...limrunNavigationOperationFacts(device, liveSessionUnavailable),
       ...limrunKeyboardOperationFacts(device, liveSessionUnavailable),
       ensureReady: liveSessionUnavailable,
