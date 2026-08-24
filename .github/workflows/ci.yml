@@ -298,6 +298,8 @@ jobs:
         with:
           name: coverage-blob-${{ matrix.shard }}
           path: .vitest-reports/
+          # The directory is dot-prefixed, which v4 excludes by default.
+          include-hidden-files: true
           if-no-files-found: error
 
   coverage-report:
