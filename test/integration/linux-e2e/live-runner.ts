@@ -116,7 +116,7 @@ async function runFindEvidence(context: LinuxContext): Promise<void> {
     'exists',
     '--first',
   ]);
-  assert.equal(find.json?.found, true, JSON.stringify(find.json));
+  assert.equal(find.json?.data?.found, true, JSON.stringify(find.json));
   verifyCommand(context, C.find, 'find resolves a live AT-SPI role match');
 }
 
