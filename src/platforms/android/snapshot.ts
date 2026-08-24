@@ -52,7 +52,10 @@ import {
   classifyAndroidHelperContent,
   type AndroidHelperContentRecoveryDecision,
 } from './snapshot-content-recovery.ts';
-import type { AndroidContentRecoveryReason } from '@agent-device/contracts/platform';
+import type {
+  AndroidCaptureFailureReason,
+  AndroidContentRecoveryReason,
+} from '@agent-device/contracts/platform';
 import {
   resetAndroidSnapshotHelperRuntime,
   retireAndroidSnapshotHelperAfterContentFailure,
@@ -576,6 +579,7 @@ function formatAndroidSnapshotHelperFailureReason(error: unknown): string {
 
 function androidSnapshotHelperCaptureError(error: unknown, reason: string): AppError {
   const normalized = normalizeError(error);
+  const captureFailureReason = androidCaptureFailureReasonOf(normalized);
   return new AppError(
     toAppErrorCode(normalized.code),
     `Android snapshot helper failed: ${reason}`,
@@ -583,17 +587,36 @@ function androidSnapshotHelperCaptureError(error: unknown, reason: string): AppE
       ...normalized.details,
       ...liftedWireFields(normalized),
       androidSnapshotHelperFailureReason: reason,
-      hint: androidSnapshotHelperCaptureHint(normalized),
+      ...(captureFailureReason ? { androidCaptureFailureReason: captureFailureReason } : {}),
+      hint: androidSnapshotHelperCaptureHint(normalized, captureFailureReason),
     },
     error,
   );
 }
 
-function androidSnapshotHelperCaptureHint(normalized: NormalizedError): string {
-  const busy =
+/**
+ * The one place that decides an Android capture failed because the hierarchy never arrived. Both
+ * shapes mean the same thing to a caller: the helper answered with a structured timeout, or its
+ * instrumentation was killed before it could answer at all. Publishing the decision as a typed
+ * reason is what lets the daemon's timeout-evidence path key on it instead of on the hint prose
+ * below (#1983).
+ */
+function androidCaptureFailureReasonOf(
+  normalized: NormalizedError,
+): AndroidCaptureFailureReason | undefined {
+  const blocked =
     isStructuredHelperTimeout(normalized.details?.helper, normalized.message) ||
     isKilledHelperInstrumentationFailure(normalized);
-  if (busy) {
+  return blocked ? 'accessibility-timeout' : undefined;
+}
+
+// The prose is derived from the typed reason rather than deciding alongside it, so rewording a
+// hint can never change what a reader concludes about the failure.
+function androidSnapshotHelperCaptureHint(
+  normalized: NormalizedError,
+  captureFailureReason: AndroidCaptureFailureReason | undefined,
+): string {
+  if (captureFailureReason === 'accessibility-timeout') {
     return 'Android accessibility snapshots can be blocked by busy or continuously changing app UI. Use screenshot as visual truth after this timeout and report the busy UI if it persists.';
   }
   if (normalized.details?.androidSnapshotHelperInstallFailure === true) {

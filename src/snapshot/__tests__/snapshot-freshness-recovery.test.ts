@@ -40,7 +40,7 @@ test('a trustworthy first capture retires the window and annotates nothing', asy
     },
     classify: () => null,
     window: windowMarkedAt(Date.now()),
-    retry: { retryUntilMs: Date.now() + 1_500, delaysMs: [250, 400, 600] },
+    retry: { retryBudgetMs: 1_500, delaysMs: [250, 400, 600] },
     onTrustworthyCapture: () => {
       retired += 1;
     },
@@ -64,7 +64,7 @@ test('a suspicious capture that recovers discloses the retry count and retires t
       },
       classify: classifierFailingFirst(1),
       window: windowMarkedAt(markedAt),
-      retry: { retryUntilMs: markedAt + 1_500, delaysMs: [250, 400, 600] },
+      retry: { retryBudgetMs: 1_500, delaysMs: [250, 400, 600] },
       onTrustworthyCapture: () => {
         retired += 1;
       },
@@ -100,7 +100,7 @@ test('a capture still suspicious after every delay keeps the window and names th
       },
       classify: () => 'stuck-route' as const,
       window: windowMarkedAt(markedAt),
-      retry: { retryUntilMs: markedAt + 1_500, delaysMs: [250, 400, 600] },
+      retry: { retryBudgetMs: 1_500, delaysMs: [250, 400, 600] },
       onTrustworthyCapture: () => {
         retired += 1;
       },
@@ -123,11 +123,11 @@ test('a capture still suspicious after every delay keeps the window and names th
 });
 
 /**
- * The retry budget is spent from the action, not from whenever the first capture returned. A
- * window whose deadline already passed gets its one capture and no retries — this is also the
- * regression guard for binding `retryUntilMs` to a bare duration, which would look like this.
+ * The invariant: the deadline is derived from the window's `markedAt` plus the budget, never from
+ * when the loop happened to start. A window whose budget was already spent before the loop ran
+ * therefore gets its one capture and no retries.
  */
-test('an already-expired retry deadline runs the capture once and no retries', async () => {
+test('a budget already spent before the loop started runs the capture once and no retries', async () => {
   let captures = 0;
   const markedAt = Date.now() - 10_000;
   const result = await captureFreshnessRecoveredAttempt({
@@ -137,7 +137,7 @@ test('an already-expired retry deadline runs the capture once and no retries', a
     },
     classify: () => 'sharp-drop' as const,
     window: windowMarkedAt(markedAt),
-    retry: { retryUntilMs: markedAt + 1_500, delaysMs: [250, 400, 600] },
+    retry: { retryBudgetMs: 1_500, delaysMs: [250, 400, 600] },
   });
 
   assert.equal(captures, 1);
@@ -147,4 +147,34 @@ test('an already-expired retry deadline runs the capture once and no retries', a
     staleAfterRetries: true,
     reason: 'sharp-drop',
   });
+});
+
+test('the same budget retries or not depending only on how old the window is', async () => {
+  vi.useFakeTimers();
+  try {
+    const now = Date.now();
+    async function retriesFor(markedAt: number): Promise<number> {
+      let captures = 0;
+      const pending = captureFreshnessRecoveredAttempt({
+        capture: async () => {
+          captures += 1;
+          return attempt();
+        },
+        classify: () => 'sharp-drop' as const,
+        window: windowMarkedAt(markedAt),
+        retry: { retryBudgetMs: 1_500, delaysMs: [250, 400, 600] },
+      });
+      await vi.advanceTimersByTimeAsync(2_000);
+      await pending;
+      return captures - 1;
+    }
+
+    // Identical budget, identical delays — only `markedAt` differs, and that alone decides
+    // whether any retry fits. A loop that measured its budget from its own start would return
+    // the same count for both.
+    assert.equal(await retriesFor(now), 3);
+    assert.equal(await retriesFor(now - 1_500), 0);
+  } finally {
+    vi.useRealTimers();
+  }
 });

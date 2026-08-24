@@ -14,11 +14,17 @@ export type {
   AndroidInputOwnershipSource,
 } from '../android-input-ownership.ts';
 export {
+  ANDROID_CAPTURE_FAILURE_REASONS,
   ANDROID_CONTENT_RECOVERY_REASONS,
   isAndroidContentRecoveryReason,
   isUnreadableCaptureContentError,
+  isAndroidCaptureFailureReason,
+  readAndroidCaptureFailureReason,
 } from '../android-snapshot-quality.ts';
-export type { AndroidContentRecoveryReason } from '../android-snapshot-quality.ts';
+export type {
+  AndroidCaptureFailureReason,
+  AndroidContentRecoveryReason,
+} from '../android-snapshot-quality.ts';
 export {
   ANDROID_SYSTEM_CHROME_PACKAGE,
   hasAndroidSystemChromeProvenance,

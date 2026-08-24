@@ -16,7 +16,7 @@ export const ANDROID_COMPARISON_BASELINE_MAX_AGE_MS = 5_000;
 // Retry suspicious snapshots until this post-action deadline expires.  The delay
 // sequence stays short in the happy path; the 600 ms tail retry is opportunistic
 // and may be skipped when slower devices spend the budget inside each capture.
-export const ANDROID_FRESHNESS_RETRY_DEADLINE_MS = 1_500;
+export const ANDROID_FRESHNESS_RETRY_BUDGET_MS = 1_500;
 export const ANDROID_FRESHNESS_RETRY_DELAYS_MS = [250, 400, 600] as const;
 
 export function isNavigationSensitiveAction(command: string): boolean {

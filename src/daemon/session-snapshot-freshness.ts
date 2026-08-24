@@ -1,7 +1,7 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import {
   ANDROID_COMPARISON_BASELINE_MAX_AGE_MS,
-  ANDROID_FRESHNESS_RETRY_DEADLINE_MS,
+  ANDROID_FRESHNESS_RETRY_BUDGET_MS,
   ANDROID_FRESHNESS_RETRY_DELAYS_MS,
   ANDROID_FRESHNESS_WINDOW_MS,
   androidFreshnessReason,
@@ -99,7 +99,7 @@ export async function captureAndroidFreshnessRecoveredAttempt<
       ),
     window: freshness,
     retry: {
-      retryUntilMs: freshness.markedAt + ANDROID_FRESHNESS_RETRY_DEADLINE_MS,
+      retryBudgetMs: ANDROID_FRESHNESS_RETRY_BUDGET_MS,
       delaysMs: ANDROID_FRESHNESS_RETRY_DELAYS_MS,
     },
     onTrustworthyCapture: () => clearAndroidSnapshotFreshness(params.session),

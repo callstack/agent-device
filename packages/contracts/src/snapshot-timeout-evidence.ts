@@ -15,6 +15,12 @@ type CapturedSnapshotTimeoutEvidenceBase = {
   overlayRefsRequested: true;
 };
 
+/** At least one ref. Annotation is a claim that something was drawn, so it cannot be empty. */
+export type NonEmptyScreenshotOverlayRefs = readonly [
+  ScreenshotOverlayRef,
+  ...ScreenshotOverlayRef[],
+];
+
 export type SnapshotTimeoutEvidence =
   | {
       captureFailed: true;
@@ -27,9 +33,15 @@ export type SnapshotTimeoutEvidence =
     })
   | (CapturedSnapshotTimeoutEvidenceBase & {
       overlayRefSource: 'session-snapshot';
-      overlayRefsAnnotated: boolean;
+      overlayRefsAnnotated: true;
       overlayRefCount: number;
-      overlayRefs: ScreenshotOverlayRef[];
+      overlayRefs: NonEmptyScreenshotOverlayRefs;
+    })
+  | (CapturedSnapshotTimeoutEvidenceBase & {
+      overlayRefSource: 'session-snapshot';
+      overlayRefsAnnotated: false;
+      overlayRefCount: 0;
+      overlayRefs: readonly [];
     })
   | (CapturedSnapshotTimeoutEvidenceBase & {
       overlayRefSource: 'session-snapshot';
@@ -54,19 +66,35 @@ export function snapshotTimeoutEvidenceWithoutOverlaySource(path: string): Snaps
   };
 }
 
-/** A screenshot annotated from the stored observation. An empty ref list is not an annotation. */
+/**
+ * A screenshot annotated from the stored observation. An empty ref list is not an annotation, and
+ * the union says so: the annotated arm carries a non-empty tuple, so `annotated: true` with zero
+ * refs is not a state a caller can build or a reader has to defend against.
+ */
 export function snapshotTimeoutEvidenceWithOverlayRefs(
   path: string,
-  overlayRefs: ScreenshotOverlayRef[],
+  overlayRefs: readonly ScreenshotOverlayRef[],
 ): SnapshotTimeoutEvidence {
-  return {
-    path,
-    overlayRefsRequested: true,
-    overlayRefsAnnotated: overlayRefs.length > 0,
-    overlayRefCount: overlayRefs.length,
-    overlayRefSource: 'session-snapshot',
-    overlayRefs,
-  };
+  const base = { path, overlayRefsRequested: true, overlayRefSource: 'session-snapshot' } as const;
+  return isNonEmptyOverlayRefs(overlayRefs)
+    ? {
+        ...base,
+        overlayRefsAnnotated: true,
+        overlayRefCount: overlayRefs.length,
+        overlayRefs,
+      }
+    : {
+        ...base,
+        overlayRefsAnnotated: false,
+        overlayRefCount: 0,
+        overlayRefs: [],
+      };
+}
+
+function isNonEmptyOverlayRefs(
+  refs: readonly ScreenshotOverlayRef[],
+): refs is NonEmptyScreenshotOverlayRefs {
+  return refs.length > 0;
 }
 
 /** A screenshot exists and a stored observation existed, but annotating it threw. */

@@ -7,17 +7,16 @@ import { sleep } from '../../utils/timeouts.ts';
 import type { SnapshotFreshnessReason, SnapshotFreshnessWindow } from './types.ts';
 
 /**
- * When to stop retrying, and what to wait between attempts. Both are policy inputs rather than
- * constants here, because "how long may a backend lag behind a real transition" is a property of
- * the acquisition backend, not of the recovery loop.
+ * How long retries may continue, and what to wait between them. Both are policy inputs rather
+ * than constants here, because "how long may a backend lag behind a real transition" is a
+ * property of the acquisition backend, not of the recovery loop.
  *
- * `retryUntilMs` is an absolute `Date.now()` instant, NOT a duration — it is the window's
- * `markedAt` plus the backend's retry budget, so the budget is spent from the action rather than
- * from whenever the first capture happened to return. Passing a bare duration here would type-check
- * and then silently run zero retries, so the name says which one it is.
+ * Both fields are durations. The loop derives the actual deadline from the window's `markedAt`
+ * itself, so the budget is always spent from the action rather than from whenever the first
+ * capture happened to return, and a caller has no absolute instant it could get wrong.
  */
 export type SnapshotFreshnessRetrySchedule = {
-  retryUntilMs: number;
+  retryBudgetMs: number;
   delaysMs: readonly number[];
 };
 
@@ -43,13 +42,17 @@ export async function captureFreshnessRecoveredAttempt<
   retry: SnapshotFreshnessRetrySchedule;
   onTrustworthyCapture?: () => void;
 }): Promise<T> {
+  // Derived here, never accepted from the caller: the budget runs from the action that opened
+  // the window, so time already spent inside the first capture is time the retries do not get.
+  const retryUntilMs = params.window.markedAt + params.retry.retryBudgetMs;
+
   let latest = await params.capture();
   let suspiciousReason = params.classify(latest);
   let retryCount = 0;
 
   for (const delayMs of params.retry.delaysMs) {
     if (!suspiciousReason) break;
-    const remainingMs = params.retry.retryUntilMs - Date.now();
+    const remainingMs = retryUntilMs - Date.now();
     if (remainingMs <= 0) break;
     await sleep(Math.min(delayMs, remainingMs));
     latest = await params.capture();

@@ -85,17 +85,26 @@ alone:
 - **Freshness recovery.** The freshness window, the Android staleness classification and its
   thresholds, and the retry loop live in `src/snapshot/snapshot-freshness/`. The loop is
   parameterized by a classifier and a retry schedule, so "how long may a backend lag behind a real
-  transition" is a policy input rather than a constant the loop owns.
+  transition" is a policy input rather than a constant the loop owns. The schedule is stated as a
+  duration budget; the loop derives the deadline from the window's `markedAt` itself, so the
+  budget is always spent from the action and a caller has no absolute instant it could get wrong.
   `src/daemon/session-snapshot-freshness.ts` keeps only what needs a session: reading and retiring
   the window on store-owned `SessionState`, and choosing the comparison baseline from snapshot
   lineage. It remains the declared R7 owner of `androidSnapshotFreshness`.
-- **Timeout evidence.** Whether a failure is the accessibility-timeout shape is a policy in
-  `src/snapshot/snapshot-timeout-policy.ts`; the published `details.androidSnapshotTimeoutScreenshot`
-  payload is vocabulary in `@agent-device/contracts/snapshot-timeout-evidence`, built through
-  constructors so an assembly site cannot publish an undeclared arm. The daemon keeps the ordering
-  that genuinely needs it — resolving a bound screenshot runtime, writing the artifact, annotating
-  it from the stored observation, and emitting the diagnostics. Typed details, logs and screenshot
-  evidence are unchanged.
+- **Timeout evidence.** The Android platform boundary decides once whether a capture failed
+  because the hierarchy never arrived — a structured helper timeout, or instrumentation killed
+  before it could answer — and publishes that decision as the typed reason
+  `accessibility-timeout` (`ANDROID_CAPTURE_FAILURE_REASONS` in
+  `@agent-device/contracts/android-snapshot-quality`). `src/snapshot/snapshot-timeout-policy.ts`
+  reads that reason; it does not re-derive the classification from hint prose, which is
+  human-facing text that may be reworded and would drift the moment two readers sniffed it. The
+  hint itself is now derived from the reason rather than decided alongside it. The published
+  `details.androidSnapshotTimeoutScreenshot` payload is vocabulary in
+  `@agent-device/contracts/snapshot-timeout-evidence`, a union whose arms encode which claims can
+  coexist — the annotated arm carries a non-empty ref tuple, so "annotated with zero refs" is not
+  a state a caller can build. The daemon keeps the ordering that genuinely needs it: resolving a
+  bound screenshot runtime, writing the artifact, annotating it from the stored observation, and
+  emitting the diagnostics. Typed details, logs and screenshot evidence are unchanged.
 - **Screenshot-overlay policy.** Which Android nodes earn an overlay ref, and what rectangle an
   overlay for one of them covers, live in `src/snapshot/screenshot-overlay/`. The daemon keeps
   approved artifact and ref assembly only: ranking, projection to screenshot pixels, drawing, and

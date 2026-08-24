@@ -216,7 +216,7 @@ function androidSnapshotTimeoutError(): AppError {
     {
       cmd: 'adb',
       args: ['shell', 'am', 'instrument'],
-      timeoutMs: 8000,
+      androidCaptureFailureReason: 'accessibility-timeout',
       hint: 'Android accessibility snapshots can be blocked by busy or continuously changing app UI. Use screenshot as visual truth after this timeout.',
     },
   );

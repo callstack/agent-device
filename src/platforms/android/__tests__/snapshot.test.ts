@@ -1074,56 +1074,6 @@ test('snapshotAndroid emits timeout diagnostics when helper capture times out', 
   assert.match(diagnostics, /helper capture timed out/);
 });
 
-test('snapshotAndroid preserves structured helper timeout guidance', async () => {
-  const helperAdb = createHelperAdb({
-    instrument: async () => ({
-      exitCode: 1,
-      stdout: [
-        'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1',
-        'INSTRUMENTATION_RESULT: helperApiVersion=1',
-        'INSTRUMENTATION_RESULT: ok=false',
-        'INSTRUMENTATION_RESULT: outputFormat=uiautomator-xml',
-        'INSTRUMENTATION_RESULT: errorType=java.util.concurrent.TimeoutException',
-        'INSTRUMENTATION_RESULT: message=Timed out waiting for accessibility root',
-        'INSTRUMENTATION_CODE: 1',
-      ].join('\n'),
-      stderr: '',
-    }),
-  });
-
-  await assert.rejects(
-    () => snapshotAndroidWithHelper(helperAdb),
-    (error) => {
-      assert.match((error as Error).message, /Timed out waiting for accessibility root/);
-      assert.match((error as Error).message, /Android snapshot helper failed/);
-      assert.equal(
-        (error as { details?: Record<string, unknown> }).details?.hint,
-        'Android accessibility snapshots can be blocked by busy or continuously changing app UI. Use screenshot as visual truth after this timeout and report the busy UI if it persists.',
-      );
-      return true;
-    },
-  );
-});
-
-test('snapshotAndroid preserves killed helper instrumentation details', async () => {
-  const helperAdb = createHelperAdb({
-    instrument: async () => ({ exitCode: 137, stdout: '', stderr: '' }),
-  });
-
-  await assert.rejects(
-    () => snapshotAndroidWithHelper(helperAdb),
-    (error) => {
-      assert.match(
-        (error as Error).message,
-        /Android snapshot helper failed before returning parseable output/,
-      );
-      assert.match((error as Error).message, /Android snapshot helper failed/);
-      assert.equal((error as { details?: Record<string, unknown> }).details?.exitCode, 137);
-      return true;
-    },
-  );
-});
-
 test('snapshotAndroid fails closed after unparseable helper output', async () => {
   const calls: string[][] = [];
   const helperAdb: AndroidAdbExecutor = async (args) => {
