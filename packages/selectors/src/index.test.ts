@@ -12,6 +12,7 @@ import {
   resolveReplaySuggestionCandidate,
   SELECTOR_RESOLUTION_POLICIES,
 } from './index.ts';
+import { loginFormNodes } from './internal/__tests__/login-form-nodes.ts';
 
 const saveNode: SnapshotNode = {
   ref: 'e1',
@@ -208,15 +209,25 @@ test('recorded-target resolution adds no second matching pass per selector alter
   // The ambiguous leg reports that same domain instead of re-listing the chain's
   // matches: one matching pass, no second one. The `map` is the deciding pass's
   // own lazily-built visibility index. The `flatMap`s are NOT that pass — they
-  // are four whole-tree viewport-rect scans per ambiguous candidate, charged by
-  // `isNodeVisibleOnScreen` because the caller passes no precomputed viewport
-  // rects. They scale with the candidate count and predate this change; they are
-  // pinned here so the number cannot grow unnoticed, and are tracked separately.
+  // are whole-tree viewport-rect scans inside `isNodeVisibleOnScreen`, charged
+  // once per candidate it is asked about.
+  //
+  // #1970 collapsed the Application/Window-rect gather (`collectViewportRects`)
+  // to one shared scan per alternative instead of one per candidate, which is
+  // why this dropped from 8 to 5: this fixture has no Application/Window root,
+  // so every `resolveViewportRect` call still falls through to its OTHER
+  // flatMap — the "largest rect of any node containing this target's center"
+  // fallback — which cannot be precomputed the same way because it depends on
+  // each node's own rect, not the shared viewport-root set. That fallback fires
+  // twice per candidate (`isNodeVisibleOnScreen` calls `resolveViewportRect`
+  // once via the effective-viewport check, once directly for the root
+  // viewport) plus the one shared gather: 2*2 + 1 = 5. It predates #1970 and is
+  // out of scope here; pinned so the number cannot grow unnoticed.
   assert.deepEqual(unresolved.passes, {
     iterated: 1,
     filter: 0,
     map: 1,
-    flatMap: 8,
+    flatMap: 5,
     forEach: 0,
     reduce: 0,
     reduceRight: 0,
@@ -229,6 +240,41 @@ test('recorded-target resolution adds no second matching pass per selector alter
     includes: 0,
     indexOf: 0,
   });
+});
+
+test('policy resolution for disambiguate/fail-closed rows adds no second matching pass per selector alternative (#1970)', () => {
+  for (const row of [
+    SELECTOR_RESOLUTION_POLICIES.readText,
+    SELECTOR_RESOLUTION_POLICIES.readUnique,
+  ]) {
+    const traced = observeTreeTraversals(loginFormNodes);
+    const outcome = resolveSelectorChainWithPolicy(
+      traced.observed,
+      'label="Continue" || id=auth_continue',
+      row,
+      { platform: 'ios' },
+    );
+    // The winner comes from the SECOND alternative — uniqueness skips the
+    // tied first one — but `matchedNodes` still reports the FIRST alternative
+    // that matched anything, the contract `wait`'s landmark check and the
+    // ambiguous outcome both rely on (resolve-with-policy.ts). Previously this
+    // ran `listSelectorChainMatches` once for that set and then
+    // `resolveSelectorChainDomain` (nee `resolveSelectorChain`) again for the
+    // winner: two full passes, one per alternative visited. `iterated: 2`
+    // below (one pass for each of the two alternatives) with `filter: 0`
+    // proves the redundant `listSelectorChainMatches` pass — which would show
+    // up as a `filter` — is gone.
+    assert.equal(outcome.kind, 'resolved');
+    if (outcome.kind !== 'resolved') throw new Error('unreachable');
+    assert.equal(outcome.resolution.selectorIndex, 1);
+    assert.equal(outcome.resolution.node.ref, 'e2');
+    assert.deepEqual(
+      outcome.matchedNodes.map((node) => node.ref),
+      ['e2', 'e3'],
+    );
+    assert.equal(traced.passes.filter, 0, 'no separate listSelectorChainMatches pass');
+    assert.equal(traced.passes.iterated, 2, 'one pass per alternative visited, not two');
+  }
 });
 
 test('recorded-target resolution applies requireRect to both winner and domain', () => {

@@ -42,6 +42,20 @@ export function isViewportRootNode(node: Pick<SnapshotNode, 'type' | 'role' | 's
 }
 
 /**
+ * The Application/Window rects a target's viewport resolves against — the
+ * whole-tree scan `resolveViewportRect` does per call when no
+ * `precomputedViewportRects` is given. A caller resolving visibility for
+ * several nodes against the SAME tree (e.g. ranking ambiguous selector
+ * candidates) should build this once and thread it through, so N candidates
+ * share one pass instead of each paying its own (#1970).
+ */
+export function collectViewportRects(nodes: RawSnapshotNode[]): Rect[] {
+  return nodes.flatMap((node) =>
+    isViewportRootNode(node) && hasValidRect(node.rect) ? [node.rect] : [],
+  );
+}
+
+/**
  * The root viewport a target rect is measured against: the largest
  * Application/Window rect containing the target's center, falling back to the
  * largest such rect, then to the largest containing rect of any node.
@@ -52,11 +66,7 @@ export function resolveViewportRect(
   precomputedViewportRects?: readonly Rect[],
 ): Rect | null {
   const targetCenter = centerOfRect(targetRect);
-  const viewportRects =
-    precomputedViewportRects ??
-    nodes.flatMap((node) =>
-      isViewportRootNode(node) && hasValidRect(node.rect) ? [node.rect] : [],
-    );
+  const viewportRects = precomputedViewportRects ?? collectViewportRects(nodes);
   const contains = (rect: Rect) => containsPoint(rect, targetCenter.x, targetCenter.y);
   const viewport =
     pickLargestRect(viewportRects.filter(contains)) ?? pickLargestRect(viewportRects);

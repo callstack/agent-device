@@ -12,6 +12,7 @@ export {
   findSnapshotAncestor,
 } from '../snapshot-tree.ts';
 export {
+  collectViewportRects,
   findNearestScrollableAncestor,
   isNodeVisibleInEffectiveViewport,
   isNodeVisibleOnScreen,

@@ -3,7 +3,8 @@ import type { SelectorChain } from './parse.ts';
 import type { SelectorMatchOptions } from './public-resolution-types.ts';
 import {
   listSelectorChainMatches,
-  resolveSelectorChain,
+  resolveSelectorChainDomain,
+  type AstSelectorChainMatchList,
   type AstSelectorResolution,
 } from './resolve.ts';
 import { selectorResolutionKnobs, type SelectorResolutionPolicy } from './resolution-policy.ts';
@@ -60,38 +61,46 @@ export function resolveSelectorChainWithPolicy(
   options: SelectorMatchOptions,
 ): AstPolicyResolutionOutcome {
   const ambiguity = policy.ambiguity;
-  // One matching pass serves every row. It also settles "nothing matched"
-  // once, up front: no alternative matching under this row's rect requirement
-  // is the only way any row reaches `none`, uniqueness included — a
-  // fail-closed row that finds candidates it will not choose between reports
-  // ambiguity, never absence.
-  const list = listSelectorChainMatches(nodes, chain, {
-    ...options,
-    requireRect: policy.requireRect,
-  });
-  if (!list || list.matchedNodes.length === 0) return { kind: 'none' };
-
-  if (ambiguity === 'first-match') return resolvedFromList(list);
-  if (ambiguity === 'reject-candidates') {
+  if (ambiguity === 'first-match' || ambiguity === 'reject-candidates') {
+    // Neither row disambiguates, so the plain existence-only scan
+    // `listSelectorChainMatches` does is the whole contract: one pass, no
+    // per-candidate visibility/tiebreak bookkeeping to pay for.
+    const list = listSelectorChainMatches(nodes, chain, {
+      ...options,
+      requireRect: policy.requireRect,
+    });
+    if (!list || list.matchedNodes.length === 0) return { kind: 'none' };
+    if (ambiguity === 'first-match') return resolvedFromList(list);
     return list.matchedNodes.length > 1 ? ambiguousFromList(list) : resolvedFromList(list);
   }
 
-  // The uniqueness knobs are named in exactly one place (#1630); the rows
-  // handled above leave only the two that map onto them. A resolution here may
-  // come from a LATER alternative than `list`, since uniqueness skips an
-  // ambiguous alternative to try the next one.
-  const resolution = resolveSelectorChain(nodes, chain, {
+  // `disambiguate` / `fail-closed`: the uniqueness knobs are named in exactly
+  // one place (#1630). `resolveSelectorChainDomain` visits each alternative
+  // once and reports both the winning resolution AND the first alternative
+  // that matched anything (`firstMatch`) from that SAME pass — previously this
+  // ran `listSelectorChainMatches` for `firstMatch` and then
+  // `resolveSelectorChainDomain` again for `resolution`, scanning the tree
+  // twice (#1970). A resolution can come from a LATER alternative than
+  // `firstMatch`, since uniqueness skips an ambiguous alternative to try the
+  // next one — `matchedNodes` below stays paired with `firstMatch`, not the
+  // winner, so a caller must pair it with `resolution.selector` before
+  // reading them as one set (see `AstPolicyResolutionOutcome`'s `resolved`
+  // case).
+  const domain = resolveSelectorChainDomain(nodes, chain, {
     ...options,
     ...selectorResolutionKnobs({ ambiguity, requireRect: policy.requireRect }),
   });
-  return resolution
-    ? { kind: 'resolved', resolution, matchedNodes: list.matchedNodes }
-    : ambiguousFromList(list);
+  if (!domain.firstMatch) return { kind: 'none' };
+  return domain.resolution
+    ? {
+        kind: 'resolved',
+        resolution: domain.resolution,
+        matchedNodes: domain.firstMatch.matchedNodes,
+      }
+    : ambiguousFromList(domain.firstMatch);
 }
 
-function ambiguousFromList(
-  list: NonNullable<ReturnType<typeof listSelectorChainMatches>>,
-): AstPolicyResolutionOutcome {
+function ambiguousFromList(list: AstSelectorChainMatchList): AstPolicyResolutionOutcome {
   return {
     kind: 'ambiguous',
     selector: list.selector.raw,
@@ -100,9 +109,7 @@ function ambiguousFromList(
   };
 }
 
-function resolvedFromList(
-  list: NonNullable<ReturnType<typeof listSelectorChainMatches>>,
-): AstPolicyResolutionOutcome {
+function resolvedFromList(list: AstSelectorChainMatchList): AstPolicyResolutionOutcome {
   const node = list.matchedNodes[0];
   if (!node) return { kind: 'none' };
   return {
