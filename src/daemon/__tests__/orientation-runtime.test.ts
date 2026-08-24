@@ -6,8 +6,12 @@ import { expect, test, vi } from 'vitest';
 // probe the same way `request-router-android-modal.test.ts` does, so that check short-circuits to
 // "clear" without spawning `adb` — matching the daemon's own real guard seam instead of dodging
 // the device platform this test is named for.
-vi.mock('../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/android/app-lifecycle.ts')>();
+//
+// The probe is owned by `window-state.ts`, which answers every window question from one dumpsys
+// read; a stub aimed at the module it used to live in is a silent no-op, because the spread only
+// adds a key nothing imports and the real spawn still runs.
+vi.mock('../../platforms/android/window-state.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../platforms/android/window-state.ts')>();
   return {
     ...actual,
     getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
