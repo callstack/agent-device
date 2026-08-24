@@ -339,35 +339,35 @@ extension RunnerTests {
     }
   }
 
-  /// Blocks until `expectedText` is observable in `target`, sharing the poll/deadline/placeholder
-  /// plumbing between the append route (`awaitSynthesizedFirstResponderCommit`) and the replacement
-  /// route (`awaitSynthesizedReplacementCommit`) — `computeOutcome` is the one thing that must NOT
-  /// be shared between them: see `awaitSynthesizedReplacementCommitOutcome`'s doc comment for why
-  /// append mode's "trust a diverged value" rule is wrong for replacement mode.
-  private func awaitSynthesizedCommit(
+  /// The placeholder/deadline/observe/pacing ingredients shared by the append route
+  /// (`awaitSynthesizedFirstResponderCommit`) and the replacement route
+  /// (`awaitSynthesizedReplacementCommit`). What must NOT be shared is which outcome function
+  /// consumes them: see `awaitSynthesizedReplacementCommitOutcome`'s doc comment for why append
+  /// mode's "trust a diverged value" rule is wrong for replacement mode. Each caller therefore
+  /// calls its own named outcome function directly, with real argument labels — deliberately not
+  /// a stored closure/function-value parameter here, which would erase those labels at the call
+  /// site and make the observe closure unrecognizable to the static content-redaction check in
+  /// `apple-runner-log-redaction.test.ts` (`extractObserveClosure` locates the labeled closure
+  /// literal by its text; a closure passed as a plain function value carries no such label).
+  private func synthesizedCommitPollingIngredients(
     app: XCUIApplication,
     target: TextEntryTarget,
-    expectedText: String,
-    routeLabel: String,
-    computeOutcome: (
-      _ expectedText: String,
-      _ placeholder: String?,
-      _ isExpired: () -> Bool,
-      _ observe: () -> String?,
-      _ waitForNextObservation: () -> Void
-    ) -> SynthesizedTextCommitOutcome
-  ) -> SynthesizedTextCommitOutcome {
+    expectedText: String
+  ) -> (
+    placeholder: String?,
+    isExpired: () -> Bool,
+    observe: () -> String?,
+    waitForNextObservation: () -> Void
+  ) {
     let placeholder = resolveTextEntryElement(app: app, target: target)?.placeholderValue
     let deadline = Date().addingTimeInterval(TextEntryTiming.synthesizedCommitTimeout)
     let waitStartedAt = Date()
-    NSLog("[DEBUG-1874] wait start expectedLen=%ld route=%@", expectedText.count, routeLabel)
-    let outcome = computeOutcome(
-      expectedText,
-      placeholder,
-      { Date() >= deadline },
-      {
-        let observedText = editableTextValue(
-          for: resolveTextEntryElement(app: app, target: target),
+    return (
+      placeholder: placeholder,
+      isExpired: { Date() >= deadline },
+      observe: {
+        let observedText = self.editableTextValue(
+          for: self.resolveTextEntryElement(app: app, target: target),
           treatingPlaceholderAsEmpty: true
         )
         // Cadence evidence stays value-free: the polled value is user content typed through
@@ -382,15 +382,8 @@ extension RunnerTests {
       },
       // XCUI resolution shares the automation channel with the in-flight synthesized event.
       // Sparse reads let the target consume that event instead of continuously interrupting it.
-      { sleepFor(TextEntryTiming.synthesizedCommitPollInterval) }
+      waitForNextObservation: { self.sleepFor(TextEntryTiming.synthesizedCommitPollInterval) }
     )
-    NSLog(
-      "[DEBUG-1874] wait outcome=%@ elapsedMs=%.0f route=%@",
-      String(describing: outcome),
-      waitStartedAt.timeIntervalSinceNow * -1000,
-      routeLabel
-    )
-    return outcome
   }
 
   /// Blocks until the synthesized bare-type text is observable in the target field, so `type`
@@ -412,13 +405,23 @@ extension RunnerTests {
     guard let textBefore, !typedText.contains("\n"), !typedText.contains("\r") else {
       return .unobservable
     }
-    return awaitSynthesizedCommit(
-      app: app,
-      target: target,
-      expectedText: textBefore + typedText,
-      routeLabel: "append",
-      computeOutcome: Self.awaitSynthesizedCommitOutcome
+    let expectedText = textBefore + typedText
+    let waitStartedAt = Date()
+    NSLog("[DEBUG-1874] wait start expectedLen=%ld route=append", expectedText.count)
+    let ingredients = synthesizedCommitPollingIngredients(app: app, target: target, expectedText: expectedText)
+    let outcome = Self.awaitSynthesizedCommitOutcome(
+      expectedText: expectedText,
+      placeholder: ingredients.placeholder,
+      isExpired: ingredients.isExpired,
+      observe: ingredients.observe,
+      waitForNextObservation: ingredients.waitForNextObservation
     )
+    NSLog(
+      "[DEBUG-1874] wait outcome=%@ elapsedMs=%.0f route=append",
+      String(describing: outcome),
+      waitStartedAt.timeIntervalSinceNow * -1000
+    )
+    return outcome
   }
 
   /// Blocks until the synthesized replacement text (`fill`) is observable in the target field, so
@@ -439,13 +442,22 @@ extension RunnerTests {
     guard !expectedText.contains("\n"), !expectedText.contains("\r") else {
       return .unobservable
     }
-    return awaitSynthesizedCommit(
-      app: app,
-      target: target,
+    let waitStartedAt = Date()
+    NSLog("[DEBUG-1874] wait start expectedLen=%ld route=replacement", expectedText.count)
+    let ingredients = synthesizedCommitPollingIngredients(app: app, target: target, expectedText: expectedText)
+    let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: expectedText,
-      routeLabel: "replacement",
-      computeOutcome: Self.awaitSynthesizedReplacementCommitOutcome
+      placeholder: ingredients.placeholder,
+      isExpired: ingredients.isExpired,
+      observe: ingredients.observe,
+      waitForNextObservation: ingredients.waitForNextObservation
     )
+    NSLog(
+      "[DEBUG-1874] wait outcome=%@ elapsedMs=%.0f route=replacement",
+      String(describing: outcome),
+      waitStartedAt.timeIntervalSinceNow * -1000
+    )
+    return outcome
   }
 
   static func shouldUseResolvedCoordinateTextEntryRoute(
