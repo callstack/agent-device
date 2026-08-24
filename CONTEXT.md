@@ -189,11 +189,9 @@ One backend attempt's raw accessibility nodes and attempt-level capture facts.
 
 **Snapshot producer**:
 The acquisition component that produced a snapshot's raw tree — the third identity axis beside
-the platform channel (`SnapshotBackend`) and the in-plan capture strategy
-(`SnapshotCaptureBackend`). One channel is fed by producers with different guarantees (the
-`xctest` channel carries Apple-runner, Appium page-source, and limrun element trees), so logic
-that assumes presentation, scope, or geometry guarantees keys on the producer, never on the
-channel alone.
+the platform channel and the in-plan capture strategy. Producers on one channel carry different
+guarantees, so presentation, scope, and geometry logic keys on the producer, never the channel
+alone.
 
 **Presentation options**:
 The policy input controlling how one snapshot acquisition becomes a public projection.

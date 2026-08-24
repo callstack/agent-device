@@ -169,7 +169,11 @@ const admittedGestureFamilyFacts = Object.freeze({
 });
 
 export const gestureRuntimeSpies = {
-  captureSnapshot: vi.fn(async () => ({ backend: 'xctest' as const, nodes: [] })),
+  captureSnapshot: vi.fn(async () => ({
+    backend: 'xctest' as const,
+    producer: 'apple-runner' as const,
+    nodes: [],
+  })),
   performGesturePlan: vi.fn(async (_input: GesturePlanInput) => ({})),
   performDirectionalFlingPlan: vi.fn(async (_input: GesturePlanInput) => ({})),
   performMultiTouchGesturePlan: vi.fn(async (_input: GesturePlanInput) => ({})),

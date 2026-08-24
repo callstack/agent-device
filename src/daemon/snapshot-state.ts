@@ -10,7 +10,8 @@ import {
   snapshotPresentationOptionsFromFlags,
   type RawSnapshotNode,
   type SnapshotBackend,
-  type SnapshotProducer,
+  type SnapshotStateProvenance,
+  snapshotStateProvenance,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import {
@@ -35,10 +36,8 @@ export function buildSnapshotState(
   data: {
     nodes?: RawSnapshotNode[];
     truncated?: boolean;
-    backend?: SnapshotBackend;
-    producer?: SnapshotProducer;
     quality?: unknown;
-  },
+  } & SnapshotStateProvenance,
   flags:
     | (Pick<CommandFlags, 'snapshotDepth' | 'snapshotInteractiveOnly' | 'snapshotRaw'> &
         Partial<Pick<CommandFlags, 'snapshotScope'>>)
@@ -71,8 +70,7 @@ export function buildSnapshotState(
     nodes,
     truncated: data?.truncated,
     createdAt: Date.now(),
-    backend: data?.backend,
-    producer: data?.producer,
+    ...snapshotStateProvenance(data),
     ...(snapshotQuality ? { snapshotQuality } : {}),
     presentationKey: buildSnapshotPresentationKey(snapshotPresentationOptionsFromFlags(flags)),
     // Only broad Android snapshots become freshness baselines. If the user asked for a scoped

@@ -12,9 +12,8 @@ import type {
   RawSnapshotNode,
   Point,
   Rect,
-  SnapshotBackend,
   SnapshotOptions as BaseSnapshotOptions,
-  SnapshotProducer,
+  SnapshotProvenance,
 } from '@agent-device/kernel/snapshot';
 
 export type RunnerContext = {
@@ -240,18 +239,15 @@ export type KeyboardEnterResult =
   | Readonly<{ kind: 'android-acknowledged' }>
   | Readonly<{ kind: 'harmonyos-acknowledged' }>;
 
+/**
+ * Every acquisition carries its provenance pair atomically: the channel alone cannot say who
+ * acquired the tree or which guarantees it carries, and `SnapshotProvenance`
+ * (`@agent-device/kernel/snapshot`) makes a cross-channel `backend`/`producer` combination
+ * fail to compile.
+ */
 export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & {
   nodes?: RawSnapshotNode[];
-  backend: Extract<
-    SnapshotBackend,
-    'android' | 'harmonyos-arkui' | 'xctest' | 'linux-atspi' | 'macos-helper' | 'web'
-  >;
-  /**
-   * Required on every acquisition: the channel alone cannot say who acquired the tree or
-   * which guarantees it carries (`SnapshotProducer` in `@agent-device/kernel/snapshot`).
-   */
-  producer: SnapshotProducer;
-};
+} & SnapshotProvenance;
 
 export type Interactor = {
   open(
