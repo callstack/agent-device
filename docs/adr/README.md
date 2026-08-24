@@ -21,6 +21,7 @@
 | [0017 Parameterized Recorded Inputs](0017-parameterized-recorded-inputs.md) | safely authoring sensitive fill inputs as `${VAR}` placeholders across recording, replay, and repair |
 | [0018 Unified Request Event Journal (Proposed)](0018-unified-event-journal.md) | event/diagnostic vocabulary, journal scopes and sinks, progress-channel separation, observability-only state |
 | [0019 Request-Bound Platform Runtime](0019-request-bound-platform-runtime.md) | platform-package boundaries/composition, device discovery, runtime facts/facets, request binding, provider ownership, platform-shaped session resources, durable reattachment, daemon-handler migration |
+| [0020 Composable Recorded Fragments (Proposed)](0020-composable-recorded-fragments.md) | lifecycle-free recorded fragment capture/composition, entry guards, fragment-local addresses/digests, staleness, and native `.ad`/Maestro composition |
 
 ADRs record *why*; the registries and gates they describe are the living source of truth — when
 prose and a registry disagree, the registry wins and the ADR needs a follow-up.
