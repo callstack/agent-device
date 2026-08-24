@@ -24,7 +24,6 @@ export type WebPlatformCoverageEntry =
       trackingIssue: number;
     };
 
-export const WEB_COVERAGE_GAP_ISSUE = 1900;
 export const WEB_SMOKE_TEST_NAME = 'live web platform e2e smoke';
 export const WEB_SMOKE_EVIDENCE: RepositoryEvidence = {
   path: 'test/integration/smoke-web-platform.test.ts',
@@ -46,11 +45,6 @@ const denial = (assertion: string): WebPlatformCoverageEntry => ({
   assertion,
   level: 'capability-denial',
 });
-const gap = (assertion: string): WebPlatformCoverageEntry => ({
-  assertion,
-  level: 'known-gap',
-  trackingIssue: WEB_COVERAGE_GAP_ISSUE,
-});
 
 /**
  * One primary, observable owner for every public command on the managed web target.
@@ -58,11 +52,21 @@ const gap = (assertion: string): WebPlatformCoverageEntry => ({
  * Live rows are limited to the existing web-smoke scenario. Contract rows cite
  * existing web-specific unit/provider evidence; they do not turn fixture-backed
  * tests into live E2E claims. Capability denials are derived from the web bucket
- * in the command capability matrix. Known gaps are explicit follow-up work, not
- * an implicit claim that a generic command works on web.
+ * in the command capability matrix.
+ *
+ * #1900 closed every known-gap row this manifest originally carried: each now cites either the
+ * web runtime's own unavailable-operation fact (a real, permanent denial — e.g. `boot`, `push`),
+ * or a new test proving the command's existing generic/shared-runtime-plan code path already
+ * runs correctly for a web-backed session (e.g. `artifacts`, `diff`, `press`). None of this widens
+ * the live web-smoke scope. `WebPlatformCoverageEntry` keeps the `known-gap` variant for any
+ * future command whose web behavior genuinely isn't decided yet.
  */
 export const WEB_PLATFORM_COVERAGE = {
-  [C.artifacts]: gap('No web-specific artifact inventory command evidence exists yet'),
+  [C.artifacts]: contract(
+    'src/daemon/__tests__/request-router-artifacts-web.test.ts',
+    'artifacts lists a daemon-tracked artifact produced during a web session',
+    'daemon artifact listing round-trips a tracked artifact for a web-backed session',
+  ),
   [C.devices]: contract(
     'test/integration/provider-scenarios/web-desktop.test.ts',
     'Provider-backed integration web desktop flow uses semantic web provider calls',
@@ -83,33 +87,69 @@ export const WEB_PLATFORM_COVERAGE = {
     'capabilities omits apps when $label runtime facts deny the operation',
     'web runtime facts keep native app inventory unavailable',
   ),
-  [C.boot]: gap('Web boot has no command-level executable evidence'),
-  [C.shutdown]: gap('Web shutdown has no command-level executable evidence'),
+  [C.boot]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'boot and shutdown report the runtime-owned unavailable readiness fact',
+    'the web runtime fact rejects device boot',
+  ),
+  [C.shutdown]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'boot and shutdown report the runtime-owned unavailable readiness fact',
+    'the web runtime fact rejects device shutdown',
+  ),
   [C.appState]: contract(
     'packages/platform-web/src/runtime.test.ts',
     'preserves a narrow web provider dump including empty successful entries',
     'web runtime facts keep app state unavailable',
   ),
   [C.perf]: denial('Web capability model rejects native performance inspection'),
-  [C.logs]: gap('Web app-log commands have no command-level executable evidence'),
-  [C.events]: gap('Web session event timeline has no command-level executable evidence'),
+  [C.logs]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'logs reports the runtime-owned unavailable app-log facts',
+    'the web runtime fact rejects native app-log commands',
+  ),
+  [C.events]: contract(
+    'src/daemon/__tests__/request-router-events.test.ts',
+    'events reads the daemon-owned session timeline for a web-backed session',
+    'the session-owned event timeline works the same for a web-backed session as any other platform',
+  ),
   [C.network]: live('network dump returns the fixture GET request and requested headers'),
   [C.audio]: contract(
     'src/daemon/handlers/__tests__/session-audio.test.ts',
     'audio probe forwards daemon millisecond timing to web provider',
     'web audio probe forwards typed duration and bucket values',
   ),
-  [C.replay]: gap('Web replay has no executable command evidence'),
-  [C.test]: gap('Web test-suite execution has no executable command evidence'),
+  [C.replay]: contract(
+    'src/daemon/handlers/__tests__/session-command-replay.test.ts',
+    'replay inherits the parent web platform selector for each invoked step',
+    'replay re-invokes each recorded step with no platform branch, so a web selector threads through unchanged',
+  ),
+  [C.test]: contract(
+    'src/daemon/handlers/__tests__/session-command-replay.test.ts',
+    'test runs an undeclared script against a session already bound to a web device',
+    'an unfiltered test run executes its script against a session already bound to a web device',
+  ),
   [C.clipboard]: denial('Web capability model rejects native clipboard operations'),
   [C.keyboard]: contract(
     'packages/platform-web/src/runtime.test.ts',
     'back/home/orientation/tv-remote/keyboard never carried a web capability bucket',
     'the exact-owner runtime fact rejects native keyboard operations on the web target',
   ),
-  [C.install]: gap('Web application installation has no command-level executable evidence'),
-  [C.reinstall]: gap('Web application reinstallation has no command-level executable evidence'),
-  [C.push]: gap('Web application push delivery has no command-level executable evidence'),
+  [C.install]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'install and reinstall share the runtime-owned unavailable deploy fact',
+    'the web runtime fact rejects native app installation',
+  ),
+  [C.reinstall]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'install and reinstall share the runtime-owned unavailable deploy fact',
+    'the web runtime fact rejects native app reinstallation',
+  ),
+  [C.push]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'push reports the runtime-owned unavailable readiness and push facts',
+    'the web runtime fact rejects native push notification delivery',
+  ),
   [C.triggerAppEvent]: denial('Web capability model rejects native app event delivery'),
   [C.open]: live('the managed browser opens the local fixture page'),
   [C.prepare]: contract(
@@ -117,10 +157,18 @@ export const WEB_PLATFORM_COVERAGE = {
     'preserves a narrow web provider dump including empty successful entries',
     'web runtime facts keep Apple runner preparation unavailable',
   ),
-  [C.batch]: gap('Web batch execution has no command-level executable evidence'),
+  [C.batch]: contract(
+    'src/daemon/handlers/__tests__/session-devices-batch-runtime.test.ts',
+    'batch step forwards the parent web platform selector to each invoked step',
+    'batch re-invokes each step through the normal dispatcher with no platform branch, so a web selector threads through unchanged',
+  ),
   [C.close]: live('close releases the managed browser session during smoke cleanup'),
   [C.snapshot]: live('interactive snapshot exposes the fixture ready marker and form controls'),
-  [C.diff]: gap('Web snapshot diff has no command-level executable evidence'),
+  [C.diff]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'diff shares the admitted captureSnapshot fact that live snapshot and diff both require',
+    'web diff shares the browser-admitted snapshot capture that backs the live snapshot command',
+  ),
   [C.wait]: live('wait observes ready text and post-interaction fixture state'),
   [C.alert]: denial('Web capability model rejects native alert operations'),
   [C.settings]: denial('Web capability model rejects native device settings operations'),
@@ -130,7 +178,11 @@ export const WEB_PLATFORM_COVERAGE = {
     'start web recording',
     'web recording starts and stops through the scoped provider',
   ),
-  [C.trace]: gap('Web trace capture has no command-level executable evidence'),
+  [C.trace]: contract(
+    'src/daemon/handlers/__tests__/trace-runtime.test.ts',
+    'starts and stops one trace through the session-owned trace slot on a web session',
+    'session-scoped trace start/stop bookkeeping works the same for a web session as any other platform',
+  ),
   [C.find]: live('find locates the ready marker through text and selector expressions'),
   [C.click]: live('click changes the fixture status to Submitted'),
   [C.fill]: live('fill updates the accessible email value and fixture status'),
@@ -144,7 +196,11 @@ export const WEB_PLATFORM_COVERAGE = {
     'hover submit ref',
     'web hover moves the pointer through the provider element handle',
   ),
-  [C.press]: gap('Web press has no direct command-level executable evidence'),
+  [C.press]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'press shares the admitted tapPoint fact that live click and press both require',
+    'web press shares the browser-admitted tap operation that backs the live click command',
+  ),
   [C.type]: contract(
     'test/integration/provider-scenarios/web-desktop.test.ts',
     'type suffix',
@@ -197,7 +253,11 @@ export const WEB_PLATFORM_COVERAGE = {
   [C.screenshot]: live('screenshot creates a valid 640x480 PNG artifact'),
   [C.viewport]: live('viewport resizes the browser and the PNG reports 640x480 dimensions'),
   [C.appSwitcher]: denial('Web capability model rejects native app switcher navigation'),
-  [C.installFromSource]: gap('Web source installation has no command-level executable evidence'),
+  [C.installFromSource]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'install-from-source reports the runtime-owned unavailable materialize and deploy facts',
+    'the web runtime fact rejects source-based app installation',
+  ),
 } satisfies Record<PublicCommand, WebPlatformCoverageEntry>;
 
 export const WEB_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY = buildCoverageClassificationSummary(
