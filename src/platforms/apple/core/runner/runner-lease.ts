@@ -164,6 +164,7 @@ export async function prepareRunnerLeaseForStartup(
         ? `iOS runner for ${deviceId} is busy after device lease admission`
         : `iOS runner for ${deviceId} is already owned by another agent-device daemon`,
       {
+        reason: 'IOS_RUNNER_OWNED_BY_OTHER_DAEMON',
         deviceId,
         logicalLeaseContext,
         ownerPid: state.lease.ownerPid,

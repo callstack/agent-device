@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS } from '../harness.ts';
+import { MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS, parseMaestroConformanceSource } from '../harness.ts';
 import { DIFFERENTIAL_SCENARIOS } from './scenarios.ts';
 import { type Invariant, evaluateInvariant, readTrace } from './invariants.ts';
 
@@ -88,6 +88,41 @@ test('bug class 4 has a machine-checkable invariant, not just outcome parity', (
     invariant?.kind === 'stepDurationBelow' ? invariant.maxMs : undefined,
     MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
   );
+});
+
+const SETTLE_FLOW_PATH = path.join(import.meta.dirname, 'flows/settle-after-tap.yaml');
+
+function assertSettleFlowSemantics(source: string): void {
+  const parsed = parseMaestroConformanceSource(source, SETTLE_FLOW_PATH);
+  assert.equal(
+    parsed.commands.some(
+      (command) => command.kind === 'scroll' || command.kind === 'scrollUntilVisible',
+    ),
+    false,
+  );
+  assert.deepEqual(
+    parsed.commands.filter((command) => command.kind === 'tap'),
+    [{ kind: 'tap', longPress: false, repeat: 1, target: { selector: { text: 'Settings' } } }],
+  );
+  assert.equal(
+    parsed.commands.some(
+      (command) =>
+        command.kind === 'assert' &&
+        command.mode === 'visible' &&
+        command.selector?.id === 'open-inert-surface',
+    ),
+    true,
+  );
+}
+
+test('the settle detector reaches its tap without an unrelated setup command', () => {
+  assertSettleFlowSemantics(fs.readFileSync(SETTLE_FLOW_PATH, 'utf8'));
+});
+
+test('the settle flow guard rejects a changed tap target or inserted scroll', () => {
+  const flow = fs.readFileSync(SETTLE_FLOW_PATH, 'utf8');
+  assert.throws(() => assertSettleFlowSemantics(flow.replace('text: Settings', 'text: Home')));
+  assert.throws(() => assertSettleFlowSemantics(flow.replace('- tapOn:', '- scroll\n- tapOn:')));
 });
 
 // --- metricAtLeast: proves a code path actually ran, not just that it passed ---

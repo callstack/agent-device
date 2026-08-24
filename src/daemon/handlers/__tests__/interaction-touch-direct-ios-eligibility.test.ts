@@ -91,6 +91,7 @@ test('ordinary click uses canonical capture even when the owner binds selector t
       },
     ]),
     backend: 'xctest',
+    producer: 'apple-runner',
   });
 
   const response = await handleInteractionCommands({
@@ -137,6 +138,7 @@ test('fill simple iOS id selector resolves runtime text input evidence before co
       },
     ]),
     backend: 'xctest',
+    producer: 'apple-runner',
   });
   mockFillPoint.mockResolvedValueOnce({
     message: 'filled',
@@ -247,6 +249,7 @@ test('click simple iOS id selector waits for snapshot path after pending gesture
       },
     ]),
     backend: 'xctest',
+    producer: 'apple-runner',
   });
 
   const response = await handleInteractionCommands({

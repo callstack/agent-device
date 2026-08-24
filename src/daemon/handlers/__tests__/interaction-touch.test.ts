@@ -294,6 +294,7 @@ test('hover selector on web resolves the target and dispatches coordinate hover'
       },
     ]),
     backend: 'web',
+    producer: 'agent-browser',
   });
 
   const response = await handleInteractionCommands({

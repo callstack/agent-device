@@ -388,6 +388,9 @@ function buildReplayTestFailedResult(
     attempts: outcome.attempts,
     artifactsDir: context.testArtifactsDir,
     error,
+    ...(attemptOutcome?.status === 'failed' && attemptOutcome.infrastructure
+      ? { infrastructure: true as const }
+      : {}),
     ...(attemptOutcome?.snapshotDiagnostics
       ? { snapshotDiagnostics: attemptOutcome.snapshotDiagnostics }
       : {}),

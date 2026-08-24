@@ -57,6 +57,27 @@ test("resolveSelectorChainDomain reports the winning alternative's matched nodes
   );
 });
 
+test('resolveSelectorChainDomain also reports the first alternative that matched anything, from the SAME pass (#1970)', () => {
+  const chain = parseSelectorChain('label="Continue" || id=auth_continue');
+  const domain = resolveSelectorChainDomain(loginFormNodes, chain, {
+    platform: 'ios',
+    requireRect: true,
+    requireUnique: true,
+  });
+  // `firstMatch` names the FIRST alternative that matched anything (index 0,
+  // both "Continue"s) even though `resolution`/`matchedNodes` name the winning
+  // SECOND alternative — a caller whose contract is "the first thing that
+  // matched" (resolveSelectorChainWithPolicy's disambiguate/fail-closed rows,
+  // #1970) reads this instead of re-scanning the tree with
+  // listSelectorChainMatches to get the same set.
+  assert.equal(domain.resolution?.selectorIndex, 1);
+  assert.equal(domain.firstMatch?.selectorIndex, 0);
+  assert.deepEqual(
+    domain.firstMatch?.matchedNodes.map((node) => node.ref),
+    ['e2', 'e3'],
+  );
+});
+
 test('resolveSelectorChainDomain reports the first matching alternative when nothing resolves', () => {
   const domain = resolveSelectorChainDomain(
     loginFormNodes,
@@ -78,7 +99,7 @@ test('resolveSelectorChainDomain reports the first matching alternative when not
     requireRect: true,
     requireUnique: true,
   });
-  assert.deepEqual(missing, { resolution: null, matchedNodes: [] });
+  assert.deepEqual(missing, { resolution: null, matchedNodes: [], firstMatch: null });
 });
 
 test('findSelectorChainMatch returns first matching selector for existence checks', () => {

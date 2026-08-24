@@ -164,7 +164,6 @@ function buildFillResponsePayloads(params: {
       kind: 'runtime',
       result,
       publicData: transformTouchResponseData({
-        session,
         command: 'fill',
         flags: params.flags,
         data: result.backendResult,

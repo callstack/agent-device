@@ -249,6 +249,7 @@ test.each(['frontmost-app', 'desktop', 'menubar'] as const)(
     const host = platformRuntimeHostFixture();
     const captureSurface = vi.fn(async () => ({
       backend: 'macos-helper' as const,
+      producer: 'macos-helper' as const,
       nodes: [],
       truncated: false,
     }));
@@ -551,6 +552,7 @@ test('the macOS surface branch composes the per-capture signal with the binding 
   const host = platformRuntimeHostFixture();
   const captureSurface = vi.fn<SnapshotRuntimeHost['captureSurface']>(async () => ({
     backend: 'macos-helper' as const,
+    producer: 'macos-helper' as const,
     nodes: [],
     truncated: false,
   }));

@@ -90,6 +90,11 @@ test('a provisioning failure is not treated as retryable infrastructure', () => 
   assert.equal(isInfrastructureBootFailureReason('IOS_RUNNER_DEVICE_NOT_PROVISIONED'), false);
 });
 
+test('a live foreign runner owner is typed infrastructure', () => {
+  assert.equal(isInfrastructureBootFailureReason('IOS_RUNNER_OWNED_BY_OTHER_DAEMON'), true);
+  assert.match(bootFailureHint('IOS_RUNNER_OWNED_BY_OTHER_DAEMON'), /owning agent-device session/);
+});
+
 test.each([
   'Provisioning profile "Agent Device" has expired.',
   'Failed to install embedded profile: signing certificate is not valid.',

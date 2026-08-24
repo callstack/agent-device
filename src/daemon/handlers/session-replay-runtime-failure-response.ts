@@ -111,7 +111,7 @@ function readStringDetail(
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-const SAFE_CAUSE_DETAIL_KEYS = ['reason', 'retriable', 'supportedOn'] as const;
+const SAFE_CAUSE_DETAIL_KEYS = ['reason', 'recovery', 'retriable', 'supportedOn'] as const;
 
 function pickSafeCauseDetails(
   details: Record<string, unknown> | undefined,

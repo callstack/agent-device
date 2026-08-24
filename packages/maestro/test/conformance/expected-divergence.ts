@@ -38,8 +38,9 @@ export const FLOW_DIVERGENCES: Record<string, FlowDivergence> = {
   },
   'upstream/067_assertTrue_pass': {
     classification: 'we-reject',
-    reason: 'assertTrue is outside the current subset; this flow requires a JavaScript expression.',
-    unsupported: ['assertTrue'],
+    reason:
+      "assertTrue supports literal values and bare ${VAR} lookups (#1295); this flow's condition is a JS expression (${1+1}), which stays unsupported by the #1292 lookup-only decision.",
+    unsupported: ['assertTrue (JS expression payload)'],
     tracking: 'https://github.com/callstack/agent-device/issues/1292',
   },
   'upstream/090_travel': {
@@ -82,13 +83,6 @@ export const FLOW_DIVERGENCES: Record<string, FlowDivergence> = {
     classification: 'we-reject',
     reason: 'pressKey supports back/enter/home/return; the flow exercises ~30 Android/TV keycodes.',
     unsupported: ['pressKey (extended keycodes)'],
-  },
-  'upstream/076_optional_assertion': {
-    classification: 'we-reject',
-    reason:
-      'assertTrue is outside the supported subset; optional is now supported on scrollUntilVisible and extendedWaitUntil.',
-    unsupported: ['assertTrue'],
-    tracking: 'https://github.com/callstack/agent-device/issues/1295',
   },
   'upstream/079_scroll_until_visible': {
     classification: 'we-reject',
@@ -184,5 +178,11 @@ export const DOCUMENTED_DEVIATIONS: DocumentedDeviation[] = [
     area: 'tap',
     description:
       'agent-device omits the upstream iOS 3s pre-tap static-screen gate (IOSDriver.SCREEN_SETTLE_TIMEOUT_MS); see LAYER2_REFERENCE_ONLY.',
+  },
+  {
+    id: 'assert-true-string-truthiness',
+    area: 'assertTrue',
+    description:
+      'assertTrue (#1295) supports literal values and bare ${VAR} lookups only; JS expressions stay unsupported per #1292. Flow config/env/runScript-output values are stored as strings, so a looked-up condition is evaluated against a pinned falsy-string table ("", "false", "0", "null", "undefined", case-sensitive) rather than native JS truthiness (which would make the non-empty string "false" truthy) — every other string, including numeric and JSON-shaped strings, is truthy. Literal booleans/numbers use native JS truthiness.',
   },
 ];

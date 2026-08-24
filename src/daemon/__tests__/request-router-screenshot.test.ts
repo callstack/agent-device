@@ -414,6 +414,7 @@ test('screenshot --overlay-refs captures a fresh snapshot when the session has n
       order.push('snapshot');
       return {
         backend: 'android',
+        producer: 'android-uiautomator',
         nodes: [
           {
             index: 0,
@@ -459,6 +460,7 @@ test('screenshot --overlay-refs uses interactive iOS presentation for row-like o
     onCapture: (input) => writeSolidPng(input.outPath, 402, 874),
     snapshotResult: () => ({
       backend: 'xctest',
+      producer: 'apple-runner',
       nodes: [
         {
           index: 0,
@@ -548,6 +550,7 @@ test('screenshot --overlay-refs uses a fresh snapshot instead of stale session s
   const { handler, sessionStore } = screenshotRouter(session, {
     snapshotResult: () => ({
       backend: 'android',
+      producer: 'android-uiautomator',
       nodes: [
         {
           index: 0,
@@ -594,6 +597,7 @@ test('screenshot --pixel-density keeps overlay refs aligned to scaled iOS simula
     onCapture: (input) => writeSolidPng(input.outPath, 804, 1748),
     snapshotResult: () => ({
       backend: 'xctest',
+      producer: 'apple-runner',
       nodes: [
         { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
         {

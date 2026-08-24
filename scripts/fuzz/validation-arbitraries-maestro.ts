@@ -37,6 +37,7 @@ function validMaestroCommand(pick: number, salt: number): string[] {
     () => ['- openLink: "https://example.com/page"'],
     () => [`- assertVisible: ${text}`],
     () => [`- assertNotVisible: ${text}`],
+    () => ['- assertTrue: true'],
     () => [`- takeScreenshot: ${text}`],
     () => ['- swipe:', `    direction: ${['UP', 'DOWN', 'LEFT', 'RIGHT'][salt % 4]}`],
     () => [`- pressKey: ${['back', 'enter', 'return', 'home'][salt % 4]}`],
@@ -51,7 +52,6 @@ function validMaestroCommand(pick: number, salt: number): string[] {
 const FAKE_MAESTRO_COMMANDS = [
   'clickOn',
   'tapOnPoint',
-  'assertTrue',
   'evalScript',
   'launchActivity',
   'inputTextt',

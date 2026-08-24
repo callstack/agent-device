@@ -72,13 +72,13 @@ Supported subset:
 
 - Flows: `launchApp`; `runFlow` file/inline with platform, visibility, and limited boolean conditions; `onFlowStart`/`onFlowComplete`; `repeat.times` and retry.
 - Interactions: `tapOn`, `doubleTapOn`, `longPressOn`, `inputText` on the focused element, `eraseText`, `openLink`, `hideKeyboard`, basic `pressKey`, and `back`; selector targets poll until available and support recursive `index`, `childOf`, `above`, `below`, `leftOf`, `rightOf`, `containsChild`, `containsDescendants`, points, and `optional`; outer command labels are metadata, not target selectors.
-- Assertions and navigation: `assertVisible`, `assertNotVisible`, `extendedWaitUntil`, `scroll`, `scrollUntilVisible`, absolute/percentage/target `swipe`, `takeScreenshot`, `waitForAnimationToEnd`, and `stopApp`.
+- Assertions and navigation: `assertVisible`, `assertNotVisible`, `assertTrue` (literal values and `${VAR}` lookups only; `""`, `"false"`, `"0"`, `"null"`, and `"undefined"` are falsy, everything else is truthy), `extendedWaitUntil`, `scroll`, `scrollUntilVisible`, absolute/percentage/target `swipe`, `takeScreenshot`, `waitForAnimationToEnd`, and `stopApp`.
 - Scripts: ordered `runScript` file/env scripts with `http.post`, `json`, and `output` variables.
 
 Boundaries:
 
 - Runtime: iOS and Android only; `launchApp.clearState` supports Android and iOS simulators, launch arguments are Apple-only, and standalone device utility/state commands are unsupported.
-- Expressions: `when.true` supports boolean literals and `maestro.platform` comparisons; `repeat.while`, `evalScript`, and broader JavaScript expressions are unsupported.
+- Expressions: `when.true` supports boolean literals and `maestro.platform` comparisons; `assertTrue` supports literal values and `${VAR}` lookups only; `repeat.while`, `evalScript`, and broader JavaScript expressions are unsupported.
 - Environment: flow `env` is the default, `AD_VAR_*` overrides it, and CLI `-e KEY=VALUE` wins over both.
 - Failure diagnostics: resolved targets and `runFlow` paths are rendered, while `inputText` payloads remain hidden; do not place secrets in diagnostic identifiers.
 - Trust: `runScript` executes trusted scripts, may make `http.post` network requests, and is not a security sandbox; output keys cannot contain a dot.

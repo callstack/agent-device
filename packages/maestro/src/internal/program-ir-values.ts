@@ -314,6 +314,30 @@ export function readRequiredNumeric(
   return readNumericScalar(value, name, node, context, constraints);
 }
 
+/**
+ * assertTrue phase 1 (#1295): a literal value or a bare `${VAR}` lookup only.
+ * JS expressions stay unsupported per the #1292 decision — reject anything
+ * `${`-shaped that isn't an exact bare-name match, loud and at parse time (so
+ * the conformance oracle's parse-only layer still classifies expression flows
+ * as rejected) rather than deferring to runtime interpolation.
+ */
+export function readAssertTrueCondition(
+  node: Node | null | undefined,
+  name: string,
+  context: MaestroProgramParseContext,
+): string | number | boolean {
+  const value = readScalarValue(node, name, context);
+  if (value === null) invalidAt(`Maestro ${name} requires a condition.`, node, context);
+  if (typeof value === 'string' && value.includes('${') && !VARIABLE_PATTERN.test(value)) {
+    invalidAt(
+      `Maestro ${name} only supports a literal value or a bare \${VAR} lookup; JavaScript expressions are not supported — compute it in a runScript and reference \${output.x}.`,
+      node,
+      context,
+    );
+  }
+  return value;
+}
+
 export function readScalarMap(
   node: Node | null | undefined,
   name: string,

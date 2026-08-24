@@ -106,6 +106,7 @@ test('press @ref refreshes Android snapshot when freshness tracking is active', 
       },
     ],
     backend: 'android',
+    producer: 'android-uiautomator',
   });
 
   const response = await handleInteractionCommands({
@@ -179,6 +180,7 @@ test('ADR 0014: Android freshness cannot retarget an admitted ref by positional 
       },
     ],
     backend: 'android',
+    producer: 'android-uiautomator',
   });
 
   const response = await handleInteractionCommands({

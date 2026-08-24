@@ -89,6 +89,7 @@ function waitRuntimeHarness(
       : {
           nodes: polls[Math.min(pollIndex++, polls.length - 1)] ?? [],
           backend: 'web',
+          producer: 'agent-browser',
         },
   );
   const findTextFact = options.findText ?? findTextUnavailable;
@@ -308,18 +309,25 @@ test('a provider owner that cannot capture fails closed instead of borrowing the
 // ---------------------------------------------------------------------------
 
 test('a timed-out wait decorates its failure through the same single binding', async () => {
-  const harness = waitRuntimeHarness({
-    nodesPerPoll: [[{ index: 0, depth: 0, type: 'Button', label: 'Checkout', hittable: true }]],
-  });
+  vi.useFakeTimers();
+  try {
+    const harness = waitRuntimeHarness({
+      nodesPerPoll: [[{ index: 0, depth: 0, type: 'Button', label: 'Checkout', hittable: true }]],
+    });
 
-  const { response } = await runWait(['text', 'Ready', '1'], harness);
+    const pending = runWait(['text', 'Ready', '1'], harness);
+    await vi.advanceTimersByTimeAsync(5_000);
+    const { response } = await pending;
 
-  expect(response.ok).toBe(false);
-  if (response.ok) return;
-  expect(response.error.message).toContain('wait timed out for text: Ready');
-  expect(response.error.message).toContain('Current surface: Checkout');
-  expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
-  expect(harness.bindDevice).toHaveBeenCalledTimes(1);
+    expect(response.ok).toBe(false);
+    if (response.ok) return;
+    expect(response.error.message).toContain('wait timed out for text: Ready');
+    expect(response.error.message).toContain('Current surface: Checkout');
+    expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
+    expect(harness.bindDevice).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 // ---------------------------------------------------------------------------

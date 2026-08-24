@@ -258,6 +258,37 @@ test('batch step flags override parent selector flags', async () => {
   expect(response?.ok).toBe(true);
 });
 
+// #1900: `batch` (`session-batch.ts` -> `runBatch`) just re-invokes each step through the normal
+// `DaemonInvokeFn` with no platform branching of its own, so a web platform selector threads
+// through the same way any other platform selector does.
+test('batch step forwards the parent web platform selector to each invoked step', async () => {
+  const sessionStore = makeSessionStore();
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'batch',
+      positionals: [],
+      flags: {
+        platform: 'web',
+        batchSteps: [
+          { command: 'open', positionals: ['http://127.0.0.1/'] },
+          { command: 'screenshot', positionals: ['/tmp/web-batch.png'] },
+        ],
+      },
+    },
+    sessionName: 'default',
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: async (stepReq) => {
+      expect(stepReq.flags?.platform).toBe('web');
+      return { ok: true, data: {} };
+    },
+  });
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(true);
+});
+
 test('batch step forwards typed runtime payload', async () => {
   const sessionStore = makeSessionStore();
   const seenRuntimes: Array<DaemonRequest['runtime']> = [];

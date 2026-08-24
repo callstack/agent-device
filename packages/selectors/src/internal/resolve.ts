@@ -1,7 +1,11 @@
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { DisambiguationTiebreak } from '@agent-device/contracts/interaction';
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
-import { buildSnapshotNodeMap, isNodeVisibleOnScreen } from '@agent-device/contracts/snapshot';
+import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import {
+  buildSnapshotNodeMap,
+  collectViewportRects,
+  isNodeVisibleOnScreen,
+} from '@agent-device/contracts/snapshot';
 import { matchesSelector } from './match.ts';
 import type { Selector, SelectorChain } from './parse.ts';
 import type {
@@ -35,10 +39,20 @@ export type AstSelectorResolution = {
  * non-null. When no alternative resolved, it describes the first alternative
  * that matched anything — the set `listSelectorChainMatches` reports, computed
  * here by the pass that already visited those nodes.
+ *
+ * `firstMatch` is the SAME "first alternative that matched anything" domain
+ * `listSelectorChainMatches` reports, but populated unconditionally — a
+ * uniqueness row can resolve from a LATER alternative than the one it first
+ * matched (uniqueness skips an ambiguous alternative to try the next one), so
+ * `firstMatch` and `matchedNodes`/`resolution` can name different
+ * alternatives. A caller whose contract is "the first thing that matched",
+ * not "what resolution bound to" (#1970), reads this instead of paying a
+ * second whole-tree scan for `listSelectorChainMatches`.
  */
 export type AstSelectorChainResolutionDomain = {
   resolution: AstSelectorResolution | null;
   matchedNodes: SnapshotNode[];
+  firstMatch: AstSelectorChainMatchList | null;
 };
 
 export function resolveSelectorChainDomain(
@@ -49,16 +63,17 @@ export function resolveSelectorChainDomain(
   const requireRect = options.requireRect ?? false;
   const requireUnique = options.requireUnique ?? true;
   const diagnostics: SelectorDiagnostics[] = [];
-  let firstMatchedNodes: SnapshotNode[] | null = null;
+  let firstMatch: AstSelectorChainMatchList | null = null;
   for (const [i, selector] of chain.selectors.entries()) {
     const summary = analyzeSelectorMatches(nodes, selector, options.platform, requireRect);
     diagnostics.push({ selector: selector.raw, matches: summary.count });
     if (summary.count === 0 || !summary.firstNode) continue;
-    firstMatchedNodes ??= summary.candidates;
+    firstMatch ??= { selector, selectorIndex: i, matchedNodes: summary.candidates };
     if (requireUnique && summary.count !== 1) {
       if (!options.disambiguateAmbiguous || !summary.disambiguated || !summary.tiebreak) continue;
       return {
         matchedNodes: summary.candidates,
+        firstMatch,
         resolution: {
           node: summary.disambiguated,
           selector,
@@ -77,6 +92,7 @@ export function resolveSelectorChainDomain(
     }
     return {
       matchedNodes: summary.candidates,
+      firstMatch,
       resolution: {
         node: summary.firstNode,
         selector,
@@ -86,7 +102,7 @@ export function resolveSelectorChainDomain(
       },
     };
   }
-  return { resolution: null, matchedNodes: firstMatchedNodes ?? [] };
+  return { resolution: null, matchedNodes: firstMatch?.matchedNodes ?? [], firstMatch };
 }
 
 export function resolveSelectorChain(
@@ -210,11 +226,16 @@ function analyzeSelectorMatches(
   let firstNode: SnapshotNode | null = null;
   const candidates: SnapshotNode[] = [];
   const state: DisambiguationState = { best: null, bestVisible: false, tie: false };
-  // Lazily built: only ambiguous matches pay for viewport inference.
+  // Lazily built: only ambiguous matches pay for viewport inference, and both
+  // maps are built once per alternative so N ambiguous candidates share one
+  // whole-tree pass instead of `isNodeVisibleOnScreen` re-deriving the
+  // viewport rects for each candidate it is asked about (#1970).
   let byIndex: Map<number, SnapshotNode> | undefined;
+  let viewportRects: Rect[] | undefined;
   const isVisible = (node: SnapshotNode): boolean => {
     byIndex ??= buildSnapshotNodeMap(nodes);
-    return isNodeVisibleOnScreen(node, nodes, byIndex);
+    viewportRects ??= collectViewportRects(nodes);
+    return isNodeVisibleOnScreen(node, nodes, byIndex, viewportRects);
   };
   for (const node of nodes) {
     if (requireRect && !node.rect) continue;

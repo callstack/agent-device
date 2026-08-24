@@ -505,7 +505,7 @@ test('closeIosApp on macOS uses helper quit for bundle identifiers', async () =>
       '#!/bin/sh',
       'printf "%s\\n" "$@" > "$AGENT_DEVICE_TEST_ARGS_FILE"',
       "cat <<'JSON'",
-      '{"ok":true,"data":{"bundleId":"com.example.foobar","running":true,"terminated":true,"forceTerminated":false}}',
+      '{"ok":true,"data":{"bundleId":"com.example.foobar","running":false,"terminated":false,"forceTerminated":false}}',
       'JSON',
       '',
     ].join('\n'),

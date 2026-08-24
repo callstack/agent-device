@@ -2,12 +2,15 @@ import { defineConfig } from 'vitest/config';
 import { resolveVitestMaxWorkers } from './scripts/lib/vitest-concurrency.ts';
 import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 
-// Files that spawn a real subprocess per case, so under broad file parallelism the
-// spawns get starved past an internal budget and production returns a generic
-// timeout instead of the asserted error. The subprocess-stub project below runs
-// them one at a time to bound that contention; per-file `process.env` isolation is
-// already delivered by `pool: forks` + `isolate: true` on every project.
-// Membership and the project's deletion test live in issue #1823.
+// Files that spawn a real subprocess per case. They used to run one at a time in
+// their own serialized `subprocess-stub` project so broad file parallelism couldn't
+// starve a spawn past its internal budget and turn it into a generic timeout.
+// #1823 is now running that project's own kill criterion: un-serialized here in
+// `unit-core`'s default forks pool, watched for 20 consecutive CI runs with no
+// timeout-shaped failure. Revert (restore the project, restore this list to
+// unit-core's exclude) the moment one appears. Still excluded from the mutation
+// lane via SERIALIZED_TESTS below regardless of this experiment's outcome —
+// thousands of mutant reruns times a real spawn per case is timeout noise either way.
 const SUBPROCESS_STUB_TESTS: readonly string[] = [
   // Stubs npx plus the package managers and spawns a real Metro dev server per case.
   'src/__tests__/client-metro.test.ts',
@@ -48,9 +51,11 @@ const FUZZ_WORKER_TESTS: readonly string[] = [
   'scripts/fuzz/corpus-replay.test.ts',
 ];
 /**
- * Everything the serialized projects own, which is what the fast lane must not also collect.
- * The two lists above stay module-local: this union is the whole cross-file surface, and the
- * mutation lane wants exactly it — every test the root config declines to run in parallel.
+ * Every test the mutation lane must not collect: a real per-case subprocess spawn is
+ * timeout noise under thousands of mutant reruns, independent of whether Vitest also
+ * serializes it — `fuzz-worker` still does; `subprocess-stub`'s former members no
+ * longer do (#1823). The two lists above stay module-local: this union is the whole
+ * cross-file surface, and the mutation lane wants exactly it.
  */
 export const SERIALIZED_TESTS: readonly string[] = [...SUBPROCESS_STUB_TESTS, ...FUZZ_WORKER_TESTS];
 
@@ -114,6 +119,10 @@ export default defineConfig({
           include: [
             'src/**/*.test.ts',
             'packages/*/src/**/*.test.ts',
+            // The subprocess watchdog self-check (#1823): spawns a real node subprocess per
+            // case, one hangs on purpose (#1414). Formerly a `subprocess-stub` member; see
+            // SUBPROCESS_STUB_TESTS above for the kill-criterion experiment this rides.
+            'scripts/fuzz/harness.test.ts',
             // The validation fuzz generators' expectation gates (#1781 B2): in-process, no
             // subprocess or worker, so they ride the fast lane unlike their serialized siblings.
             'scripts/fuzz/validation-arbitraries.test.ts',
@@ -179,25 +188,15 @@ export default defineConfig({
             // The Maestro conformance oracle runs via `node --test` in its own CI
             // job (scripts/maestro-conformance), like the layering guard.
           ],
-          exclude: [...SERIALIZED_TESTS],
+          exclude: [...FUZZ_WORKER_TESTS],
           setupFiles: SETUP_FILES,
         },
       },
       {
         test: {
-          name: 'subprocess-stub',
-          include: [...SUBPROCESS_STUB_TESTS],
-          setupFiles: SETUP_FILES,
-          fileParallelism: false,
-          isolate: true,
-          maxWorkers: 1,
-        },
-      },
-      {
-        test: {
-          // Same serialization as its sibling above, for the same contention reason: the
-          // per-case watchdog budget is real wall clock. The project exists so the coverage
-          // run can leave it out, not to run it differently.
+          // Serialized for the same contention reason `subprocess-stub` used to be (#1823):
+          // the per-case watchdog budget is real wall clock. The project exists so the
+          // coverage run can leave it out (see the comment above), not to run it differently.
           name: 'fuzz-worker',
           include: [...FUZZ_WORKER_TESTS],
           setupFiles: SETUP_FILES,

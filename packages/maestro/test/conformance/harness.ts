@@ -27,11 +27,15 @@ export { MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS };
 export function parseMaestroConformanceSource(
   source: string,
   sourcePath: string,
-): { commands: CanonicalCommand[]; kinds: Set<string> } {
+): { appId?: string; commands: CanonicalCommand[]; kinds: Set<string> } {
   const program = parseMaestroProgram(source, { sourcePath });
   const kinds = new Set<string>();
   collectCommandKinds(program.commands, kinds);
-  return { commands: canonicalizeAgentCommands(program), kinds };
+  return {
+    ...(program.config.appId ? { appId: program.config.appId } : {}),
+    commands: canonicalizeAgentCommands(program),
+    kinds,
+  };
 }
 
 function collectCommandKinds(

@@ -3,6 +3,7 @@
 // conformance-differential workflow.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, test } from 'node:test';
@@ -11,7 +12,14 @@ import {
   DIFFERENTIAL_SCENARIOS,
   type DivergenceSignature,
 } from './scenarios.ts';
-import { matchesSignature, parseRunnerArgs, selectScenarios, validateScenarios } from './run.ts';
+import { parseMaestroConformanceSource } from '../harness.ts';
+import {
+  matchesSignature,
+  parseRunnerArgs,
+  runScenario,
+  selectScenarios,
+  validateScenarios,
+} from './run.ts';
 
 const CONFORMANCE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -142,12 +150,49 @@ describe('knownDivergence signature matching', () => {
   });
 });
 
+test('an ordinary Maestro process failure cannot satisfy a behavioral waiver', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-failure-'));
+  const maestroCli = path.join(root, 'maestro.mjs');
+  const agentDeviceCli = path.join(root, 'agent-device.mjs');
+  try {
+    fs.writeFileSync(maestroCli, 'process.exit(1);\n');
+    fs.writeFileSync(agentDeviceCli, 'process.exit(0);\n');
+
+    const report = runScenario(
+      {
+        id: 'maestro-infrastructure-failure',
+        flow: 'differential/flows/settle-after-tap.yaml',
+        comparesAcrossEngines: 'test fixture',
+        expect: 'pass',
+        divergenceMeans: 'test fixture',
+        knownDivergence: {
+          reason: 'A behavioral Maestro failure is temporarily accepted for this test fixture.',
+          tracking: 'https://github.com/callstack/agent-device/issues/1',
+          expected: { maestro: 'fail', agentDevice: 'pass' },
+        },
+      },
+      {
+        dryRun: false,
+        maestroBin: `${process.execPath} ${maestroCli}`,
+        agentDeviceCli,
+      },
+    );
+
+    assert.equal(report.maestro.failureKind, 'infrastructure');
+    assert.equal(report.status, 'infrastructure-failed');
+    assert.equal(report.failed, true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('every device flow targets the fixture app the workflow installs', () => {
   for (const scenario of DIFFERENTIAL_SCENARIOS) {
-    const body = fs.readFileSync(path.join(CONFORMANCE_DIR, scenario.flow), 'utf8');
-    assert.match(
-      body,
-      new RegExp(`^appId:\\s*${DIFFERENTIAL_APP_ID}$`, 'm'),
+    const flowPath = path.join(CONFORMANCE_DIR, scenario.flow);
+    const parsed = parseMaestroConformanceSource(fs.readFileSync(flowPath, 'utf8'), flowPath);
+    assert.equal(
+      parsed.appId,
+      DIFFERENTIAL_APP_ID,
       `${scenario.id} must target ${DIFFERENTIAL_APP_ID}; a flow against any other app cannot run on the CI simulator`,
     );
   }

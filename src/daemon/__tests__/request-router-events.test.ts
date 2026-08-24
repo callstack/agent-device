@@ -6,7 +6,8 @@ import path from 'node:path';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession, makeSession } from '../../__tests__/test-utils/session-factories.ts';
+import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
 
 test('events reads the daemon-owned session timeline without appending poll noise', async () => {
   const sessionStore = makeSessionStore('agent-device-router-events-');
@@ -170,6 +171,47 @@ test('events flushes pending event writes before reading', async () => {
   if (!response.ok) return;
   expect(response.data?.events).toEqual([
     expect.objectContaining({ kind: 'action.recorded', summary: 'Opened session' }),
+  ]);
+});
+
+// #1900: `events` reads/flushes the session-owned timeline (`session-observability.ts`) with no
+// device-runtime binding at all, so a web-backed session exercises the exact same code path as
+// every other platform.
+test('events reads the daemon-owned session timeline for a web-backed session', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-events-web-');
+  sessionStore.set('web-session', makeSession('web-session', { device: WEB_DESKTOP_DEVICE }));
+  sessionStore.recordEvent('web-session', {
+    kind: 'action.recorded',
+    command: 'click',
+    summary: 'Tapped Submit order',
+  });
+
+  const handler = createRequestHandler({
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'web-session',
+    command: 'events',
+    positionals: ['10'],
+    flags: {},
+    meta: { requestId: 'req-events-web' },
+  });
+
+  expect(response.ok).toBe(true);
+  if (!response.ok) return;
+  expect(response.data?.events).toEqual([
+    expect.objectContaining({
+      kind: 'action.recorded',
+      command: 'click',
+      summary: 'Tapped Submit order',
+    }),
   ]);
 });
 

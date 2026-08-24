@@ -72,7 +72,8 @@ async function runClick(
     const baseline = session.snapshot;
     mockCaptureSnapshotForSession.mockResolvedValueOnce({
       nodes: baseline.nodes,
-      backend: baseline.backend ?? 'xctest',
+      backend: 'xctest',
+      producer: 'apple-runner',
       quality: baseline.snapshotQuality,
     });
   }

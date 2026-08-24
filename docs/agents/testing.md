@@ -159,12 +159,13 @@ Lock plans come from the production request-lock decisions — never hand-author
 modeled boundary is documented in the harness module, and every failure prints its exact replay
 command.
 
-## The `subprocess-stub` project
+## Real-subprocess-spawn tests
 
-`SUBPROCESS_STUB_TESTS` enumerates the few files that spawn real subprocesses per case. They run in
-a serialized Vitest project so host contention cannot turn internal budgets into generic timeouts.
-Membership requires naming the real spawned process; environment isolation alone does not qualify.
-There is no unit-test retry layer — fix or remove flakes.
+`SUBPROCESS_STUB_TESTS` enumerates the few files that spawn a real subprocess per case. They ran
+serialized in their own Vitest project until #1823's kill criterion: now un-serialized in
+`unit-core`'s default forks pool, reverted if a timeout-shaped failure appears within 20 consecutive
+CI runs. Still excluded from the mutation lane either way. There is no unit-test retry layer — fix
+or remove flakes.
 
 ## Speed rules
 

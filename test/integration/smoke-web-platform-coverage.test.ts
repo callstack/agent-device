@@ -42,8 +42,8 @@ test('web coverage exhaustively classifies the public catalog', () => {
 test('web coverage report has the expected classification counts', () => {
   assert.deepEqual(WEB_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
     capabilityDenial: 7,
-    contract: 20,
-    gap: 15,
+    contract: 34,
+    gap: 1,
     live: 12,
     total: 54,
   });
@@ -89,12 +89,21 @@ test('web capability denials match the mechanical capability matrix', () => {
   assert.deepEqual(deniedByManifest, deniedByCapabilities);
 });
 
+// #1900 closed 14 of the 15 known-gap rows this manifest originally carried (see the comment
+// above `WEB_PLATFORM_COVERAGE`); `test` stays a known gap because its only candidate evidence
+// proves the command CANNOT be targeted at web, not that it works. This is the planted-red proof
+// that no other row can silently regress back to 'known-gap', and that `test`'s stays pinned to
+// the one tracking issue.
 test('web known gaps use one grouped tracking issue', () => {
   const gapIssues = new Set(
     Object.values(WEB_PLATFORM_COVERAGE)
       .filter((entry) => entry.level === 'known-gap')
       .map((entry) => entry.trackingIssue),
   );
+  const gapCommands = Object.entries(WEB_PLATFORM_COVERAGE)
+    .filter(([, entry]) => entry.level === 'known-gap')
+    .map(([command]) => command);
+  assert.deepEqual(gapCommands, ['test']);
   assert.deepEqual([...gapIssues], [WEB_COVERAGE_GAP_ISSUE]);
 });
 

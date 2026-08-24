@@ -18,8 +18,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { handleSessionCommands, mockInspectDeviceRuntimeFacts } from './session-command-harness.ts';
-import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../../types.ts';
+import type { DaemonRequest } from '../../types.ts';
+import { expectOkData, makeSessionStore } from './session-test-suite.fixtures.ts';
 import { withRequestProgressSink } from '../../../request/progress.ts';
 import {
   clearRequestCanceled,
@@ -33,17 +33,6 @@ import {
   makeAndroidSession,
   makeMacOsSession,
 } from '../../../__tests__/test-utils/session-factories.ts';
-
-function makeSessionStore(): SessionStore {
-  const root = mkdtempForTestSync('agent-device-session-test-suite-');
-  return new SessionStore(path.join(root, 'sessions'));
-}
-
-function expectOkData(response: DaemonResponse | null | undefined): DaemonResponseData {
-  expect(response?.ok, JSON.stringify(response)).toBeTruthy();
-  if (!response || !response.ok) throw new Error('Expected successful daemon response.');
-  return response.data ?? {};
-}
 
 const ANDROID_ONE: DeviceInfo = {
   platform: 'android',
@@ -101,6 +90,7 @@ test('test does not retry infrastructure startup failures and stops the suite', 
   const tests = data.tests as Array<Record<string, unknown>>;
   expect(tests[0]?.status).toBe('failed');
   expect(tests[0]?.attempts).toBe(1);
+  expect(tests[0]?.infrastructure).toBe(true);
 });
 
 test('test --fail-fast stops the suite after the first failure and leaves the rest notRun', async () => {

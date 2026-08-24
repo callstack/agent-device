@@ -57,6 +57,7 @@ export function createWebInteractor(provider: WebProvider = resolveWebProvider()
         nodes: result.nodes,
         truncated: result.truncated ?? false,
         backend: 'web',
+        producer: 'agent-browser',
       };
     },
     setOrientation: async () => {

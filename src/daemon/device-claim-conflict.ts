@@ -13,6 +13,21 @@ import {
 import type { DaemonResponse } from './types.ts';
 import { errorResponse } from './handlers/response.ts';
 
+export type DeviceClaimConflictReason =
+  | 'DEVICE_CLAIM_LIVE_OWNER'
+  | 'DEVICE_CLAIM_RECOVERY_PENDING'
+  | 'DEVICE_CLAIM_OWNER_UNCERTAIN';
+
+const DEVICE_CLAIM_CONFLICT_REASONS = new Set<DeviceClaimConflictReason>([
+  'DEVICE_CLAIM_LIVE_OWNER',
+  'DEVICE_CLAIM_RECOVERY_PENDING',
+  'DEVICE_CLAIM_OWNER_UNCERTAIN',
+]);
+
+export function isDeviceClaimConflictReason(value: unknown): value is DeviceClaimConflictReason {
+  return DEVICE_CLAIM_CONFLICT_REASONS.has(value as DeviceClaimConflictReason);
+}
+
 export function buildDeviceClaimInspectionCommand(
   device: DeviceInfo,
   conflict: Pick<InspectedDeviceClaim, 'claim' | 'classification'>,
@@ -80,9 +95,7 @@ export function buildDeviceClaimConflictError(
   return errorResponse(error.code, error.message, details, { hint, retriable });
 }
 
-function conflictReason(
-  classification: DeviceClaimClassification,
-): 'DEVICE_CLAIM_LIVE_OWNER' | 'DEVICE_CLAIM_RECOVERY_PENDING' | 'DEVICE_CLAIM_OWNER_UNCERTAIN' {
+function conflictReason(classification: DeviceClaimClassification): DeviceClaimConflictReason {
   switch (classification) {
     case 'live':
       return 'DEVICE_CLAIM_LIVE_OWNER';

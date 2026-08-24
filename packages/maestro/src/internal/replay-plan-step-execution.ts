@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { stripUndefined } from './shared.ts';
 import { isMaestroTestFailure, maestroTestFailure } from './compatibility-errors.ts';
+import { isMaestroConditionTruthy } from './engine-truthiness.ts';
 import {
   MAESTRO_COMPATIBILITY_PRESETS,
   type MaestroCompatibilityTimingPolicy,
@@ -123,6 +124,14 @@ async function executeResolvedCommand(
         state.timing.assertNotVisibleTimeoutMs,
         state,
       );
+      state.executed += 1;
+      return undefined;
+    case 'assertTrue':
+      if (!isMaestroConditionTruthy(command.condition)) {
+        throw maestroTestFailure(
+          `Maestro assertTrue condition was falsy: ${JSON.stringify(command.condition)}`,
+        );
+      }
       state.executed += 1;
       return undefined;
     case 'extendedWaitUntil':

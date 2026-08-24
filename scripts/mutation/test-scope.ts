@@ -9,9 +9,10 @@
 // own static module graph.
 //
 // Two files are removed from whatever Vitest returns:
-//   - the subprocess-stub group (it spawns stubbed binaries and waits real
-//     subprocess/retry/poll time — out of scope by the issue's constraint, and
-//     thousands of mutant runs would turn it into timeout noise);
+//   - the real-subprocess-spawn tests (SUBPROCESS_STUB_TESTS in vitest.config.ts —
+//     spawns stubbed binaries and waits real subprocess/retry/poll time, out of scope
+//     by the issue's constraint, and thousands of mutant runs would turn it into
+//     timeout noise regardless of whether Vitest itself still serializes it, #1823);
 //   - tests that cannot run in the thread pool Stryker's vitest runner forces:
 //     the in-process CLI-capture tests (`process.chdir` throws in a worker
 //     thread) and the `node:worker_threads` PNG pipeline tests (a worker inside

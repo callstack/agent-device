@@ -229,6 +229,69 @@ describe('parseMaestroProgram', () => {
     });
   });
 
+  test('parses assertTrue literal, ${VAR} lookup, and map form with optional/label', () => {
+    const program = parseMaestroProgram(
+      [
+        '---',
+        '- assertTrue: true',
+        '- assertTrue: "false"',
+        '- assertTrue: ${FLAG}',
+        '- assertTrue:',
+        '    condition: "false"',
+        '    optional: true',
+        '    label: Flag check',
+      ].join('\n'),
+    );
+
+    assert.deepEqual(program.commands[0], {
+      kind: 'assertTrue',
+      source: { line: 2 },
+      condition: true,
+    });
+    assert.deepEqual(program.commands[1], {
+      kind: 'assertTrue',
+      source: { line: 3 },
+      condition: 'false',
+    });
+    assert.deepEqual(program.commands[2], {
+      kind: 'assertTrue',
+      source: { line: 4 },
+      condition: '${FLAG}',
+    });
+    assert.deepEqual(program.commands[3], {
+      kind: 'assertTrue',
+      source: { line: 5 },
+      condition: 'false',
+      optional: true,
+      label: 'Flag check',
+    });
+  });
+
+  test('rejects a JS-expression assertTrue condition (only literals and bare ${VAR} lookups are supported)', () => {
+    assert.throws(
+      () => parseMaestroProgram(['---', '- assertTrue: ${1+1}'].join('\n')),
+      /assertTrue.*bare.*lookup.*runScript/is,
+    );
+    assert.throws(
+      () =>
+        parseMaestroProgram(
+          ['---', '- assertTrue:', '    condition: "prefix ${FLAG} suffix"'].join('\n'),
+        ),
+      /assertTrue\.condition.*bare.*lookup.*runScript/is,
+    );
+  });
+
+  test('rejects assertTrue with no condition', () => {
+    assert.throws(
+      () => parseMaestroProgram(['---', '- assertTrue:', '    optional: true'].join('\n')),
+      /assertTrue requires condition/i,
+    );
+    assert.throws(
+      () => parseMaestroProgram(['---', '- assertTrue'].join('\n')),
+      /assertTrue requires condition/i,
+    );
+  });
+
   test('rejects selectors that contain only optional and no matching criteria', () => {
     assert.throws(
       () =>

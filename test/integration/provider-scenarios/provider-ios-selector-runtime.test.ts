@@ -162,6 +162,7 @@ function createProviderInteractor(calls: {
         calls.snapshots += 1;
         return {
           backend: 'xctest',
+          producer: 'apple-runner',
           nodes: [
             {
               index: 0,

@@ -3,6 +3,7 @@ import { asAppError } from '@agent-device/kernel/errors';
 export type BootFailureReason =
   | 'IOS_BOOT_TIMEOUT'
   | 'IOS_RUNNER_CONNECT_TIMEOUT'
+  | 'IOS_RUNNER_OWNED_BY_OTHER_DAEMON'
   | 'IOS_RUNNER_DEVICE_NOT_PROVISIONED'
   | 'IOS_TOOL_MISSING'
   | 'ANDROID_BOOT_TIMEOUT'
@@ -14,6 +15,7 @@ export type BootFailureReason =
 const INFRASTRUCTURE_BOOT_FAILURE_REASONS = new Set<BootFailureReason>([
   'IOS_BOOT_TIMEOUT',
   'IOS_RUNNER_CONNECT_TIMEOUT',
+  'IOS_RUNNER_OWNED_BY_OTHER_DAEMON',
   'IOS_TOOL_MISSING',
   'ANDROID_BOOT_TIMEOUT',
   'ADB_TRANSPORT_UNAVAILABLE',
@@ -143,6 +145,8 @@ export function bootFailureHint(reason: BootFailureReason): string {
       return 'Retry simulator boot and inspect simctl bootstatus logs; in CI reduce parallel jobs or use a larger runner.';
     case 'IOS_RUNNER_CONNECT_TIMEOUT':
       return 'Retry runner startup, inspect xcodebuild logs, and verify simulator responsiveness before command execution.';
+    case 'IOS_RUNNER_OWNED_BY_OTHER_DAEMON':
+      return 'Close the owning agent-device session or stop its daemon with retained-runner cleanup before retrying.';
     case 'IOS_RUNNER_DEVICE_NOT_PROVISIONED':
       return 'The XCTest runner cannot be installed on this device: its provisioning profile does not cover it. Register the device with the signing team (Xcode > Settings > Accounts, or add its UDID to the provisioning profile) and retry. Retrying without that will keep failing.';
     case 'ANDROID_BOOT_TIMEOUT':

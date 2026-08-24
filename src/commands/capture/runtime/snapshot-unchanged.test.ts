@@ -3,11 +3,11 @@ import {
   buildUnchangedSnapshotMetadata,
   ensureSnapshotPresentationKey,
 } from './snapshot-unchanged.ts';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState, SnapshotStateProvenance } from '@agent-device/kernel/snapshot';
 
 function snapshot(
   label: string,
-  overrides: Partial<SnapshotState> = {},
+  overrides: Omit<Partial<SnapshotState>, 'backend' | 'producer'> & SnapshotStateProvenance = {},
   options: Parameters<typeof ensureSnapshotPresentationKey>[1] = {},
 ): SnapshotState {
   return ensureSnapshotPresentationKey(

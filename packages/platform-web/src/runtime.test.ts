@@ -460,3 +460,121 @@ test('refuses web scrolling on a non-browser web cell', async () => {
   expect(binding.facts.operations.scrollDirection.available).toBe(false);
   expect(binding.operations.scrollDirection).toBeUndefined();
 });
+
+// #1900: `boot`/`bootTargetHeadless` and `shutdown` have no web-specific evidence beyond this
+// runtime-owned fact — a managed browser session has no OS-level boot or shutdown to drive.
+test('boot and shutdown report the runtime-owned unavailable readiness fact', async () => {
+  const binding = await createWebPlatformRuntime(host({ mode: 'transport-composed' })).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: scope(),
+  });
+  for (const operation of ['bootTarget', 'bootTargetHeadless', 'shutdownTarget'] as const) {
+    expect(binding.facts.operations[operation]).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+    });
+    expect(binding.operations[operation]).toBeUndefined();
+  }
+});
+
+// #1900: `install` and `reinstall` both resolve to `deployAppUse`, so one shared fact covers
+// both — a managed browser session has no installable native app package.
+test('install and reinstall share the runtime-owned unavailable deploy fact', async () => {
+  const binding = await createWebPlatformRuntime(host({ mode: 'transport-composed' })).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: scope(),
+  });
+  expect(binding.facts.operations.deployApp).toEqual({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
+  expect(binding.operations.deployApp).toBeUndefined();
+});
+
+// #1900: `install-from-source` resolves to `readyMaterializeAndDeployAppUse`, requiring all three
+// of these facts; none of them exist for a browser target.
+test('install-from-source reports the runtime-owned unavailable materialize and deploy facts', async () => {
+  const binding = await createWebPlatformRuntime(host({ mode: 'transport-composed' })).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: scope(),
+  });
+  for (const operation of [
+    'ensureReady',
+    'materializeAppSource',
+    'deployMaterializedApp',
+  ] as const) {
+    expect(binding.facts.operations[operation]).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+    });
+    expect(binding.operations[operation]).toBeUndefined();
+  }
+});
+
+// #1900: `push` resolves to `readySendPushNotificationUse`, requiring both facts below; a browser
+// session has no native push channel to deliver through.
+test('push reports the runtime-owned unavailable readiness and push facts', async () => {
+  const binding = await createWebPlatformRuntime(host({ mode: 'transport-composed' })).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: scope(),
+  });
+  for (const operation of ['ensureReady', 'sendPushNotification'] as const) {
+    expect(binding.facts.operations[operation]).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+    });
+    expect(binding.operations[operation]).toBeUndefined();
+  }
+});
+
+// #1900: `logs` resolves to `appLogRuntimePlanUses` (three of these five facts: appLogInspect,
+// appLogDoctor, appLogStart); the other two, appLogReattach/appLogCleanup, are asserted here too
+// since they answer the same "no native app-log channel" question a web target has no route for.
+test('logs reports the runtime-owned unavailable app-log facts', async () => {
+  const binding = await createWebPlatformRuntime(host({ mode: 'transport-composed' })).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: scope(),
+  });
+  for (const operation of [
+    'appLogInspect',
+    'appLogDoctor',
+    'appLogStart',
+    'appLogReattach',
+    'appLogCleanup',
+  ] as const) {
+    expect(binding.facts.operations[operation]).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+    });
+    expect(binding.operations[operation]).toBeUndefined();
+  }
+});
+
+// #1900: `diff` resolves to the exact same `snapshotRuntimePlanUses` as the live `snapshot`
+// command, so the admitted fact backing `snapshot` also backs `diff`.
+test('diff shares the admitted captureSnapshot fact that live snapshot and diff both require', async () => {
+  const binding = await createWebPlatformRuntime(host({ mode: 'transport-composed' })).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: scope(),
+  });
+  expect(binding.facts.operations.captureSnapshot).toEqual({ available: true });
+  expect(binding.operations.captureSnapshot).toBeTypeOf('function');
+});
+
+// #1900: `pressRuntimeUses` is literally `clickRuntimeUses` (`platform-runtime-operations.ts`),
+// so the admitted fact backing the live `click` command also backs `press`.
+test('press shares the admitted tapPoint fact that live click and press both require', async () => {
+  const binding = await createWebPlatformRuntime(host({ mode: 'transport-composed' })).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: scope(),
+  });
+  expect(binding.facts.operations.tapPoint).toEqual({ available: true });
+  expect(binding.operations.tapPoint).toBeTypeOf('function');
+});

@@ -76,6 +76,23 @@ describe('interaction response data transform', () => {
     ).toEqual({ videoPath: '/tmp/demo.mp4' });
   });
 
+  test('removes internal interaction diagnostics from every backend response', () => {
+    expect(
+      transformInteractionResponseData({
+        command: 'press',
+        input: {},
+        data: {
+          completedSteps: 2,
+          currentUptimeMs: 123,
+          gestureEndUptimeMs: 456,
+          gestureStartUptimeMs: 100,
+          sequenceResults: [{ ok: true }],
+          videoPath: '/tmp/demo.mp4',
+        },
+      }),
+    ).toEqual({ completedSteps: 2, videoPath: '/tmp/demo.mp4' });
+  });
+
   test('removes default touch repeat fields from fill backend data', () => {
     expect(
       transformInteractionResponseData({

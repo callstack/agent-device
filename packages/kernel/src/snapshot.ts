@@ -147,13 +147,69 @@ export type SnapshotNode = RawSnapshotNode & {
   inheritsIdentifier?: true;
 };
 
-export type SnapshotBackend =
-  | 'xctest'
-  | 'android'
-  | 'harmonyos-arkui'
-  | 'macos-helper'
-  | 'linux-atspi'
-  | 'web';
+/**
+ * The channel↔producer pairs that can actually occur. One channel is fed by several producers
+ * with different guarantees: `xctest` trees come from the local Apple runner, Appium
+ * page-source XML, or a limrun element tree, and only the runner's output has been through the
+ * runner's presentation (clip fold, effective geometry, scope). Logic that assumes
+ * presentation, scope, or geometry guarantees must key on the producer, never on the channel
+ * alone.
+ *
+ * This table is the single owner of both vocabularies: the platform channel
+ * (`SnapshotBackend` is its `backend` projection) and the acquisition producer (the third
+ * axis beside the channel and the in-plan capture strategy `SnapshotCaptureBackend`). Every
+ * carrier embeds the pair atomically — a cross-channel pair does not compile (pinned by
+ * snapshot-provenance.test.ts).
+ */
+export type SnapshotProvenance =
+  | { backend: 'xctest'; producer: 'apple-runner' | 'appium-source' | 'limrun-ios-tree' }
+  | { backend: 'android'; producer: 'android-uiautomator' | 'appium-source' }
+  | { backend: 'harmonyos-arkui'; producer: 'harmonyos-uitest' }
+  | { backend: 'macos-helper'; producer: 'macos-helper' }
+  | { backend: 'linux-atspi'; producer: 'linux-atspi' }
+  | { backend: 'web'; producer: 'agent-browser' };
+
+export type SnapshotBackend = SnapshotProvenance['backend'];
+
+type OptionalProducerProvenance<Pair> = Pair extends {
+  backend: infer Backend;
+  producer: infer Producer;
+}
+  ? { backend: Backend; producer?: Producer }
+  : never;
+
+/**
+ * The provenance carrier for {@link SnapshotState}: the producer may be absent (legacy states
+ * and fixtures predate it), but a present pair still has to come from the
+ * {@link SnapshotProvenance} table — the channel may not carry a foreign producer.
+ */
+export type SnapshotStateProvenance =
+  | OptionalProducerProvenance<SnapshotProvenance>
+  | { backend?: undefined; producer?: undefined };
+
+/**
+ * Narrows a provenance-carrying value to just its pair without decorrelating the two fields
+ * (reading `backend` and `producer` separately would lose the pairing for the type system).
+ */
+export function snapshotStateProvenance(
+  value: SnapshotStateProvenance | undefined,
+): SnapshotStateProvenance {
+  if (value === undefined || value.backend === undefined) return {};
+  switch (value.backend) {
+    case 'xctest':
+      return { backend: value.backend, producer: value.producer };
+    case 'android':
+      return { backend: value.backend, producer: value.producer };
+    case 'harmonyos-arkui':
+      return { backend: value.backend, producer: value.producer };
+    case 'macos-helper':
+      return { backend: value.backend, producer: value.producer };
+    case 'linux-atspi':
+      return { backend: value.backend, producer: value.producer };
+    case 'web':
+      return { backend: value.backend, producer: value.producer };
+  }
+}
 
 export function isSnapshotBackend(value: unknown): value is SnapshotBackend {
   return (
@@ -179,7 +235,6 @@ export type SnapshotState = {
   nodes: SnapshotNode[];
   createdAt: number;
   truncated?: boolean;
-  backend?: SnapshotBackend;
   snapshotQuality?: SnapshotQualityVerdict;
   comparisonSafe?: boolean;
   presentationKey?: string;
@@ -189,7 +244,7 @@ export type SnapshotState = {
    * occlusion (see core/android-system-surface-disclosure.ts).
    */
   systemSurfaceOnly?: boolean;
-};
+} & SnapshotStateProvenance;
 
 export type SnapshotUnchanged = {
   ageMs: number;

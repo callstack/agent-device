@@ -1,6 +1,7 @@
 import { isInfrastructureBootFailureReason } from '../../platforms/boot-diagnostics.ts';
 import type { DaemonResponse } from '../types.ts';
 import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
+import { isDeviceClaimConflictReason } from '../device-claim-conflict.ts';
 
 const REPLAY_INFRASTRUCTURE_FAILURE_MESSAGE_PATTERNS = [
   'failed to start daemon',
@@ -16,10 +17,12 @@ type ReplayFailureError = Extract<DaemonResponse, { ok: false }>['error'];
 export function isReplayInfrastructureFailure(
   result: DaemonResponse | ReplaySuiteTestResult,
 ): boolean {
+  if (!('ok' in result) && result.status === 'failed' && result.infrastructure === true)
+    return true;
   const error = readReplayFailureError(result);
   if (!error) return false;
   return (
-    hasInfrastructureFailureReason(error.details) ||
+    hasInfrastructureFailureDetails(error.details) ||
     hasInfrastructureFailureMessage(error.code, error.message)
   );
 }
@@ -31,9 +34,11 @@ function readReplayFailureError(
   return result.status === 'failed' ? result.error : null;
 }
 
-function hasInfrastructureFailureReason(details: Record<string, unknown> | undefined): boolean {
+function hasInfrastructureFailureDetails(details: Record<string, unknown> | undefined): boolean {
+  if (details?.recovery === 'runner_recycle_budget_exhausted') return true;
   const reason = typeof details?.reason === 'string' ? details.reason : '';
   if (reason === 'timeout_cleanup_pending') return true;
+  if (isDeviceClaimConflictReason(reason)) return true;
   return reason ? isInfrastructureBootFailureReason(reason) : false;
 }
 

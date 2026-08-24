@@ -21,7 +21,12 @@ export async function captureLinuxSurfaceSnapshot(
   const { snapshotLinux } = await import('../platforms/linux/snapshot.ts');
   const result = await snapshotLinux(options?.surface, signal);
   return shapeDesktopSurfaceSnapshot(
-    { nodes: result.nodes, truncated: result.truncated, backend: 'linux-atspi' },
+    {
+      nodes: result.nodes,
+      truncated: result.truncated,
+      backend: 'linux-atspi',
+      producer: 'linux-atspi',
+    },
     options ?? {},
   );
 }
@@ -39,7 +44,7 @@ export async function captureMacOsSurfaceSnapshot(
     bundleId: surface === 'menubar' ? options.appBundleId : undefined,
     signal,
   });
-  return shapeDesktopSurfaceSnapshot(result, options);
+  return shapeDesktopSurfaceSnapshot({ ...result, producer: 'macos-helper' }, options);
 }
 
 const captureSurface: SnapshotRuntimeHost['captureSurface'] = async (device, options, signal) => {

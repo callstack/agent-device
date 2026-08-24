@@ -165,6 +165,7 @@ test('press coordinates on iOS recording captures a full snapshot for the touch 
       },
     ]),
     backend: 'xctest',
+    producer: 'apple-runner',
   });
 
   const response = await handleInteractionCommands({

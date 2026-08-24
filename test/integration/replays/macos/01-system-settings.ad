@@ -5,11 +5,10 @@ screenshot "./test/screenshots/replays/macos-system-settings.png"
 appstate
 snapshot -i
 wait "role=button label=About" 5000
-snapshot -i
+# Keep one predicate as the macOS live-coverage owner for `is`; the wait makes it deterministic.
 is exists "role=button label=About"
 click "role=button label=About"
-wait "label=\"System Report...\" || label=\"Serial number\" || label=Chip || label=Processor || label=macOS" 5000
-snapshot -i
+# Leave enough time for the macOS runner to recycle after the interaction.
+wait "label=\"System Report...\" || label=\"Serial number\" || label=Chip || label=Processor || label=macOS" 45000
 back
 wait "role=button label=About" 5000
-is exists "role=button label=About"

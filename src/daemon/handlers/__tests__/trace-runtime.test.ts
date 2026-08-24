@@ -83,6 +83,35 @@ test('relocates trace output and projects the client artifact path', () => {
   });
 });
 
+// #1900: `trace` never binds a device runtime (no `bindDevice`/`inspectFacts` call anywhere in
+// `handleTraceCommand`), so its session-scoped start/stop bookkeeping works identically for a web
+// session as it does for the android fixture every other test in this file uses.
+test('starts and stops one trace through the session-owned trace slot on a web session', () => {
+  const { session, sessionStore } = fixture();
+  session.device = {
+    platform: 'web',
+    id: 'agent-browser-chrome',
+    name: 'Agent Browser Chrome',
+    kind: 'device',
+  };
+  const start = handleTraceCommand({
+    req: request(['start']),
+    sessionName: session.name,
+    sessionStore,
+  });
+  const startedPath = session.trace?.outPath;
+  expect(startedPath).toMatch(/trace-session-.*\.trace\.log$/);
+  expect(start).toMatchObject({ ok: true, data: { trace: 'started', outPath: startedPath } });
+
+  const stop = handleTraceCommand({
+    req: request(['stop']),
+    sessionName: session.name,
+    sessionStore,
+  });
+  expect(stop).toMatchObject({ ok: true, data: { trace: 'stopped' } });
+  expect(session.trace).toBeUndefined();
+});
+
 test('rejects invalid actions, missing sessions, and incoherent lifecycle transitions', () => {
   const { session, sessionStore } = fixture();
   expect(
