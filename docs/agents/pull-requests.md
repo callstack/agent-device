@@ -3,94 +3,95 @@
 ## Readiness
 
 - Static gates first: required checks pass, `pnpm check:fallow --base origin/main` is clean when
-  code-quality/dead-code risk is relevant, CI guards are green, and no conflict markers or unmerged
+  code-quality/dead-code risk is relevant, CI guards are green, no conflict markers or unmerged
   paths remain.
 - A local unit-only run is not CI-green. Use `pnpm test:unit` for the repo unit bundle, or
-  `vitest run --project unit-core --project subprocess-stub` when invoking Vitest directly. The
-  **Integration Tests** and **Coverage** jobs run the `provider-integration` project — verify those
-  green on the actual PR head.
+  `vitest run --project unit-core --project subprocess-stub` directly. The **Integration Tests**
+  and **Coverage** jobs run the `provider-integration` project — verify those green on the actual
+  PR head.
 - Device-facing behavior is not merge-ready without real simulator/emulator/device evidence for the
-  changed path. Fixture-backed tests prove contracts; they do not replace a live run that creates or
-  observes the artifact/state the feature claims to handle. If live verification is blocked, state
-  the blocker and the exact command/device needed, and downgrade the PR to residual risk rather than
-  calling it ready.
-- Command-surface changes preserve CLI, Node.js, daemon, MCP, help, and docs coverage
-  where that surface is affected, without duplicating command contracts across layers.
+  changed path. Fixture-backed tests prove contracts; they do not replace a live run that creates
+  or observes the artifact/state the feature claims to handle. If live verification is blocked,
+  state the blocker and the exact command/device needed, and downgrade the PR to residual risk —
+  do not call it ready.
+- Command-surface changes preserve CLI, Node.js, daemon, MCP, help, and docs coverage where that
+  surface is affected, without duplicating command contracts across layers.
 - Runtime output stays agent-friendly: compact defaults, top offenders first for diagnostics/perf,
   bounded arrays in JSON, artifact paths for large raw data, progressive lookup for deeper detail.
 - Close every manual `agent-device` session opened during verification
-  (`docs/agents/device-verification.md`) and report any cleanup that could not be completed.
-- Two readiness claims, never blurred: **published and reported** means the branch is pushed, the
-  PR body carries the evidence gathered at a named commit, and CI on the head is the authority
-  still to come; **merge-ready** means the required checks are green on the actual head and,
-  where the change touches a device-facing path, the live evidence for that path exists (the
-  device-facing bullet above; docs-only and pure-tooling changes owe none). "Don't wait for CI"
-  licenses the first, not the second — say which one you are claiming.
+  (`docs/agents/device-verification.md`) and report any cleanup you could not complete.
+- Two readiness claims, never blurred. **Published and reported**: the branch is pushed, the PR
+  body carries evidence gathered at a named commit, and CI on the head is the authority still to
+  come. **Merge-ready**: required checks are green on the actual head and, for device-facing
+  paths, the live evidence exists (docs-only and pure-tooling changes owe none). "Don't wait for
+  CI" licenses the first claim, not the second — say which one you are claiming.
 
 ## Rebasing onto a moving `main`
 
-`main` has no "require branches up to date" rule; a rebase is not owed to GitHub. Rebase when
-there is a conflict, or when the commits `main` gained since your base touch a surface your
-change depends on or that decides your gates:
+`main` has no "require branches up to date" rule; a rebase is not owed to GitHub. Rebase when there
+is a conflict, or when the commits `main` gained since your base touch a surface your change
+depends on or that decides your gates:
 
 ```sh
 pnpm check:affected --base <your-merge-base> --head origin/main   # what main gained, by gate
 ```
 
 If that plan names only files and gates disjoint from yours, the rebase buys nothing but another
-full validation cycle. Evidence in the PR body is stamped with the commit it was gathered at, so a
-rebase dates it rather than invalidating it, and CI on the new head re-establishes it. A merge
-queue is the answer once independent migration units regularly land against each other; until
-then this rule is.
+full validation cycle. PR-body evidence is stamped with the commit it was gathered at, so a rebase
+dates it rather than invalidating it; CI on the new head re-establishes it. A merge queue is the
+answer once independent migration units regularly land against each other; until then this rule is.
 
 ## PR body
 
 Conventional commit prefixes (`feat:`, `fix:`, `chore:`, `perf:`, `refactor:`, `docs:`, `test:`,
-`build:`, `ci:`). No bracketed bot tags like `[codex]`. Ready-for-review by default; draft only when
-asked or when the work is intentionally incomplete.
+`build:`, `ci:`). No bracketed bot tags like `[codex]`. Ready-for-review by default; draft only
+when asked or when the work is intentionally incomplete.
 
-- `## Summary`: user/API behavior, not an implementation file tour. Lead with what changed for
-  operators, clients, command authors, or platform behavior. A compact before/after helps when it
-  clarifies the workflow or bug fix. For new or changed public APIs, include 1-3 concrete CLI/Node/MCP
-  examples a reviewer can scan. `Closes #123` when applicable.
+- `## Summary`: user/API behavior, not a file tour. Lead with what changed for operators, clients,
+  command authors, or platform behavior. A compact before/after helps when it clarifies the
+  workflow or fix. For new or changed public APIs, give 1-3 concrete CLI/Node/MCP examples a
+  reviewer can scan. `Closes #123` when applicable.
 - `## Validation`: meaningful evidence in concise prose — scenario names, manual device/browser
-  evidence, changed screenshots, CI status, notable failures/retries and their outcome. Avoid command
-  accounting for routine local gates; name an exact command only when it is unusual, manually
-  reproducible evidence, or needed to explain a residual risk. For docs-only changes, say why runtime
-  validation does not apply instead of writing a command checklist.
+  evidence, changed screenshots, CI status, notable failures/retries and their outcome. Skip
+  command accounting for routine local gates; name an exact command only when it is unusual,
+  manually reproducible evidence, or needed to explain a residual risk. For docs-only changes, say
+  why runtime validation does not apply.
 - Call out real tradeoffs, known gaps, and follow-ups; omit boilerplate when there are none.
-- Note touched-file count and whether scope expanded beyond the initial command family.
+- Note the touched-file count and whether scope grew beyond the initial command family.
+
 ## Reviewing
 
 - Review against the linked issue, not only the diff. State the issue's motivating behavior and
   verify the PR fixes *that*.
 - Check relevant ADRs before reviewing architecture, routing, command-surface, platform-boundary,
-  diagnostics, or testing-strategy changes. An ADR conflict is a review finding unless the PR updates
-  or supersedes the ADR explicitly.
-- Read dependency notes (`Blocked by: ...`, linked PRs, sibling branches) before judging correctness.
-  A base/sequence problem outranks detail review.
-- Trace the real production route from command surface through daemon/request routing to the platform
-  backend. Tests that mock away the router, or exercise only a helper, do not prove the shipped path.
+  diagnostics, or testing-strategy changes. An ADR conflict is a finding unless the PR updates or
+  supersedes the ADR explicitly.
+- Read dependency notes (`Blocked by: ...`, linked PRs, sibling branches) before judging
+  correctness. A base/sequence problem outranks detail review.
+- Trace the real production route from command surface through daemon/request routing to the
+  platform backend. Tests that mock away the router, or exercise only a helper, do not prove the
+  shipped path.
 - Before adding an error classifier, trace every producer through normalization, wrapping,
-  serialization, and transport; inventory sibling consumers and the existing reason-code vocabulary;
-  then repair the deepest shared boundary that loses the signal. Message text is not a reason code.
-- For each key regression test, identify what deletion or revert would make it fail. If reverting the
+  serialization, and transport; inventory sibling consumers and the existing reason-code
+  vocabulary; then repair the deepest shared boundary that loses the signal. Message text is not a
+  reason code.
+- For each key regression test, name what deletion or revert would make it fail. If reverting the
   implementation still passes, the test is vacuous.
 - For recurring failures, prefer a design that makes the class impossible at the owning interface;
   keep one small regression as evidence rather than enumerating examples. If a custom guard needs
-  repeated exceptions or reconstructs compiler/schema behavior, move the invariant to its source of
-  truth instead of extending the guard.
+  repeated exceptions or reconstructs compiler/schema behavior, move the invariant to its source
+  of truth instead of extending the guard.
 - Check for hidden behavior changes separately from intended refactors: output shape,
   warning/error propagation, artifact paths, fallback/retry tiers.
 - Verify tests cover the issue's motivating failure, not just the new abstraction. Prefer
   before/after evidence when an issue reports a concrete divergence.
 - Green CI is necessary but insufficient for device-facing or routing-sensitive work.
 - Check whether the tightening pass removed code/tests the change made obsolete.
-- Treat the CI Size workflow as review evidence; local size comparisons are not required by default.
-  Escalate scrutiny when a PR adds roughly 700 or more net production lines (excluding tests,
-  generated data, fixtures, and documentation) or increases npm unpacked size by more than 3 kB.
-  Consider gross additions and deletions too, so a move-dominated change is not mistaken for pure
-  growth. These thresholds trigger investigation, not automatic rejection: ask an independent
-  reviewer whether a deeper owning interface, stronger types, less ceremony, reuse of an existing
-  construction path, or deletion of superseded code can make the change materially smaller. The PR
-  should itemize justified growth and record why a smaller design was rejected.
+- The CI Size workflow is review evidence; local size comparisons are not required by default.
+  Escalate scrutiny at roughly 700 or more net production lines (excluding tests, generated data,
+  fixtures, documentation) or more than 3 kB npm unpacked growth. Consider gross additions and
+  deletions too, so a move-dominated change is not mistaken for pure growth. These thresholds
+  trigger investigation, not automatic rejection: ask an independent reviewer whether a deeper
+  owning interface, stronger types, less ceremony, reuse of an existing construction path, or
+  deletion of superseded code can make the change materially smaller. The PR should itemize
+  justified growth and record why a smaller design was rejected.
