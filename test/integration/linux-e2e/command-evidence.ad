@@ -1,5 +1,6 @@
 # This script is intentionally outside replays/linux: the existing Linux replay smoke scope is
-# kept unchanged while this lane proves the public test and replay commands independently.
+# kept unchanged. It owns the lane's test and replay evidence; the runner owns the other direct
+# command-specific evidence.
 context platform=linux target=desktop
 open gnome-calculator --relaunch
 wait "appname=gnome-calculator || windowtitle=Calculator || label=Calculator || label=0 || label=1 || label=5" 15000

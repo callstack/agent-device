@@ -6,6 +6,10 @@ import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import { runSourceCliJsonSync } from '../cli-json.ts';
 import { assertJsonContains } from '../live-device-e2e/assertions.ts';
 import {
+  collectPagedEventTimeline,
+  type EventTimelinePage,
+} from '../live-device-e2e/event-timeline.ts';
+import {
   createLiveDeviceContext,
   createLiveDeviceHarness,
   type LiveDeviceContext,
@@ -156,9 +160,22 @@ async function runBatchEvidence(context: LinuxContext): Promise<void> {
     '--steps',
     batchSteps,
   ]);
-  assert.equal(batch.json?.data?.executed, 2, JSON.stringify(batch.json));
-  assert.equal(batch.json?.data?.results?.length, 2, JSON.stringify(batch.json));
+  assertLinuxBatchResults(batch.json);
   verifyCommand(context, C.batch, 'batch executes two successful Linux session reads');
+}
+
+function assertLinuxBatchResults(json: any): void {
+  const data = json?.data;
+  assert.ok(data, JSON.stringify(json));
+  assert.equal(data.executed, 2, JSON.stringify(json));
+  const results = data.results;
+  assert.ok(Array.isArray(results), JSON.stringify(json));
+  assert.equal(results.length, 2, JSON.stringify(json));
+  const first = results[0] as { command?: string; data?: { pass?: boolean } };
+  const second = results[1] as { command?: string };
+  assert.equal(first.command, 'is', JSON.stringify(json));
+  assert.equal(first.data?.pass, true, JSON.stringify(json));
+  assert.equal(second.command, 'snapshot', JSON.stringify(json));
 }
 
 async function runArtifactEvidence(context: LinuxContext): Promise<void> {
@@ -172,17 +189,33 @@ async function runArtifactEvidence(context: LinuxContext): Promise<void> {
   assert.ok(
     artifactEntries.some(
       (entry: Record<string, unknown>) =>
-        entry.artifactType === 'screenshot' ||
+        entry.artifactType === 'screenshot' &&
         String(entry.path ?? entry.filename ?? '').includes(path.basename(screenshotPath)),
     ),
     `Linux artifact inventory did not include the screenshot: ${JSON.stringify(artifacts.json)}`,
   );
   verifyCommand(context, C.artifacts, 'artifact inventory exposes the live screenshot');
 
-  const events = await runStep(context, 'read Linux session events', ['events']);
-  const eventEntries = events.json?.data?.events;
-  assert.ok(Array.isArray(eventEntries) && eventEntries.length > 0, JSON.stringify(events.json));
-  verifyCommand(context, C.events, 'event timeline contains requests from the Linux session');
+  const timeline = await collectPagedEventTimeline((cursor) => readLinuxEventPage(context, cursor));
+  for (const command of [C.open, C.snapshot]) {
+    assert.ok(
+      timeline.commands.includes(command),
+      `Linux events missing ${command}: ${JSON.stringify(timeline)}`,
+    );
+  }
+  verifyCommand(context, C.events, 'event timeline names open and snapshot from the Linux session');
+}
+
+async function readLinuxEventPage(
+  context: LinuxContext,
+  cursor: string | undefined,
+): Promise<EventTimelinePage> {
+  const args = ['events', '100'];
+  if (cursor !== undefined) args.push(cursor);
+  const events = await runStep(context, 'read Linux session events', args);
+  const json = events.json as { data?: EventTimelinePage };
+  assert.ok(json.data, JSON.stringify(events.json));
+  return json.data;
 }
 
 async function finalize(context: LinuxContext): Promise<unknown> {

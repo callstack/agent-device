@@ -69,6 +69,11 @@ test('Linux live claims reference commands in the existing smoke replay', () => 
   );
   const liveCommands = liveCommandsForLinuxReplay();
   assert.deepEqual(liveCommands.length, 8);
+  assert.deepEqual(
+    [...replayCommands].sort(),
+    [...liveCommands].sort(),
+    'the existing replay smoke command set must remain unchanged',
+  );
   for (const command of liveCommands) {
     assert.equal(
       replayCommands.has(command),
