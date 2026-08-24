@@ -92,6 +92,39 @@ test('findSeamMatches requires the marker text itself, not just a nearby comment
   assert.equal(matches[0]?.approvalReason, null);
 });
 
+// PR #2006 review: a bare marker with no reason is a bypass, not a review — must not approve.
+test('findSeamMatches rejects a di-seam-approved marker with no reason text', () => {
+  const matches = findSeamMatches([
+    {
+      path: 'a.ts',
+      source: 'type T = {\n  // di-seam-approved:\n  dispatch?: typeof dispatchCommand;\n};\n',
+    },
+  ]);
+  assert.equal(matches[0]?.approvalReason, null);
+});
+
+test('findSeamMatches rejects a di-seam-approved marker whose reason is only whitespace', () => {
+  const matches = findSeamMatches([
+    {
+      path: 'a.ts',
+      source: 'type T = {\n  // di-seam-approved:   \n  dispatch?: typeof dispatchCommand;\n};\n',
+    },
+  ]);
+  assert.equal(matches[0]?.approvalReason, null);
+});
+
+test('checkSeams flags a declaration whose only marker has no reason text', () => {
+  const matches = findSeamMatches([
+    {
+      path: 'src/x.ts',
+      source: 'type T = {\n  // di-seam-approved:\n  fetchImpl?: typeof fetch;\n};\n',
+    },
+  ]);
+  const { violations } = checkSeams(matches);
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0]?.field, 'fetchImpl');
+});
+
 test('checkSeams passes an approved match and flags an unapproved one', () => {
   const matches = findSeamMatches([
     {

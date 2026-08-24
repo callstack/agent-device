@@ -99,7 +99,12 @@ function approvalReason(
     cursor = comment.start;
   }
   if (block.length === 0 || !block[0]!.startsWith(APPROVAL_MARKER)) return null;
-  return [block[0]!.slice(APPROVAL_MARKER.length).trim(), ...block.slice(1)].join(' ').trim();
+  const reason = [block[0]!.slice(APPROVAL_MARKER.length).trim(), ...block.slice(1)]
+    .join(' ')
+    .trim();
+  // A bare `// di-seam-approved:` with no reason text is not a review, it's a bypass — require
+  // something was actually written, not just the marker itself.
+  return reason.length > 0 ? reason : null;
 }
 
 export function findSeamMatches(files: readonly SourceFile[]): SeamMatch[] {
