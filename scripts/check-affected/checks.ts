@@ -68,8 +68,8 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('android-helpers', 'Android helper builds (snapshot + IME)', 'build:android', false),
   gate('macos-helper', 'macOS helper build', 'build:macos-helper', false),
   gate('web-smoke', 'Live web platform smoke', 'test:smoke:web', false),
-  // Needs full history and tags, so it runs in its own fetch-depth: 0 job rather
-  // than inside the shallow-clone-safe unit lane.
+  // Needs full history and tags, so it runs in the shared fetch-depth: 0 job
+  // rather than inside the shallow-clone-safe unit lane.
   gate('replay-compat', 'Replay-compat corpus provenance (released blobs)', 'check:replay-compat'),
   gate(
     'daemon-wire-compat',
@@ -95,9 +95,9 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('wire-compat-model', 'Wire-compat rules model', 'check:daemon-wire-compat:test'),
   gate('production-exports', 'Production-unused exports', 'check:production-exports'),
   gate('bundle-owner-files', 'Bundle owner-file manifest', 'check:bundle-owner-files'),
-  // Not locally runnable: `@chenglou/freerange`'s bin is `fr.ts`, so the CI job installs Bun
-  // for it and `pnpm check` never runs this gate. Left default, fail-open would have made
-  // every `scripts/**`/`.github/**`/`package.json` edit require Bun on the pre-push path.
+  // Not locally runnable: the audit takes ~90s, more than the pre-push affected
+  // path should pay on every scripts/** edit. It runs on plain Node; CI needs
+  // no runtime beyond the default toolchain.
   gate('freerange', 'Numeric range audit', 'check:freerange', false),
   gate('fixture-cache', 'Trusted fixture-artifact selection', 'test:fixture-cache'),
   gate('fixture-fallback', 'Fixture-app cache-failure fallback', 'test:fixture-fallback'),

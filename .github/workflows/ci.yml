@@ -28,13 +28,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Two single-`rg`-assertion jobs (formerly `ios-runner-swift-compat`,
-  # `no-test-di-seams`, added independently in b79bd8601 / 9eb060406) folded
-  # into steps here: each was checkout + one grep, paying full job
-  # scheduling/checkout overhead and its own PR status-check line for what is
-  # a single assertion. Each step keeps its own failure message. See #1462.
-  static-checks:
-    name: Static Checks
+  # Text-only assertions run before the toolchain setup, so a grep failure does
+  # not wait on an install.
+  lint:
+    name: Lint & Format
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -55,35 +52,174 @@ jobs:
             exit 1
           fi
 
-  # The runner's pure-decision XCTests, on the macOS host with no simulator (#1781 A7). This
-  # job already compiled the macOS runner with the unit-test flag on every PR (as "Swift
-  # Runner Unit Compile") and threw the bundle away; running it costs one
-  # `test-without-building` on the host. Which tests that reaches is not a list: it is
-  # everything the macOS build compiles, and the simulator-only tests keep themselves out
-  # with an `os(iOS)` guard (see the classification note in RunnerTests.swift). The
-  # `-skip-testing:` entry is validated by `pnpm check:xctest-selection` for the same
-  # reason the nightly's is: `RunnerTests/testCommand` is the runner's 24-hour server
-  # entry point, and a typo re-arms the hang. The lane's reporter asserts the executed
-  # count equals the reach the check derives from source, so a build without the compile
-  # flag or a guard that compiles a file out reads as red rather than as a smaller green.
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Run oxlint
+        uses: ./.github/actions/run-gate
+        with: { gate: lint }
+
+      - name: Check formatting
+        uses: ./.github/actions/run-gate
+        with: { gate: format }
+
+  # Structural guards share one checkout and install. Every gate stays an
+  # independently named step with its own failure message; the gate manifest
+  # derives lane ownership from these declarations, so merging jobs changes
+  # nothing it asserts.
+  repo-guards:
+    name: Repo Guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # The layering gate parses production sources with `oxc-parser`, so
+      # dependencies are required; keep install-deps enabled.
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Check import-direction DAG
+        # Structured import-direction lint over the resolved graph. See
+        # scripts/layering/check.ts and CONTEXT.md (Architecture: folder DAG +
+        # layering lint).
+        uses: ./.github/actions/run-gate
+        with: { gate: layering }
+
+      - name: Check the depgraph report agrees with the gate
+        # scripts/depgraph reads the same model as the gate, so its inversion count must
+        # reproduce TYPE_INVERSION_BASELINE. Free two-sources check: if the tree changes
+        # and only one side is updated, this fails and names the difference. Runs beside
+        # the layering gate so the two can never be green independently.
+        uses: ./.github/actions/run-gate
+        with: { gate: depgraph }
+
+      # Tests for the TMPDIR redirection itself, hidden the same way as the check above.
+      #
+      # Deliberately NOT in Coverage next to `check:tmpdir-leaks`, where the subject matter
+      # would put it: vitest-tmpdir-global-setup.test.ts proves the lifecycle by spawning a
+      # real nested `vitest run`, and the Coverage lane already loses runs to
+      # `[vitest-pool]: Worker forks emitted error` when a fork is slow to terminate.
+      # Starting a nested Vitest seconds before the full instrumented suite is a contention
+      # risk with nothing to gain.
+      - name: Check the tmpdir redirection model
+        uses: ./.github/actions/run-gate
+        with: { gate: tmpdir-leaks-model }
+
+      # The selector is fail-open and advisory (GitHub CI stays authoritative),
+      # so the gate only guards the derivation model.
+      - name: Check affected-selector model
+        uses: ./.github/actions/run-gate
+        with: { gate: affected-selector }
+
+      # The gate-of-gates (#1429). It shares this job because it validates the
+      # same artifact the selector is built on — CHECK_CATALOG's `ciJobs` — and
+      # because a gate that proves the other gates are wired must not be the one
+      # gate sitting in its own job, green on its own. Deterministic and
+      # network-free: every input is a file in the checkout.
+      - name: Check the gate manifest model
+        uses: ./.github/actions/run-gate
+        with: { gate: gate-manifest-model }
+
+      - name: Check every gate is owned, wired, and reachable
+        uses: ./.github/actions/run-gate
+        with: { gate: gate-manifest }
+
+      # Same family as the manifest above — a CI selection that has stopped selecting what
+      # it claims. ios.yml runs a hand-written subset of the runner XCTest methods through an
+      # `-only-testing:` list, and xcodebuild treats an identifier that matches nothing as
+      # an empty selection rather than an error, so a rename drops a test with no signal —
+      # in both directions, since a typo in xctest-nightly.yml's `-skip-testing:` entry
+      # re-arms a 24-hour hang. Parse-only, no Xcode (#1781 A7).
+      - name: Check the PR XCTest selection still names real tests
+        uses: ./.github/actions/run-gate
+        with: { gate: xctest-selection }
+
+      # Layers 1-2 of the conformance oracle: replay the JVM-generated fixtures
+      # against the live engine. Deterministic and Java-free — the generated
+      # fixtures are checked in and only regenerated on an upstream-pin bump. The
+      # device-backed layer 3 runs on the scheduled conformance-differential
+      # workflow. See scripts/maestro-conformance/README.md. Unlike the guards
+      # above, this parses corpus flows with the live engine and imports the
+      # `yaml` package — covered by the shared install above.
+      - name: Verify Maestro conformance fixtures
+        uses: ./.github/actions/run-gate
+        with: { gate: maestro-conformance }
+
+      # server.json/smithery.yaml drift otherwise surfaces at publish time (where
+      # publish-mcp-registry.yml duplicates the same command). Parse-only.
+      - name: Check MCP registry metadata is in sync
+        uses: ./.github/actions/run-gate
+        with: { gate: mcp-metadata }
+
+  # History-backed compatibility gates share one deep checkout: fallow,
+  # replay-compat, and daemon-wire-compat all need either full history or tags,
+  # which no shallow unit lane can read.
+  compat-provenance:
+    name: Compatibility & Provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Run Fallow audit
+        env:
+          FALLOW_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        uses: ./.github/actions/run-gate
+        with:
+          gate: fallow
+          args: |
+            --base
+            ${{ env.FALLOW_BASE }}
+
+      - name: Check for production-unused exports
+        uses: ./.github/actions/run-gate
+        with: { gate: production-exports }
+
+      # The frozen replay-compat corpus (#1417) claims each entry was published by
+      # a released tag. Only a full-history checkout can re-derive that claim.
+      - name: Verify corpus entries against their released blobs
+        uses: ./.github/actions/run-gate
+        with: { gate: replay-compat }
+
+      - name: Verify the wire-compat rules
+        uses: ./.github/actions/run-gate
+        with: { gate: wire-compat-model }
+
+      # The daemon RPC wire ledger (#1432) is compared against the ledger as it
+      # stood at the last RELEASED tag, which only a tagged checkout can read.
+      # The shallow Repo Guards lane holds the ledger to its source; this step
+      # holds it to the last release.
+      - name: Compare the daemon RPC wire surface against the last released tag
+        uses: ./.github/actions/run-gate
+        with: { gate: daemon-wire-compat }
+
+  # The runner's pure-decision XCTests, on the macOS host with no simulator (#1781 A7).
+  # Which tests that reaches is not a list: it is everything the macOS build compiles, and
+  # the simulator-only tests keep themselves out with an `os(iOS)` guard (see the
+  # classification note in RunnerTests.swift). The `-skip-testing:` entry is validated by
+  # `pnpm check:xctest-selection` for the same reason the nightly's is:
+  # `RunnerTests/testCommand` is the runner's 24-hour server entry point, and a typo
+  # re-arms the hang. The lane's reporter asserts the executed count equals the reach the
+  # check derives from source, so a build without the compile flag or a guard that
+  # compiles a file out reads as red rather than as a smaller green.
   #
-  #   - Catches: regressions in the ~130 host-runnable tests on every PR, in about a
-  #     minute, independent of ios.yml — which is fifteen minutes long, cancelled ~19% of
-  #     the time, and names only a subset of them.
-  #   - Evidence: the nightly's first execution found #1812 in exactly this class of test
-  #     (a geometry guard); the same tests pass on this lane's platform.
-  #   - Cost: ~1 minute more on a job that already occupies a macOS slot for the build;
-  #     no simulator boot; no new job.
-  #   - Kill criterion: if the host run proves flaky where the simulator run of the same
-  #     tests is not (a platform-branch difference this classification missed), gate the
-  #     offender `os(iOS)` and it returns to the simulator lanes; if that happens to more
-  #     than a handful, the host lane is the wrong tool and goes.
+  # Kill criterion: if the host run proves flaky where the simulator run of the same
+  # tests is not (a platform-branch difference this classification missed), gate the
+  # offender `os(iOS)` and it returns to the simulator lanes; if that happens to more
+  # than a handful, the host lane is the wrong tool and goes.
   swift-runner-host-tests:
     name: Swift Runner Host XCTests
     runs-on: macos-26
     timeout-minutes: 20
-    # Was an inline `VAR=1 pnpm gate …` prefix on the action's build-command input. The
-    # input is a gate id now, so the variable lives where ios.yml already puts it: the job.
     env:
       AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1'
       AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/swift-runner-unit-derived
@@ -152,10 +288,12 @@ jobs:
           path: .tmp/xctest-host
           if-no-files-found: warn
 
-  lint:
-    name: Lint & Format
+  # Typecheck and package verification share one checkout and install; both
+  # need the default toolchain only, and the package step re-pins Node itself.
+  typecheck-package:
+    name: Typecheck & Package
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -163,136 +301,9 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Run oxlint
+      - name: Run typecheck
         uses: ./.github/actions/run-gate
-        with: { gate: lint }
-
-      - name: Check formatting
-        uses: ./.github/actions/run-gate
-        with: { gate: format }
-
-  layering-guard:
-    name: Layering Guard
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      # This job used to run with install-deps: false. It opted out when R7
-      # (SessionState ownership) started parsing the daemon with `oxc-parser` instead
-      # of matching assignment operators with a regex: a regex cannot see `??=` or a
-      # computed `session[key] =` write, so the choice was a real parser or a rule with
-      # holes in it. It was the last such job, so R8 zero-dep-job-closure retired for
-      # want of subjects (#1781 A6). Keep install-deps enabled.
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Check import-direction DAG
-        # Generalizes the former inline commands/-import grep into a structured
-        # import-direction lint over the resolved graph. See scripts/layering/check.ts
-        # and CONTEXT.md (Architecture: folder DAG + layering lint).
-        uses: ./.github/actions/run-gate
-        with: { gate: layering }
-
-      - name: Check the depgraph report agrees with the gate
-        # scripts/depgraph reads the same model as the gate, so its inversion count must
-        # reproduce TYPE_INVERSION_BASELINE. Free two-sources check: if the tree changes
-        # and only one side is updated, this fails and names the difference. Runs here
-        # rather than in its own job so the two can never be green independently.
-        uses: ./.github/actions/run-gate
-        with: { gate: depgraph }
-
-      # Tests for the TMPDIR redirection itself, hidden the same way as the check above.
-      #
-      # Deliberately NOT in Coverage next to `check:tmpdir-leaks`, where the subject matter
-      # would put it: vitest-tmpdir-global-setup.test.ts proves the lifecycle by spawning a
-      # real nested `vitest run`, and the Coverage lane already loses runs to
-      # `[vitest-pool]: Worker forks emitted error` when a fork is slow to terminate.
-      # Starting a nested Vitest seconds before the full instrumented suite is a contention
-      # risk with nothing to gain.
-      - name: Check the tmpdir redirection model
-        uses: ./.github/actions/run-gate
-        with: { gate: tmpdir-leaks-model }
-
-  affected-selector:
-    name: Affected-check Selector
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      # The selector's entry closure reaches `@agent-device/kernel` workspace
-      # specifiers through src/utils/exec.ts and diagnostics.ts (#1490 W0), and
-      # workspace package resolution needs the pnpm link in node_modules. R11
-      # grants no relative route into a package, so this job installs
-      # dependencies instead.
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
-
-      # The selector is fail-open and advisory (GitHub CI stays authoritative),
-      # so the gate only guards the derivation model.
-      - name: Check affected-selector model
-        uses: ./.github/actions/run-gate
-        with: { gate: affected-selector }
-
-      # The gate-of-gates (#1429). It shares this job because it validates the
-      # same artifact the selector is built on — CHECK_CATALOG's `ciJobs` — and
-      # because a gate that proves the other gates are wired must not be the one
-      # gate sitting in its own job, green on its own. Deterministic and
-      # network-free: every input is a file in the checkout.
-      - name: Check the gate manifest model
-        uses: ./.github/actions/run-gate
-        with: { gate: gate-manifest-model }
-
-      - name: Check every gate is owned, wired, and reachable
-        uses: ./.github/actions/run-gate
-        with: { gate: gate-manifest }
-
-      # Same family as the manifest above — a CI selection that has stopped selecting what
-      # it claims. ios.yml runs a hand-written subset of the runner XCTest methods through an
-      # `-only-testing:` list, and xcodebuild treats an identifier that matches nothing as
-      # an empty selection rather than an error, so a rename drops a test with no signal —
-      # in both directions, since a typo in xctest-nightly.yml's `-skip-testing:` entry
-      # re-arms a 24-hour hang. Parse-only, no Xcode (#1781 A7).
-      - name: Check the PR XCTest selection still names real tests
-        uses: ./.github/actions/run-gate
-        with: { gate: xctest-selection }
-
-  maestro-conformance:
-    name: Maestro Conformance Oracle
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      # Unlike the layering/affected guards, this job DOES install deps: the
-      # verifier parses corpus flows with the live engine, and the Maestro parser
-      # imports the `yaml` package. Keep install-deps enabled.
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
-
-      # Layers 1-2 of the conformance oracle: replay the JVM-generated fixtures
-      # against the live engine. Deterministic and Java-free — the generated
-      # fixtures are checked in and only regenerated on an upstream-pin bump. The
-      # device-backed layer 3 runs on the scheduled conformance-differential
-      # workflow. See scripts/maestro-conformance/README.md.
-      - name: Verify Maestro conformance fixtures
-        uses: ./.github/actions/run-gate
-        with: { gate: maestro-conformance }
-
-  packaged-cli-node-22-12:
-    name: Packaged CLI Node 22.12
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Setup build toolchain
-        uses: ./.github/actions/setup-node-pnpm
+        with: { gate: typecheck }
 
       - name: Build CLI
         uses: ./.github/actions/run-gate
@@ -317,80 +328,6 @@ jobs:
       # gate itself only needs `node` and `npm`, so it is the package.json script minus the launcher.
       - name: Verify the published package on Node.js 22.12
         run: node --experimental-strip-types scripts/check-package.ts
-
-  fallow:
-    name: Fallow Code Quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Run Fallow audit
-        env:
-          FALLOW_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        uses: ./.github/actions/run-gate
-        with:
-          gate: fallow
-          args: |
-            --base
-            ${{ env.FALLOW_BASE }}
-
-      - name: Check for production-unused exports
-        uses: ./.github/actions/run-gate
-        with: { gate: production-exports }
-
-  replay-compat-provenance:
-    # The frozen replay-compat corpus (#1417) claims each entry was published by
-    # a released tag. Only a full-history checkout can re-derive that claim, so
-    # this job exists separately from the shallow-clone-safe unit lane.
-    name: Replay-Compat Provenance
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Verify corpus entries against their released blobs
-        uses: ./.github/actions/run-gate
-        with: { gate: replay-compat }
-
-  released-surface-compat:
-    # The daemon RPC wire ledger (#1432) is compared against the ledger as it
-    # stood at the last RELEASED tag, which only a full-history checkout can
-    # read. Same split as the replay-compat corpus above: the shallow unit lane
-    # holds the ledger to its source, this job holds it to the last release.
-    name: Released-Surface Compatibility
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Verify the wire-compat rules
-        uses: ./.github/actions/run-gate
-        with: { gate: wire-compat-model }
-
-      - name: Compare the daemon RPC wire surface against the last released tag
-        uses: ./.github/actions/run-gate
-        with: { gate: daemon-wire-compat }
 
   coverage:
     # Runs the full unit + provider-integration suites under coverage with
@@ -443,29 +380,6 @@ jobs:
             --base
             ${{ github.event.pull_request.base.sha }}
 
-  typecheck:
-    name: Typecheck
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Run typecheck
-        uses: ./.github/actions/run-gate
-        with: { gate: typecheck }
-
-      # CHECK_CATALOG has always claimed this job mirrors the `mcp-metadata`
-      # check; until #1429 checked the claim, no PR job ran it at all, so
-      # server.json/smithery.yaml drift only surfaced at publish time (where
-      # publish-mcp-registry.yml duplicates the same command). Parse-only.
-      - name: Check MCP registry metadata is in sync
-        uses: ./.github/actions/run-gate
-        with: { gate: mcp-metadata }
-
   freerange:
     name: FreeRange
     runs-on: ubuntu-latest
@@ -476,9 +390,6 @@ jobs:
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
       - name: Check numeric ranges
         uses: ./.github/actions/run-gate
@@ -531,25 +442,16 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: fixture-cache }
 
-  web-smoke:
-    name: Web Platform Smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      AGENT_DEVICE_WEB_E2E: '1'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
-        with:
-          node-version: '24.13'
-
+      # Shares this job's ubuntu toolchain. AGENT_DEVICE_WEB_E2E is step-scoped
+      # so it cannot leak into the node/provider suites above.
       - name: Run live web smoke
+        env:
+          AGENT_DEVICE_WEB_E2E: '1'
         run: pnpm clean:daemon
 
       - name: Execute live web smoke
+        env:
+          AGENT_DEVICE_WEB_E2E: '1'
         uses: ./.github/actions/run-gate
         with: { gate: web-smoke }
 
