@@ -91,6 +91,7 @@ export function platformRuntimeHostFixture(): PlatformRuntimeHost {
       web: { resolve: async () => undefined },
       outputs: { prepare: async () => {} },
       finalize: { complete: async () => ({}) },
+      ownedProcesses: { replace: () => {}, clear: () => {} },
     },
   } as unknown as PlatformRuntimeHost;
 }

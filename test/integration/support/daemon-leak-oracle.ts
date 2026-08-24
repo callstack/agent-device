@@ -4,13 +4,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isProcessAlive } from '../../../src/utils/host-process.ts';
+import {
+  isProcessAlive,
+  readHostProcessIdentityObservations,
+  readProcessCommand,
+} from '../../../src/utils/host-process.ts';
+import { readOwnedProcessRecordFile } from '../../../src/utils/owned-process-record.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import type { OwnedProcessRecord } from '@agent-device/contracts/platform';
 import {
   evaluateDaemonLeaks,
   formatDaemonLeakReport,
   hasDaemonLeaks,
   type DaemonLeakPhaseSelection,
+  type OwnedProcessRecordObservation,
   type DaemonLeakSnapshot,
   type StateEntry,
 } from './daemon-leak-model.ts';
@@ -47,12 +54,18 @@ async function captureDaemonLeakSnapshot(
   options: DaemonLeakOracleOptions,
 ): Promise<DaemonLeakSnapshot> {
   const stateDir = path.resolve(options.stateDir);
+  const stateEntries = readStateEntries(stateDir, options.sessionsDir);
   return evaluateDaemonLeaks({
     ...phaseSelectionOf(options),
     stateDir,
     daemonPids: options.daemonPids,
     livePids: options.daemonPids.filter((pid) => isProcessAlive(pid)),
-    stateEntries: readStateEntries(stateDir, options.sessionsDir),
+    stateEntries,
+    ownedProcessRecords: readOwnedProcessObservations(
+      stateDir,
+      path.resolve(options.sessionsDir ?? path.join(stateDir, 'sessions')),
+      stateEntries,
+    ),
   });
 }
 
@@ -101,12 +114,93 @@ function readStateEntries(stateDir: string, sessionsDir?: string): StateEntry[] 
         ...(relative.endsWith('.resource.json')
           ? { descriptorLifecycle: readDescriptorLifecycle(absolute) }
           : {}),
+        ...(isOwnedProcessRecordEntry(relative)
+          ? { ownedProcessRecordStatus: readOwnedProcessRecordStatus(absolute) }
+          : {}),
       });
     } else if (isEmptyDirectory(absolute)) {
       entries.push({ path: `${relative}/`, kind: 'empty-directory' });
     }
   }
   return entries;
+}
+
+function readOwnedProcessObservations(
+  stateDir: string,
+  sessionsRoot: string,
+  stateEntries: readonly StateEntry[],
+): OwnedProcessRecordObservation[] {
+  return stateEntries.flatMap((entry) =>
+    readOwnedProcessObservation(entry, stateDir, sessionsRoot),
+  );
+}
+
+function readOwnedProcessObservation(
+  entry: StateEntry,
+  stateDir: string,
+  sessionsRoot: string,
+): OwnedProcessRecordObservation[] {
+  if (entry.kind !== 'file' || !isOwnedProcessRecordEntry(entry.path)) return [];
+  const sessionId = /^sessions\/([^/]+)\/owned-processes\.json$/.exec(entry.path)?.[1];
+  const scope =
+    sessionId === undefined ? { kind: 'daemon' as const } : { kind: 'session' as const, sessionId };
+  const absolute =
+    sessionId === undefined
+      ? path.join(stateDir, 'owned-processes.json')
+      : path.join(sessionsRoot, sessionId, 'owned-processes.json');
+  const read = readOwnedProcessRecordFile(absolute, scope);
+  const identities = readHostProcessIdentityObservations(read.records.map((record) => record.pid));
+  const { liveRecords, ownershipLostRecords } = classifyOwnedProcessRecords(
+    read.records,
+    identities,
+  );
+  return [
+    {
+      scope: scope.kind,
+      ...(sessionId === undefined ? {} : { sessionId }),
+      recordPath: entry.path,
+      records: read.records,
+      liveRecords,
+      ownershipLostRecords,
+      status: read.status,
+    },
+  ];
+}
+
+function classifyOwnedProcessRecords(
+  records: readonly OwnedProcessRecord[],
+  identities: ReadonlyMap<number, { state: string; startTime: string }>,
+): { liveRecords: OwnedProcessRecord[]; ownershipLostRecords: OwnedProcessRecord[] } {
+  const liveRecords: OwnedProcessRecord[] = [];
+  const ownershipLostRecords: OwnedProcessRecord[] = [];
+  for (const record of records) {
+    const classification = classifyOwnedProcessRecord(record, identities);
+    if (classification === 'live') liveRecords.push(record);
+    if (classification === 'ownership-lost') ownershipLostRecords.push(record);
+  }
+  return { liveRecords, ownershipLostRecords };
+}
+
+function classifyOwnedProcessRecord(
+  record: OwnedProcessRecord,
+  identities: ReadonlyMap<number, { state: string; startTime: string }>,
+): 'live' | 'missing' | 'ownership-lost' {
+  if (!isProcessAlive(record.pid)) return 'missing';
+  const observation = identities.get(record.pid);
+  if (observation === undefined) return isProcessAlive(record.pid) ? 'ownership-lost' : 'missing';
+  if (observation.state.startsWith('Z')) return 'missing';
+  return observation.startTime === record.startTime &&
+    readProcessCommand(record.pid) === record.command
+    ? 'live'
+    : 'ownership-lost';
+}
+
+function isOwnedProcessRecordEntry(entryPath: string): boolean {
+  return /^(?:owned-processes\.json|sessions\/[^/]+\/owned-processes\.json)$/.test(entryPath);
+}
+
+function readOwnedProcessRecordStatus(filePath: string): 'decoded' | 'invalid' {
+  return readOwnedProcessRecordFile(filePath, { kind: 'daemon' }).status;
 }
 
 // `sessions/<name>/…` regardless of where the SessionStore is rooted.

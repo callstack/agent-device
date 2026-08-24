@@ -3,6 +3,7 @@ import type {
   CleanupOutcome,
   DurableDescriptorCodec,
   ManagedProcessIdentity,
+  OwnedProcessRecordScope,
   RuntimeOwnerRef,
   ScreenRecordingRuntimeHost,
   ScreenRecordingStartInput,
@@ -11,7 +12,10 @@ import { SCREEN_RECORDING_RESOURCE_KIND } from '@agent-device/contracts/screen-r
 import { createDurableResourceEnvelope, encodeDurableDescriptor } from '@agent-device/capture-kit';
 
 export type AppleScreenRecordingOperationHost = Readonly<{
-  screenRecording: Pick<ScreenRecordingRuntimeHost, 'apple' | 'finalize' | 'outputs'>;
+  screenRecording: Pick<
+    ScreenRecordingRuntimeHost,
+    'apple' | 'finalize' | 'outputs' | 'ownedProcesses'
+  >;
 }>;
 
 export type AppleRecordingDescriptor =
@@ -83,13 +87,14 @@ export async function cleanupAppleRecording(
   host: AppleScreenRecordingOperationHost,
   device: DeviceInfo,
   body: Parameters<AppleRecordingDescriptorCodec['decode']>[0],
+  sessionId?: string,
 ): Promise<CleanupOutcome> {
   const decoded = descriptorCodec.decode(body);
   if (decoded.status !== 'decoded' || !descriptorMatchesAppleDevice(device, decoded.descriptor)) {
     return { status: 'cleanup-pending', reason: 'manual-recovery-required' };
   }
   if (decoded.descriptor.backend === 'simctl') {
-    return await cleanupSimulator(host, decoded.descriptor.processes);
+    return await cleanupSimulator(host, decoded.descriptor.processes, sessionId);
   }
   return await cleanupRunner(host, device, decoded.descriptor);
 }
@@ -97,6 +102,7 @@ export async function cleanupAppleRecording(
 async function cleanupSimulator(
   host: AppleScreenRecordingOperationHost,
   processes: readonly ManagedProcessIdentity[],
+  sessionId?: string,
 ): Promise<CleanupOutcome> {
   const ownership = await Promise.all(
     processes.map(async (marker) => await host.screenRecording.apple.inspectProcess(marker)),
@@ -104,7 +110,12 @@ async function cleanupSimulator(
   if (ownership.includes('ownership-lost')) {
     return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
   }
-  if (ownership.every((value) => value === 'missing')) return { status: 'already-missing' };
+  if (ownership.every((value) => value === 'missing')) {
+    if (sessionId !== undefined) {
+      host.screenRecording.ownedProcesses.clear(sessionScope(sessionId));
+    }
+    return { status: 'already-missing' };
+  }
   const outcomes = await Promise.all(
     processes.flatMap((marker, index) =>
       ownership[index] === 'owned-alive'
@@ -112,11 +123,19 @@ async function cleanupSimulator(
         : [],
     ),
   );
-  return outcomes.includes('ownership-lost')
-    ? { status: 'cleanup-pending', reason: 'ownership-fence-lost' }
-    : outcomes.every((outcome) => outcome === 'already-missing')
-      ? { status: 'already-missing' }
-      : { status: 'cleaned' };
+  if (outcomes.includes('ownership-lost')) {
+    return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
+  }
+  if (sessionId !== undefined) {
+    host.screenRecording.ownedProcesses.clear(sessionScope(sessionId));
+  }
+  return outcomes.every((outcome) => outcome === 'already-missing')
+    ? { status: 'already-missing' }
+    : { status: 'cleaned' };
+}
+
+function sessionScope(sessionId: string): OwnedProcessRecordScope {
+  return { kind: 'session', sessionId };
 }
 
 async function cleanupRunner(

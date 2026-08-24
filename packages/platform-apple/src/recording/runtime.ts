@@ -49,7 +49,12 @@ export function createAppleScreenRecordingOperations(params: {
     screenRecordingReattach: async (input) =>
       await reattachAppleRecording(host, device, input.envelope.descriptor.body),
     screenRecordingCleanup: async (input) =>
-      await cleanupAppleRecording(host, device, input.envelope.descriptor.body),
+      await cleanupAppleRecording(
+        host,
+        device,
+        input.envelope.descriptor.body,
+        input.envelope.sessionId,
+      ),
   } satisfies ScreenRecordingRuntimeOperations);
 }
 
@@ -91,7 +96,16 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
   }
   try {
     signal.throwIfAborted();
+    host.screenRecording.ownedProcesses.replace(
+      { kind: 'session', sessionId: input.sessionId },
+      processes.map((process) => ({ ...process, purpose: 'simctl-screen-recording' })),
+    );
   } catch (error) {
+    try {
+      host.screenRecording.ownedProcesses.clear({ kind: 'session', sessionId: input.sessionId });
+    } catch {
+      // Preserve the spawn/publication error; startup cleanup still has the process handle.
+    }
     await settleAppleSimulatorProcess(nativeProcess).catch(() => {});
     throw error;
   }
@@ -104,12 +118,22 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
     finish: async (current) => {
       await nativeProcess.terminate();
       const result = await nativeProcess.wait;
+      host.screenRecording.ownedProcesses.clear({ kind: 'session', sessionId: input.sessionId });
       if (result.exitCode !== 0) {
         throw new Error(`simctl recordVideo exited with code ${result.exitCode}`);
       }
       return await completion(host, current, 'iOS recording');
     },
-    cleanup: async () => await cleanupAppleSimulatorProcess(nativeProcess),
+    cleanup: async () => {
+      const result = await cleanupAppleSimulatorProcess(nativeProcess);
+      if (result.status === 'cleaned' || result.status === 'already-missing') {
+        host.screenRecording.ownedProcesses.clear({
+          kind: 'session',
+          sessionId: input.sessionId,
+        });
+      }
+      return result;
+    },
   });
 }
 

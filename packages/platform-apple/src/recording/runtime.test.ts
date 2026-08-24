@@ -78,6 +78,7 @@ test('declares the exact XCTest backend failure before exposing operations', () 
 
 test('uses simctl on simulators and retains the macOS runner path', async () => {
   const calls: string[] = [];
+  const ownedProcesses = { replace: vi.fn(), clear: vi.fn() };
   const host = appleHost({
     apple: {
       captureClockAnchor: async () => ({ wallClockAtMs: 100, uptimeMs: 50 }),
@@ -97,6 +98,7 @@ test('uses simctl on simulators and retains the macOS runner path', async () => 
       calls.push(`finalize:${targetLabel}`);
       return {};
     },
+    ownedProcesses,
   });
   for (const runtimeDevice of [
     {
@@ -150,6 +152,10 @@ test('uses simctl on simulators and retains the macOS runner path', async () => 
     'runner:stop',
     'finalize:macOS recording',
   ]);
+  expect(ownedProcesses.replace).toHaveBeenCalledWith({ kind: 'session', sessionId: 'sim' }, [
+    { ...processIdentity, purpose: 'simctl-screen-recording' },
+  ]);
+  expect(ownedProcesses.clear).toHaveBeenCalledWith({ kind: 'session', sessionId: 'sim' });
 });
 
 test('simulator cleanup waits for confirmed process exit and nonzero finish fails', async () => {

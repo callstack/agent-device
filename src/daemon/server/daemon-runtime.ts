@@ -63,6 +63,11 @@ import {
 import { createDaemonRecoveryPlatformScope } from '../platform-request-scope.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
+import {
+  createOwnedProcessRecordStore,
+  type OwnedProcessRecordStore,
+} from '../../utils/owned-process-record.ts';
+import { reapOwnedProcessRecordsAtStartup } from '../../utils/owned-process-reaper.ts';
 
 const DAEMON_SESSION_TEARDOWN_TIMEOUT_MS = 5_000;
 export const SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS = 11_000;
@@ -241,6 +246,11 @@ export async function startDaemonRuntime(
   setRunnerLeaseOwnerStateDir(baseDir);
 
   const sessionStore = new SessionStore(sessionsDir);
+  const ownedProcessRecords = createOwnedProcessRecordStore({
+    stateDir: baseDir,
+    sessionsDir,
+    resolveSessionDir: (sessionId) => sessionStore.resolveSessionDir(sessionId),
+  });
   const appLogAdmissionLedger = createAppLogAdmissionLedger();
   const screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger();
   const version = readVersion();
@@ -253,6 +263,7 @@ export async function startDaemonRuntime(
     providerRuntimes: providerDeviceRuntimes,
     providerModules: providerComposition.platformModules,
     sessionsDir,
+    ownedProcesses: ownedProcessRecords,
     resolveSessionArtifacts: (sessionId) => ({
       outputPath: sessionStore.resolveAppLogPath(sessionId),
       pidPath: sessionStore.resolveAppLogPidPath(sessionId),
@@ -293,6 +304,7 @@ export async function startDaemonRuntime(
   const dispatchRequest = createRequestHandler({
     logPath,
     stateDir: baseDir,
+    ownedProcessRecords,
     token,
     sessionStore,
     leaseRegistry,
@@ -487,7 +499,15 @@ export async function startDaemonRuntime(
       scope: createDaemonRecoveryPlatformScope(),
       onDiagnostic: (diagnostic) => startupAppLogDiagnostics.push(diagnostic),
     });
-    await cleanupWebBrowserOrphansForDaemonStartup({ stateDir: baseDir, sessionStore });
+    await reapOwnedProcessRecordsAtStartup(ownedProcessRecords, {
+      openWebSessionNames: openWebSessionNames(sessionStore),
+      purposes: ['simctl-screen-recording'],
+    });
+    await cleanupWebBrowserOrphansForDaemonStartup({
+      stateDir: baseDir,
+      sessionStore,
+      ownedProcessRecords,
+    });
     // Marker-gated lifecycle recovery owns test-IME orphan repair. Its implementation remains
     // lazy until the marker exists, so a normal daemon startup does not load or probe adb.
     void applicationLifecycle.recoverStartupResources({ stateDir: baseDir }).catch((error) => {
@@ -651,12 +671,16 @@ async function reconcileDeviceClaimsForDaemonStartup(
 export async function cleanupWebBrowserOrphansForDaemonStartup(params: {
   stateDir: string;
   sessionStore: SessionStore;
+  ownedProcessRecords?: OwnedProcessRecordStore;
 }): Promise<void> {
   const status = getManagedAgentBrowserStatus({ stateDir: params.stateDir });
   if (!status.installed) return;
   try {
     await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
       openWebSessionNames: openWebSessionNames(params.sessionStore),
+      ...(params.ownedProcessRecords === undefined
+        ? {}
+        : { ownedProcessRecords: params.ownedProcessRecords }),
     });
   } catch (error) {
     emitDiagnostic({

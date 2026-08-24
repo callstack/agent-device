@@ -1,7 +1,14 @@
-import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/platform';
+import type {
+  OwnedProcessRecordWriter,
+  ScreenRecordingRuntimeHost,
+} from '@agent-device/contracts/platform';
 
 /** Lazy host-only composition; platform semantics stay package-owned. */
-export function createScreenRecordingRuntimeHost(): ScreenRecordingRuntimeHost {
+export function createScreenRecordingRuntimeHost(
+  options: {
+    ownedProcesses?: OwnedProcessRecordWriter;
+  } = {},
+): ScreenRecordingRuntimeHost {
   const android: ScreenRecordingRuntimeHost['android'] = Object.freeze({
     resolve: async (device) => {
       const { createAndroidScreenRecordingTransport } =
@@ -30,6 +37,12 @@ export function createScreenRecordingRuntimeHost(): ScreenRecordingRuntimeHost {
       return await createScreenRecordingFinalizer().complete(input, signal);
     },
   });
+  const ownedProcesses: OwnedProcessRecordWriter =
+    options.ownedProcesses ??
+    Object.freeze({
+      replace: () => {},
+      clear: () => {},
+    });
   return Object.freeze({
     apple: createLazyAppleHost(),
     android,
@@ -37,6 +50,7 @@ export function createScreenRecordingRuntimeHost(): ScreenRecordingRuntimeHost {
     web,
     outputs,
     finalize,
+    ownedProcesses,
   });
 }
 

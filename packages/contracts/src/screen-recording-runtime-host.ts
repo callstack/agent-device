@@ -4,6 +4,7 @@ import type {
   HostCommandResult,
   ManagedProcessIdentity,
   ManagedProcessOwnership,
+  OwnedProcessRecordWriter,
 } from './platform-runtime-host.ts';
 import type { RecordingGestureEvent } from './screen-recording-runtime.ts';
 
@@ -211,4 +212,5 @@ export type ScreenRecordingRuntimeHost = Readonly<{
   web: WebScreenRecordingHost;
   outputs: ScreenRecordingOutputHost;
   finalize: ScreenRecordingFinalizer;
+  ownedProcesses: OwnedProcessRecordWriter;
 }>;

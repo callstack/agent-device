@@ -3,7 +3,7 @@
 // lifecycle or durable state leaked. Pure — `daemon-leak-oracle.ts` gathers the
 // observation and asserts on it; `daemon-leak-model.test.ts` pins the rules.
 //
-// Two leak classes:
+// Three leak classes:
 //
 //   surviving daemon   at `after-shutdown` a daemon pid that is still alive IS
 //                      the leak. `stopProcessForTakeover` is best-effort and
@@ -23,7 +23,12 @@
 //                      installs (agent-browser and its Chrome), whose own
 //                      download temporaries and scaffolding this daemon neither
 //                      writes nor owns.
+//   owned process       a decoded daemon/session record whose exact identity is
+//                      still live, or no longer matches and therefore cannot be
+//                      proved dead. The latter fails closed rather than allowing
+//                      pid reuse to turn unknown evidence into a green checkpoint.
 import { uniquePositivePids } from '../../../src/utils/host-process.ts';
+import type { OwnedProcessRecord } from '@agent-device/contracts/platform';
 
 export type DaemonLeakPhase = 'after-close' | 'after-shutdown';
 
@@ -34,7 +39,27 @@ export type StateEntry = {
   kind: 'file' | 'empty-directory';
   /** `lifecycle` of a durable capture descriptor, when this entry is one. */
   descriptorLifecycle?: string;
+  ownedProcessRecordStatus?: 'decoded' | 'invalid';
 };
+
+export type OwnedProcessRecordObservation = Readonly<{
+  scope: 'daemon' | 'session';
+  sessionId?: string;
+  recordPath: string;
+  records: readonly OwnedProcessRecord[];
+  liveRecords: readonly OwnedProcessRecord[];
+  ownershipLostRecords?: readonly OwnedProcessRecord[];
+  status: 'decoded' | 'invalid';
+}>;
+
+export type OwnedProcessLeak = Readonly<
+  OwnedProcessRecord & {
+    scope: 'daemon' | 'session';
+    sessionId?: string;
+    recordPath: string;
+    ownership: 'exact' | 'lost';
+  }
+>;
 
 export type NonEmpty<T> = readonly [T, ...T[]];
 
@@ -54,6 +79,7 @@ export type DaemonLeakObservationBase = {
   stateDir: string;
   daemonPids: readonly number[];
   livePids: readonly number[];
+  ownedProcessRecords: readonly OwnedProcessRecordObservation[];
   stateEntries: readonly StateEntry[];
 };
 
@@ -64,6 +90,7 @@ export type DaemonLeakSnapshot = {
   daemonPids: number[];
   phase: DaemonLeakPhase;
   liveDaemonPids: number[];
+  ownedProcesses: OwnedProcessLeak[];
   strayStateEntries: string[];
 };
 
@@ -95,6 +122,17 @@ export function evaluateDaemonLeaks(observation: DaemonLeakObservation): DaemonL
     daemonPids,
     phase: observation.phase,
     liveDaemonPids,
+    ownedProcesses: observation.ownedProcessRecords.flatMap((observationEntry) => {
+      if (!ownedProcessIsLeak(observationEntry, observation)) return [];
+      return [
+        ...observationEntry.liveRecords.map((record) =>
+          formatOwnedProcessLeak(observationEntry, record, 'exact'),
+        ),
+        ...(observationEntry.ownershipLostRecords ?? []).map((record) =>
+          formatOwnedProcessLeak(observationEntry, record, 'lost'),
+        ),
+      ];
+    }),
     strayStateEntries: observation.stateEntries
       .filter(
         (entry) =>
@@ -114,7 +152,37 @@ export function evaluateDaemonLeaks(observation: DaemonLeakObservation): DaemonL
  * the report — so it fails alongside owned children and state-dir residue.
  */
 export function hasDaemonLeaks(snapshot: DaemonLeakSnapshot): boolean {
-  return survivingDaemonPids(snapshot).length > 0 || snapshot.strayStateEntries.length > 0;
+  return (
+    survivingDaemonPids(snapshot).length > 0 ||
+    snapshot.ownedProcesses.length > 0 ||
+    snapshot.strayStateEntries.length > 0
+  );
+}
+
+function ownedProcessIsLeak(
+  entry: OwnedProcessRecordObservation,
+  observation: DaemonLeakObservation,
+): boolean {
+  if (observation.phase === 'after-shutdown') return true;
+  return (
+    entry.scope === 'session' &&
+    entry.sessionId !== undefined &&
+    observation.closedSessions.includes(entry.sessionId)
+  );
+}
+
+function formatOwnedProcessLeak(
+  entry: OwnedProcessRecordObservation,
+  record: OwnedProcessRecord,
+  ownership: OwnedProcessLeak['ownership'],
+): OwnedProcessLeak {
+  return {
+    ...record,
+    scope: entry.scope,
+    ...(entry.sessionId === undefined ? {} : { sessionId: entry.sessionId }),
+    recordPath: entry.recordPath,
+    ownership,
+  };
 }
 
 function survivingDaemonPids(snapshot: DaemonLeakSnapshot): number[] {
@@ -128,18 +196,57 @@ type StateEntryContext = {
 };
 
 function classifyStateEntry(entry: StateEntry, context: StateEntryContext): 'expected' | 'stray' {
-  if (MANAGED_TOOLS_ENTRY.test(entry.path)) return 'expected';
-  if (entry.kind === 'empty-directory') return 'stray';
-  if (entry.path.endsWith('.tmp')) return 'stray';
-  if (DAEMON_LIVENESS_ENTRY.test(entry.path)) {
-    return context.daemonLegitimatelyAlive ? 'expected' : 'stray';
-  }
-  if (CAPTURE_DESCRIPTOR_ENTRY.test(entry.path) || LEGACY_APP_LOG_MARKER_ENTRY.test(entry.path)) {
-    return classifyCaptureEntry(entry, context);
-  }
+  const special = classifySpecialStateEntry(entry, context);
+  if (special !== undefined) return special;
   return EXPECTED_STATE_DIR_ENTRIES.some((matcher) => matcher.test(entry.path))
     ? 'expected'
     : 'stray';
+}
+
+function classifySpecialStateEntry(
+  entry: StateEntry,
+  context: StateEntryContext,
+): 'expected' | 'stray' | undefined {
+  for (const classifier of SPECIAL_STATE_CLASSIFIERS) {
+    const result = classifier(entry, context);
+    if (result !== undefined) return result;
+  }
+  return undefined;
+}
+
+type StateClassification = 'expected' | 'stray' | undefined;
+type StateClassifier = (entry: StateEntry, context: StateEntryContext) => StateClassification;
+
+const SPECIAL_STATE_CLASSIFIERS: readonly StateClassifier[] = [
+  (entry) => (MANAGED_TOOLS_ENTRY.test(entry.path) ? 'expected' : undefined),
+  (entry) => (entry.kind === 'empty-directory' ? 'stray' : undefined),
+  (entry) => (entry.path.endsWith('.tmp') ? 'stray' : undefined),
+  (entry) => classifyOwnedProcessStateEntry(entry),
+  (entry, context) => classifyDaemonLivenessStateEntry(entry, context),
+  (entry, context) => classifyCaptureStateEntry(entry, context),
+];
+
+function classifyOwnedProcessStateEntry(entry: StateEntry): StateClassification {
+  if (!OWNED_PROCESS_RECORD_ENTRY.test(entry.path)) return undefined;
+  return entry.ownedProcessRecordStatus === 'invalid' ? 'stray' : 'expected';
+}
+
+function classifyDaemonLivenessStateEntry(
+  entry: StateEntry,
+  context: StateEntryContext,
+): StateClassification {
+  if (!DAEMON_LIVENESS_ENTRY.test(entry.path)) return undefined;
+  return context.daemonLegitimatelyAlive ? 'expected' : 'stray';
+}
+
+function classifyCaptureStateEntry(
+  entry: StateEntry,
+  context: StateEntryContext,
+): StateClassification {
+  if (!CAPTURE_DESCRIPTOR_ENTRY.test(entry.path) && !LEGACY_APP_LOG_MARKER_ENTRY.test(entry.path)) {
+    return undefined;
+  }
+  return classifyCaptureEntry(entry, context);
 }
 
 // A capture handle must be finalized once its owning session is gone: after
@@ -172,10 +279,20 @@ export function formatDaemonLeakReport(snapshot: DaemonLeakSnapshot): string {
     `  daemons that outlived shutdown: ${surviving.length}${
       surviving.length > 0 ? ` (${formatPids(surviving)})` : ''
     }`,
+    `  owned processes still alive: ${snapshot.ownedProcesses.length}`,
+    ...snapshot.ownedProcesses.map(
+      (record) =>
+        `    ${record.purpose}: pid ${record.pid} ${record.scope} ${record.recordPath}${
+          record.ownership === 'lost' ? ' (ownership lost)' : ''
+        }`,
+    ),
     `  stray state-dir entries: ${snapshot.strayStateEntries.length}`,
     ...snapshot.strayStateEntries.map((entry) => `    ${entry}`),
   ].join('\n');
 }
+
+const OWNED_PROCESS_RECORD_ENTRY =
+  /^(?:owned-processes\.json|sessions\/[^/]+\/owned-processes\.json)$/;
 
 function formatPids(pids: readonly number[]): string {
   return pids.join(', ') || '(none)';

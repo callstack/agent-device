@@ -2,6 +2,7 @@ import type {
   AppLogSessionArtifacts,
   DeviceShutdownRuntimeLoaders,
   HostCommandRequest,
+  OwnedProcessRecordWriter,
   PlatformRuntimeHost,
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -33,6 +34,7 @@ export function createPlatformRuntimeHost(options: {
   sessionsDir: string;
   resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
   shutdownLoaders: DeviceShutdownRuntimeLoaders;
+  ownedProcesses?: OwnedProcessRecordWriter;
 }): PlatformRuntimeHost {
   const processes = createManagedAppLogProcesses(options.sessionsDir);
   const localProcessTransport = Object.freeze({ mode: 'local' as const, start: processes.start });
@@ -104,7 +106,7 @@ export function createPlatformRuntimeHost(options: {
       { appleTools, commands },
       options.shutdownLoaders,
     ),
-    screenRecording: createScreenRecordingRuntimeHost(),
+    screenRecording: createScreenRecordingRuntimeHost({ ownedProcesses: options.ownedProcesses }),
     snapshot: createSnapshotRuntimeHost(),
     localInteractors: createLocalApplicationInteractorHost(),
     appleApplications,

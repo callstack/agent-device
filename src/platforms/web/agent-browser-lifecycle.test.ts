@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const { runCmdMock } = vi.hoisted(() => ({
@@ -17,13 +17,21 @@ vi.mock('../../utils/exec.ts', async (importOriginal) => {
   };
 });
 
+vi.mock('../../utils/host-process.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../utils/host-process.ts')>()),
+  readProcessStartTime: (pid: number) => `start-${pid}`,
+  readProcessCommand: (pid: number) => `command-${pid}`,
+}));
+
 import {
   DEFAULT_AGENT_BROWSER_IDLE_TIMEOUT_MS,
   agentBrowserChromeLaunchMarker,
   appendAgentDeviceChromeArgs,
   cleanupManagedAgentBrowserOrphans,
   matchAgentBrowserChromeProcess,
+  recordManagedAgentBrowserProcesses,
   resolveAgentBrowserIdleTimeoutMs,
+  summarizeManagedAgentBrowserProcesses,
   summarizeAgentBrowserProcesses,
 } from './agent-browser-lifecycle.ts';
 import { getManagedAgentBrowserStatus } from './agent-browser-tool.ts';
@@ -184,7 +192,7 @@ test('cleanup does not treat the shared socket directory mtime as browser activi
     const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup');
 
     assert.equal(result.skipped, undefined);
-    assert.equal(mockRunCmd.mock.calls.length, 1);
+    assert.equal(mockRunCmd.mock.calls.length, 0);
   } finally {
     if (originalIdleTimeout === undefined) {
       delete process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS;
@@ -195,59 +203,41 @@ test('cleanup does not treat the shared socket directory mtime as browser activi
   }
 });
 
-test('cleanup signals matched browser process trees with TERM then KILL only for live pids', async () => {
-  vi.useFakeTimers();
+test('cleanup reads recorded browser identities without reconstructing a process tree', async () => {
   const stateDir = mkdtempForTestSync('agent-device-web-life-');
   const originalIdleTimeout = process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS;
   process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS = '1';
-  const alivePids = new Set([101, 201, 301, 999]);
-  const killCalls: Array<{ pid: number; signal: string | number | undefined }> = [];
-  const killSpy = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
-    const numericPid = Number(pid);
-    killCalls.push({ pid: numericPid, signal });
-    if (signal === 'SIGKILL') alivePids.delete(numericPid);
-    if (signal === 0 && !alivePids.has(numericPid)) {
-      const error = new Error('not found') as NodeJS.ErrnoException;
-      error.code = 'ESRCH';
-      throw error;
-    }
-    return true;
-  });
+  const ownedProcessRecords = {
+    read: () => [
+      {
+        scope: { kind: 'daemon' as const },
+        path: path.join(stateDir, 'owned-processes.json'),
+        status: 'decoded' as const,
+        records: [
+          {
+            pid: 101,
+            startTime: 'start-101',
+            command: 'command-101',
+            purpose: 'managed-web-browser',
+          },
+        ],
+      },
+    ],
+    replace: vi.fn(),
+    clear: vi.fn(),
+  };
 
   try {
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({ stateDir });
-    const marker = agentBrowserChromeLaunchMarker(status);
-    mockRunCmd.mockResolvedValue({
-      stdout: [
-        `  101     1 /Applications/Chromium.app/Contents/MacOS/Chromium ${marker}`,
-        '  201   101 /Applications/Chromium.app/Contents/Frameworks/Chromium Helper --type=renderer',
-        '  301   201 /Applications/Chromium.app/Contents/Frameworks/Chromium Helper --type=gpu',
-        '  999     1 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      ].join('\n'),
-      stderr: '',
-      exitCode: 0,
+    const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
+      ownedProcessRecords,
     });
 
-    const cleanup = cleanupManagedAgentBrowserOrphans(status, 'provider-startup');
-    await vi.advanceTimersByTimeAsync(1_500);
-    const result = await cleanup;
-
     assert.deepEqual(result.pids, [101]);
-    assert.deepEqual(result.signalPids, [101, 201, 301]);
-    assert.deepEqual(
-      killCalls.filter((call) => call.signal === 'SIGTERM').map((call) => call.pid),
-      [101, 201, 301],
-    );
-    assert.deepEqual(
-      killCalls.filter((call) => call.signal === 'SIGKILL').map((call) => call.pid),
-      [101, 201, 301],
-    );
-    assert.equal(
-      killCalls.some((call) => call.pid === 999),
-      false,
-    );
-    assert.equal(killSpy.mock.calls.length > 0, true);
+    assert.deepEqual(result.signalPids, []);
+    assert.equal(mockRunCmd.mock.calls.length, 0);
+    expect(ownedProcessRecords.clear).toHaveBeenCalledOnce();
   } finally {
     if (originalIdleTimeout === undefined) {
       delete process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS;
@@ -279,6 +269,55 @@ test('process summary reports only conservatively owned managed Chrome processes
       summary.processes.map((process) => process.reason),
       ['launch-marker', 'managed-browser-home'],
     );
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('records the managed browser daemon and Chrome fleet at the spawn owner', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({ stateDir });
+    const marker = agentBrowserChromeLaunchMarker(status);
+    const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
+    mockRunCmd.mockResolvedValue({
+      stdout: [
+        `  101     1 ${status.binaryPath}`,
+        `  201   101 /Applications/Chromium.app/Contents/MacOS/Chromium ${marker}`,
+        '  301   201 /Applications/Chromium.app/Contents/Frameworks/Chromium Helper --type=gpu',
+        '  999     1 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      ].join('\n'),
+      stderr: '',
+      exitCode: 0,
+    });
+
+    const summary = await recordManagedAgentBrowserProcesses(status, store);
+
+    expect(summary.pids).toEqual([101, 201, 301]);
+    expect(store.replace).toHaveBeenCalledWith(
+      { kind: 'daemon' },
+      [101, 201, 301].map((pid) => ({
+        pid,
+        startTime: `start-${pid}`,
+        command: `command-${pid}`,
+        purpose: 'managed-web-browser',
+      })),
+    );
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('managed process summary includes the recordable agent-browser daemon', () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({ stateDir });
+    expect(
+      summarizeManagedAgentBrowserProcesses([{ pid: 101, command: status.binaryPath }], status)
+        .processes[0]?.reason,
+    ).toBe('agent-browser-daemon');
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

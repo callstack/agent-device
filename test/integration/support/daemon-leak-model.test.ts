@@ -24,6 +24,7 @@ function observe(
     stateDir: STATE_DIR,
     daemonPids: [DAEMON_PID],
     livePids: [],
+    ownedProcessRecords: [],
     stateEntries: [],
     ...overrides,
     ...selection,
@@ -43,6 +44,118 @@ function observeAfterClose(
 function file(entryPath: string, descriptorLifecycle?: string): StateEntry {
   return { path: entryPath, kind: 'file', ...(descriptorLifecycle ? { descriptorLifecycle } : {}) };
 }
+
+function ownedProcess(
+  pid: number,
+  purpose: string,
+  scope: 'daemon' | 'session' = 'daemon',
+  sessionId?: string,
+): DaemonLeakObservationBase['ownedProcessRecords'][number] {
+  const record = {
+    pid,
+    startTime: `start-${pid}`,
+    command: `command-${pid}`,
+    purpose,
+  };
+  return {
+    scope,
+    ...(sessionId === undefined ? {} : { sessionId }),
+    recordPath:
+      scope === 'daemon' ? 'owned-processes.json' : `sessions/${sessionId}/owned-processes.json`,
+    records: [record],
+    liveRecords: [record],
+    status: 'decoded',
+  };
+}
+
+function ownedProcesses(
+  pids: readonly number[],
+  purpose: string,
+  scope: 'daemon' | 'session' = 'daemon',
+  sessionId?: string,
+): DaemonLeakObservationBase['ownedProcessRecords'][number] {
+  const entry = ownedProcess(pids[0]!, purpose, scope, sessionId);
+  const records = pids.map((pid) => ({
+    pid,
+    startTime: `start-${pid}`,
+    command: `command-${pid}`,
+    purpose,
+  }));
+  return { ...entry, records, liveRecords: records };
+}
+
+describe('recorded owned-process rules', () => {
+  // #1324: the simctl recorder is represented by the spawn owner's exact
+  // identity, even though launchd reparents it away from the daemon.
+  test('flags a live simctl recorder from the session-owned record', () => {
+    const snapshot = evaluateDaemonLeaks(
+      observe({
+        ownedProcessRecords: [ownedProcess(52420, 'simctl-screen-recording', 'session', 'record')],
+      }),
+    );
+
+    expect(snapshot.ownedProcesses).toEqual([
+      expect.objectContaining({
+        pid: 52420,
+        purpose: 'simctl-screen-recording',
+        recordPath: 'sessions/record/owned-processes.json',
+      }),
+    ]);
+    expect(hasDaemonLeaks(snapshot)).toBe(true);
+  });
+
+  // #1109: the managed agent-browser daemon and its Chrome fleet are recorded
+  // at their owner seam; the leak oracle does not need PPID, PGID, env, or argv
+  // heuristics to identify them after the daemon dies.
+  test('flags a live managed-browser fleet from the daemon-owned record', () => {
+    const snapshot = evaluateDaemonLeaks(
+      observe({
+        ownedProcessRecords: [ownedProcesses([47515, 47586, 47953], 'managed-web-browser')],
+      }),
+    );
+
+    expect(snapshot.ownedProcesses.map(({ pid }) => pid)).toEqual([47515, 47586, 47953]);
+    expect(formatDaemonLeakReport(snapshot)).toContain('managed-web-browser: pid 47515');
+  });
+
+  test('fails closed when a recorded pid no longer matches its identity', () => {
+    const entry = ownedProcess(47515, 'managed-web-browser');
+    const snapshot = evaluateDaemonLeaks(
+      observe({
+        ownedProcessRecords: [{ ...entry, liveRecords: [], ownershipLostRecords: entry.records }],
+      }),
+    );
+
+    expect(snapshot.ownedProcesses).toEqual([
+      expect.objectContaining({ pid: 47515, ownership: 'lost' }),
+    ]);
+    expect(formatDaemonLeakReport(snapshot)).toContain('(ownership lost)');
+    expect(hasDaemonLeaks(snapshot)).toBe(true);
+  });
+
+  test('does not flag a daemon-scoped process during the after-close checkpoint', () => {
+    const snapshot = evaluateDaemonLeaks(
+      observeAfterClose(['closed-one'], {
+        ownedProcessRecords: [ownedProcess(47515, 'managed-web-browser')],
+      }),
+    );
+
+    expect(snapshot.ownedProcesses).toEqual([]);
+    expect(hasDaemonLeaks(snapshot)).toBe(false);
+  });
+
+  test('flags a process record belonging to the session that just closed', () => {
+    const snapshot = evaluateDaemonLeaks(
+      observeAfterClose(['closed-one'], {
+        ownedProcessRecords: [
+          ownedProcess(52420, 'simctl-screen-recording', 'session', 'closed-one'),
+        ],
+      }),
+    );
+
+    expect(snapshot.ownedProcesses.map(({ pid }) => pid)).toEqual([52420]);
+  });
+});
 
 describe('surviving-daemon rule', () => {
   // stopProcessForTakeover is best-effort void: it returns silently on identity
@@ -128,6 +241,18 @@ describe('state-dir residue rules', () => {
       'expected',
     ],
     ['legacy app-log marker', file('sessions/d/app-log.pid'), AFTER_SHUTDOWN, 'stray'],
+    [
+      'valid owned-process record',
+      { ...file('owned-processes.json'), ownedProcessRecordStatus: 'decoded' },
+      AFTER_SHUTDOWN,
+      'expected',
+    ],
+    [
+      'invalid owned-process record',
+      { ...file('owned-processes.json'), ownedProcessRecordStatus: 'invalid' },
+      AFTER_SHUTDOWN,
+      'stray',
+    ],
   ])('%s is %s', (_name, entry, selection, verdict) => {
     const snapshot = evaluateDaemonLeaks(observe({ stateEntries: [entry] }, selection));
 

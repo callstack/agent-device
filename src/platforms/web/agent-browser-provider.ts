@@ -21,7 +21,11 @@ import {
   mapManagedAgentBrowserError,
   resolveAgentBrowserTool,
 } from './agent-browser-tool.ts';
-import { cleanupManagedAgentBrowserOrphansForProviderStartup } from './agent-browser-lifecycle.ts';
+import {
+  cleanupManagedAgentBrowserOrphansForProviderStartup,
+  recordManagedAgentBrowserProcesses,
+} from './agent-browser-lifecycle.ts';
+import type { OwnedProcessRecordStore } from '../../utils/owned-process-record.ts';
 
 const AGENT_BROWSER = 'agent-browser';
 // Exported so WEB_BROWSER_SESSION_TEARDOWN_BUDGET_MS (daemon/server/daemon-runtime.ts) can be
@@ -34,6 +38,7 @@ type AgentBrowserProviderOptions = {
   session?: string;
   stateDir?: string;
   openWebSessionNames?: () => readonly string[];
+  ownedProcessRecords?: OwnedProcessRecordStore;
 };
 
 export function createAgentBrowserWebProvider(
@@ -250,6 +255,8 @@ async function runAgentBrowserCommand(
   let stdout = '';
   let stderr = '';
   let exitCode = 0;
+  let commandCompleted = false;
+  const status = getManagedAgentBrowserStatus({ stateDir: options.stateDir });
   try {
     await cleanupProviderStartupOrphans(options);
     const tool = await resolveAgentBrowserTool({ stateDir: options.stateDir });
@@ -262,11 +269,62 @@ async function runAgentBrowserCommand(
     stdout = result.stdout;
     stderr = result.stderr;
     exitCode = result.exitCode;
+    commandCompleted = true;
   } catch (error) {
     throw mapAgentBrowserRunError(error, cliArgs);
+  } finally {
+    await finalizeAgentBrowserProcessRecord({
+      cliArgs,
+      commandCompleted,
+      exitCode,
+      options,
+      status,
+    });
   }
 
   return { stdout, stderr, exitCode };
+}
+
+async function finalizeAgentBrowserProcessRecord(params: {
+  cliArgs: string[];
+  commandCompleted: boolean;
+  exitCode: number;
+  options: AgentBrowserProviderOptions;
+  status: ReturnType<typeof getManagedAgentBrowserStatus>;
+}): Promise<void> {
+  const store = params.options.ownedProcessRecords;
+  if (!store || !params.status.installed) return;
+  try {
+    const remainingSessions = params.options.openWebSessionNames?.() ?? [];
+    const currentSession = params.options.session?.trim();
+    const otherOpenSessions = remainingSessions.filter((name) => name !== currentSession);
+    if (canClearAgentBrowserRecord(params, otherOpenSessions.length)) {
+      store.clear({ kind: 'daemon' });
+    } else {
+      await recordManagedAgentBrowserProcesses(params.status, store);
+    }
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'web_agent_browser_process_record_failed',
+      data: { error: error instanceof Error ? error.message : String(error) },
+    });
+  }
+}
+
+function canClearAgentBrowserRecord(
+  params: Pick<
+    Parameters<typeof finalizeAgentBrowserProcessRecord>[0],
+    'cliArgs' | 'commandCompleted' | 'exitCode'
+  >,
+  otherOpenSessionCount: number,
+): boolean {
+  return (
+    params.commandCompleted &&
+    params.cliArgs[0] === 'close' &&
+    params.exitCode === 0 &&
+    otherOpenSessionCount === 0
+  );
 }
 
 async function cleanupProviderStartupOrphans(options: AgentBrowserProviderOptions): Promise<void> {
@@ -276,6 +334,9 @@ async function cleanupProviderStartupOrphans(options: AgentBrowserProviderOption
   try {
     await cleanupManagedAgentBrowserOrphansForProviderStartup(status, {
       openWebSessionNames: options.openWebSessionNames(),
+      ...(options.ownedProcessRecords === undefined
+        ? {}
+        : { ownedProcessRecords: options.ownedProcessRecords }),
     });
   } catch (error) {
     emitDiagnostic({

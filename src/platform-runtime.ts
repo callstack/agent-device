@@ -3,6 +3,7 @@ import type {
   ProviderDeviceRuntime,
 } from '@agent-device/contracts/device';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
+import type { OwnedProcessRecordWriter } from '@agent-device/contracts/platform';
 import type {
   AppStateRuntimeHost,
   AppStateRuntimeResult,
@@ -123,6 +124,7 @@ export function createPlatformRuntimeGateway(
     providerModules?: readonly PlatformRuntimeProviderRegistration[];
     resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
     sessionsDir: string;
+    ownedProcesses?: OwnedProcessRecordWriter;
   }>,
 ): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   return createComposedPlatformRuntimeGateway({
@@ -133,6 +135,7 @@ export function createPlatformRuntimeGateway(
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,
         shutdownLoaders,
+        ownedProcesses: options.ownedProcesses,
       });
     },
     providerRuntimes: options.providerRuntimes,

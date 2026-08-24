@@ -65,6 +65,7 @@ export function appleRecordingHost(
     apple?: Partial<ScreenRecordingRuntimeHost['apple']>;
     complete?: ScreenRecordingFinalizer['complete'];
     prepare?: ScreenRecordingRuntimeHost['outputs']['prepare'];
+    ownedProcesses?: ScreenRecordingRuntimeHost['ownedProcesses'];
   } = {},
 ): AppleScreenRecordingOperationHost {
   const apple = Object.assign(
@@ -89,6 +90,7 @@ export function appleRecordingHost(
       apple,
       outputs: { prepare: options.prepare ?? (async () => {}) },
       finalize: { complete: options.complete ?? (async () => ({})) },
+      ownedProcesses: options.ownedProcesses ?? { replace: () => {}, clear: () => {} },
     },
   };
 }

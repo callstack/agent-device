@@ -117,6 +117,21 @@ test('Provider-backed integration iOS simulator recording flow uses the focused 
           { meta: { requestId: 'ios-simulator-record-start' } },
         );
         assertRecordingStarted(recordStart, { showTouches: false });
+        const ownedProcessRecordPath = path.join(
+          daemon.sessionDir('default'),
+          'owned-processes.json',
+        );
+        const ownedProcessRecord = JSON.parse(fs.readFileSync(ownedProcessRecordPath, 'utf8')) as {
+          version: number;
+          processes: Array<{ purpose: string; pid: number }>;
+        };
+        assert.equal(ownedProcessRecord.version, 1);
+        assert.ok(ownedProcessRecord.processes.length > 0);
+        assert.ok(
+          ownedProcessRecord.processes.every(
+            ({ purpose, pid }) => purpose === 'simctl-screen-recording' && pid > 0,
+          ),
+        );
 
         const recordStop = await daemon.callCommand(
           'record',
@@ -125,6 +140,7 @@ test('Provider-backed integration iOS simulator recording flow uses the focused 
           { meta: { requestId: 'ios-simulator-record-stop' } },
         );
         assertRecordingStopped(recordStop, recordingPath, { showTouches: false });
+        assert.equal(fs.existsSync(ownedProcessRecordPath), false);
 
         runnerTranscript.assertComplete();
         assert.deepEqual(recordingStarts, [recordingPath]);

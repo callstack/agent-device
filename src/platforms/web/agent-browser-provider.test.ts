@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { beforeEach, test, vi } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const { providerStartupCleanupMock } = vi.hoisted(() => ({
@@ -23,6 +23,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { installFakeManagedAgentBrowser } from './__tests__/test-utils.ts';
+import type { OwnedProcessRecordStore } from '../../utils/owned-process-record.ts';
 
 type AgentBrowserCall = {
   cmd: string;
@@ -117,6 +118,54 @@ test('agent-browser provider runs provider-startup cleanup before the first mana
   assert.deepEqual(mockProviderStartupCleanup.mock.calls[0]?.[1], {
     openWebSessionNames: [],
   });
+});
+
+test('agent-browser close clears the daemon-owned record after its own session closes', async () => {
+  const ownedProcessRecords: OwnedProcessRecordStore = {
+    replace: vi.fn(),
+    clear: vi.fn(),
+    read: vi.fn(() => []),
+  };
+
+  await withManagedAgentBrowserProvider(
+    {
+      session: 'web-session',
+      openWebSessionNames: () => ['web-session'],
+      ownedProcessRecords,
+    },
+    async (provider) => {
+      await withCommandExecutorOverride(recordingExecutor([]), async () => await provider.close());
+    },
+  );
+
+  expect(ownedProcessRecords.clear).toHaveBeenCalledWith({ kind: 'daemon' });
+  expect(ownedProcessRecords.replace).not.toHaveBeenCalled();
+});
+
+test('agent-browser close failure does not clear the daemon-owned record', async () => {
+  const ownedProcessRecords: OwnedProcessRecordStore = {
+    replace: vi.fn(),
+    clear: vi.fn(),
+    read: vi.fn(() => []),
+  };
+
+  await withManagedAgentBrowserProvider(
+    {
+      session: 'web-session',
+      openWebSessionNames: () => ['web-session'],
+      ownedProcessRecords,
+    },
+    async (provider) => {
+      await withCommandExecutorOverride(
+        async () => {
+          throw new Error('close failed before execution');
+        },
+        async () => await assert.rejects(async () => await provider.close()),
+      );
+    },
+  );
+
+  expect(ownedProcessRecords.clear).not.toHaveBeenCalled();
 });
 
 test('agent-browser provider ignores provider-startup cleanup failures', async () => {
@@ -478,7 +527,11 @@ test('agent-browser provider preserves Node version guidance for missing managed
 });
 
 async function withManagedAgentBrowserProvider(
-  options: { session?: string; openWebSessionNames?: () => readonly string[] },
+  options: {
+    session?: string;
+    openWebSessionNames?: () => readonly string[];
+    ownedProcessRecords?: OwnedProcessRecordStore;
+  },
   testFn: (provider: ReturnType<typeof createAgentBrowserWebProvider>) => void | Promise<void>,
 ): Promise<void> {
   const stateDir = mkdtempForTestSync('agent-device-web-provider-');

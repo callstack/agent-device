@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { runCmdSync } from '../../src/utils/exec.ts';
+import { readProcessCommand, readProcessStartTime } from '../../src/utils/host-process.ts';
 
 // #1781 B1: the oracle's `after-close` checkpoint is only meaningful when it can
 // name the sessions that closed — without them it would accept every unfinalized
@@ -58,4 +59,29 @@ test('the leak oracle CLI refuses an after-close checkpoint that names no sessio
   const shutdown = runOracle(['--state-dir', stateDir, '--settle-ms', '0']);
   assert.equal(shutdown.exitCode, 1, shutdown.stderr);
   assert.match(shutdown.stdout, /LEAK \(after-shutdown\)/);
+});
+
+test('the leak oracle CLI reads an exact daemon-owned process record', (t) => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-leak-record-cli-'));
+  const startTime = readProcessStartTime(process.pid);
+  const command = readProcessCommand(process.pid);
+  if (!startTime || !command) {
+    t.skip('host process identity is unavailable in this sandbox');
+    fs.rmSync(stateDir, { recursive: true, force: true });
+    return;
+  }
+  fs.writeFileSync(
+    path.join(stateDir, 'owned-processes.json'),
+    `${JSON.stringify({
+      version: 1,
+      processes: [{ pid: process.pid, startTime, command, purpose: 'managed-web-browser' }],
+    })}\n`,
+  );
+  t.after(() => fs.rmSync(stateDir, { recursive: true, force: true }));
+
+  const result = runOracle(['--state-dir', stateDir, '--settle-ms', '0']);
+
+  assert.equal(result.exitCode, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /managed-web-browser: pid/);
+  assert.match(result.stdout, /owned processes still alive: 1/);
 });

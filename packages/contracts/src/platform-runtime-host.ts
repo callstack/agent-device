@@ -26,6 +26,25 @@ export type ManagedProcessIdentity = Readonly<{
 
 export type ManagedProcessOwnership = 'missing' | 'owned-alive' | 'ownership-lost';
 
+/**
+ * A daemon-owned process identity that may outlive the request which spawned
+ * it. The purpose is bounded recovery metadata, not a command selector.
+ */
+export type OwnedProcessRecord = ManagedProcessIdentity &
+  Readonly<{
+    purpose: string;
+  }>;
+
+export type OwnedProcessRecordScope =
+  | Readonly<{ kind: 'daemon' }>
+  | Readonly<{ kind: 'session'; sessionId: string }>;
+
+/** Host-owned persistence seam for process records; platform code never owns the file format. */
+export type OwnedProcessRecordWriter = Readonly<{
+  replace(scope: OwnedProcessRecordScope, records: readonly OwnedProcessRecord[]): void;
+  clear(scope: OwnedProcessRecordScope): void;
+}>;
+
 /** Generic process-execution port; focused Apple foreground tools use AppleToolHost. */
 export type HostCommandRunner = Readonly<{
   which(executable: string): Promise<string | undefined>;

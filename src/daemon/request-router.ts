@@ -69,6 +69,7 @@ import {
   type ScreenRecordingAdmissionLedger,
 } from './screen-recording-admission-ledger.ts';
 import { resolveGenericRuntimeExecution } from './generic-runtime-execution.ts';
+import type { OwnedProcessRecordStore } from '../utils/owned-process-record.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -77,6 +78,7 @@ import { resolveGenericRuntimeExecution } from './generic-runtime-execution.ts';
 export type RequestRouterDeps = {
   logPath: string;
   stateDir?: string;
+  ownedProcessRecords?: OwnedProcessRecordStore;
   token: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
@@ -109,6 +111,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   const {
     logPath,
     stateDir,
+    ownedProcessRecords,
     token,
     androidAdbProvider,
     appleRunnerProvider,
@@ -244,7 +247,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
                 webProvider:
                   webProvider ??
                   (shouldUseDefaultWebProvider(lockedScope)
-                    ? createDefaultWebProvider(stateDir, sessionStore)
+                    ? createDefaultWebProvider(stateDir, sessionStore, ownedProcessRecords)
                     : undefined),
                 appleSimulatorScreenRecordingTransport,
               },
@@ -343,12 +346,17 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
 }
 
 const createDefaultWebProvider =
-  (stateDir: string | undefined, sessionStore: SessionStore): WebProviderResolver =>
+  (
+    stateDir: string | undefined,
+    sessionStore: SessionStore,
+    ownedProcessRecords: OwnedProcessRecordStore | undefined,
+  ): WebProviderResolver =>
   ({ req, session }) =>
     createAgentBrowserWebProvider({
       session: session?.name ?? req.session,
       stateDir,
       openWebSessionNames: () => openWebSessionNames(sessionStore),
+      ownedProcessRecords,
     });
 
 function shouldUseDefaultWebProvider(scope: LockedRequestScope): boolean {

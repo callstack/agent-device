@@ -30,6 +30,7 @@ import { createPlatformRuntimeGateway } from '../../../src/platform-runtime.ts';
 import type { PlatformRuntimeProviderRegistration } from '../../../src/platform-runtime-gateway.ts';
 import { createProviderPlatformRuntimeRegistrations } from '../../../src/provider-device-runtimes.ts';
 import { unavailableDeviceRuntimeGateway } from '../../../src/daemon/__tests__/test-device-runtime-gateway.ts';
+import { createOwnedProcessRecordStore } from '../../../src/utils/owned-process-record.ts';
 
 const PROVIDER_SCENARIO_TOKEN = 'provider-scenario-token';
 const PROVIDER_SCENARIO_TEMP_REMOVE_OPTIONS = {
@@ -89,6 +90,11 @@ export async function createProviderScenarioHarness(
     path.join(os.tmpdir(), 'agent-device-provider-scenario-session-'),
   );
   const sessionStore = new SessionStore(sessionDir);
+  const ownedProcessRecords = createOwnedProcessRecordStore({
+    stateDir: path.dirname(sessionDir),
+    sessionsDir: sessionDir,
+    resolveSessionDir: (sessionId) => sessionStore.resolveSessionDir(sessionId),
+  });
   const {
     deviceInventoryProvider,
     deviceInventorySource,
@@ -113,6 +119,7 @@ export async function createProviderScenarioHarness(
       ? createPlatformRuntimeGateway({
           ...platformRuntimeOptions,
           sessionsDir: sessionDir,
+          ownedProcesses: ownedProcessRecords,
           resolveSessionArtifacts: (sessionId) => ({
             outputPath: sessionStore.resolveAppLogPath(sessionId),
             pidPath: sessionStore.resolveAppLogPidPath(sessionId),
@@ -123,6 +130,7 @@ export async function createProviderScenarioHarness(
     logPath: path.join(os.tmpdir(), 'agent-device-provider-scenario-daemon.log'),
     token: PROVIDER_SCENARIO_TOKEN,
     sessionStore,
+    ownedProcessRecords,
     leaseRegistry: new LeaseRegistry(),
     deviceInventoryGateways: deviceInventorySource
       ? createTestDeviceInventoryGateways({ provider: deviceInventorySource })
