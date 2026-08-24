@@ -58,6 +58,10 @@ async function runLinuxCommandEvidence(): Promise<void> {
     artifactRoot: 'test/artifacts/linux-command-evidence',
     session: `${SCENARIO_ID}-${process.pid}`,
   });
+  context.env = {
+    ...context.env,
+    AGENT_DEVICE_STATE_DIR: path.join(context.artifactDir, 'daemon-state'),
+  };
   const primaryError = await captureError(() =>
     runScenario(context, {
       id: SCENARIO_ID,
