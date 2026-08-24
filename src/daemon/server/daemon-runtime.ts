@@ -17,7 +17,7 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { clearDaemonShutdownReport, writeDaemonShutdownReport } from '../daemon-shutdown-report.ts';
 import { createRequestHandler } from '../request-router.ts';
-import { stopSessionAppLog, teardownSessionResources } from '../session-teardown.ts';
+import { isWebSession, stopSessionAppLog, teardownSessionResources } from '../session-teardown.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
 import { runtimeHintValues } from '../handlers/session-runtime.ts';
 import { closeDaemonServers } from './server-shutdown.ts';
@@ -66,6 +66,10 @@ import { createScreenRecordingAdmissionLedger } from '../screen-recording-admiss
 
 const DAEMON_SESSION_TEARDOWN_TIMEOUT_MS = 5_000;
 export const SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS = 11_000;
+// Mirrors AGENT_BROWSER_TIMEOUT_MS in platforms/web/agent-browser-provider.ts: the ceiling that
+// module already places on one `agent-browser` CLI call, so the race below never gives up on the
+// web-close step while the close it started is still running within its own enforced limit.
+export const WEB_BROWSER_SESSION_TEARDOWN_BUDGET_MS = 30_000;
 const DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS = 1_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
 const DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS = 2_000;
@@ -75,14 +79,17 @@ type WritableOutput = {
 };
 
 /**
- * Per-session teardown budget for daemon shutdown. The base budget covers ordinary resources;
- * an active durable recording gets an additional owner-finalization budget so the daemon cannot
- * exit while its runtime handle is still producing the terminal media artifact. The base portion
- * remains available to cleanup steps that follow recording finalization.
+ * Per-session teardown budget for daemon shutdown. The base budget covers ordinary resources; an
+ * active durable recording or an open web session gets an additional owner-finalization budget so
+ * the daemon cannot exit while its runtime handle is still producing the terminal media artifact,
+ * or while agent-browser is still closing its Chrome fleet. The base portion remains available to
+ * cleanup steps that follow recording finalization or the web close.
  */
 export function resolveDaemonSessionTeardownTimeoutMs(session: SessionState): number {
-  if (!session.screenRecording) return DAEMON_SESSION_TEARDOWN_TIMEOUT_MS;
-  return DAEMON_SESSION_TEARDOWN_TIMEOUT_MS + SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS;
+  let timeoutMs = DAEMON_SESSION_TEARDOWN_TIMEOUT_MS;
+  if (session.screenRecording) timeoutMs += SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS;
+  if (isWebSession(session)) timeoutMs += WEB_BROWSER_SESSION_TEARDOWN_BUDGET_MS;
+  return timeoutMs;
 }
 
 async function settleDaemonTeardownStep(params: {

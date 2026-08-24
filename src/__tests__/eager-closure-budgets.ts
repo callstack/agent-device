@@ -270,7 +270,7 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'src/core/command-descriptor/registry.ts': 66,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,
   'src/core/interactors/register-builtins.ts': 73,
-  'src/daemon/session-teardown.ts': 89,
+  'src/daemon/session-teardown.ts': 90,
 });
 
 function toRows(

@@ -8,12 +8,13 @@ import type { SessionStore } from './session-store.ts';
 import { forceCleanupSessionAppLog } from './app-log-session-resource.ts';
 import { appLogResourceStore } from './app-log-resource-store.ts';
 import { finishLiveScreenRecording } from './screen-recording-session-resource.ts';
+import { openWebSessionNames } from './web-session-names.ts';
 
-// Android cleanup helpers stay behind dynamic imports: every teardown caller pays this module's
-// graph, while the helpers only matter when the corresponding capture actually ran on the session.
-// Each import sits inside its sole caller, next to the existing guard, matching register-builtins'
-// interactor lazy pattern; the seam is pinned by
-// src/daemon/__tests__/session-teardown-import-closure.test.ts.
+// Android cleanup helpers and the web managed-browser provider stay behind dynamic imports: every
+// teardown caller pays this module's graph, while the helpers only matter when the corresponding
+// capture (or platform) actually applies to the session. Each import sits inside its sole caller,
+// next to the existing guard, matching register-builtins' interactor lazy pattern; the seam is
+// pinned by src/daemon/__tests__/session-teardown-import-closure.test.ts.
 
 export { stopSessionAudioProbe } from './audio-probe.ts';
 
@@ -51,6 +52,33 @@ export async function stopSessionAndroidSnapshotHelper(session: SessionState): P
   const { stopAndroidSnapshotHelperSessionForDevice } =
     await import('../platforms/android/snapshot-helper.ts');
   await stopAndroidSnapshotHelperSessionForDevice(session.device);
+}
+
+// Single source of truth for "is this a web session", shared with `shouldDispatchPlatformClose`
+// in daemon/handlers/session-close.ts so the ordinary-close and teardown platform-close gates
+// cannot silently drift apart.
+export function isWebSession(session: SessionState): boolean {
+  return session.device.platform === 'web';
+}
+
+// Best-effort mirror of the platform close `session close` dispatches for a web session
+// (`shouldDispatchPlatformClose` in daemon/handlers/session-close.ts) so a daemon shutdown or
+// expired-session reap tells agent-browser to close its fleet immediately instead of leaving it
+// for agent-browser's own idle timer (`DEFAULT_AGENT_BROWSER_IDLE_TIMEOUT_MS`).
+export async function stopSessionWebBrowser(params: {
+  session: SessionState;
+  sessionName: string;
+  sessionStore: SessionStore;
+}): Promise<void> {
+  const { session, sessionName, sessionStore } = params;
+  if (!isWebSession(session)) return;
+  const { createAgentBrowserWebProvider } =
+    await import('../platforms/web/agent-browser-provider.ts');
+  await createAgentBrowserWebProvider({
+    session: sessionName,
+    stateDir: sessionStore.resolveDaemonStateDir(),
+    openWebSessionNames: () => openWebSessionNames(sessionStore),
+  }).close();
 }
 
 type SessionCleanupStep = { step: string; run: () => Promise<void> };
@@ -153,6 +181,13 @@ export async function teardownSessionResources(
     { step: 'apple_perf', run: () => stopSessionApplePerfCapture(session) },
     { step: 'android_native_perf', run: () => stopSessionAndroidNativePerfCapture(session) },
     { step: 'android_snapshot_helper', run: () => stopSessionAndroidSnapshotHelper(session) },
+    // Runs after the resource steps above (recording, app-log, audio, perf) so nothing is still
+    // reading through the browser when it closes, mirroring the ordering `runSessionCloseTeardown`
+    // uses for an ordinary `session close`: best-effort resources first, platform close after.
+    {
+      step: 'web_browser',
+      run: () => stopSessionWebBrowser({ session, sessionName, sessionStore }),
+    },
   ];
   steps.push({
     step: 'materialized_paths',

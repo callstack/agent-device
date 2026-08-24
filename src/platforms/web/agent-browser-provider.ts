@@ -24,7 +24,9 @@ import {
 import { cleanupManagedAgentBrowserOrphansForProviderStartup } from './agent-browser-lifecycle.ts';
 
 const AGENT_BROWSER = 'agent-browser';
-const AGENT_BROWSER_TIMEOUT_MS = 30_000;
+// Exported so WEB_BROWSER_SESSION_TEARDOWN_BUDGET_MS (daemon/server/daemon-runtime.ts) can be
+// pinned to it instead of drifting out of sync with a copied number.
+export const AGENT_BROWSER_TIMEOUT_MS = 30_000;
 const AGENT_BROWSER_DOCTOR_HINT =
   'Run `agent-device web setup` to install the managed web backend.';
 

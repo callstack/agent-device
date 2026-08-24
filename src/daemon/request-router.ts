@@ -55,6 +55,7 @@ import {
 import { unsupportedSaveScriptFlagResponse } from './request-save-script-policy.ts';
 import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-provider.ts';
+import { isWebSession } from './session-teardown.ts';
 import { openWebSessionNames } from './web-session-names.ts';
 import { inferFillText } from './action-utils.ts';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
@@ -351,7 +352,10 @@ const createDefaultWebProvider =
     });
 
 function shouldUseDefaultWebProvider(scope: LockedRequestScope): boolean {
-  return scope.existingSession?.device.platform === 'web' || scope.req.flags?.platform === 'web';
+  return (
+    (scope.existingSession !== undefined && isWebSession(scope.existingSession)) ||
+    scope.req.flags?.platform === 'web'
+  );
 }
 
 function unauthorizedResponse(): DaemonResponse {

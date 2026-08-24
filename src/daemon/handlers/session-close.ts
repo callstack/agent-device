@@ -15,7 +15,7 @@ import {
   recordRepairPlatformClose,
 } from '../session-replay-transaction.ts';
 import { isAuthoringArmedSession } from '../session-script-publication-capability.ts';
-import { type SessionCleanupFailure } from '../session-teardown.ts';
+import { isWebSession, type SessionCleanupFailure } from '../session-teardown.ts';
 import { clearDeviceClaim } from '../device-claims.ts';
 import { applicationLifecycleExecutionFromRequest } from '../application-lifecycle-execution.ts';
 import { hasRuntimeTransportHints } from './session-runtime.ts';
@@ -392,7 +392,7 @@ async function closeAppWithoutEndingSession(params: {
 }
 
 function shouldDispatchPlatformClose(req: DaemonRequest, session: SessionState): boolean {
-  return hasCloseTarget(req) || session.device.platform === 'web';
+  return hasCloseTarget(req) || isWebSession(session);
 }
 
 function hasCloseTarget(req: DaemonRequest): boolean {
