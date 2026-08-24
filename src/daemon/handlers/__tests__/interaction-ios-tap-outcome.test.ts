@@ -73,6 +73,7 @@ async function runClick(
     mockCaptureSnapshotForSession.mockResolvedValueOnce({
       nodes: baseline.nodes,
       backend: baseline.backend ?? 'xctest',
+      producer: 'apple-runner',
       quality: baseline.snapshotQuality,
     });
   }

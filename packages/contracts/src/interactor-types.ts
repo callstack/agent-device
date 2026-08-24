@@ -14,6 +14,7 @@ import type {
   Rect,
   SnapshotBackend,
   SnapshotOptions as BaseSnapshotOptions,
+  SnapshotProducer,
 } from '@agent-device/kernel/snapshot';
 
 export type RunnerContext = {
@@ -245,6 +246,11 @@ export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & 
     SnapshotBackend,
     'android' | 'harmonyos-arkui' | 'xctest' | 'linux-atspi' | 'macos-helper' | 'web'
   >;
+  /**
+   * Required on every acquisition: the channel alone cannot say who acquired the tree or
+   * which guarantees it carries (`SnapshotProducer` in `@agent-device/kernel/snapshot`).
+   */
+  producer: SnapshotProducer;
 };
 
 export type Interactor = {

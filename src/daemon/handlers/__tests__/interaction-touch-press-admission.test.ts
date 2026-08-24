@@ -170,6 +170,7 @@ test('press selector then press @ref rejects refs that outlived the stored snaps
   mockCaptureSnapshotForSession.mockResolvedValue({
     nodes: makeTwoButtonNodes(),
     backend: 'xctest',
+    producer: 'apple-runner',
   });
 
   // Selector press: its resolution capture replaces the stored snapshot
@@ -205,6 +206,7 @@ test('a ref press crosses the ADR 0014 side-effect seam and expires the ref fram
   mockCaptureSnapshotForSession.mockResolvedValue({
     nodes: makeTwoButtonNodes(),
     backend: 'xctest',
+    producer: 'apple-runner',
   });
 
   // A freshly issued complete frame is active.
@@ -227,6 +229,7 @@ test('ADR 0014 evidence #1: a second ref mutation rejects (bare and pinned) unti
   mockCaptureSnapshotForSession.mockResolvedValue({
     nodes: makeTwoButtonNodes(),
     backend: 'xctest',
+    producer: 'apple-runner',
   });
 
   // `snapshot -> press @e1`: admitted; crosses the seam and expires the frame.
@@ -271,6 +274,7 @@ test('re-issuing a complete frame lets press @ref succeed again without warning'
   mockCaptureSnapshotForSession.mockResolvedValue({
     nodes: makeTwoButtonNodes(),
     backend: 'xctest',
+    producer: 'apple-runner',
   });
 
   const selectorPress = await runInteraction(sessionStore, sessionName, 'press', [

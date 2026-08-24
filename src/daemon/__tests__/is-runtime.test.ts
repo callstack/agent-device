@@ -50,6 +50,7 @@ function buttonSnapshot(): SnapshotResult {
       },
     ],
     backend: 'android',
+    producer: 'android-uiautomator',
   };
 }
 
@@ -232,6 +233,7 @@ test('a failing predicate answers COMMAND_FAILED from the bound capture', async 
         },
       ],
       backend: 'xctest',
+      producer: 'apple-runner',
     }),
   });
   const sessionStore = makeSessionStore();

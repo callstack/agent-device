@@ -65,7 +65,9 @@ export function selectorCaptureFixture(
   const captureSnapshot = async (input: CaptureSnapshotInput): Promise<SnapshotResult> => {
     const index = captures.length;
     captures.push(input);
-    return params.snapshot?.(input, index) ?? { nodes: [], backend: 'xctest' };
+    return (
+      params.snapshot?.(input, index) ?? { nodes: [], backend: 'xctest', producer: 'apple-runner' }
+    );
   };
 
   return {

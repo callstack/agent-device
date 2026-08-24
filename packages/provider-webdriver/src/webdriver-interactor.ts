@@ -282,6 +282,7 @@ class WebDriverInteractor implements Interactor {
     this.requireSupport('snapshot');
     return {
       backend: this.backend,
+      producer: 'appium-source',
       nodes: parseWebDriverSource(await this.client.source()),
     };
   }

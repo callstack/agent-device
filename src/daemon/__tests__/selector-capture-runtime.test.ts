@@ -10,12 +10,13 @@ import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
 // hands it over.
 const boundCapture = vi.fn(async (_input: CaptureSnapshotInput): Promise<SnapshotResult> => ({
   backend: 'xctest',
+  producer: 'apple-runner',
   nodes: [],
 }));
 
 beforeEach(() => {
   boundCapture.mockReset();
-  boundCapture.mockResolvedValue({ backend: 'xctest', nodes: [] });
+  boundCapture.mockResolvedValue({ backend: 'xctest', producer: 'apple-runner', nodes: [] });
 });
 
 test('selector capture cache is keyed by scoped presentation options', async () => {
@@ -31,6 +32,7 @@ test('selector capture cache is keyed by scoped presentation options', async () 
   sessionStore.set(sessionName, session);
   boundCapture.mockImplementation(async (input) => ({
     backend: 'xctest',
+    producer: 'apple-runner',
     nodes: [
       {
         index: 0,
@@ -70,10 +72,12 @@ test('legacy iOS sparse recovery retries a full snapshot', async () => {
   boundCapture
     .mockResolvedValueOnce({
       backend: 'xctest',
+      producer: 'apple-runner',
       nodes: [{ index: 0, type: 'Application' }],
     })
     .mockResolvedValueOnce({
       backend: 'xctest',
+      producer: 'apple-runner',
       nodes: [{ index: 0, type: 'Button', label: 'Recovered' }],
     });
 
@@ -98,6 +102,7 @@ test('legacy iOS sparse recovery rethrows full snapshot failure when scoping is 
   boundCapture
     .mockResolvedValueOnce({
       backend: 'xctest',
+      producer: 'apple-runner',
       nodes: [{ index: 0, type: 'Application' }],
     })
     .mockRejectedValueOnce(new Error('full snapshot failed'));
@@ -121,6 +126,7 @@ test('sparse verdict recovery retries with query scope and stores recovered snap
   boundCapture
     .mockResolvedValueOnce({
       backend: 'xctest',
+      producer: 'apple-runner',
       quality: {
         state: 'sparse',
         backend: 'private-ax',
@@ -131,6 +137,7 @@ test('sparse verdict recovery retries with query scope and stores recovered snap
     })
     .mockResolvedValueOnce({
       backend: 'xctest',
+      producer: 'apple-runner',
       nodes: [{ index: 0, type: 'Button', label: 'Search' }],
     });
 

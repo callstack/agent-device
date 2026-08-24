@@ -155,6 +155,25 @@ export type SnapshotBackend =
   | 'linux-atspi'
   | 'web';
 
+/**
+ * Which acquisition component produced a snapshot's raw tree — the third axis beside the
+ * platform channel (`SnapshotBackend`) and the in-plan capture strategy
+ * (`SnapshotCaptureBackend`). One channel is fed by several producers with different
+ * guarantees: `xctest` trees come from the local Apple runner, Appium page-source XML, or a
+ * limrun element tree, and only the runner's output has been through the runner's presentation
+ * (clip fold, effective geometry, scope). Logic that assumes presentation, scope, or geometry
+ * guarantees must key on the producer, never on the channel alone.
+ */
+export type SnapshotProducer =
+  | 'apple-runner'
+  | 'android-uiautomator'
+  | 'appium-source'
+  | 'limrun-ios-tree'
+  | 'macos-helper'
+  | 'linux-atspi'
+  | 'agent-browser'
+  | 'harmonyos-uitest';
+
 export function isSnapshotBackend(value: unknown): value is SnapshotBackend {
   return (
     value === 'xctest' ||
@@ -180,6 +199,7 @@ export type SnapshotState = {
   createdAt: number;
   truncated?: boolean;
   backend?: SnapshotBackend;
+  producer?: SnapshotProducer;
   snapshotQuality?: SnapshotQualityVerdict;
   comparisonSafe?: boolean;
   presentationKey?: string;

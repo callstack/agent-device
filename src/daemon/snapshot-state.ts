@@ -10,6 +10,7 @@ import {
   snapshotPresentationOptionsFromFlags,
   type RawSnapshotNode,
   type SnapshotBackend,
+  type SnapshotProducer,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import {
@@ -35,6 +36,7 @@ export function buildSnapshotState(
     nodes?: RawSnapshotNode[];
     truncated?: boolean;
     backend?: SnapshotBackend;
+    producer?: SnapshotProducer;
     quality?: unknown;
   },
   flags:
@@ -70,6 +72,7 @@ export function buildSnapshotState(
     truncated: data?.truncated,
     createdAt: Date.now(),
     backend: data?.backend,
+    producer: data?.producer,
     ...(snapshotQuality ? { snapshotQuality } : {}),
     presentationKey: buildSnapshotPresentationKey(snapshotPresentationOptionsFromFlags(flags)),
     // Only broad Android snapshots become freshness baselines. If the user asked for a scoped

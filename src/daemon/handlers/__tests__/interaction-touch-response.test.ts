@@ -114,6 +114,7 @@ test('press @ref --verify surfaces evidence through the interactionResultExtra a
       },
     ],
     backend: 'xctest',
+    producer: 'apple-runner',
   });
 
   const response = await handleInteractionCommands({
@@ -229,6 +230,7 @@ test('fill selector --verify surfaces evidence through the interactionResultExtr
       },
     ],
     backend: 'xctest',
+    producer: 'apple-runner',
   });
 
   const response = await handleInteractionCommands({
@@ -297,6 +299,7 @@ test('fill @ref --verify surfaces evidence in the ref response branch', async ()
       },
     ],
     backend: 'xctest',
+    producer: 'apple-runner',
   });
 
   const response = await handleInteractionCommands({
