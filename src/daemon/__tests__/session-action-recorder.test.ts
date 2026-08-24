@@ -500,6 +500,109 @@ test('#1398: two distinct --record-as names sharing the same literal value deter
   expect(JSON.stringify(session.actions)).not.toContain('hunter2');
 });
 
+// #1398 review fix: a naive sequential per-pair pass can corrupt an EARLIER
+// pair's just-inserted placeholder when a LATER pair's literal happens to be
+// a substring of it. Register `somethinglong -> ${ABC}` then `ABC ->
+// ${OTHER}` (a --record-as name that collides with an unrelated variable's
+// own literal value): a later echo of "somethinglong" must become exactly
+// `${ABC}`, never the corrupted `${${OTHER}}` a naive second full-string pass
+// over the already-rewritten text would produce.
+test('#1398: redacting one literal never corrupts a placeholder another literal already produced (result payload)', () => {
+  const session = makeIosSession('default');
+
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="field-one"', 'somethinglong'],
+    flags: { recordAs: 'ABC' },
+    result: { text: 'somethinglong' },
+  });
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="field-two"', 'ABC'],
+    flags: { recordAs: 'OTHER' },
+    result: { text: 'ABC' },
+  });
+  recordActionEntry(session, {
+    command: 'wait',
+    positionals: ['id="confirmation-banner"'],
+    flags: {},
+    result: { waitedMs: 1, text: 'Echo: somethinglong' },
+  });
+
+  expect(session.actions[2]?.result).toEqual({ waitedMs: 1, text: 'Echo: ${ABC}' });
+  const serialized = JSON.stringify(session.actions);
+  expect(serialized).not.toContain('somethinglong');
+  expect(serialized).not.toContain('${${OTHER}}');
+});
+
+test('#1398: redacting one literal never corrupts a placeholder another literal already produced (action-mode target evidence)', () => {
+  const session = makeIosSession('default');
+
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="field-one"', 'somethinglong'],
+    flags: { recordAs: 'ABC' },
+    result: { text: 'somethinglong' },
+  });
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="field-two"', 'ABC'],
+    flags: { recordAs: 'OTHER' },
+    result: { text: 'ABC' },
+  });
+  recordActionEntry(session, {
+    command: 'is',
+    positionals: ['visible', 'id="confirmation-banner"'],
+    flags: {},
+    result: {},
+    targetEvidence: {
+      role: 'text',
+      label: 'Echo: somethinglong',
+      ancestry: [],
+      sibling: 0,
+      viewportOrder: 0,
+      verification: 'verified',
+    },
+  });
+
+  expect(session.actions[2]?.targetEvidence).toEqual({
+    role: 'text',
+    label: 'Echo: ${ABC}',
+    ancestry: [],
+    sibling: 0,
+    viewportOrder: 0,
+    verification: 'unverifiable',
+  });
+  const serialized = JSON.stringify(session.actions);
+  expect(serialized).not.toContain('somethinglong');
+  expect(serialized).not.toContain('${${OTHER}}');
+});
+
+// #1398 review fix: a registered literal is matched BEFORE checking whether
+// an existing placeholder token starts at the current position, so a typed
+// value that itself happens to look like `${SOMETHING}` is still redacted
+// rather than being skipped as if it were already-parameterized text.
+test('#1398: a literal whose own text is shaped like an existing placeholder is still redacted', () => {
+  const session = makeIosSession('default');
+  const literal = '${OTHERVAR}';
+
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="field"', literal],
+    flags: { recordAs: 'TOKEN' },
+    result: { text: literal },
+  });
+  recordActionEntry(session, {
+    command: 'wait',
+    positionals: ['id="confirmation-banner"'],
+    flags: {},
+    result: { waitedMs: 1, text: `Echo: ${literal}` },
+  });
+
+  expect(session.actions[1]?.result).toEqual({ waitedMs: 1, text: 'Echo: ${TOKEN}' });
+  expect(JSON.stringify(session.actions)).not.toContain('OTHERVAR');
+});
+
 test('#1398: dual-endpoint (targetEvidences) evidence is protected independently per endpoint', () => {
   const session = makeIosSession('default');
   const literal = 'hunter2-secret';

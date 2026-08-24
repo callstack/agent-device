@@ -16,7 +16,7 @@ import {
   parameterizeRecordedFillTargetEvidence,
   parameterizeRecordedResultEcho,
   parameterizeTargetEvidenceEcho,
-  targetEvidenceCarriesLiteral,
+  targetEvidenceCarriesAnyLiteral,
 } from './parameterized-recorded-fill.ts';
 import type { TargetEvidenceMode } from './session-target-evidence.ts';
 
@@ -170,10 +170,11 @@ function registerRecordedFillLiteral(session: SessionState, fillLiteral: FillLit
 /**
  * #1398: apply every literal registered so far in THIS session to the
  * CURRENT entry, whatever command produced it. A no-op fast path keeps
- * ordinary, non-parameterized recordings byte-for-byte unchanged. Pairs are
- * applied longest-literal-first so one registered value that happens to be a
- * substring of another (e.g. a username that is a prefix of a password) is
- * never partially consumed by the shorter pair first.
+ * ordinary, non-parameterized recordings byte-for-byte unchanged.
+ * `parameterizeRecordedResultEcho`/`parameterizeTargetEvidenceEcho` redact
+ * every registered literal in one placeholder-safe pass each (see
+ * `parameterizeAgainstLiteralMap`), so no per-literal sequencing is needed
+ * here.
  */
 function applySessionEchoProtection(
   session: SessionState,
@@ -181,22 +182,17 @@ function applySessionEchoProtection(
 ): RecordActionEntry {
   const literals = session.recordedFillLiterals;
   if (!literals || literals.size === 0) return entry;
-  const pairs = [...literals].sort(([a], [b]) => b.length - a.length);
 
-  let result = entry.result;
-  for (const [literal, placeholder] of pairs) {
-    result = parameterizeRecordedResultEcho(result, literal, placeholder);
-  }
-
+  const result = parameterizeRecordedResultEcho(entry.result, literals);
   const evidenceMode = entry.targetEvidenceMode ?? 'action';
   const targetEvidence =
     evidenceMode === 'landmark'
-      ? redactLandmarkEvidenceEcho(entry.targetEvidence, pairs)
-      : redactActionModeEvidenceEcho(entry.targetEvidence, pairs);
+      ? redactLandmarkEvidenceEcho(entry.targetEvidence, literals)
+      : redactActionModeEvidenceEcho(entry.targetEvidence, literals);
   const targetEvidences = entry.targetEvidences
     ? {
-        source: redactActionModeEvidenceEcho(entry.targetEvidences.source, pairs),
-        destination: redactActionModeEvidenceEcho(entry.targetEvidences.destination, pairs),
+        source: redactActionModeEvidenceEcho(entry.targetEvidences.source, literals),
+        destination: redactActionModeEvidenceEcho(entry.targetEvidences.destination, literals),
       }
     : entry.targetEvidences;
 
@@ -215,17 +211,19 @@ function applySessionEchoProtection(
  */
 function redactLandmarkEvidenceEcho(
   evidence: TargetAnnotationV1 | undefined,
-  pairs: readonly (readonly [string, string])[],
+  literals: ReadonlyMap<string, string>,
 ): TargetAnnotationV1 | undefined {
   if (!evidence) return evidence;
-  const echoed = pairs.some(([literal]) => targetEvidenceCarriesLiteral(evidence, literal));
-  return echoed ? undefined : evidence;
+  return targetEvidenceCarriesAnyLiteral(evidence, literals) ? undefined : evidence;
 }
 
 /**
  * #1398: action-mode evidence (`get`, `is`, and mutating element-targeting
  * actions) is required by ADR 0012/0016 and must never be silently dropped.
- * An echoed literal-bearing label is redacted to its placeholder AND
+ * Every echoed literal-bearing label is redacted to its placeholder in one
+ * placeholder-safe pass (a label can legitimately echo more than one
+ * already-parameterized value, e.g. "Signed in as bob, session
+ * hunter2-secret" after separate USERNAME and PASSWORD fills) AND
  * `verification` is downgraded to `"unverifiable"` — the SAME fail-closed
  * downgrade decision 3's writer-parser invariant already uses for an
  * oversized payload. That fails the action's replay loudly
@@ -235,30 +233,19 @@ function redactLandmarkEvidenceEcho(
  */
 function redactActionModeEvidenceEcho(
   evidence: TargetAnnotationV1,
-  pairs: readonly (readonly [string, string])[],
+  literals: ReadonlyMap<string, string>,
 ): TargetAnnotationV1;
 function redactActionModeEvidenceEcho(
   evidence: TargetAnnotationV1 | undefined,
-  pairs: readonly (readonly [string, string])[],
+  literals: ReadonlyMap<string, string>,
 ): TargetAnnotationV1 | undefined;
 function redactActionModeEvidenceEcho(
   evidence: TargetAnnotationV1 | undefined,
-  pairs: readonly (readonly [string, string])[],
+  literals: ReadonlyMap<string, string>,
 ): TargetAnnotationV1 | undefined {
   if (!evidence) return evidence;
-  // Every registered pair is checked, not just the first match — a label can
-  // legitimately echo more than one already-parameterized value (e.g. "Signed
-  // in as bob, session hunter2-secret" after separate USERNAME and PASSWORD
-  // fills), and leaving a later literal untouched would defeat the guarantee
-  // for that value alone.
-  let redacted = evidence;
-  let echoed = false;
-  for (const [literal, placeholder] of pairs) {
-    if (!targetEvidenceCarriesLiteral(redacted, literal)) continue;
-    redacted = parameterizeTargetEvidenceEcho(redacted, literal, placeholder);
-    echoed = true;
-  }
-  return echoed ? { ...redacted, verification: 'unverifiable' } : evidence;
+  if (!targetEvidenceCarriesAnyLiteral(evidence, literals)) return evidence;
+  return { ...parameterizeTargetEvidenceEcho(evidence, literals), verification: 'unverifiable' };
 }
 
 function replaceFillText(positionals: string[], placeholder: string): string[] {

@@ -122,9 +122,15 @@ redaction lookup, not a secret registry with a naming or comparison API.
 
 - **Result/event/backend-output fields** (display data, never compared at replay): content-aware
   substring redaction, reusing the same recursive backend-output scrub the fill boundary already applies
-  to its own entry, generalized over every literal registered so far in the session. Pairs are applied
-  longest-literal-first so one registered value that is a substring of another (e.g. a username that is a
-  prefix of a password) is never partially consumed by the shorter pair first.
+  to its own entry, generalized over every literal registered so far in the session. The substitution
+  itself is one placeholder-safe left-to-right pass over each string, not N sequential full-string passes
+  — a naive sequential pass over the same value can corrupt an EARLIER pair's just-inserted placeholder
+  when a LATER pair's literal happens to be a substring of it (register `somethinglong -> ${ABC}`, then
+  `ABC -> ${OTHER}`, and a second pass over a value already rewritten to `${ABC}` matches "ABC" *inside*
+  that token, producing `${${OTHER}}`). The single pass tries every registered literal longest-first at
+  each position — so one registered value that is a substring of another (a username that is a prefix of
+  a password) is never partially consumed by the shorter pair — and never re-scans text it has already
+  emitted, so no literal can ever be matched inside another pair's placeholder token in either direction.
 - **`target-v1`/`targets-v1` identity evidence** (`label`, `ancestry[].label`, `scrollRegion.label` — the
   fields replay's own classification compares): never silently text-substituted while still claiming a
   trustworthy identity. Replay compares recorded identity against the *live* tree, which legitimately
