@@ -33,6 +33,7 @@ import type {
 } from './interactor-operation-binding.ts';
 import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
+import { bindLocalSettingsInteractor, bindProviderSettingsInteractor } from './settings-runtime.ts';
 import {
   bindLocalTvRemoteInteractor,
   bindProviderTvRemoteInteractor,
@@ -62,6 +63,7 @@ const CATALOG_INTERACTOR_OPERATIONS = [
   'writeClipboard',
   'appSwitcher',
   'triggerAppEvent',
+  'setSetting',
 ] as const;
 
 export type CatalogInteractorOperation = (typeof CATALOG_INTERACTOR_OPERATIONS)[number];
@@ -94,6 +96,7 @@ const LOCAL_BINDERS: Readonly<
   writeClipboard: bindLocalClipboardWriteInteractor,
   appSwitcher: bindLocalAppSwitcherInteractor,
   triggerAppEvent: bindLocalAppEventInteractor,
+  setSetting: bindLocalSettingsInteractor,
 });
 
 const PROVIDER_BINDERS: Readonly<
@@ -113,6 +116,7 @@ const PROVIDER_BINDERS: Readonly<
   writeClipboard: bindProviderClipboardWriteInteractor,
   appSwitcher: bindProviderAppSwitcherInteractor,
   triggerAppEvent: bindProviderAppEventInteractor,
+  setSetting: bindProviderSettingsInteractor,
 });
 
 /**

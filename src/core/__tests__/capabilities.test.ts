@@ -104,15 +104,6 @@ test('device capability matrix stays consistent across shared command groups', (
       ],
     },
     {
-      commands: ['settings'],
-      checks: [
-        { device: iosSimulator, expected: true, label: 'on iOS sim' },
-        { device: iosDevice, expected: false, label: 'on iOS device' },
-        { device: androidDevice, expected: true, label: 'on Android' },
-        { device: macOsDevice, expected: true, label: 'on macOS' },
-      ],
-    },
-    {
       commands: ['gesture', 'swipe'],
       checks: [
         { device: iosSimulator, expected: true, label: 'on iOS sim' },
@@ -210,7 +201,6 @@ test('macOS supports the Apple runner interaction core but excludes mobile-only 
       'perf',
       'press',
       'record',
-      'settings',
       'screenshot',
       'scroll',
       'snapshot',
@@ -252,7 +242,7 @@ test('tvOS follows iOS capability matrix by device kind', () => {
     [{ device: tvOsSimulator, expected: true, label: 'on tvOS' }],
   );
   assertCommandSupport(
-    ['settings', 'alert'],
+    ['alert'],
     [{ device: tvOsSimulator, expected: true, label: 'on tvOS simulator' }],
   );
 });
@@ -275,6 +265,7 @@ test('Linux supports desktop interaction commands and blocks mobile/unsupported 
       'screenshot',
       'scroll',
       'snapshot',
+      'settings',
       'swipe',
       'trigger-app-event',
       'type',
@@ -283,7 +274,7 @@ test('Linux supports desktop interaction commands and blocks mobile/unsupported 
     [{ device: linuxDevice, expected: true, label: 'on Linux' }],
   );
   assertCommandSupport(
-    ['alert', 'perf', 'settings'],
+    ['alert', 'perf'],
     [{ device: linuxDevice, expected: false, label: 'on Linux' }],
   );
 });
@@ -312,6 +303,7 @@ test('web supports only the initial browser interaction slice', () => {
       'screenshot',
       'scroll',
       'snapshot',
+      'settings',
       'swipe',
       'trigger-app-event',
       'type',
@@ -320,7 +312,7 @@ test('web supports only the initial browser interaction slice', () => {
     [{ device: webDevice, expected: true, label: 'on web' }],
   );
   assertCommandSupport(
-    ['alert', 'perf', 'settings'],
+    ['alert', 'perf'],
     [{ device: webDevice, expected: false, label: 'on web' }],
   );
   assertCommandSupport(

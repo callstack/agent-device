@@ -35,6 +35,7 @@ import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
+import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { bindLocalInteractorOperationSet } from '@agent-device/contracts/local-interactor-operation-set';
@@ -281,6 +282,9 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // The deep link opens through `am start`, admitted wherever the retired `ANDROID_ALL`
         // bucket admitted it.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: androidTouchFact(device) }),
+        // Settings run over adb (`appops`, `settings put`, `pm clear`, …) on every real kind, so
+        // the cell is the retired `ANDROID_ALL` bucket verbatim.
+        ...settingsRuntimeOperationFacts({ setSetting: androidTouchFact(device) }),
         ...orientationRuntimeOperationFacts({ orientation: androidTouchFact(device) }),
         ...tvRemoteRuntimeOperationFacts({ tvRemote: androidTvRemoteFact(device) }),
         // The only owner with a live IME status read; dismiss/enter share every other

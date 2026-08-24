@@ -5,6 +5,11 @@ import {
   providerRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
+import {
+  type SetSettingInput,
+  settingsRuntimeOperationFacts,
+} from '@agent-device/contracts/settings-runtime';
 import {
   type CaptureScreenshotInput,
   screenshotRuntimeOperationFacts,
@@ -14,8 +19,8 @@ import {
   type SnapshotResult,
   snapshotRuntimeOperationFacts,
 } from '@agent-device/contracts/snapshot-runtime';
-import { deviceShape, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import { dispatchCommand, type DispatchContext } from '../../core/dispatch.ts';
+import { deviceShape, isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import { type DispatchContext } from '../../core/dispatch.ts';
 import { getRequestSignal } from '../../request/cancel.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
@@ -28,6 +33,19 @@ import { writeSolidPng } from './screenshot-runtime-fixture.ts';
  * intent here instead of on a legacy dispatch call.
  */
 export const fixtureScreenshotCaptures: CaptureScreenshotInput[] = [];
+
+/**
+ * Every mutation the fixture's bound settings operation received, newest last. The neutral input
+ * is the whole assertion surface now: whether a request reached the owner, and with which setting,
+ * state and resolved app id, is exactly what the retired positional dispatch used to witness.
+ */
+export const fixtureSettingsMutations: SetSettingInput[] = [];
+
+/** Clears both recorders so a suite can assert "the owner was never reached" from a known zero. */
+export function resetSnapshotRuntimeFixture(): void {
+  fixtureScreenshotCaptures.length = 0;
+  fixtureSettingsMutations.length = 0;
+}
 
 /** Request-scoped snapshot seam for handler tests that mock the legacy leaf dispatch. */
 export function snapshotRuntimeFixture(requestId?: string): Readonly<{
@@ -46,6 +64,10 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
       fixtureScreenshotCaptures.push(input);
       writeSolidPng(input.outPath);
     };
+    const setSetting = async (input: SetSettingInput) => {
+      fixtureSettingsMutations.push(input);
+      return {};
+    };
     return narrowDeviceBinding(
       {
         device,
@@ -58,6 +80,7 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
           captureSnapshotWithCustomActions: captureSnapshot,
           captureSnapshotWithoutActiveApp: captureSnapshot,
           captureScreenshot,
+          setSetting,
         },
         [Symbol.asyncDispose]: async () => {},
       },
@@ -67,6 +90,17 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
 
   return { inspectFacts, bindDevice };
 }
+
+/** A physical Apple device that is not the macOS host: the one settings refusal these suites use. */
+function appleHostOrSimulatorOnly(device: DeviceInfo): boolean {
+  return device.platform === 'apple' && device.kind === 'device' && !isMacOs(device);
+}
+
+const settingsUnavailable = {
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'settings is supported on Apple simulators and the macOS host, not on physical devices of this OS.',
+} as const;
 
 async function snapshotFacts(device: DeviceInfo): Promise<RuntimeFacts<PlatformRuntimeOperations>> {
   const base = await unavailableDeviceRuntimeGateway.inspectFacts(device);
@@ -96,6 +130,13 @@ async function snapshotFacts(device: DeviceInfo): Promise<RuntimeFacts<PlatformR
           isIosFamily(device) && device.kind === 'simulator' ? available : customActionsUnavailable,
         withoutActiveApp: providerOwned || !isIosFamily(device) ? available : activeAppRequired,
       }),
+      // R58: `settings` runs on the snapshot route, so this fixture states its cell too. It
+      // restates only the one refusal these suites exercise — a physical non-macOS Apple device
+      // has no settings surface — and the full Apple cell table is pinned where it belongs, in
+      // `platform-apple/src/system/runtime.test.ts`.
+      ...settingsRuntimeOperationFacts({
+        setSetting: appleHostOrSimulatorOnly(device) ? settingsUnavailable : available,
+      }),
     },
   };
 }
@@ -119,5 +160,11 @@ async function dispatchFixtureSnapshot(
     snapshotIncludeHiddenContentHints: options.includeHiddenContentHints,
     surface: options.surface,
   };
-  return (await dispatchCommand(device, 'snapshot', [], undefined, context)) as SnapshotResult;
+  return (await legacyDispatchCapture(
+    device,
+    'snapshot',
+    [],
+    undefined,
+    context,
+  )) as SnapshotResult;
 }

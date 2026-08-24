@@ -1,4 +1,5 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
+import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -26,7 +27,6 @@ vi.mock('../../platforms/apple/core/tool-provider.ts', async (importOriginal) =>
   };
 });
 
-import { dispatchCommand } from '../../core/dispatch.ts';
 import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
@@ -43,7 +43,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
 
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 // The open path reaches readiness through its admitted package binding, so router-level
@@ -106,8 +105,8 @@ function openRequest(
 }
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  legacyDispatchCapture.mockReset();
+  legacyDispatchCapture.mockResolvedValue({});
   mockResolveTargetDevice.mockReset();
   mockEnsureDeviceReady.mockReset();
   mockEnsureDeviceReady.mockResolvedValue(undefined);
@@ -362,7 +361,7 @@ test('proxy open without required lease metadata fails before device resolution'
     expect(response.error.message).toMatch(/Proxy open requires leaseId/);
   }
   expect(mockResolveTargetDevice).not.toHaveBeenCalled();
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(legacyDispatchCapture).not.toHaveBeenCalled();
 });
 
 test('close releases the session lease', async () => {
@@ -435,7 +434,7 @@ test('close rejects a different client before cleanup', async () => {
   expect(response.ok).toBe(false);
   expect(sessionStore.get('default')).toBeDefined();
   expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(legacyDispatchCapture).not.toHaveBeenCalled();
 });
 
 test('router serializes same-device open requests before first session creation finishes', async () => {

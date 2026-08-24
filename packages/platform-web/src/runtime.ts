@@ -49,6 +49,7 @@ import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime'
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
+import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
@@ -406,6 +407,7 @@ function webRuntimeFacts(
       }),
       ...appSwitcherRuntimeOperationFacts({ appSwitcher: navigationUnavailable }),
       ...appEventRuntimeOperationFacts({ triggerAppEvent: navigationUnavailable }),
+      ...settingsRuntimeOperationFacts({ setSetting: navigationUnavailable }),
       ensureReady: readinessUnavailable,
       bootTarget: readinessUnavailable,
       bootTargetHeadless: readinessUnavailable,

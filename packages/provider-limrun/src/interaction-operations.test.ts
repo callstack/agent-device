@@ -4,6 +4,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test } from 'vitest';
 import {
   limrunAppEventOperationFacts,
+  limrunSettingsOperationFacts,
   limrunAppSwitcherOperationFacts,
   limrunClipboardOperationFacts,
   limrunNavigationOperationFacts,
@@ -100,6 +101,20 @@ test('app-event delivery is admitted on both direct-session legs', () => {
   expect(limrunAppEventOperationFacts(iosDevice, liveSessionUnavailable).triggerAppEvent).toEqual(
     liveSessionUnavailable,
   );
+});
+
+// R58: back to the app-switcher split — the Android leg reuses the local family's interactor,
+// and the iOS direct session's own `setSetting` throws.
+test('settings ride the Android interactor and are refused on the iOS leg', () => {
+  expect(limrunSettingsOperationFacts(androidMobileDevice).setSetting).toEqual({ available: true });
+  expect(limrunSettingsOperationFacts(iosDevice).setSetting).toEqual({
+    available: false,
+    reason: 'unsupported-provider-mode',
+    hint: 'Limrun iOS direct sessions do not expose settings changes yet.',
+  });
+  expect(
+    limrunSettingsOperationFacts(androidMobileDevice, liveSessionUnavailable).setSetting,
+  ).toEqual(liveSessionUnavailable);
 });
 
 test('the iOS leg admits back/orientation but explicitly refuses home and tv-remote', () => {

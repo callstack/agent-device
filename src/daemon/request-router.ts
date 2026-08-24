@@ -451,10 +451,9 @@ async function dispatchGenericForLockedScope(params: {
     inspectFacts: lockedScope.inspectFacts,
     bindDevice: lockedScope.bindDevice,
   });
-  if (runtimeExecution && !runtimeExecution.ok) return runtimeExecution.response;
+  if (!runtimeExecution.ok) return runtimeExecution.response;
 
-  const { dispatchGenericCommand, executeGenericPlatformCommand } =
-    await loadGenericRequestHandlerModule();
+  const { dispatchGenericCommand } = await loadGenericRequestHandlerModule();
   const dispatchResponse = await dispatchGenericCommand({
     req: lockedScope.req,
     session,
@@ -462,8 +461,8 @@ async function dispatchGenericForLockedScope(params: {
     logPath,
     sessionStore,
     contextFromFlags: lockedScope.contextFromFlags,
-    executePlatformCommand: runtimeExecution?.execute ?? executeGenericPlatformCommand,
-    ...(runtimeExecution?.recorded ? { recordedRequest: runtimeExecution.recorded } : {}),
+    executePlatformCommand: runtimeExecution.execute,
+    ...(runtimeExecution.recorded ? { recordedRequest: runtimeExecution.recorded } : {}),
   });
   return dispatchResponse;
 }

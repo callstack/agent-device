@@ -26,6 +26,7 @@ import {
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
+import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
@@ -279,6 +280,9 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         ...appSwitcherRuntimeOperationFacts({ appSwitcher: harmonyFocusFact(device) }),
         // HarmonyOS never carried a `trigger-app-event` bucket and is absent from the overlay.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: harmonyPlatformLeafUnavailable }),
+        // Parity with the retired `HARMONYOS_SUPPORTED_COMMANDS` overlay, which listed `settings`
+        // for both HarmonyOS kinds; the hdc-driven settings surface shares the interaction gate.
+        ...settingsRuntimeOperationFacts({ setSetting: harmonyFocusFact(device) }),
         ...orientationRuntimeOperationFacts({ orientation: harmonyPlatformLeafUnavailable }),
         ...tvRemoteRuntimeOperationFacts({ tvRemote: harmonyPlatformLeafUnavailable }),
         ...keyboardRuntimeOperationFacts({

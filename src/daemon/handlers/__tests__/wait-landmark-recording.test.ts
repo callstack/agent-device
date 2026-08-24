@@ -12,6 +12,7 @@
  * `WAIT_LANDMARK_MISMATCH_REASON` refusal.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
+import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { dispatchWaitViaRuntime } from '../../selector-runtime.ts';
 import type { DaemonRequest } from '../../types.ts';
 import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
@@ -27,7 +28,6 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return {
     ...actual,
-    dispatchCommand: vi.fn(async () => ({})),
     resolveTargetDevice: vi.fn(actual.resolveTargetDevice),
   };
 });
@@ -40,10 +40,6 @@ vi.mock('../snapshot-interactor-capture.ts', async () => {
 vi.mock('../../device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
-
-import { dispatchCommand } from '../../../core/dispatch.ts';
-
-const mockDispatch = vi.mocked(dispatchCommand);
 
 function screenSnapshot(parentLabel: string) {
   return {
@@ -69,8 +65,8 @@ function screenSnapshot(parentLabel: string) {
 }
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockImplementation(async (_device: unknown, command: string) => {
+  legacyDispatchCapture.mockReset();
+  legacyDispatchCapture.mockImplementation(async (_device: unknown, command: string) => {
     return command === 'snapshot' ? screenSnapshot('Detail Screen') : {};
   });
 });
@@ -152,7 +148,7 @@ test('a replayed wait with a landmark guard succeeds when a match carries the re
 });
 
 test('a replayed wait with a landmark guard refuses at the deadline when only impostors matched', async () => {
-  mockDispatch.mockImplementation(async (_device: unknown, command: string) => {
+  legacyDispatchCapture.mockImplementation(async (_device: unknown, command: string) => {
     return command === 'snapshot' ? screenSnapshot('List Screen') : {};
   });
 
@@ -181,5 +177,5 @@ test('a selector-shaped positional list that fails to parse as a selector is rej
   if (response.ok) return;
   expect(response.error.code).toBe('INVALID_ARGS');
   expect(response.error.message).toContain('label="Open"');
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(legacyDispatchCapture).not.toHaveBeenCalled();
 });

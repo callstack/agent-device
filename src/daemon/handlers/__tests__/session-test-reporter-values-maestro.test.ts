@@ -16,10 +16,10 @@
 //
 // These tests document today's behavior; they do not propose behavior.
 
-// Maestro replay resolves a target device and captures view hierarchies through
-// core/dispatch. These fixtures model no runner, so both are stubbed: the device resolves to a
-// fixed Android emulator, and `snapshot` returns an empty hierarchy (which is what makes
-// `assertNotVisible` pass deterministically without a screen).
+// Maestro replay resolves a target device and reads a gesture viewport through core/dispatch.
+// These fixtures model no runner, so both are stubbed: the device resolves to a fixed Android
+// emulator, and captures return an empty hierarchy (which is what makes `assertNotVisible` pass
+// deterministically without a screen).
 import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
@@ -34,9 +34,6 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
       kind: 'emulator',
       booted: true,
     })),
-    dispatchCommand: vi.fn(async () => {
-      throw new Error('no device runner available in this test');
-    }),
     dispatchGestureViewport: vi.fn(async () => ({ x: 0, y: 0, width: 400, height: 800 })),
   };
 });

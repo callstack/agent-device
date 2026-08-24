@@ -206,6 +206,8 @@ function expectLinuxNavigationAndKeyboardFacts(
     'appSwitcher',
     // R57: the retired `trigger-app-event` descriptor declared `linux: {}` too.
     'triggerAppEvent',
+    // R58: and so did `settings`.
+    'setSetting',
   ] as const) {
     expect(binding.facts.operations[operation]).toEqual({
       available: false,

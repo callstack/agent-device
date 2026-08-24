@@ -1,4 +1,5 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
+import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -28,7 +29,6 @@ vi.mock('../../platforms/apple/core/apps.ts', async (importOriginal) => {
   };
 });
 
-import { dispatchCommand } from '../../core/dispatch.ts';
 import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
@@ -43,7 +43,6 @@ import { ensureDeviceReady } from '../device-ready.ts';
 // Readiness is package-owned; hold the open at the fixture's platform-neutral readiness gate.
 import { awaitFixtureReadiness } from './application-lifecycle-runtime-fixture.ts';
 
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
@@ -51,8 +50,8 @@ const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
 beforeEach(() => {
   gestureRuntimeSpies.scrollDirection.mockClear();
   systemRuntimeSpies.appSwitcher.mockClear();
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  legacyDispatchCapture.mockReset();
+  legacyDispatchCapture.mockResolvedValue({});
   mockResolveTargetDevice.mockReset();
   mockResolveTargetDevice.mockResolvedValue(IOS_SIMULATOR);
   mockEnsureDeviceReady.mockReset();
@@ -91,7 +90,7 @@ test('replay runs active-session actions inside the parent request provider scop
   expect(response).toMatchObject({ ok: true });
   // Both actions now reach bound operations — `app-switcher` through R56, `scroll down` through
   // R53 — so the flow drives the runtime gateway twice and the legacy dispatcher not at all.
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(legacyDispatchCapture).not.toHaveBeenCalled();
   expect(systemRuntimeSpies.appSwitcher).toHaveBeenCalledTimes(1);
   expect(gestureRuntimeSpies.scrollDirection).toHaveBeenCalledTimes(1);
   expect(appleRunnerProvider).toHaveBeenCalledTimes(1);
@@ -127,7 +126,7 @@ test('replay routes session-changing actions through the full request path', asy
   expect(response).toMatchObject({ ok: true });
   // `app-switcher` reaches its bound operation since R56; `runtime set` mutates session state and
   // never dispatched, so the legacy dispatcher sees neither action.
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(legacyDispatchCapture).not.toHaveBeenCalled();
   expect(systemRuntimeSpies.appSwitcher).toHaveBeenCalledTimes(1);
   expect(appleRunnerProvider).toHaveBeenCalledTimes(2);
 });

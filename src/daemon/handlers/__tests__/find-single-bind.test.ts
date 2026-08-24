@@ -9,17 +9,7 @@ import {
   runtimeBindingSpies,
 } from './interaction-get-runtime-fixture.ts';
 import { invokeFindHandler } from './find-handler-fixture.ts';
-
-const { mockDispatch } = vi.hoisted(() => ({ mockDispatch: vi.fn() }));
-
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return {
-    ...actual,
-    dispatchCommand: mockDispatch,
-    resolveTargetDevice: actual.resolveTargetDevice,
-  };
-});
+import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 
 vi.mock('../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../__tests__/legacy-snapshot-capture-fixture.ts');
@@ -28,7 +18,7 @@ vi.mock('../snapshot-interactor-capture.ts', async () => {
 
 beforeEach(() => {
   resetGetRuntimeFixture();
-  mockDispatch.mockReset();
+  legacyDispatchCapture.mockReset();
 });
 
 async function runMutatingFind(positionals: string[], node: Record<string, unknown>) {
@@ -36,7 +26,7 @@ async function runMutatingFind(positionals: string[], node: Record<string, unkno
   const sessionName = 'default';
   const session = makeIosSession(sessionName);
   sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device: unknown, command: string) =>
+  legacyDispatchCapture.mockImplementation(async (_device, command) =>
     command === 'snapshot' ? { nodes: [node] } : {},
   );
   return await invokeFindHandler({

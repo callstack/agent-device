@@ -25,6 +25,7 @@ import {
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
+import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
@@ -221,6 +222,17 @@ const appSwitcherUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'This WebDriver provider runtime does not expose the app switcher for this device.',
+} as const);
+
+/**
+ * The WebDriver interactor's own `setSetting` always throws unsupported (its capability map
+ * declares `settings: unsupported`), so this cell is unavailable unconditionally rather than
+ * gated by interactor reachability — the same shape `tvRemote` takes.
+ */
+const settingsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'WebDriver provider runtimes do not expose device settings.',
 } as const);
 
 const appEventUnavailable = Object.freeze({
@@ -457,6 +469,7 @@ function webDriverFacts(
       writeClipboard: inactiveSession,
       appSwitcher: inactiveSession,
       triggerAppEvent: inactiveSession,
+      setSetting: inactiveSession,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: inactiveSession,
         prepareApplicationOpen: inactiveSession,
@@ -495,6 +508,7 @@ function webDriverFacts(
     writeClipboard: clipboardUnavailable,
     appSwitcher: appSwitcherUnavailable,
     triggerAppEvent: appEventUnavailable,
+    setSetting: settingsUnavailable,
     lifecycle: webDriverLifecycleFacts(device),
   });
   // Both capture cells need the same reachability: an interactor this provider can drive, on a
@@ -573,6 +587,7 @@ function webDriverFacts(
       ...appEventRuntimeOperationFacts({
         triggerAppEvent: interactorCell(reachable, appEventUnavailable),
       }),
+      ...settingsRuntimeOperationFacts({ setSetting: settingsUnavailable }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       ensureReady: available,
       bootTarget: available,

@@ -13,6 +13,7 @@ import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../..
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createTestAppLogLiveHandle } from '../../../src/__tests__/test-utils/app-log-live-handle.ts';
+import { setIosSetting } from '../../../src/platforms/apple/core/app-settings.ts';
 import { assertFlatToolCall } from './assertions.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness } from './harness.ts';
@@ -279,6 +280,18 @@ function createRecordingPlatformRuntimeGateway(params: {
               }),
             );
           },
+          // R58 put `settings` behind the owner's own `setSetting` fact, so the scenario's
+          // gateway states and serves that cell like any other. The Apple leg reuses the local
+          // family's implementation — the same shape Limrun's Android leg takes — so the simctl
+          // argument mapping this scenario asserts still runs through the recorded tool seam.
+          setSetting: async (input) =>
+            await setIosSetting(
+              device,
+              input.setting,
+              input.state,
+              input.appBundleId,
+              input.options,
+            ),
           appLogReattach: async () => ({ status: 'missing' }),
           appLogCleanup: async () => ({ status: 'already-missing' }),
           resolveOpenTarget: async (input) => ({
@@ -326,6 +339,7 @@ function recordingRuntimeFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntime
       bootTargetHeadless: unavailableRecording,
       listApps: unavailableRecording,
       ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
+      setSetting: available,
       ...applicationLifecycleOperationFacts({
         resolveOpenTarget: available,
         prepareApplicationOpen: available,

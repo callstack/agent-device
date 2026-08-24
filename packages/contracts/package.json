@@ -311,6 +311,10 @@
       "types": "./src/settings.ts",
       "default": "./src/settings.ts"
     },
+    "./settings-runtime": {
+      "types": "./src/settings-runtime.ts",
+      "default": "./src/settings-runtime.ts"
+    },
     "./snapshot": {
       "types": "./src/facades/snapshot.ts",
       "default": "./src/facades/snapshot.ts"

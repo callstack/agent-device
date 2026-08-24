@@ -1,4 +1,5 @@
 import { isMacOs } from '@agent-device/kernel/device';
+import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { expect, vi, beforeEach } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import type { AppLogLiveState } from '@agent-device/contracts/app-log-runtime';
@@ -19,7 +20,6 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const resolveTargetDevice = vi.fn();
   return {
     ...actual,
-    dispatchCommand: vi.fn(async () => ({})),
     resolveTargetDevice,
     resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(resolveTargetDevice)),
   };
@@ -95,7 +95,7 @@ import * as path from 'node:path';
 import { cleanupRetainedMaterializedPathsForSession } from '../../materialized-path-registry.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
-import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
+import { resolveTargetDevice } from '../../../core/dispatch.ts';
 import { ensureDeviceReady } from '../../device-ready.ts';
 import {
   applyRuntimeHintValues,
@@ -118,7 +118,6 @@ import {
 } from '../../../platforms/apple/core/apps.ts';
 import { dispatchApplicationLifecycleEffect } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
 
-export const mockDispatch = vi.mocked(dispatchCommand);
 export const mockLifecycleDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 export const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
 export const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
@@ -136,6 +135,8 @@ export const mockCleanupRetainedMaterializedPaths = vi.mocked(
   cleanupRetainedMaterializedPathsForSession,
 );
 export const mockRunCmd = vi.mocked(runCmd);
+/** The retired dispatcher's snapshot leg, now an owned test double (R58). */
+export const mockDispatch = legacyDispatchCapture;
 export const mockResolveIosApp = vi.mocked(resolveIosApp);
 export const mockResolveIosSimulatorDeepLinkBundleId = vi.mocked(
   resolveIosSimulatorDeepLinkBundleId,

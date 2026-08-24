@@ -73,8 +73,8 @@ test('daemon modularity baseline records the measured R7 ownership pressure', ()
     Object.values(SESSION_STATE_FIELD_OWNERS).reduce((sum, owners) => sum + owners.length, 0),
     DAEMON_MODULARITY_BASELINE.sessionState.ownerFileClaims,
   );
-  assert.equal(TYPE_CYCLE_BASELINE, 25);
-  assert.equal(DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers['daemon-server'], 14);
+  assert.equal(TYPE_CYCLE_BASELINE, 21);
+  assert.equal(DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers['daemon-server'], 12);
   assert.equal('daemon' in DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers, false);
 });
 
@@ -239,7 +239,7 @@ test('R10 zone overflow lists the whole zone so the joining member is visible', 
   const [violation] = violations;
   assert.equal(violation!.rule, 'R10 daemon-modularity');
   assert.equal(violation!.file, 'scripts/layering/daemon-modularity.ts');
-  assert.match(violation!.message, /contains 15 daemon-server file\(s\) \(baseline 14\)/);
+  assert.match(violation!.message, /contains 13 daemon-server file\(s\) \(baseline 12\)/);
   for (const member of daemonMembers) {
     assert.ok(violation!.message.includes(member), `${member} missing from: ${violation!.message}`);
   }
@@ -257,6 +257,6 @@ test('R9 rejects a baseline left above the measured cycle', () => {
 
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.rule, /^R9 /);
-  assert.match(violations[0]!.message, /dropped to 24 files \(baseline 25\)/);
+  assert.match(violations[0]!.message, /dropped to 20 files \(baseline 21\)/);
   assert.match(violations[0]!.message, /Lower LARGEST_TYPE_CYCLE_ZONE_CEILINGS by the same 1/);
 });

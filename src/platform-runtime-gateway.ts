@@ -326,6 +326,7 @@ function unavailableProviderBinding(
     writeClipboard: unavailable,
     appSwitcher: unavailable,
     triggerAppEvent: unavailable,
+    setSetting: unavailable,
     lifecycle: unavailableProviderLifecycleFacts(unavailable),
   });
 }
@@ -361,6 +362,7 @@ function unavailableProviderFacts(runtime: ProviderDeviceRuntime, device: Device
       writeClipboard: unavailable,
       appSwitcher: unavailable,
       triggerAppEvent: unavailable,
+      setSetting: unavailable,
       readiness: unavailable,
       lifecycle: unavailableProviderLifecycleFacts(unavailable),
     },

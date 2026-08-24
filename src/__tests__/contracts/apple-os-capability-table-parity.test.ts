@@ -65,8 +65,6 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   perf: supportsCoreDevicePhysicalOperation,
   alert: (device) =>
     device.platform === 'android' || isIosOs(device) || isMacOsOrAppleSimulator(device),
-  settings: (device) =>
-    device.platform === 'android' || isMacOs(device) || device.kind === 'simulator',
   // `audio` is NOT part of the AppleOS-table relocation — it stays the standalone
   // `isAudioProbeSupportedDevice` predicate. Included here only so the key-set
   // assertion stays strict (catches a dropped command) and confirms the rebase

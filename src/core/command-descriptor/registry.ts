@@ -39,6 +39,7 @@ import {
   homeRuntimeUse,
   hoverRuntimeUses,
   appEventRuntimeUse,
+  settingsRuntimeUse,
   appSwitcherRuntimeUse,
   clipboardRuntimePlanUses,
   keyboardRuntimePlanUses,
@@ -111,17 +112,10 @@ export type DescriptorCatalogRecord<Group extends CommandCatalogGroup> = {
   ]: Descriptor['name'];
 };
 
-export type DescriptorDispatchCommandName =
-  Extract<(typeof commandDescriptors)[number], { dispatch: object }> extends infer Descriptor
-    ? Descriptor extends { name: infer Name extends string }
-      ? Name
-      : never
-    : never;
-
 /**
  * The literal union of every command whose `daemon.route` is `'session'`.
  * Drives `SESSION_COMMAND_HANDLER_IMPLS` in `src/daemon/handlers/session.ts`
- * (mirrors `DescriptorDispatchCommandName` above): adding a session-routed
+ * : adding a session-routed
  * descriptor without a matching handler table entry is a compile error rather
  * than a runtime routing gap caught only by `expectHandlerResponse`.
  */
@@ -1016,18 +1010,16 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/settings.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
+    // R58 retires this command's capability bucket, its `dispatch` leaf, and its HarmonyOS
+    // overlay membership together: admission is the owner's `setSetting` fact, and the only
+    // execution is that one bound operation. The macOS setting-name gate stays daemon-side —
+    // it keys on the requested setting, which is not a device fact.
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: { route: 'snapshot', refFrameEffect: 'may-invalidate' },
-    dispatch: {},
-    capability: {
-      apple: APPLE_SIM_AND_DEVICE,
-      android: ANDROID_ALL,
-      linux: LINUX_NONE,
-    },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: [settingsRuntimeUse] },
   },
 
   // -- specialized routes --

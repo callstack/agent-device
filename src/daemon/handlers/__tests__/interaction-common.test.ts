@@ -1,4 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import {
   makeIosSession,
@@ -20,20 +21,17 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return {
     ...actual,
-    dispatchCommand: vi.fn(async () => ({})),
   };
 });
 
-import { dispatchCommand } from '../../../core/dispatch.ts';
-const mockDispatch = vi.mocked(dispatchCommand);
 const contextFromFlags = (_flags: CommandFlags | undefined) => ({});
 
 beforeEach(() => {
   resetGetRuntimeFixture();
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  legacyDispatchCapture.mockReset();
+  legacyDispatchCapture.mockResolvedValue({});
   mockFillPoint.mockImplementation(async (input) => {
-    return await mockDispatch(
+    return await legacyDispatchCapture(
       IOS_SIMULATOR,
       'fill',
       [String(input.point.x), String(input.point.y), input.text],
@@ -159,7 +157,7 @@ test('parameterized fill scrubs concatenated backend values and object keys thro
     backend: 'xctest',
   };
   sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) =>
+  legacyDispatchCapture.mockImplementation(async (_device, command) =>
     command === 'fill'
       ? {
           message: `prefix${secret}suffix`,
@@ -194,8 +192,8 @@ test('parameterized fill scrubs concatenated backend values and object keys thro
   expect(response.data).not.toHaveProperty(`prefix${placeholder}suffix`);
   expect(JSON.stringify(response.data)).not.toContain(secret);
   expect(JSON.stringify(session.actions)).not.toContain(secret);
-  expect(mockDispatch.mock.calls[0]?.[1]).toBe('fill');
-  expect(mockDispatch.mock.calls[0]?.[2]).toContain(secret);
+  expect(legacyDispatchCapture.mock.calls[0]?.[1]).toBe('fill');
+  expect(legacyDispatchCapture.mock.calls[0]?.[2]).toContain(secret);
 });
 
 test('parameterized fill collapses whitespace-only backend echoes through the handler route', async () => {
@@ -220,7 +218,7 @@ test('parameterized fill collapses whitespace-only backend echoes through the ha
     backend: 'xctest',
   };
   sessionStore.set(sessionName, session);
-  mockDispatch.mockResolvedValue({
+  legacyDispatchCapture.mockResolvedValue({
     [`prefix${secret}suffix`]: {
       [`key${secret}tail`]: `value${secret}tail`,
     },
@@ -253,7 +251,7 @@ test('parameterized fill collapses whitespace-only backend echoes through the ha
   expect(session.actions[0]?.result).not.toHaveProperty(placeholder);
   expect(session.actions[0]?.result?.selectorChain).not.toContain(`value="prefix${secret}suffix"`);
   expect(JSON.stringify(session.actions)).not.toContain(secret);
-  expect(mockDispatch.mock.calls[0]?.[2]).toContain(secret);
+  expect(legacyDispatchCapture.mock.calls[0]?.[2]).toContain(secret);
 });
 
 test.each([

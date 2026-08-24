@@ -12,7 +12,7 @@ import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
+  return { ...actual, resolveTargetDevice: vi.fn() };
 });
 
 vi.mock('../snapshot-interactor-capture.ts', () => ({

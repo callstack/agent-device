@@ -46,7 +46,7 @@ vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => 
 });
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
+  return { ...actual, resolveTargetDevice: vi.fn() };
 });
 vi.mock('../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
@@ -57,7 +57,6 @@ import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { handleCloseCommand as handleProductionCloseCommand } from '../session-close.ts';
 import { SessionStore } from '../../session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 import {
   makeIosSession,
@@ -73,9 +72,12 @@ import {
   bindLifecycleRuntime,
   inspectLifecycleRuntimeFacts,
 } from './application-lifecycle-runtime-harness.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
+import {
+  captureSnapshotThroughLegacyDispatchFixture,
+  legacyDispatchCapture,
+} from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 
-const mockDispatchCommand = vi.mocked(dispatchCommand);
+const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 
 function handleCloseCommand(

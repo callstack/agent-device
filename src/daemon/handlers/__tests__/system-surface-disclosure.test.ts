@@ -1,4 +1,5 @@
 import { test, expect, vi, beforeEach } from 'vitest';
+import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { handleFindCommands } from '../find.ts';
 import { getRuntimeBindings } from './interaction-get-runtime-fixture.ts';
 import { dispatchFindReadOnlyViaRuntime, dispatchWaitViaRuntime } from '../../selector-runtime.ts';
@@ -12,7 +13,6 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return {
     ...actual,
-    dispatchCommand: vi.fn(async () => ({})),
     resolveTargetDevice: vi.fn(actual.resolveTargetDevice),
   };
 });
@@ -26,11 +26,9 @@ vi.mock('../../device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
-import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
+import { resolveTargetDevice } from '../../../core/dispatch.ts';
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { withSystemSurfaceDisclosure } from '../system-surface-disclosure.ts';
-
-const mockDispatch = vi.mocked(dispatchCommand);
 
 // The occluding-shade capture every scenario below consumes: no application window content, one
 // active quick-settings surface. The Android capture route stamps systemSurfaceOnly on both the
@@ -59,8 +57,8 @@ const SHADE_SNAPSHOT_DATA = {
 };
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockImplementation(async (_device: unknown, command: string) => {
+  legacyDispatchCapture.mockReset();
+  legacyDispatchCapture.mockImplementation(async (_device: unknown, command: string) => {
     return command === 'snapshot' ? SHADE_SNAPSHOT_DATA : {};
   });
 });

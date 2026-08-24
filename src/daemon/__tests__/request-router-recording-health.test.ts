@@ -1,18 +1,13 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
+import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
-
-vi.mock('../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
 
 vi.mock('../../platforms/apple/core/runner/runner-client.ts', () => ({
   getRunnerSessionSnapshot: vi.fn(),
 }));
 
-import { dispatchCommand } from '../../core/dispatch.ts';
 import { getRunnerSessionSnapshot } from '../../platforms/apple/core/runner/runner-client.ts';
 import {
   createRequestHandler,
@@ -24,12 +19,11 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockGetRunnerSessionSnapshot = vi.mocked(getRunnerSessionSnapshot);
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  legacyDispatchCapture.mockReset();
+  legacyDispatchCapture.mockResolvedValue({});
   for (const spy of Object.values(gestureRuntimeSpies)) spy.mockClear();
   mockGetRunnerSessionSnapshot.mockReset();
 });
@@ -82,7 +76,7 @@ test('router blocks non-record commands when recording was invalidated', async (
   }
   expect(response.error.code).toBe('COMMAND_FAILED');
   expect(response.error.message).toBe('iOS runner session restarted during recording');
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(legacyDispatchCapture).not.toHaveBeenCalled();
 });
 
 test('router allows canonical iOS simulator gestures during overlay recording after runner restart', async () => {

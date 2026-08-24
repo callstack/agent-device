@@ -177,9 +177,10 @@ export const LINUX_PLATFORM_COVERAGE = {
   ),
   [C.wait]: live('the existing Linux replay waits for an observable calculator landmark'),
   [C.alert]: denial('alert', 'Linux capability declaration rejects native alert operations'),
-  [C.settings]: denial(
-    'settings',
-    'Linux capability declaration rejects native device settings operations',
+  [C.settings]: contract(
+    LINUX_RUNTIME_EVIDENCE.path,
+    LINUX_RUNTIME_EVIDENCE.test,
+    'the exact-owner runtime fact rejects native device settings on Linux',
   ),
   [C.reactNative]: denial(
     'react-native',

@@ -1,4 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,7 +30,6 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return {
     ...actual,
-    dispatchCommand: vi.fn(async () => ({})),
   };
 });
 
@@ -48,14 +48,11 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
 });
 
 import { getRuntimeBindings, resetGetRuntimeFixture } from './interaction-get-runtime-fixture.ts';
-import { dispatchCommand } from '../../../core/dispatch.ts';
-const mockDispatch = vi.mocked(dispatchCommand);
-
 const contextFromFlags = (_flags: CommandFlags | undefined) => ({});
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  legacyDispatchCapture.mockReset();
+  legacyDispatchCapture.mockResolvedValue({});
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
   resetGetRuntimeFixture();
@@ -194,7 +191,7 @@ test('get text simple iOS id selector while recording skips the direct runner qu
   const sessionName = 'recording-get-direct-gate';
   const session = makeAuthoringSession(sessionName, { appBundleId: 'com.example.app' });
   sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'snapshot') {
       return {
         backend: 'xctest',
@@ -235,7 +232,7 @@ test('get text simple iOS id selector while recording skips the direct runner qu
     expect.objectContaining({ command: 'querySelector' }),
     expect.anything(),
   );
-  expect(mockDispatch.mock.calls.map((call) => call[1])).toContain('snapshot');
+  expect(legacyDispatchCapture.mock.calls.map((call) => call[1])).toContain('snapshot');
 
   const recordedAction = sessionStore.get(sessionName)?.actions[0];
   expect(recordedAction?.targetEvidence).toMatchObject({
@@ -333,7 +330,7 @@ test('press on an identity-empty container: container-based daemon response, des
   // would burn wall-clock time this unit lane must not spend.
   const session = makeAuthoringSession(sessionName, { appBundleId: 'com.example.app' });
   sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'snapshot') {
       return { backend: 'xctest', nodes: IDENTITY_EMPTY_ROW_NODES };
     }
@@ -366,7 +363,7 @@ test('press on an identity-empty container: container-based daemon response, des
 // ---------------------------------------------------------------------------
 
 function mockSnapshotWithSaveButton() {
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'snapshot') {
       return { backend: 'xctest', nodes: SAVE_BUTTON_NODES };
     }

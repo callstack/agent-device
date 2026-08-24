@@ -12,7 +12,6 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
     await import('../../__tests__/device-selection-stub.ts');
   return {
     ...actual,
-    dispatchCommand: vi.fn(async () => ({})),
     resolveTargetDevice: mockResolveTargetDevice,
     resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(mockResolveTargetDevice)),
   };

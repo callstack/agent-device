@@ -1,5 +1,6 @@
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
+import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
@@ -11,6 +12,16 @@ const clipboardKindUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-device-kind',
   hint: 'clipboard is supported on Apple simulators and the macOS host.',
+} as const);
+const settingsKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'settings is supported on Apple simulators and the macOS host.',
+} as const);
+const settingsLeafUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'settings is supported on Apple simulators and the macOS host, not on physical devices of this OS.',
 } as const);
 /**
  * Parity with the retired `supportsHostOrSimulatorSurface` closure: the Apple pasteboard is
@@ -34,16 +45,30 @@ const clipboardOsUnavailable = Object.freeze({
 } as const);
 
 /**
+ * The one host-or-simulator reading `clipboard` and `settings` share, and sharing it is parity
+ * rather than convenience: the retired `supportsHostOrSimulatorSurface` closure gated both off
+ * the same per-AppleOS `physicalDeviceSurfaces` row. Only the refusal wording differs, so each
+ * caller supplies its own pair.
+ */
+function appleHostOrSimulatorFact(
+  device: DeviceInfo,
+  kindUnavailable: RuntimeOperationFact,
+  leafUnavailable: RuntimeOperationFact,
+): RuntimeOperationFact {
+  if (device.kind !== 'simulator' && device.kind !== 'device') return kindUnavailable;
+  const os = resolveDeviceAppleOs(device);
+  if (os === 'watchos') return clipboardOsUnavailable;
+  if (device.kind === 'simulator') return available;
+  return os === 'macos' ? available : leafUnavailable;
+}
+
+/**
  * Read and write share one cell: both routes (`simctl pbpaste`/`pbcopy`, and the macOS host
  * pasteboard) expose the pair or neither, so splitting them here would invent a cell no Apple
  * owner can actually be in.
  */
 function appleClipboardFact(device: DeviceInfo): RuntimeOperationFact {
-  if (device.kind !== 'simulator' && device.kind !== 'device') return clipboardKindUnavailable;
-  const os = resolveDeviceAppleOs(device);
-  if (os === 'watchos') return clipboardOsUnavailable;
-  if (device.kind === 'simulator') return available;
-  return os === 'macos' ? available : clipboardLeafUnavailable;
+  return appleHostOrSimulatorFact(device, clipboardKindUnavailable, clipboardLeafUnavailable);
 }
 
 const appEventKindUnavailable = Object.freeze({
@@ -62,12 +87,19 @@ function appleAppEventFact(device: DeviceInfo): RuntimeOperationFact {
   return resolveDeviceAppleOs(device) === 'watchos' ? clipboardOsUnavailable : available;
 }
 
-/** The system-surface cells: clipboard read/write and app-event delivery. */
+/** The system-surface cells: clipboard read/write, app-event delivery, and settings. */
 export function appleSystemFacts(device: DeviceInfo) {
   const clipboard = appleClipboardFact(device);
   return Object.freeze({
     ...clipboardRuntimeOperationFacts({ read: clipboard, write: clipboard }),
     ...appEventRuntimeOperationFacts({ triggerAppEvent: appleAppEventFact(device) }),
+    ...settingsRuntimeOperationFacts({
+      setSetting: appleHostOrSimulatorFact(
+        device,
+        settingsKindUnavailable,
+        settingsLeafUnavailable,
+      ),
+    }),
   });
 }
 

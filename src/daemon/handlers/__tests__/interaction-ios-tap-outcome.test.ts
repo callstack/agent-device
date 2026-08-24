@@ -1,4 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -7,7 +8,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { handleInteractionCommands } from '../interaction.ts';
 import { handleSnapshotCommands } from '../snapshot.ts';
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   makeIosSession,
   authoringPublication,
@@ -35,7 +35,6 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return {
     ...actual,
-    dispatchCommand: vi.fn(async () => ({})),
   };
 });
 
@@ -46,7 +45,6 @@ vi.mock('../snapshot-interactor-capture.ts', async () => {
   };
 });
 
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 const contextFromFlags = (flags: CommandFlags | undefined) => ({
@@ -95,9 +93,9 @@ async function runClick(
 beforeEach(() => {
   resetGetRuntimeFixture();
   mockCaptureSnapshotForSession.mockClear();
-  mockDispatch.mockReset();
+  legacyDispatchCapture.mockReset();
   mockTapPoint.mockImplementation(async (input) => {
-    return await mockDispatch(
+    return await legacyDispatchCapture(
       IOS_SIMULATOR,
       'press',
       [String(input.point.x), String(input.point.y)],
@@ -115,7 +113,7 @@ test('a changed post-action capture corroborates an iOS tap reported as failed',
     snapshot: snapshot(profileNodes),
   });
   sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
       throw new AppError(
         'XCTEST_RECORDED_FAILURE',
@@ -133,7 +131,7 @@ test('a changed post-action capture corroborates an iOS tap reported as failed',
     expect(response.data?.warning).toMatch(/post-action accessibility capture changed/);
     expect(response.data?.selector).toBe('id="unfollow"');
   }
-  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'press')).toHaveLength(1);
+  expect(legacyDispatchCapture.mock.calls.filter((call) => call[1] === 'press')).toHaveLength(1);
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 
@@ -145,7 +143,7 @@ test('an unchanged post-action capture keeps a failed iOS tap failed', async () 
     snapshot: snapshot(profileNodes),
   });
   sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
       throw new AppError(
         'XCTEST_RECORDED_FAILURE',
@@ -178,19 +176,21 @@ test('a private-ax baseline pins the corroboration probe to private-ax', async (
     }),
   );
   const snapshotContexts: Array<Record<string, unknown> | undefined> = [];
-  mockDispatch.mockImplementation(async (_device, command, _positionals, _outPath, context) => {
-    if (command === 'press') {
-      throw new AppError(
-        'XCTEST_RECORDED_FAILURE',
-        'XCTest recorded a failure while executing tap; the action may not have been performed.',
-      );
-    }
-    if (command === 'snapshot') {
-      snapshotContexts.push(context as Record<string, unknown> | undefined);
-      return snapshotPayload(imageViewerNodes, 'private-ax');
-    }
-    return {};
-  });
+  legacyDispatchCapture.mockImplementation(
+    async (_device, command, _positionals, _outPath, context) => {
+      if (command === 'press') {
+        throw new AppError(
+          'XCTEST_RECORDED_FAILURE',
+          'XCTest recorded a failure while executing tap; the action may not have been performed.',
+        );
+      }
+      if (command === 'snapshot') {
+        snapshotContexts.push(context as Record<string, unknown> | undefined);
+        return snapshotPayload(imageViewerNodes, 'private-ax');
+      }
+      return {};
+    },
+  );
 
   const response = await runClick(sessionStore, sessionName);
 
@@ -216,7 +216,7 @@ test('a canonical selector capture replaces a raw baseline before corroboration'
       snapshot: snapshot(profileNodes, 'private-ax', { raw: true }),
     }),
   );
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
       throw new AppError(
         'XCTEST_RECORDED_FAILURE',
@@ -230,7 +230,7 @@ test('a canonical selector capture replaces a raw baseline before corroboration'
   const response = await runClick(sessionStore, sessionName);
 
   expect(response?.ok).toBe(true);
-  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(1);
+  expect(legacyDispatchCapture.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(1);
 });
 
 test('a tree baseline does not pin the corroboration probe backend', async () => {
@@ -244,19 +244,21 @@ test('a tree baseline does not pin the corroboration probe backend', async () =>
     }),
   );
   const snapshotContexts: Array<Record<string, unknown> | undefined> = [];
-  mockDispatch.mockImplementation(async (_device, command, _positionals, _outPath, context) => {
-    if (command === 'press') {
-      throw new AppError(
-        'XCTEST_RECORDED_FAILURE',
-        'XCTest recorded a failure while executing tap; the action may not have been performed.',
-      );
-    }
-    if (command === 'snapshot') {
-      snapshotContexts.push(context as Record<string, unknown> | undefined);
-      return snapshotPayload(imageViewerNodes);
-    }
-    return {};
-  });
+  legacyDispatchCapture.mockImplementation(
+    async (_device, command, _positionals, _outPath, context) => {
+      if (command === 'press') {
+        throw new AppError(
+          'XCTEST_RECORDED_FAILURE',
+          'XCTest recorded a failure while executing tap; the action may not have been performed.',
+        );
+      }
+      if (command === 'snapshot') {
+        snapshotContexts.push(context as Record<string, unknown> | undefined);
+        return snapshotPayload(imageViewerNodes);
+      }
+      return {};
+    },
+  );
 
   const response = await runClick(sessionStore, sessionName);
 
@@ -275,7 +277,7 @@ test('a changed capture from a different iOS backend keeps the tap failure', asy
       snapshot: snapshot(profileNodes),
     }),
   );
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
       throw new AppError(
         'XCTEST_RECORDED_FAILURE',
@@ -303,7 +305,7 @@ test('a sparse changed capture keeps the tap failure', async () => {
       snapshot: snapshot(profileNodes),
     }),
   );
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
       throw new AppError(
         'XCTEST_RECORDED_FAILURE',
@@ -336,7 +338,7 @@ test('a corroboration capture failure keeps the tap failure', async () => {
       snapshot: snapshot(profileNodes),
     }),
   );
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
       throw new AppError(
         'XCTEST_RECORDED_FAILURE',
@@ -366,7 +368,7 @@ test('the canonical selector capture aligns presentation before corroboration', 
       snapshot: baseline,
     }),
   );
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
       throw new AppError(
         'XCTEST_RECORDED_FAILURE',
@@ -396,7 +398,7 @@ test('corroborates a tap when the request carries no flags and the baseline used
     }),
   );
   let snapshotCount = 0;
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
       throw new AppError(
         'XCTEST_RECORDED_FAILURE',
@@ -446,7 +448,7 @@ test('a changed capture after ordinary agent turn latency still corroborates the
       snapshot: baseline,
     }),
   );
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
       throw new AppError(
         'XCTEST_RECORDED_FAILURE',
@@ -463,7 +465,7 @@ test('a changed capture after ordinary agent turn latency still corroborates the
   if (response?.ok) {
     expect(response.data?.warning).toMatch(/post-action accessibility capture changed/);
   }
-  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(1);
+  expect(legacyDispatchCapture.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(1);
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 
@@ -479,7 +481,7 @@ test('the canonical selector capture replaces a stale baseline before corroborat
       snapshot: baseline,
     }),
   );
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
       throw new AppError(
         'XCTEST_RECORDED_FAILURE',
@@ -493,7 +495,7 @@ test('the canonical selector capture replaces a stale baseline before corroborat
   const response = await runClick(sessionStore, sessionName);
 
   expect(response?.ok).toBe(true);
-  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(1);
+  expect(legacyDispatchCapture.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(1);
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 
@@ -509,7 +511,7 @@ test('the canonical selector capture replaces a keyless baseline before corrobor
       snapshot: baseline,
     }),
   );
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
       throw new AppError(
         'XCTEST_RECORDED_FAILURE',
@@ -523,7 +525,7 @@ test('the canonical selector capture replaces a keyless baseline before corrobor
   const response = await runClick(sessionStore, sessionName);
 
   expect(response?.ok).toBe(true);
-  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(1);
+  expect(legacyDispatchCapture.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(1);
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 
@@ -538,7 +540,7 @@ test('runtime-resolved taps use the same corroboration boundary', async () => {
     }),
   );
   let snapshotCount = 0;
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
       throw new AppError(
         'XCTEST_RECORDED_FAILURE',
@@ -572,7 +574,7 @@ test('a corroborated runtime coordinate tap does not schedule a no-change retry'
     }),
   );
   let pressCount = 0;
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
       pressCount += 1;
       if (pressCount === 1) {
@@ -630,7 +632,7 @@ test('corroborated runtime taps retain target evidence through save and replay',
   let recording = true;
   let snapshotCount = 0;
   let pressCount = 0;
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
       pressCount += 1;
       if (recording) {

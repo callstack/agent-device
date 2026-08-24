@@ -1,7 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest';
+import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../snapshot.ts';
 import type { RawSnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
@@ -11,16 +11,14 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return {
     ...actual,
-    dispatchCommand: vi.fn(async () => ({})),
   };
 });
 
-const mockDispatch = vi.mocked(dispatchCommand);
 const ANDROID_SCRIPT_ERROR = 'Unable to load script. Make sure you are running Metro.';
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  legacyDispatchCapture.mockReset();
+  legacyDispatchCapture.mockResolvedValue({});
 });
 
 test('snapshot resolves @ref scope with the stored source after scoped output replaces refs', async () => {
@@ -29,7 +27,7 @@ test('snapshot resolves @ref scope with the stored source after scoped output re
   const session = makeAndroidSession(sessionName, { snapshot: androidRefScopeSourceSnapshot() });
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({
+  legacyDispatchCapture.mockResolvedValue({
     nodes: scopedScriptErrorNodes(),
     truncated: false,
     backend: 'android',
@@ -42,8 +40,8 @@ test('snapshot resolves @ref scope with the stored source after scoped output re
     if (response?.ok) expect(response.data?.nodes).toHaveLength(2);
   }
 
-  expect(mockDispatch).toHaveBeenCalledTimes(2);
-  expect(mockDispatch.mock.calls.map((call) => call[4])).toEqual([
+  expect(legacyDispatchCapture).toHaveBeenCalledTimes(2);
+  expect(legacyDispatchCapture.mock.calls.map((call) => call[4])).toEqual([
     expect.objectContaining({ snapshotScope: ANDROID_SCRIPT_ERROR }),
     expect.objectContaining({ snapshotScope: ANDROID_SCRIPT_ERROR }),
   ]);
@@ -57,7 +55,7 @@ test('a mutation clears scoped-snapshot lineage so a repeated snapshot -s @ref c
   const session = makeAndroidSession(sessionName, { snapshot: androidRefScopeSourceSnapshot() });
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({
+  legacyDispatchCapture.mockResolvedValue({
     nodes: scopedScriptErrorNodes(),
     truncated: false,
     backend: 'android',
@@ -86,7 +84,7 @@ test('empty @ref-scoped snapshot output does not replace the stored session snap
   const session = makeAndroidSession(sessionName, { snapshot: currentScreenSnapshot() });
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockResolvedValue({
+  legacyDispatchCapture.mockResolvedValue({
     nodes: [],
     truncated: false,
     backend: 'android',

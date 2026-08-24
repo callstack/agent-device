@@ -13,7 +13,6 @@ import {
   type DaemonCommandDescriptor,
 } from '../../../daemon/daemon-command-registry.ts';
 import type { DaemonRequest } from '../../../daemon/types.ts';
-import { listRegisteredDispatchCommandNames } from '../../dispatch.ts';
 import { deriveDaemonCommandDescriptors, deriveStructuredBatchCommandNames } from '../derive.ts';
 import {
   commandDescriptors,
@@ -79,6 +78,7 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.reinstall,
   PUBLIC_COMMANDS.replay,
   PUBLIC_COMMANDS.scroll,
+  PUBLIC_COMMANDS.settings,
   PUBLIC_COMMANDS.shutdown,
   PUBLIC_COMMANDS.screenshot,
   PUBLIC_COMMANDS.snapshot,
@@ -202,23 +202,17 @@ test('descriptor-only commands explicitly declare a non-public catalog group', (
   }
 });
 
-test('platform dispatch command list is built from descriptor dispatch facets', () => {
+// R58 retired the legacy platform dispatcher itself: `settings` was its last arm, so no
+// descriptor projects into it any more. The successor property is one-sided and total — the
+// `dispatch` facet is vestigial vocabulary, and a descriptor that grows one again would be
+// declaring a dispatcher that no longer exists.
+test('no descriptor projects into the retired platform dispatcher', () => {
   const dispatchCommands = commandDescriptors
     .filter((descriptor) => 'dispatch' in descriptor && descriptor.dispatch !== undefined)
     .map((descriptor) => descriptor.name)
     .sort();
 
-  assert.deepEqual(listRegisteredDispatchCommandNames(), dispatchCommands);
-  assert.equal(
-    dispatchCommands.includes('read' as never),
-    false,
-    'the read dispatch alias retired with the selector element-read cutover (#1739)',
-  );
-  assert.equal(
-    dispatchCommands.includes(PUBLIC_COMMANDS.gesture),
-    false,
-    'gesture executes through the typed runtime/backend seam',
-  );
+  assert.deepEqual(dispatchCommands, []);
 });
 
 test('generic route commands that reach platform dispatch declare the dispatch facet', () => {

@@ -64,7 +64,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
       });
     });
   },
-  settings: async ({ req, sessionName, logPath, sessionStore }) => {
+  settings: async ({ req, sessionName, logPath, sessionStore, inspectFacts, bindDevice }) => {
     const parsedSettings = parseSettingsArgs(req);
     if (!parsedSettings.ok) return parsedSettings;
     const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
@@ -76,6 +76,8 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
         session,
         device,
         parsed: parsedSettings.parsed,
+        inspectFacts,
+        bindDevice,
       });
     });
   },

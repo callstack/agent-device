@@ -65,6 +65,40 @@ test.each([
   },
 );
 
+/**
+ * `settings` shares clipboard's exact reading, and that sharing is the parity claim: the retired
+ * admission intersected the `settings` bucket (`{ simulator: true, device: true }`) with the same
+ * `supportsHostOrSimulatorSurface` closure. Only the refusal wording differs, so the table is
+ * clipboard's verbatim — including the watchOS narrowing.
+ */
+test.each([
+  { appleOs: 'ios', kind: 'simulator', expected: true },
+  { appleOs: 'ios', kind: 'device', expected: false },
+  { appleOs: 'ipados', kind: 'simulator', expected: true },
+  { appleOs: 'ipados', kind: 'device', expected: false },
+  { appleOs: 'tvos', kind: 'simulator', expected: true },
+  { appleOs: 'tvos', kind: 'device', expected: false },
+  { appleOs: 'visionos', kind: 'simulator', expected: true },
+  { appleOs: 'visionos', kind: 'device', expected: false },
+  { appleOs: 'macos', kind: 'device', expected: true },
+  { appleOs: 'watchos', kind: 'simulator', expected: false },
+] as const)(
+  'settings on an Apple $appleOs $kind is available: $expected',
+  ({ appleOs, kind, expected }) => {
+    expect(appleSystemFacts(appleDevice(appleOs, kind)).setSetting.available).toBe(expected);
+  },
+);
+
+// Same cell, different sentence: a physical iOS device is refused as a platform leaf, and the
+// hint names the two surfaces that do work rather than clipboard's shorter phrasing.
+test('a physical non-macOS Apple device refuses settings as a platform leaf', () => {
+  expect(appleSystemFacts(appleDevice('ios', 'device')).setSetting).toEqual({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+    hint: 'settings is supported on Apple simulators and the macOS host, not on physical devices of this OS.',
+  });
+});
+
 test('a non-simulator, non-device Apple kind is refused by kind, with its own reason', () => {
   const facts = appleSystemFacts(appleDevice('ios', 'emulator'));
   expect(facts.readClipboard).toEqual({
@@ -72,9 +106,14 @@ test('a non-simulator, non-device Apple kind is refused by kind, with its own re
     reason: 'unsupported-device-kind',
     hint: 'clipboard is supported on Apple simulators and the macOS host.',
   });
+  expect(facts.setSetting).toEqual({
+    available: false,
+    reason: 'unsupported-device-kind',
+    hint: 'settings is supported on Apple simulators and the macOS host.',
+  });
 });
 
-test('binds both clipboard halves for an admitted cell and neither for a refused one', () => {
+test('binds the system operations for an admitted cell and none for a refused one', () => {
   const resolve = vi.fn(async () => ({}) as unknown as Interactor);
   const host = { localInteractors: { resolve } };
   const signal = new AbortController().signal;
@@ -86,6 +125,7 @@ test('binds both clipboard halves for an admitted cell and neither for a refused
   });
   expect(admitted.readClipboard).toBeTypeOf('function');
   expect(admitted.writeClipboard).toBeTypeOf('function');
+  expect(admitted.setSetting).toBeTypeOf('function');
 
   const refused = createAppleSystemOperations({
     host,
@@ -94,5 +134,6 @@ test('binds both clipboard halves for an admitted cell and neither for a refused
   });
   expect(refused.readClipboard).toBeUndefined();
   expect(refused.writeClipboard).toBeUndefined();
+  expect(refused.setSetting).toBeUndefined();
   expect(resolve).not.toHaveBeenCalled();
 });

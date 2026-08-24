@@ -1,7 +1,6 @@
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
 import {
   ANDROID_QS_SHADE_CAPTURE_RAW_NODES,
@@ -10,19 +9,22 @@ import {
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { createReplayCoordinator } from '../../session-replay-coordinator.ts';
 import { SessionStore } from '../../session-store.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
+import {
+  captureSnapshotThroughLegacyDispatchFixture,
+  legacyDispatchCapture,
+} from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { buildReplayFailureDivergence } from '../session-replay-divergence.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
+  return { ...actual, resolveTargetDevice: vi.fn() };
 });
 vi.mock('../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
-const mockDispatchCommand = vi.mocked(dispatchCommand);
+const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {

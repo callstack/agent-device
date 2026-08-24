@@ -27,6 +27,7 @@ import {
   summarizeDiscriminatingSurfaceDivergence,
   markPendingInteractionOutcome,
   retryPendingInteractionOutcome,
+  type InteractionRetryTap,
 } from './interaction-outcome-policy.ts';
 import { runPostGestureStabilityLoop } from './post-gesture-stability.ts';
 import type { SessionState } from './types.ts';
@@ -151,6 +152,8 @@ type DeferredOutcomeCaptureParams = {
   session: SessionState | undefined;
   device: SessionState['device'];
   logPath: string;
+  /** How a no-change retry re-fires the recorded tap; absent on captures that cannot tap. */
+  retryTap?: InteractionRetryTap;
   /** Whether the capture the verdict rides on was interactive-only filtered. */
   interactiveOnly: boolean;
   androidFreshnessMode?: SnapshotFreshnessMode;
@@ -214,6 +217,7 @@ async function captureInteractionOutcomeAwareSnapshot(
     pending,
     logPath: params.logPath,
     snapshot: latest.snapshot,
+    retryTap: params.retryTap,
   });
 
   while (outcome.retried) {
@@ -228,6 +232,7 @@ async function captureInteractionOutcomeAwareSnapshot(
       pending,
       logPath: params.logPath,
       snapshot: latest.snapshot,
+      retryTap: params.retryTap,
     });
   }
 

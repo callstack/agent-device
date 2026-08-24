@@ -7,7 +7,11 @@ import type {
 } from '@agent-device/contracts/platform';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+  RuntimeAdmissionBindings,
+} from './request-runtime-binding.ts';
 import { errorResponse, type DaemonFailureResponse } from './handlers/response.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
@@ -25,17 +29,16 @@ export type RuntimeAdmission<Use> =
   | Readonly<{ type: 'response'; response: DaemonFailureResponse }>
   | Readonly<{ type: 'runtime'; runtime: BoundDeviceRuntime<Use> }>;
 
-export type RuntimeAdmissionRequest = Readonly<{
-  /** Command wording for the default unsupported message, e.g. `open`, `runtime port-reverse`. */
-  command: string;
-  device: DeviceInfo;
-  required: readonly RuntimeOperationKey<PlatformRuntimeOperations>[];
-  inspectFacts?: InspectDeviceRuntimeFacts;
-  bindDevice?: BindDeviceRuntime;
-  unavailableResponse?: UnavailableRuntimeResponse;
-}>;
+export type RuntimeAdmissionRequest = RuntimeAdmissionBindings &
+  Readonly<{
+    /** Command wording for the default unsupported message, e.g. `open`, `runtime port-reverse`. */
+    command: string;
+    device: DeviceInfo;
+    required: readonly RuntimeOperationKey<PlatformRuntimeOperations>[];
+    unavailableResponse?: UnavailableRuntimeResponse;
+  }>;
 
-export type RuntimeAdmissionBindings = Pick<RuntimeAdmissionRequest, 'inspectFacts' | 'bindDevice'>;
+export type { RuntimeAdmissionBindings };
 
 /**
  * The one facts-admission seam every migrated command route shares. It performs exactly one

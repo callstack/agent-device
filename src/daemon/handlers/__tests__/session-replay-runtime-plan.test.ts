@@ -3,7 +3,7 @@ import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
+  return { ...actual, resolveTargetDevice: vi.fn() };
 });
 
 vi.mock('../snapshot-interactor-capture.ts', () => ({
@@ -15,8 +15,11 @@ import path from 'node:path';
 import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { createReplayCoordinator } from '../../session-replay-coordinator.ts';
-import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
+import { resolveTargetDevice } from '../../../core/dispatch.ts';
+import {
+  captureSnapshotThroughLegacyDispatchFixture,
+  legacyDispatchCapture,
+} from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 import {
   makeAndroidSession,
@@ -27,7 +30,7 @@ import {
   writeReplayFile,
 } from './session-replay-runtime.fixtures.ts';
 
-const mockDispatchCommand = vi.mocked(dispatchCommand);
+const mockDispatchCommand = legacyDispatchCapture;
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 

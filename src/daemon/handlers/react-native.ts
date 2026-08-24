@@ -1,4 +1,4 @@
-import { dispatchCommand } from '../../core/dispatch.ts';
+import { createBoundTouchExecutor, resolveBoundTouchRuntime } from '../touch-runtime.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import {
   analyzeReactNativeOverlay,
@@ -106,18 +106,24 @@ async function dismissReactNativeOverlayTarget(
   target: ReactNativeOverlayDismissTarget,
 ): Promise<DaemonResponse> {
   const { req, sessionStore } = params;
+  // The dismissal press rides the same bound `tapPoint` a user-typed `press` does (R48): admit
+  // and bind before anything mutates, so an owner that cannot tap refuses here rather than
+  // through a dispatcher that no longer exists.
+  const bound = await resolveBoundTouchRuntime({
+    device: session.device,
+    command: 'press',
+    requiresCapture: false,
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
+  });
+  if (!bound.ok) return bound.response;
+  const context = params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath);
+  const executor = createBoundTouchExecutor(bound.runtime, context);
   const actionStartedAt = Date.now();
   // ADR 0014 side-effect seam: React Native overlay dismissal taps the device;
   // the target is already resolved, so expire the frame before the press.
   expireRefFrame(session);
-  const data =
-    (await dispatchCommand(
-      session.device,
-      'press',
-      [String(target.point.x), String(target.point.y)],
-      req.flags?.out,
-      params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
-    )) ?? {};
+  const data = (await executor.tapPoint?.(target.point)) ?? {};
   const actionFinishedAt = Date.now();
   const verification = await verifyReactNativeOverlayDismissal(params, session);
   const responseData = stripUndefined({

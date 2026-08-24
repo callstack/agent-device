@@ -1,13 +1,9 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
+import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-
-vi.mock('../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
 
 vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
   const actual =
@@ -17,7 +13,6 @@ vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOrigi
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
-import { dispatchCommand } from '../../core/dispatch.ts';
 import { dispatchApplicationLifecycleEffect } from './application-lifecycle-runtime-fixture.ts';
 import {
   createRequestHandler,
@@ -36,7 +31,6 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, retriableForErrorCode } from '@agent-device/kernel/errors';
 import { supportedPlatformsForCommand } from '../../core/capabilities.ts';
 
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockLifecycleEffect = vi.mocked(dispatchApplicationLifecycleEffect);
 
 /**
@@ -87,7 +81,7 @@ function request(command: string, overrides: Partial<DaemonRequest> = {}): Daemo
 }
 
 beforeEach(() => {
-  mockDispatch.mockReset();
+  legacyDispatchCapture.mockReset();
   systemRuntimeSpies.appSwitcher.mockReset();
   systemRuntimeSpies.appSwitcher.mockResolvedValue(undefined);
   mockLifecycleEffect.mockReset();
@@ -162,7 +156,7 @@ test('deterministic errors (INVALID_ARGS) are returned with the default shape â€
   expect(response.error.code).toBe('INVALID_ARGS');
   expect('retriable' in response.error).toBe(false);
   expect('supportedOn' in response.error).toBe(false);
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(legacyDispatchCapture).not.toHaveBeenCalled();
 });
 
 // ADR 0012 decision 6, BLOCKER 2 (second follow-up): a repair-armed `close`
@@ -243,7 +237,7 @@ test('#1391: an ordinary close-time script-save failure surfaces details.reason/
     // Unlike the repair-armed case above, an ordinary session's teardown
     // never withholds on a failed script save â€” it is always torn down.
     expect(sessionStore.get('typed-error')).toBeUndefined();
-    expect(mockDispatch).not.toHaveBeenCalled();
+    expect(legacyDispatchCapture).not.toHaveBeenCalled();
   } finally {
     fs.rmSync(targetPath, { force: true });
   }

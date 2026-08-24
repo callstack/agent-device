@@ -3,13 +3,9 @@ import {
   createTestDeviceInventoryGatewaysFromProvider,
 } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
+import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import os from 'node:os';
 import path from 'node:path';
-
-vi.mock('../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
 
 vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
   const actual =
@@ -19,7 +15,6 @@ vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOrigi
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
-import { dispatchCommand } from '../../core/dispatch.ts';
 import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
@@ -34,8 +29,6 @@ import {
   type PlatformRuntimeOperations,
   snapshotRuntimePlanUses,
 } from '@agent-device/contracts/platform-runtime-operations';
-
-const mockDispatch = vi.mocked(dispatchCommand);
 
 function snapshotDeviceRuntimeGateway(): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   const runtime = snapshotRuntimeFixture();
@@ -90,8 +83,8 @@ function makeAndroidSession(name: string, id = 'emulator-5554'): SessionState {
 }
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({ nodes: [] });
+  legacyDispatchCapture.mockReset();
+  legacyDispatchCapture.mockResolvedValue({ nodes: [] });
 });
 
 function installGatedDispatch(): {
@@ -104,7 +97,7 @@ function installGatedDispatch(): {
   let active = 0;
   let maxActive = 0;
 
-  mockDispatch.mockImplementation(async (device, command) => {
+  legacyDispatchCapture.mockImplementation(async (device, command) => {
     order.push(`start-${command}-${device.id}`);
     active += 1;
     maxActive = Math.max(maxActive, active);
@@ -153,7 +146,7 @@ test('direct daemon requests cannot bypass reject lock policy for existing sessi
     },
   });
 
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(legacyDispatchCapture).not.toHaveBeenCalled();
   expect(response.ok).toBe(false);
   if (!response.ok) {
     expect(response.error.code).toBe('INVALID_ARGS');
@@ -310,7 +303,7 @@ test('fresh named sessions with the same name serialize first binding before rej
     'end-snapshot-emulator-5554',
   ]);
   expect(dispatchGate.getMaxActive()).toBe(1);
-  expect(mockDispatch).toHaveBeenCalledTimes(1);
+  expect(legacyDispatchCapture).toHaveBeenCalledTimes(1);
   expect(sessionStore.get('qa-android')?.device.id).toBe('emulator-5554');
 });
 
@@ -454,9 +447,9 @@ test('fresh named sessions reject incompatible selector combinations before bind
       expect(response.error.code).toBe('INVALID_ARGS');
       expect(response.error.message).toMatch(testCase.conflict);
     }
-    expect(mockDispatch).not.toHaveBeenCalled();
+    expect(legacyDispatchCapture).not.toHaveBeenCalled();
     expect(sessionStore.get(testCase.name)).toBeUndefined();
-    mockDispatch.mockClear();
+    legacyDispatchCapture.mockClear();
   }
 });
 
@@ -493,7 +486,7 @@ test('batch steps cannot bypass reject lock policy on nested direct requests', a
     },
   });
 
-  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(legacyDispatchCapture).not.toHaveBeenCalled();
   expect(response.ok).toBe(false);
   if (!response.ok) {
     expect(response.error.code).toBe('INVALID_ARGS');
@@ -547,7 +540,7 @@ test('strip lock policy still refuses a request naming a different device, befor
   const sessionStore = makeSessionStore('agent-device-router-lock-');
   sessionStore.set('qa-ios', makeIosSession('qa-ios'));
   let dispatchCalls = 0;
-  mockDispatch.mockImplementation(async () => {
+  legacyDispatchCapture.mockImplementation(async () => {
     dispatchCalls += 1;
     return {};
   });

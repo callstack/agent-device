@@ -111,6 +111,7 @@ export function createLimrunPlatformRuntimeOwner(
             writeClipboard: liveSessionUnavailable,
             appSwitcher: liveSessionUnavailable,
             triggerAppEvent: liveSessionUnavailable,
+            setSetting: liveSessionUnavailable,
             readiness: liveSessionUnavailable,
             shutdown: liveSessionUnavailable,
             lifecycle: limrunLifecycleFacts(device, false),

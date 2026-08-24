@@ -15,17 +15,8 @@ import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';
 import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
+import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
-
-const dispatchCommandMock = vi.hoisted(() => vi.fn());
-
-vi.mock('../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
-  return {
-    ...actual,
-    dispatchCommand: dispatchCommandMock,
-  };
-});
 
 vi.mock('../handlers/snapshot-interactor-capture.ts', async () => {
   const fixture = await import('./legacy-snapshot-capture-fixture.ts');
@@ -184,7 +175,7 @@ function scenario() {
 }
 
 function seedCapture(verdict: SnapshotQualityVerdict, label = 'Continue') {
-  dispatchCommandMock.mockResolvedValue({
+  legacyDispatchCapture.mockResolvedValue({
     backend: 'xctest',
     truncated: false,
     quality: verdict,
@@ -293,7 +284,7 @@ test('an empty ref-scoped diff latches on the captured verdict, not the retained
     ],
   };
   // The runner owns scope publication and returns the healthy empty projection for a miss.
-  dispatchCommandMock.mockResolvedValue({
+  legacyDispatchCapture.mockResolvedValue({
     backend: 'xctest',
     truncated: false,
     quality: deferredVerdict(),

@@ -199,6 +199,8 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     appSwitcher: linuxPlatformLeafUnavailable,
     // The retired `trigger-app-event` descriptor declared `linux: {}`.
     triggerAppEvent: linuxPlatformLeafUnavailable,
+    // The retired `settings` descriptor declared `linux: {}` too.
+    setSetting: linuxPlatformLeafUnavailable,
     keyboardStatus: linuxPlatformLeafUnavailable,
     keyboardDismiss: linuxPlatformLeafUnavailable,
     keyboardEnter: linuxPlatformLeafUnavailable,

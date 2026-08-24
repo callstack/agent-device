@@ -331,12 +331,12 @@ export function transformTouchResponseData(params: {
 
 export function readInteractionResponseDataTransformCommand(
   requestCommand: string,
-  dispatchCommand: 'press' | 'fill',
+  executedCommand: 'press' | 'fill',
 ): InteractionResponseDataTransformCommand {
   if (requestCommand === 'click' || requestCommand === 'press' || requestCommand === 'fill') {
     return requestCommand;
   }
-  return dispatchCommand;
+  return executedCommand;
 }
 
 /** The response fields disclosing the Maestro coordinate fallback's policy and outcome. */

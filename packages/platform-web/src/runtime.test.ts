@@ -199,7 +199,7 @@ test.each([
   },
 );
 
-test('clipboard, the app switcher and app events never carried a web capability bucket', async () => {
+test('clipboard, the app switcher, app events and settings carry no web capability bucket', async () => {
   const binding = await createWebPlatformRuntime(host({ mode: 'transport-composed' })).bind({
     device,
     intent: { kind: 'ordinary' },
@@ -210,6 +210,8 @@ test('clipboard, the app switcher and app events never carried a web capability 
     'writeClipboard',
     'appSwitcher',
     'triggerAppEvent',
+    // R58: the retired `settings` descriptor declared no web leaf either.
+    'setSetting',
   ] as const) {
     expect(binding.facts.operations[operation]).toEqual({
       available: false,

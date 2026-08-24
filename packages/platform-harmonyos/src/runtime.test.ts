@@ -122,6 +122,10 @@ test.each([
     });
     expect(binding.operations[operation]).toBeUndefined();
   }
+  // R58: `settings` is the other way round — the retired overlay set listed it for both HarmonyOS
+  // kinds, so a real kind admits it off the same hdc gate the interaction leaves use.
+  expect(facts.operations.setSetting).toEqual({ available: true });
+  expect(binding.operations.setSetting).toBeTypeOf('function');
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({ booted: true });
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
@@ -171,6 +175,7 @@ test('rejects the non-discovered HarmonyOS simulator cell for appstate', async (
     'writeClipboard',
     'appSwitcher',
     'triggerAppEvent',
+    'setSetting',
   ] as const) {
     expect(binding.facts.operations[operation].available).toBe(false);
     expect(binding.operations[operation]).toBeUndefined();

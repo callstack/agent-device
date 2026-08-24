@@ -30,7 +30,8 @@ import { retiredDispatchProjectionViolations } from './runtime-command-cutover-d
  * leaves follow: back at R42, home at R43, orientation at R44, tv-remote at R45, and the
  * action-selected keyboard at R46.
  * The gesture cluster follows the touch leaves: gesture at R52, scroll at R53, swipe at R54.
- * Wave 6 closure starts at R55 clipboard, then R56 app-switcher and R57 trigger-app-event.
+ * Wave 6 closure starts at R55 clipboard, then R56 app-switcher, R57 trigger-app-event, and
+ * R58 settings — the arm that retires the legacy dispatcher itself.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -1157,7 +1158,50 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
     },
     extensions: [appEventRetiredDispatchProjectionProof],
   },
+  {
+    rule: 'R58 settings-runtime-cutover',
+    command: 'settings',
+    subject: 'device settings mutation',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // `settings` was the last `DISPATCH_HANDLERS` arm, so this row retires the legacy command
+      // dispatcher whole — its table, its three entry points, its name enumerator, and the
+      // request-router fallback that reached for it when no runtime route claimed a command.
+      // Every one of these names is now absent from production rather than shadowed.
+      routeNames: [
+        'dispatchCommand',
+        'dispatchWithInteractor',
+        'dispatchKnownCommand',
+        'DISPATCH_HANDLERS',
+        'listRegisteredDispatchCommandNames',
+        'executeGenericPlatformCommand',
+      ],
+      // Settings also leaves the HarmonyOS overlay that granted it a bucket membership the
+      // descriptor never listed; the set still exists for `perf` and must no longer name it.
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
+    },
+    admissionMember: {
+      forms: ['computed-property'],
+      files: ['src/platforms/apple/plugin.ts'],
+      message: 'Apple plugin retains a legacy settings support or hint closure',
+    },
+    runtimeTypeNames: ['SettingsRuntimeOperations'],
+    operations: { names: ['setSetting'] },
+    singularExecution: {
+      routes: ['handleSettingsCommand'],
+      operations: ['setSetting'],
+      operationOwners: { setSetting: ['executeSetSetting'] },
+    },
+    extensions: [settingsRetiredDispatchProjectionProof],
+  },
 ];
+
+function settingsRetiredDispatchProjectionProof(
+  sources: ReadonlyMap<string, string>,
+): UnruledViolation[] {
+  return retiredDispatchProjectionViolations(sources, 'settings');
+}
 
 function appEventRetiredDispatchProjectionProof(
   sources: ReadonlyMap<string, string>,

@@ -4,7 +4,6 @@ import {
   commandSupportsSettleObservation,
   commandUsesDeviceRuntimeExecution,
 } from '../core/command-descriptor/registry.ts';
-import { dispatchCommand } from '../core/dispatch.ts';
 import { requireCommandSupported } from './handlers/response.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonCommandContext } from './context.ts';
@@ -39,9 +38,9 @@ export type GenericPlatformExecutionParams = {
 };
 
 /**
- * What actually performs a generic leaf's platform work. Legacy leaves get
- * {@link executeGenericPlatformCommand}; a command migrated onto a request-bound device runtime
- * supplies its own already-admitted, already-bound closure instead (ADR 0019).
+ * What actually performs a generic leaf's platform work: the already-admitted, already-bound
+ * closure the leaf's own runtime resolution supplied (ADR 0019). R58 retired the legacy
+ * alternative, so this is the only shape.
  */
 export type GenericPlatformExecution = (
   params: GenericPlatformExecutionParams,
@@ -316,13 +315,6 @@ async function ensureGenericCommandReady(
     },
   };
 }
-
-export const executeGenericPlatformCommand: GenericPlatformExecution = async (params) => {
-  const { session, command, positionals, out, dispatchContext } = params;
-  return await dispatchCommand(session.device, command, positionals, out, {
-    ...dispatchContext,
-  });
-};
 
 function recordVisualizationAndAction(params: {
   session: SessionState;

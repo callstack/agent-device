@@ -30,7 +30,7 @@ export type CommandCapability = {
 
 const WEB_DEVICE: KindMatrix = { device: true };
 const HARMONYOS_ALL: KindMatrix = { emulator: true, device: true };
-const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>(['perf', 'settings']);
+const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>(['perf']);
 const WEB_QUERY_COMMANDS = ['audio'] as const;
 const WEB_SUPPORTED_COMMANDS = new Set<string>(WEB_QUERY_COMMANDS);
 // Built from the additive command-descriptor registry (ADR-0008, Phase 1 step 3).

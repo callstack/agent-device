@@ -126,8 +126,6 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   perf: supportsCoreDevicePhysicalOperation,
   alert: (device) =>
     device.platform === 'android' || isIosOs(device) || isMacOsOrAppleSimulator(device),
-  settings: (device) =>
-    device.platform === 'android' || isMacOs(device) || device.kind === 'simulator',
   audio: supportsHostAudioProbe,
 };
 const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
@@ -231,7 +229,7 @@ test('HarmonyOS static capabilities omit runtime-backed command admissions', () 
   // Runtime-backed navigation, keyboard, and touch commands dropped out of the matrix entirely:
   // capability buckets), so they are absent here — not because HarmonyOS admission changed, but
   // because there is no bucket left for `isCommandSupportedOnDevice` to consult at all.
-  assert.deepEqual(availableCommands, ['perf', 'settings']);
+  assert.deepEqual(availableCommands, ['perf']);
 });
 
 test('(b.2) unsupportedHint closures are verbatim across the full device matrix', () => {

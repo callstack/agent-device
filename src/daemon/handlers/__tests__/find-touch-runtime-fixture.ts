@@ -1,6 +1,5 @@
-import { vi } from 'vitest';
+import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   getRuntimeBindings,
   mockFillPoint,
@@ -11,16 +10,20 @@ import {
 
 export { mockFocusPoint };
 export const findTouchRuntimeBindings = getRuntimeBindings;
-export const mockDispatch = vi.mocked(dispatchCommand);
+/**
+ * Find's delegated touch legs record their calls on the shared capture double, so the suite can
+ * assert which command each leg re-invoked without a dispatcher to observe (R58).
+ */
+export const mockDispatch = legacyDispatchCapture;
 
 export function resetFindTouchRuntimeFixture(): void {
   resetGetRuntimeFixture();
-  mockDispatch.mockReset();
-  mockDispatch.mockImplementation(async (_device: unknown, command: string) => {
+  legacyDispatchCapture.mockReset();
+  legacyDispatchCapture.mockImplementation(async (_device: unknown, command: string) => {
     return command === 'snapshot' ? { nodes: [] } : {};
   });
   mockTapPoint.mockImplementation(async (input) => {
-    return await dispatchCommand(
+    return await legacyDispatchCapture(
       IOS_SIMULATOR,
       'press',
       [String(input.point.x), String(input.point.y)],
@@ -29,7 +32,7 @@ export function resetFindTouchRuntimeFixture(): void {
     );
   });
   mockFillPoint.mockImplementation(async (input) => {
-    return await dispatchCommand(
+    return await legacyDispatchCapture(
       IOS_SIMULATOR,
       'fill',
       [String(input.point.x), String(input.point.y), input.text],

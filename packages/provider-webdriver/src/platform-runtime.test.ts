@@ -265,10 +265,11 @@ test('captures through only the active exact WebDriver interactor', async () => 
     expect(binding.facts.operations[operation]).toEqual({ available: true });
     expect(binding.operations[operation]).toBeTypeOf('function');
   }
-  // tv-remote and every keyboard action always throw unsupported in this interactor regardless
-  // of reachability: no capability ever declared them.
+  // tv-remote, settings, and every keyboard action always throw unsupported in this interactor
+  // regardless of reachability: no capability ever declared them.
   for (const operation of [
     'tvRemote',
+    'setSetting',
     'keyboardStatus',
     'keyboardDismiss',
     'keyboardEnter',
@@ -330,6 +331,7 @@ test.each([
   expect(facts.operations.triggerAppEvent.available).toBe(state.isSessionActive());
   for (const operation of [
     'tvRemote',
+    'setSetting',
     'keyboardStatus',
     'keyboardDismiss',
     'keyboardEnter',

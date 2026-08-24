@@ -1,4 +1,5 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
+import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -7,11 +8,6 @@ import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 // `scroll` still executes through legacy platform dispatch; screenshot and click bind their fake
 // at the facts/bind seam below instead (ADR 0019).
-vi.mock('../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
-
 vi.mock('../../platforms/android/window-state.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/android/window-state.ts')>();
   return {
@@ -20,7 +16,6 @@ vi.mock('../../platforms/android/window-state.ts', async (importOriginal) => {
   };
 });
 
-import { dispatchCommand } from '../../core/dispatch.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import {
   screenshotRuntimeFixture,
@@ -35,8 +30,6 @@ import { PNG } from '../../utils/png.ts';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { makeSession as makeBaseSession } from '../../__tests__/test-utils/session-factories.ts';
-
-const mockDispatch = vi.mocked(dispatchCommand);
 
 function makeSession(name: string): SessionState {
   return makeBaseSession(name, { device: ANDROID_EMULATOR });
@@ -66,8 +59,8 @@ function makeMacOsMenubarSession(name: string): SessionState {
 }
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  legacyDispatchCapture.mockReset();
+  legacyDispatchCapture.mockResolvedValue({});
 });
 
 type ScreenshotRouter = Readonly<{

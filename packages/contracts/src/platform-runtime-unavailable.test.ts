@@ -48,6 +48,7 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
     writeClipboard: { available: false, reason: 'unsupported-provider-mode' },
     appSwitcher: { available: false, reason: 'unsupported-provider-mode' },
     triggerAppEvent: { available: false, reason: 'unsupported-provider-mode' },
+    setSetting: { available: false, reason: 'unsupported-provider-mode' },
     lifecycle,
   });
 

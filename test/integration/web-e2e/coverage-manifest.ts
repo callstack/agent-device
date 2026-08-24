@@ -140,7 +140,7 @@ export const WEB_PLATFORM_COVERAGE = {
   ),
   [C.clipboard]: contract(
     'packages/platform-web/src/runtime.test.ts',
-    'clipboard, the app switcher and app events never carried a web capability bucket',
+    'clipboard, the app switcher, app events and settings carry no web capability bucket',
     'the exact-owner runtime fact rejects native clipboard operations on the web target',
   ),
   [C.keyboard]: contract(
@@ -165,7 +165,7 @@ export const WEB_PLATFORM_COVERAGE = {
   ),
   [C.triggerAppEvent]: contract(
     'packages/platform-web/src/runtime.test.ts',
-    'clipboard, the app switcher and app events never carried a web capability bucket',
+    'clipboard, the app switcher, app events and settings carry no web capability bucket',
     'the exact-owner runtime fact rejects native app-event delivery on the web target',
   ),
   [C.open]: live('the managed browser opens the local fixture page'),
@@ -188,7 +188,11 @@ export const WEB_PLATFORM_COVERAGE = {
   ),
   [C.wait]: live('wait observes ready text and post-interaction fixture state'),
   [C.alert]: denial('Web capability model rejects native alert operations'),
-  [C.settings]: denial('Web capability model rejects native device settings operations'),
+  [C.settings]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'clipboard, the app switcher, app events and settings carry no web capability bucket',
+    'the exact-owner runtime fact rejects native device settings on the web target',
+  ),
   [C.reactNative]: denial('Web capability model rejects React Native inspection'),
   [C.record]: contract(
     'test/integration/provider-scenarios/web-desktop.test.ts',
@@ -271,7 +275,7 @@ export const WEB_PLATFORM_COVERAGE = {
   [C.viewport]: live('viewport resizes the browser and the PNG reports 640x480 dimensions'),
   [C.appSwitcher]: contract(
     'packages/platform-web/src/runtime.test.ts',
-    'clipboard, the app switcher and app events never carried a web capability bucket',
+    'clipboard, the app switcher, app events and settings carry no web capability bucket',
     'the exact-owner runtime fact rejects native app-switcher navigation on the web target',
   ),
   [C.installFromSource]: contract(

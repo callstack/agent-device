@@ -14,11 +14,10 @@ import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 // session-replay-vars.test.ts, plus a handful of generic (non-Maestro) `.ad`
 // runReplayScriptSource tests that happen to share the same runReplayFixture
 // helper and mock configuration below. It is a sibling of
-// session-replay-runtime.test.ts rather than a merge into it because that
-// file mocks '../../../core/dispatch.ts' differently (dispatchCommand
-// resolves `{}`, not throws) — vitest allows only one vi.mock per module per
-// file, so reconciling the two configurations was out of scope for a pure
-// test-file split (see #1460).
+// session-replay-runtime.test.ts rather than a merge into it because that file
+// mocks '../../../core/dispatch.ts' with its own device resolution — vitest
+// allows only one vi.mock per module per file, so reconciling the two
+// configurations was out of scope for a pure test-file split (see #1460).
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return {
@@ -41,9 +40,6 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
             booted: true,
           },
     ),
-    dispatchCommand: vi.fn(async () => {
-      throw new Error('no device runner available in this test');
-    }),
     dispatchGestureViewport: vi.fn(async () => ({ x: 0, y: 0, width: 400, height: 800 })),
   };
 });

@@ -122,6 +122,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/selector-observation-runtime',
   '@agent-device/contracts/session',
   '@agent-device/contracts/settings',
+  '@agent-device/contracts/settings-runtime',
   '@agent-device/contracts/snapshot',
   '@agent-device/contracts/snapshot-presentation',
   '@agent-device/contracts/snapshot-runtime',

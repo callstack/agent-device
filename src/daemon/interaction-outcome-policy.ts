@@ -1,11 +1,10 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { dispatchCommand } from '../core/dispatch.ts';
 import { isMobilePlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { collectKeyboardChromeRefs } from '../core/snapshot-chrome.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
-import { contextFromFlags } from './context.ts';
+import { contextFromFlags, type DaemonCommandContext } from './context.ts';
 import type { SessionState } from './types.ts';
 
 const OUTCOME_RETRY_WINDOW_MS = 30_000;
@@ -17,6 +16,27 @@ export type InteractionSurfaceSignature = NonNullable<
 >['preSignature'];
 
 export type InteractionSurfaceChange = 'changed' | 'unchanged' | 'ambiguous';
+
+/**
+ * How this policy re-fires a recorded tap. The policy owns *whether* a retry is warranted; the
+ * request route that already admitted a device cell owns *how* the tap reaches the device, and
+ * supplies it here. Keeping the seam a plain callback is what stops the policy from importing
+ * runtime admission — a read of "should we retry?" must stay readable without the binding stack.
+ *
+ * Answers `false` when the caller's owner cannot tap, so the policy can report a skipped retry
+ * instead of burning an attempt.
+ */
+export type InteractionRetryTap = (
+  request: Readonly<{
+    device: SessionState['device'];
+    point: Readonly<{ x: number; y: number }>;
+    context: InteractionRetryContext;
+  }>,
+) => Promise<boolean>;
+
+/** The runner metadata a re-fired tap carries — the same context any bound touch executes on. */
+export type InteractionRetryContext = DaemonCommandContext &
+  Readonly<{ surface?: SessionState['surface'] }>;
 
 function shouldRetryTouchOnNoChange(flags: CommandFlags | undefined): boolean {
   return flags?.interactionOutcome?.retryOnNoChange === true;
@@ -74,6 +94,7 @@ export async function retryPendingInteractionOutcome(params: {
   pending: NonNullable<SessionState['pendingInteractionOutcome']>;
   logPath: string;
   snapshot: SnapshotState;
+  retryTap?: InteractionRetryTap;
 }): Promise<{ retried: boolean; change: InteractionSurfaceChange }> {
   const { session, pending, snapshot } = params;
   const change = classifyInteractionSurfaceChange(
@@ -84,14 +105,46 @@ export async function retryPendingInteractionOutcome(params: {
     return { retried: false, change };
   }
 
+  // The retry re-fires the same coordinate tap the original press used (R48). The attempt is
+  // spent only once the tap is actually delivered, so a capture path carrying no retry seam — or
+  // an owner whose cell cannot tap — leaves the pending record intact instead of burning an
+  // attempt on a refusal, and says so rather than throwing out of the capture it was decorating.
+  const point = params.retryTap ? readRetryPoint(pending.positionals) : undefined;
   const startedAt = Date.now();
-  pending.attemptsRemaining -= 1;
   // Opt-in Maestro retries intentionally re-fire the same coordinate tap; delayed or
   // non-visual side effects can duplicate, but unchanged visual taps are the target gap.
-  await dispatchCommand(session.device, pending.command, pending.positionals, pending.flags?.out, {
-    ...contextFromFlags(params.logPath, pending.flags, session.appBundleId, session.trace?.outPath),
-    surface: session.surface,
-  });
+  const fired =
+    params.retryTap && point
+      ? await params.retryTap({
+          device: session.device,
+          point,
+          context: {
+            ...contextFromFlags(
+              params.logPath,
+              pending.flags,
+              session.appBundleId,
+              session.trace?.outPath,
+            ),
+            surface: session.surface,
+          },
+        })
+      : false;
+  if (!fired) {
+    // Never silent: a retry the opt-in flag asked for and this request could not fire says so,
+    // rather than leaving the caller to infer it from an unchanged surface.
+    emitDiagnostic({
+      level: 'info',
+      phase: 'interaction_no_change_retry_skipped',
+      data: {
+        action: pending.action,
+        attemptsRemaining: pending.attemptsRemaining,
+        reason: params.retryTap && !point ? 'unreadable-retry-point' : 'device-runtime-unavailable',
+      },
+    });
+    return { retried: false, change };
+  }
+
+  pending.attemptsRemaining -= 1;
   emitDiagnostic({
     level: 'info',
     phase: 'interaction_no_change_retry',
@@ -367,6 +420,16 @@ export function summarizeDiscriminatingSurfaceDivergence(
 
 function supportsInteractionOutcomePolicy(session: SessionState): boolean {
   return isMobilePlatform(session.device);
+}
+
+/**
+ * The pending record stores the coordinate pair `isCoordinatePair` already validated, so this
+ * only re-reads it; a record that somehow fails the read is skipped rather than retried blind.
+ */
+function readRetryPoint(positionals: readonly string[]): { x: number; y: number } | undefined {
+  const x = Number(positionals[0]);
+  const y = Number(positionals[1]);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
 }
 
 function retryCommandForTap(command: string): string | undefined {

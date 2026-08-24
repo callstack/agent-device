@@ -14,9 +14,6 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return {
     ...actual,
-    dispatchCommand: vi.fn(async (_device: unknown, command: string) => {
-      return command === 'snapshot' ? { nodes: [] } : {};
-    }),
     resolveTargetDevice: actual.resolveTargetDevice,
   };
 });

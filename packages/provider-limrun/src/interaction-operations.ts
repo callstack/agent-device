@@ -18,6 +18,7 @@ import {
 } from '@agent-device/contracts/scroll-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
+import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
@@ -127,6 +128,11 @@ const clipboardUnavailableIos = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'Limrun iOS direct sessions do not expose clipboard access yet.',
+} as const);
+const settingsUnavailableIos = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun iOS direct sessions do not expose settings changes yet.',
 } as const);
 const appSwitcherUnavailableIos = Object.freeze({
   available: false,
@@ -294,6 +300,19 @@ export function limrunAppEventOperationFacts(
   return Object.freeze({
     ...appEventRuntimeOperationFacts({ triggerAppEvent: liveSessionUnavailable ?? available }),
   });
+}
+
+/**
+ * `settings` splits the same way `app-switcher` does: the Android leg rides the local family's
+ * own interactor factory, while the iOS leg's `setSetting` throws.
+ */
+export function limrunSettingsOperationFacts(
+  device: DeviceInfo,
+  liveSessionUnavailable?: RuntimeOperationUnavailability,
+) {
+  const cell =
+    liveSessionUnavailable ?? (device.platform === 'android' ? available : settingsUnavailableIos);
+  return Object.freeze({ ...settingsRuntimeOperationFacts({ setSetting: cell }) });
 }
 
 export function limrunKeyboardOperationFacts(

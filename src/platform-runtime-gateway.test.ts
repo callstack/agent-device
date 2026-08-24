@@ -62,6 +62,7 @@ describe('composed platform runtime gateway', () => {
       writeClipboard: unavailable,
       appSwitcher: unavailable,
       triggerAppEvent: unavailable,
+      setSetting: unavailable,
       touch: unavailable,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,
@@ -156,6 +157,7 @@ describe('composed platform runtime gateway', () => {
       writeClipboard: unavailable,
       appSwitcher: unavailable,
       triggerAppEvent: unavailable,
+      setSetting: unavailable,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,
         prepareApplicationOpen: unavailable,

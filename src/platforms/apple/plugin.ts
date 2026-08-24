@@ -48,8 +48,6 @@ const supportsAlertSurface = (device: DeviceInfo): boolean =>
 const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean> = {
   [PUBLIC_COMMANDS.perf]: supportsCoreDevicePhysicalOperation,
   [PUBLIC_COMMANDS.alert]: supportsAlertSurface,
-  [PUBLIC_COMMANDS.settings]: (device) =>
-    device.platform === 'android' || supportsHostOrSimulatorSurface(device),
   [PUBLIC_COMMANDS.audio]: isAudioProbeSupportedDevice,
 };
 

@@ -48,7 +48,7 @@ vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => 
 });
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
+  return { ...actual, resolveTargetDevice: vi.fn() };
 });
 vi.mock('../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
@@ -59,9 +59,11 @@ import { runReplayScriptSource } from '../session-replay-runtime.ts';
 import { handleCloseCommand as handleProductionCloseCommand } from '../session-close.ts';
 import { SessionStore } from '../../session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
+import {
+  legacyDispatchCapture,
+  resetLegacySnapshotCapture,
+} from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { dispatchApplicationLifecycleEffect } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -92,7 +94,7 @@ import {
   inspectLifecycleRuntimeFacts,
 } from './application-lifecycle-runtime-harness.ts';
 
-const mockDispatchCommand = vi.mocked(dispatchCommand);
+const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 const mockLifecycleDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 
@@ -124,9 +126,7 @@ function sessionCloseReceipt(session: SessionState | undefined): string | undefi
 }
 
 beforeEach(() => {
-  mockDispatchCommand.mockReset();
-  mockCaptureSnapshotWithInteractor.mockReset();
-  mockCaptureSnapshotWithInteractor.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
+  resetLegacySnapshotCapture(mockCaptureSnapshotWithInteractor);
   mockLifecycleDispatch.mockReset();
   mockLifecycleDispatch.mockResolvedValue(undefined);
   // The "current" app state: "save" was renamed to "save-v2" (why step 2

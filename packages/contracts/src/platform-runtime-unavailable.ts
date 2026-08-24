@@ -27,6 +27,7 @@ import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
 import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
 import { appSwitcherRuntimeOperationFacts } from './app-switcher-runtime.ts';
 import { appEventRuntimeOperationFacts } from './app-event-runtime.ts';
+import { settingsRuntimeOperationFacts } from './settings-runtime.ts';
 import { touchRuntimeOperationFacts } from './touch-runtime.ts';
 
 /**
@@ -60,6 +61,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   writeClipboard: RuntimeOperationUnavailability;
   appSwitcher: RuntimeOperationUnavailability;
   triggerAppEvent: RuntimeOperationUnavailability;
+  setSetting: RuntimeOperationUnavailability;
   readiness?: RuntimeOperationUnavailability;
   shutdown?: RuntimeOperationUnavailability;
   lifecycle: ApplicationLifecycleOperationFacts;
@@ -120,6 +122,7 @@ export function createUnavailablePlatformRuntimeFacts(
     writeClipboard,
     appSwitcher,
     triggerAppEvent,
+    setSetting,
     readiness,
     shutdown,
     lifecycle,
@@ -192,6 +195,7 @@ export function createUnavailablePlatformRuntimeFacts(
       ...clipboardRuntimeOperationFacts({ read: readClipboard, write: writeClipboard }),
       ...appSwitcherRuntimeOperationFacts({ appSwitcher }),
       ...appEventRuntimeOperationFacts({ triggerAppEvent }),
+      ...settingsRuntimeOperationFacts({ setSetting }),
       ensureReady: readiness,
       bootTarget: readiness,
       bootTargetHeadless: readiness,
@@ -250,6 +254,9 @@ function freezeUnavailableFacts(
     // App-event delivery opens a URL on the device, which is not something a transport gap can
     // speak for: each owner states whether it can open one at all.
     triggerAppEvent: Object.freeze({ ...unavailable.triggerAppEvent }),
+    // Device settings differ by leaf and kind the way the pasteboard does, and a provider can
+    // own a device without exposing any settings API at all, so each owner states its own cell.
+    setSetting: Object.freeze({ ...unavailable.setSetting }),
     lifecycle: applicationLifecycleOperationFacts(unavailable.lifecycle),
   });
 }

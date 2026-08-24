@@ -1,4 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { handleInteractionCommands } from '../interaction.ts';
 import type { SessionStore } from '../../session-store.ts';
@@ -29,7 +30,6 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return {
     ...actual,
-    dispatchCommand: vi.fn(async () => ({})),
   };
 });
 
@@ -45,9 +45,7 @@ vi.mock('../interaction-snapshot.ts', async (importOriginal) => {
   };
 });
 
-import { dispatchCommand } from '../../../core/dispatch.ts';
 import { captureSnapshotForSession } from '../interaction-snapshot.ts';
-const mockDispatch = vi.mocked(dispatchCommand);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
 
 const BEFORE_NODES = [
@@ -86,7 +84,7 @@ async function emulateCaptureSnapshotForSession(
   options: { interactiveOnly: boolean },
 ) {
   const effectiveFlags = { ...(flags ?? {}), snapshotInteractiveOnly: options.interactiveOnly };
-  const snapshotData = (await mockDispatch(
+  const snapshotData = (await legacyDispatchCapture(
     session.device,
     'snapshot',
     [],
@@ -140,7 +138,7 @@ test('interaction runtime inherits the registered daemon request signal', () => 
 
 function mockCommandDispatch(params: { snapshots: Array<typeof BEFORE_NODES> }) {
   let snapshotCalls = 0;
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'snapshot') {
       const nodes = params.snapshots[Math.min(snapshotCalls, params.snapshots.length - 1)];
       snapshotCalls += 1;
@@ -154,10 +152,10 @@ const contextFromFlags = () => ({});
 
 beforeEach(() => {
   resetGetRuntimeFixture();
-  mockDispatch.mockReset();
-  mockDispatch.mockResolvedValue({});
+  legacyDispatchCapture.mockReset();
+  legacyDispatchCapture.mockResolvedValue({});
   mockTapPoint.mockImplementation(async (input) => {
-    return await mockDispatch(
+    return await legacyDispatchCapture(
       IOS_SIMULATOR,
       'press',
       [String(input.point.x), String(input.point.y)],
@@ -166,7 +164,7 @@ beforeEach(() => {
     );
   });
   mockFillPoint.mockImplementation(async (input) => {
-    return await mockDispatch(
+    return await legacyDispatchCapture(
       IOS_SIMULATOR,
       'fill',
       [String(input.point.x), String(input.point.y), input.text],
@@ -328,7 +326,7 @@ test('press --settle rejects an expired-frame ref before dispatch or observation
   // ADR 0014: a device action since the snapshot expired the ref frame.
   session.refFrameState = 'expired';
   sessionStore.set(sessionName, session);
-  mockDispatch.mockRejectedValue(
+  legacyDispatchCapture.mockRejectedValue(
     new Error('dispatch should not be called for an expired-frame ref'),
   );
 
@@ -362,7 +360,7 @@ test('a settle observation without a diff leaves ref staleness untouched', async
   const sessionName = 'settle-stalled';
   seedSession(sessionName, sessionStore);
   let snapshotCalls = 0;
-  mockDispatch.mockImplementation(async (_device, command) => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'snapshot') {
       snapshotCalls += 1;
       if (snapshotCalls === 1) return { nodes: BEFORE_NODES, backend: 'xctest' };

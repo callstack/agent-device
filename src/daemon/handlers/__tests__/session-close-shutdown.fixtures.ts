@@ -44,11 +44,6 @@ vi.mock('../../../utils/video.ts', () => ({
   waitForStableFile: vi.fn(async () => {}),
   isPlayableVideo: vi.fn(async () => true),
 }));
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
-
 import {
   handleSessionCommands,
   mockBindDeviceRuntime,

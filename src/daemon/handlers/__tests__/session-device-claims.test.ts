@@ -11,7 +11,6 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const resolveTargetDevice = vi.fn();
   return {
     ...actual,
-    dispatchCommand: vi.fn(),
     resolveTargetDevice,
     resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(resolveTargetDevice)),
   };

@@ -31,6 +31,18 @@ export type BindDeviceRuntime = <
   BoundDeviceRuntime<RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>>
 >;
 
+/**
+ * The two request-scoped seams a caller threads down to whichever route finally admits a device
+ * cell. It lives here, beside the two function types it is composed of, rather than beside the
+ * admission entry point that consumes it: callers that only forward the seams (a deferred capture
+ * handing them to a retry, say) would otherwise have to import the whole admission module and
+ * close a type cycle through it.
+ */
+export type RuntimeAdmissionBindings = Readonly<{
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  bindDevice?: BindDeviceRuntime;
+}>;
+
 export type BindExactDeviceRuntime = <
   const Required extends readonly RuntimeOperationKey<PlatformRuntimeOperations>[],
   const Preferred extends readonly Exclude<

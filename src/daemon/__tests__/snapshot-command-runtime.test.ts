@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
 import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import {
@@ -8,34 +8,15 @@ import {
 } from '../../request/cancel.ts';
 import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';
 import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
+import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 
-const dispatchCommandMock = vi.hoisted(() => vi.fn());
-
-vi.mock('../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
-  return {
-    ...actual,
-    dispatchCommand: dispatchCommandMock,
-  };
-});
-
-vi.mock('../handlers/snapshot-interactor-capture.ts', () => ({
-  captureSnapshotWithInteractor: vi.fn(
-    async ({ device, runnerContext, options }) =>
-      await dispatchCommandMock(device, 'snapshot', [], undefined, {
-        ...runnerContext,
-        ...options,
-        snapshotInteractiveOnly: options.interactiveOnly,
-        snapshotPreferredBackend: options.preferredBackend,
-        snapshotDepth: options.depth,
-        snapshotScope: options.scope,
-        snapshotRaw: options.raw,
-        snapshotCustomActions: options.customActions,
-        snapshotIncludeHiddenContentHints: options.includeHiddenContentHints,
-      }),
-  ),
-}));
+/**
+ * The capture double the snapshot runtime fixture's bound operation delegates to. Cancellation is
+ * what these tests are about, so the double is the one place that can observe the signal the
+ * request scope handed the binding.
+ */
+const captureMock = legacyDispatchCapture;
 
 type Deferred = {
   promise: Promise<void>;
@@ -51,7 +32,7 @@ function deferred(): Deferred {
 }
 
 afterEach(() => {
-  dispatchCommandMock.mockReset();
+  captureMock.mockReset();
 });
 
 for (const command of ['snapshot', 'diff snapshot'] as const) {
@@ -66,7 +47,7 @@ for (const command of ['snapshot', 'diff snapshot'] as const) {
     const releaseDispatch = deferred();
     let observedSignal: AbortSignal | undefined;
 
-    dispatchCommandMock.mockImplementation(async (...args: unknown[]) => {
+    captureMock.mockImplementation(async (...args) => {
       const context = args[4] as { signal?: AbortSignal } | undefined;
       observedSignal = context?.signal;
       dispatchEntered.resolve();
