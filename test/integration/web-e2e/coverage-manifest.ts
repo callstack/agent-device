@@ -49,17 +49,20 @@ const denial = (assertion: string): WebPlatformCoverageEntry => ({
 /**
  * One primary, observable owner for every public command on the managed web target.
  *
- * Live rows are limited to the existing web-smoke scenario. Contract rows cite
- * existing web-specific unit/provider evidence; they do not turn fixture-backed
- * tests into live E2E claims. Capability denials are derived from the web bucket
- * in the command capability matrix.
+ * Live rows are limited to the existing web-smoke scenario; they do not widen its scope. Capability
+ * denials are derived from the web bucket in the command capability matrix. Contract rows do not
+ * turn fixture-backed tests into live E2E claims, and cite one of three evidence shapes:
+ * a web-specific unit/provider test exercising the command's own operation (e.g. `click`, `hover`);
+ * the web runtime's own unavailable-operation fact, a real and permanent denial (e.g. `boot`,
+ * `push`); or, for a command whose handler has no platform branch at all, a test proving its
+ * existing generic/shared code path runs correctly for a web-backed session or device (e.g.
+ * `artifacts`, `batch`, `diff`, `press`) — including, for `test`, proving the one command-specific
+ * limitation that mechanism does have (its declared-platform filter cannot select web) rather than
+ * a "this works" claim it would not be honest to make.
  *
- * #1900 closed every known-gap row this manifest originally carried: each now cites either the
- * web runtime's own unavailable-operation fact (a real, permanent denial — e.g. `boot`, `push`),
- * or a new test proving the command's existing generic/shared-runtime-plan code path already
- * runs correctly for a web-backed session (e.g. `artifacts`, `diff`, `press`). None of this widens
- * the live web-smoke scope. `WebPlatformCoverageEntry` keeps the `known-gap` variant for any
- * future command whose web behavior genuinely isn't decided yet.
+ * #1900 closed every known-gap row this manifest originally carried using the shapes above.
+ * `WebPlatformCoverageEntry` keeps the `known-gap` variant for any future command whose web
+ * behavior genuinely isn't decided yet.
  */
 export const WEB_PLATFORM_COVERAGE = {
   [C.artifacts]: contract(
@@ -126,8 +129,8 @@ export const WEB_PLATFORM_COVERAGE = {
   ),
   [C.test]: contract(
     'src/daemon/handlers/__tests__/session-command-replay.test.ts',
-    'test runs an undeclared script against a session already bound to a web device',
-    'an unfiltered test run executes its script against a session already bound to a web device',
+    'test --platform web reports no matching scripts, typed or untyped, because ReplayTestPlatform excludes web',
+    "test's declared-platform filter structurally excludes web (ReplayTestPlatform = Exclude<PlatformSelector, 'web'>), so --platform web deterministically matches no script",
   ),
   [C.clipboard]: denial('Web capability model rejects native clipboard operations'),
   [C.keyboard]: contract(

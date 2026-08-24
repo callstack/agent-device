@@ -531,8 +531,9 @@ test('push reports the runtime-owned unavailable readiness and push facts', asyn
   }
 });
 
-// #1900: `logs` resolves to `appLogRuntimePlanUses`, which spans all five app-log facts; web has
-// no native app-log channel to inspect, start, or reattach to.
+// #1900: `logs` resolves to `appLogRuntimePlanUses` (three of these five facts: appLogInspect,
+// appLogDoctor, appLogStart); the other two, appLogReattach/appLogCleanup, are asserted here too
+// since they answer the same "no native app-log channel" question a web target has no route for.
 test('logs reports the runtime-owned unavailable app-log facts', async () => {
   const binding = await createWebPlatformRuntime(host({ mode: 'transport-composed' })).bind({
     device,
