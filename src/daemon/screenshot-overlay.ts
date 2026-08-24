@@ -13,18 +13,19 @@ import {
   isViewportRootNode,
   normalizeType,
 } from '@agent-device/contracts/snapshot';
-import { resolveAndroidOverlaySourceRect } from './screenshot-overlay-android.ts';
+import {
+  isAndroidUnlabeledClickableSource,
+  resolveAndroidOverlaySourceRect,
+} from '../snapshot/screenshot-overlay/android.ts';
 import { drawOverlayRef } from './screenshot-overlay-draw.ts';
-import { clamp, hasPositiveRect, rectArea, rectContains } from './screenshot-overlay-rects.ts';
+import {
+  clamp,
+  hasPositiveRect,
+  rectArea,
+  rectContains,
+} from '../snapshot/screenshot-overlay/rects.ts';
 
 const MAX_OVERLAY_REFS = 24;
-const ANDROID_UNLABELED_CLICKABLE_EXCLUDED_TYPES = [
-  'scroll',
-  'list',
-  'recyclerview',
-  'edittext',
-  'textfield',
-] as const;
 const ACTIONABLE_ROLE_TYPES = [
   'button',
   'link',
@@ -182,21 +183,6 @@ function isOverlaySourceNode(
   if (isAndroidUnlabeledClickableSource(snapshot, snapshotBounds, node)) return true;
   if (hasActionableRole(node)) return hasTextSignal;
   return hasTextSignal && isProxyOverlayNode(node);
-}
-
-function isAndroidUnlabeledClickableSource(
-  snapshot: SnapshotState,
-  snapshotBounds: Rect | null,
-  node: SnapshotNode,
-): boolean {
-  if (snapshot.backend !== 'android') return false;
-  if (!node.hittable || !hasPositiveRect(node.rect) || isViewportRootNode(node)) return false;
-  const normalizedType = normalizeType(node.type ?? '');
-  if (ANDROID_UNLABELED_CLICKABLE_EXCLUDED_TYPES.some((type) => normalizedType.includes(type))) {
-    return false;
-  }
-  if (snapshotBounds && rectArea(node.rect) > rectArea(snapshotBounds) * 0.25) return false;
-  return true;
 }
 
 function resolveOverlayTarget(

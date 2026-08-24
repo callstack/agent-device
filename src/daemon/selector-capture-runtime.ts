@@ -10,7 +10,7 @@ import type { DaemonRequest, SessionState } from './types.ts';
 import { SessionStore } from './session-store.ts';
 import { captureSnapshot } from './handlers/snapshot-capture.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
-import { getActiveAndroidSnapshotFreshness } from './android-snapshot-freshness.ts';
+import { getActiveAndroidSnapshotFreshness } from './session-snapshot-freshness.ts';
 import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
 import type { BoundSelectorCapture } from './selector-capture-binding.ts';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';

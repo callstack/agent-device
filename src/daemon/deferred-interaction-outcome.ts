@@ -7,10 +7,12 @@ import {
   captureAndroidFreshnessRecoveredAttempt,
   clearAndroidSnapshotFreshness,
   getActiveAndroidSnapshotFreshness,
-  isNavigationSensitiveAction,
   markAndroidSnapshotFreshness,
-  type AndroidFreshnessMode,
-} from './android-snapshot-freshness.ts';
+} from './session-snapshot-freshness.ts';
+import {
+  isNavigationSensitiveAction,
+  type SnapshotFreshnessMode,
+} from '../snapshot/snapshot-freshness/index.ts';
 import { withGestureNoEffectWarning } from './gesture-no-effect.ts';
 import {
   areInteractionSurfaceSignaturesStable,
@@ -151,7 +153,7 @@ type DeferredOutcomeCaptureParams = {
   logPath: string;
   /** Whether the capture the verdict rides on was interactive-only filtered. */
   interactiveOnly: boolean;
-  androidFreshnessMode?: AndroidFreshnessMode;
+  androidFreshnessMode?: SnapshotFreshnessMode;
   capture: () => Promise<DeferredOutcomeSnapshotAttempt>;
 };
 

@@ -1,6 +1,45 @@
-import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
-import { normalizeType } from '@agent-device/contracts/snapshot';
-import { hasPositiveRect, rectContains, unionRects } from './screenshot-overlay-rects.ts';
+import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import { isViewportRootNode, normalizeType } from '@agent-device/contracts/snapshot';
+import { hasPositiveRect, rectArea, rectContains, unionRects } from './rects.ts';
+
+/**
+ * Android overlay policy (#1983): which Android nodes earn an overlay ref, and what rectangle
+ * an overlay for one of them should actually cover.
+ *
+ * Android reports whole clickable rows as hittable with no role and no label, so both questions
+ * need Android-specific answers that the shared ranking pass must not have to know about. The
+ * daemon keeps the ranking, projection and artifact assembly; the classification lives here.
+ */
+
+// A hittable Android node with none of these types is a plausible unlabeled control. Scroll
+// containers, lists and text fields are hittable too, but an overlay over one of them marks a
+// region rather than a control.
+const ANDROID_UNLABELED_CLICKABLE_EXCLUDED_TYPES = [
+  'scroll',
+  'list',
+  'recyclerview',
+  'edittext',
+  'textfield',
+] as const;
+
+/**
+ * Whether an Android node qualifies as an unlabeled clickable overlay source. A node larger
+ * than a quarter of the snapshot bounds is treated as layout, not as a control.
+ */
+export function isAndroidUnlabeledClickableSource(
+  snapshot: SnapshotState,
+  snapshotBounds: Rect | null,
+  node: SnapshotNode,
+): boolean {
+  if (snapshot.backend !== 'android') return false;
+  if (!node.hittable || !hasPositiveRect(node.rect) || isViewportRootNode(node)) return false;
+  const normalizedType = normalizeType(node.type ?? '');
+  if (ANDROID_UNLABELED_CLICKABLE_EXCLUDED_TYPES.some((type) => normalizedType.includes(type))) {
+    return false;
+  }
+  if (snapshotBounds && rectArea(node.rect) > rectArea(snapshotBounds) * 0.25) return false;
+  return true;
+}
 
 export function resolveAndroidOverlaySourceRect(
   target: SnapshotNode,

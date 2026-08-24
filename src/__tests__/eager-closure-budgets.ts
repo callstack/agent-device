@@ -182,6 +182,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/settings.ts': 3,
   'packages/contracts/src/snapshot-presentation.ts': 2,
   'packages/contracts/src/snapshot-runtime.ts': 3,
+  'packages/contracts/src/snapshot-timeout-evidence.ts': 1,
   'packages/contracts/src/startup-recovery-fence.ts': 1,
   'packages/contracts/src/tv-remote.ts': 3,
   'packages/contracts/src/type-text-runtime.ts': 4,

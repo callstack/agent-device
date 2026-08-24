@@ -196,8 +196,8 @@ alone.
 **Presentation options**:
 The policy input controlling how one snapshot acquisition becomes a public projection.
 
-**Snapshot presentation facet**:
-The host-side owner of the neutral acquisition-to-presentation contract and TypeScript policies.
+**Snapshot policy facet**:
+The host-side owner of neutral snapshot policy: presentation, freshness, timeout and overlay.
 Platform acquisition supplies raw facts and a fold policy; runner-side Swift presentation remains
 separate across the process boundary.
 

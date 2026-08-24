@@ -8,7 +8,7 @@ import type { SessionState } from '../types.ts';
  * post-gesture-stabilization-verdict.test.ts (the pure verdict/classifier
  * coverage — split by subject per #1563 review, to stay under the repo's
  * 500-line test-file tripwire, AGENTS.md), deferred-interaction-outcome.test.ts,
- * and android-snapshot-freshness.test.ts. Not a `.test.ts` file, so vitest
+ * and session-snapshot-freshness.test.ts. Not a `.test.ts` file, so vitest
  * never tries to run it directly.
  */
 

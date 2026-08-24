@@ -121,6 +121,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/snapshot',
   '@agent-device/contracts/snapshot-presentation',
   '@agent-device/contracts/snapshot-runtime',
+  '@agent-device/contracts/snapshot-timeout-evidence',
   '@agent-device/contracts/startup-recovery-fence',
   '@agent-device/contracts/touch-runtime',
   '@agent-device/contracts/tv-remote',
@@ -702,6 +703,14 @@ test('Node resolution enforces the exports map at runtime', () => {
   assert.ok(
     contractsReactNativeOverlayResolved.endsWith('packages/contracts/src/react-native-overlay.ts'),
     contractsReactNativeOverlayResolved,
+  );
+  const contractsSnapshotTimeoutEvidenceResolved = import.meta
+    .resolve('@agent-device/contracts/snapshot-timeout-evidence');
+  assert.ok(
+    contractsSnapshotTimeoutEvidenceResolved.endsWith(
+      'packages/contracts/src/snapshot-timeout-evidence.ts',
+    ),
+    contractsSnapshotTimeoutEvidenceResolved,
   );
   const providerWebDriverResolved = import.meta.resolve('@agent-device/provider-webdriver');
   assert.ok(

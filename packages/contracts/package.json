@@ -307,6 +307,10 @@
       "types": "./src/snapshot-runtime.ts",
       "default": "./src/snapshot-runtime.ts"
     },
+    "./snapshot-timeout-evidence": {
+      "types": "./src/snapshot-timeout-evidence.ts",
+      "default": "./src/snapshot-timeout-evidence.ts"
+    },
     "./startup-recovery-fence": {
       "types": "./src/startup-recovery-fence.ts",
       "default": "./src/startup-recovery-fence.ts"

@@ -112,11 +112,6 @@
         "count": 1
       }
     },
-    "src/daemon/android-snapshot-freshness.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "src/daemon/client/daemon-client-lifecycle.ts": {
       "complexity_high": {
         "count": 1
@@ -575,7 +570,6 @@
     "src/daemon/handlers/session.ts:complexity",
     "src/replay/script-utils.ts:high impact",
     "packages/selectors/src/internal/predicates.ts:high impact",
-    "src/daemon/android-snapshot-freshness.ts:high impact",
     "src/platforms/boot-diagnostics.ts:complexity",
     "src/compat/maestro/support.ts:high impact",
     "src/daemon/session-routing.ts:high impact",

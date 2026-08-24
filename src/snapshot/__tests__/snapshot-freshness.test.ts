@@ -1,22 +1,14 @@
 import assert from 'node:assert/strict';
-import { afterEach, test, vi } from 'vitest';
+import { test } from 'vitest';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
 import {
+  androidFreshnessReason,
   buildSnapshotSignatures,
-  clearAndroidSnapshotFreshness,
-  getActiveAndroidSnapshotFreshness,
-  getAndroidFreshnessReason,
   isLikelySnapshotStuckOnPreviousRoute,
   isLikelyStaleSnapshotDrop,
-  markAndroidSnapshotFreshness,
-  type AndroidSnapshotFreshness,
-} from '../android-snapshot-freshness.ts';
-import { makeSession } from './post-gesture-stabilization-fixtures.ts';
-
-afterEach(() => {
-  vi.useRealTimers();
-});
+} from '../snapshot-freshness/android.ts';
+import type { SnapshotFreshnessWindow } from '../snapshot-freshness/index.ts';
 
 function labeledNodes(count: number, prefix = 'item'): RawSnapshotNode[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -30,9 +22,9 @@ function anonymousNodes(count: number): RawSnapshotNode[] {
   return Array.from({ length: count }, (_, index) => ({ index, type: 'View' }));
 }
 
-function freshnessRecord(
-  overrides: Partial<AndroidSnapshotFreshness> = {},
-): AndroidSnapshotFreshness {
+function freshnessWindow(
+  overrides: Partial<SnapshotFreshnessWindow> = {},
+): SnapshotFreshnessWindow {
   return {
     action: 'click',
     markedAt: Date.now(),
@@ -42,26 +34,26 @@ function freshnessRecord(
   };
 }
 
-// --- getAndroidFreshnessReason: the whole three-reason classification ---
+// --- androidFreshnessReason: the whole three-reason classification ---
 
 test('empty interactive capture over a dozen raw nodes reads as a transitional frame', () => {
-  const reason = getAndroidFreshnessReason(
+  const reason = androidFreshnessReason(
     { snapshot: makeSnapshotState([]), rawNodeCount: 12 },
-    freshnessRecord(),
+    freshnessWindow(),
     { interactiveOnly: true },
   );
   assert.equal(reason, 'empty-interactive');
 });
 
 test('empty interactive capture stays trusted below the raw-node floor or without disclosure', () => {
-  const belowFloor = getAndroidFreshnessReason(
+  const belowFloor = androidFreshnessReason(
     { snapshot: makeSnapshotState([]), rawNodeCount: 11 },
-    freshnessRecord({ baselineCount: 0 }),
+    freshnessWindow({ baselineCount: 0 }),
     { interactiveOnly: true },
   );
-  const undisclosed = getAndroidFreshnessReason(
+  const undisclosed = androidFreshnessReason(
     { snapshot: makeSnapshotState([]), rawNodeCount: undefined },
-    freshnessRecord({ baselineCount: 0 }),
+    freshnessWindow({ baselineCount: 0 }),
     { interactiveOnly: true },
   );
   assert.equal(belowFloor, null);
@@ -69,27 +61,27 @@ test('empty interactive capture stays trusted below the raw-node floor or withou
 });
 
 test('ref-refresh mode only ever reports the empty-interactive shape', () => {
-  const suppressed = getAndroidFreshnessReason(
+  const suppressed = androidFreshnessReason(
     { snapshot: makeSnapshotState(anonymousNodes(3)), rawNodeCount: undefined },
-    freshnessRecord({ baselineCount: 50 }),
+    freshnessWindow({ baselineCount: 50 }),
     { interactiveOnly: false, mode: 'ref-refresh' },
   );
   assert.equal(suppressed, null);
 });
 
 test('a sharp node-count drop with no meaningful content reads as stale', () => {
-  const reason = getAndroidFreshnessReason(
+  const reason = androidFreshnessReason(
     { snapshot: makeSnapshotState(anonymousNodes(3)), rawNodeCount: undefined },
-    freshnessRecord({ baselineCount: 50 }),
+    freshnessWindow({ baselineCount: 50 }),
     { interactiveOnly: false },
   );
   assert.equal(reason, 'sharp-drop');
 });
 
 test('a sharp drop onto a screen with real content is trusted (deliberately minimal screens)', () => {
-  const reason = getAndroidFreshnessReason(
+  const reason = androidFreshnessReason(
     { snapshot: makeSnapshotState(labeledNodes(3)), rawNodeCount: undefined },
-    freshnessRecord({ baselineCount: 50 }),
+    freshnessWindow({ baselineCount: 50 }),
     { interactiveOnly: false },
   );
   assert.equal(reason, null);
@@ -98,9 +90,9 @@ test('a sharp drop onto a screen with real content is trusted (deliberately mini
 test('a near-identical tree after a navigation-sensitive action reads as stuck on the previous route', () => {
   const nodes = labeledNodes(20);
   const baseline = makeSnapshotState(nodes);
-  const reason = getAndroidFreshnessReason(
+  const reason = androidFreshnessReason(
     { snapshot: makeSnapshotState(nodes), rawNodeCount: undefined },
-    freshnessRecord({
+    freshnessWindow({
       baselineCount: baseline.nodes.length,
       baselineSignatures: buildSnapshotSignatures(baseline.nodes),
       routeComparable: true,
@@ -113,14 +105,14 @@ test('a near-identical tree after a navigation-sensitive action reads as stuck o
 test('stuck-route never fires without a route-comparable baseline or for a non-navigation action', () => {
   const nodes = labeledNodes(20);
   const signatures = buildSnapshotSignatures(makeSnapshotState(nodes).nodes);
-  const notComparable = getAndroidFreshnessReason(
+  const notComparable = androidFreshnessReason(
     { snapshot: makeSnapshotState(nodes), rawNodeCount: undefined },
-    freshnessRecord({ baselineCount: 20, baselineSignatures: signatures, routeComparable: false }),
+    freshnessWindow({ baselineCount: 20, baselineSignatures: signatures, routeComparable: false }),
     { interactiveOnly: false },
   );
-  const steadyStateAction = getAndroidFreshnessReason(
+  const steadyStateAction = androidFreshnessReason(
     { snapshot: makeSnapshotState(nodes), rawNodeCount: undefined },
-    freshnessRecord({
+    freshnessWindow({
       action: 'type',
       baselineCount: 20,
       baselineSignatures: signatures,
@@ -134,9 +126,9 @@ test('stuck-route never fires without a route-comparable baseline or for a non-n
 
 test('a genuinely new route is trusted', () => {
   const baseline = makeSnapshotState(labeledNodes(20, 'catalog'));
-  const reason = getAndroidFreshnessReason(
+  const reason = androidFreshnessReason(
     { snapshot: makeSnapshotState(labeledNodes(20, 'checkout')), rawNodeCount: undefined },
-    freshnessRecord({
+    freshnessWindow({
       baselineCount: baseline.nodes.length,
       baselineSignatures: buildSnapshotSignatures(baseline.nodes),
       routeComparable: true,
@@ -160,49 +152,4 @@ test('isLikelySnapshotStuckOnPreviousRoute ignores missing baselines and tiny tr
   assert.equal(isLikelySnapshotStuckOnPreviousRoute([], nodes), false);
   const tiny = makeSnapshotState(labeledNodes(5)).nodes;
   assert.equal(isLikelySnapshotStuckOnPreviousRoute(buildSnapshotSignatures(tiny), tiny), false);
-});
-
-// --- mark / get / clear lifecycle ---
-
-test('mark records a route-comparable baseline only from a comparison-safe snapshot', () => {
-  const session = makeSession('android');
-  session.snapshot = makeSnapshotState(labeledNodes(20), { comparisonSafe: true });
-
-  markAndroidSnapshotFreshness(session, 'click');
-
-  assert.equal(session.androidSnapshotFreshness?.routeComparable, true);
-  assert.equal(session.androidSnapshotFreshness?.baselineSignatures?.length, 20);
-});
-
-test('mark keeps a pruned baseline usable for count comparison but not route comparison', () => {
-  const session = makeSession('android');
-  session.snapshot = makeSnapshotState(labeledNodes(20));
-
-  markAndroidSnapshotFreshness(session, 'click');
-
-  assert.equal(session.androidSnapshotFreshness?.routeComparable, false);
-  assert.equal(session.androidSnapshotFreshness?.baselineSignatures, undefined);
-  assert.equal(session.androidSnapshotFreshness?.baselineCount, 20);
-});
-
-test('mark is Android-only and the active window expires', () => {
-  vi.useFakeTimers();
-  const iosSession = makeSession('ios');
-  markAndroidSnapshotFreshness(iosSession, 'click');
-  assert.equal(iosSession.androidSnapshotFreshness, undefined);
-
-  const session = makeSession('android');
-  markAndroidSnapshotFreshness(session, 'click');
-  assert.ok(getActiveAndroidSnapshotFreshness(session));
-
-  vi.advanceTimersByTime(2_501);
-  assert.equal(getActiveAndroidSnapshotFreshness(session), undefined);
-  assert.equal(session.androidSnapshotFreshness, undefined);
-});
-
-test('clear removes an active freshness window', () => {
-  const session = makeSession('android');
-  markAndroidSnapshotFreshness(session, 'click');
-  clearAndroidSnapshotFreshness(session);
-  assert.equal(session.androidSnapshotFreshness, undefined);
 });

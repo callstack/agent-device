@@ -78,10 +78,46 @@ capture-plan tier before the process boundary. The contract fixture under
 `contracts/fixtures/snapshot-presentation-conformance.json` is the shared proof between those
 runtimes; it does not imply that Swift and TypeScript share an implementation.
 
-This is the first ownership slice of the Wave 4 debt tracked by #1983. Freshness recovery,
-timeout evidence, and screenshot-overlay policy retain their existing daemon adapters until their
-neutral host seams are extracted; new consumers must use the facet rather than add another daemon
-presentation path.
+The same split now holds for the three remaining Wave 4 policies tracked by #1983, so
+`src/snapshot/` is the host-side owner of snapshot policy generally rather than of presentation
+alone:
+
+- **Freshness recovery.** The freshness window, the Android staleness classification and its
+  thresholds, and the retry loop live in `src/snapshot/snapshot-freshness/`. The loop is
+  parameterized by a classifier and a retry schedule, so "how long may a backend lag behind a real
+  transition" is a policy input rather than a constant the loop owns.
+  `src/daemon/session-snapshot-freshness.ts` keeps only what needs a session: reading and retiring
+  the window on store-owned `SessionState`, and choosing the comparison baseline from snapshot
+  lineage. It remains the declared R7 owner of `androidSnapshotFreshness`.
+- **Timeout evidence.** Whether a failure is the accessibility-timeout shape is a policy in
+  `src/snapshot/snapshot-timeout-policy.ts`; the published `details.androidSnapshotTimeoutScreenshot`
+  payload is vocabulary in `@agent-device/contracts/snapshot-timeout-evidence`, built through
+  constructors so an assembly site cannot publish an undeclared arm. The daemon keeps the ordering
+  that genuinely needs it — resolving a bound screenshot runtime, writing the artifact, annotating
+  it from the stored observation, and emitting the diagnostics. Typed details, logs and screenshot
+  evidence are unchanged.
+- **Screenshot-overlay policy.** Which Android nodes earn an overlay ref, and what rectangle an
+  overlay for one of them covers, live in `src/snapshot/screenshot-overlay/`. The daemon keeps
+  approved artifact and ref assembly only: ranking, projection to screenshot pixels, drawing, and
+  PNG IO.
+
+`scripts/layering/snapshot-presentation-boundary.test.ts` enforces the direction for the whole
+facet: nothing under `src/snapshot/` may import `src/daemon/`. It carries a positive control,
+because a filter that stopped matching would look identical to a boundary being obeyed.
+
+The residual call sites #1983 also named are audited and deliberately left in place.
+`src/daemon/direct-ios-selector.ts` carries no presentation policy: `isLocalIosRunnerSession` and
+`readSimpleIosSelectorTarget` are session routing (device family, provider ownership, the
+stabilization window), while `deriveDirectIosNodeSelector` and `isDirectIosSelectorFallbackError`
+are selector derivation and ADR 0011 delegation-on-error. The latter two are pure and
+daemon-independent, but their owner would be the selector pipeline governed by R19, not this
+facet; moving them under ADR 0004 would widen it to a boundary it does not decide. The
+observation and interaction consumers — `selector-capture-runtime.ts`,
+`deferred-interaction-outcome.ts`, `snapshot-capture.ts` and
+`interaction-touch-android-freshness.ts` — now reach freshness only through the facet or its
+session binding.
+
+New consumers must use the facet rather than add another daemon presentation path.
 
 ## Regression Notes
 

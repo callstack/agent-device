@@ -17,6 +17,7 @@ import type {
 import type { DeviceInfo, PlatformSelector } from '@agent-device/kernel/device';
 import type { Rect, SnapshotState, SnapshotCaptureBackend } from '@agent-device/kernel/snapshot';
 import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
+import type { SnapshotFreshnessWindow } from '../snapshot/snapshot-freshness/index.ts';
 // Type-only import; erased at runtime. ref-frame.ts imports SessionState from
 // here, so this back-edge must stay type-only to avoid a runtime cycle.
 import type { SnapshotDiagnosticsState } from '@agent-device/contracts/capture';
@@ -157,14 +158,6 @@ export type DaemonRequest = Omit<WireRequest, 'token' | 'session' | 'flags' | 'm
 
 export type DaemonResponse = PublicDaemonResponse;
 export type DaemonInvokeFn = (req: DaemonRequest) => Promise<DaemonResponse>;
-
-export type AndroidSnapshotFreshness = {
-  action: string;
-  markedAt: number;
-  baselineCount: number;
-  baselineSignatures?: string[];
-  routeComparable: boolean;
-};
 
 /**
  * One node's contribution to an interaction-surface signature. Two comparisons
@@ -339,7 +332,7 @@ export type SessionState = {
   refFrameGeneration?: number;
   /** Last broad snapshot safe for Android route-freshness comparisons after interactive snapshots. */
   lastComparisonSafeSnapshot?: SnapshotState;
-  androidSnapshotFreshness?: AndroidSnapshotFreshness;
+  androidSnapshotFreshness?: SnapshotFreshnessWindow;
   postGestureStabilization?: PostGestureStabilization;
   pendingInteractionOutcome?: PendingInteractionOutcome;
   snapshotDiagnostics?: SnapshotDiagnosticsState;

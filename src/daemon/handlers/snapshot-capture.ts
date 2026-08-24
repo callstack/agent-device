@@ -16,10 +16,8 @@ import {
 import { resolveRefLabel } from '../../core/snapshot-node-lookup.ts';
 import { captureSnapshotWithInteractor } from './snapshot-interactor-capture.ts';
 import { buildSnapshotState } from '../snapshot-state.ts';
-import {
-  clearAndroidSnapshotFreshness,
-  type AndroidFreshnessMode,
-} from '../android-snapshot-freshness.ts';
+import { clearAndroidSnapshotFreshness } from '../session-snapshot-freshness.ts';
+import type { SnapshotFreshnessMode } from '../../snapshot/snapshot-freshness/index.ts';
 import { contextFromFlags } from '../context.ts';
 import { resolveDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
 import type { SessionState } from '../types.ts';
@@ -33,7 +31,7 @@ type CaptureSnapshotParams = {
   outPath?: string;
   logPath: string;
   snapshotScope?: string;
-  androidFreshnessMode?: AndroidFreshnessMode;
+  androidFreshnessMode?: SnapshotFreshnessMode;
   signal?: AbortSignal;
   /**
    * Request-bound platform capture. Migrated callers inject the selected

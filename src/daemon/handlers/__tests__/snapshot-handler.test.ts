@@ -9,7 +9,7 @@ import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtim
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { DaemonResponse, SessionState } from '../../types.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { buildSnapshotSignatures } from '../../android-snapshot-freshness.ts';
+import { buildSnapshotSignatures } from '../../../snapshot/snapshot-freshness/index.ts';
 import { buildInteractionSurfaceSignature } from '../../interaction-outcome-policy.ts';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { snapshotCliOutput } from '../../../commands/capture/output.ts';

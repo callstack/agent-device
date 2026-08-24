@@ -1,5 +1,5 @@
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { getActiveAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
+import { getActiveAndroidSnapshotFreshness } from '../session-snapshot-freshness.ts';
 import type { SessionState } from '../types.ts';
 import type { InteractionHandlerParams } from './interaction-common.ts';
 import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';

@@ -3,7 +3,7 @@ import { handleFindCommands } from '../find.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
-import { buildSnapshotSignatures } from '../../android-snapshot-freshness.ts';
+import { buildSnapshotSignatures } from '../../../snapshot/snapshot-freshness/index.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import {
   makeIosSession as makeSession,
