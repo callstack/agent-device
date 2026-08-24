@@ -1,13 +1,15 @@
 import { isScrollableType } from '@agent-device/contracts/snapshot';
 import type { AndroidSiblingOrderEvidence } from '@agent-device/contracts/capture';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
-import { isPositiveFiniteRect, rectArea } from '@agent-device/kernel/rect';
+import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
+import { unionCoverage } from './rect-coverage.ts';
 
 type SurfaceFootprint = {
   showRect?: Rect;
   showChildren: readonly SurfaceFootprint[];
+  paintRect?: Rect;
+  paintChildren: readonly SurfaceFootprint[];
   hasAction: boolean;
-  strongestPaint?: Rect;
 };
 
 type WorkBudget = { remaining: number; exhausted: boolean };
@@ -82,15 +84,17 @@ function canCover(
 ): boolean {
   const candidateOrder = scan.siblingOrders.get(candidate.index);
   const candidateFootprint = scan.footprints.get(candidate.index);
-  const candidatePaint = candidateFootprint?.strongestPaint;
-  if (!candidateOrder || !candidateFootprint?.hasAction || !candidatePaint) return false;
+  if (!candidateOrder || !candidateFootprint?.hasAction) return false;
   if (candidateOrder.group !== targetOrder.group || candidateOrder.order <= targetOrder.order) {
     return false;
   }
-  return (
-    footprintCoverageByRect(targetFootprint, candidatePaint, scan.budget) >=
-    MINIMUM_OCCLUSION_COVERAGE
+  const coveringRects = footprintRects(candidateFootprint, 'paint', scan.budget);
+  const coveredRects = footprintRects(targetFootprint, 'show', scan.budget);
+  if (scan.budget.exhausted) return false;
+  const coverage = unionCoverage(coveringRects, coveredRects, (units) =>
+    consumeUnits(scan.budget, units),
   );
+  return coverage !== undefined && coverage >= MINIMUM_OCCLUSION_COVERAGE;
 }
 
 function collectChildrenByParent(
@@ -128,23 +132,13 @@ function surfaceFootprint(
 ): SurfaceFootprint {
   const ownPaint = semanticPaintRect(node, childCount);
   const showRect = ownPaint ?? semanticShowRect(node);
-  const strongestPaint = largestPaintRect(ownPaint, children);
   return {
     ...(showRect ? { showRect } : {}),
     showChildren: ownPaint ? [] : children,
+    ...(ownPaint ? { paintRect: ownPaint } : {}),
+    paintChildren: ownPaint ? [] : children,
     hasAction: node.hittable === true || children.some(hasAction),
-    ...(strongestPaint ? { strongestPaint } : {}),
   };
-}
-
-function largestPaintRect(
-  ownPaint: Rect | undefined,
-  children: readonly SurfaceFootprint[],
-): Rect | undefined {
-  return children.reduce<Rect | undefined>((largest, child) => {
-    const candidate = child.strongestPaint;
-    return candidate && (!largest || rectArea(candidate) > rectArea(largest)) ? candidate : largest;
-  }, ownPaint);
 }
 
 function hasAction(footprint: SurfaceFootprint): boolean {
@@ -168,45 +162,34 @@ function hasSemanticContent(node: RawSnapshotNode): boolean {
   return Boolean(node.label?.trim() || node.value?.trim() || node.identifier?.trim());
 }
 
-function footprintCoverageByRect(
-  target: SurfaceFootprint,
-  coveringRect: Rect,
+function footprintRects(
+  root: SurfaceFootprint,
+  kind: 'paint' | 'show',
   budget: WorkBudget,
-): number {
-  let targetArea = 0;
-  let coveredArea = 0;
-  const pending = [target];
+): Rect[] {
+  const rects: Rect[] = [];
+  const pending = [root];
   while (pending.length > 0) {
-    if (!consume(budget)) return 0;
+    if (!consume(budget)) return rects;
     const footprint = pending.pop()!;
-    if (footprint.showRect) {
-      targetArea += rectArea(footprint.showRect);
-      coveredArea += intersectionArea(footprint.showRect, coveringRect);
-    }
-    pending.push(...footprint.showChildren);
+    const rect = kind === 'paint' ? footprint.paintRect : footprint.showRect;
+    if (rect) rects.push(rect);
+    pending.push(...(kind === 'paint' ? footprint.paintChildren : footprint.showChildren));
   }
-  return targetArea <= 0 ? 0 : coveredArea / targetArea;
+  return rects;
 }
 
 function consume(budget: WorkBudget): boolean {
-  if (budget.remaining <= 0) {
+  return consumeUnits(budget, 1);
+}
+
+function consumeUnits(budget: WorkBudget, units: number): boolean {
+  if (units > budget.remaining) {
     budget.exhausted = true;
     return false;
   }
-  budget.remaining -= 1;
+  budget.remaining -= units;
   return true;
-}
-
-function intersectionArea(left: Rect, right: Rect): number {
-  const width = Math.max(
-    0,
-    Math.min(left.x + left.width, right.x + right.width) - Math.max(left.x, right.x),
-  );
-  const height = Math.max(
-    0,
-    Math.min(left.y + left.height, right.y + right.height) - Math.max(left.y, right.y),
-  );
-  return width * height;
 }
 
 function expandSubtrees(

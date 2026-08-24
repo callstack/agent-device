@@ -1,17 +1,26 @@
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type { Rect } from '@agent-device/kernel/snapshot';
-import type { AndroidSnapshotPresentationBudget } from './snapshot-presentation.ts';
 
 type Interval = { start: number; end: number };
 type SweepRect = Rect & { endX: number };
+type ConsumeWork = (units: number) => boolean;
 
 /** Fraction of the covered rects' union that lies under the covering rects' union. */
 export function unionCoverage(
   coveringRects: readonly Rect[],
   coveredRects: readonly Rect[],
-  presentationBudget?: AndroidSnapshotPresentationBudget,
-): number {
-  presentationBudget?.consume(coveringRects.length + coveredRects.length);
+): number;
+export function unionCoverage(
+  coveringRects: readonly Rect[],
+  coveredRects: readonly Rect[],
+  consumeWork: ConsumeWork,
+): number | undefined;
+export function unionCoverage(
+  coveringRects: readonly Rect[],
+  coveredRects: readonly Rect[],
+  consumeWork?: ConsumeWork,
+): number | undefined {
+  if (consumeWork?.(coveringRects.length + coveredRects.length) === false) return undefined;
   const covered = sweepRects(coveredRects);
   if (covered.length === 0) return 0;
 
@@ -28,7 +37,7 @@ export function unionCoverage(
     ...covered.flatMap((rect) => [rect.x, rect.endX]),
     ...covering.flatMap((rect) => [Math.max(rect.x, minX), Math.min(rect.endX, maxX)]),
   ];
-  presentationBudget?.consume(covered.length + covering.length + xEdges.length);
+  if (consumeWork?.(covered.length + covering.length + xEdges.length) === false) return undefined;
   covered.sort(compareRectsByX);
   covering.sort(compareRectsByX);
   const xs = [...new Set(xEdges)].sort((left, right) => left - right);
@@ -55,7 +64,7 @@ export function unionCoverage(
       nextCovering += 1;
     }
 
-    presentationBudget?.consume(1 + activeCovered.length + activeCovering.length);
+    if (consumeWork?.(1 + activeCovered.length + activeCovering.length) === false) return undefined;
     const coveredY = mergeYIntervals(activeCovered);
     const coveringY = mergeYIntervals(activeCovering);
     const width = nextX - x;

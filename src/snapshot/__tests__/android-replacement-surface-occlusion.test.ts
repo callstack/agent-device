@@ -59,6 +59,30 @@ test('sparse floating Android overlays do not cover a richer app surface', () =>
   );
 });
 
+test('higher-order actionable descendants collectively cover a stale surface', () => {
+  const nodes: RawSnapshotNode[] = [
+    node(0, undefined, 'android.widget.FrameLayout', [0, 0, 400, 800]),
+    { ...node(1, 0, 'android.widget.ScrollView', [0, 0, 400, 800]), hittable: true },
+    { ...node(2, 1, 'android.widget.Button', [20, 700, 360, 60]), label: 'Stale', hittable: true },
+    node(3, 0, 'android.view.ViewGroup', [0, 0, 400, 800]),
+    { ...node(4, 3, 'android.widget.Button', [0, 0, 200, 800]), hittable: true },
+    { ...node(5, 3, 'android.widget.Button', [200, 0, 200, 800]), hittable: true },
+  ];
+
+  assert.deepEqual(
+    [
+      ...coveredAndroidReplacementNodeIndexes(
+        nodes,
+        siblingOrders([
+          [1, 1],
+          [3, 2],
+        ]),
+      ),
+    ],
+    [1, 2],
+  );
+});
+
 test('side-by-side Android surfaces remain independently actionable', () => {
   const nodes: RawSnapshotNode[] = [
     node(0, undefined, 'android.widget.FrameLayout', [0, 0, 400, 800]),

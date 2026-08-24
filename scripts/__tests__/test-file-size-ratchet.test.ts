@@ -51,7 +51,7 @@ const PINNED_TEST_FILE_LINES: Readonly<Record<string, number>> = Object.freeze({
   'src/daemon/handlers/__tests__/find.test.ts': 1202,
   'src/platforms/apple/core/__tests__/perf.test.ts': 1222,
   'src/mcp/__tests__/command-tools.test.ts': 1218,
-  'src/daemon/handlers/__tests__/session-replay-divergence.test.ts': 1215,
+  'src/daemon/handlers/__tests__/session-replay-divergence.test.ts': 1137,
   'src/platforms/apple/core/__tests__/apps.test.ts': 1210,
   'src/daemon/handlers/__tests__/session-replay-repair-transaction.test.ts': 1208,
   'src/daemon/snapshot-presentation/ios/presentation.test.ts': 1201,

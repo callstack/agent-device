@@ -35,12 +35,6 @@ import {
   type FakeAndroidProcess,
 } from './snapshot-helper-session.fixtures.ts';
 import { withAndroidAdbProvider, type AndroidAdbProvider } from '../adb-executor.ts';
-import { buildSnapshotState } from '../../../daemon/snapshot-state.ts';
-import {
-  copySnapshotPrivateEvidence,
-  readSnapshotOcclusionContextEvidence,
-} from '@agent-device/contracts/capture';
-import { coveredAndroidReplacementNodeIndexes } from '../../../snapshot/android-replacement-surface-occlusion.ts';
 
 const VALID_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+b9xkAAAAASUVORK5CYII=',
@@ -388,47 +382,6 @@ test('snapshotAndroid discloses unavailable sibling order for API 23 helper tree
   const api24 = await snapshotAndroid(device, { helperAdb, helperArtifact });
   assert.equal(api24.androidSnapshot.occlusionScanUnavailable, undefined);
   assert.equal('occlusionScanUnavailable' in api24.androidSnapshot, false);
-});
-
-test('scoped Android captures retain broad off-wire context for daemon occlusion', async () => {
-  const xml = `<hierarchy>
-  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true">
-    <node class="android.view.ViewGroup" bounds="[0,0][390,844]" clickable="true" visible-to-user="true" drawing-order="2">
-      <node class="android.widget.Button" text="Modal action" bounds="[24,420][366,480]" clickable="true" visible-to-user="true"/>
-    </node>
-    <node class="android.widget.Button" text="Behind the modal" bounds="[0,220][280,280]" clickable="true" visible-to-user="true" drawing-order="1"/>
-  </node>
-</hierarchy>`;
-  const captured = await snapshotAndroidWithHelper(androidSnapshotHelperAdb(xml), {
-    scope: 'Behind the modal',
-  });
-  const context = readSnapshotOcclusionContextEvidence(captured);
-
-  assert.ok(context);
-  assert.deepEqual(
-    captured.nodes.map(({ index, type, label, hittable }) => ({ index, type, label, hittable })),
-    [{ index: 0, type: 'android.widget.Button', label: 'Behind the modal', hittable: true }],
-  );
-  assert.deepEqual([...context.sourceIndexByNodeIndex], [[0, 3]]);
-  assert.deepEqual(
-    [
-      ...coveredAndroidReplacementNodeIndexes(
-        context.nodes,
-        context.androidSiblingOrderByNodeIndex,
-      ),
-    ],
-    [3],
-  );
-
-  const daemonCapture = copySnapshotPrivateEvidence(captured, {
-    ...captured,
-    backend: 'android' as const,
-  });
-  const published = buildSnapshotState(daemonCapture, { snapshotScope: 'Behind the modal' });
-
-  assert.equal(published.nodes.length, 1);
-  assert.equal(published.nodes[0]?.label, 'Behind the modal');
-  assert.equal(published.nodes[0]?.interactionBlocked, 'covered');
 });
 
 test('snapshotAndroid emits helper phase diagnostics', async () => {

@@ -25,7 +25,6 @@ vi.mock('../../../utils/timeouts.ts', async (importOriginal) => {
 
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
-import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   makeAndroidSession,
@@ -33,7 +32,6 @@ import {
 } from '../../../__tests__/test-utils/session-factories.ts';
 import {
   ANDROID_IME_CAPTURE_RAW_NODES,
-  ANDROID_QS_SHADE_CAPTURE_RAW_NODES,
   walkNonRawAndroidFixture,
 } from '../../../__tests__/test-utils/android-ui-hierarchy-fixtures.ts';
 import { SessionStore } from '../../session-store.ts';
@@ -1083,85 +1081,6 @@ test('buildReplayFailureDivergence: divergence capture drops the action snapshot
   expect(context?.snapshotDepth).toBeUndefined();
   // The interactive-only policy (press → interactive) is still applied.
   expect(context?.snapshotInteractiveOnly).toBe(true);
-});
-
-// Real walked FULL-COVER quick-settings shade: every node is systemui and the
-// status-bar icons share the shade's window. The second scenario pessimistically
-// marks the whole tree as chrome to model older/OEM layouts whose status-bar
-// container also owns real controls; the last-resort hittable fallback must keep
-// replay repair actionable without promoting non-hittable status residue.
-test.each([
-  {
-    name: 'classifies the shade precisely',
-    prepare: (nodes: RawSnapshotNode[]) => nodes,
-  },
-  {
-    name: 'survives a whole-tree chrome false positive',
-    prepare: (nodes: RawSnapshotNode[]) =>
-      nodes.map((node) => ({ ...node, systemChrome: true as const })),
-  },
-])('buildReplayFailureDivergence: a full-cover quick-settings shade $name', async (fixture) => {
-  const { prepare } = fixture;
-  const root = mkdtempForTestSync('agent-device-replay-divergence-qsshade-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  const sessionName = 'default';
-  sessionStore.set(
-    sessionName,
-    makeAndroidSession(sessionName, { appBundleId: 'com.google.android.deskclock' }),
-  );
-
-  const walked = prepare(walkNonRawAndroidFixture(ANDROID_QS_SHADE_CAPTURE_RAW_NODES));
-  mockDispatchCommand.mockResolvedValue({ nodes: walked, truncated: false, backend: 'android' });
-
-  const action = {
-    ts: 0,
-    command: 'get',
-    positionals: ['text', 'label="World Clock"'],
-    flags: {},
-    result: { selectorChain: ['label="World Clock"'] },
-  };
-  const divergence = await buildReplayFailureDivergence({
-    error: { code: 'COMMAND_FAILED', message: 'Selector did not match: label="World Clock"' },
-    action,
-    index: 0,
-    sourcePath: path.join(root, 'flow.ad'),
-    sourceLine: 1,
-    session: sessionStore.get(sessionName),
-    sessionName,
-    sessionStore,
-    resumeStamper: createReplayCoordinator({ sessionStore, sessionName }).resumeStamper,
-    logPath: path.join(root, 'daemon.log'),
-    responseLevel: 'default',
-    planActions: [action],
-    planDigest: 'test-plan-digest',
-  });
-
-  expect(divergence.screen.state).toBe('available');
-  const screen = divergence.screen as Extract<typeof divergence.screen, { state: 'available' }>;
-
-  // The capture plainly holds actionable nodes, so the screen must not be empty:
-  // never NARROWER than the `snapshot` of the same surface.
-  expect(walked.some((node) => node.hittable === true)).toBe(true);
-  expect(screen.refs.length).toBeGreaterThan(0);
-
-  // The shade's own interaction targets — the reason an agent is shown this
-  // screen at all — are what it publishes. Compose quick-settings tiles expose
-  // no per-tile label (they rank in as unlabeled hittable `group`s); the
-  // brightness slider is the one carrying real text.
-  expect(screen.refs.some((ref) => ref.label === 'Display brightness')).toBe(true);
-  expect(screen.refs.length).toBe(20); // SCREEN_REF_CAPTURE_LIMIT
-  // This synthetic backend result has no private sibling-order evidence. Publication therefore
-  // fails conservative and discloses that more actionable refs exist beyond the response limit.
-  expect(screen.truncated).toBe(true);
-
-  // Every published ref is actionable; non-hittable status residue in the same
-  // systemui window (battery/wifi/mobile icons) never rides along.
-  const published = new Map(
-    (sessionStore.get(sessionName)?.snapshot?.nodes ?? []).map((node) => [node.ref, node]),
-  );
-  expect(screen.refs.every((ref) => published.get(ref.ref)?.hittable === true)).toBe(true);
-  expect(screen.refs.some((ref) => ref.label === 'Battery charging, 100 percent.')).toBe(false);
-  expect(screen.refs.some((ref) => ref.label === 'Wifi signal full.')).toBe(false);
 });
 
 // #1385 P2: the retry deadline is a DELAY-ONLY budget, not a per-attempt

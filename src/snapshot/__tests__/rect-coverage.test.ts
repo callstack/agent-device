@@ -1,9 +1,8 @@
 import type { Rect } from '@agent-device/kernel/snapshot';
 import fc from 'fast-check';
 import { expect, test } from 'vitest';
-import { PROPERTY_RUNS } from '../../../__tests__/test-utils/property-arbitraries.ts';
+import { PROPERTY_RUNS } from '../../__tests__/test-utils/property-arbitraries.ts';
 import { unionCoverage } from '../rect-coverage.ts';
-import { createAndroidSnapshotPresentationBudget } from '../snapshot-presentation.ts';
 
 const smallRect = fc.record({
   x: fc.integer({ min: -4, max: 20 }),
@@ -81,28 +80,28 @@ test('ignores degenerate rectangles and keeps the ratio within its exact thresho
 test('charges deterministic work and rejects overlapping hostile inputs', () => {
   const covering = Array.from({ length: 100 }, () => ({ x: 0, y: 0, width: 100, height: 100 }));
   const covered = Array.from({ length: 100 }, () => ({ x: 0, y: 0, width: 100, height: 100 }));
-  const first = createAndroidSnapshotPresentationBudget(
-    { deadlineAtMs: Number.POSITIVE_INFINITY },
-    10_000,
-  );
-  const second = createAndroidSnapshotPresentationBudget(
-    { deadlineAtMs: Number.POSITIVE_INFINITY },
-    10_000,
-  );
+  const first = workBudget(10_000);
+  const second = workBudget(10_000);
 
-  expect(unionCoverage(covering, covered, first)).toBe(1);
-  expect(unionCoverage(covering, covered, second)).toBe(1);
-  expect(first.workUnitCount).toBe(1001);
-  expect(first.workUnitCount).toBe(second.workUnitCount);
+  expect(unionCoverage(covering, covered, first.consume)).toBe(1);
+  expect(unionCoverage(covering, covered, second.consume)).toBe(1);
+  expect(first.consumed()).toBe(1001);
+  expect(first.consumed()).toBe(second.consumed());
 
-  const constrained = createAndroidSnapshotPresentationBudget(
-    { deadlineAtMs: Number.POSITIVE_INFINITY, maxWorkUnits: 900 },
-    10_000,
-  );
-  expect(() => unionCoverage(covering, covered, constrained)).toThrow(
-    'Android snapshot presentation exceeded its linear work budget',
-  );
+  const constrained = workBudget(900);
+  expect(unionCoverage(covering, covered, constrained.consume)).toBeUndefined();
 });
+
+function workBudget(limit: number) {
+  let workUnits = 0;
+  return {
+    consume: (units: number) => {
+      workUnits += units;
+      return workUnits <= limit;
+    },
+    consumed: () => workUnits,
+  };
+}
 
 function bruteForceCoverage(covering: Rect[], covered: Rect[]): number {
   const coveringCells = cellsOf(covering);
