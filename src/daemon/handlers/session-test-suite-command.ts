@@ -304,7 +304,7 @@ export async function runReplayTestSuiteCommand(
     resolveShardTargets: buildReplayTestShardTargetResolver(req.flags),
     cleanupSession: async (testSessionName) => {
       if (!sessionStore.get(testSessionName)) return;
-      await handleCloseCommand({
+      const closeResponse = await handleCloseCommand({
         req: {
           token: req.token,
           session: testSessionName,
@@ -320,6 +320,12 @@ export async function runReplayTestSuiteCommand(
         inspectFacts: params.inspectFacts,
         bindDevice: params.bindDevice,
       });
+      if (!closeResponse.ok) {
+        throw new AppError(closeResponse.error.code, closeResponse.error.message, {
+          ...(closeResponse.error.details ?? {}),
+          ...(closeResponse.error.hint ? { hint: closeResponse.error.hint } : {}),
+        });
+      }
     },
   });
   return outcome.status === 'completed'

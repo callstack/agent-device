@@ -17,7 +17,7 @@ vi.mock('../snapshot-interactor-capture.ts', () => ({
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { handleSessionCommands } from './session-command-harness.ts';
+import { handleSessionCommands, mockInspectDeviceRuntimeFacts } from './session-command-harness.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../../types.ts';
 import { withRequestProgressSink } from '../../../request/progress.ts';
@@ -29,7 +29,10 @@ import {
 } from '../../../request/cancel.ts';
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
+import {
+  makeAndroidSession,
+  makeMacOsSession,
+} from '../../../__tests__/test-utils/session-factories.ts';
 
 function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-session-test-suite-');
@@ -321,6 +324,56 @@ test('test emits progress when attempts retry and pass', async () => {
     total: 1,
     attempt: 2,
     maxAttempts: 2,
+  });
+});
+
+test('test stops before retrying when a rejected close leaves the prior macOS session owning its device', async () => {
+  const sessionStore = makeSessionStore();
+  const root = mkdtempForTestSync('agent-device-test-suite-macos-cleanup-failure-');
+  fs.writeFileSync(
+    path.join(root, '01-system-settings.ad'),
+    'context platform=macos\nopen "System Settings"\n',
+  );
+
+  let replayAttempts = 0;
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'test',
+      positionals: [root],
+      meta: { cwd: root, requestId: 'suite-macos-cleanup-failure' },
+      flags: { retries: 2 },
+    },
+    sessionName: 'default',
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    inspectFacts: async (device) => {
+      const facts = await mockInspectDeviceRuntimeFacts(device);
+      return {
+        ...facts,
+        operations: {
+          ...facts.operations,
+          closeApplication: { available: false, reason: 'owner-capability-missing' },
+        },
+      };
+    },
+    invoke: async (req) => {
+      replayAttempts += 1;
+      sessionStore.set(req.session, makeMacOsSession(req.session));
+      return {
+        ok: false,
+        error: { code: 'COMMAND_FAILED', message: 'open "System Settings" failed' },
+      };
+    },
+  });
+
+  const data = expectOkData(response);
+  expect(replayAttempts).toBe(1);
+  expect(data.failed).toBe(1);
+  expect((data.tests as Array<Record<string, unknown>>)[0]).toMatchObject({
+    status: 'failed',
+    attempts: 1,
   });
 });
 

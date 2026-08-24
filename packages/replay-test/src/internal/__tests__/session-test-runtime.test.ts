@@ -154,6 +154,33 @@ test('runReplayTestAttempt keeps a passing replay passed when finalization fails
   expect(cleanupSession).toHaveBeenCalledWith('default:test:pass');
 });
 
+test('runReplayTestAttempt marks a failed cleanup as infrastructure so the scheduler cannot retry into its session', async () => {
+  const cleanupSession = vi.fn(async () => {
+    throw new Error('macOS session still owns host-macos-local');
+  });
+
+  const result = await runReplayTestAttempt({
+    filePath: '01-cleanup-failure.ad',
+    sessionName: 'default:test:cleanup-failure',
+    requestId: 'req-cleanup-failure',
+    runReplay: async () => ({
+      status: 'failed',
+      error: { code: 'COMMAND_FAILED', message: 'open "System Settings" failed' },
+      artifactPaths: [],
+      infrastructure: false,
+    }),
+    cleanupSession,
+    ...trackCancellation(),
+  });
+
+  expect(result.status).toBe('failed');
+  if (result.status === 'failed') {
+    expect(result.error.message).toBe('open "System Settings" failed');
+    expect(result.infrastructure).toBe(true);
+  }
+  expect(cleanupSession).toHaveBeenCalledWith('default:test:cleanup-failure');
+});
+
 // #1478 P3 characterization: attempt finalization happens before cleanup, always, and the
 // timing trace is the durable evidence of that order. P3 moves this `finally` orchestration
 // into replay-test, so the order and the recorded event names are pinned here as shipped.

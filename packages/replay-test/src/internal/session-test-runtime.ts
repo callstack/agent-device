@@ -190,6 +190,7 @@ export async function runReplayTestAttempt(
           error: appErr.message,
         },
       });
+      outcome = markReplayTestCleanupFailure(outcome, appErr, artifactPaths);
     }
   }
   return (
@@ -198,6 +199,27 @@ export async function runReplayTestAttempt(
       error: { code: 'COMMAND_FAILED', message: 'Unknown replay test failure' },
     })
   );
+}
+
+/**
+ * Cleanup is the ownership handoff between attempts. A failed cleanup leaves the prior attempt's
+ * device/session state unknown, so the scheduler must stop instead of retrying into a live claim.
+ * Keep an action failure as the user-facing cause when one already exists; the infrastructure tag
+ * is the scheduler-only fact that prevents a contended follow-up attempt.
+ */
+function markReplayTestCleanupFailure(
+  outcome: ReplayTestAttemptOutcome | undefined,
+  cleanupError: ReturnType<typeof normalizeError>,
+  artifactPaths: Set<string>,
+): ReplayTestAttemptOutcome {
+  if (outcome?.status === 'failed') {
+    return { ...outcome, infrastructure: true };
+  }
+  return replayTestAttemptFailure({
+    error: cleanupError,
+    artifactPaths: [...artifactPaths],
+    infrastructure: true,
+  });
 }
 
 async function waitForReplayAfterTimeout(
