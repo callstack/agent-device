@@ -31,6 +31,7 @@ import {
   skipWhenLoopbackUnavailable,
 } from '../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { flushSessionEventLogWrites } from '../session-event-log.ts';
 
 const TOKEN = 'save-script-transport-token';
 const SESSION = 'save-script-transport';
@@ -53,7 +54,10 @@ type Harness = {
 
 const roots: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
+  // #1998: request handling queues fire-and-forget session-event-log appends;
+  // drain them before rmSync or a late append re-creates the dir → ENOTEMPTY.
+  await flushSessionEventLogWrites();
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
