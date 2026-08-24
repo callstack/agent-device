@@ -99,7 +99,7 @@ export async function captureAndroidFreshnessRecoveredAttempt<
       ),
     window: freshness,
     retry: {
-      deadlineMs: freshness.markedAt + ANDROID_FRESHNESS_RETRY_DEADLINE_MS,
+      retryUntilMs: freshness.markedAt + ANDROID_FRESHNESS_RETRY_DEADLINE_MS,
       delaysMs: ANDROID_FRESHNESS_RETRY_DELAYS_MS,
     },
     onTrustworthyCapture: () => clearAndroidSnapshotFreshness(params.session),

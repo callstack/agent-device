@@ -5,10 +5,9 @@ import type { SnapshotState } from '@agent-device/kernel/snapshot';
  * later capture can be judged against it.
  *
  * The window carries no platform vocabulary: it is a marked instant, a baseline size, and an
- * optional route signature. Which shapes count as suspicious is a policy input
- * (`SnapshotFreshnessPolicy`), not a property of the window, so a second backend with an async
- * hierarchy dump can reuse the window and the recovery loop without inheriting Android's
- * thresholds.
+ * optional route signature. Which shapes count as suspicious is decided by the `classify`
+ * callback the recovery loop is bound with, not by the window, so a second backend with an async
+ * hierarchy dump can reuse the window and the loop without inheriting Android's thresholds.
  */
 export type SnapshotFreshnessWindow = {
   action: string;
