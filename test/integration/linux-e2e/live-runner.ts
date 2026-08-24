@@ -154,7 +154,7 @@ async function runDiffEvidence(context: LinuxContext): Promise<void> {
 }
 
 async function runSwipeEvidence(context: LinuxContext): Promise<void> {
-  await runStep(context, 'swipe across the Linux desktop', ['swipe', '500', '700', '500', '500']);
+  await runStep(context, 'swipe across the Linux desktop', ['swipe', '100', '400', '100', '300']);
   verifyCommand(context, C.swipe, 'coordinate swipe reaches the Linux input runtime');
 }
 
