@@ -10,7 +10,9 @@ const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
   // Same move, daemon side: with no dispatcher to re-fire a tap through, the pending-outcome
   // retry declares its own callback seam instead of importing runtime admission, so
   // `interaction-outcome-policy.ts` and `deferred-interaction-outcome.ts` both left the cycle.
-  'daemon-server': 12,
+  // R63 then deleted `session-install-capability-projection.ts` outright — the general
+  // fact-owned projection subsumes it — taking a third member with it.
+  'daemon-server': 11,
   // R42/R43/R45 deleted `vega/plugin.ts`'s `PUBLIC_COMMANDS` import (the retired
   // back/home/tv-remote closures were its only consumer), dropping it out of the cycle and
   // leaving `apple/plugin.ts` as the platforms zone's sole remaining member.

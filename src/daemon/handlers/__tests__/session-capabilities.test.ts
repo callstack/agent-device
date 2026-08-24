@@ -99,11 +99,9 @@ test('capabilities reports supported commands for the selected session device', 
     ]),
   );
   expect(runtime.inspections).toHaveLength(1);
-  expect(runtime.uses).toEqual([
-    { required: [], preferred: ['appLogInspect'] },
-    { required: [], preferred: ['networkDump'] },
-    { required: [], preferred: ['screenRecordingStart'] },
-  ]);
+  // ADR 0019 §6: `capabilities` is a `none` descriptor, so the projection binds no device — one
+  // side-effect-free inspection answers every command, `logs`/`network`/`record` included.
+  expect(runtime.uses).toEqual([]);
 });
 
 test('capabilities omits the commands this Android owner does not admit', async () => {
@@ -164,11 +162,9 @@ test('capabilities excludes logs from an unavailable provider-mode XCTest runtim
   expect(availableCommands).not.toContain(PUBLIC_COMMANDS.prepare);
   expect(availableCommands).not.toContain(PUBLIC_COMMANDS.shutdown);
   expect(runtime.inspections).toHaveLength(1);
-  expect(runtime.uses).toEqual([
-    { required: [], preferred: ['appLogInspect'] },
-    { required: [], preferred: ['networkDump'] },
-    { required: [], preferred: ['screenRecordingStart'] },
-  ]);
+  // ADR 0019 §6: `capabilities` is a `none` descriptor, so the projection binds no device — one
+  // side-effect-free inspection answers every command, `logs`/`network`/`record` included.
+  expect(runtime.uses).toEqual([]);
 });
 
 test('capabilities excludes network when the runtime fact is unavailable', async () => {

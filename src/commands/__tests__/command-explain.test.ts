@@ -72,7 +72,6 @@ describe('explainCommand', () => {
         exposure: {
           batchable: true,
           mcp: true,
-          dispatch: false,
           postActionObservation: 'settle-and-verify',
         },
         cli: { usage: 'click <x y|@ref|selector>' },

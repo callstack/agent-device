@@ -35,12 +35,6 @@ export type CapabilitiesAdmissionRuntimeOptions = Readonly<{
   screenshotAvailable?: boolean;
 }>;
 
-export const legacyCapabilityUses = [
-  { required: [], preferred: ['appLogInspect'] },
-  { required: [], preferred: ['networkDump'] },
-  { required: [], preferred: ['screenRecordingStart'] },
-];
-
 export function createCapabilitiesAdmissionRuntime(options: CapabilitiesAdmissionRuntimeOptions) {
   const uses: Array<{
     required: readonly string[];

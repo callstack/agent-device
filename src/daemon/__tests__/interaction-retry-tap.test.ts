@@ -81,6 +81,37 @@ test('the seam re-fires the recorded point through the owner-bound tapPoint', as
   assert.deepEqual(taps[0]?.point, { x: 100, y: 200 });
 });
 
+// ADR 0019 §9 is one admission per handler, and the outcome policy calls this seam once per retry
+// round. The binding underneath is request-cached, so what memoization saves is the repeated facts
+// inspection — and what it pins is that the seam admits once, not once per round.
+test('the seam admits once no matter how many rounds the policy runs', async () => {
+  const taps: TapPointInput[] = [];
+  const admission = bindings(true, taps);
+  let inspections = 0;
+  const retryTap = createInteractionRetryTap({
+    inspectFacts: async (target) => {
+      inspections += 1;
+      return await admission.inspectFacts(target);
+    },
+    bindDevice: admission.bindDevice,
+  });
+  assert.ok(retryTap);
+
+  const context = { logPath: '/tmp/daemon.log', requestId: 'retry-1' };
+  await retryTap({ device, point: { x: 10, y: 20 }, context });
+  await retryTap({ device, point: { x: 30, y: 40 }, context });
+
+  assert.equal(inspections, 1);
+  assert.equal(taps.length, 2);
+  assert.deepEqual(
+    taps.map((tap) => tap.point),
+    [
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+    ],
+  );
+});
+
 // The policy spends an attempt only on a delivered tap, so a cell that cannot tap must answer
 // `false` here rather than throwing out of the capture the retry was decorating.
 test('an owner cell that cannot tap answers false instead of throwing', async () => {

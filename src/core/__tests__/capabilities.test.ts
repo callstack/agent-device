@@ -224,9 +224,14 @@ test('tvOS follows iOS capability matrix by device kind', () => {
   );
 });
 
-test('Linux supports desktop interaction commands and blocks mobile/unsupported ones', () => {
+test('the residual capability matrix leaves Linux desktop interaction admitted', () => {
   // Runtime-backed network admission is proven from operation facts in
-  // session-capabilities.test.ts, not through this legacy matrix projection.
+  // session-capabilities.test.ts, not through this legacy matrix projection. `alert` (R59),
+  // `clipboard` (R55), `settings` (R58) and `trigger-app-event` (R57) sit in the admitted list for
+  // the same reason the already-migrated commands do: a command whose admission comes from exact
+  // owner facts carries no capability-matrix row, and a command with no row is not decided by this
+  // matrix at all. `platform-linux/src/runtime.test.ts` is where the real Linux cells are pinned —
+  // and it is the one that refuses the mobile-only legs this test used to list.
   assertCommandSupport(
     [
       'alert',
@@ -262,12 +267,14 @@ test('web supports only the initial browser interaction slice', () => {
       'fill',
       'focus',
       'find',
-      // `clipboard` (R55), `gesture` and `swipe` (R42/R44), and `alert` (R59) join the migrated
-      // commands here for the same reason `focus`, `find`, `screenshot`, `scroll`, `snapshot`,
-      // `type` and `wait` already do: a command whose admission comes from exact owner facts
-      // carries no capability-matrix row, and a command with no row is not decided by this matrix
-      // at all. The web owner refuses every gesture tier, both clipboard halves and all four
-      // alert legs — `platform-web/src/runtime.test.ts` is where those cells are pinned.
+      // `gesture`/`swipe` (R42/R44), `clipboard` (R55), `app-switcher` (R56),
+      // `trigger-app-event` (R57), `settings` (R58) and `alert` (R59) join the migrated commands
+      // here for the same reason `focus`, `find`, `screenshot`, `scroll`, `snapshot`, `type` and
+      // `wait` already do: a command whose admission comes from exact owner facts carries no
+      // capability-matrix row, and a command with no row is not decided by this matrix at all. The
+      // web owner refuses every gesture tier, both clipboard halves, the springboard, the app-event
+      // leg, every setting and all four alert legs — `platform-web/src/runtime.test.ts` is where
+      // those cells are pinned.
       'alert',
       'app-switcher',
       'clipboard',

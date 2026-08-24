@@ -6,20 +6,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
 let snapshotCalls = 0;
-const dispatchCalls: string[][] = [];
 let snapshotMode: 'blocking-dialog' | 'throws' = 'blocking-dialog';
-let dispatchResult: Record<string, unknown> = {};
-
-vi.mock('../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
-  return {
-    ...actual,
-    dispatchCommand: vi.fn(async (_device: unknown, command: string, positionals: string[]) => {
-      dispatchCalls.push([command, ...positionals]);
-      return dispatchResult;
-    }),
-  };
-});
 
 import {
   createRequestHandler,
@@ -139,9 +126,7 @@ function makeAndroidSession(name: string): SessionState {
 test('generic Android gesture commands dismiss blocking system dialogs during recording', async () => {
   snapshotCalls = 0;
   snapshotMode = 'blocking-dialog';
-  dispatchResult = {};
   execCalls.length = 0;
-  dispatchCalls.length = 0;
   gestureRuntimeSpies.scrollDirection.mockClear();
 
   const sessionStore = makeSessionStore('agent-device-router-android-modal-');
@@ -168,8 +153,8 @@ test('generic Android gesture commands dismiss blocking system dialogs during re
   });
 
   expect(response.ok).toBe(true);
-  // R43: `scroll` reaches the device through its bound operation, so the dispatcher sees nothing.
-  expect(dispatchCalls).toEqual([]);
+  // R43: `scroll` reaches the device through its bound operation, and R58 retired the dispatcher
+  // it used to reach — the bound call count below is the whole execution record.
   expect(gestureRuntimeSpies.scrollDirection).toHaveBeenCalledTimes(1);
   expect(gestureRuntimeSpies.scrollDirection.mock.calls[0]?.[0]).toMatchObject({
     direction: 'down',
@@ -187,7 +172,6 @@ test('generic Android gesture commands continue when recording dialog inspection
   snapshotCalls = 0;
   snapshotMode = 'throws';
   execCalls.length = 0;
-  dispatchCalls.length = 0;
   gestureRuntimeSpies.scrollDirection.mockClear();
   // The owner's own result is what the readiness warning has to merge with, so the bound
   // operation carries it now that the dispatcher no longer executes this command.
@@ -220,8 +204,8 @@ test('generic Android gesture commands continue when recording dialog inspection
   });
 
   expect(response.ok).toBe(true);
-  // R43: `scroll` reaches the device through its bound operation, so the dispatcher sees nothing.
-  expect(dispatchCalls).toEqual([]);
+  // R43: `scroll` reaches the device through its bound operation, and R58 retired the dispatcher
+  // it used to reach — the bound call count below is the whole execution record.
   expect(gestureRuntimeSpies.scrollDirection).toHaveBeenCalledTimes(1);
   expect(gestureRuntimeSpies.scrollDirection.mock.calls[0]?.[0]).toMatchObject({
     direction: 'down',
@@ -242,9 +226,7 @@ test('generic Android gesture commands continue when recording dialog inspection
 test('generic Android gesture commands skip local dialog recovery for provider devices', async () => {
   snapshotCalls = 0;
   snapshotMode = 'blocking-dialog';
-  dispatchResult = {};
   execCalls.length = 0;
-  dispatchCalls.length = 0;
   gestureRuntimeSpies.scrollDirection.mockClear();
 
   const sessionStore = makeSessionStore('agent-device-router-android-modal-provider-');
@@ -281,8 +263,8 @@ test('generic Android gesture commands skip local dialog recovery for provider d
   });
 
   expect(response.ok).toBe(true);
-  // R43: `scroll` reaches the device through its bound operation, so the dispatcher sees nothing.
-  expect(dispatchCalls).toEqual([]);
+  // R43: `scroll` reaches the device through its bound operation, and R58 retired the dispatcher
+  // it used to reach — the bound call count below is the whole execution record.
   expect(gestureRuntimeSpies.scrollDirection).toHaveBeenCalledTimes(1);
   expect(gestureRuntimeSpies.scrollDirection.mock.calls[0]?.[0]).toMatchObject({
     direction: 'down',

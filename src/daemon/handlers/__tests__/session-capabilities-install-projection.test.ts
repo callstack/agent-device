@@ -8,10 +8,7 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../request-runtime-binding.ts';
-import {
-  createCapabilitiesAdmissionRuntime,
-  legacyCapabilityUses,
-} from './session-capabilities.fixtures.ts';
+import { createCapabilitiesAdmissionRuntime } from './session-capabilities.fixtures.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
 
 test('capabilities projects the install family from exactly one facts inspection', async () => {
@@ -44,10 +41,12 @@ test('capabilities projects the install family from exactly one facts inspection
     ]),
   );
   expect(runtime.inspections).toHaveLength(1);
-  expect(runtime.uses).toEqual(legacyCapabilityUses);
+  // ADR 0019 §6: `capabilities` declares `platformExecution: none`, so it binds nothing. R63
+  // retired the three empty-`required` probes that used to answer `logs`/`network`/`record`.
+  expect(runtime.uses).toEqual([]);
 });
 
-test('capabilities keeps legacy runtime commands outside the install-family facts projection', async () => {
+test('capabilities projects every fact-owned command from that same inspection', async () => {
   const { sessionName, sessionStore } = createAndroidCapabilitiesSession('legacy-runtime');
   const runtime = createCapabilitiesAdmissionRuntime({
     appLogAvailable: true,
@@ -73,10 +72,10 @@ test('capabilities keeps legacy runtime commands outside the install-family fact
   // this test previously pinned the opposite, because only the install family consumed facts.
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.boot);
   expect(runtime.inspections).toHaveLength(1);
-  expect(runtime.uses).toEqual(legacyCapabilityUses);
+  expect(runtime.uses).toEqual([]);
 });
 
-test('capabilities fails closed only for install-family projection when facts inspection fails', async () => {
+test('capabilities fails closed for every fact-owned command when facts inspection fails', async () => {
   const { sessionName, sessionStore } = createAndroidCapabilitiesSession('facts-failure');
   const runtime = createCapabilitiesAdmissionRuntime({
     appLogAvailable: true,
@@ -95,16 +94,17 @@ test('capabilities fails closed only for install-family projection when facts in
 
   expect(response).toMatchObject({ ok: true });
   if (!response?.ok) return;
-  // R63: with no facts at all, every fact-owned command fails closed rather than being
-  // advertised on faith. `logs` survives because its availability is a BIND-time fact, and the
-  // binding here still succeeds.
+  // R63: with no facts at all, every fact-owned command fails closed rather than being advertised
+  // on faith — `logs` included. It used to survive on a second `bindDevice` probe, but every owner
+  // composes a binding's facts from the same inspection that just failed, so that probe was
+  // answering from a path that cannot outlive the inspection it duplicates.
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.boot);
-  expect(response.data?.availableCommands).toContain(PUBLIC_COMMANDS.logs);
+  expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.logs);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.install);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.reinstall);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.installFromSource);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.push);
-  expect(runtime.uses).toEqual(legacyCapabilityUses);
+  expect(runtime.uses).toEqual([]);
 });
 
 function createAndroidCapabilitiesSession(suffix: string) {

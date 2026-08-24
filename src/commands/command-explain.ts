@@ -40,7 +40,6 @@ export type CommandExplanation = {
   exposure: {
     batchable: boolean;
     mcp: boolean;
-    dispatch: boolean;
     postActionObservation?: string;
   };
   timeout: {
@@ -126,7 +125,6 @@ function buildCommandExplanation(
       family?.name,
       'daemon' in descriptor ? descriptor.daemon?.route : undefined,
       Boolean('capability' in descriptor && descriptor.capability),
-      Boolean('dispatch' in descriptor && descriptor.dispatch),
       fileExists,
       daemonRouteOwnerFiles,
     ),
@@ -146,7 +144,7 @@ export function formatCommandExplanation(
     explanation.daemon
       ? `daemon: ${explanation.daemon.route}${explanation.daemon.traits.length ? ` (${explanation.daemon.traits.join(', ')})` : ''}`
       : 'daemon: none',
-    `exposure: batch=${yesNo(explanation.exposure.batchable)}, mcp=${yesNo(explanation.exposure.mcp)}, dispatch=${yesNo(explanation.exposure.dispatch)}${explanation.exposure.postActionObservation ? `, observe=${explanation.exposure.postActionObservation}` : ''}`,
+    `exposure: batch=${yesNo(explanation.exposure.batchable)}, mcp=${yesNo(explanation.exposure.mcp)}${explanation.exposure.postActionObservation ? `, observe=${explanation.exposure.postActionObservation}` : ''}`,
     `timeout: envelope=${formatEnvelope(explanation.timeout.envelopeMs)}, on-timeout=${explanation.timeout.onTimeout}, budget=${explanation.timeout.budget}`,
   ];
   if (explanation.capability) {
@@ -229,7 +227,6 @@ function describeCommandExposure(descriptor: CommandDescriptor): CommandExplanat
   return {
     batchable: descriptor.batchable,
     mcp: descriptor.mcpExposed,
-    dispatch: 'dispatch' in descriptor && descriptor.dispatch !== undefined,
     ...('postActionObservation' in descriptor && descriptor.postActionObservation
       ? { postActionObservation: descriptor.postActionObservation }
       : {}),
@@ -320,7 +317,6 @@ function commandFiles(
   family: string | undefined,
   daemonRoute: DaemonCommandRoute | undefined,
   hasCapability: boolean,
-  hasDispatch: boolean,
   fileExists: FileExists | undefined,
   daemonRouteOwnerFiles: Readonly<Record<DaemonCommandRoute, string>>,
 ): string[] {
@@ -336,7 +332,6 @@ function commandFiles(
     derived.push('src/cli-schema/command-overrides.ts');
   }
   if (daemonRoute) derived.push(daemonRouteOwnerFiles[daemonRoute]);
-  if (hasDispatch) derived.push('src/core/dispatch.ts');
   if (hasCapability) derived.push('src/core/capabilities.ts');
   const present = fileExists ? opportunistic.filter(fileExists) : opportunistic;
   return [...new Set([...derived, ...ownerFiles, ...present])];

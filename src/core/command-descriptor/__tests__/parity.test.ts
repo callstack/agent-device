@@ -130,10 +130,6 @@ function isDescriptorOnlyCommand(descriptor: TestCommandDescriptor): boolean {
   return !hasDaemonFacet(descriptor) && !hasCapabilityFacet(descriptor) && !descriptor.batchable;
 }
 
-function readDaemonRouteForTest(descriptor: TestCommandDescriptor): string | undefined {
-  return 'daemon' in descriptor ? descriptor.daemon?.route : undefined;
-}
-
 test('derived daemon registry holds its routing invariants', () => {
   // The daemon registry is now BUILT from these derived descriptors (the
   // hand-authored literal was deleted after #906 proved byte-equality), so a
@@ -201,48 +197,6 @@ test('descriptor-only commands explicitly declare a non-public catalog group', (
     const group = readCatalogGroupForTest(descriptor);
     assert.notEqual(group, 'public', `${descriptor.name} declares a non-public catalog group`);
     assert.equal(publicCommands.has(descriptor.name), false, `${descriptor.name} is not public`);
-  }
-});
-
-// R58 retired the legacy platform dispatcher itself: `settings` was its last arm, so no
-// descriptor projects into it any more. The successor property is one-sided and total — the
-// `dispatch` facet is vestigial vocabulary, and a descriptor that grows one again would be
-// declaring a dispatcher that no longer exists.
-test('no descriptor projects into the retired platform dispatcher', () => {
-  const dispatchCommands = commandDescriptors
-    .filter((descriptor) => 'dispatch' in descriptor && descriptor.dispatch !== undefined)
-    .map((descriptor) => descriptor.name)
-    .sort();
-
-  assert.deepEqual(dispatchCommands, []);
-});
-
-test('generic route commands that reach platform dispatch declare the dispatch facet', () => {
-  const nonDispatchGenericCommands = new Set<string>([
-    PUBLIC_COMMANDS.gesture,
-    PUBLIC_COMMANDS.focus,
-    PUBLIC_COMMANDS.screenshot,
-    // R43 retired scroll's dispatch leaf with its capability bucket: the bound
-    // `scrollDirection` operation is its only execution.
-    PUBLIC_COMMANDS.scroll,
-    PUBLIC_COMMANDS.viewport,
-    PUBLIC_COMMANDS.back,
-    PUBLIC_COMMANDS.home,
-    PUBLIC_COMMANDS.orientation,
-    PUBLIC_COMMANDS.tvRemote,
-    // R56 retired app-switcher's dispatch leaf with its capability bucket: the bound
-    // `appSwitcher` operation is its only execution.
-    PUBLIC_COMMANDS.appSwitcher,
-  ]);
-
-  for (const descriptor of commandDescriptors) {
-    const route = readDaemonRouteForTest(descriptor);
-    if (route !== 'generic' || nonDispatchGenericCommands.has(descriptor.name)) continue;
-
-    assert.ok(
-      'dispatch' in descriptor && descriptor.dispatch !== undefined,
-      `${descriptor.name} declares dispatch coverage`,
-    );
   }
 });
 

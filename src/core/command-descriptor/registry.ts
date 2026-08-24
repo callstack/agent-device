@@ -116,9 +116,8 @@ export type DescriptorCatalogRecord<Group extends CommandCatalogGroup> = {
 
 /**
  * The literal union of every command whose `daemon.route` is `'session'`.
- * Drives `SESSION_COMMAND_HANDLER_IMPLS` in `src/daemon/handlers/session.ts`
- * : adding a session-routed
- * descriptor without a matching handler table entry is a compile error rather
+ * Drives `SESSION_COMMAND_HANDLER_IMPLS` in `src/daemon/handlers/session.ts`: adding a
+ * session-routed descriptor without a matching handler table entry is a compile error rather
  * than a runtime routing gap caught only by `expectHandlerResponse`.
  */
 export type DescriptorSessionRouteCommandName =
@@ -1704,18 +1703,6 @@ export function commandSupportsSettleObservation(command: string | undefined): b
 
 export function commandSupportsVerifyEvidence(command: string | undefined): boolean {
   return resolveCommandPostActionObservationSupport(command) === 'settle-and-verify';
-}
-
-/**
- * Whether a command's platform behavior comes from a request-bound device runtime (ADR 0019).
- * Admission for those commands is the owner's exact operation facts, so a route must never also
- * consult a capability bucket for them — and a migrated command has no bucket to consult. Reading
- * the discriminator here rather than naming commands at each route means the next unit's
- * descriptor flip is the whole change.
- */
-export function commandUsesDeviceRuntimeExecution(command: string | undefined): boolean {
-  if (command === undefined) return false;
-  return COMMAND_DESCRIPTOR_BY_NAME.get(command)?.platformExecution.kind === 'device-runtime';
 }
 
 /**

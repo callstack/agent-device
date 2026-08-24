@@ -96,7 +96,7 @@ export async function retryPendingInteractionOutcome(params: {
   snapshot: SnapshotState;
   retryTap?: InteractionRetryTap;
 }): Promise<{ retried: boolean; change: InteractionSurfaceChange }> {
-  const { session, pending, snapshot } = params;
+  const { pending, snapshot } = params;
   const change = classifyInteractionSurfaceChange(
     pending.preSignature,
     buildInteractionSurfaceSignature(snapshot.nodes),
@@ -105,46 +105,30 @@ export async function retryPendingInteractionOutcome(params: {
     return { retried: false, change };
   }
 
-  // The retry re-fires the same coordinate tap the original press used (R48). The attempt is
-  // spent only once the tap is actually delivered, so a capture path carrying no retry seam — or
-  // an owner whose cell cannot tap — leaves the pending record intact instead of burning an
-  // attempt on a refusal, and says so rather than throwing out of the capture it was decorating.
-  const point = params.retryTap ? readRetryPoint(pending.positionals) : undefined;
-  const startedAt = Date.now();
-  // Opt-in Maestro retries intentionally re-fire the same coordinate tap; delayed or
-  // non-visual side effects can duplicate, but unchanged visual taps are the target gap.
-  const fired =
-    params.retryTap && point
-      ? await params.retryTap({
-          device: session.device,
-          point,
-          context: {
-            ...contextFromFlags(
-              params.logPath,
-              pending.flags,
-              session.appBundleId,
-              session.trace?.outPath,
-            ),
-            surface: session.surface,
-          },
-        })
-      : false;
-  if (!fired) {
-    // Never silent: a retry the opt-in flag asked for and this request could not fire says so,
-    // rather than leaving the caller to infer it from an unchanged surface.
-    emitDiagnostic({
-      level: 'info',
-      phase: 'interaction_no_change_retry_skipped',
-      data: {
-        action: pending.action,
-        attemptsRemaining: pending.attemptsRemaining,
-        reason: params.retryTap && !point ? 'unreadable-retry-point' : 'device-runtime-unavailable',
-      },
-    });
+  // The retry re-fires the same coordinate tap the original press used (R48). Nothing was
+  // attempted when this capture path carries no retry seam or the recorded coordinates are
+  // unreadable, so those leave the pending record whole instead of burning an attempt, and say so
+  // rather than letting the caller infer it from an unchanged surface.
+  const retryTap = params.retryTap;
+  const point = retryTap ? readRetryPoint(pending.positionals) : undefined;
+  if (!retryTap || !point) {
+    emitSkippedRetry(pending, retryTap ? 'unreadable-retry-point' : 'device-runtime-unavailable');
     return { retried: false, change };
   }
 
+  const startedAt = Date.now();
+  // Spent before the device work, matching the retired route: an owner that refuses the tap or
+  // fails mid-flight has still consumed the attempt, so the next capture inside the pending
+  // window cannot re-attempt it from a full budget.
   pending.attemptsRemaining -= 1;
+  // Opt-in Maestro retries intentionally re-fire the same coordinate tap; delayed or
+  // non-visual side effects can duplicate, but unchanged visual taps are the target gap.
+  const fired = await fireRetryTap(retryTap, params);
+  if (!fired) {
+    emitSkippedRetry(pending, 'retry-tap-unavailable');
+    return { retried: false, change };
+  }
+
   emitDiagnostic({
     level: 'info',
     phase: 'interaction_no_change_retry',
@@ -155,6 +139,57 @@ export async function retryPendingInteractionOutcome(params: {
     },
   });
   return { retried: true, change };
+}
+
+/**
+ * The seam is allowed to refuse and allowed to fail; neither may escape into the capture this
+ * retry decorates. A press whose re-fire dies on the device leaves the caller with the honest
+ * unchanged surface plus a diagnostic, not a failed `snapshot`.
+ */
+async function fireRetryTap(
+  retryTap: InteractionRetryTap,
+  params: Readonly<{
+    session: SessionState;
+    pending: NonNullable<SessionState['pendingInteractionOutcome']>;
+    logPath: string;
+  }>,
+): Promise<boolean> {
+  const { session, pending } = params;
+  const point = readRetryPoint(pending.positionals);
+  if (!point) return false;
+  try {
+    return await retryTap({
+      device: session.device,
+      point,
+      context: {
+        ...contextFromFlags(
+          params.logPath,
+          pending.flags,
+          session.appBundleId,
+          session.trace?.outPath,
+        ),
+        surface: session.surface,
+      },
+    });
+  } catch {
+    return false;
+  }
+}
+
+/** Never silent: a retry the opt-in flag asked for and this request did not deliver says why. */
+function emitSkippedRetry(
+  pending: NonNullable<SessionState['pendingInteractionOutcome']>,
+  reason: 'device-runtime-unavailable' | 'unreadable-retry-point' | 'retry-tap-unavailable',
+): void {
+  emitDiagnostic({
+    level: 'info',
+    phase: 'interaction_no_change_retry_skipped',
+    data: {
+      action: pending.action,
+      attemptsRemaining: pending.attemptsRemaining,
+      reason,
+    },
+  });
 }
 
 export function emitInteractionSettled(params: {

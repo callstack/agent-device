@@ -595,6 +595,12 @@ function webDriverFacts(
       }),
       // Clipboard rides the same reachable interactor `back`/`home` do; the declared-capability
       // gate stays inside the interactor, where it already lives.
+      //
+      // R55 cell delta, deliberate: the retired `supportsHostOrSimulatorSurface` closure refused
+      // `clipboard` on every provider-owned physical Apple device, because it was a LOCAL-Apple
+      // predicate (host helper or simulator) being applied to a device this provider drives over
+      // Appium — which does expose the clipboard extension. The refusal moves to where it can be
+      // true: the interactor, per session.
       ...clipboardRuntimeOperationFacts({
         read: interactorCell(reachable, clipboardUnavailable),
         write: interactorCell(reachable, clipboardUnavailable),
@@ -608,6 +614,11 @@ function webDriverFacts(
         triggerAppEvent: interactorCell(reachable, appEventUnavailable),
       }),
       ...settingsRuntimeOperationFacts({ setSetting: settingsUnavailable }),
+      // R59 cell delta, deliberate: the retired `supportsAlertSurface` closure ADMITTED `alert` on
+      // a provider-owned physical iOS device (it keyed on `appleOs === 'ios'` alone), and the
+      // handler then drove the LOCAL XCTest runner against a device living in someone else's
+      // cloud. Nothing this provider owns can serve an alert leg, so it states that up front
+      // instead of admitting and failing mid-execution (ADR 0019 §2).
       ...alertRuntimeOperationFacts({
         read: alertUnavailable,
         wait: alertUnavailable,

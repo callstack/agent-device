@@ -33,6 +33,12 @@ export async function handleReactNativeCommands(
   // R61: admission is the owner's own `tapPoint` fact — the one operation this command executes.
   // It runs before the observing capture, exactly where the retired capability gate ran, so an
   // owner that cannot dismiss an overlay refuses without first spending a snapshot on it.
+  //
+  // Deliberate widening: the retired bucket was `{apple, android, linux: {}}`, so Linux desktop,
+  // web and HarmonyOS were refused by family. All three admit `tapPoint`, so all three now run —
+  // and answer `detected: false` on a surface with no React Native overlay, which is the truthful
+  // result. A family cannot be a support authority for a migrated command (ADR 0019 §8); the
+  // Linux and web coverage manifests record this, and HarmonyOS has no manifest to record it in.
   const bound = await resolveBoundTouchRuntime({
     device: session.device,
     command: 'press',
@@ -134,11 +140,21 @@ async function executeReactNativeOverlayDismiss(
   // binding is the caller's: admission happened before the overlay was even observed.
   const context = params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath);
   const executor = createBoundTouchExecutor(runtime, context);
+  // `tapPoint` is this command's one *required* operation, so admission already proved the cell.
+  // The executor still types every leg optional, and reaching it through `?.` would report
+  // `dismissed: true` for a dismissal that never touched the device. Refuse instead of lying.
+  const tapPoint = executor.tapPoint;
+  if (!tapPoint) {
+    return errorResponse(
+      'UNSUPPORTED_OPERATION',
+      'react-native dismiss-overlay is not supported on this device',
+    );
+  }
   const actionStartedAt = Date.now();
   // ADR 0014 side-effect seam: React Native overlay dismissal taps the device;
   // the target is already resolved, so expire the frame before the press.
   expireRefFrame(session);
-  const data = (await executor.tapPoint?.(target.point)) ?? {};
+  const data = await tapPoint(target.point);
   const actionFinishedAt = Date.now();
   const verification = await verifyReactNativeOverlayDismissal(params, session);
   const responseData = stripUndefined({

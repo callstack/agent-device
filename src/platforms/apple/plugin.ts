@@ -5,18 +5,15 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerContext } from '@agent-device/contracts/interaction';
 
 // ---------------------------------------------------------------------------
-// Apple family per-command capability closures. Originally RELOCATED VERBATIM from
-// src/core/command-descriptor/registry.ts (ADR-0009), the
-// AppleOS-axis predicates (`target !== 'tv'` / `platform !== 'macos'` /
-// `isTvOsDevice`) are now READ from the per-`AppleOS` capability table
-// (`apple-os-capabilities.ts`, step d.5) instead of being open-coded. The rewrite is
-// behaviorless: the DEVICE-shaped nuance (simulator vs physical device) stays in the
-// closure — only the OS-axis facts moved to data — and the non-Apple branches are the
-// verbatim verdicts (`appleOsCapabilities` returns `undefined` off the Apple family, so
-// each closure is a no-op on android/linux/web). The table-equivalence gate
-// (apple-os-capabilities table parity + capability-plugin-routing-parity tests) pins
-// every closure byte-for-byte against a verbatim copy of the original predicate across
-// the full {command x sample-device} matrix (iOS/iPadOS/tvOS/macOS/visionOS).
+// Apple family per-command capability closures for the commands still admitted by a capability
+// bucket. Originally RELOCATED VERBATIM from src/core/command-descriptor/registry.ts (ADR-0009).
+//
+// R59/R63 deleted the per-`AppleOS` capability table (`apple-os-capabilities.ts`) along with the
+// closures that read it: every command it served is now admitted from its owner's operation facts
+// (ADR 0019 §8), so the OS-axis predicates live in `packages/platform-apple` rather than here.
+// What remains is DEVICE-shaped nuance (simulator vs physical device, XCTest vs CoreDevice) for
+// unmigrated commands, pinned against the original predicates by
+// `capability-plugin-routing-parity` across the full {command x sample-device} matrix.
 // ---------------------------------------------------------------------------
 
 const supportsCoreDevicePhysicalOperation = (device: DeviceInfo): boolean =>

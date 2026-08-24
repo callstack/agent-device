@@ -212,9 +212,45 @@ test('a capture route with no retry seam reports a skip instead of spending an a
 
   assert.ok(observed.result?.snapshot);
   assert.equal(retryTap.mock.calls.length, 0);
-  // One skip, no retry: nothing was delivered, so no attempt was spent on a refusal.
+  // One skip, no retry: nothing was attempted, so no attempt was spent. The emitted reason
+  // (`device-runtime-unavailable`) is what separates this from a delivered tap the owner refused —
+  // a route that stops forwarding its bindings lands here, not there.
   assert.equal(observed.skips, 1);
   assert.equal(observed.retries, 0);
+});
+
+// A retry that dies on the device is the seam's problem, not the caller's: the capture it was
+// decorating still has to answer with the unchanged surface it observed.
+test('a retry tap that throws is reported as a skip rather than failing the capture', async () => {
+  const session = makeSession('android');
+  session.snapshot = pickupSnapshot();
+  markDeferredInteractionOutcome({
+    session,
+    command: 'click',
+    positionals: ['100', '200'],
+    flags: { interactionOutcome: { retryOnNoChange: true } },
+    scheduleOutcomeRetry: true,
+  });
+  const attemptsBefore = session.pendingInteractionOutcome?.attemptsRemaining;
+  const { capture } = scriptedCapture([pickupSnapshot()]);
+  retryTap.mockRejectedValueOnce(new Error('adb: device offline'));
+
+  const observed = await withDiagnosticsScope({}, async () => {
+    const result = await resolveDeferredInteractionOutcome(resolveParams(session, capture));
+    return {
+      result,
+      skips: countDiagnosticEventsByPhase(['interaction_no_change_retry_skipped']),
+      retries: countDiagnosticEventsByPhase(['interaction_no_change_retry']),
+    };
+  });
+
+  assert.ok(observed.result?.snapshot);
+  assert.equal(observed.skips, 1);
+  assert.equal(observed.retries, 0);
+  // The attempt is spent before the device work, so a failing owner cannot be re-attempted from a
+  // full budget by the next capture inside the pending window.
+  assert.equal(attemptsBefore, 2);
+  assert.equal(session.pendingInteractionOutcome, undefined);
 });
 
 test('a pending stabilization resolves through the quiet-window loop and clears itself', async () => {

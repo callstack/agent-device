@@ -36,9 +36,8 @@ import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-
 registerBuiltinPlatformPlugins();
 
 // ---------------------------------------------------------------------------
-// Independent copies of the command capability contracts, including the original
-// AppleOS predicates and current backend-specific gates. This oracle stays independent
-// of the table it pins (mirrors capability-plugin-routing-parity.test.ts).
+// Independent copies of the command capability contracts. This oracle stays independent of the
+// closures it pins (mirrors capability-plugin-routing-parity.test.ts).
 // ---------------------------------------------------------------------------
 const supportsCoreDevicePhysicalOperation = (device: DeviceInfo): boolean =>
   device.platform !== 'apple' ||
@@ -128,7 +127,7 @@ test('resolveDeviceAppleOs prefers the stored discriminant, else infers from tar
   assert.equal(resolveDeviceAppleOs(MACOS_DEVICE), 'macos');
 });
 
-test('table-driven Apple supports() closures match the independent command contracts', () => {
+test('Apple supports() closures match the independent command contracts', () => {
   const appleSupports = getPlugin('apple').capability.supportsByDefault;
   assert.ok(appleSupports, 'the Apple plugin carries supportsByDefault');
   // Every command that had an original predicate must still carry one, keyed the same.
@@ -146,7 +145,7 @@ test('table-driven Apple supports() closures match the independent command contr
   }
 });
 
-test('table-driven Apple unsupportedHint() closures match the independent contracts', () => {
+test('Apple unsupportedHint() closures match the independent contracts', () => {
   const appleHints = getPlugin('apple').capability.unsupportedHintByDefault;
   assert.ok(appleHints, 'the Apple plugin carries unsupportedHintByDefault');
   assert.deepEqual(Object.keys(appleHints).sort(), Object.keys(HINT_REF).sort());

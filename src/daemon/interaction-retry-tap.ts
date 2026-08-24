@@ -20,16 +20,26 @@ export function createInteractionRetryTap(
 ): InteractionRetryTap | undefined {
   const { inspectFacts, bindDevice } = bindings;
   if (!inspectFacts || !bindDevice) return undefined;
+  // ADR 0019 §9 is one admission per handler, and the outcome policy can call this seam once per
+  // retry round. Memoizing per device keeps the facts inspection and the narrowing to the first
+  // round: `bindDevice` already caches the underlying binding, so re-resolving would only re-read
+  // facts the request has already admitted on.
+  const resolutions = new Map<string, ReturnType<typeof resolveBoundTouchRuntime>>();
   return async ({ device, point, context }) => {
     // Admission runs before the policy spends an attempt: an owner whose cell cannot tap answers
     // `false` here and leaves the pending record intact.
-    const bound = await resolveBoundTouchRuntime({
-      device,
-      command: 'press',
-      requiresCapture: false,
-      inspectFacts,
-      bindDevice,
-    });
+    let resolution = resolutions.get(device.id);
+    if (!resolution) {
+      resolution = resolveBoundTouchRuntime({
+        device,
+        command: 'press',
+        requiresCapture: false,
+        inspectFacts,
+        bindDevice,
+      });
+      resolutions.set(device.id, resolution);
+    }
+    const bound = await resolution;
     if (!bound.ok) return false;
     const executor = createBoundTouchExecutor(bound.runtime, context);
     if (!executor.tapPoint) return false;

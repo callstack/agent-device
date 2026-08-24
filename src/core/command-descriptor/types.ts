@@ -136,14 +136,6 @@ export type CommandCatalogFacet = {
   key?: string;
 };
 
-export type CommandDispatchFacet = {
-  /**
-   * Platform dispatch command handled by src/core/dispatch.ts. The descriptor
-   * name is the dispatched command; dispatch-only names such as `read` are
-   * modeled as named descriptors rather than hidden aliases.
-   */
-} & Record<string, never>;
-
 /**
  * ADR 0016: whether a recorded request changes app-visible state or only
  * observes it. The resolver form keeps subcommand-sensitive decisions on the
@@ -220,7 +212,6 @@ type CommandDescriptorBase = {
   catalog: CommandCatalogFacet;
   /** Required iff `catalog.group === 'public'`; see {@link CommandFrameworkTier}. */
   frameworkTier?: CommandFrameworkTier;
-  dispatch?: CommandDispatchFacet;
   /** Internal-only ADR 0019 cutover discriminant; public projections must ignore it. */
   platformExecution: CommandPlatformExecution;
   /** ADR 0012 / #1349: present iff this command's recorded steps can carry `target-v1` evidence. */
