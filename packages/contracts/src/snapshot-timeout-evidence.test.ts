@@ -36,23 +36,36 @@ test('a capture with no stored observation still discloses that refs were reques
     overlayRefsRequested: true,
     overlayRefsAnnotated: false,
     overlayRefSource: 'unavailable',
-    overlayRefCount: 0,
   });
 });
 
 test('the union cannot express an annotated capture with no refs', () => {
-  // Type-level half of the invariant: the annotated arm carries a non-empty tuple, so this
-  // literal is not assignable. `@ts-expect-error` fails the build if it ever becomes valid.
+  // The annotated arm carries a non-empty tuple, so this literal is not assignable.
+  // `@ts-expect-error` fails the build if it ever becomes valid again.
   // @ts-expect-error annotated:true requires at least one overlay ref
   const contradiction: SnapshotTimeoutEvidence = {
     path: '/tmp/shot.png',
     overlayRefsRequested: true,
     overlayRefSource: 'session-snapshot',
     overlayRefsAnnotated: true,
-    overlayRefCount: 0,
     overlayRefs: [],
   };
   assert.ok(contradiction);
+});
+
+test('the union has no stored count that could disagree with the refs', () => {
+  // The count is derived, so there is no field to set — a mismatched one is not merely wrong,
+  // it is unwritable. This guards against reintroducing the second source of truth.
+  const withStoredCount: SnapshotTimeoutEvidence = {
+    path: '/tmp/shot.png',
+    overlayRefsRequested: true,
+    overlayRefSource: 'session-snapshot',
+    overlayRefsAnnotated: true,
+    overlayRefs: [overlayRef('e1')],
+    // @ts-expect-error overlayRefCount is derived, not stored
+    overlayRefCount: 0,
+  };
+  assert.ok(withStoredCount);
 });
 
 test('an empty ref list is a capture that was not annotated, not an annotated one', () => {
@@ -75,7 +88,6 @@ test('a failed annotation keeps the screenshot and names why the refs are missin
     overlayRefsRequested: true,
     overlayRefsAnnotated: false,
     overlayRefSource: 'session-snapshot',
-    overlayRefCount: 0,
     overlayAnnotationError: 'png decode failed',
   });
 });

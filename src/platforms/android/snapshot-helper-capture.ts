@@ -1,4 +1,9 @@
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  androidCaptureFailureReasonDetail,
+  androidCaptureFailureReasonFromExitCode,
+  androidCaptureFailureReasonFromHelperResult,
+} from './snapshot-capture-failure-reason.ts';
 import { execFailureDetails } from '../../utils/exec.ts';
 import {
   parseInstrumentationRecords,
@@ -235,6 +240,9 @@ async function readFallbackHelperOutputOrThrow(
       stdout: result.stdout,
       stderr: result.stderr,
       exitCode: result.exitCode,
+      ...androidCaptureFailureReasonDetail(
+        androidCaptureFailureReasonFromExitCode(result.exitCode),
+      ),
     },
     error,
   );
@@ -369,6 +377,9 @@ function readFinalHelperResult(records: Array<Record<string, string>>): Record<s
     throw new AppError('COMMAND_FAILED', readHelperErrorMessage(finalResult), {
       errorType: finalResult.errorType,
       helper: finalResult,
+      ...androidCaptureFailureReasonDetail(
+        androidCaptureFailureReasonFromHelperResult(finalResult),
+      ),
     });
   }
   return finalResult;

@@ -56,6 +56,7 @@ import type {
   AndroidCaptureFailureReason,
   AndroidContentRecoveryReason,
 } from '@agent-device/contracts/platform';
+import { readAndroidCaptureFailureReason } from '@agent-device/contracts/android-snapshot-quality';
 import {
   resetAndroidSnapshotHelperRuntime,
   retireAndroidSnapshotHelperAfterContentFailure,
@@ -595,19 +596,18 @@ function androidSnapshotHelperCaptureError(error: unknown, reason: string): AppE
 }
 
 /**
- * The one place that decides an Android capture failed because the hierarchy never arrived. Both
- * shapes mean the same thing to a caller: the helper answered with a structured timeout, or its
- * instrumentation was killed before it could answer at all. Publishing the decision as a typed
- * reason is what lets the daemon's timeout-evidence path key on it instead of on the hint prose
- * below (#1983).
+ * The typed reason the capture already carries, if its producer named one (#1983).
+ *
+ * This rewraps rather than reclassifies. `snapshot-capture-failure-reason.ts` decides at the
+ * deepest boundary, from machine-defined values — the helper's structured `errorType`, or the
+ * SIGKILL exit code — so no message shape is consulted here or below. Rewording helper or
+ * wrapper prose cannot change the reason, and prose that merely reads like a timeout does not
+ * become one.
  */
 function androidCaptureFailureReasonOf(
   normalized: NormalizedError,
 ): AndroidCaptureFailureReason | undefined {
-  const blocked =
-    isStructuredHelperTimeout(normalized.details?.helper, normalized.message) ||
-    isKilledHelperInstrumentationFailure(normalized);
-  return blocked ? 'accessibility-timeout' : undefined;
+  return readAndroidCaptureFailureReason(normalized);
 }
 
 // The prose is derived from the typed reason rather than deciding alongside it, so rewording a
@@ -646,27 +646,10 @@ function liftedWireFields(normalized: NormalizedError): Record<string, string | 
   return fields;
 }
 
-function isKilledHelperInstrumentationFailure(error: {
-  message: string;
-  details?: Record<string, unknown>;
-}): boolean {
-  if (error.details?.exitCode !== 137) return false;
-  return /Android snapshot helper (failed before returning parseable output|output could not be parsed)/.test(
-    error.message,
-  );
-}
-
 function readHelperMessage(helper: unknown): string | undefined {
   if (!helper || typeof helper !== 'object' || !('message' in helper)) return undefined;
   const message = String(helper.message).trim();
   return message && message !== 'null' ? message : undefined;
-}
-
-function isStructuredHelperTimeout(helper: unknown, fallbackMessage: string): boolean {
-  if (!helper || typeof helper !== 'object') return false;
-  const errorType = 'errorType' in helper ? String(helper.errorType) : '';
-  const message = readHelperMessage(helper) ?? fallbackMessage;
-  return /TimeoutException/.test(errorType) || /timed out/i.test(message);
 }
 
 async function resolveAndroidSnapshotHelperArtifact(

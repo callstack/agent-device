@@ -1,6 +1,10 @@
 import net from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  androidCaptureFailureReasonDetail,
+  androidCaptureFailureReasonFromHelperResult,
+} from './snapshot-capture-failure-reason.ts';
+import {
   readInstrumentationResultBoolean,
   readInstrumentationResultNumber,
 } from './instrumentation-helper.ts';
@@ -242,7 +246,10 @@ function validateSnapshotHeaders(headers: Record<string, string>, requestId: str
     throw new AppError(
       'COMMAND_FAILED',
       headers.message || headers.errorType || 'Android snapshot helper session returned an error',
-      { helper: headers },
+      {
+        helper: headers,
+        ...androidCaptureFailureReasonDetail(androidCaptureFailureReasonFromHelperResult(headers)),
+      },
     );
   }
 }

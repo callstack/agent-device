@@ -21,6 +21,13 @@ export type NonEmptyScreenshotOverlayRefs = readonly [
   ...ScreenshotOverlayRef[],
 ];
 
+/**
+ * No arm stores a ref count. A count beside the refs is a second source of truth that the type
+ * system cannot keep in step — `{annotated: true, count: 0, refs: [ref]}` would stay assignable —
+ * so the count is derived from `overlayRefs` by `snapshotTimeoutEvidenceOverlayCounts` instead.
+ * The arms that carry no refs have nothing to count, which `overlayRefsAnnotated: false` already
+ * states.
+ */
 export type SnapshotTimeoutEvidence =
   | {
       captureFailed: true;
@@ -29,24 +36,20 @@ export type SnapshotTimeoutEvidence =
   | (CapturedSnapshotTimeoutEvidenceBase & {
       overlayRefSource: 'unavailable';
       overlayRefsAnnotated: false;
-      overlayRefCount: 0;
     })
   | (CapturedSnapshotTimeoutEvidenceBase & {
       overlayRefSource: 'session-snapshot';
       overlayRefsAnnotated: true;
-      overlayRefCount: number;
       overlayRefs: NonEmptyScreenshotOverlayRefs;
     })
   | (CapturedSnapshotTimeoutEvidenceBase & {
       overlayRefSource: 'session-snapshot';
       overlayRefsAnnotated: false;
-      overlayRefCount: 0;
       overlayRefs: readonly [];
     })
   | (CapturedSnapshotTimeoutEvidenceBase & {
       overlayRefSource: 'session-snapshot';
       overlayRefsAnnotated: false;
-      overlayRefCount: 0;
       overlayAnnotationError: string;
     });
 
@@ -62,7 +65,6 @@ export function snapshotTimeoutEvidenceWithoutOverlaySource(path: string): Snaps
     overlayRefsRequested: true,
     overlayRefsAnnotated: false,
     overlayRefSource: 'unavailable',
-    overlayRefCount: 0,
   };
 }
 
@@ -77,18 +79,8 @@ export function snapshotTimeoutEvidenceWithOverlayRefs(
 ): SnapshotTimeoutEvidence {
   const base = { path, overlayRefsRequested: true, overlayRefSource: 'session-snapshot' } as const;
   return isNonEmptyOverlayRefs(overlayRefs)
-    ? {
-        ...base,
-        overlayRefsAnnotated: true,
-        overlayRefCount: overlayRefs.length,
-        overlayRefs,
-      }
-    : {
-        ...base,
-        overlayRefsAnnotated: false,
-        overlayRefCount: 0,
-        overlayRefs: [],
-      };
+    ? { ...base, overlayRefsAnnotated: true, overlayRefs }
+    : { ...base, overlayRefsAnnotated: false, overlayRefs: [] };
 }
 
 function isNonEmptyOverlayRefs(
@@ -107,23 +99,23 @@ export function snapshotTimeoutEvidenceOverlayFailed(
     overlayRefsRequested: true,
     overlayRefsAnnotated: false,
     overlayRefSource: 'session-snapshot',
-    overlayRefCount: 0,
     overlayAnnotationError,
   };
 }
 
 /**
- * The overlay counts a diagnostic may report, narrowed off the union so a log site does not
- * re-derive the arm discrimination with `in` checks.
+ * The overlay counts a diagnostic may report, derived from the refs the evidence actually holds.
+ * This is the only place a count exists, so it cannot disagree with the arm it came from.
  */
 export function snapshotTimeoutEvidenceOverlayCounts(evidence: SnapshotTimeoutEvidence): {
   overlayRefCount: number | undefined;
   overlayRefsAnnotated: boolean | undefined;
 } {
-  return 'captureFailed' in evidence
-    ? { overlayRefCount: undefined, overlayRefsAnnotated: undefined }
-    : {
-        overlayRefCount: evidence.overlayRefCount,
-        overlayRefsAnnotated: evidence.overlayRefsAnnotated,
-      };
+  if ('captureFailed' in evidence) {
+    return { overlayRefCount: undefined, overlayRefsAnnotated: undefined };
+  }
+  return {
+    overlayRefCount: 'overlayRefs' in evidence ? evidence.overlayRefs.length : 0,
+    overlayRefsAnnotated: evidence.overlayRefsAnnotated,
+  };
 }

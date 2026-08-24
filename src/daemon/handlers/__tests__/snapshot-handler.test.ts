@@ -240,7 +240,7 @@ function assertAndroidTimeoutEvidencePayload(evidence: unknown) {
   expect(record.path).toEqual(expect.stringContaining('snapshot-timeout-overlay-refs.png'));
   expect(fs.existsSync(record.path as string)).toBe(true);
   expect(record.overlayRefsAnnotated).toBe(true);
-  expect(record.overlayRefCount).toBe(1);
+  expect(record.overlayRefs).toHaveLength(1);
   expect(record.overlayRefs).toEqual([expect.objectContaining({ ref: 'e1', label: 'Continue' })]);
 }
 
