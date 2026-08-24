@@ -113,6 +113,24 @@ test('the macOS host reads through its helper, and a frontmost-app session names
   assert.deepEqual(mockHelper.mock.calls[0], ['get', { surface: 'frontmost-app' }]);
 });
 
+// The narrowing is the macOS helper's alone. A non-macOS Apple leaf keeps the session bundle
+// whatever the surface says, exactly as the retired route passed it to the XCTest runner.
+test('the XCTest runner keeps the session bundle even on a frontmost-app surface', async () => {
+  mockRunner.mockResolvedValue({ title: 'Camera Access' });
+
+  await readAppleAlert(IOS_SIMULATOR, runnerOptions, {
+    surface: 'frontmost-app',
+    appBundleId: 'com.example.app',
+  });
+
+  assert.deepEqual(mockRunner.mock.calls[0]?.[1], {
+    command: 'alert',
+    action: 'get',
+    appBundleId: 'com.example.app',
+    timeoutMs: 10_000,
+  });
+});
+
 test('a macOS app session forwards the bundle its surface is scoped to', async () => {
   mockHelper.mockResolvedValue({ action: 'dismiss' });
 

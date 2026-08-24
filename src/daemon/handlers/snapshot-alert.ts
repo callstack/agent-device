@@ -132,18 +132,18 @@ export async function handleAlertCommand(
 }
 
 /**
- * The session's own alert target. A frontmost-app session deliberately carries no bundle — that
- * surface means "whatever is frontmost", and naming an app would contradict it — so the pair is
- * forwarded as the session holds it rather than collapsed into one field.
+ * The session's own alert target, forwarded as the session holds it. The two fields stay separate
+ * because a macOS frontmost-app surface means "whatever is frontmost" and must reach its helper
+ * with no bundle at all — but that narrowing belongs to the Apple owner, which is the only leg
+ * that ever applied it. The retired route passed `session?.appBundleId` to the XCTest runner
+ * unconditionally, and it still does.
  */
 function alertTarget(
   session: SessionState | undefined,
 ): Readonly<{ appBundleId?: string; surface?: SessionState['surface'] }> {
-  if (!session) return {};
-  if (session.surface === 'frontmost-app') return { surface: session.surface };
   return {
-    ...(session.appBundleId === undefined ? {} : { appBundleId: session.appBundleId }),
-    ...(session.surface === undefined ? {} : { surface: session.surface }),
+    ...(session?.appBundleId === undefined ? {} : { appBundleId: session.appBundleId }),
+    ...(session?.surface === undefined ? {} : { surface: session.surface }),
   };
 }
 

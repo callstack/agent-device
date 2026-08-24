@@ -85,7 +85,8 @@ export function parseSettingsArgs(
  * whose payload is not just `(setting, state)`; everything else sends none. Coordinate typing
  * happens here rather than in the owner: `readLocationCoordinate` is input validation, and it
  * throws the same `INVALID_ARGS` the retired dispatcher threw from the same point in the
- * sequence — after admission, immediately before the device call.
+ * sequence — after admission, after the frame expiry and the diagnostic, immediately before the
+ * device call.
  */
 function buildSettingOptions(parsed: ParsedSettingsArgs): SettingOptions | undefined {
   if (parsed.setting === 'permission') {
@@ -172,15 +173,17 @@ export async function handleSettingsCommand(
       'settings clear-app-state requires an app id when no app is bound to the session',
     );
   }
-  const options = buildSettingOptions(parsed);
+  // ADR 0014 side-effect seam: a settings mutation changes device state; expire the frame before
+  // the bound call (settings is always classified may-invalidate). It runs here, ahead of the
+  // diagnostic and the coordinate typing, because that is where the retired daemon route expired
+  // it — a request that later fails on a bad coordinate expired the frame then and expires it now.
+  if (session) expireRefFrame(session);
   emitDiagnostic({
     level: 'debug',
     phase: 'settings_apply',
     data: settingsDiagnosticData(parsed, appBundleId, device.platform),
   });
-  // ADR 0014 side-effect seam: a settings mutation changes device state; expire the frame before
-  // the bound call (settings is always classified may-invalidate).
-  if (session) expireRefFrame(session);
+  const options = buildSettingOptions(parsed);
   const context = contextFromFlags(logPath, req.flags, appBundleId, session?.trace?.outPath);
   const data = await executeSetSetting(
     admission.runtime,
