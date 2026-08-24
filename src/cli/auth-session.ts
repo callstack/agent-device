@@ -71,6 +71,8 @@ type AuthIo = {
   stdoutIsTTY?: boolean;
   stderr?: Pick<NodeJS.WriteStream, 'write'>;
   now?: () => number;
+  // di-seam-approved: injects the fetch global, which has no module boundary vi.mock can
+  // intercept. auth-session.test.ts injects it directly for exact per-call assertions.
   fetch?: typeof fetch;
   openBrowser?: (url: string) => Promise<void>;
 };
@@ -408,6 +410,8 @@ async function pollDeviceAuth(options: {
   deviceCode: string;
   expiresIn: number | undefined;
   interval: number | undefined;
+  // di-seam-approved: same fetch-global seam as AuthIo.fetch above, threaded through this
+  // device-auth-poll helper as fetchImpl.
   fetchImpl?: typeof fetch;
   now?: () => number;
 }): Promise<DeviceAuthPollResponse> {
@@ -446,6 +450,8 @@ async function postJson<T>(options: {
   baseUrl: string;
   pathName: string;
   body: Record<string, unknown>;
+  // di-seam-approved: same fetch-global seam as AuthIo.fetch above, threaded through this
+  // postJson helper as fetchImpl.
   fetchImpl?: typeof fetch;
 }): Promise<T> {
   const fetchImpl = options.fetchImpl ?? fetch;

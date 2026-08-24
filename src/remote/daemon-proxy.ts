@@ -19,6 +19,8 @@ export type DaemonProxyOptions = {
   clientToken: string;
   maxRpcBodyBytes?: number;
   upstreamTimeoutMs?: number;
+  // di-seam-approved: injects the fetch global, which has no module boundary vi.mock can
+  // intercept, for the remote daemon proxy's upstream request.
   fetchImpl?: typeof fetch;
 };
 

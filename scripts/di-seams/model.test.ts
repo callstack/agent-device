@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { checkSeams, findSeamMatches } from './model.ts';
 
-test('findSeamMatches finds an optional typeof field with its line number', () => {
+test('findSeamMatches finds an unapproved optional typeof property with its line number', () => {
   const matches = findSeamMatches([
     { path: 'a.ts', source: 'type T = {\n  dispatch?: typeof dispatchCommand;\n};\n' },
   ]);
@@ -12,7 +12,8 @@ test('findSeamMatches finds an optional typeof field with its line number', () =
       line: 2,
       field: 'dispatch',
       target: 'dispatchCommand',
-      text: 'dispatch?: typeof dispatchCommand',
+      text: 'dispatch?: typeof dispatchCommand;',
+      approvalReason: null,
     },
   ]);
 });
@@ -24,97 +25,119 @@ test('findSeamMatches ignores a required (non-optional) field', () => {
   assert.deepEqual(matches, []);
 });
 
-// PR #2006 review, round 2: a per-line scan is blind to a declaration split across lines.
-test('findSeamMatches finds a declaration whose `?:` and `typeof` land on different lines', () => {
+test('findSeamMatches finds a bare optional function parameter, not just object-type fields', () => {
   const matches = findSeamMatches([
-    {
-      path: 'a.ts',
-      source: 'type T = {\n  dispatch?:\n    typeof dispatchCommand;\n};\n',
-    },
+    { path: 'a.ts', source: 'function f(dispatch?: typeof dispatchCommand) {}\n' },
   ]);
   assert.equal(matches.length, 1);
   assert.equal(matches[0]?.field, 'dispatch');
   assert.equal(matches[0]?.target, 'dispatchCommand');
-  // The match starts on the line holding `field?:`, which is what an approval's `line` names.
-  assert.equal(matches[0]?.line, 2);
 });
 
-test('checkSeams passes a match whose exact (file, line, field, target) quadruple is approved', () => {
-  const matches = findSeamMatches([{ path: 'src/x.ts', source: 'fetchImpl?: typeof fetch;' }]);
-  const { violations, staleApprovals } = checkSeams(matches, [
-    { file: 'src/x.ts', line: 1, field: 'fetchImpl', target: 'fetch', reason: 'test' },
+// AST-based matching finds this for free — no multiline-specific handling needed, unlike a
+// text-based scan (PR #2006 review, round 2).
+test('findSeamMatches finds a declaration whose `?:` and `typeof` land on different lines', () => {
+  const matches = findSeamMatches([
+    { path: 'a.ts', source: 'type T = {\n  dispatch?:\n    typeof dispatchCommand;\n};\n' },
   ]);
-  assert.deepEqual(violations, []);
-  assert.deepEqual(staleApprovals, []);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0]?.field, 'dispatch');
+  assert.equal(matches[0]?.target, 'dispatchCommand');
 });
 
-// This is the exact failure mode PR #2006's review flagged in the earlier name-based version:
-// approving `typeof fetch` in one file must not silently approve it everywhere.
-test('checkSeams flags the same field/target seam in an unapproved file', () => {
-  const matches = findSeamMatches([{ path: 'src/y.ts', source: 'fetchImpl?: typeof fetch;' }]);
-  const { violations } = checkSeams(matches, [
-    { file: 'src/x.ts', line: 1, field: 'fetchImpl', target: 'fetch', reason: 'test' },
+test('findSeamMatches attaches an immediately-preceding di-seam-approved comment', () => {
+  const matches = findSeamMatches([
+    {
+      path: 'a.ts',
+      source:
+        'type T = {\n  // di-seam-approved: legitimate, reviewed\n  dispatch?: typeof dispatchCommand;\n};\n',
+    },
   ]);
-  assert.equal(violations.length, 1);
-  assert.equal(violations[0]?.file, 'src/y.ts');
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0]?.approvalReason, 'legitimate, reviewed');
 });
 
-test('checkSeams flags an unapproved field name in an approved file, even for an approved target', () => {
-  const matches = findSeamMatches([{ path: 'src/x.ts', source: 'otherField?: typeof fetch;' }]);
-  const { violations } = checkSeams(matches, [
-    { file: 'src/x.ts', line: 1, field: 'fetchImpl', target: 'fetch', reason: 'test' },
+test('findSeamMatches joins a multi-line di-seam-approved comment block into one reason', () => {
+  const matches = findSeamMatches([
+    {
+      path: 'a.ts',
+      source:
+        'type T = {\n  // di-seam-approved: first line of the reason\n  // second line of the reason\n  dispatch?: typeof dispatchCommand;\n};\n',
+    },
   ]);
-  assert.equal(violations.length, 1);
-  assert.equal(violations[0]?.field, 'otherField');
+  assert.equal(matches[0]?.approvalReason, 'first line of the reason second line of the reason');
 });
 
-test('checkSeams flags a seam under a different target, even for an approved field name', () => {
-  const matches = findSeamMatches([{ path: 'src/x.ts', source: 'fetchImpl?: typeof otherFn;' }]);
-  const { violations } = checkSeams(matches, [
-    { file: 'src/x.ts', line: 1, field: 'fetchImpl', target: 'fetch', reason: 'test' },
+test('findSeamMatches does not treat a marker on an earlier, unrelated field as approving this one', () => {
+  const matches = findSeamMatches([
+    {
+      path: 'a.ts',
+      source:
+        'type T = {\n  // di-seam-approved: approves otherField only\n  otherField: string;\n  dispatch?: typeof dispatchCommand;\n};\n',
+    },
   ]);
-  assert.equal(violations.length, 1);
-  assert.equal(violations[0]?.target, 'otherFn');
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0]?.field, 'dispatch');
+  assert.equal(matches[0]?.approvalReason, null);
 });
 
-test('checkSeams reports an approval as stale when its quadruple matches nothing', () => {
-  const { staleApprovals, violations } = checkSeams(
-    [],
-    [{ file: 'src/x.ts', line: 1, field: 'fetchImpl', target: 'fetch', reason: 'test' }],
-  );
-  assert.equal(violations.length, 0);
-  assert.equal(staleApprovals.length, 1);
-  assert.equal(staleApprovals[0]?.field, 'fetchImpl');
+test('findSeamMatches requires the marker text itself, not just a nearby comment', () => {
+  const matches = findSeamMatches([
+    {
+      path: 'a.ts',
+      source:
+        'type T = {\n  // just a plain comment, not a marker\n  dispatch?: typeof dispatchCommand;\n};\n',
+    },
+  ]);
+  assert.equal(matches[0]?.approvalReason, null);
 });
 
-// PR #2006 review, round 2: approving one occurrence of a (file, field, target) triple must not
-// bless a second, unreviewed occurrence of the exact same triple elsewhere in the same file.
-test('checkSeams flags a second occurrence of an approved field/target pair at a different line', () => {
+test('checkSeams passes an approved match and flags an unapproved one', () => {
   const matches = findSeamMatches([
     {
       path: 'src/x.ts',
-      source: 'fetchImpl?: typeof fetch;\n// unrelated code\nfetchImpl?: typeof fetch;\n',
+      source:
+        'type T = {\n  // di-seam-approved: reviewed\n  fetchImpl?: typeof fetch;\n  dispatch?: typeof dispatchCommand;\n};\n',
     },
   ]);
-  const { violations, staleApprovals } = checkSeams(matches, [
-    { file: 'src/x.ts', line: 1, field: 'fetchImpl', target: 'fetch', reason: 'test' },
-  ]);
+  const { violations } = checkSeams(matches);
   assert.equal(violations.length, 1);
-  assert.equal(violations[0]?.line, 3);
-  assert.deepEqual(staleApprovals, []);
+  assert.equal(violations[0]?.field, 'dispatch');
 });
 
-test('checkSeams passes two occurrences of the same triple only when both lines are individually approved', () => {
+// This is the exact failure mode PR #2006's review flagged in the name-based version: approving
+// one `fetchImpl?: typeof fetch` must not silently approve a second, different one.
+test('checkSeams flags a second, unmarked occurrence of an approved field/target pair', () => {
   const matches = findSeamMatches([
     {
       path: 'src/x.ts',
-      source: 'fetchImpl?: typeof fetch;\n// unrelated code\nfetchImpl?: typeof fetch;\n',
+      source:
+        'type T = {\n  // di-seam-approved: reviewed\n  fetchImpl?: typeof fetch;\n};\ntype U = {\n  fetchImpl?: typeof fetch;\n};\n',
     },
   ]);
-  const { violations, staleApprovals } = checkSeams(matches, [
-    { file: 'src/x.ts', line: 1, field: 'fetchImpl', target: 'fetch', reason: 'test' },
-    { file: 'src/x.ts', line: 3, field: 'fetchImpl', target: 'fetch', reason: 'test' },
+  const { violations } = checkSeams(matches);
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0]?.line, 6);
+});
+
+// PR #2006 review, round 3: a global positional table breaks on any unrelated line shift. A
+// code-local marker has nothing to resync — reordering unrelated declarations around an approved
+// one must not affect it.
+test('checkSeams stays passing when unrelated code is inserted above an approved declaration', () => {
+  const before = findSeamMatches([
+    {
+      path: 'src/x.ts',
+      source: 'type T = {\n  // di-seam-approved: reviewed\n  fetchImpl?: typeof fetch;\n};\n',
+    },
   ]);
-  assert.deepEqual(violations, []);
-  assert.deepEqual(staleApprovals, []);
+  const after = findSeamMatches([
+    {
+      path: 'src/x.ts',
+      source:
+        '// an unrelated new import or declaration lands here\nconst unrelated = 1;\n\ntype T = {\n  // di-seam-approved: reviewed\n  fetchImpl?: typeof fetch;\n};\n',
+    },
+  ]);
+  assert.deepEqual(checkSeams(before).violations, []);
+  assert.deepEqual(checkSeams(after).violations, []);
+  assert.notEqual(before[0]?.line, after[0]?.line);
 });

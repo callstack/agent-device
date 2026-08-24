@@ -57,6 +57,9 @@ export type InteractionResponseSource =
   | (InteractionResponseSourceBase & {
       kind: 'runtime';
       result: InteractionRuntimeResult;
+      // di-seam-approved: not a DI seam — derives a literal union-member type from a constant
+      // for discriminated-union typing, not an injectable optional parameter. The seam pattern
+      // matches it only by syntax coincidence.
       dispatchPath?: typeof MAESTRO_COORDINATE_FALLBACK_PATH;
     })
   | (InteractionResponseSourceBase & {
