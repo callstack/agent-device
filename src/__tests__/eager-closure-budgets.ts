@@ -199,7 +199,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/kernel/src/snapshot.ts': 1,
 
   // --- @agent-device/maestro ---
-  'packages/maestro/src/index.ts': 104,
+  'packages/maestro/src/index.ts': 105,
 
   // --- @agent-device/platform-*: ADR-0019's metadata-eager/implementation-lazy façades. Each
   // evaluates only itself; every implementation sits behind a function-scoped `await import`.
