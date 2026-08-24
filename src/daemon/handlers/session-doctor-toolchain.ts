@@ -8,7 +8,7 @@ import type { DoctorCheck } from '@agent-device/contracts/observability';
 import {
   listLocalDeviceInventory,
   shouldPropagateDeviceInventoryProbeError,
-} from '../../core/device-inventory-context.ts';
+} from '../../request/device-inventory-context.ts';
 
 const TOOLCHAIN_TIMEOUT_MS = 3_000;
 type AndroidLicenseState = 'accepted' | 'missing' | 'unknown';

@@ -22,7 +22,7 @@ import {
   listLocalDeviceInventory,
   readDeviceInventory,
   shouldPropagateDeviceInventoryProbeError,
-} from './device-inventory-context.ts';
+} from '../request/device-inventory-context.ts';
 export type ResolveDeviceFlags = Pick<
   CliFlags,
   | 'platform'

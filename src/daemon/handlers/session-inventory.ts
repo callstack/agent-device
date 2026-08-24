@@ -1,5 +1,5 @@
 import { isCommandSupportedOnDevice, listCapabilityCommands } from '../../core/capabilities.ts';
-import { listDeviceInventory } from '../../core/device-inventory-context.ts';
+import { listDeviceInventory } from '../../request/device-inventory-context.ts';
 import { assertResolvedAppsFilter } from '@agent-device/contracts/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import {

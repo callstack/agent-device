@@ -1,5 +1,5 @@
 import { buildDeviceInventoryRequestFromFlags } from '../../core/dispatch-resolve.ts';
-import { listDeviceInventory } from '../../core/device-inventory-context.ts';
+import { listDeviceInventory } from '../../request/device-inventory-context.ts';
 import {
   countDeviceInventoryByGroup,
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,

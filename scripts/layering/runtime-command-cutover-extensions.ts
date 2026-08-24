@@ -15,7 +15,7 @@ type AstNode = Record<string, unknown>;
 
 const DEVICES_HANDLER_FILE = 'src/daemon/handlers/session-inventory.ts';
 const DEVICES_INVENTORY_IMPORT_SOURCES = new Set([
-  '../../core/device-inventory-context.ts',
+  '../../request/device-inventory-context.ts',
   '../../core/dispatch-resolve.ts',
 ]);
 const DEVICES_GATEWAY_BINDING = 'listDeviceInventory';

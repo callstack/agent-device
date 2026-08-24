@@ -1,5 +1,5 @@
 import { withResolveTargetDeviceCacheScope } from '../core/dispatch-resolve.ts';
-import { withDeviceInventoryContext } from '../core/device-inventory-context.ts';
+import { withDeviceInventoryContext } from '../request/device-inventory-context.ts';
 import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import type {
   ComposedDeviceInventoryGateways,
