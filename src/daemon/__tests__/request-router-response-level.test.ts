@@ -3,11 +3,6 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 
-vi.mock('../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
-
 vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../platforms/apple/core/runner/runner-client.ts')>();
@@ -16,10 +11,10 @@ vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOrigi
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
-// Register a test view on a command that flows through the (mocked) generic
-// dispatch path, so the router graft mechanics can be exercised end to end
-// without the real snapshot handler (the actual snapshot view is unit-tested in
-// response-views.test.ts).
+// Register a test view on a command whose payload this file controls end to end, so the router
+// graft mechanics can be exercised without the real snapshot handler (the actual snapshot view is
+// unit-tested in response-views.test.ts). `app-switcher` reaches a bound operation since R56, so
+// its payload is the one the daemon leaf builds rather than a mocked dispatcher's.
 vi.mock('../response-views.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../response-views.ts')>();
   return {
@@ -28,26 +23,25 @@ vi.mock('../response-views.ts', async (importOriginal) => {
       ...actual.RESPONSE_VIEWS,
       'app-switcher': (data: Record<string, unknown>, level: string) =>
         level === 'digest'
-          ? { appSwitcherDigest: true, hadItems: Array.isArray(data.items) }
+          ? { appSwitcherDigest: true, hadAction: data.action === 'app-switcher' }
           : data,
     },
   };
 });
 
-import { dispatchCommand } from '../../core/dispatch.ts';
 import {
   createRequestHandler,
-  gestureDeviceRuntimeGateway,
   gestureRuntimeSpies,
+  lifecycleDeviceRuntimeGateway,
 } from './test-device-runtime-gateway.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
 
-const mockDispatch = vi.mocked(dispatchCommand);
-
-const REPRESENTATIVE_PAYLOAD = { message: 'app-switcher-ok', items: [1, 2, 3] } as const;
+const REPRESENTATIVE_PAYLOAD = { message: 'scroll-ok', items: [1, 2, 3] } as const;
+/** What the bound `app-switcher` leaf answers; this file's registered view digests it. */
+const APP_SWITCHER_PAYLOAD = { action: 'app-switcher', message: 'Opened app switcher' } as const;
 
 function makeIosSession(name: string): SessionState {
   return {
@@ -78,9 +72,9 @@ function makeHandler() {
       leaseRegistry: new LeaseRegistry(),
       deviceInventoryGateways: createTestDeviceInventoryGateways(),
       trackDownloadableArtifact: () => 'artifact-id',
-      // `scroll` is the view-less subject of case (e), and R53 moved it onto a bound runtime, so
-      // the handler needs an owner that admits `scrollDirection`.
-      deviceRuntimeGateway: gestureDeviceRuntimeGateway,
+      // Both subjects reach bound runtimes now — `app-switcher` through R56 and `scroll` through
+      // R53 — so the handler needs an owner admitting `appSwitcher` and `scrollDirection` alike.
+      deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     }),
   };
 }
@@ -97,8 +91,6 @@ function request(command: string, overrides: Partial<DaemonRequest> = {}): Daemo
 }
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockImplementation(async () => ({ ...REPRESENTATIVE_PAYLOAD }));
   gestureRuntimeSpies.scrollDirection.mockReset();
   gestureRuntimeSpies.scrollDirection.mockResolvedValue({});
 });
@@ -113,7 +105,7 @@ test('(a) default identity: responseLevel absent === default === no meta, byte-i
 
   expect(JSON.stringify(noMeta)).toBe(JSON.stringify(emptyMeta));
   expect(JSON.stringify(noMeta)).toBe(JSON.stringify(explicitDefault));
-  if (noMeta.ok) expect(noMeta.data).toEqual(REPRESENTATIVE_PAYLOAD);
+  if (noMeta.ok) expect(noMeta.data).toEqual(APP_SWITCHER_PAYLOAD);
 });
 
 test('(b) digest applies the registered view, dropping the full payload', async () => {
@@ -121,7 +113,7 @@ test('(b) digest applies the registered view, dropping the full payload', async 
   const resp = await handler(request('app-switcher', { meta: { responseLevel: 'digest' } }));
   expect(resp.ok).toBe(true);
   if (!resp.ok) return;
-  expect(resp.data).toEqual({ appSwitcherDigest: true, hadItems: true });
+  expect(resp.data).toEqual({ appSwitcherDigest: true, hadAction: true });
   expect('message' in (resp.data ?? {})).toBe(false);
 });
 
@@ -139,7 +131,7 @@ test('(d) digest composes with --cost: viewed data plus an additive cost block',
   );
   expect(resp.ok).toBe(true);
   if (!resp.ok) return;
-  expect(resp.data).toMatchObject({ appSwitcherDigest: true, hadItems: true });
+  expect(resp.data).toMatchObject({ appSwitcherDigest: true, hadAction: true });
   expect(typeof resp.data?.cost?.wallClockMs).toBe('number');
 });
 

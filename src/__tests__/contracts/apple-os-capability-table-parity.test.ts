@@ -44,7 +44,6 @@ registerBuiltinPlatformPlugins();
 // AppleOS predicates and current backend-specific gates. This oracle stays independent
 // of the table it pins (mirrors capability-plugin-routing-parity.test.ts).
 // ---------------------------------------------------------------------------
-const isNotMacOs = (device: DeviceInfo): boolean => !isMacOs(device);
 const isMacOsOrAppleSimulator = (device: DeviceInfo): boolean =>
   isMacOs(device) || device.kind === 'simulator';
 const isIosOs = (device: DeviceInfo): boolean =>
@@ -64,7 +63,6 @@ const coreDeviceOnlyPhysicalOperationHint = (device: DeviceInfo): string | undef
 // `packages/platform-apple/src/runtime.ts` and its `system/`, `navigation/` siblings.
 const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   perf: supportsCoreDevicePhysicalOperation,
-  'app-switcher': isNotMacOs,
   alert: (device) =>
     device.platform === 'android' || isIosOs(device) || isMacOsOrAppleSimulator(device),
   settings: (device) =>

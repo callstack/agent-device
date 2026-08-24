@@ -194,6 +194,9 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     tvRemote: linuxPlatformLeafUnavailable,
     readClipboard: clipboardKindUnavailable,
     writeClipboard: clipboardKindUnavailable,
+    // The Linux interactor's own `appSwitcher` throws unsupported, and the retired descriptor
+    // declared `linux: {}`, so no Linux cell was ever admitted.
+    appSwitcher: linuxPlatformLeafUnavailable,
     keyboardStatus: linuxPlatformLeafUnavailable,
     keyboardDismiss: linuxPlatformLeafUnavailable,
     keyboardEnter: linuxPlatformLeafUnavailable,

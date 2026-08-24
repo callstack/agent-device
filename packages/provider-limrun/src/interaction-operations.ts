@@ -17,6 +17,7 @@ import {
   scrollRuntimeOperationFacts,
 } from '@agent-device/contracts/scroll-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
@@ -125,6 +126,11 @@ const clipboardUnavailableIos = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'Limrun iOS direct sessions do not expose clipboard access yet.',
+} as const);
+const appSwitcherUnavailableIos = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun iOS direct sessions do not expose app switcher yet.',
 } as const);
 
 /**
@@ -257,6 +263,21 @@ export function limrunClipboardOperationFacts(
   const cell =
     liveSessionUnavailable ?? (device.platform === 'android' ? available : clipboardUnavailableIos);
   return Object.freeze({ ...clipboardRuntimeOperationFacts({ read: cell, write: cell }) });
+}
+
+/**
+ * `app-switcher` splits the same way its siblings do: the Android leg rides
+ * `session.dependencies.android.createInteractor` -- the SAME factory the local Android family
+ * binds -- while the iOS leg's own `appSwitcher` throws.
+ */
+export function limrunAppSwitcherOperationFacts(
+  device: DeviceInfo,
+  liveSessionUnavailable?: RuntimeOperationUnavailability,
+) {
+  const cell =
+    liveSessionUnavailable ??
+    (device.platform === 'android' ? available : appSwitcherUnavailableIos);
+  return Object.freeze({ ...appSwitcherRuntimeOperationFacts({ appSwitcher: cell }) });
 }
 
 export function limrunKeyboardOperationFacts(

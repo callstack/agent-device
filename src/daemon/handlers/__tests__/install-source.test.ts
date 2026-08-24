@@ -385,6 +385,7 @@ function sourceRuntimeFacts(
       keyboardEnter: unavailable,
       readClipboard: unavailable,
       writeClipboard: unavailable,
+      appSwitcher: unavailable,
       deployApp: unavailable,
       materializeAppSource: materializationAvailable ? { available: true } : unavailable,
       deployMaterializedApp: materializationAvailable ? { available: true } : unavailable,

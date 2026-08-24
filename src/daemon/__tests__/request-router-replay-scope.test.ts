@@ -37,6 +37,7 @@ import {
   createRequestHandler,
   gestureRuntimeSpies,
   lifecycleDeviceRuntimeGateway,
+  systemRuntimeSpies,
 } from './test-device-runtime-gateway.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 // Readiness is package-owned; hold the open at the fixture's platform-neutral readiness gate.
@@ -49,6 +50,7 @@ const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
 
 beforeEach(() => {
   gestureRuntimeSpies.scrollDirection.mockClear();
+  systemRuntimeSpies.appSwitcher.mockClear();
   mockDispatch.mockReset();
   mockDispatch.mockResolvedValue({});
   mockResolveTargetDevice.mockReset();
@@ -87,9 +89,10 @@ test('replay runs active-session actions inside the parent request provider scop
   });
 
   expect(response).toMatchObject({ ok: true });
-  // `app-switcher` is still a legacy dispatch leaf; `scroll down` reaches its bound operation
-  // instead (R53), so the flow's two actions land on two different execution paths.
-  expect(mockDispatch).toHaveBeenCalledTimes(1);
+  // Both actions now reach bound operations — `app-switcher` through R56, `scroll down` through
+  // R53 — so the flow drives the runtime gateway twice and the legacy dispatcher not at all.
+  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(systemRuntimeSpies.appSwitcher).toHaveBeenCalledTimes(1);
   expect(gestureRuntimeSpies.scrollDirection).toHaveBeenCalledTimes(1);
   expect(appleRunnerProvider).toHaveBeenCalledTimes(1);
 });
@@ -122,7 +125,10 @@ test('replay routes session-changing actions through the full request path', asy
   });
 
   expect(response).toMatchObject({ ok: true });
-  expect(mockDispatch).toHaveBeenCalledTimes(1);
+  // `app-switcher` reaches its bound operation since R56; `runtime set` mutates session state and
+  // never dispatched, so the legacy dispatcher sees neither action.
+  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(systemRuntimeSpies.appSwitcher).toHaveBeenCalledTimes(1);
   expect(appleRunnerProvider).toHaveBeenCalledTimes(2);
 });
 

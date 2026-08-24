@@ -154,7 +154,7 @@ function expectAppleSnapshotAvailability(
 }
 
 test.each(Object.entries(leaves))(
-  'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+  'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
   async (_name, device) => {
     const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
       device,
@@ -192,13 +192,12 @@ function expectNavigationAndKeyboardFacts(
   // constructibility.
   expectOperationAvailability(binding, 'back', device.appleOs !== 'watchos');
 
-  // home is unavailable on macOS, which drives an already-running app with no springboard, and
-  // on watchOS.
-  expectOperationAvailability(
-    binding,
-    'home',
-    device.appleOs !== 'macos' && device.appleOs !== 'watchos',
-  );
+  // home and app-switcher share one springboard reading (R56): both are unavailable on macOS,
+  // which drives an already-running app with no springboard, and on watchOS. That is parity, not
+  // convenience — the retired `supportsAppAndDeviceLifecycle` closure gated both off the same row.
+  const springboard = device.appleOs !== 'macos' && device.appleOs !== 'watchos';
+  expectOperationAvailability(binding, 'home', springboard);
+  expectOperationAvailability(binding, 'appSwitcher', springboard);
 
   // orientation and keyboard dismiss/enter share mobile-input eligibility: unavailable on tvOS
   // (focus-only XCUIRemote navigation), macOS (an AppKit desktop host), and watchOS.

@@ -1,3 +1,4 @@
+import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
@@ -42,8 +43,22 @@ const homeLifecycleUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
 } as const);
-function appleHomeFact(device: DeviceInfo): RuntimeOperationFact {
-  if (device.kind !== 'simulator' && device.kind !== 'device') return homeKindUnavailable;
+const appSwitcherKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'app-switcher is supported on Apple simulators and physical devices.',
+} as const);
+/**
+ * `home` and `app-switcher` are one springboard reading, and sharing it here is parity rather
+ * than convenience: the retired `supportsAppAndDeviceLifecycle` closure gated both off the same
+ * per-AppleOS `appAndDeviceLifecycle` row. Only the kind-refusal hint differs, so each caller
+ * supplies its own.
+ */
+function appleSpringboardFact(
+  device: DeviceInfo,
+  kindUnavailable: RuntimeOperationFact,
+): RuntimeOperationFact {
+  if (device.kind !== 'simulator' && device.kind !== 'device') return kindUnavailable;
   const os = resolveDeviceAppleOs(device);
   return os === 'macos' || os === 'watchos' ? homeLifecycleUnavailable : available;
 }
@@ -109,11 +124,17 @@ function appleKeyboardEnterFact(device: DeviceInfo): RuntimeOperationFact {
   return appleMobileInputEligible(device) ? available : keyboardCellUnavailable;
 }
 
-/** The navigation cells: back, home, orientation, tv-remote, and keyboard status/dismiss/enter. */
+/**
+ * The navigation cells: back, home, app-switcher, orientation, tv-remote, and keyboard
+ * status/dismiss/enter.
+ */
 export function appleNavigationFacts(device: DeviceInfo) {
   return Object.freeze({
     ...backRuntimeOperationFacts({ back: appleBackFact(device) }),
-    ...homeRuntimeOperationFacts({ home: appleHomeFact(device) }),
+    ...homeRuntimeOperationFacts({ home: appleSpringboardFact(device, homeKindUnavailable) }),
+    ...appSwitcherRuntimeOperationFacts({
+      appSwitcher: appleSpringboardFact(device, appSwitcherKindUnavailable),
+    }),
     ...orientationRuntimeOperationFacts({ orientation: appleOrientationFact(device) }),
     ...tvRemoteRuntimeOperationFacts({ tvRemote: appleTvRemoteFact(device) }),
     ...keyboardRuntimeOperationFacts({

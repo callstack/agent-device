@@ -56,6 +56,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/app-inventory-runtime',
   '@agent-device/contracts/app-log-runtime',
   '@agent-device/contracts/app-state-runtime',
+  '@agent-device/contracts/app-switcher-runtime',
   '@agent-device/contracts/apple-multitouch-support',
   '@agent-device/contracts/application-lifecycle-interaction',
   '@agent-device/contracts/application-lifecycle-runtime',

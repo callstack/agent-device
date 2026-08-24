@@ -34,6 +34,7 @@ import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtim
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { bindLocalInteractorOperationSet } from '@agent-device/contracts/local-interactor-operation-set';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
@@ -273,6 +274,9 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         ...backRuntimeOperationFacts({ back: androidTouchFact(device) }),
         ...homeRuntimeOperationFacts({ home: androidTouchFact(device) }),
+        // `app-switcher` shares `home`'s cell: one `input keyevent`, admitted wherever the
+        // retired `ANDROID_ALL` bucket admitted it.
+        ...appSwitcherRuntimeOperationFacts({ appSwitcher: androidTouchFact(device) }),
         ...orientationRuntimeOperationFacts({ orientation: androidTouchFact(device) }),
         ...tvRemoteRuntimeOperationFacts({ tvRemote: androidTvRemoteFact(device) }),
         // The only owner with a live IME status read; dismiss/enter share every other

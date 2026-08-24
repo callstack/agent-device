@@ -47,6 +47,10 @@
       "types": "./src/app-state-runtime.ts",
       "default": "./src/app-state-runtime.ts"
     },
+    "./app-switcher-runtime": {
+      "types": "./src/app-switcher-runtime.ts",
+      "default": "./src/app-switcher-runtime.ts"
+    },
     "./apple-multitouch-support": {
       "types": "./src/apple-multitouch-support.ts",
       "default": "./src/apple-multitouch-support.ts"

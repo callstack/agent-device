@@ -47,11 +47,10 @@ const contract = (path: string, test: string, assertion: string): MacOsPlatformC
   level: 'command-contract',
   owner: { path, test },
 });
-const denial = (path: string, test: string, assertion: string): MacOsPlatformCoverageEntry => ({
-  assertion,
-  level: 'capability-denial',
-  owner: { path, test },
-});
+// No `denial` constructor: R56 moved the last macOS capability-denial row (`app-switcher`) onto
+// owner facts, so no command is denied on this host by a capability declaration any more. The
+// level stays in the entry type because `macOS capability-denial rows match the owning capability
+// matrix` still enforces both sides — today it asserts the denied set is empty.
 const gap = (assertion: string): MacOsPlatformCoverageEntry => ({
   assertion,
   level: 'known-gap',
@@ -112,7 +111,7 @@ export const MACOS_PLATFORM_COVERAGE = {
   ),
   [C.keyboard]: contract(
     'packages/platform-apple/src/runtime.test.ts',
-    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
     'the exact-owner runtime fact rejects keyboard actions on the macOS AppKit desktop leaf',
   ),
   [C.install]: contract(
@@ -205,17 +204,17 @@ export const MACOS_PLATFORM_COVERAGE = {
   ),
   [C.home]: contract(
     'packages/platform-apple/src/runtime.test.ts',
-    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
     'the exact-owner runtime fact rejects mobile Home navigation on the macOS leaf, which drives an already-running app with no springboard',
   ),
   [C.tvRemote]: contract(
     'packages/platform-apple/src/runtime.test.ts',
-    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
     'the exact-owner runtime fact admits TV remote input only for the tvOS leaf, not macOS',
   ),
   [C.orientation]: contract(
     'packages/platform-apple/src/runtime.test.ts',
-    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
     'the exact-owner runtime fact rejects device orientation changes on the macOS leaf',
   ),
   [C.scroll]: live(
@@ -233,10 +232,10 @@ export const MACOS_PLATFORM_COVERAGE = {
     'classifies the %s leaf explicitly',
     'Apple runtime facts reject viewport resizing on the macOS host',
   ),
-  [C.appSwitcher]: denial(
-    'src/platforms/apple/capabilities.ts',
-    'appAndDeviceLifecycle',
-    'macOS capability declarations reject mobile app-switcher navigation',
+  [C.appSwitcher]: contract(
+    'packages/platform-apple/src/runtime.test.ts',
+    'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
+    'the exact-owner runtime fact rejects app-switcher navigation on the macOS host leaf',
   ),
   [C.installFromSource]: contract(
     'packages/platform-apple/src/deployment/runtime.test.ts',

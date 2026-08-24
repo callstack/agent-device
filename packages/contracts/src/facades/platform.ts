@@ -245,6 +245,7 @@ export {
   keyboardStatusUse,
   keyboardDismissUse,
   keyboardEnterUse,
+  appSwitcherRuntimeUse,
   clipboardRuntimePlanUses,
   clipboardReadUse,
   clipboardWriteUse,

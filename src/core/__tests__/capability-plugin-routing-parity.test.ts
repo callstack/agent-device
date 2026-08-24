@@ -100,7 +100,6 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
 // (b.2) Independent copies of the per-command supports()/unsupportedHint()
 // contracts. Kept in sync by hand so this oracle stays independent of production.
 // ---------------------------------------------------------------------------
-const isNotMacOs = (device: DeviceInfo): boolean => !isMacOs(device);
 const isMacOsOrAppleSimulator = (device: DeviceInfo): boolean =>
   isMacOs(device) || device.kind === 'simulator';
 const isIosOs = (device: DeviceInfo): boolean =>
@@ -125,7 +124,6 @@ const coreDeviceOnlyPhysicalOperationHint = (device: DeviceInfo): string | undef
 // gains/loses a closure (or whose closure body changes) breaks parity.
 const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   perf: supportsCoreDevicePhysicalOperation,
-  'app-switcher': isNotMacOs,
   alert: (device) =>
     device.platform === 'android' || isIosOs(device) || isMacOsOrAppleSimulator(device),
   settings: (device) =>
@@ -233,7 +231,7 @@ test('HarmonyOS static capabilities omit runtime-backed command admissions', () 
   // Runtime-backed navigation, keyboard, and touch commands dropped out of the matrix entirely:
   // capability buckets), so they are absent here — not because HarmonyOS admission changed, but
   // because there is no bucket left for `isCommandSupportedOnDevice` to consult at all.
-  assert.deepEqual(availableCommands, ['app-switcher', 'perf', 'settings']);
+  assert.deepEqual(availableCommands, ['perf', 'settings']);
 });
 
 test('(b.2) unsupportedHint closures are verbatim across the full device matrix', () => {

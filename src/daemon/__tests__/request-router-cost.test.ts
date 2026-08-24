@@ -3,11 +3,6 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 
-vi.mock('../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
-});
-
 vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../platforms/apple/core/runner/runner-client.ts')>();
@@ -16,20 +11,22 @@ vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOrigi
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
-import { dispatchCommand } from '../../core/dispatch.ts';
-import { createRequestHandler } from './test-device-runtime-gateway.ts';
+import {
+  createRequestHandler,
+  gestureDeviceRuntimeGateway,
+  gestureRuntimeSpies,
+} from './test-device-runtime-gateway.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
 
-const mockDispatch = vi.mocked(dispatchCommand);
-
-// A representative, structurally rich daemon payload so the parity assertions
-// exercise nested objects/arrays rather than a trivial flat record.
+// A representative, structurally rich owner payload so the parity assertions exercise nested
+// objects/arrays rather than a trivial flat record. `scroll` is the subject because it reaches a
+// bound operation (R53) whose return this file controls, and its daemon leaf spreads that return
+// into `response.data` — which is what the cost graft reads.
 const REPRESENTATIVE_PAYLOAD = {
-  message: 'app-switcher-ok',
   detail: { nested: true, count: 3 },
   items: [1, 2, 3],
 } as const;
@@ -61,6 +58,7 @@ function makeHandler(sessionStore = makeSessionStore('agent-device-router-cost-'
       leaseRegistry: new LeaseRegistry(),
       deviceInventoryGateways: createTestDeviceInventoryGateways(),
       trackDownloadableArtifact: () => 'artifact-id',
+      deviceRuntimeGateway: gestureDeviceRuntimeGateway,
     }),
   };
 }
@@ -69,16 +67,18 @@ function baseRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
   return {
     token: 'test-token',
     session: 'cost-session',
-    command: 'app-switcher',
-    positionals: [],
+    command: 'scroll',
+    positionals: ['down'],
     flags: {},
     ...overrides,
   };
 }
 
 beforeEach(() => {
-  mockDispatch.mockReset();
-  mockDispatch.mockImplementation(async () => ({ ...REPRESENTATIVE_PAYLOAD }));
+  gestureRuntimeSpies.scrollDirection.mockReset();
+  gestureRuntimeSpies.scrollDirection.mockImplementation(async () => ({
+    ...REPRESENTATIVE_PAYLOAD,
+  }));
 });
 
 test('(a) flag-off identity: meta.includeCost absent === no meta at all, byte-identical and no cost', async () => {
@@ -98,7 +98,8 @@ test('(a) flag-off identity: meta.includeCost absent === no meta at all, byte-id
     expect('cost' in (respMetaWithoutCost.data ?? {})).toBe(false);
   }
   if (respNoMeta.ok) {
-    expect(respNoMeta.data).toEqual(REPRESENTATIVE_PAYLOAD);
+    // The owner payload passes through beside scroll's own result fields.
+    expect(respNoMeta.data).toMatchObject(REPRESENTATIVE_PAYLOAD);
   }
 });
 
@@ -133,9 +134,9 @@ test('(c) runnerRoundTrips counts real iOS-runner round-trip diagnostics in scop
   const { sessionStore, handler } = makeHandler();
   sessionStore.set('cost-session', makeIosSession('cost-session'));
 
-  // The mocked dispatch runs inside the request's diagnostics scope, so emitting
-  // here is equivalent to the runner-session emitting these phases per round-trip.
-  mockDispatch.mockImplementation(async () => {
+  // The bound operation runs inside the request's diagnostics scope, so emitting here is
+  // equivalent to the runner-session emitting these phases per round-trip.
+  gestureRuntimeSpies.scrollDirection.mockImplementation(async () => {
     emitDiagnostic({ phase: 'ios_runner_readiness_preflight' }); // real round-trip
     emitDiagnostic({ phase: 'ios_runner_command_send' }); // real round-trip
     emitDiagnostic({ phase: 'ios_runner_command_send' }); // real round-trip
@@ -158,7 +159,7 @@ test('(c2) nodeCount reports the node-tree size whenever data carries a nodes ar
 
   // The nodeCount read is command-agnostic: it triggers on any response.data that
   // carries a `nodes` array (in production only the snapshot node-tree commands
-  // do). We drive it through the generic dispatch path with a node-bearing payload.
+  // do). We drive it through a bound operation returning a node-bearing payload.
   const nodeTreePayload = {
     nodes: [
       { ref: 'e1', type: 'Button', label: 'A' },
@@ -167,7 +168,9 @@ test('(c2) nodeCount reports the node-tree size whenever data carries a nodes ar
     ],
     truncated: false,
   };
-  mockDispatch.mockImplementation(async () => structuredClone(nodeTreePayload));
+  gestureRuntimeSpies.scrollDirection.mockImplementation(async () =>
+    structuredClone(nodeTreePayload),
+  );
 
   const respFlagOff = await handler(baseRequest());
   const respFlagOn = await handler(baseRequest({ meta: { includeCost: true } }));
@@ -181,14 +184,14 @@ test('(c2) nodeCount reports the node-tree size whenever data carries a nodes ar
   // a pure read of the existing `nodes` array, never a mutation of the payload.
   delete respFlagOn.data?.cost;
   expect(respFlagOn.data).toEqual(respFlagOff.data);
-  expect(respFlagOff.data).toEqual(nodeTreePayload);
+  expect(respFlagOff.data).toMatchObject(nodeTreePayload);
 });
 
 test('(d) error path: a failing request with includeCost:true produces NO cost', async () => {
   const { sessionStore, handler } = makeHandler();
   sessionStore.set('cost-session', makeIosSession('cost-session'));
 
-  // Conflicting explicit selector under a reject lock policy fails before dispatch.
+  // Conflicting explicit selector under a reject lock policy fails before the bound execution.
   const failingRequest = baseRequest({
     flags: { udid: 'SIM-999' },
     meta: { lockPolicy: 'reject', includeCost: true },
@@ -208,15 +211,15 @@ test('(d) error path: a failing request with includeCost:true produces NO cost',
 
 test('(e) boundary survival: meta.includeCost survives commandRpcParamsSchema parsing', () => {
   const parsed = commandRpcParamsSchema.parse({
-    command: 'app-switcher',
-    positionals: [],
+    command: 'scroll',
+    positionals: ['down'],
     meta: { includeCost: true },
   });
   expect(parsed.meta?.includeCost).toBe(true);
 
   const parsedOff = commandRpcParamsSchema.parse({
-    command: 'app-switcher',
-    positionals: [],
+    command: 'scroll',
+    positionals: ['down'],
     meta: {},
   });
   expect(parsedOff.meta?.includeCost).toBeUndefined();

@@ -177,6 +177,7 @@ function readinessFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperati
       keyboardEnter: unavailable,
       readClipboard: unavailable,
       writeClipboard: unavailable,
+      appSwitcher: unavailable,
       deployApp: operationAvailability(deployment.deploy),
       materializeAppSource: operationAvailability(deployment.source),
       deployMaterializedApp: operationAvailability(deployment.source),

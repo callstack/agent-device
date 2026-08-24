@@ -3,6 +3,7 @@ import { bindAdmittedProviderInteractorOperations } from '@agent-device/contract
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test } from 'vitest';
 import {
+  limrunAppSwitcherOperationFacts,
   limrunClipboardOperationFacts,
   limrunNavigationOperationFacts,
 } from './interaction-operations.ts';
@@ -71,6 +72,21 @@ test('clipboard follows the same Android-reuse / iOS-refusal split its siblings 
   const stale = limrunClipboardOperationFacts(androidMobileDevice, liveSessionUnavailable);
   expect(stale.readClipboard).toEqual(liveSessionUnavailable);
   expect(stale.writeClipboard).toEqual(liveSessionUnavailable);
+});
+
+// R56: same Android-reuse / iOS-refusal split.
+test('app-switcher rides the Android interactor and is refused on the iOS leg', () => {
+  expect(limrunAppSwitcherOperationFacts(androidMobileDevice).appSwitcher).toEqual({
+    available: true,
+  });
+  expect(limrunAppSwitcherOperationFacts(iosDevice).appSwitcher).toEqual({
+    available: false,
+    reason: 'unsupported-provider-mode',
+    hint: 'Limrun iOS direct sessions do not expose app switcher yet.',
+  });
+  expect(
+    limrunAppSwitcherOperationFacts(androidMobileDevice, liveSessionUnavailable).appSwitcher,
+  ).toEqual(liveSessionUnavailable);
 });
 
 test('the iOS leg admits back/orientation but explicitly refuses home and tv-remote', () => {

@@ -8,6 +8,7 @@ import type { DaemonRequest, SessionState } from './types.ts';
 import { resolveBoundViewportRuntime } from './viewport-runtime.ts';
 import { resolveBoundBackRuntime } from './back-runtime.ts';
 import { resolveBoundHomeRuntime } from './home-runtime.ts';
+import { resolveBoundAppSwitcherRuntime } from './app-switcher-runtime.ts';
 import { resolveBoundOrientationRuntime } from './orientation-runtime.ts';
 import { resolveBoundTvRemoteRuntime } from './tv-remote-runtime.ts';
 
@@ -57,6 +58,12 @@ export async function resolveGenericRuntimeExecution(
       });
     case 'home':
       return await resolveBoundHomeRuntime({
+        device: params.session.device,
+        inspectFacts: params.inspectFacts,
+        bindDevice: params.bindDevice,
+      });
+    case 'app-switcher':
+      return await resolveBoundAppSwitcherRuntime({
         device: params.session.device,
         inspectFacts: params.inspectFacts,
         bindDevice: params.bindDevice,

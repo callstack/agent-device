@@ -140,7 +140,7 @@ export const WEB_PLATFORM_COVERAGE = {
   ),
   [C.clipboard]: contract(
     'packages/platform-web/src/runtime.test.ts',
-    'clipboard never carried a web capability bucket',
+    'clipboard and the app switcher never carried a web capability bucket',
     'the exact-owner runtime fact rejects native clipboard operations on the web target',
   ),
   [C.keyboard]: contract(
@@ -265,7 +265,11 @@ export const WEB_PLATFORM_COVERAGE = {
   ),
   [C.screenshot]: live('screenshot creates a valid 640x480 PNG artifact'),
   [C.viewport]: live('viewport resizes the browser and the PNG reports 640x480 dimensions'),
-  [C.appSwitcher]: denial('Web capability model rejects native app switcher navigation'),
+  [C.appSwitcher]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'clipboard and the app switcher never carried a web capability bucket',
+    'the exact-owner runtime fact rejects native app-switcher navigation on the web target',
+  ),
   [C.installFromSource]: contract(
     'packages/platform-web/src/runtime.test.ts',
     'install-from-source reports the runtime-owned unavailable materialize and deploy facts',

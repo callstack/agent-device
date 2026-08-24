@@ -115,7 +115,7 @@ export const TVOS_PLATFORM_COVERAGE = {
   [C.clipboard]: gap('No tvOS-specific clipboard command evidence exists yet'),
   [C.keyboard]: contract(
     'packages/platform-apple/src/runtime.test.ts',
-    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
     'the exact-owner runtime fact rejects keyboard input on the tvOS focus-only leaf',
   ),
   [C.install]: contract(
@@ -184,12 +184,12 @@ export const TVOS_PLATFORM_COVERAGE = {
   ),
   [C.tvRemote]: contract(
     'packages/platform-apple/src/runtime.test.ts',
-    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
     'the exact-owner runtime fact admits tv-remote for the tvOS leaf, which drives navigation through XCUIRemote presses',
   ),
   [C.orientation]: contract(
     'packages/platform-apple/src/runtime.test.ts',
-    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
     'the exact-owner runtime fact rejects device orientation changes on the tvOS leaf',
   ),
   [C.scroll]: contract(

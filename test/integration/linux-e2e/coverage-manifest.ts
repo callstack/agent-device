@@ -264,9 +264,10 @@ export const LINUX_PLATFORM_COVERAGE = {
     LINUX_RUNTIME_EVIDENCE.test,
     'Linux runtime facts explicitly report viewport changes unavailable',
   ),
-  [C.appSwitcher]: denial(
-    'app-switcher',
-    'Linux capability declaration rejects native app-switcher navigation',
+  [C.appSwitcher]: contract(
+    LINUX_RUNTIME_EVIDENCE.path,
+    LINUX_RUNTIME_EVIDENCE.test,
+    'the exact-owner runtime fact rejects native app-switcher navigation on Linux',
   ),
   [C.installFromSource]: gap('No Linux-specific source-install command evidence exists yet'),
 } satisfies Record<PublicCommand, LinuxPlatformCoverageEntry>;

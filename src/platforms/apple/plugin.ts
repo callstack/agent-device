@@ -20,14 +20,6 @@ import type { RunnerContext } from '@agent-device/contracts/interaction';
 // the full {command x sample-device} matrix (iOS/iPadOS/tvOS/macOS/visionOS).
 // ---------------------------------------------------------------------------
 
-// `home`/`app-switcher`
-// (was `!isMacOs(device)`). Off Apple (caps undefined) the original was
-// always true — no non-Apple platform is macOS.
-const supportsAppAndDeviceLifecycle = (device: DeviceInfo): boolean => {
-  const caps = appleOsCapabilities(device);
-  return caps ? caps.appAndDeviceLifecycle : true;
-};
-
 const supportsCoreDevicePhysicalOperation = (device: DeviceInfo): boolean =>
   device.platform !== 'apple' ||
   device.kind !== 'device' ||
@@ -55,7 +47,6 @@ const supportsAlertSurface = (device: DeviceInfo): boolean =>
 // the command-descriptor registry (a command absent here has no Apple gate).
 const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean> = {
   [PUBLIC_COMMANDS.perf]: supportsCoreDevicePhysicalOperation,
-  [PUBLIC_COMMANDS.appSwitcher]: supportsAppAndDeviceLifecycle,
   [PUBLIC_COMMANDS.alert]: supportsAlertSurface,
   [PUBLIC_COMMANDS.settings]: (device) =>
     device.platform === 'android' || supportsHostOrSimulatorSurface(device),

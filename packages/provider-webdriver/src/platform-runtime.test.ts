@@ -259,6 +259,7 @@ test('captures through only the active exact WebDriver interactor', async () => 
     'setOrientation',
     'readClipboard',
     'writeClipboard',
+    'appSwitcher',
   ] as const) {
     expect(binding.facts.operations[operation]).toEqual({ available: true });
     expect(binding.operations[operation]).toBeTypeOf('function');
@@ -324,6 +325,7 @@ test.each([
   expect(facts.operations.setOrientation.available).toBe(state.isSessionActive());
   expect(facts.operations.readClipboard.available).toBe(state.isSessionActive());
   expect(facts.operations.writeClipboard.available).toBe(state.isSessionActive());
+  expect(facts.operations.appSwitcher.available).toBe(state.isSessionActive());
   for (const operation of [
     'tvRemote',
     'keyboardStatus',

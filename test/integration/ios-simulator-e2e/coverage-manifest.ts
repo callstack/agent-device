@@ -185,7 +185,7 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
   ),
   [C.tvRemote]: contract(
     'packages/platform-apple/src/runtime.test.ts',
-    'classifies back/home/orientation/tv-remote/keyboard facts for the %s leaf',
+    'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
     'tv-remote admission is owned by its exact-owner runtime fact: available only for the tvOS leaf, not the iOS mobile simulator',
   ),
   [C.type]: live(

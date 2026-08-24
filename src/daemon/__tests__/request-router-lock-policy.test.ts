@@ -20,7 +20,11 @@ vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOrigi
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 import { dispatchCommand } from '../../core/dispatch.ts';
-import { createRequestHandler } from './test-device-runtime-gateway.ts';
+import {
+  createRequestHandler,
+  lifecycleDeviceRuntimeGateway,
+  systemRuntimeSpies,
+} from './test-device-runtime-gateway.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 import type { SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
@@ -503,17 +507,14 @@ test('batch steps cannot bypass reject lock policy on nested direct requests', a
 test('direct daemon requests apply strip lock policy for existing sessions before dispatch', async () => {
   const sessionStore = makeSessionStore('agent-device-router-lock-');
   sessionStore.set('qa-ios', makeIosSession('qa-ios'));
-  let dispatchCalls = 0;
-  mockDispatch.mockImplementation(async () => {
-    dispatchCalls += 1;
-    return {};
-  });
+  systemRuntimeSpies.appSwitcher.mockClear();
 
   const handler = createRequestHandler({
     logPath: path.join(os.tmpdir(), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
@@ -532,7 +533,7 @@ test('direct daemon requests apply strip lock policy for existing sessions befor
     },
   });
 
-  expect(dispatchCalls).toBe(1);
+  expect(systemRuntimeSpies.appSwitcher).toHaveBeenCalledTimes(1);
   expect(response.ok).toBe(true);
   const action = sessionStore.get('qa-ios')?.actions.at(-1);
   expect(action?.flags.platform).toBe('ios');
@@ -587,17 +588,14 @@ test('batch preserves tenant-scoped session names across nested requests', async
     tenantId: 'tenant-a',
     runId: 'run-1',
   });
-  let dispatchCalls = 0;
-  mockDispatch.mockImplementation(async () => {
-    dispatchCalls += 1;
-    return {};
-  });
+  systemRuntimeSpies.appSwitcher.mockClear();
 
   const handler = createRequestHandler({
     logPath: path.join(os.tmpdir(), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry,
+    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
@@ -619,6 +617,6 @@ test('batch preserves tenant-scoped session names across nested requests', async
   });
 
   expect(response.ok).toBe(true);
-  expect(dispatchCalls).toBe(1);
+  expect(systemRuntimeSpies.appSwitcher).toHaveBeenCalledTimes(1);
   expect(sessionStore.get('tenant-a:default')?.actions.at(-1)?.command).toBe('app-switcher');
 });

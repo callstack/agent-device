@@ -48,6 +48,7 @@ const UNROUTED_PUBLIC_COMMANDS = new Set<string>([PUBLIC_COMMANDS.installFromSou
 const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.appState,
   PUBLIC_COMMANDS.apps,
+  PUBLIC_COMMANDS.appSwitcher,
   PUBLIC_COMMANDS.artifacts,
   PUBLIC_COMMANDS.back,
   PUBLIC_COMMANDS.batch,
@@ -232,6 +233,9 @@ test('generic route commands that reach platform dispatch declare the dispatch f
     PUBLIC_COMMANDS.home,
     PUBLIC_COMMANDS.orientation,
     PUBLIC_COMMANDS.tvRemote,
+    // R56 retired app-switcher's dispatch leaf with its capability bucket: the bound
+    // `appSwitcher` operation is its only execution.
+    PUBLIC_COMMANDS.appSwitcher,
   ]);
 
   for (const descriptor of commandDescriptors) {

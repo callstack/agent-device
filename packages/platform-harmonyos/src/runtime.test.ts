@@ -82,7 +82,15 @@ test.each([
   expect(binding.operations.focusPoint).toBeTypeOf('function');
   expect(binding.operations.typeText).toBeTypeOf('function');
   // back/home/keyboard dismiss+enter share focus's hdc-driven gate on both real kinds.
-  for (const operation of ['back', 'home', 'keyboardDismiss', 'keyboardEnter'] as const) {
+  for (const operation of [
+    'back',
+    'home',
+    // R56 parity: the retired `HARMONYOS_SUPPORTED_COMMANDS` overlay listed `app-switcher` for
+    // both HarmonyOS kinds, and it rides the same hdc key input `home` does.
+    'appSwitcher',
+    'keyboardDismiss',
+    'keyboardEnter',
+  ] as const) {
     expect(facts.operations[operation]).toEqual({ available: true });
     expect(binding.operations[operation]).toBeTypeOf('function');
   }
@@ -161,6 +169,7 @@ test('rejects the non-discovered HarmonyOS simulator cell for appstate', async (
     'keyboardEnter',
     'readClipboard',
     'writeClipboard',
+    'appSwitcher',
   ] as const) {
     expect(binding.facts.operations[operation].available).toBe(false);
     expect(binding.operations[operation]).toBeUndefined();

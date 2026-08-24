@@ -201,6 +201,9 @@ function expectLinuxNavigationAndKeyboardFacts(
     'keyboardStatus',
     'keyboardDismiss',
     'keyboardEnter',
+    // R56: the Linux interactor's own `appSwitcher` throws, and the retired descriptor declared
+    // `linux: {}`, so no Linux cell was ever admitted.
+    'appSwitcher',
   ] as const) {
     expect(binding.facts.operations[operation]).toEqual({
       available: false,

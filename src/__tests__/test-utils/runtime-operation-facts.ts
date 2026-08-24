@@ -64,6 +64,7 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   keyboardEnter: unavailable,
   readClipboard: unavailable,
   writeClipboard: unavailable,
+  appSwitcher: unavailable,
 });
 
 /** Default facts for tests that are unrelated to application lifecycle commands. */

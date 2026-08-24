@@ -293,7 +293,7 @@ test('admits Android tv-remote only for a real TV target', async () => {
 // Android admission closure, so `cmd clipboard get/set text` is admitted on every real kind and
 // refused only on the synthetic `simulator` row the bucket never listed. (`unknown` is the
 // bucket's name for a device with no declared kind, which `DeviceKind` cannot express.)
-test('admits both clipboard halves on every real Android kind', async () => {
+test('admits both clipboard halves and the app switcher on every real Android kind', async () => {
   for (const kind of ['emulator', 'device'] as const) {
     const binding = await createAndroidPlatformRuntime(androidNavigationHostFixture()).bind({
       device: { ...device, id: `android-${kind}`, kind },
@@ -308,6 +308,9 @@ test('admits both clipboard halves on every real Android kind', async () => {
     expect(binding.facts.operations.writeClipboard).toEqual({ available: true });
     expect(binding.operations.readClipboard).toBeTypeOf('function');
     expect(binding.operations.writeClipboard).toBeTypeOf('function');
+    // R56: `app-switcher` shares `home`'s cell — one `input keyevent` on every real kind.
+    expect(binding.facts.operations.appSwitcher).toEqual({ available: true });
+    expect(binding.operations.appSwitcher).toBeTypeOf('function');
   }
 });
 
@@ -334,6 +337,7 @@ test('the synthetic Android simulator cell refuses back/home/orientation/keyboar
     'keyboardEnter',
     'readClipboard',
     'writeClipboard',
+    'appSwitcher',
   ] as const) {
     expect(facts.operations[operation].available).toBe(false);
     expect(binding.operations[operation]).toBeUndefined();

@@ -24,6 +24,7 @@ import {
 } from '@agent-device/contracts/scroll-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
@@ -208,6 +209,17 @@ const clipboardUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'This WebDriver provider runtime does not expose clipboard access for this device.',
+} as const);
+
+/**
+ * `appSwitcher` calls `requireSupport('appSwitcher')` inside the interactor, so a provider whose
+ * declared capability map refuses the button still refuses at call time. This cell states the
+ * seam the same way `back`/`home` do: whether this runtime has a reachable interactor to ask.
+ */
+const appSwitcherUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'This WebDriver provider runtime does not expose the app switcher for this device.',
 } as const);
 
 const appStateUnavailable = Object.freeze({
@@ -436,6 +448,7 @@ function webDriverFacts(
       keyboardEnter: inactiveSession,
       readClipboard: inactiveSession,
       writeClipboard: inactiveSession,
+      appSwitcher: inactiveSession,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: inactiveSession,
         prepareApplicationOpen: inactiveSession,
@@ -472,6 +485,7 @@ function webDriverFacts(
     keyboardEnter: keyboardUnavailable,
     readClipboard: clipboardUnavailable,
     writeClipboard: clipboardUnavailable,
+    appSwitcher: appSwitcherUnavailable,
     lifecycle: webDriverLifecycleFacts(device),
   });
   // Both capture cells need the same reachability: an interactor this provider can drive, on a
@@ -541,6 +555,9 @@ function webDriverFacts(
       ...clipboardRuntimeOperationFacts({
         read: interactorCell(reachable, clipboardUnavailable),
         write: interactorCell(reachable, clipboardUnavailable),
+      }),
+      ...appSwitcherRuntimeOperationFacts({
+        appSwitcher: interactorCell(reachable, appSwitcherUnavailable),
       }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       ensureReady: available,

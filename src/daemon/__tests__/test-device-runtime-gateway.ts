@@ -77,6 +77,7 @@ async function lifecycleBindingForTest(device: DeviceInfo) {
         listApps: unavailable,
         ...lifecycleFacts,
         ...admittedGestureFamilyFacts,
+        ...admittedSystemFamilyFacts,
       },
     },
     operations: {
@@ -87,6 +88,9 @@ async function lifecycleBindingForTest(device: DeviceInfo) {
       // The gesture family rides along: replay flows drive `scroll`/`swipe` through this gateway,
       // and R52/R53 put them on bound operations rather than the mocked dispatcher.
       ...gestureRuntimeSpies,
+      // Same reason for the Wave 6 system leaves: R56 put `app-switcher` on a bound operation,
+      // so router/replay flows that drive it no longer reach the mocked dispatcher either.
+      ...systemRuntimeSpies,
     },
     [Symbol.asyncDispose]: async () => {},
   };
@@ -167,6 +171,12 @@ const admittedGestureFamilyFacts = Object.freeze({
   gestureViewport: available,
   scrollDirection: available,
 });
+
+const admittedSystemFamilyFacts = Object.freeze({ appSwitcher: available });
+
+export const systemRuntimeSpies = {
+  appSwitcher: vi.fn(async () => undefined),
+};
 
 export const gestureRuntimeSpies = {
   captureSnapshot: vi.fn(async () => ({

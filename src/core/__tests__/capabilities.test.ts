@@ -222,9 +222,11 @@ test('macOS supports the Apple runner interaction core but excludes mobile-only 
     ],
     [{ device: macOsDevice, expected: true, label: 'on macOS' }],
   );
+  // R56 moved `app-switcher` off this matrix onto the Apple owner's springboard fact, which is
+  // where the macOS refusal now lives (`platform-apple/src/runtime.test.ts` pins that cell).
   assertCommandSupport(
     ['app-switcher'],
-    [{ device: macOsDevice, expected: false, label: 'on macOS' }],
+    [{ device: macOsDevice, expected: true, label: 'through runtime admission on macOS' }],
   );
 });
 
@@ -280,7 +282,7 @@ test('Linux supports desktop interaction commands and blocks mobile/unsupported 
     [{ device: linuxDevice, expected: true, label: 'on Linux' }],
   );
   assertCommandSupport(
-    ['alert', 'app-switcher', 'perf', 'settings', 'trigger-app-event'],
+    ['alert', 'perf', 'settings', 'trigger-app-event'],
     [{ device: linuxDevice, expected: false, label: 'on Linux' }],
   );
 });
@@ -299,6 +301,7 @@ test('web supports only the initial browser interaction slice', () => {
       // capability-matrix row, and a command with no row is not decided by this matrix at all.
       // The web owner refuses every gesture tier and both clipboard halves —
       // `platform-web/src/runtime.test.ts` is where those cells are pinned.
+      'app-switcher',
       'clipboard',
       'gesture',
       'get',
@@ -315,7 +318,7 @@ test('web supports only the initial browser interaction slice', () => {
     [{ device: webDevice, expected: true, label: 'on web' }],
   );
   assertCommandSupport(
-    ['alert', 'app-switcher', 'perf', 'settings', 'trigger-app-event'],
+    ['alert', 'perf', 'settings', 'trigger-app-event'],
     [{ device: webDevice, expected: false, label: 'on web' }],
   );
   assertCommandSupport(

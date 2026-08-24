@@ -25,6 +25,7 @@ import { orientationRuntimeOperationFacts } from './orientation-runtime.ts';
 import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
 import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
 import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
+import { appSwitcherRuntimeOperationFacts } from './app-switcher-runtime.ts';
 import { touchRuntimeOperationFacts } from './touch-runtime.ts';
 
 /**
@@ -56,6 +57,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   keyboardEnter: RuntimeOperationUnavailability;
   readClipboard: RuntimeOperationUnavailability;
   writeClipboard: RuntimeOperationUnavailability;
+  appSwitcher: RuntimeOperationUnavailability;
   readiness?: RuntimeOperationUnavailability;
   shutdown?: RuntimeOperationUnavailability;
   lifecycle: ApplicationLifecycleOperationFacts;
@@ -114,6 +116,7 @@ export function createUnavailablePlatformRuntimeFacts(
     keyboardEnter,
     readClipboard,
     writeClipboard,
+    appSwitcher,
     readiness,
     shutdown,
     lifecycle,
@@ -184,6 +187,7 @@ export function createUnavailablePlatformRuntimeFacts(
         enter: keyboardEnter,
       }),
       ...clipboardRuntimeOperationFacts({ read: readClipboard, write: writeClipboard }),
+      ...appSwitcherRuntimeOperationFacts({ appSwitcher }),
       ensureReady: readiness,
       bootTarget: readiness,
       bootTargetHeadless: readiness,
@@ -236,6 +240,9 @@ function freezeUnavailableFacts(
     // and write can diverge on a provider whose extension exposes only one half.
     readClipboard: Object.freeze({ ...unavailable.readClipboard }),
     writeClipboard: Object.freeze({ ...unavailable.writeClipboard }),
+    // The app switcher is the springboard surface `home` drives, and differs by owner the same
+    // way: an owner states it for its exact leaf rather than inheriting a sibling's gap.
+    appSwitcher: Object.freeze({ ...unavailable.appSwitcher }),
     lifecycle: applicationLifecycleOperationFacts(unavailable.lifecycle),
   });
 }

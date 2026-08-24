@@ -118,10 +118,6 @@ type DispatchHandler = (args: DispatchHandlerArgs) => Promise<Record<string, unk
 const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
   'trigger-app-event': ({ device, interactor, positionals, context }) =>
     handleTriggerAppEventCommand(device, interactor, positionals, context),
-  'app-switcher': async ({ interactor }) => {
-    await interactor.appSwitcher();
-    return { action: 'app-switcher', ...successText('Opened app switcher') };
-  },
   settings: ({ device, interactor, positionals, context }) =>
     handleSettingsCommand(device, interactor, positionals, context),
 };

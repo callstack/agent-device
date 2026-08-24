@@ -38,6 +38,7 @@ import {
   gestureRuntimePlanUses,
   homeRuntimeUse,
   hoverRuntimeUses,
+  appSwitcherRuntimeUse,
   clipboardRuntimePlanUses,
   keyboardRuntimePlanUses,
   longPressRuntimeUses,
@@ -1367,6 +1368,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'appSwitcher' },
     frameworkTier: 'extended',
+    // R56 retires this command's capability bucket, its `dispatch` leaf, and its HarmonyOS
+    // overlay membership together: admission is the owner's `appSwitcher` fact, and the only
+    // execution is that one bound operation (ADR 0019 §9).
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     // ADR 0014: app-switcher previously reached the generic daemon leaf via the
@@ -1375,15 +1379,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // covered by the completeness gate; this is the escape hatch the ADR calls
     // out, not a new specialized route.
     daemon: { route: 'generic', refFrameEffect: 'may-invalidate' },
-    dispatch: {},
-    capability: {
-      apple: APPLE_SIM_AND_DEVICE,
-      android: ANDROID_ALL,
-      linux: LINUX_NONE,
-    },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: [appSwitcherRuntimeUse] },
   },
   {
     name: 'install-from-source',

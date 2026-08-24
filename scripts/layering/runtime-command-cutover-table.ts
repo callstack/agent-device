@@ -30,7 +30,7 @@ import { retiredDispatchProjectionViolations } from './runtime-command-cutover-d
  * leaves follow: back at R42, home at R43, orientation at R44, tv-remote at R45, and the
  * action-selected keyboard at R46.
  * The gesture cluster follows the touch leaves: gesture at R52, scroll at R53, swipe at R54.
- * Wave 6 closure starts at R55 clipboard.
+ * Wave 6 closure starts at R55 clipboard, then R56 app-switcher.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -1108,7 +1108,39 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
     },
     extensions: [clipboardRetiredDispatchProjectionProof],
   },
+  {
+    rule: 'R56 app-switcher-runtime-cutover',
+    command: 'app-switcher',
+    subject: 'app switcher reveal',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The dispatch-table arm; `app-switcher` had no dedicated named handler function to retire
+      // (its legacy body lived inline in the `DISPATCH_HANDLERS` literal). It also leaves the
+      // HarmonyOS overlay that granted it a capability bucket the descriptor never listed.
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
+    },
+    admissionMember: {
+      forms: ['computed-property'],
+      files: ['src/platforms/apple/plugin.ts'],
+      message: 'Apple plugin retains a legacy app-switcher support or hint closure',
+    },
+    runtimeTypeNames: ['AppSwitcherRuntimeOperations'],
+    operations: { names: ['appSwitcher'] },
+    singularExecution: {
+      routes: ['dispatchGenericCommand'],
+      operations: ['appSwitcher'],
+      operationOwners: { appSwitcher: ['executeAppSwitcher'] },
+    },
+    extensions: [appSwitcherRetiredDispatchProjectionProof],
+  },
 ];
+
+function appSwitcherRetiredDispatchProjectionProof(
+  sources: ReadonlyMap<string, string>,
+): UnruledViolation[] {
+  return retiredDispatchProjectionViolations(sources, 'app-switcher');
+}
 
 function clipboardRetiredDispatchProjectionProof(
   sources: ReadonlyMap<string, string>,

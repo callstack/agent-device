@@ -22,6 +22,7 @@ import { dispatchApplicationLifecycleEffect } from './application-lifecycle-runt
 import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
+  systemRuntimeSpies,
 } from './test-device-runtime-gateway.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
@@ -87,6 +88,8 @@ function request(command: string, overrides: Partial<DaemonRequest> = {}): Daemo
 
 beforeEach(() => {
   mockDispatch.mockReset();
+  systemRuntimeSpies.appSwitcher.mockReset();
+  systemRuntimeSpies.appSwitcher.mockResolvedValue(undefined);
   mockLifecycleEffect.mockReset();
   mockLifecycleEffect.mockResolvedValue(undefined);
 });
@@ -100,23 +103,41 @@ test('retriableForErrorCode is a conservative policy: transient => true, others 
 
 test('UNSUPPORTED_OPERATION errors carry supportedOn derived from the capability matrix', async () => {
   const { sessionStore, handler } = makeHandler();
-  sessionStore.set('typed-error', makeIosSession('typed-error'));
-  mockDispatch.mockRejectedValue(new AppError('UNSUPPORTED_OPERATION', 'nope on this platform'));
+  // `perf` is the subject because the graft reads the CAPABILITY MATRIX, and perf is the command
+  // that still has a row there: its migration is Wave 2, sequenced behind the next major. Its
+  // xctrace collector refuses a non-Apple session in production, so no mocking is needed to reach
+  // a real UNSUPPORTED_OPERATION.
+  sessionStore.set(
+    'typed-error',
+    makeSession('typed-error', {
+      ...TENANT_SESSION_DEFAULTS,
+      device: {
+        platform: 'linux',
+        id: 'local',
+        name: 'Linux Desktop',
+        kind: 'device',
+        target: 'desktop',
+        booted: true,
+      },
+    }),
+  );
 
-  // `app-switcher` routes through the (mocked) generic dispatch and is platform-restricted.
-  const response = await handler(request('app-switcher'));
+  const response = await handler(request('perf', { positionals: ['trace', 'start', 'xctrace'] }));
 
   expect(response.ok).toBe(false);
   if (response.ok) return;
-  const expected = supportedPlatformsForCommand('app-switcher');
-  expect(expected.length).toBeGreaterThan(0); // app-switcher is a platform-restricted command
+  expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
+  const expected = supportedPlatformsForCommand('perf');
+  expect(expected.length).toBeGreaterThan(0); // perf is a platform-restricted command
   expect(response.error.supportedOn).toBe(expected.join(', '));
 });
 
 test('DEVICE_IN_USE errors are flagged retriable; supportedOn stays absent', async () => {
   const { sessionStore, handler } = makeHandler();
   sessionStore.set('typed-error', makeIosSession('typed-error'));
-  mockDispatch.mockRejectedValue(new AppError('DEVICE_IN_USE', 'device busy'));
+  // R56 put `app-switcher` on a bound operation, so the failure is raised where the device work
+  // happens rather than by the retired dispatcher.
+  systemRuntimeSpies.appSwitcher.mockRejectedValue(new AppError('DEVICE_IN_USE', 'device busy'));
 
   const response = await handler(request('app-switcher'));
 
