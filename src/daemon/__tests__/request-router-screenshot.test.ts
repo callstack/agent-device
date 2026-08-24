@@ -16,7 +16,7 @@ vi.mock('../../platforms/android/window-state.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/android/window-state.ts')>();
   return {
     ...actual,
-    getAndroidBlockingDialogFocus: vi.fn(async () => null),
+    getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
   };
 });
 

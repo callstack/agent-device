@@ -44,7 +44,7 @@ vi.mock('../../../platforms/android/window-state.ts', async (importOriginal) => 
   return {
     ...actual,
     getAndroidAppState: vi.fn(async () => ({})),
-    getAndroidBlockingDialogFocus: vi.fn(async () => null),
+    getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
   };
 });
 
@@ -68,17 +68,17 @@ import { dispatchCommand } from '../../../core/dispatch.ts';
 const mockDispatch = vi.mocked(dispatchCommand);
 import {
   getAndroidAppState,
-  getAndroidBlockingDialogFocus,
+  getAndroidBlockingDialogObservation,
 } from '../../../platforms/android/window-state.ts';
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
-const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
+const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
 beforeEach(() => {
   mockDispatch.mockReset();
   mockDispatch.mockResolvedValue({});
   mockGetAndroidAppState.mockReset();
   mockGetAndroidAppState.mockResolvedValue({});
-  mockGetAndroidBlockingDialogFocus.mockReset();
-  mockGetAndroidBlockingDialogFocus.mockResolvedValue(null);
+  mockGetAndroidBlockingDialogObservation.mockReset();
+  mockGetAndroidBlockingDialogObservation.mockResolvedValue({ status: 'clear' });
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
   resetGetRuntimeFixture();

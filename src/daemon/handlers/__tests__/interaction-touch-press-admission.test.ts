@@ -41,7 +41,7 @@ vi.mock('../../../platforms/android/window-state.ts', async (importOriginal) => 
   return {
     ...actual,
     getAndroidAppState: vi.fn(async () => ({})),
-    getAndroidBlockingDialogFocus: vi.fn(async () => null),
+    getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
   };
 });
 
@@ -57,12 +57,12 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
 
 import {
   getAndroidAppState,
-  getAndroidBlockingDialogFocus,
+  getAndroidBlockingDialogObservation,
 } from '../../../platforms/android/window-state.ts';
 import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
-const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
+const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
@@ -70,8 +70,8 @@ beforeEach(() => {
   resetGetRuntimeFixture();
   mockGetAndroidAppState.mockReset();
   mockGetAndroidAppState.mockResolvedValue({});
-  mockGetAndroidBlockingDialogFocus.mockReset();
-  mockGetAndroidBlockingDialogFocus.mockResolvedValue(null);
+  mockGetAndroidBlockingDialogObservation.mockReset();
+  mockGetAndroidBlockingDialogObservation.mockResolvedValue({ status: 'clear' });
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();

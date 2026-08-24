@@ -34,7 +34,8 @@ test('a run of taps on a clear screen costs one window dump per tap', async () =
     },
   );
 
-  // Tap 1: pre-check (no prior observation) + post-check. Taps 2 and 3: post-check only, because
-  // the previous tap's post-check already observed the device and nothing has mutated it since.
-  expect(dumps).toBe(4);
+  // Two checks per tap, one dump each: the focused-window line answers the question, so the
+  // second `dumpsys` variant never runs on a clear screen. Neither check may be skipped — a dialog
+  // surfaces with no adb traffic at all, so the previous check is evidence about nothing.
+  expect(dumps).toBe(6);
 });

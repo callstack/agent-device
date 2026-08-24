@@ -10,7 +10,7 @@ vi.mock('../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/android/app-lifecycle.ts')>();
   return {
     ...actual,
-    getAndroidBlockingDialogFocus: vi.fn(async () => null),
+    getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
   };
 });
 

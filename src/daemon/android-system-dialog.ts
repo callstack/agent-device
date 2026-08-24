@@ -3,12 +3,8 @@ import type { AndroidBlockingDialogFocus } from '../platforms/android/app-parser
 import {
   createAndroidWindowDumpReader,
   getAndroidAppState,
-  getAndroidBlockingDialogFocus,
+  getAndroidBlockingDialogObservation,
 } from '../platforms/android/window-state.ts';
-import {
-  isAndroidDialogReadinessObserved,
-  recordAndroidDialogReadinessObservation,
-} from './android-dialog-readiness-observation.ts';
 import { snapshotAndroid } from '../platforms/android/snapshot.ts';
 import { androidSnapshotPublicationInput } from '../platforms/android/snapshot-capture.ts';
 import { runAndroidAdb } from '../platforms/android/adb.ts';
@@ -163,15 +159,27 @@ export async function ensureAndroidBlockingSystemDialogReady(params: {
 }): Promise<AndroidBlockingDialogReadinessResult> {
   const { session, command } = params;
   if (session.device.platform !== 'android') return { status: 'clear' };
-  if (params.phase === 'before-command' && isAndroidDialogReadinessObserved(session)) {
-    return { status: 'clear' };
-  }
 
-  const focus = await getAndroidBlockingDialogFocus(session.device);
-  if (!focus) {
-    if (params.phase === 'after-command') recordAndroidDialogReadinessObservation(session);
+  const observation = await getAndroidBlockingDialogObservation(session.device);
+  if (observation.status !== 'dialog') {
+    // "No variant printed the focused window" is not "the device is clear". The command still
+    // proceeds — a failed probe has never been a refusal — but the miss is recorded as a miss so
+    // it can never be mistaken for evidence about this device.
+    if (observation.status === 'unknown') {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'android_blocking_dialog_unobserved',
+        data: {
+          session: session.name,
+          deviceId: session.device.id,
+          command,
+          commandPhase: params.phase,
+        },
+      });
+    }
     return { status: 'clear' };
   }
+  const focus = observation.focus;
 
   if (isSessionAppAnr(session, focus)) {
     const recovered = await recoverAppOwnedAndroidBlockingSystemDialogSafely(session);
@@ -397,11 +405,9 @@ async function isAndroidAppFocused(
   options: { requireNoBlockingDialog?: boolean },
 ): Promise<boolean> {
   const readWindowDump = createAndroidWindowDumpReader(session.device);
-  if (
-    options.requireNoBlockingDialog &&
-    (await getAndroidBlockingDialogFocus(session.device, readWindowDump))
-  ) {
-    return false;
+  if (options.requireNoBlockingDialog) {
+    const observation = await getAndroidBlockingDialogObservation(session.device, readWindowDump);
+    if (observation.status === 'dialog') return false;
   }
   const state = await getAndroidAppState(session.device, readWindowDump);
   return state.package === appBundleId;
