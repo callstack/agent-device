@@ -36,12 +36,6 @@ vi.mock('../snapshot-interactor-capture.ts', () => ({
 
 beforeEach(() => resetGetRuntimeFixture());
 
-vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
-  return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
-});
-
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   getAndroidAppState,
@@ -262,7 +256,6 @@ test('click simple iOS id selector rejects distinct runtime candidates after amb
     expect(typeof response.error.details?.refsGeneration).toBe('number');
   }
 });
->>>>>>> 23597c6ca (perf(android): answer every window question from one dumpsys read)
 
 test.each([
   ['ELEMENT_NOT_FOUND', 'element not found'],
