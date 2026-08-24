@@ -181,6 +181,7 @@ test('a normalized nested failure preserves typed recovery signals on REPLAY_DIV
         message: 'The device is temporarily leased.',
         retriable: true,
         supportedOn: 'ios',
+        details: { recovery: 'runner_recycle_budget_exhausted' },
       },
     }),
   });
@@ -190,6 +191,7 @@ test('a normalized nested failure preserves typed recovery signals on REPLAY_DIV
   expect(response.error.code).toBe('REPLAY_DIVERGENCE');
   expect(response.error.retriable).toBe(true);
   expect(response.error.supportedOn).toBe('ios');
+  expect(response.error.details?.recovery).toBe('runner_recycle_budget_exhausted');
 });
 
 test('a failing replay step captures an available screen digest with blessed refs', async () => {

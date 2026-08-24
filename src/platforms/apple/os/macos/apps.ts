@@ -2,6 +2,7 @@ import type { AppsFilter } from '@agent-device/contracts/device';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { parseAppearanceAction } from '../../../appearance.ts';
 import {
   createAppResolutionCache,
@@ -16,6 +17,8 @@ const MACOS_ALIASES: Record<string, string> = {
 };
 
 const MACOS_BUNDLE_ID_PATTERN = /^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/;
+const MACOS_APP_TERMINATION_POLL_MS = 100;
+const MACOS_APP_TERMINATION_MAX_ATTEMPTS = 20;
 
 // macOS currently has no install/uninstall flow; add cache invalidation if that changes.
 const MACOS_APP_RESOLUTION_CACHE_SCOPE = {
@@ -81,13 +84,24 @@ export async function openMacOsApp(
 
 export async function closeMacOsApp(_device: DeviceInfo, app: string): Promise<void> {
   const bundleId = await resolveMacOsApp(app);
-  const result = await quitMacOsApp(bundleId);
-  if (!result.running || result.terminated || result.forceTerminated) return;
-  throw new AppError('COMMAND_FAILED', `Failed to close macOS app ${app}`, {
+  const request = await quitMacOsApp(bundleId);
+  if (!request.running) return;
+  if (!request.terminated && !request.forceTerminated) {
+    throw new AppError('COMMAND_FAILED', `Failed to close macOS app ${app}`, {
+      bundleId,
+      running: request.running,
+      terminated: request.terminated,
+      forceTerminated: request.forceTerminated,
+    });
+  }
+  for (let attempt = 1; attempt < MACOS_APP_TERMINATION_MAX_ATTEMPTS; attempt += 1) {
+    await sleep(MACOS_APP_TERMINATION_POLL_MS);
+    if (!(await quitMacOsApp(bundleId)).running) return;
+  }
+  throw new AppError('COMMAND_FAILED', `Timed out waiting for macOS app ${app} to close`, {
+    reason: 'MACOS_APP_TERMINATION_TIMEOUT',
     bundleId,
-    running: result.running,
-    terminated: result.terminated,
-    forceTerminated: result.forceTerminated,
+    attempts: MACOS_APP_TERMINATION_MAX_ATTEMPTS,
   });
 }
 

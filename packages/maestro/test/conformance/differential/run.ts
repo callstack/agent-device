@@ -18,7 +18,7 @@ import {
   type DivergenceSignature,
 } from './scenarios.ts';
 import { type InvariantResult, evaluateInvariants, readTrace } from './invariants.ts';
-import { type EngineResult, runAgentDeviceEngine, runEngine } from './engine-process.ts';
+import { type EngineResult, runAgentDeviceEngine, runMaestroEngine } from './engine-process.ts';
 import {
   printDryRun,
   printRunSummary,
@@ -164,10 +164,10 @@ function runScenario(scenario: DifferentialScenario, options: RunnerOptions): Sc
   const flowPath = path.join(CONFORMANCE_DIR, scenario.flow);
   const platformArgs = options.platform ? ['--platform', options.platform] : [];
 
-  const maestro = runEngine('maestro', options.maestroBin, ['test', flowPath, ...platformArgs]);
+  const maestro = runMaestroEngine(options.maestroBin, ['test', flowPath, ...platformArgs]);
   // `--maestro` is required: without it `test` rejects a .yaml flow outright
   // ("test does not support this file type"). Matches scripts/run-test-app-maestro-suite.mjs.
-  const agentDevice = runAgentDeviceEngine(`node ${options.agentDeviceCli}`, [
+  const agentDevice = runAgentDeviceEngine(options.agentDeviceCli, [
     'test',
     flowPath,
     '--maestro',

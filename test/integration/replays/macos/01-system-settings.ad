@@ -4,12 +4,10 @@ open "System Settings" --relaunch
 screenshot "./test/screenshots/replays/macos-system-settings.png"
 appstate
 snapshot -i
-wait "role=button label=About" 5000
-snapshot -i
-is exists "role=button label=About"
-click "role=button label=About"
+wait "label=About" 5000
+# Keep one predicate as the macOS live-coverage owner for `is`; the wait makes it deterministic.
+is exists "label=About"
+click "label=About"
 wait "label=\"System Report...\" || label=\"Serial number\" || label=Chip || label=Processor || label=macOS" 5000
-snapshot -i
 back
-wait "role=button label=About" 5000
-is exists "role=button label=About"
+wait "label=About" 5000

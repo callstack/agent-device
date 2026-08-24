@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { isReplayInfrastructureFailure } from '../session-test-infrastructure.ts';
 import type { DaemonResponse } from '../../types.ts';
+import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 
 test('isReplayInfrastructureFailure accepts shared boot diagnostic reasons', () => {
   const response: DaemonResponse = {
@@ -41,6 +42,23 @@ test('isReplayInfrastructureFailure accepts replay timeout cleanup races', () =>
   assert.equal(isReplayInfrastructureFailure(response), true);
 });
 
+test('isReplayInfrastructureFailure accepts the owning runtime verdict', () => {
+  const result: ReplaySuiteTestResult = {
+    file: 'cleanup.ad',
+    session: 'default:test:cleanup',
+    status: 'failed',
+    durationMs: 1,
+    attempts: 1,
+    error: {
+      code: 'COMMAND_FAILED',
+      message: 'Replay test cleanup failed',
+    },
+    infrastructure: true,
+  };
+
+  assert.equal(isReplayInfrastructureFailure(result), true);
+});
+
 test('isReplayInfrastructureFailure accepts a typed foreign runner owner', () => {
   const response: DaemonResponse = {
     ok: false,
@@ -48,6 +66,20 @@ test('isReplayInfrastructureFailure accepts a typed foreign runner owner', () =>
       code: 'COMMAND_FAILED',
       message: 'Runner is busy',
       details: { reason: 'IOS_RUNNER_OWNED_BY_OTHER_DAEMON' },
+    },
+  };
+
+  assert.equal(isReplayInfrastructureFailure(response), true);
+});
+
+test('isReplayInfrastructureFailure accepts typed runner recycle exhaustion', () => {
+  const response: DaemonResponse = {
+    ok: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      message:
+        'iOS runner was already restarted during this request and "snapshot" still failed, so agent-device stopped instead of paying for another runner boot.',
+      details: { recovery: 'runner_recycle_budget_exhausted' },
     },
   };
 

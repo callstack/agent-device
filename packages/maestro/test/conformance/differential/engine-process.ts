@@ -9,25 +9,10 @@ export type EngineResult = {
   failureKind?: 'behavioral' | 'infrastructure';
 };
 
-export function runEngine(
-  engine: EngineResult['engine'],
-  command: string,
-  args: string[],
-): EngineResult {
+export function runMaestroEngine(command: string, args: string[]): EngineResult {
   const [bin = '', ...rest] = command.split(' ').filter(Boolean);
   const result = spawnSync(bin, [...rest, ...args], { stdio: 'inherit', cwd: process.cwd() });
-  const exitCode = result.status ?? 1;
-  const infrastructureFailed = result.status === null || result.error !== undefined;
-  return {
-    engine,
-    outcome: exitCode === 0 ? 'pass' : 'fail',
-    exitCode,
-    ...(exitCode === 0
-      ? {}
-      : {
-          failureKind: infrastructureFailed ? ('infrastructure' as const) : ('behavioral' as const),
-        }),
-  };
+  return buildEngineResult('maestro', result, () => 'behavioral');
 }
 
 export function classifyAgentDeviceFailure(stdout: string): 'behavioral' | 'infrastructure' {
@@ -45,26 +30,28 @@ export function classifyAgentDeviceFailure(stdout: string): 'behavioral' | 'infr
   }
 }
 
-export function runAgentDeviceEngine(command: string, args: string[]): EngineResult {
-  const [bin = '', ...rest] = command.split(' ').filter(Boolean);
-  const result = spawnSync(bin, [...rest, ...args, '--json'], {
+export function runAgentDeviceEngine(cliPath: string, args: string[]): EngineResult {
+  const result = spawnSync(process.execPath, [cliPath, ...args, '--json'], {
     cwd: process.cwd(),
     encoding: 'utf8',
   });
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
+  return buildEngineResult('agent-device', result, () => classifyAgentDeviceFailure(result.stdout));
+}
+
+function buildEngineResult(
+  engine: EngineResult['engine'],
+  result: { status: number | null; error?: Error },
+  classifyFailure: () => NonNullable<EngineResult['failureKind']>,
+): EngineResult {
   const exitCode = result.status ?? 1;
-  const infrastructureFailed = result.status === null || result.error !== undefined;
+  if (exitCode === 0) return { engine, outcome: 'pass', exitCode };
   return {
-    engine: 'agent-device',
-    outcome: exitCode === 0 ? 'pass' : 'fail',
+    engine,
+    outcome: 'fail',
     exitCode,
-    ...(exitCode === 0
-      ? {}
-      : {
-          failureKind: infrastructureFailed
-            ? ('infrastructure' as const)
-            : classifyAgentDeviceFailure(result.stdout),
-        }),
+    failureKind:
+      result.status === null || result.error !== undefined ? 'infrastructure' : classifyFailure(),
   };
 }

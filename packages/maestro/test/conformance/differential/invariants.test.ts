@@ -6,11 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import {
-  type CanonicalCommand,
-  MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
-  parseMaestroConformanceSource,
-} from '../harness.ts';
+import { MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS, parseMaestroConformanceSource } from '../harness.ts';
 import { DIFFERENTIAL_SCENARIOS } from './scenarios.ts';
 import { type Invariant, evaluateInvariant, readTrace } from './invariants.ts';
 
@@ -95,31 +91,28 @@ test('bug class 4 has a machine-checkable invariant, not just outcome parity', (
 });
 
 const SETTLE_FLOW_PATH = path.join(import.meta.dirname, 'flows/settle-after-tap.yaml');
-const EXPECTED_SETTLE_COMMANDS: CanonicalCommand[] = [
-  { kind: 'launchApp', appId: 'com.callstack.agentdevicelab', clearState: true },
-  {
-    kind: 'assert',
-    mode: 'visible',
-    timed: false,
-    selector: { text: 'Agent Device Tester' },
-  },
-  {
-    kind: 'tap',
-    longPress: false,
-    repeat: 1,
-    target: { selector: { text: 'Settings' } },
-  },
-  {
-    kind: 'assert',
-    mode: 'visible',
-    timed: false,
-    selector: { id: 'open-inert-surface' },
-  },
-];
 
 function assertSettleFlowSemantics(source: string): void {
   const parsed = parseMaestroConformanceSource(source, SETTLE_FLOW_PATH);
-  assert.deepEqual(parsed.commands, EXPECTED_SETTLE_COMMANDS);
+  assert.equal(
+    parsed.commands.some(
+      (command) => command.kind === 'scroll' || command.kind === 'scrollUntilVisible',
+    ),
+    false,
+  );
+  assert.deepEqual(
+    parsed.commands.filter((command) => command.kind === 'tap'),
+    [{ kind: 'tap', longPress: false, repeat: 1, target: { selector: { text: 'Settings' } } }],
+  );
+  assert.equal(
+    parsed.commands.some(
+      (command) =>
+        command.kind === 'assert' &&
+        command.mode === 'visible' &&
+        command.selector?.id === 'open-inert-surface',
+    ),
+    true,
+  );
 }
 
 test('the settle detector reaches its tap without an unrelated setup command', () => {

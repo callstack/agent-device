@@ -4,7 +4,6 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { normalizeError } from '@agent-device/kernel/errors';
 import {
   replayTestAttemptFailure,
-  type ReplayTestAttemptFailed,
   type ReplayTestAttemptOutcome,
   type ReplayTestAttemptStepSink,
   type ReplayTestEmitDiagnostic,
@@ -174,6 +173,7 @@ export async function runReplayTestAttempt(
       });
     } catch (error) {
       const appErr = normalizeError(error);
+      outcome = markReplayTestCleanupFailed(outcome, appErr);
       appendReplayTestTimingEvent(tracePath, {
         type: 'replay_test_cleanup_stop',
         ts: new Date().toISOString(),

@@ -18,7 +18,7 @@ export type ScenarioReport = {
 
 export function printScenarioReport(report: ScenarioReport): void {
   console.log(
-    `${report.status.padEnd(17)} ${report.id} maestro=${report.maestro.outcome} agent-device=${report.agentDevice.outcome}`,
+    `${report.status.padEnd('infrastructure-failed'.length)} ${report.id} maestro=${report.maestro.outcome} agent-device=${report.agentDevice.outcome}`,
   );
   for (const result of report.invariants) {
     console.log(`        invariant ${result.status}: ${result.detail}`);
