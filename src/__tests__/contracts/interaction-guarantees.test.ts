@@ -26,6 +26,10 @@ test('every dispatch path classifies every guarantee', () => {
   }
 });
 
+test('the Maestro non-hittable fallback classifies its reachable direct click command', () => {
+  assert.ok(INTERACTION_DISPATCH_PATHS['maestro-non-hittable-fallback'].commands.includes('click'));
+});
+
 test('runtime enforcement entries reference real exported symbols', async () => {
   for (const [pathId, contract] of Object.entries(INTERACTION_DISPATCH_PATHS)) {
     for (const [guarantee, enforcement] of Object.entries(contract.guarantees)) {

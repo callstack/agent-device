@@ -413,7 +413,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
   'maestro-non-hittable-fallback': {
     description:
       'Replay-only coordinate fallback for non-hittable elements (allowNonHittableCoordinateFallback), matching Maestro semantics.',
-    commands: ['press', 'fill'],
+    commands: ['press', 'click', 'fill'],
     guarantees: {
       disambiguation: {
         kind: 'waived',
