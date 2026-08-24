@@ -121,7 +121,7 @@ async function runFindEvidence(context: LinuxContext): Promise<void> {
 }
 
 async function runDiffEvidence(context: LinuxContext): Promise<void> {
-  await runStep(context, 'close the replay session before diff reset', ['close']);
+  await closeIfOpen(context);
   await runStep(context, 'reset the calculator before diff', [
     'open',
     'gnome-calculator',
