@@ -6,9 +6,9 @@
   code-quality/dead-code risk is relevant, CI guards are green, no conflict markers or unmerged
   paths remain.
 - A local unit-only run is not CI-green. Use `pnpm test:unit` for the repo unit bundle, or
-  `vitest run --project unit-core --project subprocess-stub` directly. The **Integration Tests**
-  and **Coverage** jobs run the `provider-integration` project — verify those green on the actual
-  PR head.
+  `vitest run --project unit-core --project subprocess-stub --project fuzz-worker` directly.
+  The **Integration Tests** and **Coverage** jobs run the `provider-integration` project —
+  verify those green on the actual PR head.
 - Device-facing behavior is not merge-ready without real simulator/emulator/device evidence for the
   changed path. Fixture-backed tests prove contracts; they do not replace a live run that creates
   or observes the artifact/state the feature claims to handle. If live verification is blocked,

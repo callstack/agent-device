@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { readTestScope, threadHostileTestFiles } from './scripts/mutation/test-scope.ts';
 import { workspaceSourceAliases } from './scripts/mutation/workspace-aliases.ts';
-import { SETUP_FILES, SUBPROCESS_STUB_TESTS } from './vitest.config.ts';
+import { SERIALIZED_TESTS, SETUP_FILES } from './vitest.config.ts';
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 
@@ -24,7 +24,7 @@ const workspaceAliases = workspaceSourceAliases(repoRoot);
 // (`vitest related` over the mutated files) and hands it over through
 // AGENT_DEVICE_MUTATION_TEST_FILES; the fallback is the deterministic unit suite,
 // which keeps `pnpm exec stryker run` usable by hand. Excluded either way: the
-// subprocess-stub group and the CLI-capture tests — see
+// serialized groups (subprocess-stub and fuzz-worker) and the CLI-capture tests — see
 // scripts/mutation/test-scope.ts for why, and why excluding them cannot hide a
 // surviving mutant.
 const scope = readTestScope();
@@ -35,7 +35,7 @@ export default defineConfig({
   },
   test: {
     include: scope ?? ['src/**/*.test.ts', 'packages/*/src/**/*.test.ts'],
-    exclude: [...SUBPROCESS_STUB_TESTS, ...threadHostileTestFiles(repoRoot), '**/node_modules/**'],
+    exclude: [...SERIALIZED_TESTS, ...threadHostileTestFiles(repoRoot), '**/node_modules/**'],
     setupFiles: [...SETUP_FILES],
   },
 });

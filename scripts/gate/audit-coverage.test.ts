@@ -95,8 +95,9 @@ test('a path filter that excludes a category fails, though the check still runs 
   assert.ok(found.some((message) => /selects "daemon-wire-compat"/.test(message)));
 });
 
-// The Coverage lane runs a bare `vitest run --coverage`, which runs every project the config
-// declares — so an unrun project is only representable once that script names its projects.
+// The Coverage lane's two legs together run every project the config declares — the instrumented
+// one takes `--project=!fuzz-worker` and the nested `test:fuzz-worker` takes the rest — so an unrun
+// project is still only representable once that script names its projects positively.
 const projectScoped = (projects: readonly string[]): string =>
   `vitest run --coverage ${projects.map((name) => `--project ${name}`).join(' ')}`;
 

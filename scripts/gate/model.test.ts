@@ -65,6 +65,31 @@ test('a bare Vitest run spans every configured project', () => {
   ]);
 });
 
+test('a negated --project subtracts from the configured set, so the skipped one is not credited', () => {
+  assert.deepEqual(
+    scriptUnits('cov', scriptModel({ cov: 'vitest run --coverage --project=!subprocess-stub' })),
+    ['vitest:unit-core'],
+  );
+});
+
+// The real `test:coverage:ci` shape: the second leg is a nested script whose body carries an env
+// prefix (it blanks the coverage-shard switches). Both indirections have to survive, or the lane
+// stops owning the project it hands to that leg.
+test('the two halves of test:coverage:ci together still own every project', () => {
+  assert.deepEqual(
+    scriptUnits(
+      'test:coverage:ci',
+      scriptModel({
+        'test:coverage:ci':
+          'vitest run --coverage --project=!subprocess-stub && pnpm test:subprocess-stub',
+        'test:subprocess-stub':
+          'AGENT_DEVICE_COVERAGE_SHARD= AGENT_DEVICE_COVERAGE_MERGE= vitest run --project subprocess-stub',
+      }),
+    ),
+    ['vitest:unit-core', 'vitest:subprocess-stub'],
+  );
+});
+
 test('aggregates expand transitively, so a lane running the aggregate owns its parts', () => {
   const units = scriptUnits(
     'check:all',

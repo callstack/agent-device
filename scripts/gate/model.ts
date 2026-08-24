@@ -70,9 +70,24 @@ function vitestArgs(parts: readonly string[]): {
 
 const RUNNER_TOKENS = /^(?:pnpm|exec|vitest|run)$/;
 
+/**
+ * Vitest's own `--project` semantics: bare names select, `!name` excludes, and a run with only
+ * exclusions starts from every configured project. The model has to read the negated form or it
+ * would credit a lane with a project it skips — `test:coverage:ci` runs `--project=!fuzz-worker`
+ * and hands that project to a second, uninstrumented invocation.
+ */
+function selectedProjects(named: readonly string[], projects: readonly string[]): string[] {
+  const excluded = new Set(
+    named.filter((name) => name.startsWith('!')).map((name) => name.slice(1)),
+  );
+  const included = named.filter((name) => !name.startsWith('!'));
+  const base = included.length > 0 ? included : projects;
+  return base.filter((name) => !excluded.has(name));
+}
+
 function vitestUnits(parts: readonly string[], projects: readonly string[]): Unit[] {
   const { named, files } = vitestArgs(parts);
-  const selected = named.length > 0 ? named : projects;
+  const selected = named.length > 0 ? selectedProjects(named, projects) : projects;
   const suffix = files.length > 0 ? `@${files.join(',')}` : '';
   return selected.map((project) => `vitest:${project}${suffix}`);
 }

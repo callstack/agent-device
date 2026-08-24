@@ -8,14 +8,51 @@ import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 // them one at a time to bound that contention; per-file `process.env` isolation is
 // already delivered by `pool: forks` + `isolate: true` on every project.
 // Membership and the project's deletion test live in issue #1823.
-export const SUBPROCESS_STUB_TESTS: readonly string[] = [
+const SUBPROCESS_STUB_TESTS: readonly string[] = [
   // Stubs npx plus the package managers and spawns a real Metro dev server per case.
   'src/__tests__/client-metro.test.ts',
   // The SUT is the subprocess watchdog: a node subprocess per case, one hangs on purpose (#1414).
   'scripts/fuzz/harness.test.ts',
-  // Replays the fuzz corpus through that same worker watchdog, waiting its per-case budget.
+];
+
+// The fuzz corpus replay, which must not run under V8 coverage instrumentation.
+//
+// #1824 found two causes behind `Worker exited unexpectedly`. Shape (A) — a test signalling
+// a fabricated pid that landed on a sibling fork — was fixed at the source in #1854. Shape
+// (B) was left open: one fork dies mid-file, alone, with no test attributed. Scanning every
+// failed Coverage job across the 120 CI runs after #1854 merged found the signature five
+// times, and the vanished file was this one all five (plus #1866's, so six for six) — 23% of
+// Coverage failures in that window. The uninstrumented unit lane has never lost it.
+//
+// So the coverage run skips this project and a second, uninstrumented Vitest invocation owns
+// it — see `test:coverage:ci`. That costs no coverage at all, which is measured rather than
+// assumed: the cases execute inside worker threads, a separate isolate the fork's inspector
+// session never instruments, so this file reports the same lines with or without it.
+//
+// The second leg goes through `test:fuzz-worker`, which blanks AGENT_DEVICE_COVERAGE_SHARD and
+// AGENT_DEVICE_COVERAGE_MERGE — the sharding switches read just below. ci.yml sets them as
+// *job*-level env over a single `gate: unit-ci` step, so without the blanking both legs inherit
+// them and the shard dies: Vitest refuses `--shard=1/2` over a one-file project ("must be a
+// smaller than count of test files"), and the blob reporter overwrites the instrumented shard's
+// report on its way out, leaving the Coverage Report job nothing to merge. Measured, not
+// reasoned: the unguarded leg leaves a 1.4 kB blob holding only this project plus that error.
+//
+// Membership is by demonstrated failure, not by a property of the code. In particular it is
+// NOT "constructs a `node:worker_threads` Worker": `session-replay-runtime-maestro.test.ts`
+// does exactly that and stays in `unit-core`, instrumented and green. The proximate cause was
+// never reproduced — what these entries share is an observed record of vanishing from the
+// Coverage lane, and that record is the only thing that admits a file here. A new entry needs
+// its own run URLs; a theory about workers is not enough.
+const FUZZ_WORKER_TESTS: readonly string[] = [
+  // Replays the fuzz corpus through the worker watchdog, waiting its per-case budget (#1414).
   'scripts/fuzz/corpus-replay.test.ts',
 ];
+/**
+ * Everything the serialized projects own, which is what the fast lane must not also collect.
+ * The two lists above stay module-local: this union is the whole cross-file surface, and the
+ * mutation lane wants exactly it — every test the root config declines to run in parallel.
+ */
+export const SERIALIZED_TESTS: readonly string[] = [...SUBPROCESS_STUB_TESTS, ...FUZZ_WORKER_TESTS];
 
 // Imported by vitest.mutation.config.ts so the two lanes cannot drift: a guard
 // added here must reach the Stryker sandbox too.
@@ -142,7 +179,7 @@ export default defineConfig({
             // The Maestro conformance oracle runs via `node --test` in its own CI
             // job (scripts/maestro-conformance), like the layering guard.
           ],
-          exclude: [...SUBPROCESS_STUB_TESTS],
+          exclude: [...SERIALIZED_TESTS],
           setupFiles: SETUP_FILES,
         },
       },
@@ -150,6 +187,19 @@ export default defineConfig({
         test: {
           name: 'subprocess-stub',
           include: [...SUBPROCESS_STUB_TESTS],
+          setupFiles: SETUP_FILES,
+          fileParallelism: false,
+          isolate: true,
+          maxWorkers: 1,
+        },
+      },
+      {
+        test: {
+          // Same serialization as its sibling above, for the same contention reason: the
+          // per-case watchdog budget is real wall clock. The project exists so the coverage
+          // run can leave it out, not to run it differently.
+          name: 'fuzz-worker',
+          include: [...FUZZ_WORKER_TESTS],
           setupFiles: SETUP_FILES,
           fileParallelism: false,
           isolate: true,
