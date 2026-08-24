@@ -24,6 +24,7 @@ export type WebPlatformCoverageEntry =
       trackingIssue: number;
     };
 
+export const WEB_COVERAGE_GAP_ISSUE = 1900;
 export const WEB_SMOKE_TEST_NAME = 'live web platform e2e smoke';
 export const WEB_SMOKE_EVIDENCE: RepositoryEvidence = {
   path: 'test/integration/smoke-web-platform.test.ts',
@@ -45,24 +46,31 @@ const denial = (assertion: string): WebPlatformCoverageEntry => ({
   assertion,
   level: 'capability-denial',
 });
+const gap = (assertion: string): WebPlatformCoverageEntry => ({
+  assertion,
+  level: 'known-gap',
+  trackingIssue: WEB_COVERAGE_GAP_ISSUE,
+});
 
 /**
  * One primary, observable owner for every public command on the managed web target.
  *
  * Live rows are limited to the existing web-smoke scenario; they do not widen its scope. Capability
  * denials are derived from the web bucket in the command capability matrix. Contract rows do not
- * turn fixture-backed tests into live E2E claims, and cite one of three evidence shapes:
- * a web-specific unit/provider test exercising the command's own operation (e.g. `click`, `hover`);
- * the web runtime's own unavailable-operation fact, a real and permanent denial (e.g. `boot`,
- * `push`); or, for a command whose handler has no platform branch at all, a test proving its
- * existing generic/shared code path runs correctly for a web-backed session or device (e.g.
- * `artifacts`, `batch`, `diff`, `press`) — including, for `test`, proving the one command-specific
- * limitation that mechanism does have (its declared-platform filter cannot select web) rather than
- * a "this works" claim it would not be honest to make.
+ * turn fixture-backed tests into live E2E claims, and cite one of two evidence shapes: a
+ * web-specific unit/provider test exercising the command's own operation (e.g. `click`, `hover`);
+ * or, for a command whose handler has no platform branch at all, a test proving its existing
+ * generic/shared code path runs correctly for a web-backed session or device (e.g. `artifacts`,
+ * `batch`, `diff`, `press`), OR the web runtime's own unavailable-operation fact, a real and
+ * permanent denial (e.g. `boot`, `push`).
  *
- * #1900 closed every known-gap row this manifest originally carried using the shapes above.
- * `WebPlatformCoverageEntry` keeps the `known-gap` variant for any future command whose web
- * behavior genuinely isn't decided yet.
+ * #1900 closed 14 of the 15 known-gap rows this manifest originally carried using the shapes
+ * above. `test` stays `known-gap`: its declared-platform filter structurally excludes web
+ * (`ReplayTestPlatform = Exclude<PlatformSelector, 'web'>`), so `test --platform web` can never
+ * select a script — real, tested, command-specific behavior (see
+ * `session-command-replay.test.ts`), but evidence of what the command cannot do, not executable
+ * evidence that it works on web. Closing this row needs a separate product decision: either web
+ * replay-test support, or an explicit denial.
  */
 export const WEB_PLATFORM_COVERAGE = {
   [C.artifacts]: contract(
@@ -127,10 +135,8 @@ export const WEB_PLATFORM_COVERAGE = {
     'replay inherits the parent web platform selector for each invoked step',
     'replay re-invokes each recorded step with no platform branch, so a web selector threads through unchanged',
   ),
-  [C.test]: contract(
-    'src/daemon/handlers/__tests__/session-command-replay.test.ts',
-    'test --platform web reports no matching scripts, typed or untyped, because ReplayTestPlatform excludes web',
-    "test's declared-platform filter structurally excludes web (ReplayTestPlatform = Exclude<PlatformSelector, 'web'>), so --platform web deterministically matches no script",
+  [C.test]: gap(
+    "Web test-suite execution has no executable web evidence: ReplayTestPlatform = Exclude<PlatformSelector, 'web'> structurally excludes web from the declared-platform filter, so `test --platform web` can never select a script (proven by a regression test in session-command-replay.test.ts) — that is evidence of what the command cannot do, not that it works on web",
   ),
   [C.clipboard]: denial('Web capability model rejects native clipboard operations'),
   [C.keyboard]: contract(

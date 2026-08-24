@@ -8,6 +8,7 @@ import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
 import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
 import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import {
+  WEB_COVERAGE_GAP_ISSUE,
   WEB_PLATFORM_COVERAGE,
   WEB_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,
   WEB_SMOKE_EVIDENCE,
@@ -29,9 +30,10 @@ test('web coverage exhaustively classifies the public catalog', () => {
       assert.ok(entry.owner.test.trim().length > 0, `${command} needs named evidence`);
     }
     if (entry.level === 'known-gap') {
-      assert.ok(
-        Number.isInteger(entry.trackingIssue) && entry.trackingIssue > 0,
-        `${command} needs a valid gap tracking issue`,
+      assert.equal(
+        entry.trackingIssue,
+        WEB_COVERAGE_GAP_ISSUE,
+        `${command} has the wrong gap issue`,
       );
     }
   }
@@ -40,8 +42,8 @@ test('web coverage exhaustively classifies the public catalog', () => {
 test('web coverage report has the expected classification counts', () => {
   assert.deepEqual(WEB_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
     capabilityDenial: 7,
-    contract: 35,
-    gap: 0,
+    contract: 34,
+    gap: 1,
     live: 12,
     total: 54,
   });
@@ -87,15 +89,22 @@ test('web capability denials match the mechanical capability matrix', () => {
   assert.deepEqual(deniedByManifest, deniedByCapabilities);
 });
 
-// #1900 closed every known-gap row this manifest carried (see the comment above
-// `WEB_PLATFORM_COVERAGE`): each now cites a runtime-owned denial fact or a new test proving the
-// command's existing code path already runs for a web-backed session. This is the planted-red
-// proof that a future row can't silently regress back to 'known-gap' without failing here.
-test('web has no known-gap rows left after #1900', () => {
-  const gaps = Object.entries(WEB_PLATFORM_COVERAGE).filter(
-    ([, entry]) => entry.level === 'known-gap',
+// #1900 closed 14 of the 15 known-gap rows this manifest originally carried (see the comment
+// above `WEB_PLATFORM_COVERAGE`); `test` stays a known gap because its only candidate evidence
+// proves the command CANNOT be targeted at web, not that it works. This is the planted-red proof
+// that no other row can silently regress back to 'known-gap', and that `test`'s stays pinned to
+// the one tracking issue.
+test('web known gaps use one grouped tracking issue', () => {
+  const gapIssues = new Set(
+    Object.values(WEB_PLATFORM_COVERAGE)
+      .filter((entry) => entry.level === 'known-gap')
+      .map((entry) => entry.trackingIssue),
   );
-  assert.deepEqual(gaps, []);
+  const gapCommands = Object.entries(WEB_PLATFORM_COVERAGE)
+    .filter(([, entry]) => entry.level === 'known-gap')
+    .map(([command]) => command);
+  assert.deepEqual(gapCommands, ['test']);
+  assert.deepEqual([...gapIssues], [WEB_COVERAGE_GAP_ISSUE]);
 });
 
 test('web coverage report persists the manifest rollup and live command list', async () => {
