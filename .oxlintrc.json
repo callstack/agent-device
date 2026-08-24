@@ -15,13 +15,21 @@
         "argsIgnorePattern": "^_",
         "caughtErrorsIgnorePattern": "^_",
         "destructuredArrayIgnorePattern": "^_",
-        "fix": { "imports": "safe-fix", "variables": "suggestion" },
+        "fix": {
+          "imports": "safe-fix",
+          "variables": "suggestion"
+        },
         "varsIgnorePattern": "^_"
       }
     ],
     "eslint/prefer-const": "error",
     "eslint/no-useless-escape": "error",
-    "eslint/no-empty": ["error", { "allowEmptyCatch": true }],
+    "eslint/no-empty": [
+      "error",
+      {
+        "allowEmptyCatch": true
+      }
+    ],
     "typescript/no-explicit-any": "off",
     "typescript/only-throw-error": "off",
     "typescript/no-var-requires": "error",
@@ -38,6 +46,16 @@
               {
                 "name": "node:child_process",
                 "message": "Use process helpers from src/utils/exec.ts instead of importing node:child_process directly."
+              },
+              {
+                "name": "@agent-device/contracts/platform",
+                "allowTypeImports": true,
+                "message": "Value-importing this facade evaluates all 32 vocabulary modules it re-exports. Import the symbol from the module that owns it (@agent-device/contracts/<module>). `import type` stays fine \u2014 it is erased."
+              },
+              {
+                "name": "@agent-device/contracts/interaction",
+                "allowTypeImports": true,
+                "message": "Value-importing this facade evaluates all 18 vocabulary modules it re-exports. Import the symbol from the module that owns it (@agent-device/contracts/<module>). `import type` stays fine \u2014 it is erased."
               }
             ]
           }
@@ -47,7 +65,45 @@
     {
       "files": ["src/utils/exec.ts", "src/**/*.test.ts", "src/**/__tests__/**/*.ts"],
       "rules": {
-        "eslint/no-restricted-imports": "off"
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@agent-device/contracts/platform",
+                "allowTypeImports": true,
+                "message": "Value-importing this facade evaluates all 32 vocabulary modules it re-exports. Import the symbol from the module that owns it (@agent-device/contracts/<module>). `import type` stays fine \u2014 it is erased."
+              },
+              {
+                "name": "@agent-device/contracts/interaction",
+                "allowTypeImports": true,
+                "message": "Value-importing this facade evaluates all 18 vocabulary modules it re-exports. Import the symbol from the module that owns it (@agent-device/contracts/<module>). `import type` stays fine \u2014 it is erased."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/*/src/**/*.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@agent-device/contracts/platform",
+                "allowTypeImports": true,
+                "message": "Value-importing this facade evaluates all 32 vocabulary modules it re-exports. Import the symbol from the module that owns it (@agent-device/contracts/<module>). `import type` stays fine \u2014 it is erased."
+              },
+              {
+                "name": "@agent-device/contracts/interaction",
+                "allowTypeImports": true,
+                "message": "Value-importing this facade evaluates all 18 vocabulary modules it re-exports. Import the symbol from the module that owns it (@agent-device/contracts/<module>). `import type` stays fine \u2014 it is erased."
+              }
+            ]
+          }
+        ]
       }
     },
     {
