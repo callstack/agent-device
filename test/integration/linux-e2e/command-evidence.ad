@@ -1,0 +1,8 @@
+# This script is intentionally outside replays/linux: the existing Linux replay smoke scope is
+# kept unchanged while this lane proves the public test and replay commands independently.
+context platform=linux target=desktop
+open gnome-calculator --relaunch
+wait "appname=gnome-calculator || windowtitle=Calculator || label=Calculator || label=0 || label=1 || label=5" 15000
+snapshot -i
+find role "button" exists
+close

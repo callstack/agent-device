@@ -145,6 +145,12 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('replay-ios-device', 'iOS physical device replay suite', 'test:replay:ios-device', false),
   gate('replay-macos', 'macOS replay suite', 'test:replay:macos', false),
   gate('replay-linux', 'Linux replay suite', 'test:replay:linux', false),
+  gate(
+    'linux-command-evidence',
+    'Linux command evidence suite',
+    'test:linux:command-evidence',
+    false,
+  ),
   gate('replay-android', 'Android replay suite', 'test:replay:android', false),
 ];
 

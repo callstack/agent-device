@@ -13,7 +13,7 @@ function lanes(file: string): CheckId[] {
   const plan = selectChecks({ changedFiles: [file] });
   assert.equal(plan.failOpen, false, `${file} must not fail open`);
   return plan.checks.filter((id) =>
-    /^macos-coverage$|^replay-|^web-smoke$|^swift-runner-|^macos-helper$|^android-helpers$/.test(
+    /^macos-coverage$|^replay-|^linux-command-evidence$|^web-smoke$|^swift-runner-|^macos-helper$|^android-helpers$/.test(
       id,
     ),
   );
@@ -84,6 +84,7 @@ test('shared runtime surface owns every device lane', () => {
       'replay-ios-device',
       'replay-macos',
       'replay-linux',
+      'linux-command-evidence',
       'replay-android',
     ]);
   }
@@ -103,8 +104,11 @@ test('another family owns only its own lanes, so an Android-only change carries 
   assert.deepEqual(lanes('test/integration/android-emulator-e2e/live-runner.ts'), [
     'replay-android',
   ]);
-  assert.deepEqual(lanes('src/platforms/linux/snapshot.ts'), ['replay-linux']);
-  assert.deepEqual(lanes('linux/atspi-dump.py'), ['replay-linux']);
+  assert.deepEqual(lanes('src/platforms/linux/snapshot.ts'), [
+    'replay-linux',
+    'linux-command-evidence',
+  ]);
+  assert.deepEqual(lanes('linux/atspi-dump.py'), ['replay-linux', 'linux-command-evidence']);
   assert.deepEqual(lanes('src/platforms/web/provider.ts'), ['web-smoke']);
   assert.deepEqual(lanes('test/integration/smoke-web-platform.test.ts'), ['web-smoke']);
   // Families with no CI lane fall through to the static gates only.

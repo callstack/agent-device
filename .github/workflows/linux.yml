@@ -136,6 +136,14 @@ jobs:
             --report-junit
             test/artifacts/replays-linux.junit.xml
 
+      - name: Reset daemon before Linux command evidence
+        run: pnpm clean:daemon
+
+      - name: Execute Linux command evidence
+        uses: ./.github/actions/run-gate
+        with:
+          gate: linux-command-evidence
+
       - name: Upload Linux artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

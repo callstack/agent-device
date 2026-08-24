@@ -44,6 +44,11 @@ type HarnessOptions<Context, BehaviorId extends string> = {
   behaviorsForScenario: (scenarioId: string) => readonly BehaviorId[];
   commandsForScenario: (scenarioId: string) => readonly string[];
   commonFlags: (context: Context, args: readonly string[]) => string[];
+  runCli?: (
+    args: string[],
+    env: NodeJS.ProcessEnv,
+    options?: { timeoutMs?: number },
+  ) => Promise<CliJsonResult>;
   writeCoverageReport: (context: Context) => void;
 };
 
@@ -120,7 +125,7 @@ export function createLiveDeviceHarness<
   ): Promise<CliJsonResult> {
     const fullArgs = buildStepArgs(context, args, stepOptions);
     const startedAt = Date.now();
-    const result = await runBuiltCliJson(fullArgs, context.env, {
+    const result = await (options.runCli ?? runBuiltCliJson)(fullArgs, context.env, {
       timeoutMs: stepOptions.timeoutMs,
     });
     const failedAsExpected = stepOptions.expectFailure === true && result.status !== 0;

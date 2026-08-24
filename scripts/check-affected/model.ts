@@ -84,6 +84,7 @@ export type CheckId =
   | 'replay-ios-device'
   | 'replay-macos'
   | 'replay-linux'
+  | 'linux-command-evidence'
   | 'replay-android';
 
 // The complete local check universe. A fail-open plan selects all of these;
@@ -144,6 +145,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'replay-ios-device',
   'replay-macos',
   'replay-linux',
+  'linux-command-evidence',
   'replay-android',
 ];
 

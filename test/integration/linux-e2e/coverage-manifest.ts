@@ -36,6 +36,11 @@ export const LINUX_REPLAY_EVIDENCE: RepositoryEvidence = {
   test: '# Smoke test for Linux desktop automation on CI.',
 };
 
+export const LINUX_COMMAND_EVIDENCE: RepositoryEvidence = {
+  path: 'test/integration/linux-e2e/live-runner.ts',
+  test: 'runLinuxCommandEvidence',
+};
+
 const LINUX_PROVIDER_EVIDENCE: RepositoryEvidence = {
   path: 'test/integration/provider-scenarios/linux-desktop.test.ts',
   test: 'Provider-backed integration Linux desktop flow uses semantic desktop and input providers',
@@ -50,11 +55,16 @@ const LINUX_CAPABILITY_DECLARATION_PATH = 'src/core/command-descriptor/registry.
 const LINUX_CAPABILITY_DECLARATION = 'linux: LINUX_NONE';
 
 const C = PUBLIC_COMMANDS;
-const live = (assertion: string): LinuxPlatformCoverageEntry => ({
+const live = (
+  assertion: string,
+  owner: RepositoryEvidence = LINUX_REPLAY_EVIDENCE,
+): LinuxPlatformCoverageEntry => ({
   assertion,
   level: 'live',
-  owner: LINUX_REPLAY_EVIDENCE,
+  owner,
 });
+const commandEvidenceLive = (assertion: string): LinuxPlatformCoverageEntry =>
+  live(assertion, LINUX_COMMAND_EVIDENCE);
 const contract = (path: string, test: string, assertion: string): LinuxPlatformCoverageEntry => ({
   assertion,
   level: 'command-contract',
@@ -78,21 +88,24 @@ const gap = (assertion: string): LinuxPlatformCoverageEntry => ({
 /**
  * One primary, observable owner for every public command on the Linux desktop.
  *
- * Live rows are limited to the existing Linux replay. Contract rows cite the
- * existing provider scenario or dedicated Linux unit/runtime evidence; they do
- * not turn mocked provider calls into live desktop claims. Capability denials
- * are derived from the owning command-descriptor matrix. Known gaps are
- * explicit follow-up work, not an implicit claim that a generic command works.
+ * Live rows cite either the existing Linux replay or the separate command-evidence
+ * lane. The existing replay scope stays unchanged. Contract rows cite the existing
+ * provider scenario or dedicated Linux unit/runtime evidence; they do not turn
+ * mocked provider calls into live desktop claims. Capability denials are derived
+ * from the owning command-descriptor matrix. Known gaps are explicit follow-up
+ * work, not an implicit claim that a generic command works.
  */
 export const LINUX_PLATFORM_COVERAGE = {
-  [C.artifacts]: gap('No Linux-specific artifact inventory command evidence exists yet'),
+  [C.artifacts]: commandEvidenceLive('the command-evidence lane lists a live screenshot artifact'),
   [C.devices]: contract(
     LINUX_PROVIDER_EVIDENCE.path,
     LINUX_PROVIDER_EVIDENCE.test,
     'Linux provider scenario inventories the selected desktop device through the daemon client',
   ),
-  [C.capabilities]: gap('No Linux-specific capabilities command evidence exists yet'),
-  [C.doctor]: gap('No Linux-specific doctor command evidence exists yet'),
+  [C.capabilities]: commandEvidenceLive(
+    'the command-evidence lane reads capabilities for the selected Linux desktop',
+  ),
+  [C.doctor]: commandEvidenceLive('the command-evidence lane reads Linux doctor diagnostics'),
   [C.apps]: contract(
     LINUX_RUNTIME_EVIDENCE.path,
     LINUX_RUNTIME_EVIDENCE.test,
@@ -111,15 +124,21 @@ export const LINUX_PLATFORM_COVERAGE = {
   ),
   [C.perf]: denial('perf', 'Linux capability declaration rejects native performance inspection'),
   [C.logs]: gap('No Linux-specific app-log command evidence exists yet'),
-  [C.events]: gap('No Linux-specific session event command evidence exists yet'),
+  [C.events]: commandEvidenceLive(
+    'the command-evidence lane reads the event timeline produced by its Linux session',
+  ),
   [C.network]: contract(
     LINUX_RUNTIME_EVIDENCE.path,
     LINUX_RUNTIME_EVIDENCE.test,
     'Linux runtime facts explicitly report network capture unavailable',
   ),
   [C.audio]: denial('audio', 'Linux capability declaration rejects native audio probing'),
-  [C.replay]: gap('No Linux-specific replay command evidence exists yet'),
-  [C.test]: gap('No Linux-specific test-suite command evidence exists yet'),
+  [C.replay]: commandEvidenceLive(
+    'the command-evidence lane replays a dedicated Linux script with a live session',
+  ),
+  [C.test]: commandEvidenceLive(
+    'the command-evidence lane runs a dedicated Linux script as a test suite',
+  ),
   [C.clipboard]: contract(
     'src/platforms/linux/__tests__/clipboard.test.ts',
     'writeLinuxClipboard uses xclip with stdin on X11',
@@ -143,14 +162,16 @@ export const LINUX_PLATFORM_COVERAGE = {
     LINUX_RUNTIME_EVIDENCE.test,
     'Linux runtime facts explicitly report Apple runner preparation unavailable',
   ),
-  [C.batch]: gap('No Linux-specific batch command evidence exists yet'),
+  [C.batch]: commandEvidenceLive('the command-evidence lane executes two live Linux read steps'),
   [C.close]: contract(
     LINUX_PROVIDER_EVIDENCE.path,
     LINUX_PROVIDER_EVIDENCE.test,
     'Linux provider scenario closes the calculator and observes the desktop close call',
   ),
   [C.snapshot]: live('the existing Linux replay captures the calculator accessibility tree'),
-  [C.diff]: gap('No Linux-specific snapshot diff command evidence exists yet'),
+  [C.diff]: commandEvidenceLive(
+    'the command-evidence lane observes a non-empty calculator snapshot mutation',
+  ),
   [C.wait]: live('the existing Linux replay waits for an observable calculator landmark'),
   [C.alert]: denial('alert', 'Linux capability declaration rejects native alert operations'),
   [C.settings]: denial(
@@ -163,7 +184,7 @@ export const LINUX_PLATFORM_COVERAGE = {
   ),
   [C.record]: gap('No Linux-specific recording command evidence exists yet'),
   [C.trace]: gap('No Linux-specific trace command evidence exists yet'),
-  [C.find]: gap('No Linux-specific find command evidence exists yet'),
+  [C.find]: commandEvidenceLive('the command-evidence lane resolves a live AT-SPI role match'),
   // Promoted from command-contract to live: the desktop replay now clicks a resolved digit
   // button on real Linux hardware and the downstream wait only passes if the click landed
   // (formerly missed — AT-SPI extents were computed screen-absolute-wrong under GTK4; see
@@ -230,7 +251,7 @@ export const LINUX_PLATFORM_COVERAGE = {
     'scrollLinux uses ydotool mousemove --wheel for vertical scroll',
     'Linux scroll dispatch uses the Wayland ydotool wheel primitive',
   ),
-  [C.swipe]: gap('No Linux-specific public swipe command evidence exists yet'),
+  [C.swipe]: commandEvidenceLive('the command-evidence lane dispatches a coordinate swipe'),
   // Promoted from command-contract to live by #1925: the desktop replay now runs a coordinate
   // focus on real Linux hardware, so the migrated `focusPoint` path has live changed-path
   // evidence rather than only the provider scenario at LINUX_PROVIDER_EVIDENCE.
@@ -254,6 +275,16 @@ export const LINUX_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY = buildCoverageClass
 
 export function liveCommandsForLinuxReplay(): PublicCommand[] {
   return Object.entries(LINUX_PLATFORM_COVERAGE)
-    .filter(([, entry]) => entry.level === 'live')
+    .filter(
+      ([, entry]) => entry.level === 'live' && entry.owner.path === LINUX_REPLAY_EVIDENCE.path,
+    )
+    .map(([command]) => command as PublicCommand);
+}
+
+export function liveCommandsForLinuxCommandEvidence(): PublicCommand[] {
+  return Object.entries(LINUX_PLATFORM_COVERAGE)
+    .filter(
+      ([, entry]) => entry.level === 'live' && entry.owner.path === LINUX_COMMAND_EVIDENCE.path,
+    )
     .map(([command]) => command as PublicCommand);
 }

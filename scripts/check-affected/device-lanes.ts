@@ -1,8 +1,8 @@
 // Device-lane ownership: which live device lanes a changed path can break (#1781 A9-2).
 //
 // The live lanes (`replay-ios`, `replay-ios-device`, `replay-macos`, `replay-android`,
-// `replay-linux`, `web-smoke`) drive the CLI and daemon against a real simulator, emulator,
-// desktop, or browser. Before this rule the selector could reach them only through a full
+// `replay-linux`, `linux-command-evidence`, `web-smoke`) drive the CLI and daemon against a real
+// simulator, emulator, desktop, or browser. Before this rule the selector could reach them only through a full
 // fail-open, so a TypeScript-only Apple change (`src/platforms/apple/**`) produced a plan
 // with no iOS check in it at all, and nothing could route `ios.yml` on the plan.
 //
@@ -42,7 +42,7 @@ const LEAF_LANES: Readonly<Record<Leaf, readonly CheckId[]>> = {
   macos: ['replay-macos'],
   apple: ['replay-ios', 'replay-ios-device', 'replay-macos'],
   android: ['replay-android'],
-  linux: ['replay-linux'],
+  linux: ['replay-linux', 'linux-command-evidence'],
   web: ['web-smoke'],
   harmonyos: [],
   vega: [],

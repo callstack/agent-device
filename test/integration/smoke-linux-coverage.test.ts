@@ -9,11 +9,17 @@ import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
 import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import {
   LINUX_COVERAGE_GAP_ISSUE,
+  LINUX_COMMAND_EVIDENCE,
   LINUX_PLATFORM_COVERAGE,
   LINUX_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,
   LINUX_REPLAY_EVIDENCE,
+  liveCommandsForLinuxCommandEvidence,
   liveCommandsForLinuxReplay,
 } from './linux-e2e/coverage-manifest.ts';
+import {
+  LINUX_COMMAND_EVIDENCE_COMMANDS,
+  LINUX_COMMAND_EVIDENCE_SCRIPT,
+} from './linux-e2e/command-evidence.ts';
 
 const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
 
@@ -39,14 +45,13 @@ test('Linux coverage exhaustively classifies the public catalog', () => {
 
 test('Linux coverage report has the expected classification counts', () => {
   assert.deepEqual(LINUX_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    // focus (#1925), click, and type are live via the replay: click resolves and lands on a
-    // digit button, and the typed calculation's result is now selectable (see the manifest
-    // entries for the platform defects this fixed). keyboard/orientation/tv-remote moved from
-    // capability-denial to command-contract: they're fact-owned now, not catalog-owned.
+    // focus (#1925), click, and type remain live via the existing replay. The separate
+    // command-evidence lane adds ten generic-command rows without changing that replay. Keyboard,
+    // orientation, and tv-remote remain fact-owned command-contract rows, not catalog denials.
     capabilityDenial: 7,
     contract: 21,
-    gap: 18,
-    live: 8,
+    gap: 8,
+    live: 18,
     total: 54,
   });
 
@@ -69,6 +74,28 @@ test('Linux live claims reference commands in the existing smoke replay', () => 
       replayCommands.has(command),
       true,
       `${command} is not invoked by ${LINUX_REPLAY_EVIDENCE.path}`,
+    );
+  }
+});
+
+test('Linux command-evidence claims name every executable lane command', () => {
+  const runnerPath = path.resolve(LINUX_COMMAND_EVIDENCE.path);
+  const runnerSource = fs.readFileSync(runnerPath, 'utf8');
+  assert.ok(runnerSource.includes(LINUX_COMMAND_EVIDENCE.test));
+
+  const scriptPath = path.resolve(LINUX_COMMAND_EVIDENCE_SCRIPT);
+  const scriptSource = fs.readFileSync(scriptPath, 'utf8');
+  assert.ok(scriptSource.includes('find role "button" exists'));
+  assert.deepEqual(
+    new Set(liveCommandsForLinuxCommandEvidence()),
+    new Set(LINUX_COMMAND_EVIDENCE_COMMANDS),
+  );
+
+  for (const command of LINUX_COMMAND_EVIDENCE_COMMANDS) {
+    assert.match(
+      runnerSource,
+      new RegExp(`verifyCommand\\([\\s\\S]{0,220}C\\.${command}\\b`),
+      `${command} must have a named command-evidence assertion`,
     );
   }
 });
