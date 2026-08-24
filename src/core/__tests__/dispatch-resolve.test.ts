@@ -13,6 +13,7 @@ vi.mock('../../platforms/apple/core/apps.ts', () => {
 });
 import {
   resolveTargetDevice as resolveTargetDeviceInContext,
+  resolveTargetDeviceSelection as resolveTargetDeviceSelectionInContext,
   withResolveTargetDeviceCacheScope,
 } from '../dispatch-resolve.ts';
 import {
@@ -354,14 +355,22 @@ test('resolveTargetDevice preserves physical-device backend evidence from inject
   assert.equal(mockListAppleDevices.mock.calls.length, 0);
 });
 
+test('resolveTargetDeviceSelection reports one candidate for an explicit Apple identity', async () => {
+  const selection = await withDeviceInventoryProvider(
+    async () => [physical, bootedSimulator],
+    async () => await resolveTargetDeviceSelectionInContext({ platform: 'ios', udid: physical.id }),
+  );
+
+  assert.equal(selection.device.id, physical.id);
+  assert.equal(selection.reason, 'explicit-selector');
+  assert.equal(selection.candidateCount, 1);
+});
+
 test('resolveTargetDevice preserves Apple simulator preference with injected inventory', async () => {
   const result = await withTestDeviceInventory(
     {
       provider: {
-        discover: async (request) => {
-          assert.equal(request.platform, 'ios');
-          return { kind: 'inventory', devices: [physical] };
-        },
+        discover: async () => ({ kind: 'declined' }),
       },
       local: async () => [simulator],
     },
@@ -373,16 +382,37 @@ test('resolveTargetDevice preserves Apple simulator preference with injected inv
   assert.equal(mockListAppleDevices.mock.calls.length, 0);
 });
 
+test('resolveTargetDevice keeps provider Apple inventory isolated from local fallback', async () => {
+  const localDiscover = vi.fn(async () => [simulator]);
+
+  const result = await withTestDeviceInventory(
+    {
+      provider: {
+        discover: async (request) => {
+          assert.equal(request.platform, 'ios');
+          return { kind: 'inventory', devices: [physical] };
+        },
+      },
+      local: localDiscover,
+    },
+    async () => await resolveTargetDeviceInContext({ platform: 'ios' }),
+  );
+
+  assert.equal(result.id, physical.id);
+  assert.equal(localDiscover.mock.calls.length, 0);
+});
+
 test('resolveTargetDevice propagates cancellation from the local Apple simulator probe', async () => {
   const canceled = new AppError('COMMAND_FAILED', 'request canceled', {
     reason: 'request_canceled',
   });
+  let localCalls = 0;
 
   await assert.rejects(
     withTestDeviceInventory(
       {
-        provider: { discover: async () => ({ kind: 'inventory', devices: [physical] }) },
         local: async () => {
+          if (localCalls++ === 0) return [physical];
           throw canceled;
         },
       },
@@ -398,12 +428,13 @@ test('resolveTargetDevice propagates missing inventory wiring from the local App
     'Device inventory gateway is unavailable outside request execution',
     { reason: 'device_inventory_context_unavailable' },
   );
+  let localCalls = 0;
 
   await assert.rejects(
     withTestDeviceInventory(
       {
-        provider: { discover: async () => ({ kind: 'inventory', devices: [physical] }) },
         local: async () => {
+          if (localCalls++ === 0) return [physical];
           throw unavailable;
         },
       },
@@ -414,10 +445,11 @@ test('resolveTargetDevice propagates missing inventory wiring from the local App
 });
 
 test('resolveTargetDevice keeps genuine local Apple simulator probe failures best-effort', async () => {
+  let localCalls = 0;
   const result = await withTestDeviceInventory(
     {
-      provider: { discover: async () => ({ kind: 'inventory', devices: [physical] }) },
       local: async () => {
+        if (localCalls++ === 0) return [physical];
         throw new Error('simctl timed out');
       },
     },
@@ -483,6 +515,33 @@ test('resolveTargetDevice fast-path preserves macOS selector validation', async 
   await expectDeviceNotFound(() => resolveTargetDevice({ platform: 'macos', udid: 'other-mac' }));
 
   assert.equal(mockListAppleDevices.mock.calls.length, 0);
+});
+
+test('resolveTargetDevice keeps simulator-set scope separate from the macOS host target', async () => {
+  const requests: DeviceInventoryRequest[] = [];
+  await withTestDeviceInventory(
+    {
+      local: async (request) => {
+        requests.push(request);
+        return request.platform === 'macos' ? [macDesktop] : [simulator];
+      },
+    },
+    async () => {
+      const simulatorResult = await resolveTargetDeviceInContext({
+        platform: 'ios',
+        iosSimulatorDeviceSet: '/tmp/isolated-set',
+      });
+      const macResult = await resolveTargetDeviceInContext({
+        platform: 'macos',
+        iosSimulatorDeviceSet: '/tmp/isolated-set',
+      });
+      assert.equal(simulatorResult.id, simulator.id);
+      assert.equal(macResult.id, macDesktop.id);
+    },
+  );
+
+  assert.equal(requests[0]?.iosSimulatorSetPath, '/tmp/isolated-set');
+  assert.equal(requests[1]?.iosSimulatorSetPath, undefined);
 });
 
 async function expectDeviceNotFound(action: () => Promise<unknown>): Promise<void> {

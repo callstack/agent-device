@@ -161,6 +161,7 @@ export function serializeOpenResult(result: AppOpenResult): Record<string, unkno
       ...(result.eventLogPath ? { eventLogPath: result.eventLogPath } : {}),
       ...(result.appName ? { appName: result.appName } : {}),
       ...(result.appBundleId ? { appBundleId: result.appBundleId } : {}),
+      ...(result.selection ? { selection: result.selection } : {}),
       ...(result.startup ? { startup: result.startup } : {}),
       ...(result.runtime ? { runtime: result.runtime } : {}),
       ...(result.device ? serializeSessionDevice(result.device) : {}),

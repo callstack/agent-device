@@ -2,9 +2,32 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 
+const { mockResolveTargetDevice, mockResolveTargetDeviceSelection } = vi.hoisted(() => {
+  const resolveTargetDevice = vi.fn();
+  return {
+    mockResolveTargetDevice: resolveTargetDevice,
+    mockResolveTargetDeviceSelection: vi.fn(async (...args: any[]) => {
+      const device = await resolveTargetDevice(...args);
+      return {
+        device,
+        reason: 'explicit-selector',
+        source: 'local',
+        candidateCount: 1,
+        booted: device?.booted === true,
+        bootOccurred: false,
+      };
+    }),
+  };
+});
+
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
+  return {
+    ...actual,
+    dispatchCommand: vi.fn(async () => ({})),
+    resolveTargetDevice: mockResolveTargetDevice,
+    resolveTargetDeviceSelection: mockResolveTargetDeviceSelection,
+  };
 });
 vi.mock('../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
@@ -51,7 +74,6 @@ import {
   mockBindDeviceRuntime,
   mockInspectDeviceRuntimeFacts,
 } from './session-command-harness.ts';
-import { resolveTargetDevice } from '../../../core/dispatch.ts';
 import { applyRuntimeHintValues } from '../../../platform-runtime-runtime-hints.ts';
 import { resolveAndroidPackageForOpen } from '../../../platform-runtime-open-target.ts';
 import { dispatchApplicationLifecycleEffect } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
@@ -65,7 +87,6 @@ import {
 } from './session-open-runtime.fixtures.ts';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
-const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintValues);
 const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
 

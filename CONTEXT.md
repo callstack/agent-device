@@ -22,6 +22,18 @@ runtime bindings.
 **Device inventory gateway**:
 The platform-neutral composition of local-family and provider inventory sources.
 
+**Device selection result**:
+The typed outcome of resolving one device from an inventory or an existing session, including its
+source, candidate count, and selection reason.
+
+**Selection reason**:
+The machine-readable precedence branch that selected a device, such as an explicit selector,
+existing-session binding, a single booted or bootable local target, or one provider target.
+
+**Authoritative provider inventory**:
+A provider-owned candidate set whose empty or multi-device result is not replaced by local
+discovery; provider ownership must be explicit or singular before a request can bind it.
+
 **Device runtime gateway**:
 The platform-neutral boundary that reports runtime facts and binds an admitted device to its
 runtime owner.

@@ -11,7 +11,7 @@ import type { DispatchContext } from './dispatch-context.ts';
 import { getInteractor } from './interactors.ts';
 
 export type { DispatchContext } from './dispatch-context.ts';
-export { resolveTargetDevice } from './dispatch-resolve.ts';
+export { resolveTargetDevice, resolveTargetDeviceSelection } from './dispatch-resolve.ts';
 
 export async function dispatchCommand(
   device: DeviceInfo,

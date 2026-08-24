@@ -65,6 +65,28 @@ test('MCP collection results use object envelopes without changing object result
   }
 });
 
+test('MCP open keeps device-selection evidence in structured content and JSON text data', async () => {
+  const openResult = {
+    session: 'selected',
+    selection: {
+      reason: 'single-booted-local',
+      source: 'local',
+      candidateCount: 2,
+      booted: true,
+      bootOccurred: false,
+    },
+  };
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async () => openResult,
+  });
+
+  const result = await executor.execute('open', { app: 'Settings', mcpOutputFormat: 'json' });
+
+  assert.deepEqual(result.structuredContent, openResult);
+  assert.deepEqual(JSON.parse(result.content[0]?.text ?? '{}').selection, openResult.selection);
+});
+
 test('MCP fill projects target-bound unconfirmed verification through its advertised schema', async () => {
   const fillResult = {
     targetKind: 'point',

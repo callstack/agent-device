@@ -1,4 +1,4 @@
-import { resolveTargetDevice } from '../../core/dispatch.ts';
+import { resolveTargetDeviceSelection } from '../../core/dispatch.ts';
 import {
   openApplicationRuntimeUse,
   openApplicationWithRuntimeHintApplyAndClearUse,
@@ -27,6 +27,7 @@ import { expireRefFrame } from '../ref-frame.ts';
 import type { DeviceClaimReconciler } from '../device-claims.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { admitRuntimeOperations } from '../runtime-admission.ts';
+import { resolveExistingSessionDeviceSelection } from '../../core/device-selection-resolver.ts';
 import {
   completeOpenCommand,
   openNewSessionWithDeviceClaim,
@@ -186,6 +187,7 @@ export async function handleOpenCommand(params: {
     }
 
     const device = await refreshSessionDeviceIfNeeded(session.device);
+    const selection = resolveExistingSessionDeviceSelection(device);
     await req.internal?.retainDeviceExecutionLock?.(device.id);
     const runtimePlanAdmission = await resolveOpenRuntimePlanAdmission({
       req,
@@ -235,6 +237,7 @@ export async function handleOpenCommand(params: {
       applyRuntimeHints: admission.applyRuntimeHints,
       surface: surfaceResult,
       existingSession: session,
+      selection,
     });
   }
 
@@ -253,10 +256,11 @@ export async function handleOpenCommand(params: {
     return preResolvedValidation;
   }
 
-  const device = await resolveTargetDevice(
+  const selection = await resolveTargetDeviceSelection(
     req.flags ?? {},
     buildOpenTargetDeviceResolutionOptions(openTarget),
   );
+  const device = selection.device;
   await req.internal?.retainDeviceExecutionLock?.(device.id);
   const surfaceResult = resolveOpenSurfaceResponse(device, req.flags?.surface, openTarget);
   if (typeof surfaceResult !== 'string') {
@@ -301,6 +305,7 @@ export async function handleOpenCommand(params: {
         applyRuntimeHints: admission.applyRuntimeHints,
         clearRuntimeHints: admission.clearRuntimeHints,
         reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
+        selection,
       }),
   );
 }

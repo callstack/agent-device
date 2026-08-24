@@ -72,6 +72,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/command-platform-execution',
   '@agent-device/contracts/device',
   '@agent-device/contracts/device-readiness-runtime',
+  '@agent-device/contracts/device-selection',
   '@agent-device/contracts/device-shutdown-runtime',
   '@agent-device/contracts/divergence',
   '@agent-device/contracts/durable-resource',

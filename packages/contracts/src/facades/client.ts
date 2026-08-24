@@ -42,6 +42,12 @@ export type {
   StartupPerfSample,
 } from '../client-device-view.ts';
 export type {
+  DeviceSelectionMetadata,
+  DeviceSelectionReason,
+  DeviceSelectionRetrySelector,
+  DeviceSelectionSource,
+} from '../device-selection.ts';
+export type {
   ClickOptions,
   DragOptions,
   FillOptions,

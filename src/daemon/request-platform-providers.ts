@@ -1,5 +1,5 @@
 import type { PlatformGatedProviderResolverKey } from '@agent-device/contracts/platform';
-import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
+import { resolveTargetDeviceSelection } from '../core/dispatch-resolve.ts';
 import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
 import { tryGetPlugin } from '../core/platform-plugin-registry.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../platforms/android/adb-executor.ts';
@@ -15,6 +15,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppleSimulatorScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-transport.ts';
 import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-runner-transport.ts';
 import { hasExplicitDeviceSelector } from './device-selector-intent.ts';
+import { buildOpenTargetDeviceResolutionOptions } from './open-device-selection.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 import { resolveProviderDeviceResolutionIntent } from './daemon-command-registry.ts';
 
@@ -362,13 +363,21 @@ async function resolveScopedProviderDevice(
       // scope for this request", never a failed request — the command's own
       // device resolution still reports its errors downstream.
       try {
-        return await resolveTargetDevice(req.flags ?? {});
+        return await resolveProviderTargetDevice(req);
       } catch {
         return undefined;
       }
     case 'skip':
       return undefined;
   }
+}
+
+async function resolveProviderTargetDevice(req: DaemonRequest): Promise<DeviceInfo> {
+  const options =
+    req.command === 'open'
+      ? buildOpenTargetDeviceResolutionOptions(req.positionals?.[0])
+      : undefined;
+  return (await resolveTargetDeviceSelection(req.flags ?? {}, options)).device;
 }
 
 async function requestPlatformProviderScopeWrappers(

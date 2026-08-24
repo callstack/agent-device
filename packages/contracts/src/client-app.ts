@@ -14,6 +14,7 @@ import type {
   DeviceCommandBaseOptions,
 } from './client-connection.ts';
 import type { AgentDeviceSessionDevice, StartupPerfSample } from './client-device-view.ts';
+import type { DeviceSelectionMetadata } from './device-selection.ts';
 
 export type AppInstallOptions = AgentDeviceRequestOverrides &
   AgentDeviceSelectionOptions & {
@@ -73,6 +74,7 @@ export type AppOpenResult = {
   appId?: string;
   startup?: StartupPerfSample;
   runtime?: SessionRuntimeHints;
+  selection?: DeviceSelectionMetadata;
   device?: AgentDeviceSessionDevice;
   /**
    * Initial interactive snapshot captured immediately after an open that
