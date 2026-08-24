@@ -38,17 +38,58 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      # #1976: ripgrep is never installed on ubuntu-latest, so `rg` failed with "command not
+      # found" (exit 127) on every run, and `if rg ...; then ... fi` cannot distinguish that
+      # from "no matches" (exit 1) — both read as false, so the step passed without the
+      # assertion ever executing. Rewritten against `grep`, which every runner ships, with the
+      # match/no-match/error exit codes handled explicitly so a broken scan fails loudly instead
+      # of silently passing.
       - name: Disallow trailing commas before closing parenthesis in Swift
         run: |
-          if rg -nU --glob '*.swift' ',\s*\n\s*\)' apple/runner; then
+          mapfile -d '' -t swift_files < <(git ls-files -z -- 'apple/runner' | grep -z '\.swift$')
+          if [ "${#swift_files[@]}" -eq 0 ]; then
+            echo "No apple/runner/*.swift files are tracked; the trailing-comma check has nothing to scan." >&2
+            exit 1
+          fi
+          set +e
+          grep -PzoH ',\s*\n\s*\)' "${swift_files[@]}"
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
             echo "Found trailing commas before ')' in Swift files. This syntax requires Swift 6.1+ and breaks older Xcode toolchains."
+            exit 1
+          elif [ "$status" -ne 1 ]; then
+            echo "grep exited $status while scanning apple/runner for trailing commas; treating an unreadable scan as a failure instead of a silent pass."
             exit 1
           fi
 
+      # Same false-green shape as the check above, plus a narrower pattern (#1976). Two kinds
+      # of `?: typeof X` are excluded as not being test-only DI seams:
+      #   - `typeof fetch`: fetchImpl?/fetch? params inject the one global with no module
+      #     boundary `vi.mock` can intercept. src/cli/auth-session.ts, cloud-profile.ts, and
+      #     remote/daemon-proxy.ts use the seam for exact per-call assertions in their unit
+      #     tests, while the CLI-level tests use `vi.stubGlobal('fetch', ...)` where the seam
+      #     isn't reachable — a deliberate, exercised seam, not a leftover one.
+      #   - `typeof SOME_CONSTANT` (SCREAMING_SNAKE_CASE): derives a literal union type from a
+      #     constant, e.g. `dispatchPath?: typeof MAESTRO_COORDINATE_FALLBACK_PATH` in
+      #     src/daemon/handlers/interaction-touch-response.ts. Not an injectable seam at all —
+      #     the pattern only ever matched it by syntax coincidence.
       - name: Fail if test-only DI seams reappear in production code
         run: |
-          if rg '\?\s*:\s*typeof\s+' src/ --glob '!**/__tests__/**' --glob '!*.test.ts'; then
+          mapfile -d '' -t seam_files < <(git ls-files -z -- 'src' | grep -zvE '/__tests__/|\.test\.ts$')
+          if [ "${#seam_files[@]}" -eq 0 ]; then
+            echo "No production src/ files are tracked; the DI-seam check has nothing to scan." >&2
+            exit 1
+          fi
+          set +e
+          grep -PnH '\?\s*:\s*typeof\s+(?!fetch\b)(?![A-Z][A-Z0-9_]*\b)' "${seam_files[@]}"
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
             echo "Found test-only DI seams (optional typeof params) in production code."
+            exit 1
+          elif [ "$status" -ne 1 ]; then
+            echo "grep exited $status while scanning src/ for DI seams; treating an unreadable scan as a failure instead of a silent pass."
             exit 1
           fi
 
