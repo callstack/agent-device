@@ -68,7 +68,7 @@ export const APPROVED_SEAMS: readonly ApprovedSeam[] = [
   },
   {
     file: 'src/daemon/handlers/interaction-touch-response.ts',
-    line: 61,
+    line: 60,
     field: 'dispatchPath',
     target: 'MAESTRO_COORDINATE_FALLBACK_PATH',
     reason:
