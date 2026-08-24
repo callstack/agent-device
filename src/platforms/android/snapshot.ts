@@ -13,19 +13,13 @@ import {
   attachRefs,
   type HiddenContentHint,
   type RawSnapshotNode,
-  type SnapshotQualityVerdict,
   type SnapshotOptions,
 } from '@agent-device/kernel/snapshot';
-import {
-  attachSnapshotClickabilityEvidence,
-  attachSnapshotOcclusionContextEvidence,
-} from '@agent-device/contracts/capture';
 import { deriveMobileSnapshotHiddenContentHints } from '../../snapshot/mobile-snapshot-semantics.ts';
 import {
   buildUiHierarchySnapshot,
   parseUiHierarchyTree,
   type AndroidBuiltSnapshot,
-  type AndroidSnapshotAnalysis,
   type AndroidUiHierarchySnapshotOptions,
   type AndroidUiHierarchy,
 } from './ui-hierarchy.ts';
@@ -70,6 +64,7 @@ import {
   type AndroidSnapshotPresentationOptions,
 } from './snapshot-presentation.ts';
 import { readAndroidSiblingOrder } from './ui-hierarchy-node.ts';
+import { createAndroidSnapshotCapture, type AndroidSnapshotCapture } from './snapshot-capture.ts';
 
 const HELPER_INSTALL_TIMEOUT_MS = 30_000;
 /**
@@ -102,13 +97,7 @@ export async function captureAndroidUiHierarchyXml(
 export async function snapshotAndroid(
   device: DeviceInfo,
   options: AndroidSnapshotOptions = {},
-): Promise<{
-  nodes: RawSnapshotNode[];
-  truncated?: boolean;
-  analysis: AndroidSnapshotAnalysis;
-  androidSnapshot: AndroidSnapshotBackendMetadata;
-  quality?: SnapshotQualityVerdict;
-}> {
+): Promise<AndroidSnapshotCapture> {
   const adb = resolveAndroidAdbProvider(device, options.helperAdb).exec;
   const capture = await captureAndroidUiHierarchy(device, options, adb);
   const xml = capture.xml;
@@ -142,10 +131,10 @@ export async function snapshotAndroid(
       androidSnapshot,
       quality: { state: 'healthy', backend: 'android-helper' } as const,
     };
-    return attachSnapshotClickabilityEvidence(
-      attachSnapshotOcclusionContextEvidence(result, occlusionContext),
-      buildAndroidSnapshotClickabilityEvidence(built),
-    );
+    return createAndroidSnapshotCapture(result, {
+      clickability: buildAndroidSnapshotClickabilityEvidence(built),
+      occlusionContext,
+    });
   } catch (error) {
     if (!isAndroidSnapshotPresentationFailure(error)) throw error;
     return attachAndroidPresentationFailureEvidence({
@@ -158,14 +147,8 @@ export async function snapshotAndroid(
 function attachAndroidPresentationFailureEvidence(params: {
   failure: AndroidSnapshotPresentationFailure;
   androidSnapshot: AndroidSnapshotBackendMetadata;
-}): {
-  nodes: RawSnapshotNode[];
-  truncated: true;
-  analysis: AndroidSnapshotAnalysis;
-  androidSnapshot: AndroidSnapshotBackendMetadata;
-  quality: SnapshotQualityVerdict;
-} {
-  return attachSnapshotClickabilityEvidence(
+}): AndroidSnapshotCapture {
+  return createAndroidSnapshotCapture(
     {
       nodes: [],
       truncated: true,
@@ -187,7 +170,13 @@ function attachAndroidPresentationFailureEvidence(params: {
         reasonCode: params.failure.qualityReasonCode,
       },
     },
-    { kind: 'exact', provider: 'android-helper', clickableByNodeIndex: new Map() },
+    {
+      clickability: {
+        kind: 'exact',
+        provider: 'android-helper',
+        clickableByNodeIndex: new Map(),
+      },
+    },
   );
 }
 

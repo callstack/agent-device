@@ -38,10 +38,7 @@ import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { withMethodScope } from '../../utils/method-scope.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
-import {
-  copySnapshotPrivateEvidence,
-  snapshotCaptureAnnotationsFrom,
-} from '@agent-device/contracts/capture';
+import { androidSnapshotPublicationInput } from '../../platforms/android/snapshot-capture.ts';
 
 /**
  * `appBundleId` is present exactly for app-backed daemon sessions, whose teardown releases the
@@ -108,12 +105,7 @@ export function createAndroidInteractor(
           }),
         { backend: 'android' },
       );
-      return copySnapshotPrivateEvidence(result, {
-        nodes: result.nodes ?? [],
-        truncated: result.truncated ?? false,
-        backend: 'android',
-        ...snapshotCaptureAnnotationsFrom(result),
-      });
+      return androidSnapshotPublicationInput(result);
     },
     back: (_mode) => backAndroid(device),
     home: () => homeAndroid(device),

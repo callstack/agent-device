@@ -5,6 +5,7 @@ import {
   type AndroidBlockingDialogFocus,
 } from '../platforms/android/app-lifecycle.ts';
 import { snapshotAndroid } from '../platforms/android/snapshot.ts';
+import { androidSnapshotPublicationInput } from '../platforms/android/snapshot-capture.ts';
 import { runAndroidAdb } from '../platforms/android/adb.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
@@ -291,7 +292,7 @@ async function readAndroidSnapshotNodes(session: SessionState): Promise<Snapshot
   const rawSnapshot = await snapshotAndroid(session.device, {
     interactiveOnly: false,
   });
-  return buildSnapshotState({ nodes: rawSnapshot.nodes, backend: 'android' }, undefined).nodes;
+  return buildSnapshotState(androidSnapshotPublicationInput(rawSnapshot), undefined).nodes;
 }
 
 async function tapAndroidDialogButton(

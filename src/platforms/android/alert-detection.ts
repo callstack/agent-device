@@ -1,5 +1,6 @@
 import { centerOfRect, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { AlertInfo, AlertSource } from '@agent-device/contracts/interaction';
+import { isSnapshotNodeInteractionBlocked } from '../../snapshot/snapshot-occlusion.ts';
 
 type AndroidAlertButtonRole = 'accept' | 'dismiss' | 'neutral';
 
@@ -57,7 +58,7 @@ export function classifyAndroidAlertIdentifier(
 }
 
 export function findAndroidAlertCandidate(nodes: RawSnapshotNode[]): AndroidAlertCandidate | null {
-  const candidate = findAndroidAlertNodes(nodes);
+  const candidate = findAndroidAlertNodes(nodes.filter(isReachableAlertNode));
   const candidateNodes = candidate.nodes;
   if (candidateNodes.length === 0) return null;
 
@@ -65,6 +66,7 @@ export function findAndroidAlertCandidate(nodes: RawSnapshotNode[]): AndroidAler
   const textNodes = candidateNodes.filter((node) => readNodeText(node) && !isButtonLike(node));
   const title = chooseAlertTitle(textNodes);
   const message = chooseAlertMessage(textNodes, title);
+  if (!title && !message && buttons.length === 0) return null;
   const packageName = choosePackageName(candidateNodes);
   return {
     alert: {
@@ -77,6 +79,10 @@ export function findAndroidAlertCandidate(nodes: RawSnapshotNode[]): AndroidAler
     },
     buttons,
   };
+}
+
+function isReachableAlertNode(node: RawSnapshotNode): boolean {
+  return !isSnapshotNodeInteractionBlocked(node);
 }
 
 export function chooseAndroidAlertButton(

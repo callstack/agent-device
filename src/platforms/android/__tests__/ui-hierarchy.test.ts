@@ -4,14 +4,11 @@ import { buildSnapshotState } from '../../../daemon/snapshot-state.ts';
 import { isNodeVisibleOnScreen } from '@agent-device/contracts/snapshot';
 import { androidUiNodes, parseUiHierarchyTree } from '../ui-hierarchy.ts';
 import { parseUiHierarchy } from './ui-hierarchy-fixtures.ts';
-import { copySnapshotPrivateEvidence } from '@agent-device/contracts/capture';
+import { androidSnapshotPublicationInput } from '../snapshot-capture.ts';
 
 function publishUiHierarchy(xml: string) {
   const captured = parseUiHierarchy(xml, 800, {});
-  return buildSnapshotState(
-    copySnapshotPrivateEvidence(captured, { ...captured, backend: 'android' as const }),
-    {},
-  );
+  return buildSnapshotState(androidSnapshotPublicationInput(captured), {});
 }
 
 test('parseUiHierarchy does not truncate when no max node count is requested', () => {

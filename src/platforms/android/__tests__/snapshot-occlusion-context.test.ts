@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
-import {
-  copySnapshotPrivateEvidence,
-  readSnapshotOcclusionContextEvidence,
-} from '@agent-device/contracts/capture';
+import { readSnapshotOcclusionContextEvidence } from '@agent-device/contracts/capture';
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../__tests__/test-utils/android-snapshot-helper.ts';
 import { buildSnapshotState } from '../../../daemon/snapshot-state.ts';
@@ -12,6 +9,7 @@ import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-insta
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import type { AndroidAdbExecutor } from '../snapshot-helper.ts';
 import { snapshotAndroid } from '../snapshot.ts';
+import { androidSnapshotPublicationInput } from '../snapshot-capture.ts';
 import {
   ANDROID_HELPER_INSTALLED_VERSION_PROBE,
   androidHelperInstrumentationOutput,
@@ -46,7 +44,8 @@ test('scoped Android captures retain broad off-wire context for daemon occlusion
     helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
     scope: 'Behind the modal',
   });
-  const context = readSnapshotOcclusionContextEvidence(captured);
+  const daemonCapture = androidSnapshotPublicationInput(captured);
+  const context = readSnapshotOcclusionContextEvidence(daemonCapture);
 
   assert.ok(context);
   assert.deepEqual(
@@ -64,10 +63,6 @@ test('scoped Android captures retain broad off-wire context for daemon occlusion
     [3],
   );
 
-  const daemonCapture = copySnapshotPrivateEvidence(captured, {
-    ...captured,
-    backend: 'android' as const,
-  });
   const published = buildSnapshotState(daemonCapture, { snapshotScope: 'Behind the modal' });
 
   assert.equal(published.nodes.length, 1);

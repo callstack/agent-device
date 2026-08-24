@@ -3,6 +3,7 @@ import { test, expect, vi } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
 let snapshotCalls = 0;
 const dispatchCalls: string[][] = [];
@@ -34,6 +35,24 @@ import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/scre
 
 vi.mock('../../platforms/android/snapshot.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/android/snapshot.ts')>();
+  const { createAndroidSnapshotCapture } =
+    await import('../../platforms/android/snapshot-capture.ts');
+  const capture = (nodes: RawSnapshotNode[]) =>
+    createAndroidSnapshotCapture(
+      {
+        nodes,
+        analysis: { rawNodeCount: nodes.length, maxDepth: 0 },
+        androidSnapshot: { backend: 'android-helper' },
+        quality: { state: 'healthy', backend: 'android-helper' },
+      },
+      {
+        clickability: {
+          kind: 'exact',
+          provider: 'android-helper',
+          clickableByNodeIndex: new Map(),
+        },
+      },
+    );
   return {
     ...actual,
     snapshotAndroid: vi.fn(async () => {
@@ -46,24 +65,22 @@ vi.mock('../../platforms/android/snapshot.ts', async (importOriginal) => {
         );
       }
       if (snapshotCalls === 1) {
-        return {
-          nodes: [
-            {
-              index: 0,
-              type: 'android.widget.TextView',
-              label: 'Process system is not responding',
-              rect: { x: 50, y: 400, width: 500, height: 80 },
-            },
-            {
-              index: 1,
-              type: 'android.widget.Button',
-              label: 'Close app',
-              rect: { x: 100, y: 600, width: 220, height: 80 },
-            },
-          ],
-        };
+        return capture([
+          {
+            index: 0,
+            type: 'android.widget.TextView',
+            label: 'Process system is not responding',
+            rect: { x: 50, y: 400, width: 500, height: 80 },
+          },
+          {
+            index: 1,
+            type: 'android.widget.Button',
+            label: 'Close app',
+            rect: { x: 100, y: 600, width: 220, height: 80 },
+          },
+        ]);
       }
-      return { nodes: [] };
+      return capture([]);
     }),
   };
 });

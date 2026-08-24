@@ -13,6 +13,7 @@ import type { AndroidAdbExecutor } from '../snapshot-helper.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../__tests__/test-utils/android-snapshot-helper.ts';
 import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-install.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
+import { androidSnapshotPublicationInput } from '../snapshot-capture.ts';
 
 vi.mock('../../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
@@ -92,8 +93,9 @@ test('snapshotAndroid captures the hierarchy once and retains clickability off-w
     helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
     raw: true,
   });
-  const evidence = readSnapshotClickabilityEvidence(result);
-  const occlusionContext = readSnapshotOcclusionContextEvidence(result);
+  const publication = androidSnapshotPublicationInput(result);
+  const evidence = readSnapshotClickabilityEvidence(publication);
+  const occlusionContext = readSnapshotOcclusionContextEvidence(publication);
 
   assert.equal(hierarchyCaptures, 1);
   assert.equal(evidence?.kind, 'exact');

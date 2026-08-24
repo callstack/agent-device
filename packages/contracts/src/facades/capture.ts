@@ -56,7 +56,6 @@ export {
   attachSnapshotClickabilityEvidence,
   attachSnapshotOcclusionContextEvidence,
   copySnapshotClickabilityEvidence,
-  copySnapshotPrivateEvidence,
   readSnapshotClickabilityEvidence,
   readSnapshotOcclusionContextEvidence,
 } from '../snapshot-private-evidence.ts';

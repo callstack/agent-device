@@ -1,7 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import {
-  attachSnapshotClickabilityEvidence,
-  attachSnapshotOcclusionContextEvidence,
   readSnapshotClickabilityEvidence,
   readSnapshotOcclusionContextEvidence,
 } from '@agent-device/contracts/capture';
@@ -10,6 +8,7 @@ import { createAndroidInteractor } from './android.ts';
 import { snapshotAndroid } from '../../platforms/android/snapshot.ts';
 import { scrollAndroid } from '../../platforms/android/input-actions.ts';
 import { fillAndroid } from '../../platforms/android/text-input.ts';
+import { makeAndroidSnapshotCapture } from '../../__tests__/test-utils/android-snapshot-capture.ts';
 
 vi.mock('../../platforms/android/snapshot.ts', () => ({
   snapshotAndroid: vi.fn(),
@@ -46,23 +45,20 @@ afterEach(() => {
 });
 
 test('preserves Android clickability evidence through the interactor snapshot adapter', async () => {
-  const captured = {
-    nodes: [{ index: 0, identifier: 'target', rect: { x: 0, y: 0, width: 20, height: 20 } }],
-    analysis: { rawNodeCount: 1, maxDepth: 0 },
-    androidSnapshot: { backend: 'android-helper' as const },
-    quality: { state: 'healthy' as const, backend: 'android-helper' as const },
-  };
+  const nodes = [{ index: 0, identifier: 'target', rect: { x: 0, y: 0, width: 20, height: 20 } }];
   const evidence = {
     kind: 'exact' as const,
     provider: 'android-helper' as const,
     clickableByNodeIndex: new Map<number, boolean | undefined>([[0, true]]),
   };
-  attachSnapshotClickabilityEvidence(captured, evidence);
   const occlusionContext = {
-    nodes: captured.nodes,
+    nodes,
     sourceIndexByNodeIndex: new Map([[0, 0]]),
   };
-  attachSnapshotOcclusionContextEvidence(captured, occlusionContext);
+  const captured = makeAndroidSnapshotCapture(nodes, {
+    clickability: evidence,
+    occlusionContext,
+  });
   snapshotAndroidMock.mockResolvedValue(captured);
 
   const result = await createAndroidInteractor(device).snapshot({});

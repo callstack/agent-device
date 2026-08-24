@@ -4,7 +4,7 @@ import type { AndroidBuiltSnapshot } from './ui-hierarchy.ts';
 /** Preserve the helper's reported clickable fact across Android presentation. */
 export function buildAndroidSnapshotClickabilityEvidence(
   snapshot: Pick<AndroidBuiltSnapshot, 'nodes' | 'sourceNodes'>,
-): SnapshotClickabilityEvidence {
+): Extract<SnapshotClickabilityEvidence, { provider: 'android-helper' }> {
   const clickableByNodeIndex = new Map<number, boolean | undefined>();
   snapshot.nodes.forEach((node, position) => {
     clickableByNodeIndex.set(node.index, snapshot.sourceNodes[position]?.clickable);

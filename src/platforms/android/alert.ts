@@ -9,6 +9,7 @@ import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { successText } from '../../utils/success-text.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   chooseAndroidAlertButton,
   findAndroidAlertCandidate,
@@ -16,7 +17,11 @@ import {
   type AndroidAlertInfo,
 } from './alert-detection.ts';
 import { backAndroid, pressAndroid } from './input-actions.ts';
-import { snapshotAndroid } from './snapshot.ts';
+
+type AndroidAlertOptions = {
+  timeoutMs?: number;
+  captureNodes: () => Promise<RawSnapshotNode[]>;
+};
 
 export type AndroidAlertResult =
   | {
@@ -47,24 +52,27 @@ export type AndroidAlertResult =
 export async function handleAndroidAlert(
   device: DeviceInfo,
   action: AlertAction,
-  options: { timeoutMs?: number } = {},
+  options: AndroidAlertOptions,
 ): Promise<AndroidAlertResult> {
   if (action === 'wait') {
-    return await waitForAndroidAlert(device, options.timeoutMs ?? DEFAULT_ALERT_TIMEOUT_MS);
+    return await waitForAndroidAlert(
+      options.captureNodes,
+      options.timeoutMs ?? DEFAULT_ALERT_TIMEOUT_MS,
+    );
   }
   if (action === 'get') {
-    const candidate = await readAndroidAlertCandidate(device);
+    const candidate = await readAndroidAlertCandidate(options.captureNodes);
     return buildAndroidAlertStatusResponse(candidate?.alert ?? null);
   }
-  return await handleAndroidAlertAction(device, action);
+  return await handleAndroidAlertAction(device, action, options.captureNodes);
 }
 
 async function waitForAndroidAlert(
-  device: DeviceInfo,
+  captureNodes: AndroidAlertOptions['captureNodes'],
   timeoutMs: number,
 ): Promise<AndroidAlertResult> {
   const start = Date.now();
-  const candidate = await pollAndroidAlertCandidate(device, timeoutMs);
+  const candidate = await pollAndroidAlertCandidate(captureNodes, timeoutMs);
   if (!candidate) {
     throw new AppError('COMMAND_FAILED', 'alert wait timed out');
   }
@@ -81,8 +89,9 @@ async function waitForAndroidAlert(
 async function handleAndroidAlertAction(
   device: DeviceInfo,
   action: 'accept' | 'dismiss',
+  captureNodes: AndroidAlertOptions['captureNodes'],
 ): Promise<AndroidAlertResult> {
-  const candidate = await pollAndroidAlertCandidate(device, ALERT_ACTION_RETRY_MS);
+  const candidate = await pollAndroidAlertCandidate(captureNodes, ALERT_ACTION_RETRY_MS);
   if (!candidate) {
     throw new AppError('COMMAND_FAILED', 'alert not found', {
       hint: 'If a sheet is visible in snapshot but alert reports no alert, it is likely app-owned UI. Use snapshot -i and press the visible label/ref.',
@@ -107,12 +116,12 @@ async function handleAndroidAlertAction(
 }
 
 async function pollAndroidAlertCandidate(
-  device: DeviceInfo,
+  captureNodes: AndroidAlertOptions['captureNodes'],
   timeoutMs: number,
 ): Promise<AndroidAlertCandidate | null> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const candidate = await readAndroidAlertCandidate(device);
+    const candidate = await readAndroidAlertCandidate(captureNodes);
     if (candidate) return candidate;
     await sleep(ALERT_POLL_INTERVAL_MS);
   }
@@ -120,17 +129,13 @@ async function pollAndroidAlertCandidate(
 }
 
 async function readAndroidAlertCandidate(
-  device: DeviceInfo,
+  captureNodes: AndroidAlertOptions['captureNodes'],
 ): Promise<AndroidAlertCandidate | null> {
-  const result = await withDiagnosticTimer(
-    'snapshot_capture',
-    async () =>
-      await snapshotAndroid(device, {
-        includeHiddenContentHints: false,
-      }),
-    { backend: 'android', purpose: 'alert' },
-  );
-  return findAndroidAlertCandidate(result.nodes);
+  const result = await withDiagnosticTimer('snapshot_capture', captureNodes, {
+    backend: 'android',
+    purpose: 'alert',
+  });
+  return findAndroidAlertCandidate(result);
 }
 
 function buildAndroidAlertStatusResponse(alert: AndroidAlertInfo | null): AndroidAlertResult {

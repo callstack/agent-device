@@ -9,6 +9,8 @@ import { sleep } from '../../utils/timeouts.ts';
 import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import { runMacOsAlertAction } from '../../platforms/apple/os/macos/helper.ts';
 import { handleAndroidAlert } from '../../platforms/android/alert.ts';
+import { snapshotAndroid } from '../../platforms/android/snapshot.ts';
+import { androidSnapshotPublicationInput } from '../../platforms/android/snapshot-capture.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
@@ -18,6 +20,7 @@ import { parseTimeout } from '../../utils/parse-timeout.ts';
 import { resolveRefFrameEffect } from '../daemon-command-registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { errorResponse, requireCommandSupported } from './response.ts';
+import { buildSnapshotState } from '../snapshot-state.ts';
 
 type HandleAlertCommandParams = {
   req: DaemonRequest;
@@ -63,6 +66,10 @@ export async function handleAlertCommand(
       params,
       await handleAndroidAlert(device, action, {
         timeoutMs,
+        captureNodes: async () => {
+          const capture = await snapshotAndroid(device, { includeHiddenContentHints: false });
+          return buildSnapshotState(androidSnapshotPublicationInput(capture), undefined).nodes;
+        },
       }),
     );
   }

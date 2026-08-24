@@ -10,6 +10,7 @@ import { runAndroidAdb } from '../../platforms/android/adb.ts';
 import { recoverAndroidBlockingSystemDialog } from '../android-system-dialog.ts';
 import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
+import { makeAndroidSnapshotCapture } from '../../__tests__/test-utils/android-snapshot-capture.ts';
 
 test('android blocking-dialog recovery expires the ref frame before its recovery tap', async () => {
   const dialog = {
@@ -28,8 +29,8 @@ test('android blocking-dialog recovery expires the ref frame before its recovery
   // First read: the blocking dialog is present (drives recovery). Post-tap poll:
   // the dialog is gone, so recovery completes without sleeping through retries.
   vi.mocked(snapshotAndroid)
-    .mockResolvedValueOnce({ nodes: [dialog, closeApp] } as never)
-    .mockResolvedValue({ nodes: [] } as never);
+    .mockResolvedValueOnce(makeAndroidSnapshotCapture([dialog, closeApp]) as never)
+    .mockResolvedValue(makeAndroidSnapshotCapture([]) as never);
   vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
 
   const session = makeAndroidSession('anr-recovery');

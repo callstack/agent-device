@@ -12,6 +12,7 @@ import { runAndroidAdb } from '../../platforms/android/adb.ts';
 import { recoverAndroidBlockingSystemDialog } from '../android-system-dialog.ts';
 import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
+import { makeAndroidSnapshotCapture } from '../../__tests__/test-utils/android-snapshot-capture.ts';
 
 const SCREEN = { x: 0, y: 0, width: 1080, height: 2400 };
 
@@ -72,8 +73,10 @@ test('recovery taps the reachable Close app, not a covered one that comes first'
     rect: { x: 40, y: 1800, width: 200, height: 80 },
   };
   vi.mocked(snapshotAndroid)
-    .mockResolvedValueOnce({ nodes: [staleCloseApp, sheet, dialog, visibleCloseApp] } as never)
-    .mockResolvedValue({ nodes: [] } as never);
+    .mockResolvedValueOnce(
+      makeAndroidSnapshotCapture([staleCloseApp, sheet, dialog, visibleCloseApp]) as never,
+    )
+    .mockResolvedValue(makeAndroidSnapshotCapture([]) as never);
   vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
 
   const result = await recoverAndroidBlockingSystemDialog({
@@ -100,13 +103,82 @@ test('a fully covered dialog does not trigger recovery', async () => {
     hittable: true,
     rect: { x: 40, y: 300, width: 200, height: 80 },
   };
-  vi.mocked(snapshotAndroid).mockResolvedValue({
-    nodes: [staleDialog, staleCloseApp, foregroundSheet(2)],
-  } as never);
+  vi.mocked(snapshotAndroid).mockResolvedValue(
+    makeAndroidSnapshotCapture([staleDialog, staleCloseApp, foregroundSheet(2)]) as never,
+  );
   vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
 
   const result = await recoverAndroidBlockingSystemDialog({
     session: recordingSession('anr-covered-dialog'),
+  });
+
+  expect(result.status).toBe('absent');
+  expect(tappedPoints()).toEqual([]);
+});
+
+test('collectively covered Close app is neither selected nor tapped', async () => {
+  vi.mocked(runAndroidAdb).mockReset();
+  const nodes = [
+    {
+      index: 0,
+      type: 'android.widget.FrameLayout',
+      rect: SCREEN,
+    },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'android.widget.Button',
+      label: 'Close app',
+      hittable: true,
+      rect: { x: 40, y: 300, width: 200, height: 80 },
+    },
+    {
+      index: 2,
+      parentIndex: 0,
+      type: 'android.view.ViewGroup',
+    },
+    {
+      index: 3,
+      parentIndex: 2,
+      type: 'android.widget.Button',
+      label: 'Foreground left',
+      hittable: true,
+      rect: { x: 40, y: 300, width: 100, height: 80 },
+    },
+    {
+      index: 4,
+      parentIndex: 2,
+      type: 'android.widget.Button',
+      label: 'Foreground right',
+      hittable: true,
+      rect: { x: 140, y: 300, width: 100, height: 80 },
+    },
+    {
+      index: 5,
+      parentIndex: 0,
+      type: 'android.widget.TextView',
+      label: "App isn't responding",
+      rect: { x: 40, y: 180, width: 320, height: 60 },
+    },
+  ];
+  const capture = makeAndroidSnapshotCapture(nodes, {
+    occlusionContext: {
+      nodes,
+      sourceIndexByNodeIndex: new Map(nodes.map((node) => [node.index, node.index])),
+      androidSiblingOrderByNodeIndex: new Map([
+        [1, { group: 0, order: 1 }],
+        [2, { group: 0, order: 2 }],
+        [5, { group: 0, order: 3 }],
+      ]),
+    },
+  });
+  vi.mocked(snapshotAndroid)
+    .mockResolvedValueOnce(capture as never)
+    .mockResolvedValue(makeAndroidSnapshotCapture([]) as never);
+  vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
+
+  const result = await recoverAndroidBlockingSystemDialog({
+    session: recordingSession('anr-collectively-covered-button'),
   });
 
   expect(result.status).toBe('absent');

@@ -79,12 +79,3 @@ export function readSnapshotOcclusionContextEvidence(
 ): SnapshotOcclusionContextEvidence | undefined {
   return owner ? privateEvidenceBySnapshotObject.get(owner)?.occlusionContext : undefined;
 }
-
-/** Copies every non-serializable capture fact needed before daemon publication. */
-export function copySnapshotPrivateEvidence<T extends object>(
-  source: object | null | undefined,
-  target: T,
-): T {
-  const evidence = source ? privateEvidenceBySnapshotObject.get(source) : undefined;
-  return evidence ? attachSnapshotPrivateEvidence(target, evidence) : target;
-}
