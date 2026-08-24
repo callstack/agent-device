@@ -9,17 +9,19 @@ export type CliJsonResult = {
   stderr: string;
 };
 
-export function runSourceCliJsonSync(
-  args: string[],
-  options?: { env?: NodeJS.ProcessEnv },
-): CliJsonResult {
+export type CliJsonOptions = {
+  env?: NodeJS.ProcessEnv;
+  timeoutMs?: number;
+};
+
+export function runSourceCliJsonSync(args: string[], options?: CliJsonOptions): CliJsonResult {
   const result = runCmdSync(
     process.execPath,
     ['--experimental-strip-types', 'src/bin.ts', ...args],
     {
       allowFailure: true,
       env: options?.env,
-      timeoutMs: CLI_TIMEOUT_MS,
+      timeoutMs: options?.timeoutMs ?? CLI_TIMEOUT_MS,
     },
   );
   return cliJsonResult(result);

@@ -82,6 +82,11 @@ test('Linux command-evidence claims name every executable lane command', () => {
   const runnerPath = path.resolve(LINUX_COMMAND_EVIDENCE.path);
   const runnerSource = fs.readFileSync(runnerPath, 'utf8');
   assert.ok(runnerSource.includes(LINUX_COMMAND_EVIDENCE.test));
+  assert.match(
+    runnerSource,
+    /runSourceCliJsonSync\(args, \{ env, timeoutMs: options\?\.timeoutMs \}\)/,
+    'Linux source CLI adapter must forward the shared harness timeout bound',
+  );
 
   const scriptPath = path.resolve(LINUX_COMMAND_EVIDENCE_SCRIPT);
   const scriptSource = fs.readFileSync(scriptPath, 'utf8');

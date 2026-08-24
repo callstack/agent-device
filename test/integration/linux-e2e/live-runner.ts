@@ -38,7 +38,8 @@ const harness = createLiveDeviceHarness<LinuxContext, LinuxBehavior>({
     context.session,
     '--json',
   ],
-  runCli: async (args, env) => runSourceCliJsonSync(args, { env }),
+  runCli: async (args, env, options) =>
+    runSourceCliJsonSync(args, { env, timeoutMs: options?.timeoutMs }),
   writeCoverageReport: (context) =>
     writeCoverageReport(context, {
       platform: 'linux',
