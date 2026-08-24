@@ -4,6 +4,10 @@ import {
 } from '@agent-device/contracts/android-system-chrome';
 import type { AndroidSiblingOrderEvidence } from '@agent-device/contracts/capture';
 import { isScrollableType, normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
+import {
+  foldSnapshotRect,
+  serializeRegularSnapshotPresentationNode,
+} from '@agent-device/contracts/snapshot-presentation';
 import type { RawSnapshotNode, Rect, SnapshotOptions } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect, pickLargestRect } from '@agent-device/kernel/rect';
 import {
@@ -17,9 +21,7 @@ import { scopePresentedAndroidSnapshot } from './ui-hierarchy-scope.ts';
 import { isCollectionContainerType, shouldIncludeAndroidNode } from './ui-hierarchy-inclusion.ts';
 import {
   createAndroidSnapshotPresentationNode,
-  effectiveAndroidRect,
   isAndroidSnapshotPresentationFailure,
-  serializeAndroidRegularPresentationNode,
   validateAndroidRegularPresentation,
   createAndroidSnapshotPresentationBudget,
   type AndroidSnapshotPresentationBudget,
@@ -241,7 +243,7 @@ function resolveAndroidEffectiveRect(
   ancestorClip: Rect | undefined,
   windowRect: Rect | undefined,
 ): Rect | undefined {
-  return state.options.raw ? node.rect : effectiveAndroidRect(node.rect, windowRect, ancestorClip);
+  return state.options.raw ? node.rect : foldSnapshotRect(node.rect, windowRect, ancestorClip);
 }
 
 function appendAndroidNodeIfPresented(
@@ -376,7 +378,7 @@ function publishAndroidPresentationNode(
   state.nodes.push(
     state.options.raw
       ? presentationNode.raw
-      : serializeAndroidRegularPresentationNode(presentationNode),
+      : serializeRegularSnapshotPresentationNode(presentationNode),
   );
 }
 

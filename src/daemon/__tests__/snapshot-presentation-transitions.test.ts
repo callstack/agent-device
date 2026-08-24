@@ -1,9 +1,9 @@
 import { expect, test } from 'vitest';
-import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builders.ts';
-import { createInteractionDevice } from '../../../commands/interaction/runtime/__tests__/test-utils/index.ts';
-import { buildSnapshotState } from '../../snapshot-state.ts';
-import { presentIosInteractiveSnapshot } from './index.ts';
-import { navigationTitleWithAppProvidedDetailsAffordanceNodes } from './transitions.fixtures.ts';
+import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
+import { createInteractionDevice } from '../../commands/interaction/runtime/__tests__/test-utils/index.ts';
+import { buildSnapshotState } from '../snapshot-state.ts';
+import { presentIosInteractiveSnapshot } from '../../snapshot/snapshot-presentation/ios/index.ts';
+import { navigationTitleWithAppProvidedDetailsAffordanceNodes } from '../../snapshot/snapshot-presentation/ios/transitions.fixtures.ts';
 
 test('iOS daemon presentation applies transitions without reapplying runner-owned scope', () => {
   const snapshot = buildSnapshotState(

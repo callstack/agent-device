@@ -62,7 +62,7 @@ test('the ratchet fails an entry that SHRANK, not only one that grew', () => {
 });
 
 test('closure pressure is attributed to the heaviest direct edges and is bounded', () => {
-  // The hole: printing a chain per evaluated module is unusable at src/cli.ts scale (361), so a
+  // The hole: printing a chain per evaluated module is unusable at src/cli.ts scale (363), so a
   // failure that "names the chain" can still be unreadable. This pins both halves: the offending
   // edge ranks first, and the output stays bounded however wide the entry is.
   const entry = '/repo/entry.ts';

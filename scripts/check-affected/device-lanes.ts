@@ -14,7 +14,7 @@
 // can: `CANONICAL_PLATFORM_FAMILIES` names the families, layering R13 pins each family's runtime
 // to `packages/platform-<family>/` and `src/platforms/<family>/`, and the remaining family-owned
 // trees are named by a family or Apple-leaf directory segment (`android/`, `linux/`,
-// `test/integration/replays/<leaf>/`, `src/daemon/snapshot-presentation/ios/`) or, under
+// `test/integration/replays/<leaf>/`, `src/snapshot/snapshot-presentation/ios/`) or, under
 // `test/integration/`, by the lane prefix of the smoke file. A path tagged with exactly one
 // family owns that family's lanes; a path tagged with none — or with two — is shared runtime
 // surface and owns every lane. Unit tests (`*.test.ts`, `__tests__/`) under `src/` and

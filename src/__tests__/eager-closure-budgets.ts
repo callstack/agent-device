@@ -171,6 +171,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/platform-runtime-unavailable.ts': 23,
   'packages/contracts/src/platform-runtime.ts': 6,
   'packages/contracts/src/record-runtime-cutover.ts': 7,
+  'packages/contracts/src/react-native-overlay.ts': 1,
   'packages/contracts/src/screen-recording-runtime-plan.ts': 5,
   'packages/contracts/src/screen-recording-runtime.ts': 1,
   'packages/contracts/src/screenshot-runtime.ts': 4,
@@ -179,6 +180,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/scroll-runtime.ts': 4,
   'packages/contracts/src/selector-observation-runtime.ts': 1,
   'packages/contracts/src/settings.ts': 3,
+  'packages/contracts/src/snapshot-presentation.ts': 2,
   'packages/contracts/src/snapshot-runtime.ts': 3,
   'packages/contracts/src/startup-recovery-fence.ts': 1,
   'packages/contracts/src/tv-remote.ts': 3,
@@ -263,7 +265,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
  * only), so its pin is also the assertion that composing the registry stays metadata-eager.
  */
 export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
-  'src/cli.ts': 362,
+  'src/cli.ts': 363,
   'src/platform-runtime.ts': 39,
   'src/core/dispatch.ts': 83,
   'src/core/capabilities.ts': 75,
@@ -322,7 +324,7 @@ export function classifyBudget(id: string, actual: number, budget: number): stri
 
 /**
  * Failure-output caps. A violation has to fit in a terminal to be read: `src/cli.ts` evaluates
- * 361 modules, and one eagerly-imported platform subtree can pull in hundreds, so both
+ * 363 modules, and one eagerly-imported platform subtree can pull in hundreds, so both
  * diagnostics below print a few owning edges with a couple of representative routes each and
  * count what they left out, rather than emitting a chain per module.
  */

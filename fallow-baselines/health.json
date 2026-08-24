@@ -581,7 +581,7 @@
     "src/daemon/session-routing.ts:high impact",
     "src/daemon/handlers/session-state.ts:complexity",
     "src/commands/cli-grammar/common.ts:high impact",
-    "src/daemon/snapshot-presentation/tree.ts:high impact",
+    "src/snapshot/snapshot-presentation/tree.ts:high impact",
     "src/utils/success-text.ts:high impact",
     "src/cli.ts:complexity",
     "src/utils/timeouts.ts:high impact",

@@ -196,6 +196,11 @@ alone.
 **Presentation options**:
 The policy input controlling how one snapshot acquisition becomes a public projection.
 
+**Snapshot presentation facet**:
+The host-side owner of the neutral acquisition-to-presentation contract and TypeScript policies.
+Platform acquisition supplies raw facts and a fold policy; runner-side Swift presentation remains
+separate across the process boundary.
+
 **Capture hint**:
 The acquisition-facing view of a snapshot request, derived once from presentation options. It names
 the projection a backend must serve, keeps raw traversal depth separate from regular presented depth,

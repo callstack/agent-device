@@ -7,6 +7,9 @@
   "dependencies": {
     "@agent-device/kernel": "workspace:*"
   },
+  "devDependencies": {
+    "fast-check": "^4.9.0"
+  },
   "exports": {
     "./alert-contract": {
       "types": "./src/alert-contract.ts",
@@ -252,6 +255,10 @@
       "types": "./src/facades/replay.ts",
       "default": "./src/facades/replay.ts"
     },
+    "./react-native-overlay": {
+      "types": "./src/react-native-overlay.ts",
+      "default": "./src/react-native-overlay.ts"
+    },
     "./screen-recording-runtime": {
       "types": "./src/screen-recording-runtime.ts",
       "default": "./src/screen-recording-runtime.ts"
@@ -291,6 +298,10 @@
     "./snapshot": {
       "types": "./src/facades/snapshot.ts",
       "default": "./src/facades/snapshot.ts"
+    },
+    "./snapshot-presentation": {
+      "types": "./src/snapshot-presentation.ts",
+      "default": "./src/snapshot-presentation.ts"
     },
     "./snapshot-runtime": {
       "types": "./src/snapshot-runtime.ts",

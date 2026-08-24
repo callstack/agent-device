@@ -22,7 +22,7 @@
 
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { resolveRectCenter } from '../utils/rect-center.ts';
-import { findNearestScrollableContainer } from './snapshot-presentation/tree.ts';
+import { findNearestScrollableContainer } from '../snapshot/snapshot-presentation/tree.ts';
 import {
   classifyTargetBindingMatch,
   demoteNonUniqueLocalIdentity,

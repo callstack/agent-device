@@ -108,6 +108,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/recording',
   '@agent-device/contracts/remote',
   '@agent-device/contracts/replay',
+  '@agent-device/contracts/react-native-overlay',
   '@agent-device/contracts/screen-recording-runtime',
   '@agent-device/contracts/screen-recording-runtime-plan',
   '@agent-device/contracts/screenshot-runtime',
@@ -118,6 +119,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/session',
   '@agent-device/contracts/settings',
   '@agent-device/contracts/snapshot',
+  '@agent-device/contracts/snapshot-presentation',
   '@agent-device/contracts/snapshot-runtime',
   '@agent-device/contracts/startup-recovery-fence',
   '@agent-device/contracts/touch-runtime',
@@ -686,6 +688,20 @@ test('Node resolution enforces the exports map at runtime', () => {
   assert.ok(
     contractsSnapshotResolved.endsWith('packages/contracts/src/facades/snapshot.ts'),
     contractsSnapshotResolved,
+  );
+  const contractsSnapshotPresentationResolved = import.meta
+    .resolve('@agent-device/contracts/snapshot-presentation');
+  assert.ok(
+    contractsSnapshotPresentationResolved.endsWith(
+      'packages/contracts/src/snapshot-presentation.ts',
+    ),
+    contractsSnapshotPresentationResolved,
+  );
+  const contractsReactNativeOverlayResolved = import.meta
+    .resolve('@agent-device/contracts/react-native-overlay');
+  assert.ok(
+    contractsReactNativeOverlayResolved.endsWith('packages/contracts/src/react-native-overlay.ts'),
+    contractsReactNativeOverlayResolved,
   );
   const providerWebDriverResolved = import.meta.resolve('@agent-device/provider-webdriver');
   assert.ok(

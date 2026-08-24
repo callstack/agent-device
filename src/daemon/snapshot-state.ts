@@ -21,7 +21,7 @@ import {
 import { coveredAndroidReplacementNodeIndexes } from '../snapshot/android-replacement-surface-occlusion.ts';
 import { scopeSnapshotNodes } from '../snapshot/snapshot-desktop-surface.ts';
 import { normalizeSnapshotTree, pruneGroupNodes } from '../core/snapshot-tree-ingestion.ts';
-import { presentIosInteractiveSnapshot } from './snapshot-presentation/ios/index.ts';
+import { presentIosInteractiveSnapshot } from '../snapshot/snapshot-presentation/ios/index.ts';
 
 /**
  * The ONE daemon presentation of a captured tree (ADR 0004 / #1797 "compaction layer"): normalize,

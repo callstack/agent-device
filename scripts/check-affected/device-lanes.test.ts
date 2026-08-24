@@ -32,7 +32,7 @@ test('a TypeScript-only Apple change selects the iOS and macOS lanes without a S
       ),
     );
   }
-  assert.deepEqual(lanes('src/daemon/snapshot-presentation/ios/action-shelf.ts'), [...IOS]);
+  assert.deepEqual(lanes('src/snapshot/snapshot-presentation/ios/action-shelf.ts'), [...IOS]);
   assert.deepEqual(lanes('test/integration/replays/macos/01-desktop.ad'), ['replay-macos']);
 });
 
