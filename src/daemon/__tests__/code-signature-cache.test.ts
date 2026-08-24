@@ -16,22 +16,42 @@ afterEach(() => {
  * outside the graph. Sizes differ per revision on purpose — the fingerprint
  * buckets on `size:mtime`, not content (see the sibling walk tests), so a
  * same-length rewrite can land in the same bucket on a fast filesystem.
+ *
+ * The cache's temporary directory is redirected inside the fixture, so the
+ * documents a test sees are exactly the ones its own fixture published — never
+ * a document a parallel worker owns in the run's shared `TMPDIR`.
  */
-function writeGraphFixture(prefix: string): { root: string; entryPath: string; depPath: string } {
+function writeGraphFixture(prefix: string): {
+  root: string;
+  entryPath: string;
+  depPath: string;
+  cacheHome: string;
+} {
   const root = mkdtempForTestSync(prefix);
   const entryPath = path.join(root, 'src', 'daemon.ts');
   const depPath = path.join(root, 'src', 'dep.ts');
   fs.mkdirSync(path.dirname(entryPath), { recursive: true });
   fs.writeFileSync(entryPath, "import './dep.ts';\n", 'utf8');
   fs.writeFileSync(depPath, 'export const dep = 1;\n', 'utf8');
-  return { root, entryPath, depPath };
+  const cacheHome = path.join(root, 'cache-home');
+  fs.mkdirSync(cacheHome, { recursive: true });
+  vi.spyOn(os, 'tmpdir').mockReturnValue(cacheHome);
+  return { root, entryPath, depPath, cacheHome };
 }
 
-/** Replaces every published cache document, whichever key this fixture landed on. */
-function overwriteCacheDocuments(contents: string): void {
-  const cacheDir = path.join(os.tmpdir(), 'agent-device-code-signature');
-  for (const name of fs.readdirSync(cacheDir)) {
-    fs.writeFileSync(path.join(cacheDir, name), contents, 'utf8');
+/** Every document this fixture published, whatever key each landed on. */
+function listCacheDocuments(cacheHome: string): string[] {
+  return fs
+    .readdirSync(cacheHome)
+    .flatMap((name) =>
+      fs.readdirSync(path.join(cacheHome, name)).map((doc) => path.join(cacheHome, name, doc)),
+    );
+}
+
+function writeDocuments(documents: readonly string[], contents: string): void {
+  assert.ok(documents.length > 0);
+  for (const document of documents) {
+    fs.writeFileSync(document, contents, 'utf8');
   }
 }
 
@@ -120,15 +140,18 @@ const UNUSABLE_CACHE_DOCUMENTS = [
   '{"version":1,"files":[["src/dep.ts",12,34]]',
   '{"version":1,"files":[["src/dep.ts"]]}',
   '{"version":99,"files":[]}',
+  '{"version":1,"files":[]}',
   'null',
 ];
 
 for (const document of UNUSABLE_CACHE_DOCUMENTS) {
   test(`resolveCachedDaemonCodeSignature falls back to the walk for cache document ${document}`, () => {
-    const { root, entryPath } = writeGraphFixture('agent-device-signature-cache-corrupt-');
+    const { root, entryPath, cacheHome } = writeGraphFixture(
+      'agent-device-signature-cache-corrupt-',
+    );
     try {
       const expected = resolveCachedDaemonCodeSignature(entryPath, root);
-      overwriteCacheDocuments(document);
+      writeDocuments(listCacheDocuments(cacheHome), document);
 
       assert.equal(resolveCachedDaemonCodeSignature(entryPath, root), expected);
     } finally {
@@ -136,6 +159,75 @@ for (const document of UNUSABLE_CACHE_DOCUMENTS) {
     }
   });
 }
+
+test('resolveCachedDaemonCodeSignature republishes over a zero-entry document instead of restarting the daemon forever', () => {
+  const { root, entryPath, cacheHome } = writeGraphFixture('agent-device-signature-cache-empty-');
+  const emptyDocument = '{"version":1,"files":[]}';
+  try {
+    const expected = resolveCachedDaemonCodeSignature(entryPath, root);
+    const documents = listCacheDocuments(cacheHome);
+    // Every stamp in an empty list matches vacuously, so a document that
+    // merely fell back to the walk without republishing would be re-read and
+    // re-refused on every invocation: a permanent daemon-restart loop.
+    writeDocuments(documents, emptyDocument);
+
+    assert.equal(resolveCachedDaemonCodeSignature(entryPath, root), expected);
+    for (const document of documents) {
+      assert.notEqual(fs.readFileSync(document, 'utf8'), emptyDocument);
+    }
+
+    const readPaths = spyOnReads();
+    assert.equal(resolveCachedDaemonCodeSignature(entryPath, root), expected);
+    assert.deepEqual(
+      readPaths().filter((target) => target.startsWith(root)),
+      [],
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resolveCachedDaemonCodeSignature refuses a document that omits the entry itself', () => {
+  const { root, entryPath, cacheHome } = writeGraphFixture('agent-device-signature-cache-subset-');
+  try {
+    const expected = resolveCachedDaemonCodeSignature(entryPath, root);
+    const documents = listCacheDocuments(cacheHome);
+    // Every surviving stamp still matches disk, so a subset of the real graph
+    // would validate — and answer with a signature no daemon ever reports.
+    for (const document of documents) {
+      const parsed = JSON.parse(fs.readFileSync(document, 'utf8')) as {
+        files: [string, number, number][];
+      };
+      const files = parsed.files.filter(([label]) => label !== path.join('src', 'daemon.ts'));
+      assert.equal(files.length, parsed.files.length - 1);
+      fs.writeFileSync(document, JSON.stringify({ version: 1, files }), 'utf8');
+    }
+
+    assert.equal(resolveCachedDaemonCodeSignature(entryPath, root), expected);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resolveCachedDaemonCodeSignature ignores a cache document another user wrote', () => {
+  const { root, entryPath } = writeGraphFixture('agent-device-signature-cache-foreign-');
+  try {
+    const expected = resolveCachedDaemonCodeSignature(entryPath, root);
+
+    // On Linux the cache directory lives in the shared `/tmp`: a document this
+    // user did not write must not choose the signature the client compares a
+    // running daemon against.
+    const foreignStats = fs.statSync(entryPath);
+    foreignStats.uid += 1;
+    vi.spyOn(fs, 'fstatSync').mockReturnValue(foreignStats);
+
+    const readPaths = spyOnReads();
+    assert.equal(resolveCachedDaemonCodeSignature(entryPath, root), expected);
+    assert.ok(readPaths().includes(entryPath));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('resolveCachedDaemonCodeSignature reports an unreadable entry as unknown', () => {
   const root = mkdtempForTestSync('agent-device-signature-cache-missing-');

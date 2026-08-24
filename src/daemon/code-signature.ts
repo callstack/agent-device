@@ -63,7 +63,7 @@ export function walkDaemonCodeGraph(entryPath: string, root: string): DaemonCode
     if (!stat.isFile()) continue;
 
     stamps.push([
-      path.relative(normalizedRoot, currentPath) || currentPath,
+      buildDaemonCodeFileLabel(normalizedRoot, currentPath),
       stat.size,
       Math.trunc(stat.mtimeMs),
     ]);
@@ -78,6 +78,17 @@ export function walkDaemonCodeGraph(entryPath: string, root: string): DaemonCode
   }
 
   return stamps;
+}
+
+/**
+ * The label a visited module is stamped under: repository-relative where
+ * possible, absolute when it lies outside the root. `code-signature-cache.ts`
+ * derives the ENTRY's label through this same function, so a stored document
+ * that does not list it cannot be a document for this graph.
+ */
+export function buildDaemonCodeFileLabel(root: string, filePath: string): string {
+  const resolvedPath = path.resolve(filePath);
+  return path.relative(path.resolve(root), resolvedPath) || resolvedPath;
 }
 
 /** The wire form of a signature; identical for a walked and a cache-validated stamp list. */

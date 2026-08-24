@@ -187,6 +187,11 @@ export type ReplayDivergenceResume =
  * on the narrowed record too — a payload this reader rejects cannot be
  * carrying the R7 liveness signal, because the stamp is only ever written to
  * a record it accepted.
+ *
+ * Every field the returned type declares is checked, the two optional ones
+ * included: this is the owning interface for the shape, so a payload it
+ * accepts cannot type as `repairSessionHeld: true` while carrying something
+ * else.
  */
 export function readReplayDivergenceResume(
   divergence: unknown,
@@ -196,6 +201,10 @@ export function readReplayDivergenceResume(
   if (typeof resume.allowed !== 'boolean') return undefined;
   if (!Number.isInteger(resume.from) || typeof resume.planDigest !== 'string') return undefined;
   if (!resume.allowed && typeof resume.reason !== 'string') return undefined;
+  if (resume.repairSessionHeld !== undefined && resume.repairSessionHeld !== true) return undefined;
+  if (resume.alternateFrom !== undefined && !Number.isInteger(resume.alternateFrom)) {
+    return undefined;
+  }
   return resume as ReplayDivergenceResume;
 }
 

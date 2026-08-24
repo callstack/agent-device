@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { publishFileSync } from '../utils/atomic-file.ts';
 import {
+  buildDaemonCodeFileLabel,
   formatDaemonCodeSignature,
   walkDaemonCodeGraph,
   type DaemonCodeFileStamp,
@@ -14,7 +15,14 @@ import {
 // itself inside the graph it walks, so changing the WALK invalidates every
 // document through the ordinary stamp comparison.
 const CACHE_FORMAT_VERSION = 1;
-const CACHE_DIRECTORY_NAME = 'agent-device-code-signature';
+// Per-user, and readable only by that user: `os.tmpdir()` is per-user on
+// macOS but the shared `/tmp` on Linux, where a single directory would mean
+// whichever uid ran first owns it and every other uid's publish fails EACCES
+// forever, silently — and where a document any local process could write
+// would choose the signature this client compares a running daemon against.
+const CACHE_DIRECTORY_PREFIX = 'agent-device-code-signature';
+const CACHE_DIRECTORY_MODE = 0o700;
+const CACHE_DOCUMENT_MODE = 0o600;
 
 type CacheDocument = {
   version: typeof CACHE_FORMAT_VERSION;
@@ -28,21 +36,29 @@ type CacheDocument = {
  * its edges means reading all ~800 files: ~30ms of a ~245ms invocation, for a
  * graph that is identical on every invocation but the first one after an edit.
  *
- * So the walk is cached and revalidated by `statSync` alone. That is sound
- * against the walk it replaces, not merely close to it: the signature already
- * treats a file's `size:mtime` as the stand-in for its contents
- * (`DaemonCodeFileStamp`), so if every previously visited file still carries
- * its recorded pair, no file's contents changed, therefore no import
- * specifier changed, therefore the graph and its signature are unchanged. Any
- * mismatched, vanished, or newly non-file entry, and any unreadable or
- * malformed cache document, falls back to the full walk, which republishes.
+ * So the walk is cached and revalidated by `statSync` alone. For an edit to a
+ * file ALREADY in the graph that is exactly as strong as the walk it
+ * replaces: the signature itself treats a file's `size:mtime` as the stand-in
+ * for its contents (`DaemonCodeFileStamp`), so a still-matching pair means an
+ * unchanged file, therefore an unchanged specifier list, therefore an
+ * unchanged graph. It is deliberately weaker in one direction, because the
+ * set of files to revalidate is read out of the document: a module that JOINS
+ * the graph without touching any recorded file — an import whose target did
+ * not exist when the document was published and is created afterwards — stays
+ * invisible until some recorded file changes. The cost is a source-checkout
+ * dev loop reusing a daemon one edit stale; the next edit to any graph file
+ * republishes.
  *
- * The cache is a best-effort artifact under `os.tmpdir()`, like the Swift
- * toolchain cache: failing to read or write one only costs the walk.
+ * Any mismatched, vanished, or newly non-file entry, and any unreadable,
+ * malformed, foreign, or entry-less cache document, falls back to the full
+ * walk, which republishes. The cache is a best-effort artifact under
+ * `os.tmpdir()`, like the Swift toolchain cache: failing to read or write one
+ * only costs the walk.
  */
 export function resolveCachedDaemonCodeSignature(entryPath: string, root: string): string {
   const cachePath = resolveCachePath(entryPath, root);
-  const validated = readValidatedStamps(cachePath, root);
+  const entryLabel = buildDaemonCodeFileLabel(root, entryPath);
+  const validated = readValidatedStamps(cachePath, root, entryLabel);
   if (validated) return formatDaemonCodeSignature(validated);
 
   let stamps: DaemonCodeFileStamp[];
@@ -51,14 +67,18 @@ export function resolveCachedDaemonCodeSignature(entryPath: string, root: string
   } catch {
     return 'unknown';
   }
-  publishStamps(cachePath, stamps);
+  if (describesEntry(stamps, entryLabel)) publishStamps(cachePath, stamps);
   return formatDaemonCodeSignature(stamps);
 }
 
 /** The recorded stamps when every one of them still describes the file on disk. */
-function readValidatedStamps(cachePath: string, root: string): DaemonCodeFileStamp[] | undefined {
+function readValidatedStamps(
+  cachePath: string,
+  root: string,
+  entryLabel: string,
+): DaemonCodeFileStamp[] | undefined {
   const stamps = readCachedStamps(cachePath);
-  if (!stamps) return undefined;
+  if (!stamps || !describesEntry(stamps, entryLabel)) return undefined;
   for (const [label, size, mtimeMs] of stamps) {
     let stat: fs.Stats;
     try {
@@ -71,6 +91,18 @@ function readValidatedStamps(cachePath: string, root: string): DaemonCodeFileSta
     }
   }
   return stamps;
+}
+
+/**
+ * Whether a stamp list can be this entry's graph at all. The walk always
+ * stamps the entry itself, so a list without it is foreign or truncated — and
+ * the empty list is the dangerous shape: every stamp in it matches vacuously,
+ * so it would validate forever, and a signature no daemon reports restarts a
+ * healthy daemon on every invocation. Publishing is gated on the same
+ * question, so a document this reader would refuse is never written.
+ */
+function describesEntry(stamps: readonly DaemonCodeFileStamp[], entryLabel: string): boolean {
+  return stamps.some(([label]) => label === entryLabel);
 }
 
 function readCachedStamps(cachePath: string): DaemonCodeFileStamp[] | undefined {
@@ -87,9 +119,11 @@ function readCachedStamps(cachePath: string): DaemonCodeFileStamp[] | undefined 
 
 /** The document's raw entries, or `undefined` for anything this format cannot own. */
 function readCachedEntries(cachePath: string): unknown[] | undefined {
+  const contents = readOwnedDocument(cachePath);
+  if (contents === undefined) return undefined;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    parsed = JSON.parse(contents);
   } catch {
     return undefined;
   }
@@ -97,6 +131,28 @@ function readCachedEntries(cachePath: string): unknown[] | undefined {
   const document = parsed as Partial<CacheDocument>;
   if (document.version !== CACHE_FORMAT_VERSION) return undefined;
   return Array.isArray(document.files) ? document.files : undefined;
+}
+
+/** The document's text, but only when this user is the one who wrote it. */
+function readOwnedDocument(cachePath: string): string | undefined {
+  let handle: number;
+  try {
+    handle = fs.openSync(cachePath, 'r');
+  } catch {
+    return undefined;
+  }
+  try {
+    // The ownership check and the read share one descriptor, so what is
+    // trusted is what is read. Where uids do not exist the temporary
+    // directory is per-user by construction and there is nothing to check.
+    const userId = process.getuid?.();
+    if (userId !== undefined && fs.fstatSync(handle).uid !== userId) return undefined;
+    return fs.readFileSync(handle, 'utf8');
+  } catch {
+    return undefined;
+  } finally {
+    fs.closeSync(handle);
+  }
 }
 
 function readStamp(entry: unknown): DaemonCodeFileStamp | undefined {
@@ -111,8 +167,12 @@ function readStamp(entry: unknown): DaemonCodeFileStamp | undefined {
 function publishStamps(cachePath: string, files: DaemonCodeFileStamp[]): void {
   const document: CacheDocument = { version: CACHE_FORMAT_VERSION, files };
   try {
-    fs.mkdirSync(path.dirname(cachePath), { recursive: true });
-    publishFileSync({ destination: cachePath, contents: JSON.stringify(document) });
+    fs.mkdirSync(path.dirname(cachePath), { recursive: true, mode: CACHE_DIRECTORY_MODE });
+    publishFileSync({
+      destination: cachePath,
+      contents: JSON.stringify(document),
+      mode: CACHE_DOCUMENT_MODE,
+    });
   } catch {
     // Best effort: an uncached signature is still a correct signature.
   }
@@ -122,7 +182,17 @@ function publishStamps(cachePath: string, files: DaemonCodeFileStamp[]): void {
 function resolveCachePath(entryPath: string, root: string): string {
   const key = crypto
     .createHash('sha1')
-    .update(`${path.resolve(root)} ${path.resolve(entryPath)}`)
+    .update(`${resolveRealPath(root)} ${resolveRealPath(entryPath)}`)
     .digest('hex');
-  return path.join(os.tmpdir(), CACHE_DIRECTORY_NAME, `${key}.json`);
+  const directory = `${CACHE_DIRECTORY_PREFIX}-${process.getuid?.() ?? 'user'}`;
+  return path.join(os.tmpdir(), directory, `${key}.json`);
+}
+
+/** Symlinked paths to one checkout are one checkout, as in `buildSourceCheckoutStateDirName`. */
+function resolveRealPath(filePath: string): string {
+  try {
+    return fs.realpathSync.native(filePath);
+  } catch {
+    return path.resolve(filePath);
+  }
 }

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { computeDaemonCodeSignature } from '../../code-signature.ts';
 import { resolveDaemonLaunchSpec, resolveLocalDaemonCodeSignature } from '../daemon-launch-spec.ts';
@@ -46,4 +47,30 @@ test('resolveLocalDaemonCodeSignature agrees with the uncached walk over the lau
   const entryPath = spec.useSrc ? spec.srcPath : spec.distPath;
 
   assert.equal(resolveLocalDaemonCodeSignature(), computeDaemonCodeSignature(entryPath, spec.root));
+});
+
+test('a source client fingerprints the source entry through the stat-validated cache', () => {
+  // A built checkout runs Vitest without `--experimental-strip-types`, so
+  // every other test in this file routes the DIST branch of the ternary. This
+  // is the branch the cache exists for; stub the mode marker to reach it.
+  const execArgv = process.execArgv;
+  process.execArgv = [...execArgv, '--experimental-strip-types'];
+  resetAllProcessMemosForTests();
+  try {
+    const spec = resolveDaemonLaunchSpec();
+    assert.equal(spec.useSrc, true);
+    const expected = computeDaemonCodeSignature(spec.srcPath, spec.root);
+    assert.equal(resolveLocalDaemonCodeSignature(), expected);
+
+    const readSpy = vi.spyOn(fs, 'readFileSync');
+    assert.equal(resolveLocalDaemonCodeSignature(), expected);
+    const sourceReads = readSpy.mock.calls
+      .map(([target]) => target)
+      .filter((target): target is string => typeof target === 'string')
+      .filter((target) => target.startsWith(path.join(spec.root, 'src')));
+    assert.deepEqual(sourceReads, []);
+  } finally {
+    process.execArgv = execArgv;
+    resetAllProcessMemosForTests();
+  }
 });

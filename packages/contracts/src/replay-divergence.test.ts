@@ -921,6 +921,14 @@ const UNREADABLE_DIVERGENCE_PAYLOADS: [label: string, payload: unknown][] = [
   ['a fractional from', { resume: { allowed: true, from: 1.5, planDigest: 'd' } }],
   ['a missing planDigest', { resume: { allowed: true, from: 1 } }],
   ['a blocked resume without reason', { resume: { allowed: false, from: 1, planDigest: 'd' } }],
+  [
+    'a non-true repairSessionHeld',
+    { resume: { allowed: true, from: 1, planDigest: 'd', repairSessionHeld: 'yes' } },
+  ],
+  [
+    'a fractional alternateFrom',
+    { resume: { allowed: true, from: 1, planDigest: 'd', alternateFrom: 2.5 } },
+  ],
 ];
 
 for (const [label, payload] of UNREADABLE_DIVERGENCE_PAYLOADS) {
