@@ -21,6 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { writeManifest } from './build-manifest.mjs';
+import { formatGeneratedJson } from './format-generated-json.mjs';
 import { fixtureContentHash } from '../../packages/maestro/test/conformance/fixture-seal.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -91,7 +92,7 @@ function writeFixture(name, pin, content) {
   // on any byte difference, which forgery cannot survive.
   const wrappedWithSeal = { ...wrapped, contentHash: fixtureContentHash(wrapped) };
   const target = path.join(FIXTURES_DIR, name);
-  fs.writeFileSync(target, `${JSON.stringify(wrappedWithSeal, null, 2)}\n`);
+  fs.writeFileSync(target, formatGeneratedJson(wrappedWithSeal, target));
   console.log(`wrote ${path.relative(HERE, target)}`);
 }
 

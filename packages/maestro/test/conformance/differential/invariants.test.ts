@@ -90,6 +90,17 @@ test('bug class 4 has a machine-checkable invariant, not just outcome parity', (
   );
 });
 
+test('the settle detector reaches its tap without an unrelated scroll precondition', () => {
+  const flow = fs.readFileSync(
+    path.join(import.meta.dirname, 'flows/settle-after-tap.yaml'),
+    'utf8',
+  );
+
+  assert.doesNotMatch(flow, /scrollUntilVisible/);
+  assert.match(flow, /text: Settings/);
+  assert.match(flow, /id: open-inert-surface/);
+});
+
 // --- metricAtLeast: proves a code path actually ran, not just that it passed ---
 
 const RETRY_INVARIANT: Invariant = {

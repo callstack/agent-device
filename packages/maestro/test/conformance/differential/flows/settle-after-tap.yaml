@@ -1,16 +1,13 @@
 # Layer-3 device flow (bug class 4). A real tap on a real control of the lab app,
 # so the post-tap settle loop actually runs and the timing invariant is meaningful.
-# home-open-form sits below the fold, so scroll it into view first — the app's own
-# helper flow (examples/test-app/maestro/helpers/open-checkout-form.yaml) does
-# exactly this; tapping it directly fails with "element not found".
+# Use the always-visible Settings tab so scrolling is not an unrelated
+# precondition for the tap detector. open-inert-surface proves navigation finished.
 appId: com.callstack.agentdevicelab
 ---
 - launchApp:
     clearState: true
 - assertVisible: Agent Device Tester
-- scrollUntilVisible:
-    element:
-      id: home-open-form
 - tapOn:
-    id: home-open-form
-- assertVisible: Checkout form
+    text: Settings
+- assertVisible:
+    id: open-inert-surface
