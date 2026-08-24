@@ -1,6 +1,7 @@
 import { isMap, isScalar, isSeq, type Node } from 'yaml';
 import { stripUndefined } from './shared.ts';
 import type {
+  MaestroAssertTrueCommand,
   MaestroBackCommand,
   MaestroCommand,
   MaestroEraseTextCommand,
@@ -43,6 +44,7 @@ import {
   hasEntry,
   invalidAt,
   isNullNode,
+  readAssertTrueCondition,
   readMapEntries,
   readOptionalBoolean,
   readOptionalCommandOption,
@@ -109,6 +111,7 @@ const COMMAND_VALUE_PARSERS: Readonly<Record<string, CommandValueParser>> = {
     parseMaestroAssertion('assertVisible', value, node, context),
   assertNotVisible: (value, node, context) =>
     parseMaestroAssertion('assertNotVisible', value, node, context),
+  assertTrue: parseAssertTrue,
   extendedWaitUntil: parseExtendedWaitUntil,
   takeScreenshot: parseTakeScreenshot,
   scroll: parseScroll,
@@ -252,6 +255,34 @@ function parseOpenLink(
     source,
     link: readRequiredString(entryValue(entries, 'link'), 'openLink.link', context),
   };
+}
+
+function parseAssertTrue(
+  value: Node | null,
+  commandNode: Node,
+  context: MaestroProgramParseContext,
+): MaestroAssertTrueCommand {
+  const source = sourceAt(commandNode, context);
+  if (isNullNode(value)) invalidAt('Maestro assertTrue requires condition.', commandNode, context);
+  if (isScalar(value)) {
+    return {
+      kind: 'assertTrue',
+      source,
+      condition: readAssertTrueCondition(value, 'assertTrue', context),
+    };
+  }
+  const entries = readMapEntries(value, 'assertTrue', context);
+  assertOnlyKeys(entries, 'assertTrue', ['condition', 'optional', 'label'], context);
+  if (!hasEntry(entries, 'condition'))
+    invalidAt('Maestro assertTrue requires condition.', commandNode, context);
+  const condition = readAssertTrueCondition(
+    entryValue(entries, 'condition'),
+    'assertTrue.condition',
+    context,
+  );
+  const options = readOptionalCommandOption(entries, 'assertTrue', context);
+  const label = readMaestroCommandLabel(entries, 'assertTrue', context);
+  return stripUndefined({ kind: 'assertTrue' as const, source, condition, ...options, label });
 }
 
 function parseExtendedWaitUntil(

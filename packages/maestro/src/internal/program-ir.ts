@@ -143,6 +143,13 @@ export type MaestroAssertNotVisibleCommand = MaestroOptionalCommand & {
   label?: string;
 };
 
+export type MaestroAssertTrueCommand = MaestroOptionalCommand & {
+  kind: 'assertTrue';
+  source: MaestroSourceLocation;
+  condition: string | number | boolean;
+  label?: string;
+};
+
 export type MaestroExtendedWaitUntilCommand = MaestroOptionalCommand & {
   kind: 'extendedWaitUntil';
   source: MaestroSourceLocation;
@@ -248,6 +255,7 @@ export type MaestroCommand =
   | MaestroOpenLinkCommand
   | MaestroAssertVisibleCommand
   | MaestroAssertNotVisibleCommand
+  | MaestroAssertTrueCommand
   | MaestroExtendedWaitUntilCommand
   | MaestroTakeScreenshotCommand
   | MaestroScrollCommand

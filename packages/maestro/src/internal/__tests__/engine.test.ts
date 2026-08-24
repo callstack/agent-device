@@ -173,6 +173,72 @@ describe('executeMaestroProgram', () => {
     );
   });
 
+  test('passes assertTrue for a truthy literal and a truthy ${VAR} lookup', async () => {
+    const port = makePort();
+    const program = parseMaestroProgram(
+      [
+        '---',
+        '- assertTrue: true',
+        '- assertTrue: 42',
+        '- assertTrue: nonEmptyString',
+        '- assertTrue: ${FLAG}',
+      ].join('\n'),
+    );
+
+    const result = await executeMaestroProgram(program, port, { env: { FLAG: 'yes' } });
+
+    expect(result).toMatchObject({ executed: 4, skipped: 0 });
+    expect(port.execute).not.toHaveBeenCalled();
+    expect(port.observe).not.toHaveBeenCalled();
+  });
+
+  test('fails assertTrue for a falsy literal and a falsy ${VAR} lookup', async () => {
+    const port = makePort();
+    const program = parseMaestroProgram(
+      ['---', '- assertTrue: false', '- inputText: unreachable'].join('\n'),
+    );
+
+    await expect(executeMaestroProgram(program, port)).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+    });
+    expect(port.execute).not.toHaveBeenCalled();
+  });
+
+  test('treats stringified "false" from a ${VAR} lookup as falsy, not a non-empty string', async () => {
+    const port = makePort();
+    const program = parseMaestroProgram(['---', '- assertTrue: ${OUTPUT_FLAG}'].join('\n'));
+
+    await expect(
+      executeMaestroProgram(program, port, { env: { OUTPUT_FLAG: 'false' } }),
+    ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+  });
+
+  test('continues after an optional assertTrue with a falsy condition', async () => {
+    const port = makePort();
+    const program = parseMaestroProgram(
+      [
+        '---',
+        '- assertTrue:',
+        '    condition: "false"',
+        '    optional: true',
+        '- inputText: continued',
+      ].join('\n'),
+    );
+
+    const result = await executeMaestroProgram(program, port);
+
+    expect(result).toMatchObject({ executed: 1, skipped: 1 });
+    expect(result.warnings).toEqual([
+      expect.stringMatching(/Optional Maestro assertTrue skipped at line 2/),
+    ]);
+  });
+
+  test('rejects a JS-expression assertTrue condition at parse time', () => {
+    expect(() => parseMaestroProgram(['---', '- assertTrue: ${1+1}'].join('\n'))).toThrow(
+      /assertTrue.*bare.*lookup.*runScript/is,
+    );
+  });
+
   test('propagates AMBIGUOUS_MATCH from an optional target command', async () => {
     const ambiguous = new AppError('AMBIGUOUS_MATCH', 'multiple target matches');
     const execute = vi.fn(async () => {

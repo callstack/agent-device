@@ -52,11 +52,12 @@ export type CanonicalCommand =
     }
   | {
       kind: 'assert';
-      mode: 'visible' | 'notVisible';
+      mode: 'visible' | 'notVisible' | 'true';
       timed: boolean;
       timeout?: number | string;
       label?: string;
       selector?: CanonicalSelector;
+      expression?: string;
     }
   | { kind: 'swipe'; label?: string; gesture: CanonicalGesture }
   | { kind: 'inputText'; label?: string; text?: string }
@@ -147,6 +148,16 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
           timeout,
           label: str(f.label),
           selector: canonicalizeUpstreamSelector(condition.notVisible),
+        });
+      }
+      if (condition.scriptCondition != null) {
+        return dropUndefined({
+          kind: 'assert',
+          mode: 'true',
+          timed: f.timeout != null,
+          timeout,
+          label: str(f.label),
+          expression: str(condition.scriptCondition),
         });
       }
       return { kind: 'unsupported', command: 'assertTrue' };
@@ -348,6 +359,14 @@ function canonicalizeAgentCommand(
         label: command.label,
         selector: canonicalizeAgentSelector(command.target),
       });
+    case 'assertTrue':
+      return dropUndefined({
+        kind: 'assert',
+        mode: 'true',
+        timed: false,
+        label: command.label,
+        expression: String(command.condition),
+      });
     case 'extendedWaitUntil':
       return dropUndefined({
         kind: 'assert',
@@ -368,9 +387,13 @@ function canonicalizeAgentCommand(
     case 'scroll':
       return { kind: 'scroll' };
     case 'scrollUntilVisible':
+      // Upstream materializes the DOWN default onto the command at parse time;
+      // our engine defers it to execution (runtime-port-commands.ts). Materialize
+      // it here too so the comparison is on effective values, matching the same
+      // pattern used for swipe duration and repeat delay above.
       return dropUndefined({
         kind: 'scrollUntilVisible',
-        direction: command.direction,
+        direction: command.direction ?? 'down',
         label: command.label,
         selector: canonicalizeAgentSelector(command.element),
         timeout: numLike(command.timeout),

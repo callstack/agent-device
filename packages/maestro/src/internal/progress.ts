@@ -76,6 +76,7 @@ function commandDetailProgressValue(
   if (command.kind === 'runFlow') {
     return valueOf(command.label ?? (command.include.kind === 'file' ? command.include.path : ''));
   }
+  if (command.kind === 'assertTrue') return valueOf(String(command.condition));
   return {};
 }
 

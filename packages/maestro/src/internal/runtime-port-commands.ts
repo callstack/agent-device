@@ -37,7 +37,7 @@ type MaestroNavigationCommand = MaestroCommandOf<
 >;
 type MaestroSupportCommand = MaestroCommandOf<'takeScreenshot' | 'runScript'>;
 type MaestroObservationCommand = MaestroCommandOf<
-  'assertVisible' | 'assertNotVisible' | 'extendedWaitUntil'
+  'assertVisible' | 'assertNotVisible' | 'assertTrue' | 'extendedWaitUntil'
 >;
 type MaestroCommandKind = MaestroRuntimeCommand['kind'];
 type MaestroRuntimeCommandHandler<K extends MaestroCommandKind> = (
@@ -70,6 +70,7 @@ const MAESTRO_RUNTIME_COMMAND_HANDLERS = {
   runScript: executeSupportCommand,
   assertVisible: executeObservationCommand,
   assertNotVisible: executeObservationCommand,
+  assertTrue: executeObservationCommand,
   extendedWaitUntil: executeObservationCommand,
 } satisfies MaestroRuntimeCommandHandlers;
 
@@ -93,6 +94,7 @@ const MAESTRO_COMMAND_REQUIRES_SETTLED_PREDECESSOR = {
   runScript: false,
   assertVisible: false,
   assertNotVisible: false,
+  assertTrue: false,
   extendedWaitUntil: false,
 } satisfies Record<MaestroCommandKind, boolean>;
 
