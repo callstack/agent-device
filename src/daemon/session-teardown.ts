@@ -64,8 +64,10 @@ export function isWebSession(session: SessionState): boolean {
 // Best-effort mirror of the platform close `session close` dispatches for a web session
 // (`shouldDispatchPlatformClose` in daemon/handlers/session-close.ts) so a daemon shutdown or
 // expired-session reap tells agent-browser to close its fleet immediately instead of leaving it
-// for agent-browser's own idle timer (`DEFAULT_AGENT_BROWSER_IDLE_TIMEOUT_MS`).
-export async function stopSessionWebBrowser(params: {
+// for agent-browser's own idle timer (`DEFAULT_AGENT_BROWSER_IDLE_TIMEOUT_MS`). Unlike its
+// siblings above, this has no second caller in the ordinary-close path (that path already
+// reaches the browser through `dispatchTargetedPlatformClose`), so it stays module-private.
+async function stopSessionWebBrowser(params: {
   session: SessionState;
   sessionName: string;
   sessionStore: SessionStore;
