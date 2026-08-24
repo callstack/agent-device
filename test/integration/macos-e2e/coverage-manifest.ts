@@ -1,4 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { buildCoverageClassificationSummary } from '../support/coverage-classification.ts';
 import {
   MACOS_LIVE_SCENARIOS,
   type MacOsLiveScenario,
@@ -31,14 +32,6 @@ export type MacOsPlatformCoverageEntry =
       level: 'known-gap';
       trackingIssue: number;
     };
-
-export type MacOsPlatformCoverageClassificationSummary = {
-  capabilityDenial: number;
-  contract: number;
-  gap: number;
-  live: number;
-  total: number;
-};
 
 export const MACOS_COVERAGE_GAP_ISSUE = 1916;
 
@@ -266,33 +259,4 @@ function liveScenario(scenarioId: MacOsLiveScenarioId): MacOsLiveScenario {
   const scenario = MACOS_LIVE_SCENARIOS.find((candidate) => candidate.id === scenarioId);
   if (!scenario) throw new Error(`Unknown macOS coverage scenario: ${scenarioId}`);
   return scenario;
-}
-
-function buildCoverageClassificationSummary(
-  entries: readonly MacOsPlatformCoverageEntry[],
-): MacOsPlatformCoverageClassificationSummary {
-  const summary: MacOsPlatformCoverageClassificationSummary = {
-    capabilityDenial: 0,
-    contract: 0,
-    gap: 0,
-    live: 0,
-    total: entries.length,
-  };
-  for (const entry of entries) {
-    switch (entry.level) {
-      case 'live':
-        summary.live += 1;
-        break;
-      case 'command-contract':
-        summary.contract += 1;
-        break;
-      case 'capability-denial':
-        summary.capabilityDenial += 1;
-        break;
-      case 'known-gap':
-        summary.gap += 1;
-        break;
-    }
-  }
-  return summary;
 }

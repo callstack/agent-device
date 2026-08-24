@@ -1,4 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { buildCoverageClassificationSummary } from '../support/coverage-classification.ts';
 
 type PublicCommand = (typeof PUBLIC_COMMANDS)[keyof typeof PUBLIC_COMMANDS];
 
@@ -36,14 +37,6 @@ export type TvOsPlatformCoverageEntry =
       level: 'known-gap';
       trackingIssue: number;
     };
-
-export type TvOsPlatformCoverageClassificationSummary = {
-  capabilityDenial: number;
-  contract: number;
-  gap: number;
-  live: number;
-  total: number;
-};
 
 export const TVOS_COVERAGE_GAP_ISSUE = 1914;
 export const TVOS_REMOTE_TEST_NAME =
@@ -219,32 +212,3 @@ export const TVOS_PLATFORM_COVERAGE = {
 export const TVOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY = buildCoverageClassificationSummary(
   Object.values(TVOS_PLATFORM_COVERAGE),
 );
-
-function buildCoverageClassificationSummary(
-  entries: readonly TvOsPlatformCoverageEntry[],
-): TvOsPlatformCoverageClassificationSummary {
-  const summary: TvOsPlatformCoverageClassificationSummary = {
-    capabilityDenial: 0,
-    contract: 0,
-    gap: 0,
-    live: 0,
-    total: entries.length,
-  };
-  for (const entry of entries) {
-    switch (entry.level) {
-      case 'live':
-        summary.live += 1;
-        break;
-      case 'command-contract':
-        summary.contract += 1;
-        break;
-      case 'capability-denial':
-        summary.capabilityDenial += 1;
-        break;
-      case 'known-gap':
-        summary.gap += 1;
-        break;
-    }
-  }
-  return summary;
-}
