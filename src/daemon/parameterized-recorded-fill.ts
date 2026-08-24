@@ -426,7 +426,7 @@ function sortedLiteralPairs(
  * during a payload/evidence walk, so the sort happens once at the caller
  * rather than being repeated on every leaf.
  */
-export function parameterizeAgainstLiteralMap(
+function parameterizeAgainstLiteralMap(
   value: string,
   pairs: readonly (readonly [string, string])[],
 ): string {
