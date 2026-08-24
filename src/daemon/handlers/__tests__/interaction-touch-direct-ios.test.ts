@@ -1,29 +1,18 @@
-import { test, expect, vi, beforeEach } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { attachRefs } from '@agent-device/kernel/snapshot';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import {
   getRuntimeBindings,
   mockTapElementSelector,
-  mockTapPoint,
   resetGetRuntimeFixture,
 } from './interaction-get-runtime-fixture.ts';
 import {
   contextFromFlags,
   makeStaleRefSession,
-  makeTwoButtonNodes,
   runInteraction,
 } from './interaction-touch-fixtures.ts';
-
-// What the direct iOS selector dispatch does once eligible: delegate to the
-// runtime tree path on semantic failure, preserve Maestro's native error shape,
-// and cross the fused ADR 0014 seam.
-
-const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
-  mockRunAppleRunnerCommand: vi.fn(),
-}));
 
 vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
   const actual =
@@ -45,198 +34,7 @@ vi.mock('../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
-vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
-  return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
-});
-
-import {
-  getAndroidAppState,
-  getAndroidBlockingDialogFocus,
-} from '../../../platforms/android/app-lifecycle.ts';
-import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
-import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
-const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
-const mockGetAndroidBlockingDialogFocus = vi.mocked(getAndroidBlockingDialogFocus);
-const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
-const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
-
-beforeEach(() => {
-  resetGetRuntimeFixture();
-  mockGetAndroidAppState.mockReset();
-  mockGetAndroidAppState.mockResolvedValue({});
-  mockGetAndroidBlockingDialogFocus.mockReset();
-  mockGetAndroidBlockingDialogFocus.mockResolvedValue(null);
-  mockGetAndroidScreenSize.mockReset();
-  mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
-  mockCaptureSnapshotForSession.mockReset();
-  mockRunAppleRunnerCommand.mockReset();
-  mockRunAppleRunnerCommand.mockResolvedValue({});
-});
-
-test('click simple iOS id selector falls back to snapshot coordinates on transport failure', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-direct-selector-fallback-transport';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-
-  mockTapElementSelector.mockRejectedValue(new AppError('COMMAND_FAILED', 'fetch failed'));
-  mockCaptureSnapshotForSession.mockResolvedValue({
-    nodes: attachRefs([
-      {
-        index: 0,
-        type: 'Window',
-        rect: { x: 0, y: 0, width: 390, height: 844 },
-      },
-      {
-        index: 1,
-        parentIndex: 0,
-        type: 'XCUIElementTypeButton',
-        identifier: 'submit',
-        rect: { x: 20, y: 80, width: 120, height: 40 },
-        enabled: true,
-        hittable: true,
-      },
-    ]),
-    backend: 'xctest',
-  });
-
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'click',
-      positionals: ['id="submit"'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-    ...getRuntimeBindings(),
-  });
-
-  expect(response?.ok).toBe(true);
-  expect(mockTapElementSelector).toHaveBeenCalledOnce();
-  expect(mockTapPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 80, y: 100 } }));
-  if (response?.ok) {
-    expect(response.data?.selectorChain).toContain('id="submit"');
-  }
-});
-
-test('click simple iOS id selector falls back to snapshot resolution on runner element miss', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-direct-selector-element-miss';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-
-  mockTapElementSelector.mockRejectedValue(new AppError('ELEMENT_NOT_FOUND', 'element not found'));
-  mockCaptureSnapshotForSession.mockResolvedValue({
-    nodes: attachRefs([
-      {
-        index: 0,
-        type: 'Window',
-        rect: { x: 0, y: 0, width: 390, height: 844 },
-      },
-      {
-        index: 1,
-        parentIndex: 0,
-        type: 'XCUIElementTypeButton',
-        identifier: 'submit',
-        rect: { x: 20, y: 80, width: 120, height: 40 },
-        enabled: true,
-        hittable: true,
-      },
-    ]),
-    backend: 'xctest',
-  });
-
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'click',
-      positionals: ['id="submit"'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-    ...getRuntimeBindings(),
-  });
-
-  expect(response?.ok).toBe(true);
-  expect(mockTapElementSelector).toHaveBeenCalledOnce();
-  expect(mockTapPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 80, y: 100 } }));
-  if (response?.ok) {
-    expect(response.data?.selectorChain).toContain('id="submit"');
-  }
-});
-
-test('click simple iOS id selector rejects distinct runtime candidates after ambiguous runner match', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-direct-selector-ambiguous';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-
-  mockTapElementSelector.mockRejectedValue(
-    new AppError('AMBIGUOUS_MATCH', 'Selector matched multiple elements'),
-  );
-  mockCaptureSnapshotForSession.mockResolvedValue({
-    nodes: attachRefs([
-      {
-        index: 0,
-        type: 'Window',
-        rect: { x: 0, y: 0, width: 390, height: 844 },
-      },
-      // Geometry must not choose the visible twin across distinct
-      // subtrees after the direct runner delegates ambiguity.
-      {
-        index: 1,
-        parentIndex: 0,
-        type: 'XCUIElementTypeButton',
-        identifier: 'submit',
-        rect: { x: -300, y: 80, width: 120, height: 40 },
-        enabled: true,
-        hittable: true,
-      },
-      {
-        index: 2,
-        parentIndex: 0,
-        type: 'XCUIElementTypeButton',
-        identifier: 'submit',
-        rect: { x: 20, y: 80, width: 120, height: 40 },
-        enabled: true,
-        hittable: true,
-      },
-    ]),
-    backend: 'xctest',
-  });
-
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'click',
-      positionals: ['id="submit"'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-    ...getRuntimeBindings(),
-  });
-
-  expect(response?.ok).toBe(false);
-  expect(mockTapElementSelector).toHaveBeenCalledOnce();
-  expect(mockTapPoint).not.toHaveBeenCalled();
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('AMBIGUOUS_MATCH');
-    expect(response.error.details?.matches).toBe(2);
-    expect(response.error.details?.candidates).toEqual([
-      '@e2 [button] "submit"',
-      '@e3 [button] "submit"',
-    ]);
-    expect(typeof response.error.details?.refsGeneration).toBe('number');
-  }
-});
+beforeEach(() => resetGetRuntimeFixture());
 
 test.each([
   ['ELEMENT_NOT_FOUND', 'element not found'],
@@ -247,11 +45,7 @@ test.each([
     const sessionStore = makeSessionStore();
     const sessionName = `ios-maestro-direct-selector-${code}`;
     sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-
     mockTapElementSelector.mockRejectedValue(new AppError(code, message));
-    mockCaptureSnapshotForSession.mockRejectedValue(
-      new Error('snapshot fallback should not run for maestro replay dispatches'),
-    );
 
     const response = await handleInteractionCommands({
       req: {
@@ -268,26 +62,19 @@ test.each([
     });
 
     expect(response?.ok).toBe(false);
-    if (response?.ok === false) {
-      expect(response.error.code).toBe(code);
-    }
-    expect(mockCaptureSnapshotForSession).not.toHaveBeenCalled();
+    if (response?.ok === false) expect(response.error.code).toBe(code);
   },
 );
 
-test('direct iOS selector click crosses the ADR 0014 fused seam and expires the ref frame', async () => {
+test('Maestro selector click crosses the ADR 0014 fused seam and expires the ref frame', async () => {
   const sessionStore = makeSessionStore();
-  const sessionName = 'direct-ios-seam';
-  const session = makeStaleRefSession(sessionName);
-  sessionStore.set(sessionName, session);
-  mockCaptureSnapshotForSession.mockResolvedValue({
-    nodes: makeTwoButtonNodes(),
-    backend: 'xctest',
+  const sessionName = 'maestro-direct-ios-seam';
+  sessionStore.set(sessionName, makeStaleRefSession(sessionName));
+
+  const click = await runInteraction(sessionStore, sessionName, 'click', ['label=Continue'], {
+    maestro: { allowNonHittableCoordinateFallback: true },
   });
 
-  // click + a simple selector on a non-recording iOS session takes the direct
-  // iOS selector fast path (no daemon-tree resolution).
-  const click = await runInteraction(sessionStore, sessionName, 'click', ['label=Continue']);
   expect(click?.ok).toBe(true);
   expect(mockTapElementSelector).toHaveBeenCalledOnce();
   expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');

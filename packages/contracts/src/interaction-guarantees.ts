@@ -78,7 +78,6 @@ export const INTERACTION_PATH_IDS = [
   'runtime-selector',
   'runtime-ref',
   'target-drag',
-  'direct-ios-selector',
   'native-ref',
   'coordinate',
   'maestro-non-hittable-fallback',
@@ -293,69 +292,6 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       resolutionDisclosure: {
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/gestures.ts#dragCommand',
-      },
-    },
-  },
-  'direct-ios-selector': {
-    description:
-      'Simple press and click selectors use the bound owner preferred tapElementSelector operation when its exact facts advertise it, querying and tapping without a daemon tree capture. Fill deliberately resolves through the runtime tree so AX-hostile text inputs carry typed target evidence into coordinate entry.',
-    commands: ['press', 'click'],
-    guarantees: {
-      disambiguation: {
-        kind: 'delegated',
-        to: 'runtime-selector',
-        via: 'RunnerSelectorMatchPolicy.swift#classifyDirectSelectorCandidates rejects multiple raw exact matches before hittability; AMBIGUOUS_MATCH then falls back to runtime structural-equivalence classification for non-maestro dispatches',
-      },
-      occlusion: {
-        kind: 'delegated',
-        to: 'runtime-selector',
-        via: 'runner ELEMENT_NOT_FOUND/AMBIGUOUS_MATCH fall back to tree-based resolution (isDirectIosSelectorFallbackError delegateSemanticFailures; non-maestro dispatches only) — XCTest skips covered/non-hittable matches, so the runtime path raises the covered-element refusal with its hint',
-      },
-      parentOwnedTouchPoint: {
-        kind: 'waived',
-        reason:
-          'gap: the direct runner path has the matched element but no daemon snapshot tree from which to classify independently interactive descendants.',
-        trackingIssue: PARENT_OWNED_TOUCH_POINT_GAP_ISSUE,
-      },
-      offscreen: {
-        // Decision: TapPointPolicy (pure geometry, parity-tested against the
-        // TS twin isTapPointInsideViewport). onScreenWindowFrame stays the
-        // impure frame getter feeding it.
-        kind: 'runner',
-        via: 'RunnerTapPointPolicy.swift#TapPointPolicy',
-        parityTable: 'contracts/fixtures/tap-point-policy.json',
-      },
-      nonHittable: {
-        kind: 'delegated',
-        to: 'runtime-selector',
-        via: 'runner ELEMENT_NOT_FOUND (non-hittable matches are skipped runner-side) falls back to tree-based resolution (isDirectIosSelectorFallbackError delegateSemanticFailures; non-maestro dispatches only), which promotes to a hittable ancestor or annotates targetHittable/hint',
-      },
-      responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
-      responseIdentity: {
-        kind: 'waived',
-        reason: 'gap: refLabel/selectorChain are absent on the direct path.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
-      },
-      verifyEvidence: {
-        kind: 'delegated',
-        to: 'runtime-selector',
-        via: '--verify disables the direct path when the descriptor post-action observation trait supports verify evidence',
-      },
-      settleObservation: {
-        kind: 'delegated',
-        to: 'runtime-selector',
-        via: '--settle disables the direct path when the descriptor post-action observation trait supports settle observation — settling needs the tree-based baseline and captures',
-      },
-      errorTaxonomy: {
-        kind: 'delegated',
-        to: 'runtime-selector',
-        via: 'runner ELEMENT_NOT_FOUND/AMBIGUOUS_MATCH fall back to tree-based resolution (isDirectIosSelectorFallbackError delegateSemanticFailures; non-maestro dispatches only), which attaches the shared no-match diagnostics, ambiguous shape, and hints',
-      },
-      // No daemon tree, so only the not-observed marker — no counts or
-      // candidates, and no parity table (that would imply runtime parity).
-      resolutionDisclosure: {
-        kind: 'runtime',
-        via: 'src/daemon/handlers/interaction-touch-response.ts#buildInteractionResponseData',
       },
     },
   },

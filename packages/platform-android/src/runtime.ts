@@ -70,6 +70,10 @@ const focusKindUnavailable = Object.freeze({
   reason: 'unsupported-device-kind',
   hint: 'focus is supported on Android emulators and physical devices.',
 } as const);
+const hoverUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+} as const);
 const headlessUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-device-kind',
@@ -220,7 +224,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           tap: androidTouchFact(device),
           tapRef: focusKindUnavailable,
           longPress: androidTouchFact(device),
-          hover: focusKindUnavailable,
+          hover: hoverUnavailable,
           hoverRef: focusKindUnavailable,
           fill: androidTouchFact(device),
           fillRef: focusKindUnavailable,

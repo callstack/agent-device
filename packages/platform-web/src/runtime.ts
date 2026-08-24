@@ -100,7 +100,7 @@ const nativeRefUnavailable = Object.freeze({
   reason: 'owner-capability-missing',
 } as const);
 
-function webRefFact(operation: unknown, browserDevice: RuntimeOperationFact) {
+function webOptionalOperationFact(operation: unknown, browserDevice: RuntimeOperationFact) {
   return typeof operation === 'function' ? browserDevice : nativeRefUnavailable;
 }
 
@@ -339,12 +339,12 @@ function webRuntimeFacts(
       ...typeTextRuntimeOperationFacts({ type: browserDevice }),
       ...touchRuntimeOperationFacts({
         tap: browserDevice,
-        tapRef: webRefFact(interactor?.tapRef, browserDevice),
+        tapRef: webOptionalOperationFact(interactor?.tapRef, browserDevice),
         longPress: readinessUnavailable,
-        hover: browserDevice,
-        hoverRef: webRefFact(interactor?.hoverRef, browserDevice),
+        hover: webOptionalOperationFact(interactor?.hover, browserDevice),
+        hoverRef: webOptionalOperationFact(interactor?.hoverRef, browserDevice),
         fill: browserDevice,
-        fillRef: webRefFact(interactor?.fillRef, browserDevice),
+        fillRef: webOptionalOperationFact(interactor?.fillRef, browserDevice),
         tapElementSelector: readinessUnavailable,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: browserDevice }),

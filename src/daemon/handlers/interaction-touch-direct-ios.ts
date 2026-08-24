@@ -21,9 +21,9 @@ import {
 } from './interaction-touch-response.ts';
 
 /**
- * How the direct iOS selector fast path dispatches, delegates back to the
- * runtime tree path, or corroborates its own failure. Eligibility — the narrow
- * gate that decides whether this path may run at all — lives in
+ * How the Maestro-compatible direct iOS selector route dispatches or
+ * corroborates its own failure. Eligibility — the narrow gate that decides
+ * whether this path may run at all — lives in
  * interaction-touch-direct-ios-eligibility.ts.
  */
 

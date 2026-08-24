@@ -131,7 +131,7 @@ function clearPostGestureStabilization(session: SessionState | undefined): void 
 
 /**
  * The one read other modules are allowed: "is a stabilization pending on this
- * session right now?" — the gate that pauses the direct iOS selector fast path
+ * session right now?" — the gate that pauses the Maestro iOS selector route
  * and the selector snapshot cache while the tree may still be moving. Callers
  * never see the field shape; what a pending record contains is this module's
  * implementation.

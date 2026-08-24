@@ -86,7 +86,7 @@ test('transport-level COMMAND_FAILED errors fall back, semantic ones do not', ()
 });
 
 // #1542: isLocalIosRunnerSession is the ONE shared eligibility predicate for
-// both the direct-selector tap fast path and the offscreen refusal
+// both the Maestro selector-tap route and the offscreen refusal
 // double-check probe. Its two callers differ in exactly one parameter.
 
 test('isLocalIosRunnerSession: iOS local sessions are eligible, Android and undefined are not', () => {

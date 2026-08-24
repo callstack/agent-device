@@ -98,7 +98,8 @@ export const keyboardEnterUse = defineUse({ required: ['keyboardEnter'] });
 export const tapPointUse = defineUse({ required: ['tapPoint'] });
 export const capturedTapUse = defineUse({
   required: ['captureSnapshot', 'tapPoint'],
-  preferred: ['tapElementSelector', 'tapRef'],
+  preferred: ['tapRef'],
+  conditional: ['tapElementSelector'],
 });
 export const longPressPointUse = defineUse({ required: ['longPressPoint'] });
 export const capturedLongPressUse = defineUse({

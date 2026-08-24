@@ -109,6 +109,11 @@ test.each([
   // only the synthetic `simulator` row (covered below) lacks a device behind it.
   expect(facts.operations.focusPoint).toEqual({ available: true });
   expect(facts.operations.typeText).toEqual({ available: true });
+  expect(facts.operations.hoverPoint).toEqual({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+    hint: 'hover raises pointer hover state and is available on web targets only. On touch platforms use longpress for hold gestures.',
+  });
   expect(binding.operations.focusPoint).toBeTypeOf('function');
   expect(binding.operations.typeText).toBeTypeOf('function');
   expect(binding.operations.captureScreenshot).toBeTypeOf('function');

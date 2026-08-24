@@ -6,7 +6,6 @@ import { withWebProvider, type WebProvider } from '../../platforms/web/provider.
 
 test('web interactor delegates first-slice operations to the scoped provider', async () => {
   const calls: string[] = [];
-  const interactor = createWebInteractor();
   const provider = makeWebProvider({
     async open(target, options) {
       calls.push(`open:${target}:${options?.url ?? ''}`);
@@ -45,6 +44,7 @@ test('web interactor delegates first-slice operations to the scoped provider', a
   });
 
   const snapshot = await withWebProvider(provider, async () => {
+    const interactor = createWebInteractor();
     await interactor.open('https://example.test');
     await interactor.open('app-shell', { url: 'https://example.test/deep' });
     await interactor.close('app-shell');
@@ -79,14 +79,13 @@ test('web interactor delegates first-slice operations to the scoped provider', a
 });
 
 test('web interactor reports hover unsupported when the provider lacks it', async () => {
-  const interactor = createWebInteractor();
-  await assert.rejects(
-    () => withWebProvider(makeWebProvider(), async () => await interactor.hover?.(1, 2)),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'UNSUPPORTED_OPERATION' &&
-      error.message === 'hover is not supported by this web provider',
-  );
+  await withWebProvider(makeWebProvider(), async () => {
+    const interactor = createWebInteractor();
+    assert.equal(interactor.tapRef, undefined);
+    assert.equal(interactor.hover, undefined);
+    assert.equal(interactor.hoverRef, undefined);
+    assert.equal(interactor.fillRef, undefined);
+  });
 });
 
 test('web interactor reports unsupported operations explicitly', async () => {

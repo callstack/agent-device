@@ -11,13 +11,13 @@ export type DirectIosSelectorTarget = ElementSelectorTapOptions & { raw: string 
 
 /**
  * Is this session eligible for a direct, tree-independent local XCTest
- * runner read/tap? Both the direct-selector tap fast path and the offscreen
+ * runner read/tap? Both the Maestro selector-tap route and the offscreen
  * refusal double-check probe (`src/daemon/offscreen-target-probe.ts`) share
  * this "local runner, not a provider-owned device" boundary — provider-owned
  * iOS devices resolve through their own interactor-backed runtime instead.
  *
  * The one difference between the two callers is explicit, not baked in: the
- * tap fast path skips itself while a post-gesture stabilization is
+ * Maestro tap route skips itself while a post-gesture stabilization is
  * pending (it hands off to the tree-based runtime path instead), but the
  * double-check must NOT inherit that skip — it exists specifically to cover
  * the window where the bulk AX tree is stale (pending or just-cleared

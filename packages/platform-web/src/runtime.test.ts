@@ -82,6 +82,47 @@ test('keeps a web transport without dumpNetwork unavailable instead of throwing 
   expectLifecycleFacts(binding);
 });
 
+test('projects sparse scoped-provider touch methods into facts and bound operations', async () => {
+  const sparseInteractor = {
+    tap: async () => undefined,
+    fill: async () => undefined,
+  } as unknown as Interactor;
+  const runtime = createWebPlatformRuntime(host({ mode: 'local' }, undefined, sparseInteractor));
+  const facts = await runtime.inspectFacts(device);
+  const binding = await runtime.bind({ device, intent: { kind: 'ordinary' }, scope: scope() });
+
+  for (const operation of ['tapRef', 'hoverPoint', 'hoverRef', 'fillRef'] as const) {
+    expect(facts.operations[operation]).toMatchObject({
+      available: false,
+      reason: 'owner-capability-missing',
+    });
+    expect(binding.operations[operation]).toBeUndefined();
+  }
+  expect(facts.operations.tapPoint).toEqual({ available: true });
+  expect(facts.operations.fillPoint).toEqual({ available: true });
+  expect(binding.operations.tapPoint).toBeTypeOf('function');
+  expect(binding.operations.fillPoint).toBeTypeOf('function');
+});
+
+test('binds only the scoped-provider touch methods that are present', async () => {
+  const fullInteractor = {
+    tap: async () => undefined,
+    tapRef: async () => undefined,
+    hover: async () => undefined,
+    hoverRef: async () => undefined,
+    fill: async () => undefined,
+    fillRef: async () => undefined,
+  } as unknown as Interactor;
+  const runtime = createWebPlatformRuntime(host({ mode: 'local' }, undefined, fullInteractor));
+  const facts = await runtime.inspectFacts(device);
+  const binding = await runtime.bind({ device, intent: { kind: 'ordinary' }, scope: scope() });
+
+  for (const operation of ['tapRef', 'hoverPoint', 'hoverRef', 'fillRef'] as const) {
+    expect(facts.operations[operation]).toEqual({ available: true });
+    expect(binding.operations[operation]).toBeTypeOf('function');
+  }
+});
+
 test('binds agent-browser recording only through the focused web transport', async () => {
   const calls: string[] = [];
   const binding = await createWebPlatformRuntime(
@@ -271,6 +312,7 @@ function host(
   webRecording: Awaited<
     ReturnType<PlatformRuntimeHost['screenRecording']['web']['resolve']>
   > = undefined,
+  interactor: Interactor = {} as Interactor,
 ): PlatformRuntimeHost {
   return {
     appleTools: {
@@ -333,7 +375,7 @@ function host(
       },
       androidEmulator: { discover: async () => [], launch: () => 1, terminate: async () => {} },
     },
-    localInteractors: { resolve: async () => ({}) as Interactor },
+    localInteractors: { resolve: async () => interactor },
     applicationResources: {
       recoverStartupResources: async () => {},
       detachForDaemonShutdown: async () => {},

@@ -4,7 +4,6 @@ import { makeIosSession } from '../../../__tests__/test-utils/session-factories.
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import {
-  elementReadFixtureState,
   getRuntimeBindings,
   mockFillPoint,
   mockTapElementSelector,
@@ -13,9 +12,8 @@ import {
 } from './interaction-get-runtime-fixture.ts';
 import { contextFromFlags } from './interaction-touch-fixtures.ts';
 
-// Whether a click may take the direct iOS selector fast path: which selector
-// shapes qualify, what Maestro decoration rides along, and the exclusions that
-// keep a capture-backed guarantee (fill, pending stabilization).
+// Ordinary selectors stay capture-backed. Only the explicit Maestro
+// non-hittable fallback may use the direct iOS selector route.
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
@@ -71,51 +69,10 @@ beforeEach(() => {
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
 
-test('click simple iOS id selector uses direct runner selector tap without snapshot', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-direct-selector';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-
-  mockTapElementSelector.mockResolvedValue({
-    message: 'tapped',
-    x: 80,
-    y: 100,
-    referenceWidth: 390,
-    referenceHeight: 844,
-  });
-
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'click',
-      positionals: ['id="submit"'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-    ...getRuntimeBindings(),
-  });
-
-  expect(response?.ok).toBe(true);
-  expect(mockRunAppleRunnerCommand).not.toHaveBeenCalled();
-  expect(mockTapElementSelector).toHaveBeenCalledWith(
-    expect.objectContaining({
-      selector: { key: 'id', value: 'submit', raw: 'id="submit"' },
-    }),
-  );
-  expect(mockCaptureSnapshotForSession).not.toHaveBeenCalled();
-  if (response?.ok) {
-    expect(response.data?.selector).toBe('id="submit"');
-  }
-});
-
-test('click falls back to capture when the owner does not bind direct selector tap', async () => {
+test('ordinary click uses canonical capture even when the owner binds selector tap', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-selector-without-direct-operation';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-  elementReadFixtureState.tapElementSelectorAvailable = false;
   mockCaptureSnapshotForSession.mockResolvedValueOnce({
     nodes: attachRefs([
       {

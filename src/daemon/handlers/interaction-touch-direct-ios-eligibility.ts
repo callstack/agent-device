@@ -12,9 +12,9 @@ import { isSessionRecording } from '../session-script-publication-capability.ts'
 import type { SessionState } from '../types.ts';
 
 /**
- * Whether a click may take the direct iOS selector fast path. The gate is
- * deliberately narrow (docs/agents/selector-capture.md):
- * every exclusion here keeps a capture-backed guarantee on the regular path.
+ * Whether a Maestro-compatible click needs the direct iOS selector route.
+ * Ordinary selectors always use canonical capture and point dispatch; this
+ * narrow route exists only for the explicit non-hittable fallback contract.
  */
 
 export function readDirectIosSelectorTapTarget(params: {
@@ -26,6 +26,7 @@ export function readDirectIosSelectorTapTarget(params: {
 }): DirectIosSelectorTarget | null {
   const { session, commandLabel, target, flags } = params;
   if (!params.tapElementSelectorAvailable) return null;
+  if (flags?.maestro?.allowNonHittableCoordinateFallback !== true) return null;
   if (commandLabel !== 'click') return null;
   if (target.kind !== 'selector') return null;
   if (isSessionRecording(session)) return null;

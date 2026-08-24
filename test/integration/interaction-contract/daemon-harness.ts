@@ -21,7 +21,7 @@ const CONTRACT_DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
 
 /**
  * Provider-transcript harness for contract scenarios whose path involves the
- * iOS runner (direct-ios-selector, maestro-non-hittable-fallback) or that
+ * iOS runner (maestro-non-hittable-fallback) or that
  * prove daemon-level response construction. The transcript is the proof
  * vehicle: `assertComplete` after `run` guarantees exactly the scripted
  * runner conversation happened — a path that dispatched differently either
@@ -67,13 +67,6 @@ export function runnerSnapshotEntry(nodes: readonly unknown[]): ProviderScenario
     platform: 'apple',
     result: { nodes, truncated: false },
   };
-}
-
-// A UI that has gone quiet: every settle capture sees the same tree. How many
-// captures the loop spends reaching that verdict is wall-clock, so the count is
-// not the contract and is never scripted.
-export function quietRunnerSnapshotEntry(nodes: readonly unknown[]): ProviderScenarioProviderEntry {
-  return { ...runnerSnapshotEntry(nodes), repeat: true };
 }
 
 export function runnerTapEntry(

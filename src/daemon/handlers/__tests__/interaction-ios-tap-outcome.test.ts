@@ -26,10 +26,10 @@ import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture
 import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import {
   getRuntimeBindings,
-  mockTapElementSelector,
   mockTapPoint,
   resetGetRuntimeFixture,
 } from './interaction-get-runtime-fixture.ts';
+import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -41,10 +41,13 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
 
 vi.mock('../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../__tests__/legacy-snapshot-capture-fixture.ts');
-  return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
+  return {
+    captureSnapshotWithInteractor: vi.fn(fixture.captureSnapshotThroughLegacyDispatchFixture),
+  };
 });
 
 const mockDispatch = vi.mocked(dispatchCommand);
+const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 const contextFromFlags = (flags: CommandFlags | undefined) => ({
   count: flags?.count,
@@ -64,6 +67,15 @@ async function runClick(
   sessionName: string,
   options: { positionals?: string[]; flags?: CommandFlags } = {},
 ): Promise<Awaited<ReturnType<typeof handleInteractionCommands>>> {
+  const session = sessionStore.get(sessionName);
+  if (session?.snapshot && !session.scriptPublication && options.positionals?.length !== 2) {
+    const baseline = session.snapshot;
+    mockCaptureSnapshotForSession.mockResolvedValueOnce({
+      nodes: baseline.nodes,
+      backend: baseline.backend ?? 'xctest',
+      quality: baseline.snapshotQuality,
+    });
+  }
   return await handleInteractionCommands({
     req: {
       token: 'test',
@@ -81,6 +93,7 @@ async function runClick(
 
 beforeEach(() => {
   resetGetRuntimeFixture();
+  mockCaptureSnapshotForSession.mockClear();
   mockDispatch.mockReset();
   mockTapPoint.mockImplementation(async (input) => {
     return await mockDispatch(
@@ -91,20 +104,10 @@ beforeEach(() => {
       input.execution,
     );
   });
-  mockTapElementSelector.mockImplementation(
-    async (input) =>
-      (await mockDispatch(
-        IOS_SIMULATOR,
-        'press',
-        [`${input.selector.key}="${input.selector.value}"`],
-        undefined,
-        input.execution,
-      )) ?? {},
-  );
 });
 
-test('a changed post-action capture corroborates a direct iOS tap reported as failed', async () => {
-  const sessionName = 'ios-direct-tap-corroboration';
+test('a changed post-action capture corroborates an iOS tap reported as failed', async () => {
+  const sessionName = 'ios-tap-corroboration';
   const sessionStore = makeSessionStore();
   const session = makeIosSession(sessionName, {
     appBundleId: 'com.example.app',
@@ -198,7 +201,7 @@ test('a private-ax baseline pins the corroboration probe to private-ax', async (
   expect(snapshotContexts[0]?.snapshotPreferredBackend).toBe('private-ax');
 });
 
-test('a raw baseline is excluded from corroboration entirely (#1634 P1)', async () => {
+test('a canonical selector capture replaces a raw baseline before corroboration', async () => {
   // The raw diagnostic plan keeps tree-first error propagation by contract and
   // is never rerouted by the pin, so a raw private-AX baseline could not be
   // matched same-backend — corroboration must decline up front (no probe
@@ -225,10 +228,8 @@ test('a raw baseline is excluded from corroboration entirely (#1634 P1)', async 
 
   const response = await runClick(sessionStore, sessionName);
 
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) expect(response.error.code).toBe('XCTEST_RECORDED_FAILURE');
-  // Declined before any probe: no corroboration snapshot was dispatched.
-  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(0);
+  expect(response?.ok).toBe(true);
+  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(1);
 });
 
 test('a tree baseline does not pin the corroboration probe backend', async () => {
@@ -352,7 +353,7 @@ test('a corroboration capture failure keeps the tap failure', async () => {
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(0);
 });
 
-test('a changed capture with a different presentation keeps the tap failure', async () => {
+test('the canonical selector capture aligns presentation before corroboration', async () => {
   const sessionName = 'ios-presentation-mismatch-tap-corroboration';
   const sessionStore = makeSessionStore();
   const baseline = snapshot(profileNodes);
@@ -377,9 +378,8 @@ test('a changed capture with a different presentation keeps the tap failure', as
 
   const response = await runClick(sessionStore, sessionName);
 
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) expect(response.error.code).toBe('XCTEST_RECORDED_FAILURE');
-  expect(sessionStore.get(sessionName)?.actions).toHaveLength(0);
+  expect(response?.ok).toBe(true);
+  expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 
 test('corroborates a tap when the request carries no flags and the baseline used a non-default scope', async () => {
@@ -394,6 +394,7 @@ test('corroborates a tap when the request carries no flags and the baseline used
       snapshot: baseline,
     }),
   );
+  let snapshotCount = 0;
   mockDispatch.mockImplementation(async (_device, command) => {
     if (command === 'press') {
       throw new AppError(
@@ -401,7 +402,10 @@ test('corroborates a tap when the request carries no flags and the baseline used
         'XCTest recorded a failure while executing tap; the action may not have been performed.',
       );
     }
-    if (command === 'snapshot') return snapshotPayload(imageViewerNodes);
+    if (command === 'snapshot') {
+      snapshotCount += 1;
+      return snapshotPayload(snapshotCount === 1 ? profileNodes : imageViewerNodes);
+    }
     return {};
   });
 
@@ -462,7 +466,7 @@ test('a changed capture after ordinary agent turn latency still corroborates the
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 
-test('a changed capture against a stale baseline keeps the tap failure', async () => {
+test('the canonical selector capture replaces a stale baseline before corroboration', async () => {
   const sessionName = 'ios-stale-baseline-tap-corroboration';
   const sessionStore = makeSessionStore();
   const baseline = snapshot(profileNodes);
@@ -487,13 +491,12 @@ test('a changed capture against a stale baseline keeps the tap failure', async (
 
   const response = await runClick(sessionStore, sessionName);
 
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) expect(response.error.code).toBe('XCTEST_RECORDED_FAILURE');
-  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(0);
-  expect(sessionStore.get(sessionName)?.actions).toHaveLength(0);
+  expect(response?.ok).toBe(true);
+  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(1);
+  expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 
-test('a changed capture against a keyless baseline keeps the tap failure', async () => {
+test('the canonical selector capture replaces a keyless baseline before corroboration', async () => {
   const sessionName = 'ios-keyless-baseline-tap-corroboration';
   const sessionStore = makeSessionStore();
   const baseline = snapshot(profileNodes);
@@ -518,10 +521,9 @@ test('a changed capture against a keyless baseline keeps the tap failure', async
 
   const response = await runClick(sessionStore, sessionName);
 
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) expect(response.error.code).toBe('XCTEST_RECORDED_FAILURE');
-  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(0);
-  expect(sessionStore.get(sessionName)?.actions).toHaveLength(0);
+  expect(response?.ok).toBe(true);
+  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(1);
+  expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 
 test('runtime-resolved taps use the same corroboration boundary', async () => {
