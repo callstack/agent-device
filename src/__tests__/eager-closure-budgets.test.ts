@@ -1,15 +1,16 @@
 import { expect, test } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { eagerClosureGraphOf } from './eager-import-closure.fixtures.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 import {
   classifyBudget,
   describeClosurePressure,
+  describePlatformOffenders,
   discoverFacadeEntryFiles,
   EAGER_CLOSURE_BUDGETS,
   FACADE_BUDGETS,
-  formatImportChain,
   HUB_BUDGETS,
   PLATFORM_IMPLEMENTATION_PATTERNS,
   type EagerClosureBudget,
@@ -43,10 +44,6 @@ import {
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 
-function relList(files: readonly string[]): string[] {
-  return [...files].map((file) => path.relative(repoRoot, file)).sort();
-}
-
 // --- the rules, tested in their failing direction -------------------------------------------
 // Each of these covers a hole that the real-tree assertions below cannot see: while the tree
 // matches its pins, an `<=` comparison, a one-level discovery scan, and a duplicate-swallowing
@@ -78,13 +75,50 @@ test('closure pressure is attributed to the heaviest direct edges and is bounded
   for (let index = 0; index < 10; index += 1) graph.set(`/repo/filler-${index}.ts`, entry);
 
   const described = describeClosurePressure(graph, entry, '/repo');
-  expect(described).toContain('heavy.ts -- 3 module(s) enter through this edge');
+  expect(described).toContain('heavy.ts -- 3 module(s) under this edge');
   expect(described.indexOf('heavy.ts')).toBeLessThan(described.indexOf('light.ts'));
   expect(described, 'the deep route must be shown, not just the edge name').toContain('heavy-3.ts');
   expect(described, 'output must be capped and say how much it omitted').toMatch(
-    /\(\+\d+ more direct edge\(s\), smaller\)/,
+    /\(\+\d+ more owning edge\(s\), \d+ module\(s\)\)/,
   );
   expect(described.split('\n').length).toBeLessThan(20);
+});
+
+test('a WIDE platform violation is capped, not dumped as hundreds of chains', () => {
+  // The hole: the platform assertion printed every offender with its own full chain. One eagerly
+  // imported platform subtree is hundreds of modules, which buries the single import that caused
+  // them all. Fixture is deliberately wide -- 300 offenders under one owning edge, plus a second
+  // owning edge and enough extra edges to force the "more owning edge(s)" tail.
+  const entry = '/repo/packages/contracts/src/facades/platform.ts';
+  const graph = new Map<string, string | null>([[entry, null]]);
+  const owningEdge = '/repo/packages/platform-apple/src/index.ts';
+  graph.set(owningEdge, entry);
+  const offenders = [owningEdge];
+  for (let index = 0; index < 300; index += 1) {
+    const file = `/repo/packages/platform-apple/src/mechanics-${index}.ts`;
+    // Broad and a few levels deep, the shape a real platform subtree actually has.
+    const parent =
+      index < 10 ? owningEdge : `/repo/packages/platform-apple/src/mechanics-${index % 10}.ts`;
+    graph.set(file, parent);
+    offenders.push(file);
+  }
+  for (let index = 0; index < 6; index += 1) {
+    const file = `/repo/src/platforms/android/extra-${index}.ts`;
+    graph.set(file, entry);
+    offenders.push(file);
+  }
+
+  const described = describePlatformOffenders(graph, entry, '/repo', offenders);
+  expect(described).toContain('packages/platform-apple/src/index.ts -- 301');
+  expect(described, 'the cap must be visible as an explicit omitted count').toMatch(
+    /\(\+299 more platform implementation module\(s\) under this edge\)/,
+  );
+  expect(described, 'extra owning edges must be summarised, not listed').toMatch(
+    /\(\+3 more owning edge\(s\), 3 platform implementation module\(s\)\)/,
+  );
+  // The whole point: bounded. 300+ offenders must not become 300+ printed chains.
+  expect(described.split('\n').length).toBeLessThan(30);
+  expect(described).not.toContain('mechanics-150.ts');
 });
 
 test('an entry that evaluates only itself is described without pretending to an edge', () => {
@@ -93,13 +127,22 @@ test('an entry that evaluates only itself is described without pretending to an 
   expect(describeClosurePressure(graph, '/repo/solo.ts', '/repo')).toContain('only itself');
 });
 
-test('discovery is recursive, so a NESTED facade file cannot hide from the gate', () => {
-  // The hole: a one-level `readdir` of `src/facades` omits `src/facades/nested/x.ts`, which R11's
-  // recursive scan covers -- the two gates would disagree about what a façade is, and this one
-  // would be the lenient half. Exercised against a fixture tree so it holds even while the real
-  // repo happens to have no nested façade.
-  const fixtureRoot = mkdtempForTestSync('eager-closure-discovery-');
-  const pkgDir = path.join(fixtureRoot, 'packages/demo');
+test('discovery is recursive and reads TRACKED files only', () => {
+  // Two holes in one fixture, because both are about discovery seeing the wrong set of files.
+  //
+  // Recursion: a one-level `readdir` of `src/facades` omits `src/facades/nested/x.ts`, which R11's
+  // scan covers -- the two gates would disagree about what a façade is, and this one would be the
+  // lenient half.
+  //
+  // Tracked-only: the first fix for the recursion hole replaced R11's `listSourceFiles()` with a
+  // raw filesystem walk, which regressed R11 itself. A layering gate describes COMMITTED state, so
+  // an uncommitted scratch file under a scanned path must stay invisible -- otherwise someone's
+  // local experiment fails a gate that is supposed to describe the repository (#1965 review).
+  //
+  // Both only exist relative to git, so this builds a real repository rather than a bare tmpdir,
+  // following `scripts/layering/platform-package-repository.test.ts`.
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'eager-closure-discovery-'));
+  const pkgDir = path.join(repo, 'packages/demo');
   fs.mkdirSync(path.join(pkgDir, 'src/facades/nested'), { recursive: true });
   fs.writeFileSync(
     path.join(pkgDir, 'package.json'),
@@ -109,13 +152,32 @@ test('discovery is recursive, so a NESTED facade file cannot hide from the gate'
   fs.writeFileSync(path.join(pkgDir, 'src/facades/top.ts'), 'export const b = 2;\n');
   fs.writeFileSync(path.join(pkgDir, 'src/facades/nested/deep.ts'), 'export const c = 3;\n');
   fs.writeFileSync(path.join(pkgDir, 'src/facades/skip.test.ts'), 'export const d = 4;\n');
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync(
+    'git',
+    ['-c', 'user.name=Gate', '-c', 'user.email=gate@example.test', 'commit', '-qm', 'base'],
+    { cwd: repo },
+  );
 
-  const discovered = discoverFacadeEntryFiles(fixtureRoot);
+  // Written AFTER the commit and never added: a contributor's local scratch façade.
+  fs.writeFileSync(path.join(pkgDir, 'src/facades/scratch.ts'), 'export const e = 5;\n');
+  fs.writeFileSync(path.join(pkgDir, 'src/facades/nested/scratch.ts'), 'export const f = 6;\n');
+
+  const discovered = discoverFacadeEntryFiles(repo);
   expect(discovered).toContain('packages/demo/src/entry.ts'); // manifest-declared
   expect(discovered).toContain('packages/demo/src/facades/top.ts');
-  expect(discovered).toContain('packages/demo/src/facades/nested/deep.ts'); // the regression
+  expect(discovered, 'a nested façade must not hide from the gate').toContain(
+    'packages/demo/src/facades/nested/deep.ts',
+  );
   expect(discovered, 'test sources are not entry surfaces').not.toContain(
     'packages/demo/src/facades/skip.test.ts',
+  );
+  expect(discovered, 'an untracked scratch façade is not committed state').not.toContain(
+    'packages/demo/src/facades/scratch.ts',
+  );
+  expect(discovered, 'nor is an untracked file beside a tracked nested façade').not.toContain(
+    'packages/demo/src/facades/nested/scratch.ts',
   );
 });
 
@@ -212,14 +274,12 @@ test.for(EAGER_CLOSURE_BUDGETS.filter((entry) => entry.denyPlatformImplementatio
     const offenders = [...graph.keys()]
       .filter((file) => file !== entryPath)
       .filter((file) => PLATFORM_IMPLEMENTATION_PATTERNS.some((pattern) => pattern.test(file)));
-    const chains = offenders.map((file) => formatImportChain(graph, file, repoRoot)).sort();
-
     expect(
-      relList(offenders),
-      `${entry.id} must not evaluate a concrete platform implementation before discovery or ` +
-        'binding selects an owner (ADR-0019: the registry is metadata-eager and ' +
-        'implementation-lazy). Move the offending edge behind a function-scoped `await import`. ' +
-        `The chains that reach implementation:\n\n${chains.join('\n\n')}`,
-    ).toEqual([]);
+      offenders.length,
+      `${entry.id} evaluates ${offenders.length} concrete platform implementation module(s) ` +
+        'before discovery or binding selects an owner (ADR-0019: the registry is metadata-eager ' +
+        'and implementation-lazy). Move the owning edge behind a function-scoped `await import`.' +
+        `\nWhere they come in (capped):\n${describePlatformOffenders(graph, entryPath, repoRoot, offenders)}`,
+    ).toBe(0);
   },
 );

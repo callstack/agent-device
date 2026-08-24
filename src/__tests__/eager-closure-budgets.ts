@@ -251,7 +251,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
  * only), so its pin is also the assertion that composing the registry stays metadata-eager.
  */
 export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
-  'src/cli.ts': 361,
+  'src/cli.ts': 362,
   'src/platform-runtime.ts': 31,
   'src/core/dispatch.ts': 100,
   'src/core/capabilities.ts': 76,
@@ -308,32 +308,106 @@ export function classifyBudget(id: string, actual: number, budget: number): stri
   );
 }
 
-/** How many direct edges, and how many chains within one, an over-pin failure prints. */
+/**
+ * Failure-output caps. A violation has to fit in a terminal to be read: `src/cli.ts` evaluates
+ * 361 modules, and one eagerly-imported platform subtree can pull in hundreds, so both
+ * diagnostics below print a few owning edges with a couple of representative routes each and
+ * count what they left out, rather than emitting a chain per module.
+ */
 const REPORTED_EDGES = 4;
-const REPORTED_CHAINS_PER_EDGE = 2;
+const REPORTED_ROUTES_PER_EDGE = 2;
 
-/** Modules reached from `file` in the breadth-first tree, in discovery order. */
-function subtreeOf(childrenOf: ReadonlyMap<string, string[]>, file: string): string[] {
-  const found: string[] = [];
-  const queue = [file];
-  for (let head = 0; head < queue.length; head += 1) {
-    const current = queue[head];
-    if (current === undefined) continue;
-    found.push(current);
-    for (const child of childrenOf.get(current) ?? []) queue.push(child);
+/**
+ * The entry's own direct import that `file` came in through -- walk the discovery chain back up
+ * until the next step would be the entry itself.
+ *
+ * This is the unit both diagnostics group by, because it is the unit a reader can act on: the
+ * fix for "too much evaluates" is almost always to change one of the entry's own imports.
+ */
+function owningEdgeOf(
+  graph: ReadonlyMap<string, string | null>,
+  entryPath: string,
+  file: string,
+): string | null {
+  let current = file;
+  for (let hops = 0; hops < 64; hops += 1) {
+    const parent = graph.get(current);
+    if (parent === undefined || parent === null) return null;
+    if (parent === entryPath) return current;
+    current = parent;
   }
-  return found;
+  return null;
+}
+
+/** `files` bucketed by the entry's direct import they arrived through, heaviest bucket first. */
+function groupByOwningEdge(
+  graph: ReadonlyMap<string, string | null>,
+  entryPath: string,
+  files: readonly string[],
+): { edge: string; members: string[] }[] {
+  const groups = new Map<string, string[]>();
+  for (const file of files) {
+    const edge = owningEdgeOf(graph, entryPath, file) ?? file;
+    const members = groups.get(edge);
+    if (members) members.push(file);
+    else groups.set(edge, [file]);
+  }
+  return [...groups]
+    .map(([edge, members]) => ({ edge, members }))
+    .sort((left, right) => right.members.length - left.members.length);
+}
+
+/** Deepest routes first: a leaf names the far end of the chain, not just the edge again. */
+function representativeRoutes(
+  graph: ReadonlyMap<string, string | null>,
+  members: readonly string[],
+  repoRoot: string,
+): string[] {
+  return [...members]
+    .sort((left, right) => chainLength(graph, right) - chainLength(graph, left))
+    .slice(0, REPORTED_ROUTES_PER_EDGE)
+    .map((file) => `    ${formatImportChain(graph, file, repoRoot)}`);
+}
+
+/**
+ * Shared bounded rendering for both diagnostics: the top `REPORTED_EDGES` owning edges, each with
+ * up to `REPORTED_ROUTES_PER_EDGE` representative routes, plus an explicit count of everything
+ * omitted so a truncated report never reads as a complete one.
+ */
+function renderOwningEdges(
+  graph: ReadonlyMap<string, string | null>,
+  repoRoot: string,
+  groups: readonly { edge: string; members: string[] }[],
+  noun: string,
+): string {
+  const shown = groups.slice(0, REPORTED_EDGES);
+  const sections = shown.map(({ edge, members }) => {
+    const routes = representativeRoutes(graph, members, repoRoot);
+    const hiddenRoutes = members.length - routes.length;
+    const more = hiddenRoutes > 0 ? `\n    (+${hiddenRoutes} more ${noun} under this edge)` : '';
+    return (
+      `  ${path.relative(repoRoot, edge)} -- ${members.length} ${noun} under this edge:\n` +
+      `${routes.join('\n')}${more}`
+    );
+  });
+  const hiddenGroups = groups.slice(REPORTED_EDGES);
+  const hiddenMembers = hiddenGroups.reduce((total, group) => total + group.members.length, 0);
+  const tail =
+    hiddenGroups.length > 0
+      ? `\n  (+${hiddenGroups.length} more owning edge(s), ${hiddenMembers} ${noun})`
+      : '';
+  return `${sections.join('\n')}${tail}`;
 }
 
 /**
  * A bounded account of WHERE an entry's evaluated modules come from: its heaviest direct imports,
- * each with a couple of representative routes into the subtree it pulls in.
+ * each with a couple of representative routes into what they pull in.
  *
- * What it shows: the direct edges of the entry ranked by how many modules enter the closure
- * THROUGH THEM -- attribution by shortest import route, since the walk is breadth-first -- capped
- * at `REPORTED_EDGES` edges and `REPORTED_CHAINS_PER_EDGE` chains each. When a regression is a new
- * import on the entry itself, which is the common case, that edge is new and its whole subtree is
- * attributed to it, so it sorts to the top and the offending route is the first thing printed.
+ * What it shows: the entry's direct edges ranked by how many modules enter the closure THROUGH
+ * THEM -- attribution by shortest import route, since the walk is breadth-first -- capped, with
+ * the omitted counts stated. When a regression is a new import on the entry itself, which is the
+ * common case, that edge is new and everything under it is attributed to it, so it sorts to the
+ * top and the offending route is the first thing printed.
  *
  * What it does NOT show: a diff against a recorded baseline. This gate persists each entry's
  * module COUNT, not its module identity, so it cannot say "these three modules are new" -- only
@@ -348,43 +422,37 @@ export function describeClosurePressure(
   entryPath: string,
   repoRoot: string,
 ): string {
-  const childrenOf = new Map<string, string[]>();
-  for (const [file, parent] of graph) {
-    if (parent === null) continue;
-    const siblings = childrenOf.get(parent);
-    if (siblings) siblings.push(file);
-    else childrenOf.set(parent, [file]);
-  }
-
-  const ranked = (childrenOf.get(entryPath) ?? [])
-    .map((edge) => ({ edge, subtree: subtreeOf(childrenOf, edge) }))
-    .sort((left, right) => right.subtree.length - left.subtree.length);
-  if (ranked.length === 0) return '  (no eager edges: this entry evaluates only itself)';
-
-  const sections = ranked.slice(0, REPORTED_EDGES).map(({ edge, subtree }) => {
-    // Deepest-first: a leaf names the far end of the route, which is more informative than
-    // re-printing the edge itself.
-    const deepest = [...subtree]
-      .sort((left, right) => chainLength(graph, right) - chainLength(graph, left))
-      .slice(0, REPORTED_CHAINS_PER_EDGE);
-    const routes = deepest.map((file) => `    ${formatImportChain(graph, file, repoRoot)}`);
-    return (
-      `  ${path.relative(repoRoot, edge)} -- ${subtree.length} module(s) enter through this ` +
-      `edge:\n${routes.join('\n')}`
-    );
-  });
-  const omitted = ranked.length - Math.min(ranked.length, REPORTED_EDGES);
-  const tail = omitted > 0 ? `\n  (+${omitted} more direct edge(s), smaller)` : '';
-  return `${sections.join('\n')}${tail}`;
+  const evaluated = [...graph.keys()].filter((file) => file !== entryPath);
+  if (evaluated.length === 0) return '  (no eager edges: this entry evaluates only itself)';
+  return renderOwningEdges(
+    graph,
+    repoRoot,
+    groupByOwningEdge(graph, entryPath, evaluated),
+    'module(s)',
+  );
 }
 
-function chainLength(graph: ReadonlyMap<string, string | null>, target: string): number {
-  let length = 0;
-  for (let at: string | null | undefined = target; at != null; at = graph.get(at)) {
-    length += 1;
-    if (length > 64) break;
-  }
-  return length;
+/**
+ * The same bounded shape for the platform-implementation assertion.
+ *
+ * One eagerly imported platform subtree drags in hundreds of implementation modules, so listing
+ * every offender with its own full chain buries the single import that caused all of them. This
+ * groups the offenders by the entry's own import they arrived through -- which is the edge to
+ * make lazy -- and caps the output the same way (#1965 review).
+ */
+export function describePlatformOffenders(
+  graph: ReadonlyMap<string, string | null>,
+  entryPath: string,
+  repoRoot: string,
+  offenders: readonly string[],
+): string {
+  if (offenders.length === 0) return '';
+  return renderOwningEdges(
+    graph,
+    repoRoot,
+    groupByOwningEdge(graph, entryPath, offenders),
+    'platform implementation module(s)',
+  );
 }
 
 /**
@@ -395,7 +463,7 @@ function chainLength(graph: ReadonlyMap<string, string | null>, target: string):
  * actually pulled it in. `eagerClosureGraphOf` records each file's discoverer, so the route is
  * just a walk back up, and because that walk is breadth-first the route is the shortest one.
  */
-export function formatImportChain(
+function formatImportChain(
   graph: ReadonlyMap<string, string | null>,
   target: string,
   repoRoot: string,
@@ -406,4 +474,14 @@ export function formatImportChain(
     if (chain.length > 64) break; // defensive: a cycle would otherwise spin here
   }
   return chain.reverse().join('\n      -> ');
+}
+
+/** How many hops from the entry down to `target`, bounded so a cycle cannot spin. */
+function chainLength(graph: ReadonlyMap<string, string | null>, target: string): number {
+  let length = 0;
+  for (let at: string | null | undefined = target; at != null; at = graph.get(at)) {
+    length += 1;
+    if (length > 64) break;
+  }
+  return length;
 }

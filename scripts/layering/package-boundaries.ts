@@ -18,6 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseImports } from './model.ts';
+import { listTrackedProductionSources } from './tracked-sources.ts';
 
 export type PackageBoundaryViolation = {
   rule: string;
@@ -267,20 +268,19 @@ export function rootExternalDependencyRanges(repoRoot: string): Map<string, stri
  * one-level `readdir` missed both nested façade files and the six `packages/platform-*`
  * manifest façades, which have no `facades/` directory at all).
  *
- * The `src/facades/` walk is recursive and skips test sources, matching the production-file
- * scope every other layering scan uses.
+ * The `src/facades/` side reads TRACKED production sources (`listTrackedProductionSources`), the
+ * same input every other layering scan uses, and is recursive so a nested façade cannot be
+ * covered by one gate and missed by another. Tracked-only matters: an uncommitted scratch file
+ * under a scanned path must stay invisible, or these gates start describing a contributor's
+ * working directory instead of the committed tree (#1965 review).
  */
 export function facadeEntryFiles(repoRoot: string): string[] {
   const found = new Set<string>();
   for (const pkg of readWorkspacePackages(repoRoot)) {
     for (const target of pkg.exportTargets.values()) found.add(target);
   }
-  for (const root of ['src', 'packages']) {
-    for (const file of walkTsFiles(repoRoot, root)) {
-      if (!file.includes('/src/facades/')) continue;
-      if (/(?:^|\/)__tests__\//.test(file) || file.endsWith('.test.ts')) continue;
-      found.add(file);
-    }
+  for (const file of listTrackedProductionSources(repoRoot)) {
+    if (file.includes('/src/facades/')) found.add(file);
   }
   return [...found].filter((file) => fs.existsSync(path.join(repoRoot, file))).sort();
 }

@@ -1,0 +1,47 @@
+// The file list every layering scan reads: TRACKED production TypeScript, nothing else.
+//
+// A leaf module on purpose. `check.ts` owns the scan and imports `package-boundaries.ts`, so the
+// boundary rules cannot import `check.ts` back for its file list; without a shared leaf the two
+// would each grow their own enumerator, and the moment those disagree a rule silently changes
+// scope. That is not hypothetical -- it is the #1965 review finding this module exists to fix:
+// `facadeEntryFiles` was briefly implemented as a raw `readdir` walk, which quietly widened R11
+// from tracked files to whatever happened to be on disk.
+//
+// Tracked-only is a hard rule, not an optimization. A layering gate describes COMMITTED state:
+// `docs/adr/0019-request-bound-platform-runtime.md` requires review "from a clean committed tree
+// with all production files present in HEAD", and `check.ts` separately fails closed when
+// production TypeScript is untracked. A scratch file a contributor has not committed -- a
+// throwaway `facades/experiment.ts`, a half-finished module -- must be invisible here, or a gate
+// that is supposed to describe the repository starts failing on the contents of someone's working
+// directory instead.
+
+import { execFileSync } from 'node:child_process';
+
+// `src/**/*.ts` only matches NESTED files, so root-level `src/*.ts` (src/cli.ts,
+// src/command-catalog.ts) needs its own pathspec or it silently drops out of every scan.
+// Workspace package sources are production files too (#1490 W0).
+const TRACKED_SOURCE_PATHSPECS = [
+  'src/*.ts',
+  'src/**/*.ts',
+  'packages/*/src/*.ts',
+  'packages/*/src/**/*.ts',
+];
+
+/** Every tracked `.ts` source file under the scanned roots, repo-root-relative. */
+export function listTrackedTypeScriptFiles(repoRoot: string): string[] {
+  const out = execFileSync('git', ['ls-files', ...TRACKED_SOURCE_PATHSPECS], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  return out.split('\n').filter(Boolean);
+}
+
+/** Production sources only: test files and `__tests__/` trees are not layering subjects. */
+export function isProductionSourceFile(file: string): boolean {
+  return file.endsWith('.ts') && !/(?:^|\/)__tests__\//.test(file) && !/\.test\.ts$/.test(file);
+}
+
+/** The canonical layering scan input: tracked, production, repo-root-relative. */
+export function listTrackedProductionSources(repoRoot: string): string[] {
+  return listTrackedTypeScriptFiles(repoRoot).filter(isProductionSourceFile);
+}

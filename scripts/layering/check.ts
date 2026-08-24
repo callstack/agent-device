@@ -98,39 +98,22 @@ import { policyLead, policyViolation, ZONE_POLICIES } from './zone-policy.ts';
 import { contractsImplementationAuthorityViolations } from './contracts-implementation-policy.ts';
 import { selectorPipelineOwnershipViolations } from './selector-pipeline-ownership.ts';
 import { recordRuntimeRegistryJoinViolations } from './record-runtime-registry-policy.ts';
+import { listTrackedProductionSources, listTrackedTypeScriptFiles } from './tracked-sources.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
 }).trim();
 
 export function listTypeScriptFiles(): string[] {
-  // `src/**/*.ts` only matches nested files; root-level `src/*.ts` (e.g.
-  // src/cli.ts, src/command-catalog.ts) needs its own pathspec or it silently
-  // drops out of cycle/back-edge analysis.
-  // Workspace package sources are production files too (#1490 W0): R4 cycle
-  // rejection and the zone staleness guard must see them, and workspace
-  // specifiers resolve across the seam in resolveTargetFile.
-  const out = execFileSync(
-    'git',
-    ['ls-files', 'src/*.ts', 'src/**/*.ts', 'packages/*/src/*.ts', 'packages/*/src/**/*.ts'],
-    {
-      cwd: repoRoot,
-      encoding: 'utf8',
-    },
-  );
-  return out.split('\n').filter(Boolean);
+  return listTrackedTypeScriptFiles(repoRoot);
 }
 
 export function listSourceFiles(): string[] {
-  return listTypeScriptFiles().filter(isProductionSourceFile);
+  return listTrackedProductionSources(repoRoot);
 }
 
 function readSources(files: readonly string[]): Map<string, string> {
   return new Map(files.map((file) => [file, fs.readFileSync(path.join(repoRoot, file), 'utf8')]));
-}
-
-function isProductionSourceFile(file: string): boolean {
-  return file.endsWith('.ts') && !/(?:^|\/)__tests__\//.test(file) && !/\.test\.ts$/.test(file);
 }
 
 // R1-R3 are declared as a policy table in zone-policy.ts. This walks it; the boundaries
