@@ -5,6 +5,7 @@
  */
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { readAndroidCaptureFailureReason } from '@agent-device/contracts/android-snapshot-quality';
 import type {
   AndroidSnapshotHelperCaptureOptions,
   AndroidSnapshotHelperOutput,
@@ -74,18 +75,14 @@ async function captureFromAndroidSnapshotHelperSession(params: {
       data: {
         deviceKey,
         reason: error instanceof Error ? error.message : String(error),
-        uiAutomationConnectionTimeout: isUiAutomationConnectionTimeoutResponse(error),
+        // The typed reason the session protocol already published, not a second
+        // comparison against the helper's error type: one owner, one taxonomy (#1983).
+        uiAutomationConnectionTimeout:
+          readAndroidCaptureFailureReason(error) === 'accessibility-timeout',
       },
     });
     return undefined;
   }
-}
-
-function isUiAutomationConnectionTimeoutResponse(error: unknown): boolean {
-  if (!(error instanceof AppError)) return false;
-  const helper = error.details?.helper;
-  if (!helper || typeof helper !== 'object') return false;
-  return (helper as Record<string, unknown>).errorType === 'java.util.concurrent.TimeoutException';
 }
 
 // Touch commands piggyback on a live snapshot session so gestures do not restart instrumentation

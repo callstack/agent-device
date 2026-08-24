@@ -7,6 +7,10 @@ import {
   createSessionProvider,
   type FakeAndroidProcess,
 } from './snapshot-helper-session.fixtures.ts';
+import path from 'node:path';
+import { promises as fs } from 'node:fs';
+import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { withDiagnosticsScope } from '../../../utils/diagnostics.ts';
 
 beforeEach(async () => {
   await resetAndroidSnapshotHelperSessions();
@@ -190,4 +194,45 @@ test('invalidates and falls back from the helper session after a malformed respo
     calls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
     true,
   );
+});
+
+/**
+ * The session fallback diagnostic must read the typed reason its own protocol published, not
+ * re-compare the helper's error type. A second comparison is a second taxonomy, and it drifts the
+ * first time either side changes (#1983).
+ */
+test('the session fallback diagnostic reads the typed timeout reason', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-android-session-timeout-diag-');
+  const logPath = path.join(tmpDir, 'diag.ndjson');
+  try {
+    const processes: FakeAndroidProcess[] = [];
+    const provider = createSessionProvider({
+      calls: [],
+      processes,
+      responseMode: 'ui-automation-timeout',
+    });
+
+    await withDiagnosticsScope(
+      { debug: true, logPath, session: 'android-test', requestId: 'req-1', command: 'snapshot' },
+      async () => {
+        const output = await captureAndroidSnapshotWithHelperSession({
+          adb: provider.exec,
+          adbProvider: provider,
+          deviceKey: 'android:emulator-5554',
+        });
+        assert.equal(output, undefined);
+      },
+    );
+
+    const log = await fs.readFile(logPath, 'utf8');
+    const fallback = log
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { phase?: string; data?: Record<string, unknown> })
+      .find((event) => event.phase === 'android_snapshot_helper_session_fallback');
+    assert.ok(fallback, 'expected a session fallback diagnostic');
+    assert.equal(fallback.data?.uiAutomationConnectionTimeout, true);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
 });
