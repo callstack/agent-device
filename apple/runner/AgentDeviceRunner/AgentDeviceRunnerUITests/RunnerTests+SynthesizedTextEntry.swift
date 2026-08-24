@@ -127,6 +127,17 @@ extension RunnerTests {
         sleepFor(request.delaySeconds)
       }
     }
+    // The private synthesize call returns at post time, not commit time (same as bare `type`,
+    // see awaitSynthesizedFirstResponderCommit) — but this route never resolves an XCUIElement,
+    // so without this wait it had no way to notice a dropped or still-in-flight character at all
+    // and reported ok purely because the event posted. Wait here, on the same request.target
+    // (element nil, refreshPoint set) that gated this route, so each poll re-resolves via the
+    // refresh point rather than trusting a stale element handle.
+    let commit = awaitSynthesizedReplacementCommit(
+      app: request.app,
+      target: request.target,
+      expectedText: request.text
+    )
     logTextEntryPhase(
       commandId: request.commandId,
       phase: "total",
@@ -140,7 +151,8 @@ extension RunnerTests {
         repaired: false,
         expectedText: request.text,
         observedText: nil,
-        textEntryRoute: "synthesized-first-responder-replacement"
+        textEntryRoute: "synthesized-first-responder-replacement",
+        failure: Self.textEntryFailure(forCommitOutcome: commit)
       )
     )
 #else
@@ -236,12 +248,15 @@ extension RunnerTests {
   /// indistinguishable from a committed one — `type` then reported ok with a partial value in the
   /// field (#1874, #1844).
   enum SynthesizedTextCommitOutcome: Equatable {
-    /// The app answered: the expected text committed, or the app transformed the input and the
-    /// runner must not second-guess it.
+    /// The wait's success case, but its meaning is route-specific: for append mode (bare `type`),
+    /// the expected text committed OR the app transformed the input in a way the runner must not
+    /// second-guess; for replacement mode (`fill`), it means only an exact match — see
+    /// `awaitSynthesizedReplacementCommitOutcome`'s doc comment for why replacement mode has no
+    /// "trust it" case.
     case settled
     /// There was nothing to wait for — no readable baseline, or the text carries a submit key.
     case unobservable
-    /// The deadline expired with a strict prefix of the expected text still outstanding.
+    /// The deadline expired with the expected text still not observed.
     case notObserved
   }
 
@@ -289,6 +304,95 @@ extension RunnerTests {
     }
   }
 
+  /// The replacement-mode counterpart of `awaitSynthesizedCommitOutcome`. It must NOT reuse that
+  /// function's `synthesizedTextCommitProgress`: prefix-walk's `.diverged` case exists to trust an
+  /// app that transforms bare-`type` input (formatter, autocomplete) rather than second-guess it —
+  /// but that same rule silently accepts a dropped-character corruption too, because a value with a
+  /// hole in the middle ("ada@example" -> "aexample") is neither a matching prefix NOR the full
+  /// string, yet still gets classified `.diverged` -> `.settled` -> reported `ok: true`. This is not
+  /// a hypothetical: it is the exact shape of the corruption this wait exists to catch (`fill`
+  /// reporting success over "Avelace"/"aexample"-style drops), verified against both live examples
+  /// before writing this comment.
+  ///
+  /// `.replacement` mode does not need prefix tolerance for legitimate transforms either:
+  /// `isRepairableTextEntryMismatch` (RunnerTests+TextTyping.swift) already treats every mismatch in
+  /// `.replacement` mode as repairable unconditionally, with no formatter/autocomplete carve-out —
+  /// `fill` fully owns the field via select-all, so there is no legitimate reason for the settled
+  /// value to be anything other than exactly what was requested. A settled non-match is therefore
+  /// always the wait's failure case, never a `.settled` pass-through.
+  static func awaitSynthesizedReplacementCommitOutcome(
+    expectedText: String,
+    placeholder: String?,
+    isExpired: () -> Bool,
+    observe: () -> String?,
+    waitForNextObservation: () -> Void
+  ) -> SynthesizedTextCommitOutcome {
+    if Self.textMatchesPlaceholder(expectedText, placeholder: placeholder) {
+      return .notObserved
+    }
+    while true {
+      if observe() == expectedText {
+        return .settled
+      }
+      if isExpired() { return .notObserved }
+      waitForNextObservation()
+    }
+  }
+
+  /// Blocks until `expectedText` is observable in `target`, sharing the poll/deadline/placeholder
+  /// plumbing between the append route (`awaitSynthesizedFirstResponderCommit`) and the replacement
+  /// route (`awaitSynthesizedReplacementCommit`) — `computeOutcome` is the one thing that must NOT
+  /// be shared between them: see `awaitSynthesizedReplacementCommitOutcome`'s doc comment for why
+  /// append mode's "trust a diverged value" rule is wrong for replacement mode.
+  private func awaitSynthesizedCommit(
+    app: XCUIApplication,
+    target: TextEntryTarget,
+    expectedText: String,
+    routeLabel: String,
+    computeOutcome: (
+      _ expectedText: String,
+      _ placeholder: String?,
+      _ isExpired: () -> Bool,
+      _ observe: () -> String?,
+      _ waitForNextObservation: () -> Void
+    ) -> SynthesizedTextCommitOutcome
+  ) -> SynthesizedTextCommitOutcome {
+    let placeholder = resolveTextEntryElement(app: app, target: target)?.placeholderValue
+    let deadline = Date().addingTimeInterval(TextEntryTiming.synthesizedCommitTimeout)
+    let waitStartedAt = Date()
+    NSLog("[DEBUG-1874] wait start expectedLen=%ld route=%@", expectedText.count, routeLabel)
+    let outcome = computeOutcome(
+      expectedText,
+      placeholder,
+      { Date() >= deadline },
+      {
+        let observedText = editableTextValue(
+          for: resolveTextEntryElement(app: app, target: target),
+          treatingPlaceholderAsEmpty: true
+        )
+        // Cadence evidence stays value-free: the polled value is user content typed through
+        // `type`/`fill` and must never reach runner.log. Lengths and the expected-prefix walk
+        // are enough to distinguish throttling (prefix grows slowly) from a wedge (it freezes).
+        Self.logCommitCadence(
+          elapsedMs: Int(waitStartedAt.timeIntervalSinceNow * -1000),
+          observedLen: observedText?.count ?? -1,
+          expectedPrefixLen: observedText.map { Self.commonPrefixLength($0, expectedText) } ?? -1
+        )
+        return observedText
+      },
+      // XCUI resolution shares the automation channel with the in-flight synthesized event.
+      // Sparse reads let the target consume that event instead of continuously interrupting it.
+      { sleepFor(TextEntryTiming.synthesizedCommitPollInterval) }
+    )
+    NSLog(
+      "[DEBUG-1874] wait outcome=%@ elapsedMs=%.0f route=%@",
+      String(describing: outcome),
+      waitStartedAt.timeIntervalSinceNow * -1000,
+      routeLabel
+    )
+    return outcome
+  }
+
   /// Blocks until the synthesized bare-type text is observable in the target field, so `type`
   /// cannot report ok while trailing characters are still uncommitted on a slow simulator.
   ///
@@ -308,40 +412,40 @@ extension RunnerTests {
     guard let textBefore, !typedText.contains("\n"), !typedText.contains("\r") else {
       return .unobservable
     }
-    let expectedText = textBefore + typedText
-    let placeholder = resolveTextEntryElement(app: app, target: target)?.placeholderValue
-    let deadline = Date().addingTimeInterval(TextEntryTiming.synthesizedCommitTimeout)
-    let waitStartedAt = Date()
-    NSLog("[DEBUG-1874] wait start expectedLen=%ld", expectedText.count)
-    let outcome = Self.awaitSynthesizedCommitOutcome(
+    return awaitSynthesizedCommit(
+      app: app,
+      target: target,
+      expectedText: textBefore + typedText,
+      routeLabel: "append",
+      computeOutcome: Self.awaitSynthesizedCommitOutcome
+    )
+  }
+
+  /// Blocks until the synthesized replacement text (`fill`) is observable in the target field, so
+  /// `fill` cannot report ok while the select-all-and-retype it posted is still uncommitted — or
+  /// silently wrong — on a slow or channel-penalized simulator (this route runs only when the
+  /// XCTest channel is already penalized, and never resolves an `XCUIElement`, so it previously had
+  /// no verification at all).
+  ///
+  /// Unlike the append route, the expected value is the final text itself — replacement mode
+  /// clears the field first, so there is no `textBefore` prefix to account for — and unlike the
+  /// append route, a settled mismatch is always reported rather than trusted: see
+  /// `awaitSynthesizedReplacementCommitOutcome`'s doc comment.
+  func awaitSynthesizedReplacementCommit(
+    app: XCUIApplication,
+    target: TextEntryTarget,
+    expectedText: String
+  ) -> SynthesizedTextCommitOutcome {
+    guard !expectedText.contains("\n"), !expectedText.contains("\r") else {
+      return .unobservable
+    }
+    return awaitSynthesizedCommit(
+      app: app,
+      target: target,
       expectedText: expectedText,
-      placeholder: placeholder,
-      isExpired: { Date() >= deadline },
-      observe: {
-        let observedText = editableTextValue(
-          for: resolveTextEntryElement(app: app, target: target),
-          treatingPlaceholderAsEmpty: true
-        )
-        // Cadence evidence stays value-free: the polled value is user content typed through
-        // `type` and must never reach runner.log. Lengths and the expected-prefix walk are
-        // enough to distinguish throttling (prefix grows slowly) from a wedge (it freezes).
-        Self.logCommitCadence(
-          elapsedMs: Int(waitStartedAt.timeIntervalSinceNow * -1000),
-          observedLen: observedText?.count ?? -1,
-          expectedPrefixLen: observedText.map { Self.commonPrefixLength($0, expectedText) } ?? -1
-        )
-        return observedText
-      },
-      // XCUI resolution shares the automation channel with the in-flight synthesized event.
-      // Sparse reads let the target consume that event instead of continuously interrupting it.
-      waitForNextObservation: { sleepFor(TextEntryTiming.synthesizedCommitPollInterval) }
+      routeLabel: "replacement",
+      computeOutcome: Self.awaitSynthesizedReplacementCommitOutcome
     )
-    NSLog(
-      "[DEBUG-1874] wait outcome=%@ elapsedMs=%.0f",
-      String(describing: outcome),
-      waitStartedAt.timeIntervalSinceNow * -1000
-    )
-    return outcome
   }
 
   static func shouldUseResolvedCoordinateTextEntryRoute(

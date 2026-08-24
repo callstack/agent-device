@@ -199,6 +199,97 @@ extension RunnerTests {
     }
   }
 
+  // The bug this whole route exists to fix: `awaitSynthesizedCommitOutcome` (append/`type`) treats
+  // any non-prefix value as `.diverged` -> `.settled`, i.e. "trust the app, don't second-guess it."
+  // That rule is correct for `type` (an autocomplete/formatter can legitimately transform bare
+  // input) but silently swallows a dropped-character corruption in `.replacement` mode, because a
+  // value with a hole in the middle is neither a matching prefix nor an exact match — it still hits
+  // `.diverged`. These are the two corruption strings actually observed in CI on `fill`
+  // (id="field-name" "Ada Lovelace" -> "Avelace", id="field-email" "ada@example" -> "aexample";
+  // first character and tail survive, a middle run is missing). Confirms
+  // `awaitSynthesizedReplacementCommitOutcome` reports `.notObserved` for both, where
+  // `awaitSynthesizedCommitOutcome` (proven by the assertion inside the loop) reports `.settled`.
+  func testSynthesizedReplacementCommitCatchesDroppedMiddleCharacters() {
+    let corruptions: [(expected: String, observedAfterDrop: String)] = [
+      (expected: "Ada Lovelace", observedAfterDrop: "Avelace"),
+      (expected: "ada@example", observedAfterDrop: "aexample"),
+    ]
+    for corruption in corruptions {
+      XCTAssertEqual(
+        Self.awaitSynthesizedCommitOutcome(
+          expectedText: corruption.expected,
+          placeholder: nil,
+          isExpired: { false },
+          observe: { corruption.observedAfterDrop },
+          waitForNextObservation: {}
+        ),
+        .settled,
+        "append-mode's diverge-trusting outcome must stay unchanged by this fix"
+      )
+      var polls = 0
+      let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
+        expectedText: corruption.expected,
+        placeholder: nil,
+        isExpired: { polls >= 2 },
+        observe: { corruption.observedAfterDrop },
+        waitForNextObservation: { polls += 1 }
+      )
+      XCTAssertEqual(outcome, .notObserved, "expected \(corruption.expected), dropped to \(corruption.observedAfterDrop)")
+      XCTAssertEqual(polls, 2, "a settled-but-wrong value must be polled until the deadline, not trusted early")
+    }
+  }
+
+  // The non-failure counterpart: replacement mode must still tolerate real commit lag (the value
+  // converges to an exact match over a few polls), not just instant matches. Mirrors
+  // `testSynthesizedCommitWalksAPrefixToCompletion`, but replacement mode has no "prefix" concept —
+  // every intermediate read here is deliberately NOT a prefix of the final value, to prove the wait
+  // does not depend on prefix-walking to keep polling.
+  func testSynthesizedReplacementCommitToleratesLagUntilExactMatch() {
+    let steps = ["", "ad", "ada@example"]
+    var index = 0
+    let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
+      expectedText: "ada@example",
+      placeholder: nil,
+      isExpired: { false },
+      observe: { steps[min(index, steps.count - 1)] },
+      waitForNextObservation: { index += 1 }
+    )
+    XCTAssertEqual(outcome, .settled)
+    XCTAssertEqual(index, 2)
+  }
+
+  // Same ordering guarantee as `testCommitLandingDuringTheFinalSleepIsStillObserved`: the deadline
+  // is checked AFTER an observation, so a match landing during the final poll sleep is still caught.
+  func testSynthesizedReplacementCommitLandingDuringTheFinalSleepIsStillObserved() {
+    var polls = 0
+    let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
+      expectedText: "ada@example",
+      placeholder: nil,
+      isExpired: { polls >= 1 },
+      observe: { polls == 0 ? "ada@exampl" : "ada@example" },
+      waitForNextObservation: { polls += 1 }
+    )
+    XCTAssertEqual(outcome, .settled)
+  }
+
+  // Same placeholder-collision guard as append mode, and for the same reason: a pre-dispatch value
+  // cannot identify what a later placeholder-equal AX value represents, so refuse before polling.
+  func testSynthesizedReplacementCommitPlaceholderGuardRefusesWithoutPolling() {
+    var observations = 0
+    let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
+      expectedText: "0.00",
+      placeholder: "0.00",
+      isExpired: { false },
+      observe: {
+        observations += 1
+        return "0.00"
+      },
+      waitForNextObservation: {}
+    )
+    XCTAssertEqual(Self.textEntryFailure(forCommitOutcome: outcome)?.rawValue, "TEXT_INPUT_COMMIT_NOT_OBSERVED")
+    XCTAssertEqual(observations, 0, "no post-dispatch read can resolve this collision")
+  }
+
   // The mapping the command actually refuses on. `.unobservable` must stay a success: it is the
   // pre-existing contract for submit-key text and unreadable fields, so inverting it would fail
   // every `type "...\n"`.
@@ -282,8 +373,19 @@ extension RunnerTests {
 #if os(iOS)
   func testTypeTextReliablyPacesSynthesizedReplacementThroughProductionCaller() {
     let synthesizer = RecordingTextEntrySynthesizer()
+    // Springboard, not a bare `XCUIApplication()`: the commit wait now really polls (see below),
+    // and each poll resolves `target.refreshPoint` through `textInputAt`, which queries the real
+    // XCTest element-query channel. Against a bare, never-`.launch()`ed `XCUIApplication()` that
+    // query throws `_XCTestCaseInterruptionException` ("Application ... is not running") on every
+    // single poll — caught by `safely(...)` so production code never sees it, but XCTest's own
+    // instrumentation independently records each occurrence as a test failure regardless, which
+    // faked this test red under `xcodebuild test-without-building` despite every assertion below
+    // passing (verified locally: 15 recorded failures, 0 of them from an XCTAssert). Springboard is
+    // always running on a booted simulator without an explicit launch, so the same query instead
+    // resolves normally to zero matching elements — this is not a workaround for a flaky query, it
+    // is giving the query a fixture it can actually answer.
     let result = typeTextReliably(
-      app: XCUIApplication(),
+      app: springboard,
       target: TextEntryTarget(
         element: nil,
         refreshPoint: CGPoint(x: 10, y: 20),
@@ -307,6 +409,35 @@ extension RunnerTests {
     XCTAssertNil(result.verified)
     XCTAssertFalse(result.repaired)
     XCTAssertEqual(result.textEntryRoute, "synthesized-first-responder-replacement")
+    // The regression this pins: this route used to return here with no commit wait at all, so a
+    // dropped or still-in-flight character was indistinguishable from success (the "ada@example"
+    // landing as "aexample" CI signature). The fake synthesizer never actually writes into
+    // Springboard, so the wait's `observe()` reads nil (no matching field at that point) on every
+    // poll and the value never becomes "abc" — under the replacement-mode outcome function that is
+    // correctly a failure (see `testSynthesizedReplacementCommitCatchesDroppedMiddleCharacters` for
+    // why it must NOT be waved through as success), so this call runs the real 3-second deadline
+    // (`TextEntryTiming.synthesizedCommitTimeout`) before returning. That is deliberate here, not a
+    // flake: this test only runs in the nightly XCUITest lane (see `runner-xctest-local-run-gotchas`
+    // memory / ios.yml's `-only-testing:` allowlist), where a few extra seconds is a non-issue, and
+    // the alternative — asserting `nil` on a wiring path that can never actually observe the
+    // expected text — would silently reintroduce the exact bug this fix closes.
+    XCTAssertEqual(result.failure, .commitNotObserved)
+  }
+
+  // Companion to the above: text carrying a submit key must skip the wait entirely, same as the
+  // append route (`awaitSynthesizedFirstResponderCommit`) — the app may clear or rewrite the field
+  // on submit, so there is nothing meaningful to poll toward.
+  func testSynthesizedReplacementCommitSkipsSubmitKeyText() {
+    for expectedText in ["ada@example.test\n", "ada@example.test\r"] {
+      XCTAssertEqual(
+        awaitSynthesizedReplacementCommit(
+          app: XCUIApplication(),
+          target: TextEntryTarget(element: nil, refreshPoint: CGPoint(x: 10, y: 20), prefersFocusedElement: false),
+          expectedText: expectedText
+        ),
+        .unobservable
+      )
+    }
   }
 
   func testCommonPrefixLengthWalksTheExpectedPrefixOnly() {
