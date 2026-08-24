@@ -48,3 +48,4 @@ android/ime-helper/dist/
 # Workspace package declaration output (tsc -b project references)
 packages/*/dist-types/
 *.tsbuildinfo
+.vitest-reports/
