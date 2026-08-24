@@ -106,6 +106,7 @@ async function runCommandDiscoveryEvidence(context: LinuxContext): Promise<void>
   assert.equal(replay.json?.data?.sessionActive, true, JSON.stringify(replay.json));
   assert.equal(typeof replay.json?.data?.session, 'string', JSON.stringify(replay.json));
   context.session = replay.json.data.session;
+  context.sessionOpen = true;
   verifyCommand(context, C.replay, 'the Linux command-evidence script passes through replay');
 }
 
@@ -233,7 +234,7 @@ async function finalize(context: LinuxContext): Promise<unknown> {
 }
 
 async function closeIfOpen(context: LinuxContext): Promise<void> {
-  if (!(await sessionExists(context))) return;
+  if (!context.sessionOpen && !(await sessionExists(context))) return;
   await runStep(context, 'close the Linux command-evidence session', ['close']);
 }
 
