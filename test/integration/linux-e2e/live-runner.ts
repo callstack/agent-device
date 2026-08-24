@@ -116,7 +116,7 @@ async function runFindEvidence(context: LinuxContext): Promise<void> {
     'exists',
     '--first',
   ]);
-  assertJsonContains(find, 'button', 'find should return a calculator button match');
+  assert.equal(find.json?.found, true, JSON.stringify(find.json));
   verifyCommand(context, C.find, 'find resolves a live AT-SPI role match');
 }
 
