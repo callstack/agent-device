@@ -8,8 +8,8 @@ import { assertPngDimensions, assertPngFile } from './provider-scenarios/asserti
 import { runCleanupWithCoverageReport } from './web-e2e/coverage-report.ts';
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import {
-  cleanupManagedAgentBrowserOrphans,
   inspectManagedAgentBrowserProcesses,
+  summarizeAgentBrowserProcesses,
   type AgentBrowserProcessSummary,
 } from '../../src/platforms/web/agent-browser-lifecycle.ts';
 import {
@@ -17,21 +17,26 @@ import {
   type AgentBrowserToolStatus,
 } from '../../src/platforms/web/agent-browser-tool.ts';
 import { stopProcessForTakeover } from '../../src/daemon/daemon-process.ts';
-import { isProcessAlive } from '../../src/utils/host-process.ts';
+import {
+  expandProcessTree,
+  isProcessAlive,
+  listHostProcesses,
+  stopPidsWithEscalation,
+} from '../../src/utils/host-process.ts';
 
 const TEST_NAME = 'live web platform e2e smoke';
 const SHUTDOWN_TEST_NAME = 'live web platform e2e daemon-shutdown browser cleanup';
 const WEB_E2E_ENABLED = process.env.AGENT_DEVICE_WEB_E2E === '1';
-// #1868: SIGTERM must close the managed Chrome fleet well before agent-browser's own idle timer
-// would have. This lane's context omits the AGENT_BROWSER_IDLE_TIMEOUT_MS override the functional
-// smoke test above uses, so the idle timer that could otherwise reap the fleet on its own stays at
-// its production default — DEFAULT_AGENT_BROWSER_IDLE_TIMEOUT_MS, 5 minutes, pinned by
-// `resolveAgentBrowserIdleTimeoutMs({})` in agent-browser-lifecycle.test.ts — comfortably past this
-// poll deadline. A pass can then only mean the daemon's shutdown teardown actively closed the
-// browser, not that the idle timer coincidentally beat this test's own wait.
 const WEB_SHUTDOWN_SETTLE_TIMEOUT_MS = 45_000;
 const WEB_SHUTDOWN_SETTLE_POLL_MS = 500;
 const WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS = 5_000;
+// #1868: SIGTERM must close the managed Chrome fleet well before agent-browser's own idle timer
+// would have. The shutdown lane owns this value directly, at a fixed offset above its own poll
+// deadline, rather than the functional smoke test's shortened override or an omitted-env-var
+// assumption about agent-browser's default — so a future change to either stays unable to make
+// this pass for the wrong reason. A pass can then only mean the daemon's shutdown teardown
+// actively closed the browser, not that agent-browser's own idle timer beat this test's own wait.
+const WEB_SHUTDOWN_IDLE_TIMEOUT_MS = WEB_SHUTDOWN_SETTLE_TIMEOUT_MS + 60_000;
 
 type StepRecord = {
   step: string;
@@ -82,7 +87,11 @@ test(
       : 'Set AGENT_DEVICE_WEB_E2E=1 to run the managed web backend smoke.',
   },
   async () => {
-    await runWebShutdownSmoke(await createWebSmokeContext());
+    await runWebShutdownSmoke(
+      await createWebSmokeContext({
+        agentBrowserIdleTimeoutMs: String(WEB_SHUTDOWN_IDLE_TIMEOUT_MS),
+      }),
+    );
   },
 );
 
@@ -134,10 +143,11 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
 }
 
 // Best-effort and independent of how far the `try` block got: a daemon that survived SIGTERM
-// (stopProcessForTakeover escalates to SIGKILL) and a Chrome fleet that outlived it (the same
-// orphan sweep daemon startup runs) are reaped here regardless of which assertion above failed,
-// or whether none did. Mirrors cleanupWebSmoke's AggregateError shape so a cleanup failure never
-// silently swallows the original assertion failure it ran alongside.
+// (stopProcessForTakeover escalates to SIGKILL) and a Chrome fleet that outlived it (a forceful
+// reap, not cleanupManagedAgentBrowserOrphans — see forceKillManagedBrowserProcesses) are reaped
+// here regardless of which assertion above failed, or whether none did. Mirrors cleanupWebSmoke's
+// AggregateError shape so a cleanup failure never silently swallows the assertion failure it ran
+// alongside.
 async function cleanupWebShutdownSmoke(
   context: WebSmokeContext,
   daemonPid: number | undefined,
@@ -156,7 +166,7 @@ async function cleanupWebShutdownSmoke(
   }
   if (status) {
     try {
-      await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {});
+      await forceKillManagedBrowserProcesses(status);
     } catch (error) {
       errors.push(error);
     }
@@ -168,6 +178,27 @@ async function cleanupWebShutdownSmoke(
   }
   if (errors.length === 1) throw errors[0];
   if (errors.length > 1) throw new AggregateError(errors, 'web shutdown smoke cleanup failed');
+}
+
+// Deliberately NOT cleanupManagedAgentBrowserOrphans: that function exists to leave an actively
+// used fleet alone, and skips killing anything once it sees activity inside the (here, minutes-
+// long) idle window — precisely the state this test's own fleet is always in. A forced safety-net
+// cleanup needs the opposite property: reap whatever this test's own fleet still owns, regardless
+// of how recently it was used, so a planted regression (no active close on shutdown) cannot leave
+// Chrome processes running on the host just because cleanup honored the same idle guard the
+// regression exploits.
+async function forceKillManagedBrowserProcesses(status: AgentBrowserToolStatus): Promise<void> {
+  const processes = await listHostProcesses({ timeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS });
+  const summary = summarizeAgentBrowserProcesses(processes, status);
+  if (summary.count === 0) return;
+  const signalPids = expandProcessTree(summary.pids, processes).map(
+    (processInfo) => processInfo.pid,
+  );
+  await stopPidsWithEscalation({
+    pids: signalPids,
+    termTimeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS,
+    killTimeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS,
+  });
 }
 
 function readDaemonPid(stateDir: string): number {
