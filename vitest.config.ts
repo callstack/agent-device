@@ -181,10 +181,9 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov', 'json-summary'],
-      thresholds: {
-        statements: 78,
-        lines: 80,
-      },
+      // A shard sees roughly half the suite, so its own numbers sit far below
+      // the gate; thresholds are enforced once on the merged full-suite run.
+      thresholds: COVERAGE_SHARD ? { statements: 0, lines: 0 } : { statements: 78, lines: 80 },
       include: ['src/**/*.ts', 'packages/*/src/**/*.ts'],
       exclude: [
         'src/**/*.test.ts',
