@@ -113,7 +113,7 @@
     "release:publish": "pnpm release:prepare && npm publish --ignore-scripts .tmp/release/*.tgz",
     "ad": "node bin/agent-device.mjs",
     "bench:help-conformance": "node scripts/help-conformance-bench.mjs",
-    "maestro:conformance": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/maestro-conformance/format-generated-json.test.mjs packages/maestro/test/conformance/verify.test.ts packages/maestro/test/conformance/differential/run.test.ts packages/maestro/test/conformance/differential/invariants.test.ts",
+    "maestro:conformance": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/maestro-conformance/format-generated-json.test.mjs packages/maestro/test/conformance/verify.test.ts packages/maestro/test/conformance/differential/engine-process.test.ts packages/maestro/test/conformance/differential/report-output.test.ts packages/maestro/test/conformance/differential/run.test.ts packages/maestro/test/conformance/differential/invariants.test.ts",
     "maestro:conformance:regenerate": "node --experimental-strip-types scripts/maestro-conformance/regenerate.mjs",
     "maestro:conformance:differential": "node --experimental-strip-types packages/maestro/test/conformance/differential/run.ts",
     "size": "node scripts/size-report.mjs",

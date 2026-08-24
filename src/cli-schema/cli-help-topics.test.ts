@@ -229,6 +229,8 @@ test('usageForCommand resolves scripting help topic', async () => {
   assert.match(help, /agent-device fill 'id="password"' "\$AD_VAR_PASSWORD" --record-as PASSWORD/);
   assert.match(help, /published script contain only \$\{PASSWORD\}/);
   assert.match(help, /Do not record passwords\/tokens without --record-as/);
+  assert.match(help, /test --json marks a failed test with infrastructure: true/);
+  assert.match(help, /It remains a failed test/);
   assert.match(help, /REPLAY_DIVERGENCE with a bounded report/);
   assert.match(help, /replay --from <n> --plan-digest <sha256>/);
   assert.match(help, /resume never re-executes skipped steps/);

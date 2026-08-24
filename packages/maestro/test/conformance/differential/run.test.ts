@@ -11,6 +11,7 @@ import {
   DIFFERENTIAL_SCENARIOS,
   type DivergenceSignature,
 } from './scenarios.ts';
+import { parseMaestroConformanceSource } from '../harness.ts';
 import { matchesSignature, parseRunnerArgs, selectScenarios, validateScenarios } from './run.ts';
 
 const CONFORMANCE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -120,6 +121,15 @@ describe('knownDivergence signature matching', () => {
     );
   });
 
+  test('infrastructure failure is NOT covered by a behavioral waiver', () => {
+    assert.equal(
+      matchesSignature(sig, engine('pass'), { ...engine('fail'), failureKind: 'infrastructure' }, [
+        inv('no-data'),
+      ]),
+      false,
+    );
+  });
+
   test('every declaration states its expected signature', () => {
     for (const scenario of DIFFERENTIAL_SCENARIOS) {
       const declared = scenario.knownDivergence;
@@ -144,10 +154,11 @@ describe('knownDivergence signature matching', () => {
 
 test('every device flow targets the fixture app the workflow installs', () => {
   for (const scenario of DIFFERENTIAL_SCENARIOS) {
-    const body = fs.readFileSync(path.join(CONFORMANCE_DIR, scenario.flow), 'utf8');
-    assert.match(
-      body,
-      new RegExp(`^appId:\\s*${DIFFERENTIAL_APP_ID}$`, 'm'),
+    const flowPath = path.join(CONFORMANCE_DIR, scenario.flow);
+    const parsed = parseMaestroConformanceSource(fs.readFileSync(flowPath, 'utf8'), flowPath);
+    assert.equal(
+      parsed.appId,
+      DIFFERENTIAL_APP_ID,
       `${scenario.id} must target ${DIFFERENTIAL_APP_ID}; a flow against any other app cannot run on the CI simulator`,
     );
   }

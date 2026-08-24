@@ -6,7 +6,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS } from '../harness.ts';
+import {
+  type CanonicalCommand,
+  MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
+  parseMaestroConformanceSource,
+} from '../harness.ts';
 import { DIFFERENTIAL_SCENARIOS } from './scenarios.ts';
 import { type Invariant, evaluateInvariant, readTrace } from './invariants.ts';
 
@@ -90,15 +94,42 @@ test('bug class 4 has a machine-checkable invariant, not just outcome parity', (
   );
 });
 
-test('the settle detector reaches its tap without an unrelated scroll precondition', () => {
-  const flow = fs.readFileSync(
-    path.join(import.meta.dirname, 'flows/settle-after-tap.yaml'),
-    'utf8',
-  );
+const SETTLE_FLOW_PATH = path.join(import.meta.dirname, 'flows/settle-after-tap.yaml');
+const EXPECTED_SETTLE_COMMANDS: CanonicalCommand[] = [
+  { kind: 'launchApp', appId: 'com.callstack.agentdevicelab', clearState: true },
+  {
+    kind: 'assert',
+    mode: 'visible',
+    timed: false,
+    selector: { text: 'Agent Device Tester' },
+  },
+  {
+    kind: 'tap',
+    longPress: false,
+    repeat: 1,
+    target: { selector: { text: 'Settings' } },
+  },
+  {
+    kind: 'assert',
+    mode: 'visible',
+    timed: false,
+    selector: { id: 'open-inert-surface' },
+  },
+];
 
-  assert.doesNotMatch(flow, /scrollUntilVisible/);
-  assert.match(flow, /text: Settings/);
-  assert.match(flow, /id: open-inert-surface/);
+function assertSettleFlowSemantics(source: string): void {
+  const parsed = parseMaestroConformanceSource(source, SETTLE_FLOW_PATH);
+  assert.deepEqual(parsed.commands, EXPECTED_SETTLE_COMMANDS);
+}
+
+test('the settle detector reaches its tap without an unrelated setup command', () => {
+  assertSettleFlowSemantics(fs.readFileSync(SETTLE_FLOW_PATH, 'utf8'));
+});
+
+test('the settle flow guard rejects a changed tap target or inserted scroll', () => {
+  const flow = fs.readFileSync(SETTLE_FLOW_PATH, 'utf8');
+  assert.throws(() => assertSettleFlowSemantics(flow.replace('text: Settings', 'text: Home')));
+  assert.throws(() => assertSettleFlowSemantics(flow.replace('- tapOn:', '- scroll\n- tapOn:')));
 });
 
 // --- metricAtLeast: proves a code path actually ran, not just that it passed ---

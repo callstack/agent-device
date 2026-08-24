@@ -108,6 +108,8 @@ export type ReplaySuiteTestFailed = {
   attempts: number;
   artifactsDir?: string;
   error: DaemonError;
+  /** Present when the owning runtime classified the failure as device/runner infrastructure. */
+  infrastructure?: true;
   shardIndex?: number;
   shardCount?: number;
   deviceId?: string;

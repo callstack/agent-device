@@ -41,6 +41,19 @@ test('isReplayInfrastructureFailure accepts replay timeout cleanup races', () =>
   assert.equal(isReplayInfrastructureFailure(response), true);
 });
 
+test('isReplayInfrastructureFailure accepts a typed foreign runner owner', () => {
+  const response: DaemonResponse = {
+    ok: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      message: 'Runner is busy',
+      details: { reason: 'IOS_RUNNER_OWNED_BY_OTHER_DAEMON' },
+    },
+  };
+
+  assert.equal(isReplayInfrastructureFailure(response), true);
+});
+
 test('isReplayInfrastructureFailure rejects normal replay failures', () => {
   const response: DaemonResponse = {
     ok: false,

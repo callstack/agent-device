@@ -101,6 +101,7 @@ test('test does not retry infrastructure startup failures and stops the suite', 
   const tests = data.tests as Array<Record<string, unknown>>;
   expect(tests[0]?.status).toBe('failed');
   expect(tests[0]?.attempts).toBe(1);
+  expect(tests[0]?.infrastructure).toBe(true);
 });
 
 test('test --fail-fast stops the suite after the first failure and leaves the rest notRun', async () => {
