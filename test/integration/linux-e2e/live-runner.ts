@@ -98,11 +98,14 @@ async function runCommandDiscoveryEvidence(context: LinuxContext): Promise<void>
   assert.equal(suite.commandsByScript.get(SCRIPT_PATH)?.includes('find'), true);
   verifyCommand(context, C.test, 'the Linux command-evidence script passes through test');
 
-  await runStep(context, 'replay the command-evidence script', [
+  const replay = await runStep(context, 'replay the command-evidence script', [
     'replay',
     SCRIPT_PATH,
     '--keep-session',
   ]);
+  assert.equal(replay.json?.data?.sessionActive, true, JSON.stringify(replay.json));
+  assert.equal(typeof replay.json?.data?.session, 'string', JSON.stringify(replay.json));
+  context.session = replay.json.data.session;
   verifyCommand(context, C.replay, 'the Linux command-evidence script passes through replay');
 }
 
