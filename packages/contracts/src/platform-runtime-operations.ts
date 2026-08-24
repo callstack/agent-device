@@ -125,26 +125,23 @@ export const hoverRuntimeUses = Object.freeze([hoverPointUse, capturedHoverUse] 
 export const fillRuntimeUses = Object.freeze([fillPointUse, capturedFillUse] as const);
 
 export type TouchRuntimePlan =
-  | Readonly<{ kind: 'tap-point'; operation: 'tapPoint'; use: typeof tapPointUse }>
-  | Readonly<{ kind: 'captured-tap'; operation: 'tapPoint'; use: typeof capturedTapUse }>
+  | Readonly<{ kind: 'tap-point'; use: typeof tapPointUse }>
+  | Readonly<{ kind: 'captured-tap'; use: typeof capturedTapUse }>
   | Readonly<{
       kind: 'long-press-point';
-      operation: 'longPressPoint';
       use: typeof longPressPointUse;
     }>
   | Readonly<{
       kind: 'captured-long-press';
-      operation: 'longPressPoint';
       use: typeof capturedLongPressUse;
     }>
-  | Readonly<{ kind: 'hover-point'; operation: 'hoverPoint'; use: typeof hoverPointUse }>
+  | Readonly<{ kind: 'hover-point'; use: typeof hoverPointUse }>
   | Readonly<{
       kind: 'captured-hover';
-      operation: 'hoverPoint';
       use: typeof capturedHoverUse;
     }>
-  | Readonly<{ kind: 'fill-point'; operation: 'fillPoint'; use: typeof fillPointUse }>
-  | Readonly<{ kind: 'captured-fill'; operation: 'fillPoint'; use: typeof capturedFillUse }>;
+  | Readonly<{ kind: 'fill-point'; use: typeof fillPointUse }>
+  | Readonly<{ kind: 'captured-fill'; use: typeof capturedFillUse }>;
 
 export function resolveTouchRuntimePlan(
   command: 'click' | 'press' | 'fill' | 'longpress' | 'hover',
@@ -154,20 +151,20 @@ export function resolveTouchRuntimePlan(
     case 'click':
     case 'press':
       return requiresCapture
-        ? { kind: 'captured-tap', operation: 'tapPoint', use: capturedTapUse }
-        : { kind: 'tap-point', operation: 'tapPoint', use: tapPointUse };
+        ? { kind: 'captured-tap', use: capturedTapUse }
+        : { kind: 'tap-point', use: tapPointUse };
     case 'fill':
       return requiresCapture
-        ? { kind: 'captured-fill', operation: 'fillPoint', use: capturedFillUse }
-        : { kind: 'fill-point', operation: 'fillPoint', use: fillPointUse };
+        ? { kind: 'captured-fill', use: capturedFillUse }
+        : { kind: 'fill-point', use: fillPointUse };
     case 'longpress':
       return requiresCapture
-        ? { kind: 'captured-long-press', operation: 'longPressPoint', use: capturedLongPressUse }
-        : { kind: 'long-press-point', operation: 'longPressPoint', use: longPressPointUse };
+        ? { kind: 'captured-long-press', use: capturedLongPressUse }
+        : { kind: 'long-press-point', use: longPressPointUse };
     case 'hover':
       return requiresCapture
-        ? { kind: 'captured-hover', operation: 'hoverPoint', use: capturedHoverUse }
-        : { kind: 'hover-point', operation: 'hoverPoint', use: hoverPointUse };
+        ? { kind: 'captured-hover', use: capturedHoverUse }
+        : { kind: 'hover-point', use: hoverPointUse };
   }
 }
 const captureSnapshotWithCustomActionsUse = defineUse({

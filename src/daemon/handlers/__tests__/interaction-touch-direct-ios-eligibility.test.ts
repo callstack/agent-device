@@ -4,6 +4,7 @@ import { makeIosSession } from '../../../__tests__/test-utils/session-factories.
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import {
+  elementReadFixtureState,
   getRuntimeBindings,
   mockFillPoint,
   mockTapElementSelector,
@@ -108,6 +109,51 @@ test('click simple iOS id selector uses direct runner selector tap without snaps
   if (response?.ok) {
     expect(response.data?.selector).toBe('id="submit"');
   }
+});
+
+test('click falls back to capture when the owner does not bind direct selector tap', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-selector-without-direct-operation';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  elementReadFixtureState.tapElementSelectorAvailable = false;
+  mockCaptureSnapshotForSession.mockResolvedValueOnce({
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'Button',
+        identifier: 'submit',
+        rect: { x: 40, y: 80, width: 100, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    backend: 'xctest',
+  });
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'click',
+      positionals: ['id="submit"'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+    ...getRuntimeBindings(),
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockTapElementSelector).not.toHaveBeenCalled();
+  expect(mockCaptureSnapshotForSession).toHaveBeenCalledTimes(1);
+  expect(mockTapPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 90, y: 100 } }));
 });
 
 test('fill simple iOS id selector resolves runtime text input evidence before coordinate fill', async () => {

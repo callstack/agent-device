@@ -101,6 +101,7 @@ export const elementReadFixtureState = {
   captureSnapshotAvailable: true,
   focusPointAvailable: true,
   typeTextAvailable: true,
+  tapElementSelectorAvailable: true,
 };
 
 export function resetGetRuntimeFixture(): void {
@@ -142,6 +143,7 @@ export function resetGetRuntimeFixture(): void {
   elementReadFixtureState.captureSnapshotAvailable = true;
   elementReadFixtureState.focusPointAvailable = true;
   elementReadFixtureState.typeTextAvailable = true;
+  elementReadFixtureState.tapElementSelectorAvailable = true;
 }
 
 const available = Object.freeze({ available: true } as const);
@@ -209,7 +211,9 @@ function fixtureTouchFacts(device: DeviceInfo) {
     hoverRef: ref,
     fillPoint: available,
     fillRef: ref,
-    tapElementSelector: available,
+    tapElementSelector: elementReadFixtureState.tapElementSelectorAvailable
+      ? available
+      : unavailable,
   };
 }
 
@@ -248,7 +252,9 @@ const mockBindElementReadRuntime: BindDeviceRuntime = vi.fn(async (device: Devic
       ...(device.platform === 'web' ? { hoverRef: mockHoverRef } : {}),
       fillPoint: mockFillPoint,
       ...(device.platform === 'web' ? { fillRef: mockFillRef } : {}),
-      tapElementSelector: mockTapElementSelector,
+      ...(elementReadFixtureState.tapElementSelectorAvailable
+        ? { tapElementSelector: mockTapElementSelector }
+        : {}),
     }),
     [Symbol.asyncDispose]: async () => undefined,
   }) as DeviceBinding<PlatformRuntimeOperations>;

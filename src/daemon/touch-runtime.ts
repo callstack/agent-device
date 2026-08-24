@@ -215,6 +215,9 @@ function createTapTouchExecutor(
   captureSnapshot: BoundTouchExecutor['captureSnapshot'],
 ): BoundTouchExecutor {
   const tapRef = bound.captured ? bound.runtime.operations.tapRef : undefined;
+  const tapElementSelector = bound.captured
+    ? bound.runtime.operations.tapElementSelector
+    : undefined;
   return Object.freeze({
     captureSnapshot,
     tapPoint: async (point: Point, options: Partial<PressPointOptions> = {}) => {
@@ -238,24 +241,25 @@ function createTapTouchExecutor(
       };
     },
     tapRef: tapRef ? async (ref) => await tapRef({ ref, ...shared }) : undefined,
-    tapElementSelector: bound.captured
-      ? async (selector) => {
-          const result = await bound.runtime.operations.tapElementSelector?.({
-            selector,
-            ...shared,
-          });
-          const usedFallback = result?.maestroNonHittableCoordinateFallbackUsed === true;
-          return {
-            selector: selector.raw,
-            ...(result ?? {}),
-            ...successText(
-              usedFallback
-                ? 'tapped via non-hittable coordinate fallback'
-                : `Tapped ${selector.raw}`,
-            ),
-          };
-        }
-      : undefined,
+    tapElementSelector:
+      bound.captured && tapElementSelector
+        ? async (selector) => {
+            const result = await bound.runtime.operations.tapElementSelector?.({
+              selector,
+              ...shared,
+            });
+            const usedFallback = result?.maestroNonHittableCoordinateFallbackUsed === true;
+            return {
+              selector: selector.raw,
+              ...(result ?? {}),
+              ...successText(
+                usedFallback
+                  ? 'tapped via non-hittable coordinate fallback'
+                  : `Tapped ${selector.raw}`,
+              ),
+            };
+          }
+        : undefined,
   });
 }
 

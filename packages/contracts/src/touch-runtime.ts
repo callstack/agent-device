@@ -86,7 +86,7 @@ export function touchRuntimeOperationFacts(
     tapElementSelector: RuntimeOperationFact;
   }>,
 ): TouchRuntimeOperationFacts {
-  const hoverRef = input.hoverRef ?? NATIVE_REF_UNAVAILABLE;
+  const hoverRef: RuntimeOperationFact = input.hoverRef ?? NATIVE_REF_UNAVAILABLE;
   return Object.freeze({
     tapPoint: input.tap,
     tapRef: input.tapRef ?? NATIVE_REF_UNAVAILABLE,
@@ -98,7 +98,7 @@ export function touchRuntimeOperationFacts(
       ? hoverRef
       : Object.freeze({
           ...hoverRef,
-          hint: ('hint' in hoverRef ? hoverRef.hint : undefined) ?? HOVER_UNAVAILABLE_HINT,
+          hint: hoverRef.hint ?? HOVER_UNAVAILABLE_HINT,
         }),
     fillPoint: input.fill,
     fillRef: input.fillRef ?? NATIVE_REF_UNAVAILABLE,
