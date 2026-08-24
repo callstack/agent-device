@@ -7,8 +7,10 @@ import {
   narrowDeviceBinding,
   providerRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
+import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
+import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
 import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import type {
@@ -106,6 +108,14 @@ function createAdmissionFacts(
         fill: unavailable,
         tapElementSelector: unavailable,
       }),
+      ...gestureRuntimeOperationFacts({
+        plan: unavailable,
+        directionalFling: unavailable,
+        multiTouch: unavailable,
+        targetAuthoredDrag: unavailable,
+        viewport: unavailable,
+      }),
+      ...scrollRuntimeOperationFacts({ scroll: unavailable }),
       deployApp: cell(options.deployAvailable),
       materializeAppSource: cell(options.sourceAvailable),
       deployMaterializedApp: cell(options.sourceAvailable),

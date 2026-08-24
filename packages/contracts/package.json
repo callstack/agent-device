@@ -132,6 +132,10 @@
       "types": "./src/focus-runtime.ts",
       "default": "./src/focus-runtime.ts"
     },
+    "./gesture-admission": {
+      "types": "./src/gesture-admission.ts",
+      "default": "./src/gesture-admission.ts"
+    },
     "./gesture-input": {
       "types": "./src/gesture-input.ts",
       "default": "./src/gesture-input.ts"
@@ -147,6 +151,10 @@
     "./gesture-plan-types": {
       "types": "./src/gesture-plan-types.ts",
       "default": "./src/gesture-plan-types.ts"
+    },
+    "./gesture-runtime": {
+      "types": "./src/gesture-runtime.ts",
+      "default": "./src/gesture-runtime.ts"
     },
     "./home-runtime": {
       "types": "./src/home-runtime.ts",
@@ -263,6 +271,10 @@
     "./scroll-gesture": {
       "types": "./src/scroll-gesture.ts",
       "default": "./src/scroll-gesture.ts"
+    },
+    "./scroll-runtime": {
+      "types": "./src/scroll-runtime.ts",
+      "default": "./src/scroll-runtime.ts"
     },
     "./selector-observation-runtime": {
       "types": "./src/selector-observation-runtime.ts",

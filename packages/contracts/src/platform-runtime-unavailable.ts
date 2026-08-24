@@ -15,6 +15,8 @@ import { snapshotRuntimeOperationFacts } from './snapshot-runtime.ts';
 import { selectorObservationRuntimeOperationFacts } from './selector-observation-runtime.ts';
 import { viewportRuntimeOperationFacts } from './viewport-runtime.ts';
 import { focusRuntimeOperationFacts } from './focus-runtime.ts';
+import { gestureRuntimeOperationFacts } from './gesture-runtime.ts';
+import { scrollRuntimeOperationFacts } from './scroll-runtime.ts';
 import { typeTextRuntimeOperationFacts } from './type-text-runtime.ts';
 import { elementTextRuntimeOperationFacts } from './element-text-runtime.ts';
 import { backRuntimeOperationFacts } from './back-runtime.ts';
@@ -39,6 +41,8 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   snapshot?: RuntimeOperationUnavailability;
   viewport: RuntimeOperationUnavailability;
   focus: RuntimeOperationUnavailability;
+  gesture: RuntimeOperationUnavailability;
+  scroll: RuntimeOperationUnavailability;
   typeText: RuntimeOperationUnavailability;
   touch: RuntimeOperationUnavailability;
   elementText: RuntimeOperationUnavailability;
@@ -93,6 +97,8 @@ export function createUnavailablePlatformRuntimeFacts(
     snapshot,
     viewport,
     focus,
+    gesture,
+    scroll,
     typeText,
     touch,
     elementText,
@@ -143,6 +149,14 @@ export function createUnavailablePlatformRuntimeFacts(
       }),
       ...viewportRuntimeOperationFacts({ setViewport: viewport }),
       ...focusRuntimeOperationFacts({ focus }),
+      ...gestureRuntimeOperationFacts({
+        plan: gesture,
+        directionalFling: gesture,
+        multiTouch: gesture,
+        targetAuthoredDrag: gesture,
+        viewport: gesture,
+      }),
+      ...scrollRuntimeOperationFacts({ scroll }),
       ...typeTextRuntimeOperationFacts({ type: typeText }),
       ...touchRuntimeOperationFacts({
         tap: touch,
@@ -194,6 +208,8 @@ function freezeUnavailableFacts(
     // Interaction cells are stated by their owner: a family that can drive touch says so for its
     // exact kinds, and one that cannot must say why rather than inherit a transport gap.
     focus: Object.freeze({ ...unavailable.focus }),
+    gesture: Object.freeze({ ...unavailable.gesture }),
+    scroll: Object.freeze({ ...unavailable.scroll }),
     typeText: Object.freeze({ ...unavailable.typeText }),
     touch: Object.freeze({ ...unavailable.touch }),
     readiness: orNetwork(unavailable.readiness),

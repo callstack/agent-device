@@ -12,8 +12,10 @@ import {
   narrowDeviceBinding,
   providerRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
+import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
+import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
 import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -365,6 +367,14 @@ function sourceRuntimeFacts(
         fill: unavailable,
         tapElementSelector: unavailable,
       }),
+      ...gestureRuntimeOperationFacts({
+        plan: unavailable,
+        directionalFling: unavailable,
+        multiTouch: unavailable,
+        targetAuthoredDrag: unavailable,
+        viewport: unavailable,
+      }),
+      ...scrollRuntimeOperationFacts({ scroll: unavailable }),
       readTextAtPoint: unavailable,
       back: unavailable,
       home: unavailable,

@@ -14,6 +14,15 @@ import {
   bindLocalFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
+import { TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
+import {
+  bindLocalGestureInteractor,
+  gestureRuntimeOperationFacts,
+} from '@agent-device/contracts/gesture-runtime';
+import {
+  bindLocalScrollInteractor,
+  scrollRuntimeOperationFacts,
+} from '@agent-device/contracts/scroll-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
@@ -147,6 +156,31 @@ function harmonyCloseTargetFact(device: DeviceInfo) {
     : closeTargetKindUnavailable;
 }
 
+const gestureKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'Gestures are supported on HarmonyOS emulators and physical devices.',
+} as const);
+/**
+ * hdc synthesizes one contact. The retired admission refused two-contact synthesis on every
+ * platform that is neither Android nor Apple, with no hint — that is this cell.
+ */
+const multiTouchUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+} as const);
+const targetAuthoredDragUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
+} as const);
+
+function harmonyGestureFact(device: DeviceInfo): RuntimeOperationFact {
+  return device.kind === 'emulator' || device.kind === 'device'
+    ? available
+    : gestureKindUnavailable;
+}
+
 function harmonyFocusFact(device: DeviceInfo): RuntimeOperationFact {
   return device.kind === 'emulator' || device.kind === 'device' ? available : focusKindUnavailable;
 }
@@ -209,6 +243,16 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: harmonyFocusFact(device) }),
+        // Gestures share focus's kind cell (the overlay admitted `{emulator, device}`); only the
+        // two tiers hdc cannot synthesize are refused.
+        ...gestureRuntimeOperationFacts({
+          plan: harmonyGestureFact(device),
+          directionalFling: harmonyGestureFact(device),
+          multiTouch: multiTouchUnavailable,
+          targetAuthoredDrag: targetAuthoredDragUnavailable,
+          viewport: harmonyGestureFact(device),
+        }),
+        ...scrollRuntimeOperationFacts({ scroll: harmonyGestureFact(device) }),
         // Text entry shares focus's cell: hdc drives both on the same two kinds.
         ...typeTextRuntimeOperationFacts({ type: harmonyFocusFact(device) }),
         ...touchRuntimeOperationFacts({
@@ -303,6 +347,19 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
             : {}),
           ...(facts.operations.typeText.available
             ? bindLocalTypeTextInteractor({
+                device: request.device,
+                signal: request.scope.signal,
+                resolveInteractor: host.localInteractors.resolve,
+              })
+            : {}),
+          ...bindLocalGestureInteractor({
+            device: request.device,
+            signal: request.scope.signal,
+            facts: facts.operations,
+            resolveInteractor: host.localInteractors.resolve,
+          }),
+          ...(facts.operations.scrollDirection.available
+            ? bindLocalScrollInteractor({
                 device: request.device,
                 signal: request.scope.signal,
                 resolveInteractor: host.localInteractors.resolve,

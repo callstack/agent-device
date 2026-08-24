@@ -5,10 +5,13 @@ import path from 'node:path';
 import { iosRunnerOverrides, performGestureApple } from '../../interactions.ts';
 import { runAppleRunnerCommand } from '../runner/runner-client.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  gestureRefusalMessage,
+  PHYSICAL_IOS_MULTI_TOUCH_UNSUPPORTED_HINT,
+} from '@agent-device/contracts/gesture-admission';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import type { RunnerCommand } from '../runner/runner-contract.ts';
 import { TEXT_ENTRY_ROUTES } from '@agent-device/contracts/interactor-types';
-import { requireGestureSupported } from '../../../../core/capabilities.ts';
 import {
   IOS_TEST_DEVICE,
   IOS_TEST_SIMULATOR,
@@ -296,29 +299,18 @@ test('performGestureApple sends exact two-pointer pan samples through gesture', 
 });
 
 test('Apple admission and execution share the same multi-touch refusal', async () => {
-  let admissionError: AppError | undefined;
-  try {
-    requireGestureSupported(
-      {
-        intent: 'pan',
-        origin: { x: 100, y: 200 },
-        delta: { x: 80, y: -40 },
-        pointerCount: 2,
-      },
-      IOS_TEST_DEVICE,
-    );
-  } catch (error) {
-    if (error instanceof AppError) admissionError = error;
-  }
-  assert.ok(admissionError);
+  // Admission is now the Apple owner's `performMultiTouchGesturePlan` fact composed with the
+  // shared refusal wording (R42); execution keeps its defensive adapter check. The two must
+  // still say the same thing, which is what this pins.
+  const admissionMessage = gestureRefusalMessage(IOS_TEST_DEVICE, 'multi-touch', 'pan');
 
   await assert.rejects(
     () => performGestureApple(IOS_TEST_DEVICE, {}, {}, twoFingerPanPlan()),
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'UNSUPPORTED_OPERATION' &&
-      error.message === admissionError.message &&
-      error.details?.hint === admissionError.details?.hint,
+      error.message === admissionMessage &&
+      error.details?.hint === PHYSICAL_IOS_MULTI_TOUCH_UNSUPPORTED_HINT,
   );
   assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });

@@ -1,4 +1,4 @@
-import type { GesturePlan, Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
@@ -8,7 +8,6 @@ import { successText, withSuccessText } from '../utils/success-text.ts';
 import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
 import type { DescriptorDispatchCommandName } from './command-descriptor/registry.ts';
 import type { DispatchContext } from './dispatch-context.ts';
-import { handleScrollCommand } from './dispatch-scroll.ts';
 import { getInteractor } from './interactors.ts';
 
 export type { DispatchContext } from './dispatch-context.ts';
@@ -72,18 +71,6 @@ async function dispatchWithInteractor(
   );
 }
 
-export async function dispatchGesturePlan(
-  device: DeviceInfo,
-  plan: GesturePlan,
-  context?: DispatchContext,
-): Promise<Record<string, unknown> | void> {
-  const interactor = await getInteractor(device, runnerContextFromDispatchContext(context));
-  if (!interactor.performGesture) {
-    throw new AppError('UNSUPPORTED_OPERATION', 'Gesture execution is unavailable');
-  }
-  return await interactor.performGesture(plan);
-}
-
 export async function dispatchGestureViewport(
   device: DeviceInfo,
   context?: DispatchContext,
@@ -129,8 +116,6 @@ type DispatchHandler = (args: DispatchHandlerArgs) => Promise<Record<string, unk
  * behaviorless.
  */
 const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
-  scroll: ({ interactor, positionals, context }) =>
-    handleScrollCommand(interactor, positionals, context),
   'trigger-app-event': ({ device, interactor, positionals, context }) =>
     handleTriggerAppEventCommand(device, interactor, positionals, context),
   'app-switcher': async ({ interactor }) => {

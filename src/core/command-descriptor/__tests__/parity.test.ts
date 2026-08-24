@@ -60,6 +60,7 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.events,
   PUBLIC_COMMANDS.find,
   PUBLIC_COMMANDS.focus,
+  PUBLIC_COMMANDS.gesture,
   PUBLIC_COMMANDS.get,
   PUBLIC_COMMANDS.home,
   PUBLIC_COMMANDS.install,
@@ -75,9 +76,11 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.record,
   PUBLIC_COMMANDS.reinstall,
   PUBLIC_COMMANDS.replay,
+  PUBLIC_COMMANDS.scroll,
   PUBLIC_COMMANDS.shutdown,
   PUBLIC_COMMANDS.screenshot,
   PUBLIC_COMMANDS.snapshot,
+  PUBLIC_COMMANDS.swipe,
   PUBLIC_COMMANDS.test,
   PUBLIC_COMMANDS.trace,
   PUBLIC_COMMANDS.tvRemote,
@@ -220,6 +223,9 @@ test('generic route commands that reach platform dispatch declare the dispatch f
     PUBLIC_COMMANDS.gesture,
     PUBLIC_COMMANDS.focus,
     PUBLIC_COMMANDS.screenshot,
+    // R43 retired scroll's dispatch leaf with its capability bucket: the bound
+    // `scrollDirection` operation is its only execution.
+    PUBLIC_COMMANDS.scroll,
     PUBLIC_COMMANDS.viewport,
     PUBLIC_COMMANDS.back,
     PUBLIC_COMMANDS.home,
@@ -341,7 +347,16 @@ test('capability-checked command list is built from descriptor capabilities', ()
     false,
     'snapshot admission comes from exact device-runtime facts',
   );
-  assert.ok(expectedNames.has(PUBLIC_COMMANDS.gesture), 'gesture remains capability-checked');
+  assert.equal(
+    expectedNames.has(PUBLIC_COMMANDS.gesture),
+    false,
+    'gesture admission comes from exact device-runtime facts',
+  );
+  assert.equal(
+    expectedNames.has(PUBLIC_COMMANDS.click),
+    false,
+    'click admission comes from exact device-runtime facts',
+  );
   assert.equal(
     expectedNames.has(PUBLIC_COMMANDS.capabilities),
     false,

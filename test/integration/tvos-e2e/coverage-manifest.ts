@@ -173,7 +173,7 @@ export const TVOS_PLATFORM_COVERAGE = {
     'the existing provider scenario maps Back to the tvOS Menu remote press',
   ),
   [C.gesture]: contract(
-    'src/core/__tests__/gesture-capabilities.test.ts',
+    'src/daemon/__tests__/gesture-admission-parity.test.ts',
     'TV, spatial, watch, desktop, Linux, and web gesture policy stays explicit',
     'the typed Apple gesture policy refuses tvOS multi-touch while preserving the narrower gesture contract',
   ),

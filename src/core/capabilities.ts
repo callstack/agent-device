@@ -3,12 +3,6 @@ import { commandDescriptors } from './command-descriptor/registry.ts';
 import { tryGetPlugin } from './platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
-import type {
-  GestureCommandInput,
-  GestureSemanticInput,
-} from '@agent-device/contracts/interaction';
-import { assertAppleMultiTouchSupported } from '@agent-device/contracts/apple-multitouch-support';
 
 // Populate the PlatformPlugin registry once at module load (idempotent; registers
 // only lazy closures, so no leaf code is imported and CLI cold-start is unaffected
@@ -36,16 +30,9 @@ export type CommandCapability = {
 
 const WEB_DEVICE: KindMatrix = { device: true };
 const HARMONYOS_ALL: KindMatrix = { emulator: true, device: true };
-const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>([
-  'perf',
-  'app-switcher',
-  'gesture',
-  'scroll',
-  'settings',
-  'swipe',
-]);
+const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>(['perf', 'app-switcher', 'settings']);
 const WEB_QUERY_COMMANDS = ['audio'] as const;
-const WEB_SUPPORTED_COMMANDS = new Set<string>([...WEB_QUERY_COMMANDS, 'scroll']);
+const WEB_SUPPORTED_COMMANDS = new Set<string>(WEB_QUERY_COMMANDS);
 // Built from the additive command-descriptor registry (ADR-0008, Phase 1 step 3).
 // The hand-authored literal was deleted after #906 proved deriveCapabilityMatrix is
 // byte-equal to it (platform/kind buckets). The per-command `supports()` /
@@ -159,78 +146,4 @@ export function supportedPlatformsForCommand(command: string): string[] {
     if (kinds && Object.values(kinds).some((value) => value === true)) supported.push(family);
   }
   return supported;
-}
-
-export function requireGestureSupported(input: GestureCommandInput, device: DeviceInfo): void {
-  if (input.intent === 'drag') {
-    requireTargetAuthoredDragSupported(input, device);
-    return;
-  }
-  if (device.platform === 'web' || device.appleOs === 'watchos') {
-    throw unsupportedGesture(input, gesturePlatformMessage(input, device));
-  }
-  if (isMultiTouchGesture(input)) {
-    requireMultiTouchGestureSupported(input, device);
-    return;
-  }
-  if (device.appleOs === 'visionos') {
-    throw unsupportedGesture(input, gesturePlatformMessage(input, device));
-  }
-  // Linux can preserve public coordinate/preset swipe through its drag primitive, but cannot
-  // honor the speed semantics authored by `gesture fling`.
-  if (input.intent === 'fling' && 'direction' in input && device.platform === 'linux') {
-    throw unsupportedGesture(input, 'gesture fling is not supported on Linux');
-  }
-}
-
-function requireTargetAuthoredDragSupported(
-  input: Extract<GestureCommandInput, { intent: 'drag' }>,
-  device: DeviceInfo,
-): void {
-  if (supportsTargetAuthoredDrag(device)) return;
-  throw unsupportedGesture(
-    input,
-    gesturePlatformMessage(input, device),
-    'Target-authored drag requires an adapter that preserves source hold, timed movement, and destination hold; it is supported on Android touch devices and iOS/iPadOS.',
-  );
-}
-
-function supportsTargetAuthoredDrag(device: DeviceInfo): boolean {
-  if (device.platform === 'android') {
-    return device.target !== 'tv';
-  }
-  if (device.platform !== 'apple') return false;
-  if (device.appleOs === undefined) return device.target !== 'desktop' && device.target !== 'tv';
-  return device.appleOs === 'ios' || device.appleOs === 'ipados';
-}
-
-function isMultiTouchGesture(input: GestureSemanticInput): boolean {
-  if (input.intent === 'pan') return ('pointerCount' in input ? input.pointerCount : 1) === 2;
-  return input.intent === 'pinch' || input.intent === 'rotate' || input.intent === 'transform';
-}
-
-function requireMultiTouchGestureSupported(input: GestureSemanticInput, device: DeviceInfo): void {
-  if (device.platform === 'android') {
-    if (device.target !== 'tv') return;
-    throw unsupportedGesture(
-      input,
-      `gesture ${input.intent} is not supported on Android TV`,
-      'Android TV has no touch input — this gesture is supported on Android phones, tablets, and the iOS simulator only.',
-    );
-  }
-  if (device.platform !== 'apple') {
-    throw unsupportedGesture(input, gesturePlatformMessage(input, device));
-  }
-  assertAppleMultiTouchSupported(device, input.intent);
-}
-
-function gesturePlatformMessage(input: GestureCommandInput, device: DeviceInfo): string {
-  return `gesture ${input.intent} is not supported on ${device.appleOs ?? device.platform}`;
-}
-
-function unsupportedGesture(input: GestureCommandInput, message: string, hint?: string): AppError {
-  return new AppError('UNSUPPORTED_OPERATION', message, {
-    gesture: input.intent,
-    ...(hint ? { hint } : {}),
-  });
 }

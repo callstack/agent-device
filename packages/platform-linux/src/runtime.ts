@@ -22,6 +22,15 @@ import {
   bindLocalFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
+import { TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
+import {
+  bindLocalGestureInteractor,
+  gestureRuntimeOperationFacts,
+} from '@agent-device/contracts/gesture-runtime';
+import {
+  bindLocalScrollInteractor,
+  scrollRuntimeOperationFacts,
+} from '@agent-device/contracts/scroll-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import {
@@ -63,6 +72,27 @@ const typeKindUnavailable = unavailableLinuxRuntimeFact(
   'unsupported-device-kind',
   'type is supported only for the Linux desktop device.',
 );
+const gestureKindUnavailable = unavailableLinuxRuntimeFact(
+  'unsupported-device-kind',
+  'Gestures are supported only for the Linux desktop device.',
+);
+const scrollKindUnavailable = unavailableLinuxRuntimeFact(
+  'unsupported-device-kind',
+  'scroll is supported only for the Linux desktop device.',
+);
+/**
+ * The drag primitive preserves a coordinate fling's endpoints but not a direction-authored
+ * fling's speed semantics, which is the one gesture the retired admission refused BY PLATFORM
+ * rather than by leaf or kind.
+ */
+const directionalFlingUnavailable = unavailableLinuxRuntimeFact('unsupported-platform-leaf');
+const multiTouchUnavailable = unavailableLinuxRuntimeFact('unsupported-platform-leaf');
+const targetAuthoredDragUnavailable = unavailableLinuxRuntimeFact(
+  'unsupported-platform-leaf',
+  TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
+);
+/** No frame read of its own: a Linux gesture derives its viewport from a capture, as it does today. */
+const gestureViewportUnavailable = unavailableLinuxRuntimeFact('unsupported-platform-leaf');
 const runtimeHintsUnavailable = unavailableLinuxRuntimeFact(
   'unsupported-platform-leaf',
   'Runtime hints are supported only for local iOS-family simulators and Android devices.',
@@ -155,7 +185,7 @@ export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformR
   });
 }
 
-/** The five desktop-interactor operations, each independently gated by its own admitted fact. */
+/** The desktop-interactor operations, each independently gated by its own admitted fact. */
 function linuxInteractionOperations(
   host: PlatformRuntimeHost,
   request: Parameters<PlatformRuntimeOwner['bind']>[0],
@@ -171,6 +201,8 @@ function linuxInteractionOperations(
       ? bindLocalScreenshotInteractor(resolver)
       : {}),
     ...(facts.operations.focusPoint.available ? bindLocalFocusInteractor(resolver) : {}),
+    ...bindLocalGestureInteractor({ ...resolver, facts: facts.operations }),
+    ...(facts.operations.scrollDirection.available ? bindLocalScrollInteractor(resolver) : {}),
     ...(facts.operations.typeText.available ? bindLocalTypeTextInteractor(resolver) : {}),
     ...(facts.operations.readTextAtPoint.available ? bindElementTextRuntime(resolver) : {}),
     ...bindAdmittedLocalInteractorOperations({
@@ -190,6 +222,8 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     snapshot: snapshotKindUnavailable,
     viewport: unsupportedPlatformLeaf,
     focus: focusKindUnavailable,
+    gesture: gestureKindUnavailable,
+    scroll: scrollKindUnavailable,
     typeText: typeKindUnavailable,
     touch: focusKindUnavailable,
     elementText: elementTextKindUnavailable,
@@ -229,6 +263,17 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
       // the only Linux cell with a pointer to drive.
       ...focusRuntimeOperationFacts({ focus: linuxDesktopFact(device, focusKindUnavailable) }),
       // Text entry shares focus's cell: ydotool drives both on the desktop device only.
+      // The desktop device is the only Linux cell with a pointer; three tiers are refused on
+      // every cell — a direction-authored fling's speed semantics, two-contact synthesis, and
+      // target-authored drag timing.
+      ...gestureRuntimeOperationFacts({
+        plan: linuxDesktopFact(device, gestureKindUnavailable),
+        directionalFling: directionalFlingUnavailable,
+        multiTouch: multiTouchUnavailable,
+        targetAuthoredDrag: targetAuthoredDragUnavailable,
+        viewport: gestureViewportUnavailable,
+      }),
+      ...scrollRuntimeOperationFacts({ scroll: linuxDesktopFact(device, scrollKindUnavailable) }),
       ...typeTextRuntimeOperationFacts({ type: linuxDesktopFact(device, typeKindUnavailable) }),
       ...linuxTouchFacts(device),
       // The Linux read is value-first (AXValue/title/description) where the captured tree is

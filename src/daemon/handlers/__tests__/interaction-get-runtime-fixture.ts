@@ -158,6 +158,8 @@ function elementReadFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOpera
     network: unavailable,
     viewport: unavailable,
     focus: unavailable,
+    gesture: unavailable,
+    scroll: unavailable,
     typeText: unavailable,
     touch: unavailable,
     elementText: unavailable,

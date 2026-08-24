@@ -245,3 +245,57 @@ test('the Linux surface capture composes the per-capture signal with the request
   scope.abort();
   expect(passedSecond.aborted).toBe(true);
 });
+
+// R52/R53: Linux is the one owner whose gesture tiers genuinely split. Its drag primitive
+// preserves a coordinate fling's endpoints but not a direction-authored fling's speed semantics
+// (`gesture fling is not supported on Linux`), it synthesizes one contact, and it has no frame
+// read of its own — which is why `gestureViewport` is PREFERRED rather than required.
+test.each([
+  ['desktop device', 'device' as const, true],
+  ['non-desktop kind', 'emulator' as const, false],
+])('declares the Linux %s gesture and scroll cells', async (_name, kind, supported) => {
+  const facts = await createLinuxPlatformRuntime(lifecycleHost()).inspectFacts({
+    platform: 'linux',
+    id: 'linux',
+    name: 'Linux',
+    kind,
+    target: 'desktop',
+    booted: true,
+  });
+  expect(facts.operations.performGesturePlan.available).toBe(supported);
+  expect(facts.operations.scrollDirection.available).toBe(supported);
+  expect(facts.operations.performDirectionalFlingPlan.available).toBe(false);
+  expect(facts.operations.performMultiTouchGesturePlan.available).toBe(false);
+  expect(facts.operations.performTargetAuthoredDrag).toMatchObject({
+    available: false,
+    hint: expect.stringContaining('source hold, timed movement, and destination hold'),
+  });
+  expect(facts.operations.gestureViewport.available).toBe(false);
+});
+
+test('binds the Linux coordinate-fling tier without a frame read', async () => {
+  const binding = await createLinuxPlatformRuntime(lifecycleHost()).bind({
+    device: {
+      platform: 'linux',
+      id: 'linux',
+      name: 'Linux',
+      kind: 'device',
+      target: 'desktop',
+      booted: true,
+    },
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+  expect(binding.operations.performGesturePlan).toBeTypeOf('function');
+  expect(binding.operations.scrollDirection).toBeTypeOf('function');
+  expect(binding.operations.performDirectionalFlingPlan).toBeUndefined();
+  expect(binding.operations.performMultiTouchGesturePlan).toBeUndefined();
+  expect(binding.operations.performTargetAuthoredDrag).toBeUndefined();
+  // Absent, not broken: the caller derives the coordinate frame from a capture instead, which is
+  // exactly how a Linux gesture resolved its viewport before this migration.
+  expect(binding.operations.gestureViewport).toBeUndefined();
+});

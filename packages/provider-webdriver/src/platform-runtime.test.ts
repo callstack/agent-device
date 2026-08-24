@@ -453,3 +453,53 @@ function host(run: PlatformRuntimeHost['commands']['run']): PlatformRuntimeHost 
     },
   } as unknown as PlatformRuntimeHost;
 }
+
+// R52/R53: gestures and scrolling ride the same reachability gate the captures do. The one extra
+// gate is the retired multi-touch policy — this provider owns physical devices only, and
+// two-finger synthesis on a physical iOS device was refused before this migration too.
+test.each([
+  ['Android physical', device, true],
+  ['iOS physical', { ...device, platform: 'apple' as const, appleOs: 'ios' as const }, false],
+])('declares the WebDriver %s gesture and scroll cells', async (_name, owned, multiTouch) => {
+  const owner = createWebDriverPlatformRuntimeOwner({
+    host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+    owner: providerRuntimeOwner('browserstack', 'android'),
+    ownsDevice: () => true,
+    getInteractor: () => ({}) as unknown as Interactor,
+  });
+  const facts = await owner.inspectFacts(owned);
+  expect(facts.operations.performGesturePlan).toEqual({ available: true });
+  expect(facts.operations.performDirectionalFlingPlan).toEqual({ available: true });
+  expect(facts.operations.performTargetAuthoredDrag).toEqual({ available: true });
+  expect(facts.operations.gestureViewport).toEqual({ available: true });
+  expect(facts.operations.scrollDirection).toEqual({ available: true });
+  expect(facts.operations.performMultiTouchGesturePlan.available).toBe(multiTouch);
+  if (!multiTouch) {
+    expect(facts.operations.performMultiTouchGesturePlan).toMatchObject({
+      hint: 'Two-finger gesture synthesis is iOS-simulator only — not available on physical iOS devices.',
+    });
+  }
+});
+
+test('closes every WebDriver gesture and scroll cell when the interactor is unreachable', async () => {
+  const owner = createWebDriverPlatformRuntimeOwner({
+    host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+    owner: providerRuntimeOwner('browserstack', 'android'),
+    ownsDevice: () => true,
+    getInteractor: undefined,
+  });
+  const facts = await owner.inspectFacts(device);
+  for (const operation of [
+    'performGesturePlan',
+    'performDirectionalFlingPlan',
+    'performMultiTouchGesturePlan',
+    'performTargetAuthoredDrag',
+    'gestureViewport',
+    'scrollDirection',
+  ] as const) {
+    expect(facts.operations[operation]).toMatchObject({
+      available: false,
+      reason: 'unsupported-provider-mode',
+    });
+  }
+});

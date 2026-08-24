@@ -40,6 +40,8 @@ export type ScreenshotRuntimeFixtureOptions = Readonly<{
   /** Replaces the default "write a solid PNG at the requested path" capture behavior. */
   onCapture?: (input: CaptureScreenshotInput) => Promise<void> | void;
   snapshotResult?: (input: CaptureSnapshotInput) => SnapshotResult;
+  /** Gate for the neighbouring bound `scroll`, used by the device-lock serialization tests. */
+  onScroll?: () => Promise<void> | void;
 }>;
 
 export type ScreenshotRuntimeFixture = Readonly<{
@@ -74,6 +76,12 @@ export function screenshotRuntimeFixture(
       options.snapshotResult?.(input) ?? { nodes: [], backend: 'android' },
   );
   const tapPoint = vi.fn(async (_input: TapPointInput) => ({}));
+  // R43: `scroll` is the neighbouring command the device-lock tests use to prove serialization,
+  // and it now reaches the platform through a bound operation like the screenshot beside it.
+  const scrollDirection = vi.fn(async () => {
+    await options.onScroll?.();
+    return {};
+  });
 
   // The unavailable gateway is the exhaustive fact catalog; only the capture cells are overridden.
   const facts = async (device: DeviceInfo): Promise<RuntimeFacts<PlatformRuntimeOperations>> => {
@@ -83,6 +91,7 @@ export function screenshotRuntimeFixture(
       operations: {
         ...base.operations,
         ...screenshotRuntimeOperationFacts({ capture: options.capture ?? available }),
+        scrollDirection: available,
         ...snapshotRuntimeOperationFacts({
           capture: options.snapshot ?? available,
           customActions: options.snapshot ?? available,
@@ -111,6 +120,7 @@ export function screenshotRuntimeFixture(
         captureSnapshotWithCustomActions: captureSnapshot,
         captureSnapshotWithoutActiveApp: captureSnapshot,
         tapPoint,
+        scrollDirection,
       },
       [Symbol.asyncDispose]: async () => {},
     };

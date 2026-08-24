@@ -293,6 +293,12 @@ test('web supports only the initial browser interaction slice', () => {
       'fill',
       'focus',
       'find',
+      // `gesture` and `swipe` (R42/R44) join the migrated commands here for the same reason
+      // `focus`, `find`, `screenshot`, `scroll`, `snapshot`, `type` and `wait` already do: a
+      // command whose admission comes from exact owner facts carries no capability-matrix row,
+      // and a command with no row is not decided by this matrix at all. The web owner refuses
+      // every gesture tier — `platform-web/src/runtime.test.ts` is where that cell is pinned.
+      'gesture',
       'get',
       'hover',
       'press',
@@ -300,22 +306,14 @@ test('web supports only the initial browser interaction slice', () => {
       'screenshot',
       'scroll',
       'snapshot',
+      'swipe',
       'type',
       'wait',
     ],
     [{ device: webDevice, expected: true, label: 'on web' }],
   );
   assertCommandSupport(
-    [
-      'alert',
-      'app-switcher',
-      'clipboard',
-      'gesture',
-      'perf',
-      'settings',
-      'swipe',
-      'trigger-app-event',
-    ],
+    ['alert', 'app-switcher', 'clipboard', 'perf', 'settings', 'trigger-app-event'],
     [{ device: webDevice, expected: false, label: 'on web' }],
   );
   assertCommandSupport(

@@ -266,3 +266,52 @@ function expectLegacyLifecycleCell(
     }
   }
 }
+
+// R52/R53: hdc synthesizes one contact, so HarmonyOS admits the one-contact tiers on the same
+// kind cell its focus/type overlay admitted, and refuses the two tiers it cannot reproduce.
+test.each([
+  ['device', device],
+  ['emulator', { ...device, kind: 'emulator' as const }],
+])('declares the HarmonyOS %s gesture and scroll cells', async (_name, runtimeDevice) => {
+  const facts = await createHarmonyPlatformRuntime(gestureHost()).inspectFacts(runtimeDevice);
+  expect(facts.operations.performGesturePlan).toEqual({ available: true });
+  expect(facts.operations.performDirectionalFlingPlan).toEqual({ available: true });
+  expect(facts.operations.gestureViewport).toEqual({ available: true });
+  expect(facts.operations.scrollDirection).toEqual({ available: true });
+  // The retired admission refused two-contact synthesis on every platform that is neither
+  // Android nor Apple, with no hint — that is this cell, verbatim.
+  expect(facts.operations.performMultiTouchGesturePlan).toEqual({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
+  expect(facts.operations.performTargetAuthoredDrag).toMatchObject({
+    available: false,
+    hint: expect.stringContaining('source hold, timed movement, and destination hold'),
+  });
+});
+
+test('binds the HarmonyOS gesture tiers it admitted and omits the rest', async () => {
+  const binding = await createHarmonyPlatformRuntime(gestureHost()).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+  expect(binding.operations.performGesturePlan).toBeTypeOf('function');
+  expect(binding.operations.gestureViewport).toBeTypeOf('function');
+  expect(binding.operations.scrollDirection).toBeTypeOf('function');
+  expect(binding.operations.performMultiTouchGesturePlan).toBeUndefined();
+  expect(binding.operations.performTargetAuthoredDrag).toBeUndefined();
+});
+
+function gestureHost(): PlatformRuntimeHost {
+  return {
+    processTransports: { resolve: async () => ({ mode: 'local' as const }) },
+    appInventory: { harmonyos: { listApps: async () => [] } },
+    appState: { harmonyos: { run: async () => ({ stdout: '' }) } },
+    localInteractors: { resolve: async () => ({}) },
+  } as unknown as PlatformRuntimeHost;
+}

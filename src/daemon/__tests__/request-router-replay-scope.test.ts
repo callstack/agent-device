@@ -35,6 +35,7 @@ import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import {
   createRequestHandler,
+  gestureRuntimeSpies,
   lifecycleDeviceRuntimeGateway,
 } from './test-device-runtime-gateway.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
@@ -47,6 +48,7 @@ const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
 
 beforeEach(() => {
+  gestureRuntimeSpies.scrollDirection.mockClear();
   mockDispatch.mockReset();
   mockDispatch.mockResolvedValue({});
   mockResolveTargetDevice.mockReset();
@@ -85,7 +87,10 @@ test('replay runs active-session actions inside the parent request provider scop
   });
 
   expect(response).toMatchObject({ ok: true });
-  expect(mockDispatch).toHaveBeenCalledTimes(2);
+  // `app-switcher` is still a legacy dispatch leaf; `scroll down` reaches its bound operation
+  // instead (R53), so the flow's two actions land on two different execution paths.
+  expect(mockDispatch).toHaveBeenCalledTimes(1);
+  expect(gestureRuntimeSpies.scrollDirection).toHaveBeenCalledTimes(1);
   expect(appleRunnerProvider).toHaveBeenCalledTimes(1);
 });
 

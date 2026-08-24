@@ -23,7 +23,7 @@ import {
   splitRefGenerationSuffix,
   type Point,
 } from '@agent-device/kernel/snapshot';
-import { requireGestureSupported } from '../../core/capabilities.ts';
+import { resolveBoundGestureRuntime, type BoundGestureExecutor } from '../gesture-runtime.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import { ensureAndroidBlockingSystemDialogReady } from '../android-system-dialog.ts';
@@ -52,6 +52,19 @@ type GestureInteractionOutcome = {
   recordedTargets?: { source: RecordedTargetCapture; destination: RecordedTargetCapture };
 };
 
+/**
+ * A refused gesture short-circuits with the admission's own response. The retired
+ * `requireGestureSupported` threw, so the refusal skipped the after-command dialog check and
+ * returned the normalized error; returning it here preserves that control flow exactly.
+ */
+type GestureInteractionResult = GestureInteractionOutcome | Readonly<{ refused: DaemonResponse }>;
+
+function isRefusal(
+  result: GestureInteractionResult,
+): result is Readonly<{ refused: DaemonResponse }> {
+  return 'refused' in result;
+}
+
 export async function dispatchGestureViaRuntime(
   params: GestureHandlerParams,
 ): Promise<DaemonResponse> {
@@ -63,14 +76,22 @@ export async function dispatchGestureViaRuntime(
 async function runGestureInteraction(
   params: GestureHandlerParams,
   session: SessionState,
-): Promise<GestureInteractionOutcome> {
+): Promise<GestureInteractionResult> {
   const input = readGesturePayload(params.req.input);
   const gesture = prepareGestureCommandInput(input, session);
   if (gesture.intent === 'pan' && params.req.internal?.gestureExecutionProfile) {
     gesture.executionProfile = params.req.internal.gestureExecutionProfile;
   }
-  requireGestureSupported(gesture, session.device);
-  const runtime = createGestureRuntime(params);
+  // ADR 0019 §9: the gesture input selects one execution tier and this is the request's ONE bind,
+  // taken before any plan is built — a drag binds here, not after its targets resolve.
+  const bound = await resolveBoundGestureRuntime({
+    device: session.device,
+    input: gesture,
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
+  });
+  if (!bound.ok) return { refused: bound.response };
+  const runtime = createGestureRuntime(params, bound.gestures);
   const context = { session: params.sessionName, requestId: params.req.meta?.requestId };
   const result = await runPreparedGesture(runtime, context, gesture, params.req.internal);
   return buildGestureOutcome(input, gesture, result, params.req.flags);
@@ -134,11 +155,19 @@ export async function dispatchSwipeViaRuntime(
 ): Promise<DaemonResponse> {
   return await dispatchGestureInteraction(params, 'swipe', async (session) => {
     const input = readSwipeInput(params.req.input);
-    requireGestureSupported(normalizePublicSwipeMotion(input).gesture, session.device);
+    // One bind for the whole series: `--count N` executes the bound operation N times under a
+    // single binding, never one bind per repetition (ADR 0019 §9).
+    const bound = await resolveBoundGestureRuntime({
+      device: session.device,
+      input: normalizePublicSwipeMotion(input).gesture,
+      inspectFacts: params.inspectFacts,
+      bindDevice: params.bindDevice,
+    });
+    if (!bound.ok) return { refused: bound.response };
     const count = input.count ?? 1;
     const pauseMs = input.pauseMs ?? 0;
     const pattern = input.pattern ?? 'one-way';
-    const runtime = createGestureRuntime(params);
+    const runtime = createGestureRuntime(params, bound.gestures);
     const result = await runSwipeRepetitions(runtime, params, input, count, pauseMs, pattern);
     return {
       positionals: swipeReplayPositionals(input),
@@ -161,9 +190,10 @@ export async function dispatchSwipeViaRuntime(
   });
 }
 
-function createGestureRuntime(params: GestureHandlerParams) {
+function createGestureRuntime(params: GestureHandlerParams, gestures: BoundGestureExecutor) {
   return createInteractionRuntime({
     ...params,
+    gestures,
     pairedGestureViewport: params.req.internal?.gestureViewport,
   });
 }
@@ -171,7 +201,7 @@ function createGestureRuntime(params: GestureHandlerParams) {
 async function dispatchGestureInteraction(
   params: GestureHandlerParams,
   command: 'gesture' | 'swipe',
-  run: (session: SessionState) => Promise<GestureInteractionOutcome>,
+  run: (session: SessionState) => Promise<GestureInteractionResult>,
 ): Promise<DaemonResponse> {
   const session = params.sessionStore.get(params.sessionName);
   if (!session) return noActiveSessionError();
@@ -186,6 +216,7 @@ async function dispatchGestureInteraction(
           phase: 'before-command',
         });
     const outcome = await run(session);
+    if (isRefusal(outcome)) return outcome.refused;
     if (!providerDevice) {
       await ensureAndroidBlockingSystemDialogReady({
         session,

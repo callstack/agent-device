@@ -13,6 +13,15 @@ import {
   bindProviderFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
+import { PHYSICAL_IOS_MULTI_TOUCH_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
+import {
+  bindProviderGestureInteractor,
+  gestureRuntimeOperationFacts,
+} from '@agent-device/contracts/gesture-runtime';
+import {
+  bindProviderScrollInteractor,
+  scrollRuntimeOperationFacts,
+} from '@agent-device/contracts/scroll-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
@@ -133,6 +142,21 @@ const typeUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'This WebDriver provider runtime does not expose text entry for this device.',
+} as const);
+const gestureUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'This WebDriver provider runtime does not expose gestures for this device.',
+} as const);
+const scrollUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'This WebDriver provider runtime does not expose scrolling for this device.',
+} as const);
+const physicalIosMultiTouchUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: PHYSICAL_IOS_MULTI_TOUCH_UNSUPPORTED_HINT,
 } as const);
 const elementTextUnavailable = Object.freeze({
   available: false,
@@ -288,6 +312,8 @@ function webDriverInteractionOperations(
       : {}),
     ...(facts.operations.focusPoint.available ? bindProviderFocusInteractor(resolver) : {}),
     ...(facts.operations.typeText.available ? bindProviderTypeTextInteractor(resolver) : {}),
+    ...bindProviderGestureInteractor({ ...resolver, facts: facts.operations }),
+    ...(facts.operations.scrollDirection.available ? bindProviderScrollInteractor(resolver) : {}),
     ...bindAdmittedProviderInteractorOperations({
       ...resolver,
       facts: facts.operations,
@@ -383,6 +409,8 @@ function webDriverFacts(
       screenshot: inactiveSession,
       viewport: inactiveSession,
       focus: inactiveSession,
+      gesture: inactiveSession,
+      scroll: inactiveSession,
       typeText: inactiveSession,
       touch: inactiveSession,
       elementText: inactiveSession,
@@ -415,6 +443,8 @@ function webDriverFacts(
     screenshot: screenshotUnavailable,
     viewport: viewportUnavailable,
     focus: focusUnavailable,
+    gesture: gestureUnavailable,
+    scroll: scrollUnavailable,
     typeText: typeUnavailable,
     touch: typeUnavailable,
     elementText: elementTextUnavailable,
@@ -464,6 +494,18 @@ function webDriverFacts(
         fillRef: typeUnavailable,
         tapElementSelector: focusUnavailable,
       }),
+      // Gestures and scrolling ride the same provider interactor the captures do, so they need the
+      // same reachability. The one extra gate is the retired multi-touch policy: this provider only
+      // ever owns physical devices, and two-finger synthesis on a physical iOS device was refused
+      // before this migration exactly as it is refused here.
+      ...gestureRuntimeOperationFacts({
+        plan: interactorCell(reachable, gestureUnavailable),
+        directionalFling: interactorCell(reachable, gestureUnavailable),
+        multiTouch: webDriverMultiTouchCell(device, reachable),
+        targetAuthoredDrag: interactorCell(reachable, gestureUnavailable),
+        viewport: interactorCell(reachable, gestureUnavailable),
+      }),
+      ...scrollRuntimeOperationFacts({ scroll: interactorCell(reachable, scrollUnavailable) }),
       // `back`/`home`/`orientation` ride the same reachable interactor; `tvRemote` always throws
       // unsupported in this interactor regardless of reachability (no capability declares it).
       ...backRuntimeOperationFacts({ back: interactorCell(reachable, backUnavailable) }),
@@ -489,6 +531,12 @@ function webDriverFacts(
       },
     },
   });
+}
+
+/** Two-finger synthesis is iOS-simulator only, and this provider owns no simulators. */
+function webDriverMultiTouchCell(device: DeviceInfo, reachable: boolean): RuntimeOperationFact {
+  if (!reachable) return gestureUnavailable;
+  return device.platform === 'apple' ? physicalIosMultiTouchUnavailable : available;
 }
 
 /** The device shapes this provider can reach at all through its own WebDriver interactor. */

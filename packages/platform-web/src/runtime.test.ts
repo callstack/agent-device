@@ -418,3 +418,45 @@ function host(
     },
   } as unknown as PlatformRuntimeHost;
 }
+
+// R52/R53: `scroll` is the one gesture-family command the web overlay ever admitted
+// (`WEB_INTERACTION_COMMANDS`); `gesture` and `swipe` carried no web bucket at all, and the
+// retired admission refused `platform === 'web'` outright.
+test('admits web scrolling and refuses every gesture tier', async () => {
+  const binding = await createWebPlatformRuntime(host({ mode: 'local' })).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: scope(),
+  });
+  expect(binding.facts.operations.scrollDirection).toEqual({ available: true });
+  expect(binding.operations.scrollDirection).toBeTypeOf('function');
+  for (const operation of [
+    'performGesturePlan',
+    'performDirectionalFlingPlan',
+    'performMultiTouchGesturePlan',
+    'gestureViewport',
+  ] as const) {
+    expect(binding.facts.operations[operation]).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+    });
+    expect(binding.operations[operation]).toBeUndefined();
+  }
+  // The retired admission checked drag FIRST, before its `platform === 'web'` branch, so this one
+  // tier keeps the target-authored-drag wording rather than the bare platform refusal.
+  expect(binding.facts.operations.performTargetAuthoredDrag).toMatchObject({
+    available: false,
+    hint: expect.stringContaining('source hold, timed movement, and destination hold'),
+  });
+  expect(binding.operations.performTargetAuthoredDrag).toBeUndefined();
+});
+
+test('refuses web scrolling on a non-browser web cell', async () => {
+  const binding = await createWebPlatformRuntime(host({ mode: 'local' })).bind({
+    device: { ...device, kind: 'emulator' },
+    intent: { kind: 'ordinary' },
+    scope: scope(),
+  });
+  expect(binding.facts.operations.scrollDirection.available).toBe(false);
+  expect(binding.operations.scrollDirection).toBeUndefined();
+});

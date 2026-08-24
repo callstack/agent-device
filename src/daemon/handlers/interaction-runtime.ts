@@ -1,4 +1,3 @@
-import { dispatchGesturePlan, dispatchGestureViewport } from '../../core/dispatch.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import type {
   AgentDeviceBackend,
@@ -21,11 +20,19 @@ import { buildAppleRunnerRequestOptions } from '../apple-runner-options.ts';
 import { isLocalIosRunnerSession } from '../direct-ios-selector.ts';
 import { confirmIosOffscreenTargetVisible } from '../offscreen-target-probe.ts';
 import type { BoundTouchExecutor } from '../touch-runtime.ts';
+import type { BoundGestureExecutor } from '../gesture-runtime.ts';
+import type { DaemonCommandContext } from '../context.ts';
 
 type InteractionRuntimeParams = InteractionHandlerParams & {
   captureSnapshotForSession: CaptureSnapshotForSession;
   pairedGestureViewport?: Rect;
   touchExecutor?: BoundTouchExecutor;
+  /**
+   * The request's single gesture binding (ADR 0019), supplied only by the `gesture`/`swipe`
+   * handler. Every other interaction command leaves it out, and the backend then exposes no
+   * gesture members at all — the touch leaves that share this backend execute no gestures.
+   */
+  gestures?: BoundGestureExecutor;
 };
 
 export function createInteractionRuntime(params: InteractionRuntimeParams) {
@@ -58,6 +65,8 @@ function createInteractionBackend(
   params: InteractionRuntimeParams & { session: SessionState },
 ): AgentDeviceBackend {
   const { req, session } = params;
+  const gestureContext = () =>
+    params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath);
   return {
     platform: publicPlatformString(session.device),
     captureSnapshot: async (context, options): Promise<BackendSnapshotResult> => ({
@@ -71,16 +80,11 @@ function createInteractionBackend(
           preferredBackend: options?.preferredBackend,
           includeRects: options?.includeRects === true,
           signal: context.signal,
-          boundCapture: params.touchExecutor?.captureSnapshot,
+          boundCapture: params.touchExecutor?.captureSnapshot ?? params.gestures?.captureSnapshot,
         },
       ),
     }),
-    resolveGestureViewport: async () =>
-      params.pairedGestureViewport ??
-      (await dispatchGestureViewport(
-        session.device,
-        params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
-      )),
+    ...gestureBackendMembers(params, session, gestureContext),
     // #1542: iOS-only escape hatch for the off-screen refusal double-check.
     // Local (non-provider) iOS sessions get a direct, AX-tree-independent
     // probe (deliberately NOT skipped while postGestureStabilization is
@@ -103,15 +107,38 @@ function createInteractionBackend(
           })
       : undefined,
     ...touchBackendMembers(params.touchExecutor, session, req.flags),
+  };
+}
+
+/**
+ * The gesture members, present only for the `gesture`/`swipe` handler that bound them (R52/R54).
+ * Every other interaction command shares this backend and executes no gestures, so it gets
+ * neither member — the backend holds no gesture reach it cannot prove.
+ *
+ * A replay-supplied viewport still wins over the owner's own read, exactly as before; an owner
+ * with no frame read answers `undefined` and the caller derives the frame from a capture, which
+ * is how a Linux gesture resolves its coordinate frame today.
+ */
+function gestureBackendMembers(
+  params: InteractionRuntimeParams,
+  session: SessionState,
+  gestureContext: () => DaemonCommandContext,
+): Pick<AgentDeviceBackend, 'performGesture' | 'resolveGestureViewport'> {
+  const gestures = params.gestures;
+  const pairedGestureViewport = params.pairedGestureViewport;
+  if (!gestures) {
+    return pairedGestureViewport
+      ? { resolveGestureViewport: async (): Promise<Rect> => pairedGestureViewport }
+      : {};
+  }
+  return {
+    resolveGestureViewport: async (): Promise<Rect | undefined> =>
+      pairedGestureViewport ?? (await gestures.gestureViewport?.(gestureContext())),
     performGesture: async (_context, plan): Promise<BackendActionResult> => {
+      // ADR 0014 side-effect seam: the plan is built; expire the ref frame synchronously before
+      // executing so a later step cannot reuse it.
       expireRefFrame(session);
-      return toBackendActionResult(
-        await dispatchGesturePlan(
-          session.device,
-          plan,
-          params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
-        ),
-      );
+      return toBackendActionResult(await gestures.performPlan(plan, gestureContext()));
     },
   };
 }

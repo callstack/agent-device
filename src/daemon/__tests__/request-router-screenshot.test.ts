@@ -233,10 +233,9 @@ test('router serializes concurrent commands for the same device across sessions'
       writeSolidPng(input.outPath);
       await gate('screenshot');
     },
-  });
-  mockDispatch.mockImplementation(async (_device, command) => {
-    await gate(command);
-    return {};
+    onScroll: async () => {
+      await gate('scroll');
+    },
   });
 
   const handler = createRequestHandler({

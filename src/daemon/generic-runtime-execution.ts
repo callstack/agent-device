@@ -1,7 +1,9 @@
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
 import { resolveBoundFocusRuntime } from './focus-runtime.ts';
 import { resolveScreenshotGenericExecution } from './screenshot-runtime.ts';
+import { resolveBoundScrollRuntime } from './scroll-runtime.ts';
 import type { ScreenshotRuntimeBindings } from './screenshot-runtime-binding.ts';
+import type { DaemonCommandContext } from './context.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 import { resolveBoundViewportRuntime } from './viewport-runtime.ts';
 import { resolveBoundBackRuntime } from './back-runtime.ts';
@@ -15,7 +17,12 @@ import { resolveBoundTvRemoteRuntime } from './tv-remote-runtime.ts';
  * name. `undefined` means the leaf still executes through legacy platform dispatch.
  */
 export async function resolveGenericRuntimeExecution(
-  params: Readonly<{ req: DaemonRequest; session: SessionState }> & ScreenshotRuntimeBindings,
+  params: Readonly<{
+    req: DaemonRequest;
+    session: SessionState;
+    context: DaemonCommandContext;
+  }> &
+    ScreenshotRuntimeBindings,
 ): Promise<ResolvedGenericExecution | undefined> {
   switch (params.req.command) {
     case 'screenshot':
@@ -24,6 +31,14 @@ export async function resolveGenericRuntimeExecution(
       return await resolveBoundFocusRuntime({
         device: params.session.device,
         positionals: params.req.positionals ?? [],
+        inspectFacts: params.inspectFacts,
+        bindDevice: params.bindDevice,
+      });
+    case 'scroll':
+      return await resolveBoundScrollRuntime({
+        device: params.session.device,
+        positionals: params.req.positionals ?? [],
+        context: params.context,
         inspectFacts: params.inspectFacts,
         bindDevice: params.bindDevice,
       });

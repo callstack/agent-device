@@ -3,6 +3,19 @@ import {
   bindProviderFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
+import {
+  ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT,
+  TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
+} from '@agent-device/contracts/gesture-admission';
+import {
+  bindProviderGestureInteractor,
+  gestureRuntimeOperationFacts,
+  type GestureRuntimeOperationFacts,
+} from '@agent-device/contracts/gesture-runtime';
+import {
+  bindProviderScrollInteractor,
+  scrollRuntimeOperationFacts,
+} from '@agent-device/contracts/scroll-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
@@ -23,6 +36,63 @@ import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const available = Object.freeze({ available: true } as const);
+/**
+ * Limrun's iOS direct session drives text and touch but exposes no portable gesture execution —
+ * its interactor's own `performGesture` refuses with this wording. Stating it as a fact refuses at
+ * admission instead of mid-execution (ADR 0019 §6), keeping the agent-facing hint identical.
+ */
+const iosGestureUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun iOS direct sessions do not expose portable gesture execution yet.',
+} as const);
+const androidTvMultiTouchUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT,
+} as const);
+const androidTvDragUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
+} as const);
+
+/**
+ * Gesture cells split by the interactor behind the session: an Android emulator session runs the
+ * ordinary Android interactor (every tier, minus the TV gates it always carried), while the iOS
+ * direct session has no gesture execution at all.
+ */
+function limrunGestureFacts(
+  device: DeviceInfo,
+  cell: RuntimeOperationUnavailability | typeof available,
+): GestureRuntimeOperationFacts {
+  if (cell !== available) {
+    return gestureRuntimeOperationFacts({
+      plan: cell,
+      directionalFling: cell,
+      multiTouch: cell,
+      targetAuthoredDrag: cell,
+      viewport: cell,
+    });
+  }
+  if (device.platform !== 'android') {
+    return gestureRuntimeOperationFacts({
+      plan: iosGestureUnavailable,
+      directionalFling: iosGestureUnavailable,
+      multiTouch: iosGestureUnavailable,
+      targetAuthoredDrag: iosGestureUnavailable,
+      viewport: iosGestureUnavailable,
+    });
+  }
+  const tv = device.target === 'tv';
+  return gestureRuntimeOperationFacts({
+    plan: available,
+    directionalFling: available,
+    multiTouch: tv ? androidTvMultiTouchUnavailable : available,
+    targetAuthoredDrag: tv ? androidTvDragUnavailable : available,
+    viewport: available,
+  });
+}
 const homeUnavailableIos = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -83,10 +153,17 @@ export function limrunInteractionOperationFacts(
       fillRef: unsupportedTouch,
       tapElementSelector: liveSessionUnavailable ?? (isIosFamily(device) ? cell : unsupportedTouch),
     }),
+    ...limrunGestureFacts(device, cell),
+    // `scroll` needs no gesture synthesis: both session kinds expose it directly.
+    ...scrollRuntimeOperationFacts({ scroll: cell }),
   });
 }
 
-/** Binds the interactor-backed operations (snapshot, screenshot, focus, type) for one session. */
+/**
+ * Binds the interactor-backed operations (snapshot, screenshot, focus, type, gestures, scroll) for
+ * one session. Only a live session reaches here, so the gesture tiers are gated by the same device
+ * split their facts use rather than by liveness.
+ */
 export function bindLimrunInteractionOperations(
   params: Readonly<{
     device: DeviceInfo;
@@ -108,6 +185,13 @@ export function bindLimrunInteractionOperations(
       pause: async (milliseconds) => await sleep(milliseconds, undefined, { signal }),
     }),
     ...bindProviderScreenshotInteractor({ device, signal, resolveInteractor }),
+    ...bindProviderGestureInteractor({
+      device,
+      signal,
+      facts: limrunGestureFacts(device, available),
+      resolveInteractor,
+    }),
+    ...bindProviderScrollInteractor({ device, signal, resolveInteractor }),
   });
 }
 

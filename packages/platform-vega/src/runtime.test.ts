@@ -208,3 +208,41 @@ function expectLifecycleFacts(
     }
   }
 }
+
+// R52/R53: `gesture`, `scroll` and `swipe` never carried a vega capability bucket, so no cell of
+// the gesture family was ever admitted on this owner.
+test('declares every Vega gesture and scroll cell unavailable', async () => {
+  const facts = await createVegaPlatformRuntime(lifecycleHost()).inspectFacts({
+    platform: 'vega',
+    id: 'vega-vvd',
+    name: 'Vega VVD',
+    kind: 'emulator',
+    target: 'tv',
+    booted: true,
+  });
+  for (const operation of [
+    'performGesturePlan',
+    'performDirectionalFlingPlan',
+    'gestureViewport',
+  ] as const) {
+    expect(facts.operations[operation]).toMatchObject({
+      available: false,
+      hint: expect.stringContaining('remote navigation only'),
+    });
+  }
+  // Two tiers keep the retired closures' own wording instead of this owner's: two-contact
+  // synthesis refused with no hint at all on a non-Android, non-Apple platform, and
+  // target-authored drag refused by naming the phases an adapter must preserve.
+  expect(facts.operations.performMultiTouchGesturePlan).toEqual({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
+  expect(facts.operations.performTargetAuthoredDrag).toMatchObject({
+    available: false,
+    hint: expect.stringContaining('source hold, timed movement, and destination hold'),
+  });
+  expect(facts.operations.scrollDirection).toMatchObject({
+    available: false,
+    hint: expect.stringContaining('remote navigation only'),
+  });
+});

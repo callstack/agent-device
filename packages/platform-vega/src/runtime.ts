@@ -17,6 +17,8 @@ import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime'
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
+import { TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
+import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -99,6 +101,25 @@ const typeUnavailable = vegaUnavailable(
   'unsupported-platform-leaf',
   'type is not supported on Vega OS: the Vega runtime exposes remote navigation only.',
 );
+
+const gestureUnavailable = vegaUnavailable(
+  'unsupported-platform-leaf',
+  'Gestures are not supported on Vega OS: the Vega runtime exposes remote navigation only.',
+);
+const scrollUnavailable = vegaUnavailable(
+  'unsupported-platform-leaf',
+  'scroll is not supported on Vega OS: the Vega runtime exposes remote navigation only.',
+);
+/**
+ * The two tiers the retired admission refused BY NAME on a non-Android, non-Apple platform, in its
+ * own wording: two-contact synthesis with no hint at all, and target-authored drag by naming the
+ * phases an adapter has to preserve.
+ */
+const multiTouchUnavailable = vegaUnavailable('unsupported-platform-leaf');
+const targetAuthoredDragUnavailable = vegaUnavailable(
+  'unsupported-platform-leaf',
+  TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
+);
 // `orientation` and every keyboard action never carried a Vega capability bucket at all; `back`,
 // `home`, and `tv-remote` did (the retired `vegaPlugin` closure), gated by the same VVD cell
 // their lifecycle open/close already require.
@@ -135,6 +156,10 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     viewport: unsupportedPlatformLeaf,
     // Vega exposes remote navigation only; it never carried a `focus` capability bucket.
     focus: focusUnavailable,
+    // Vega exposes remote navigation only; `gesture`, `scroll` and `swipe` never carried a vega
+    // capability bucket, so no gesture-family cell was ever admitted here.
+    gesture: gestureUnavailable,
+    scroll: scrollUnavailable,
     typeText: typeUnavailable,
     touch: unsupportedPlatformLeaf,
     elementText: unsupportedPlatformLeaf,
@@ -168,6 +193,16 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
       ...homeRuntimeOperationFacts({ home: supported ? lifecycleAvailable : homeUnavailable }),
       ...tvRemoteRuntimeOperationFacts({
         tvRemote: supported ? lifecycleAvailable : tvRemoteUnavailable,
+      }),
+      // Two gesture tiers keep the retired closures' own wording instead of this owner's generic
+      // one; the rest had no retired closure and now refuse at admission rather than inside the
+      // Vega interactor.
+      ...gestureRuntimeOperationFacts({
+        plan: gestureUnavailable,
+        directionalFling: gestureUnavailable,
+        multiTouch: multiTouchUnavailable,
+        targetAuthoredDrag: targetAuthoredDragUnavailable,
+        viewport: gestureUnavailable,
       }),
     },
   });

@@ -110,6 +110,18 @@ export type RuntimeOperationUnavailability = Readonly<{
 
 export type RuntimeOperationFact = Readonly<{ available: true }> | RuntimeOperationUnavailability;
 
+/**
+ * An operation is present on a binding only when the owner's own facts admitted it. One helper so
+ * every owner's `bind` reads as a list of admitted operations rather than a chain of branches —
+ * and so the next operation added there costs no additional branch.
+ */
+export function whenAdmitted<T extends object>(
+  fact: RuntimeOperationFact,
+  build: () => T,
+): T | Record<string, never> {
+  return fact.available ? build() : {};
+}
+
 export type RuntimeFacts<Operations extends object> = Readonly<{
   device: RuntimeDeviceShape;
   operations: Readonly<{
@@ -312,12 +324,4 @@ function unsupportedRuntimeOperation(key: string, fact: RuntimeOperationUnavaila
     reason: fact.reason,
     hint: fact.hint,
   });
-}
-
-/** Include an operation binding only when the owning runtime's published fact admits it. */
-export function whenAdmitted<T extends object>(
-  fact: RuntimeOperationFact,
-  build: () => T,
-): T | Record<string, never> {
-  return fact.available ? build() : {};
 }

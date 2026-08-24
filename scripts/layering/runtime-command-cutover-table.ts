@@ -29,6 +29,7 @@ import { retiredDispatchProjectionViolations } from './runtime-command-cutover-d
  * focus at R40, and type at R41 — the Wave 4 observation family is complete. Wave 5's generic
  * leaves follow: back at R42, home at R43, orientation at R44, tv-remote at R45, and the
  * action-selected keyboard at R46.
+ * The gesture cluster follows the touch leaves: gesture at R52, scroll at R53, swipe at R54.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -969,6 +970,108 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
         captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
         findText: ['selectWaitObservationOperations'],
         findSelector: ['selectWaitObservationOperations'],
+      },
+    },
+  },
+  {
+    rule: 'R52 gesture-runtime-cutover',
+    command: 'gesture',
+    subject: 'gesture execution',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The whole admission and the plan dispatcher. `requireGestureSupported` was the last
+      // daemon-owned platform table in this family: its intent-dependent tiers are now owner
+      // facts, so the function and its five private helpers go with it.
+      routeNames: ['requireGestureSupported', 'dispatchGesturePlan'],
+      // `gesture` also leaves the hand-maintained overlay that granted it a capability bucket on
+      // a family the descriptor never listed. `dispatchGestureViewport` is deliberately NOT
+      // claimed here: the Maestro replay port still consumes it, and ADR 0019 §6 keeps a shared
+      // mechanic in place until its last consumer can move.
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
+    },
+    runtimeTypeNames: ['GestureRuntimeOperations', 'SnapshotRuntimeOperations'],
+    operations: {
+      names: [
+        'performGesturePlan',
+        'performDirectionalFlingPlan',
+        'performMultiTouchGesturePlan',
+        'performTargetAuthoredDrag',
+        'captureSnapshot',
+        'gestureViewport',
+      ],
+    },
+    singularExecution: {
+      routes: ['handleInteractionCommands'],
+      operations: [
+        'performGesturePlan',
+        'performDirectionalFlingPlan',
+        'performMultiTouchGesturePlan',
+        'performTargetAuthoredDrag',
+        'captureSnapshot',
+        'gestureViewport',
+      ],
+      // One lexical owner per tier, all four inside the single binder `swipe` shares (R54).
+      // Four keys rather than one because their CELLS differ, not their mechanics — the tier a
+      // gesture input selects is what admission proves and what that branch then calls, on a
+      // binding narrow enough that the operation needs no cast or non-null repair.
+      operationOwners: {
+        performGesturePlan: ['bindGestureTier'],
+        performDirectionalFlingPlan: ['bindGestureTier'],
+        performMultiTouchGesturePlan: ['bindGestureTier'],
+        performTargetAuthoredDrag: ['bindGestureTier'],
+        captureSnapshot: ['selectGestureFrame'],
+        gestureViewport: ['selectGestureFrame'],
+      },
+    },
+  },
+  {
+    rule: 'R53 scroll-runtime-cutover',
+    command: 'scroll',
+    subject: 'directional scrolling',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The interactor leaf and its dispatch-table arm. Deleting the descriptor's `dispatch`
+      // leaf drops `'scroll'` from `DescriptorDispatchCommandName`, which makes a surviving
+      // `DISPATCH_HANDLERS.scroll` a COMPILE error rather than something this row has to police.
+      routeNames: ['handleScrollCommand'],
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
+    },
+    runtimeTypeNames: ['ScrollRuntimeOperations'],
+    operations: { names: ['scrollDirection'] },
+    singularExecution: {
+      routes: ['dispatchGenericCommand'],
+      operations: ['scrollDirection'],
+      // The edge verification consumes the SHARED `captureSnapshot` the selector family owns, so
+      // this row claims only the scroll pass itself.
+      operationOwners: { scrollDirection: ['scrollOnce'] },
+    },
+  },
+  {
+    rule: 'R54 swipe-runtime-cutover',
+    command: 'swipe',
+    subject: 'coordinate swipe',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // `swipe` owned no adapter of its own: it normalized to a coordinate fling and executed
+      // through the same plan dispatcher `gesture` did (retired by R42). Its whole retirement is
+      // admission data — the capability bucket the row's automatic columns reject, plus the
+      // overlay membership below.
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
+    },
+    runtimeTypeNames: ['GestureRuntimeOperations', 'SnapshotRuntimeOperations'],
+    operations: { names: ['performGesturePlan', 'captureSnapshot', 'gestureViewport'] },
+    singularExecution: {
+      routes: ['handleInteractionCommands'],
+      operations: ['performGesturePlan', 'captureSnapshot', 'gestureViewport'],
+      // Shared with `gesture` the way `find` shares the selector family's owners: a swipe series
+      // binds once and re-enters the same bound executor per repetition.
+      operationOwners: {
+        performGesturePlan: ['bindGestureTier'],
+        captureSnapshot: ['selectGestureFrame'],
+        gestureViewport: ['selectGestureFrame'],
       },
     },
   },

@@ -35,7 +35,11 @@ vi.mock('../response-views.ts', async (importOriginal) => {
 });
 
 import { dispatchCommand } from '../../core/dispatch.ts';
-import { createRequestHandler } from './test-device-runtime-gateway.ts';
+import {
+  createRequestHandler,
+  gestureDeviceRuntimeGateway,
+  gestureRuntimeSpies,
+} from './test-device-runtime-gateway.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
@@ -74,6 +78,9 @@ function makeHandler() {
       leaseRegistry: new LeaseRegistry(),
       deviceInventoryGateways: createTestDeviceInventoryGateways(),
       trackDownloadableArtifact: () => 'artifact-id',
+      // `scroll` is the view-less subject of case (e), and R53 moved it onto a bound runtime, so
+      // the handler needs an owner that admits `scrollDirection`.
+      deviceRuntimeGateway: gestureDeviceRuntimeGateway,
     }),
   };
 }
@@ -92,6 +99,8 @@ function request(command: string, overrides: Partial<DaemonRequest> = {}): Daemo
 beforeEach(() => {
   mockDispatch.mockReset();
   mockDispatch.mockImplementation(async () => ({ ...REPRESENTATIVE_PAYLOAD }));
+  gestureRuntimeSpies.scrollDirection.mockReset();
+  gestureRuntimeSpies.scrollDirection.mockResolvedValue({});
 });
 
 test('(a) default identity: responseLevel absent === default === no meta, byte-identical', async () => {
@@ -136,10 +145,20 @@ test('(d) digest composes with --cost: viewed data plus an additive cost block',
 
 test('(e) digest on a command with no registered view is byte-identical to default', async () => {
   const { handler } = makeHandler();
-  const digest = await handler(request('scroll', { meta: { responseLevel: 'digest' } }));
-  const def = await handler(request('scroll', { meta: {} }));
+  // `scroll` has no registered view. It no longer reaches the mocked `dispatchCommand` (R53 put
+  // it on a bound runtime), so the representative payload comes from the bound operation instead.
+  gestureRuntimeSpies.scrollDirection.mockResolvedValue({ ...REPRESENTATIVE_PAYLOAD });
+  const scrollRequest: Partial<DaemonRequest> = { positionals: ['down'], meta: {} };
+  const digest = await handler(
+    request('scroll', { ...scrollRequest, meta: { responseLevel: 'digest' } }),
+  );
+  const def = await handler(request('scroll', scrollRequest));
   expect(JSON.stringify(digest)).toBe(JSON.stringify(def));
-  if (digest.ok) expect(digest.data).toEqual(REPRESENTATIVE_PAYLOAD);
+  // The owner's payload passes through the view-less path; scroll's own result fields sit beside
+  // it, and its success text owns `message`.
+  if (digest.ok) {
+    expect(digest.data).toMatchObject({ items: REPRESENTATIVE_PAYLOAD.items, direction: 'down' });
+  }
 });
 
 test('(f) boundary survival: meta.responseLevel survives commandRpcParamsSchema parsing', () => {

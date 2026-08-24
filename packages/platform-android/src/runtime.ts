@@ -1,6 +1,10 @@
 import type { EnsureReadyInput } from '@agent-device/contracts/device-readiness-runtime';
 import type { NetworkDumpInput } from '@agent-device/contracts/network-runtime';
-import type { DeviceBinding, RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import type {
+  DeviceBinding,
+  RuntimeFacts,
+  RuntimeOperationFact,
+} from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
@@ -18,6 +22,18 @@ import {
   bindLocalFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
+import {
+  ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT,
+  TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
+} from '@agent-device/contracts/gesture-admission';
+import {
+  bindLocalGestureInteractor,
+  gestureRuntimeOperationFacts,
+} from '@agent-device/contracts/gesture-runtime';
+import {
+  bindLocalScrollInteractor,
+  scrollRuntimeOperationFacts,
+} from '@agent-device/contracts/scroll-runtime';
 import { localRuntimeOwner, whenAdmitted } from '@agent-device/contracts/platform-runtime';
 import {
   bindLocalScreenshotInteractor,
@@ -168,6 +184,36 @@ function androidRuntimeHintsFact(device: DeviceInfo) {
     : runtimeHintsUnavailable;
 }
 
+const gestureKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'Gestures are supported on Android emulators and physical devices.',
+} as const);
+const androidTvMultiTouchUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT,
+} as const);
+const androidTvDragUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
+} as const);
+
+/**
+ * A TV target has no touch input at all, which is the one Android gate the retired admission
+ * carried — it applied to two-contact synthesis and to target-authored drag, never to a plain
+ * one-contact fling or pan (the D-pad adapter executes those).
+ */
+function androidTouchTargetFact(device: DeviceInfo, refusal: RuntimeOperationFact) {
+  if (device.kind === 'simulator') return gestureKindUnavailable;
+  return device.target === 'tv' ? refusal : available;
+}
+
+function androidGestureFact(device: DeviceInfo) {
+  return device.kind === 'simulator' ? gestureKindUnavailable : available;
+}
+
 /** adb drives every interaction cell the same way; only the synthetic `simulator` row lacks a device. */
 function androidTouchFact(device: DeviceInfo) {
   return device.kind === 'simulator' ? focusKindUnavailable : available;
@@ -217,6 +263,16 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: androidTouchFact(device) }),
+        ...gestureRuntimeOperationFacts({
+          plan: androidGestureFact(device),
+          directionalFling: androidGestureFact(device),
+          multiTouch: androidTouchTargetFact(device, androidTvMultiTouchUnavailable),
+          targetAuthoredDrag: androidTouchTargetFact(device, androidTvDragUnavailable),
+          viewport: androidGestureFact(device),
+        }),
+        // `scroll` had no admission beyond its capability bucket, so its cell is that bucket
+        // verbatim: every Android kind but the synthetic `simulator` row.
+        ...scrollRuntimeOperationFacts({ scroll: androidGestureFact(device) }),
         // Text entry shares focus's cell: adb drives both, and only the synthetic `simulator`
         // row has no device behind it (parity with the retired `type` bucket).
         ...typeTextRuntimeOperationFacts({ type: androidTouchFact(device) }),
@@ -292,51 +348,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           networkDump: async (input: NetworkDumpInput) =>
             await dumpAndroidNetworkTraffic(host, request.device, input, request.scope.signal),
           ...recording,
-          ...(facts.operations.captureSnapshot.available
-            ? bindLocalSnapshotInteractor({
-                device: request.device,
-                signal: request.scope.signal,
-                resolveInteractor: host.localInteractors.resolve,
-              })
-            : {}),
-          ...(facts.operations.captureScreenshot.available
-            ? bindLocalScreenshotInteractor({
-                device: request.device,
-                signal: request.scope.signal,
-                resolveInteractor: host.localInteractors.resolve,
-              })
-            : {}),
-          ...(facts.operations.focusPoint.available
-            ? bindLocalFocusInteractor({
-                device: request.device,
-                signal: request.scope.signal,
-                resolveInteractor: host.localInteractors.resolve,
-              })
-            : {}),
-          ...(facts.operations.typeText.available
-            ? bindLocalTypeTextInteractor({
-                device: request.device,
-                signal: request.scope.signal,
-                resolveInteractor: host.localInteractors.resolve,
-              })
-            : {}),
-          ...whenAdmitted(facts.operations.tapPoint, () =>
-            bindLocalTouchInteractor({
-              facts: facts.operations,
-              device: request.device,
-              signal: request.scope.signal,
-              resolveInteractor: host.localInteractors.resolve,
-              pause: async (milliseconds) =>
-                await host.clock.sleep(milliseconds, request.scope.signal),
-            }),
-          ),
-          ...(facts.operations.readTextAtPoint.available
-            ? bindElementTextRuntime({
-                device: request.device,
-                signal: request.scope.signal,
-                resolveInteractor: host.localInteractors.resolve,
-              })
-            : {}),
+          ...androidInteractionOperations(host, request, facts),
           ...bindAdmittedLocalInteractorOperations({
             device: request.device,
             signal: request.scope.signal,
@@ -397,4 +409,39 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
     },
     shutdown: async () => await appLogs.shutdown(),
   });
+}
+
+/**
+ * The interactor-backed operations, each independently gated by its own admitted fact. Extracted
+ * for the same reason the Linux owner extracts its own: `bind` composes owners, it does not read
+ * facts one ternary at a time.
+ */
+function androidInteractionOperations(
+  host: PlatformRuntimeHost,
+  request: Parameters<PlatformRuntimeOwner['bind']>[0],
+  facts: RuntimeFacts<PlatformRuntimeOperations>,
+): Partial<DeviceBinding<PlatformRuntimeOperations>['operations']> {
+  const resolver = {
+    device: request.device,
+    signal: request.scope.signal,
+    resolveInteractor: host.localInteractors.resolve,
+  };
+  return {
+    ...(facts.operations.captureSnapshot.available ? bindLocalSnapshotInteractor(resolver) : {}),
+    ...(facts.operations.captureScreenshot.available
+      ? bindLocalScreenshotInteractor(resolver)
+      : {}),
+    ...(facts.operations.focusPoint.available ? bindLocalFocusInteractor(resolver) : {}),
+    ...bindLocalGestureInteractor({ ...resolver, facts: facts.operations }),
+    ...(facts.operations.scrollDirection.available ? bindLocalScrollInteractor(resolver) : {}),
+    ...(facts.operations.typeText.available ? bindLocalTypeTextInteractor(resolver) : {}),
+    ...whenAdmitted(facts.operations.tapPoint, () =>
+      bindLocalTouchInteractor({
+        ...resolver,
+        facts: facts.operations,
+        pause: async (milliseconds) => await host.clock.sleep(milliseconds, request.scope.signal),
+      }),
+    ),
+    ...(facts.operations.readTextAtPoint.available ? bindElementTextRuntime(resolver) : {}),
+  };
 }

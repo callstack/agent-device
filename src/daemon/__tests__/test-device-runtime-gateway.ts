@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import {
   type ApplicationLifecycleOperationFacts,
   applicationLifecycleOperationFacts,
@@ -8,7 +9,9 @@ import {
   localRuntimeOwner,
   narrowDeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
+import type { GesturePlanInput } from '@agent-device/contracts/gesture-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import type { ScrollDirectionInput } from '@agent-device/contracts/scroll-runtime';
 import {
   createRequestHandler as createProductionRequestHandler,
   type RequestRouterDeps,
@@ -73,12 +76,18 @@ async function lifecycleBindingForTest(device: DeviceInfo) {
         bootTargetHeadless: unavailable,
         listApps: unavailable,
         ...lifecycleFacts,
+        ...admittedGestureFamilyFacts,
       },
     },
-    operations: availableApplicationLifecycleOperations(
-      await applicationLifecycleRuntimeFixture(device),
-      lifecycleFacts,
-    ),
+    operations: {
+      ...availableApplicationLifecycleOperations(
+        await applicationLifecycleRuntimeFixture(device),
+        lifecycleFacts,
+      ),
+      // The gesture family rides along: replay flows drive `scroll`/`swipe` through this gateway,
+      // and R52/R53 put them on bound operations rather than the mocked dispatcher.
+      ...gestureRuntimeSpies,
+    },
     [Symbol.asyncDispose]: async () => {},
   };
 }
@@ -142,6 +151,55 @@ export const unavailableDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRunti
     }),
     shutdown: async () => {},
   });
+
+/**
+ * Spies for the gesture surface a router-level test drives. They replace the retired
+ * `dispatchGesturePlan` / `dispatchGestureViewport` module mocks: gestures now reach the platform
+ * through a bound operation, so the observation point is the operation, not the dispatcher.
+ */
+/** The gesture-family cells a gateway admits when it stands in for a working owner. */
+const admittedGestureFamilyFacts = Object.freeze({
+  captureSnapshot: available,
+  performGesturePlan: available,
+  performDirectionalFlingPlan: available,
+  performMultiTouchGesturePlan: available,
+  performTargetAuthoredDrag: available,
+  gestureViewport: available,
+  scrollDirection: available,
+});
+
+export const gestureRuntimeSpies = {
+  captureSnapshot: vi.fn(async () => ({ backend: 'xctest' as const, nodes: [] })),
+  performGesturePlan: vi.fn(async (_input: GesturePlanInput) => ({})),
+  performDirectionalFlingPlan: vi.fn(async (_input: GesturePlanInput) => ({})),
+  performMultiTouchGesturePlan: vi.fn(async (_input: GesturePlanInput) => ({})),
+  performTargetAuthoredDrag: vi.fn(async (_input: GesturePlanInput) => ({})),
+  gestureViewport: vi.fn(async () => ({ x: 0, y: 0, width: 390, height: 844 })),
+  scrollDirection: vi.fn(async (_input: ScrollDirectionInput) => ({})),
+};
+
+/** The unavailable gateway plus an admitted gesture/scroll surface. */
+export const gestureDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> =
+  Object.freeze({
+    inspectFacts: async (device) => (await gestureBinding(device)).facts,
+    bind: async (request) => await gestureBinding(request.device),
+    shutdown: async () => {},
+  });
+
+async function gestureBinding(device: DeviceInfo) {
+  const base = await unavailableBinding(device);
+  return {
+    ...base,
+    facts: {
+      ...base.facts,
+      operations: {
+        ...base.facts.operations,
+        ...admittedGestureFamilyFacts,
+      },
+    },
+    operations: { ...base.operations, ...gestureRuntimeSpies },
+  } as unknown as Awaited<ReturnType<DeviceRuntimeGateway<PlatformRuntimeOperations>['bind']>>;
+}
 
 async function unavailableBinding(device: DeviceInfo) {
   return await unavailableDeviceRuntimeGateway.bind({

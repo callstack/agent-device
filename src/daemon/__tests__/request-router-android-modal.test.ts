@@ -20,7 +20,11 @@ vi.mock('../../core/dispatch.ts', async (importOriginal) => {
   };
 });
 
-import { createRequestHandler } from './test-device-runtime-gateway.ts';
+import {
+  createRequestHandler,
+  gestureDeviceRuntimeGateway,
+  gestureRuntimeSpies,
+} from './test-device-runtime-gateway.ts';
 import type { SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
@@ -117,6 +121,7 @@ test('generic Android gesture commands dismiss blocking system dialogs during re
   dispatchResult = {};
   execCalls.length = 0;
   dispatchCalls.length = 0;
+  gestureRuntimeSpies.scrollDirection.mockClear();
 
   const sessionStore = makeSessionStore('agent-device-router-android-modal-');
   sessionStore.set('default', makeAndroidSession('default'));
@@ -130,6 +135,7 @@ test('generic Android gesture commands dismiss blocking system dialogs during re
     leaseRegistry: new LeaseRegistry(),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
+    deviceRuntimeGateway: gestureDeviceRuntimeGateway,
   });
 
   const response = await handler({
@@ -141,7 +147,13 @@ test('generic Android gesture commands dismiss blocking system dialogs during re
   });
 
   expect(response.ok).toBe(true);
-  expect(dispatchCalls).toEqual([['scroll', 'down', '0.55']]);
+  // R43: `scroll` reaches the device through its bound operation, so the dispatcher sees nothing.
+  expect(dispatchCalls).toEqual([]);
+  expect(gestureRuntimeSpies.scrollDirection).toHaveBeenCalledTimes(1);
+  expect(gestureRuntimeSpies.scrollDirection.mock.calls[0]?.[0]).toMatchObject({
+    direction: 'down',
+    options: { amount: 0.55 },
+  });
   expect(execCalls).toEqual([['-s', 'emulator-5554', 'shell', 'input', 'tap', '210', '640']]);
   expect(openAndroidApp).toHaveBeenCalledWith(
     expect.objectContaining({ id: 'emulator-5554' }),
@@ -153,9 +165,14 @@ test('generic Android gesture commands dismiss blocking system dialogs during re
 test('generic Android gesture commands continue when recording dialog inspection fails', async () => {
   snapshotCalls = 0;
   snapshotMode = 'throws';
-  dispatchResult = { warning: 'The platform response already carried a warning.' };
   execCalls.length = 0;
   dispatchCalls.length = 0;
+  gestureRuntimeSpies.scrollDirection.mockClear();
+  // The owner's own result is what the readiness warning has to merge with, so the bound
+  // operation carries it now that the dispatcher no longer executes this command.
+  gestureRuntimeSpies.scrollDirection.mockResolvedValueOnce({
+    warning: 'The platform response already carried a warning.',
+  });
 
   const sessionStore = makeSessionStore('agent-device-router-android-modal-');
   sessionStore.set('default', makeAndroidSession('default'));
@@ -170,6 +187,7 @@ test('generic Android gesture commands continue when recording dialog inspection
     leaseRegistry: new LeaseRegistry(),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
+    deviceRuntimeGateway: gestureDeviceRuntimeGateway,
   });
 
   const response = await handler({
@@ -181,7 +199,13 @@ test('generic Android gesture commands continue when recording dialog inspection
   });
 
   expect(response.ok).toBe(true);
-  expect(dispatchCalls).toEqual([['scroll', 'down', '0.55']]);
+  // R43: `scroll` reaches the device through its bound operation, so the dispatcher sees nothing.
+  expect(dispatchCalls).toEqual([]);
+  expect(gestureRuntimeSpies.scrollDirection).toHaveBeenCalledTimes(1);
+  expect(gestureRuntimeSpies.scrollDirection.mock.calls[0]?.[0]).toMatchObject({
+    direction: 'down',
+    options: { amount: 0.55 },
+  });
   expect(execCalls).toEqual([]);
   expect(openAndroidApp).not.toHaveBeenCalled();
   expect(snapshotCalls).toBe(1);
@@ -200,6 +224,7 @@ test('generic Android gesture commands skip local dialog recovery for provider d
   dispatchResult = {};
   execCalls.length = 0;
   dispatchCalls.length = 0;
+  gestureRuntimeSpies.scrollDirection.mockClear();
 
   const sessionStore = makeSessionStore('agent-device-router-android-modal-provider-');
   const session = makeAndroidSession('default');
@@ -223,6 +248,7 @@ test('generic Android gesture commands skip local dialog recovery for provider d
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     providerDeviceRuntimeScope: providers.providerDeviceRuntimeScope,
     trackDownloadableArtifact: () => 'artifact-id',
+    deviceRuntimeGateway: gestureDeviceRuntimeGateway,
   });
 
   const response = await handler({
@@ -234,7 +260,13 @@ test('generic Android gesture commands skip local dialog recovery for provider d
   });
 
   expect(response.ok).toBe(true);
-  expect(dispatchCalls).toEqual([['scroll', 'down', '0.55']]);
+  // R43: `scroll` reaches the device through its bound operation, so the dispatcher sees nothing.
+  expect(dispatchCalls).toEqual([]);
+  expect(gestureRuntimeSpies.scrollDirection).toHaveBeenCalledTimes(1);
+  expect(gestureRuntimeSpies.scrollDirection.mock.calls[0]?.[0]).toMatchObject({
+    direction: 'down',
+    options: { amount: 0.55 },
+  });
   expect(execCalls).toEqual([]);
   expect(snapshotCalls).toBe(0);
 });

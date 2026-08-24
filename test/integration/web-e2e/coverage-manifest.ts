@@ -157,7 +157,13 @@ export const WEB_PLATFORM_COVERAGE = {
     'back/home/orientation/tv-remote/keyboard never carried a web capability bucket',
     'the exact-owner runtime fact rejects native back navigation on the web target',
   ),
-  [C.gesture]: denial('Web capability model rejects touch gesture input'),
+  // R52/R54: the web refusal moved from the capability matrix to the web owner's own gesture
+  // facts, so the evidence is the cell test rather than a mechanical matrix denial.
+  [C.gesture]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'admits web scrolling and refuses every gesture tier',
+    'the web runtime owner declares every gesture tier unavailable',
+  ),
   [C.home]: contract(
     'packages/platform-web/src/runtime.test.ts',
     'back/home/orientation/tv-remote/keyboard never carried a web capability bucket',
@@ -178,7 +184,11 @@ export const WEB_PLATFORM_COVERAGE = {
     'scroll by pixels',
     'web scroll moves the provider-backed page by the requested pixels',
   ),
-  [C.swipe]: denial('Web capability model rejects touch swipe input'),
+  [C.swipe]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'admits web scrolling and refuses every gesture tier',
+    'swipe shares the gesture tiers the web runtime owner declares unavailable',
+  ),
   [C.focus]: contract(
     'src/core/__tests__/web-interactor.test.ts',
     'web interactor delegates first-slice operations to the scoped provider',

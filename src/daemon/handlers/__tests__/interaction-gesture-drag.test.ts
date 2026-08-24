@@ -7,15 +7,6 @@ import {
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { activateCompleteRefFrame, refFrameState } from '../../ref-frame.ts';
 
-vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return {
-    ...actual,
-    dispatchGestureViewport: vi.fn(async () => ({ x: 0, y: 0, width: 400, height: 800 })),
-    dispatchGesturePlan: vi.fn(async () => ({})),
-  };
-});
-
 vi.mock('../interaction-snapshot.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../interaction-snapshot.ts')>();
   return {
@@ -26,15 +17,14 @@ vi.mock('../interaction-snapshot.ts', async (importOriginal) => {
   };
 });
 
-import { dispatchGesturePlan } from '../../../core/dispatch.ts';
 import { handleInteractionCommands } from '../interaction.ts';
+import { gestureRuntimeBindingsFixture } from './gesture-runtime-bindings.fixtures.ts';
 
-const mockDispatchGesturePlan = vi.mocked(dispatchGesturePlan);
 const contextFromFlags = () => ({});
+let gestures = gestureRuntimeBindingsFixture();
 
 beforeEach(() => {
-  mockDispatchGesturePlan.mockClear();
-  mockDispatchGesturePlan.mockResolvedValue({});
+  gestures = gestureRuntimeBindingsFixture();
 });
 
 function makeDragSession(sessionName: string) {
@@ -96,6 +86,8 @@ async function runDrag(sessionStore: ReturnType<typeof makeSessionStore>, sessio
     sessionName,
     sessionStore,
     contextFromFlags,
+    inspectFacts: gestures.inspectFacts,
+    bindDevice: gestures.bindDevice,
   });
 }
 
@@ -129,7 +121,11 @@ test('recorded ref drag dispatches once and stores portable selectors with both 
     expect(response.data).not.toHaveProperty('selectorChain');
     expect(response.data).not.toHaveProperty('targetEvidence');
   }
-  expect(mockDispatchGesturePlan).toHaveBeenCalledTimes(1);
+  // ADR 0019 §9 regression guard: a drag resolves two targets and still takes exactly one
+  // inspection and one bind — the #1944 P1 shape.
+  expect(gestures.performTargetAuthoredDrag).toHaveBeenCalledTimes(1);
+  expect(gestures.inspectFacts).toHaveBeenCalledTimes(1);
+  expect(gestures.bindDevice).toHaveBeenCalledTimes(1);
   expect(refFrameState(session)).toBe('expired');
 
   const recorded = session.actions[0];
@@ -163,5 +159,5 @@ test('a second ref drag is rejected before dispatch after the first drag expires
       currentGeneration: 42,
     });
   }
-  expect(mockDispatchGesturePlan).toHaveBeenCalledTimes(1);
+  expect(gestures.performTargetAuthoredDrag).toHaveBeenCalledTimes(1);
 });

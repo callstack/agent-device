@@ -17,6 +17,10 @@ import type { SnapshotRuntimeHost, SnapshotRuntimeOperations } from './snapshot-
 import type { SelectorObservationRuntimeOperations } from './selector-observation-runtime.ts';
 import type { ViewportRuntimeOperations } from './viewport-runtime.ts';
 import type { FocusRuntimeOperations } from './focus-runtime.ts';
+import type { GestureCommandInput, GestureSemanticInput } from './gesture-plan-types.ts';
+import type { GestureRuntimeTier } from './gesture-tier.ts';
+import type { GestureRuntimeOperations } from './gesture-runtime.ts';
+import type { ScrollRuntimeOperations } from './scroll-runtime.ts';
 import type { TypeTextRuntimeOperations } from './type-text-runtime.ts';
 import type { ElementTextRuntimeOperations } from './element-text-runtime.ts';
 import type { BackRuntimeOperations } from './back-runtime.ts';
@@ -59,6 +63,8 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   SelectorObservationRuntimeOperations &
   ViewportRuntimeOperations &
   FocusRuntimeOperations &
+  GestureRuntimeOperations &
+  ScrollRuntimeOperations &
   TypeTextRuntimeOperations &
   ElementTextRuntimeOperations &
   BackRuntimeOperations &
@@ -167,6 +173,133 @@ export function resolveTouchRuntimePlan(
         ? { kind: 'captured-hover', use: capturedHoverUse }
         : { kind: 'hover-point', use: hoverPointUse };
   }
+}
+
+/**
+ * The gesture family's action-selected uses (ADR 0019 §9: one bind per handler). A gesture input
+ * needs exactly one execution tier, so each tier carries the complete requirement set and the
+ * handler binds once — for the whole `swipe --count N` series as much as for one `gesture pinch`.
+ *
+ * Every tier binds snapshot capture with its action because capture is the fallback when the owner
+ * has no direct viewport read. `gestureViewport` remains preferred.
+ */
+const gesturePlanUse = defineUse({
+  required: ['performGesturePlan', 'captureSnapshot'],
+  preferred: ['gestureViewport'],
+});
+const gestureDirectionalFlingUse = defineUse({
+  required: ['performDirectionalFlingPlan', 'captureSnapshot'],
+  preferred: ['gestureViewport'],
+});
+const gestureMultiTouchUse = defineUse({
+  required: ['performMultiTouchGesturePlan', 'captureSnapshot'],
+  preferred: ['gestureViewport'],
+});
+const gestureTargetAuthoredDragUse = defineUse({
+  required: ['performTargetAuthoredDrag', 'captureSnapshot'],
+  preferred: ['gestureViewport'],
+});
+
+/** `scroll <direction>` executes one pass and needs nothing else. */
+const scrollDirectionUse = defineUse({ required: ['scrollDirection'] });
+/**
+ * `scroll top` / `scroll bottom` verify hidden content between passes, so the capture is part of
+ * the tier's requirement rather than something discovered mid-run — the retired leaf's
+ * "requires snapshot support to verify hidden content before scrolling" refusal, moved to
+ * admission.
+ */
+const scrollEdgeUse = defineUse({ required: ['scrollDirection', 'captureSnapshot'] });
+
+const gestureUsesByTier = Object.freeze({
+  plan: gesturePlanUse,
+  'directional-fling': gestureDirectionalFlingUse,
+  'multi-touch': gestureMultiTouchUse,
+  'target-authored-drag': gestureTargetAuthoredDragUse,
+} as const);
+
+/** Every use `gesture` can select between; the descriptor declares the whole set. */
+export const gestureRuntimePlanUses = Object.freeze([
+  gesturePlanUse,
+  gestureDirectionalFlingUse,
+  gestureMultiTouchUse,
+  gestureTargetAuthoredDragUse,
+] as const);
+
+/** Public `swipe` always normalizes to a one-contact coordinate fling. */
+export const swipeRuntimePlanUses = Object.freeze([gesturePlanUse] as const);
+
+/** Every use `scroll` can select between. */
+export const scrollRuntimePlanUses = Object.freeze([scrollDirectionUse, scrollEdgeUse] as const);
+
+type GesturePlanFor<Tier extends GestureRuntimeTier> = Readonly<{
+  tier: Tier;
+  operation: GestureTierOperation<Tier>;
+  use: (typeof gestureUsesByTier)[Tier];
+}>;
+
+type GestureTierOperation<Tier extends GestureRuntimeTier> =
+  (typeof gestureUsesByTier)[Tier]['required'][0];
+
+export type GestureRuntimePlan = {
+  [Tier in GestureRuntimeTier]: GesturePlanFor<Tier>;
+}[GestureRuntimeTier];
+
+/** Selects the one owner-fact-backed gesture plan a normalized gesture input needs. */
+/** Two contacts are what pinch, rotate, transform, and an explicit two-pointer pan all need. */
+function isMultiTouchGesture(input: GestureSemanticInput): boolean {
+  if (input.intent === 'pan') return ('pointerCount' in input ? input.pointerCount : 1) === 2;
+  return input.intent === 'pinch' || input.intent === 'rotate' || input.intent === 'transform';
+}
+
+/** Selects the one tier a gesture input needs, so its handler binds exactly once (ADR 0019 §9). */
+function gestureRuntimeTier(input: GestureCommandInput): GestureRuntimeTier {
+  if (input.intent === 'drag') return 'target-authored-drag';
+  if (isMultiTouchGesture(input)) return 'multi-touch';
+  // A direction-authored fling carries speed semantics a coordinate fling does not, which is the
+  // one thing the Linux drag primitive cannot reproduce.
+  if (input.intent === 'fling' && 'direction' in input) return 'directional-fling';
+  return 'plan';
+}
+
+export function resolveGestureRuntimePlan(input: GestureCommandInput): GestureRuntimePlan {
+  const tier = gestureRuntimeTier(input);
+  switch (tier) {
+    case 'plan':
+      return gesturePlan(tier);
+    case 'directional-fling':
+      return gesturePlan(tier);
+    case 'multi-touch':
+      return gesturePlan(tier);
+    case 'target-authored-drag':
+      return gesturePlan(tier);
+  }
+}
+
+function gesturePlan<const Tier extends GestureRuntimeTier>(tier: Tier): GesturePlanFor<Tier> {
+  const use = gestureUsesByTier[tier];
+  return Object.freeze({
+    tier,
+    operation: use.required[0] as GestureTierOperation<Tier>,
+    use,
+  });
+}
+
+/**
+ * The edge travels WITH the discriminant so a caller that narrows to `edge` also has the edge
+ * itself — that is what lets its execution closure be typed on a binding whose `captureSnapshot`
+ * is non-optional, instead of widening both branches and re-proving the capture at runtime.
+ */
+export type ScrollRuntimePlan =
+  | Readonly<{ kind: 'direction'; use: typeof scrollDirectionUse }>
+  | Readonly<{ kind: 'edge'; edge: 'top' | 'bottom'; use: typeof scrollEdgeUse }>;
+
+/** `scroll top`/`scroll bottom` verify between passes; every other scroll executes one pass. */
+export function resolveScrollRuntimePlan(
+  input: Readonly<{ edge?: 'top' | 'bottom' }>,
+): ScrollRuntimePlan {
+  return input.edge === undefined
+    ? Object.freeze({ kind: 'direction', use: scrollDirectionUse } as const)
+    : Object.freeze({ kind: 'edge', edge: input.edge, use: scrollEdgeUse } as const);
 }
 const captureSnapshotWithCustomActionsUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithCustomActions'],

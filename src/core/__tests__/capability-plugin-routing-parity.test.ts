@@ -238,14 +238,7 @@ test('HarmonyOS static capabilities omit runtime-backed command admissions', () 
   // Runtime-backed navigation, keyboard, and touch commands dropped out of the matrix entirely:
   // capability buckets), so they are absent here — not because HarmonyOS admission changed, but
   // because there is no bucket left for `isCommandSupportedOnDevice` to consult at all.
-  assert.deepEqual(availableCommands, [
-    'app-switcher',
-    'gesture',
-    'perf',
-    'scroll',
-    'settings',
-    'swipe',
-  ]);
+  assert.deepEqual(availableCommands, ['app-switcher', 'perf', 'settings']);
 });
 
 test('(b.2) unsupportedHint closures are verbatim across the full device matrix', () => {

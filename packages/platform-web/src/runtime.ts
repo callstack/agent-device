@@ -15,6 +15,12 @@ import {
   bindLocalFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
+import { TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
+import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
+import {
+  bindLocalScrollInteractor,
+  scrollRuntimeOperationFacts,
+} from '@agent-device/contracts/scroll-runtime';
 import {
   localRuntimeOwner,
   sameRuntimeOwner,
@@ -108,6 +114,16 @@ function webAvailableFact(condition: boolean, unavailable: RuntimeOperationFact)
   return condition ? available : unavailable;
 }
 
+/** `gesture` and `swipe` never carried a web capability bucket; the browser drives no synthesis. */
+const gestureUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+} as const);
+const targetAuthoredDragUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
+} as const);
 const openTargetKindUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-device-kind',
@@ -258,6 +274,13 @@ function bindWebRuntime(
         pause: async (milliseconds) => await host.clock.sleep(milliseconds, signal),
       }),
     ),
+    ...(facts.operations.scrollDirection.available
+      ? bindLocalScrollInteractor({
+          device,
+          signal,
+          resolveInteractor: host.localInteractors.resolve,
+        })
+      : {}),
     ...(facts.operations.setViewport.available
       ? {
           setViewport: async (input) => {
@@ -346,6 +369,18 @@ function webRuntimeFacts(
         fill: browserDevice,
         fillRef: webOptionalOperationFact(interactor?.fillRef, browserDevice),
         tapElementSelector: readinessUnavailable,
+      }),
+      // `scroll` is the one gesture-family command the web overlay admitted
+      // (`WEB_INTERACTION_COMMANDS`), so it shares focus's `{ device: true }` cell. `gesture` and
+      // `swipe` never carried a web bucket, and the retired admission refused `platform === 'web'`
+      // outright. Drag is the exception it checked FIRST, by naming the phases an adapter needs.
+      ...scrollRuntimeOperationFacts({ scroll: browserDevice }),
+      ...gestureRuntimeOperationFacts({
+        plan: gestureUnavailable,
+        directionalFling: gestureUnavailable,
+        multiTouch: gestureUnavailable,
+        targetAuthoredDrag: targetAuthoredDragUnavailable,
+        viewport: gestureUnavailable,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: browserDevice }),
       // The web backend has no point-addressed read: `get` answers from the captured DOM tree,

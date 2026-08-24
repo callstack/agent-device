@@ -406,3 +406,78 @@ function expectLimrunNavigationAndKeyboardFacts(
     }
   }
 }
+
+// R52/R53: Limrun's two session kinds run different interactors. The Android emulator session
+// runs the ordinary Android interactor (every tier); the iOS direct session's own
+// `performGesture` refuses, so stating that as a fact refuses at admission instead of
+// mid-execution — with the interactor's wording preserved.
+const limrunAndroid = {
+  platform: 'android' as const,
+  id: 'limrun:android:lease-a',
+  name: 'Limrun Android',
+  kind: 'emulator' as const,
+  target: 'mobile' as const,
+  booted: true,
+};
+
+test('admits every gesture tier on a Limrun Android session', async () => {
+  const owner = createLimrunPlatformRuntimeOwner(
+    limrunOwnerOptions({ getInteractor: () => ({}) as never }),
+  );
+  const binding = await owner.bind({
+    device: limrunAndroid,
+    intent: { kind: 'ordinary' },
+    scope,
+  });
+  for (const operation of [
+    'performGesturePlan',
+    'performDirectionalFlingPlan',
+    'performMultiTouchGesturePlan',
+    'performTargetAuthoredDrag',
+    'gestureViewport',
+    'scrollDirection',
+  ] as const) {
+    expect(binding.facts.operations[operation]).toEqual({ available: true });
+    expect(binding.operations[operation]).toBeTypeOf('function');
+  }
+});
+
+test('refuses Limrun iOS gestures at admission while keeping its scroll', async () => {
+  const owner = createLimrunPlatformRuntimeOwner(
+    limrunOwnerOptions({ getInteractor: () => ({}) as never }),
+  );
+  const binding = await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
+  for (const operation of [
+    'performGesturePlan',
+    'performDirectionalFlingPlan',
+    'performMultiTouchGesturePlan',
+    'performTargetAuthoredDrag',
+    'gestureViewport',
+  ] as const) {
+    expect(binding.facts.operations[operation]).toEqual({
+      available: false,
+      reason: 'unsupported-provider-mode',
+      hint: 'Limrun iOS direct sessions do not expose portable gesture execution yet.',
+    });
+    expect(binding.operations[operation]).toBeUndefined();
+  }
+  // The iOS direct session exposes scrolling directly — no gesture synthesis involved.
+  expect(binding.facts.operations.scrollDirection).toEqual({ available: true });
+  expect(binding.operations.scrollDirection).toBeTypeOf('function');
+});
+
+test('closes every Limrun gesture and scroll cell without a live session', async () => {
+  const owner = createLimrunPlatformRuntimeOwner(
+    limrunOwnerOptions({ getInteractor: () => ({}) as never, hasLiveSession: () => false }),
+  );
+  const facts = await owner.inspectFacts(limrunAndroid);
+  for (const operation of [
+    'performGesturePlan',
+    'performMultiTouchGesturePlan',
+    'performTargetAuthoredDrag',
+    'gestureViewport',
+    'scrollDirection',
+  ] as const) {
+    expect(facts.operations[operation].available).toBe(false);
+  }
+});

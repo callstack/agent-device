@@ -1,4 +1,3 @@
-import type { CommandCapability } from '../capabilities.ts';
 // The typed-flags request from contracts/, not the daemon's server-side refinement: these
 // descriptors read `command`, `positionals` and `flags` and never touch `internal`.
 import type { DispatchedCommand } from '@agent-device/contracts/command';
@@ -36,6 +35,7 @@ import {
   fillRuntimeUses,
   findRuntimePlanUses,
   focusRuntimeUse,
+  gestureRuntimePlanUses,
   homeRuntimeUse,
   hoverRuntimeUses,
   keyboardRuntimePlanUses,
@@ -43,6 +43,8 @@ import {
   orientationRuntimeUse,
   pressRuntimeUses,
   screenshotRuntimePlanUses,
+  scrollRuntimePlanUses,
+  swipeRuntimePlanUses,
   selectorCaptureRuntimePlanUses,
   selectorTextCaptureRuntimePlanUses,
   shutdownTargetUse,
@@ -241,11 +243,6 @@ const ANDROID_ALL = { emulator: true, device: true, unknown: true };
 const LINUX_DEVICE = { device: true };
 const LINUX_NONE = {};
 
-const ALL_DEVICE_COMMAND_CAPABILITY = {
-  apple: APPLE_SIM_AND_DEVICE,
-  android: ANDROID_ALL,
-  linux: LINUX_DEVICE,
-} satisfies CommandCapability;
 // ---------------------------------------------------------------------------
 // ADR 0019 §6 platform-execution modes. Every descriptor declares one; there is
 // no registry-entry default (see `readDeclaredPlatformExecution`).
@@ -261,10 +258,9 @@ const NO_PLATFORM_EXECUTION = { kind: 'none' } as const;
 const LEGACY_PLATFORM_EXECUTION = { kind: 'legacy' } as const;
 
 /**
- * The daemon/recording traits every generic-route mutating command shares, migrated or not.
- * Split from the legacy execution pair (`dispatch`/`capability`, see
- * {@link LEGACY_LINUX_DEVICE_EXECUTION}) so a migrated descriptor spreads this alone instead of
- * hand-expanding it minus the two fields migration strips.
+ * The daemon/recording traits every generic-route mutating command shares. The legacy execution
+ * pair it was split from (`dispatch`/`capability`) is gone: `scroll` was its last consumer, and
+ * R53 migrated it, so every generic-route mutating command now spreads this alone.
  */
 const GENERIC_MUTATING_COMMAND_TRAITS = {
   recordsSessionAction: true,
@@ -285,19 +281,6 @@ const GENERIC_MUTATING_COMMAND_TRAITS = {
   | 'daemon'
   | 'timeoutPolicy'
   | 'batchable'
->;
-
-/**
- * The legacy `dispatch`/`capability` pair a still-unmigrated generic-route mutating command
- * carries alongside {@link GENERIC_MUTATING_COMMAND_TRAITS}; migration strips both together (one
- * owner fact replaces the capability bucket, one bound operation replaces the dispatch leaf).
- */
-const LEGACY_LINUX_DEVICE_EXECUTION = {
-  dispatch: {},
-  capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-} as const satisfies Pick<
-  Extract<CommandDescriptor, { recordsSessionAction: true }>,
-  'dispatch' | 'capability'
 >;
 
 // click/fill/press/longpress differ only in their timeout budget and response
@@ -1268,10 +1251,12 @@ export const RAW_COMMAND_DESCRIPTORS = [
       refFrameEffect: 'may-invalidate',
       androidBlockingDialogGuard: true,
     },
-    capability: ALL_DEVICE_COMMAND_CAPABILITY,
+    // R52 retires this command's capability bucket: admission is the owner's gesture-tier facts,
+    // which the retired `requireGestureSupported` used to decide inside the daemon. The declared
+    // uses are the four tiers one gesture input can select between (ADR 0019 §9).
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: gestureRuntimePlanUses },
   },
   {
     name: 'home',
@@ -1305,14 +1290,16 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'scroll',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/scroll-runtime.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
+    // R53 retires this command's capability bucket and its `dispatch` leaf together: admission is
+    // the owner's `scrollDirection` fact, and the only execution is the bound operation. `scroll`
+    // was the last holder of the legacy `dispatch`/`capability` pair, which retires with it.
     ...GENERIC_MUTATING_COMMAND_TRAITS,
-    ...LEGACY_LINUX_DEVICE_EXECUTION,
     timeoutPolicy: postActionObservationTimeoutPolicy('scroll', DEFAULT_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('scroll'),
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: scrollRuntimePlanUses },
   },
   {
     name: 'swipe',
@@ -1327,10 +1314,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
       refFrameEffect: 'may-invalidate',
       androidBlockingDialogGuard: true,
     },
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
+    // R54 retires this command's capability bucket. A swipe always normalizes to a coordinate
+    // fling, so it declares only the one-contact plan it can select.
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: swipeRuntimePlanUses },
   },
   {
     name: 'focus',

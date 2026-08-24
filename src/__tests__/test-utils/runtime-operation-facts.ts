@@ -1,7 +1,9 @@
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
+import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
+import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
 import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 
@@ -44,6 +46,14 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
     fill: unavailable,
     tapElementSelector: unavailable,
   }),
+  ...gestureRuntimeOperationFacts({
+    plan: unavailable,
+    directionalFling: unavailable,
+    multiTouch: unavailable,
+    targetAuthoredDrag: unavailable,
+    viewport: unavailable,
+  }),
+  ...scrollRuntimeOperationFacts({ scroll: unavailable }),
   ...elementTextRuntimeOperationFacts({ readTextAtPoint: unavailable }),
   back: unavailable,
   home: unavailable,

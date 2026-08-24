@@ -18,6 +18,8 @@ import {
   bindLocalFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
+import { bindLocalGestureInteractor } from '@agent-device/contracts/gesture-runtime';
+import { bindLocalScrollInteractor } from '@agent-device/contracts/scroll-runtime';
 import { localRuntimeOwner, whenAdmitted } from '@agent-device/contracts/platform-runtime';
 import {
   bindLocalScreenshotInteractor,
@@ -40,6 +42,7 @@ import {
   resolveDeviceAppleOs,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
+import { appleGestureAndScrollFacts } from './gesture-facts.ts';
 import { createAppleAppLogRuntime } from './logs/runtime.ts';
 import { dumpAppleNetworkTraffic } from './network/runtime.ts';
 import {
@@ -282,6 +285,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: appleFocusFact(device) }),
+        ...appleGestureAndScrollFacts(device),
         // Text entry rides the same interactor authority the point focus does, so it shares the
         // exact kind cell (parity with the retired `type` bucket, `{ simulator, device }`).
         ...typeTextRuntimeOperationFacts({ type: appleFocusFact(device) }),
@@ -346,6 +350,19 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ),
         ...whenAdmitted(facts.operations.focusPoint, () =>
           bindLocalFocusInteractor({
+            device: request.device,
+            signal: request.scope.signal,
+            resolveInteractor: host.localInteractors.resolve,
+          }),
+        ),
+        ...bindLocalGestureInteractor({
+          device: request.device,
+          signal: request.scope.signal,
+          facts: facts.operations,
+          resolveInteractor: host.localInteractors.resolve,
+        }),
+        ...whenAdmitted(facts.operations.scrollDirection, () =>
+          bindLocalScrollInteractor({
             device: request.device,
             signal: request.scope.signal,
             resolveInteractor: host.localInteractors.resolve,

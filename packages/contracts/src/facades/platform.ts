@@ -224,6 +224,11 @@ export {
   waitSelectorCaptureRuntimePlanUses,
   findRuntimePlanUses,
   focusRuntimeUse,
+  gestureRuntimePlanUses,
+  resolveGestureRuntimePlan,
+  resolveScrollRuntimePlan,
+  scrollRuntimePlanUses,
+  swipeRuntimePlanUses,
   typeTextRuntimeUse,
   viewportRuntimeUse,
   backRuntimeUse,
@@ -236,7 +241,9 @@ export {
   keyboardEnterUse,
 } from '../platform-runtime-operations.ts';
 export type {
+  GestureRuntimePlan,
   ScreenshotRuntimePlan,
+  ScrollRuntimePlan,
   SelectorCaptureRuntimeIntent,
   SelectorCaptureRuntimePlan,
   SnapshotRuntimePlan,
@@ -431,6 +438,7 @@ export type {
   LocalKeyboardInteractorResolver,
   ProviderKeyboardInteractorResolver,
 } from '../keyboard-runtime.ts';
+export { APPLE_MULTI_TOUCH_UNSUPPORTED_HINTS } from '../apple-multitouch-support.ts';
 export { viewportRuntimeOperationFacts } from '../viewport-runtime.ts';
 export type {
   SetViewportInput,

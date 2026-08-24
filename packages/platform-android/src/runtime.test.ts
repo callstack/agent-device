@@ -443,3 +443,83 @@ function expectLifecycleFacts(
     }
   }
 }
+
+// R52/R53: the Android gesture-tier and scroll cells. The one gate the retired
+// `requireGestureSupported` carried on Android was the TV target, which it applied to two-contact
+// synthesis and to target-authored drag but never to a plain one-contact fling or pan.
+test.each([
+  // name, device, plan, multiTouch, drag, scroll
+  ['emulator', device, true, true, true, true],
+  ['physical device', { ...device, kind: 'device' as const }, true, true, true, true],
+  ['unknown kind', unknownKindDevice, true, true, true, true],
+  ['TV target', { ...device, target: 'tv' as const }, true, false, false, true],
+  [
+    'synthetic simulator row',
+    { ...device, kind: 'simulator' as const },
+    false,
+    false,
+    false,
+    false,
+  ],
+])(
+  'declares the Android %s gesture and scroll cells',
+  async (_name, runtimeDevice, plan, multiTouch, drag, scroll) => {
+    const facts = await createAndroidPlatformRuntime(gestureHost()).inspectFacts(runtimeDevice);
+    expect(facts.operations.performGesturePlan.available).toBe(plan);
+    // Android honors a direction-authored fling's speed semantics, so it shares the plan cell.
+    expect(facts.operations.performDirectionalFlingPlan.available).toBe(plan);
+    expect(facts.operations.performMultiTouchGesturePlan.available).toBe(multiTouch);
+    expect(facts.operations.performTargetAuthoredDrag.available).toBe(drag);
+    expect(facts.operations.gestureViewport.available).toBe(plan);
+    expect(facts.operations.scrollDirection.available).toBe(scroll);
+  },
+);
+
+test('carries the retired Android TV hints verbatim', async () => {
+  const facts = await createAndroidPlatformRuntime(gestureHost()).inspectFacts({
+    ...device,
+    target: 'tv',
+  });
+  expect(facts.operations.performMultiTouchGesturePlan).toEqual({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+    hint: 'Android TV has no touch input — this gesture is supported on Android phones, tablets, and the iOS simulator only.',
+  });
+  expect(facts.operations.performTargetAuthoredDrag).toMatchObject({
+    available: false,
+    hint: expect.stringContaining('source hold, timed movement, and destination hold'),
+  });
+});
+
+test('binds only the Android gesture tiers the target admitted', async () => {
+  const bind = async (runtimeDevice: DeviceInfo) =>
+    await createAndroidPlatformRuntime(gestureHost()).bind({
+      device: runtimeDevice,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+  const phone = await bind(device);
+  expect(phone.operations.performMultiTouchGesturePlan).toBeTypeOf('function');
+  expect(phone.operations.scrollDirection).toBeTypeOf('function');
+  const tv = await bind({ ...device, target: 'tv' });
+  expect(tv.operations.performGesturePlan).toBeTypeOf('function');
+  expect(tv.operations.performMultiTouchGesturePlan).toBeUndefined();
+  expect(tv.operations.performTargetAuthoredDrag).toBeUndefined();
+});
+
+function gestureHost(): PlatformRuntimeHost {
+  return {
+    processTransports: { resolve: async () => ({ mode: 'local' as const }) },
+    appInventory: {
+      apple: { listApps: async () => [] },
+      android: { listApps: async () => [] },
+      harmonyos: { listApps: async () => [] },
+    },
+    localInteractors: { resolve: async () => ({}) },
+    screenRecording: { android: { resolve: async () => ({ mode: 'local' as const }) } },
+  } as unknown as PlatformRuntimeHost;
+}

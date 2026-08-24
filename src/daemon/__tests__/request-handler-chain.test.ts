@@ -11,6 +11,8 @@ import { makeIosSession, makeSession } from '../../__tests__/test-utils/session-
 import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { dispatchSwipeViaRuntime } from '../handlers/interaction-gesture.ts';
+import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
+import { createRequestRuntimeBindings } from '../request-runtime-binding.ts';
 import {
   createLocalLinuxToolProvider,
   withLinuxToolProvider,
@@ -160,7 +162,26 @@ test('duration-less public coordinate swipe retains Linux drag behavior', async 
   const sessionStore = makeSessionStore('agent-device-linux-swipe-');
   sessionStore.set('linux-swipe', makeSession('linux-swipe', { device: LINUX_DEVICE }));
   const drags: number[][] = [];
+  let captureCount = 0;
   const provider = createLocalLinuxToolProvider({
+    accessibility: {
+      captureTree: async () => {
+        captureCount += 1;
+        return {
+          nodes: [
+            {
+              index: 0,
+              depth: 0,
+              type: 'Application',
+              rect: { x: 0, y: 0, width: 200, height: 200 },
+              visibleToUser: true,
+            },
+          ],
+          truncated: false,
+          surface: 'desktop',
+        };
+      },
+    },
     input: {
       click: async () => {},
       doubleClick: async () => {},
@@ -174,10 +195,38 @@ test('duration-less public coordinate swipe retains Linux drag behavior', async 
     },
   });
 
+  // R44: swipe binds its gesture tier before executing, so this drives the REAL Linux owner
+  // through the composed gateway. Linux advertises no `gestureViewport`, so the coordinate frame
+  // still comes from the capture below — the preferred-operation fallback, unchanged.
+  const gateway = createPlatformRuntimeGateway({
+    resolveSessionArtifacts: () => ({
+      outputPath: '/sessions/linux-swipe/app.log',
+      pidPath: '/sessions/linux-swipe/app-log.pid',
+    }),
+    sessionsDir: '/sessions',
+  });
+  let bindCount = 0;
+  const bindings = createRequestRuntimeBindings({
+    gateway: {
+      ...gateway,
+      bind: async (request) => {
+        bindCount += 1;
+        return await gateway.bind(request);
+      },
+    },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+    admitDeviceClaim: async () => {},
+  });
   const response = await withLinuxToolProvider(
     provider,
     async () =>
       await dispatchSwipeViaRuntime({
+        inspectFacts: bindings.inspectFacts,
+        bindDevice: bindings.bindDevice,
         req: {
           ...makeRequest('swipe'),
           session: 'linux-swipe',
@@ -186,14 +235,11 @@ test('duration-less public coordinate swipe retains Linux drag behavior', async 
         sessionName: 'linux-swipe',
         sessionStore,
         contextFromFlags: () => ({}),
-        captureSnapshotForSession: async () =>
-          makeSnapshotState([
-            {
-              index: 0,
-              rect: { x: 0, y: 0, width: 200, height: 200 },
-              visibleToUser: true,
-            },
-          ]),
+        captureSnapshotForSession: async (_session, _flags, _store, _context, options) => {
+          assert.ok(options.boundCapture);
+          const captured = await options.boundCapture({ options: { surface: 'desktop' } });
+          return makeSnapshotState(captured.nodes ?? []);
+        },
       }),
   );
 
@@ -202,6 +248,8 @@ test('duration-less public coordinate swipe retains Linux drag behavior', async 
   assert.ok(response.data);
   assert.equal(response.data.kind, 'fling');
   assert.equal(response.data.durationMs, 100);
+  assert.equal(bindCount, 1);
+  assert.equal(captureCount, 1);
   assert.deepEqual(drags, [[10, 20, 110, 20, 100]]);
 });
 
