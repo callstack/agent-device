@@ -2,6 +2,7 @@ import {
   attachRefs,
   type RawSnapshotNode,
   type SnapshotState,
+  type SnapshotStateProvenance,
 } from '@agent-device/kernel/snapshot';
 
 export function buildNodes(raw: RawSnapshotNode[]) {
@@ -10,7 +11,9 @@ export function buildNodes(raw: RawSnapshotNode[]) {
 
 export function makeSnapshotState(
   raw: RawSnapshotNode[],
-  overrides?: Partial<SnapshotState>,
+  // The provenance pair stays correlated: overrides carry it as one value, never as two
+  // independently typed fields.
+  overrides?: Omit<Partial<SnapshotState>, 'backend' | 'producer'> & SnapshotStateProvenance,
 ): SnapshotState {
   return {
     nodes: attachRefs(raw),

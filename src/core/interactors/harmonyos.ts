@@ -45,7 +45,7 @@ export function createHarmonyInteractor(device: DeviceInfo, _runner?: RunnerCont
         async () => await snapshotHarmony(device, options),
         { backend: 'harmonyos-arkui' },
       );
-      return { ...result, backend: 'harmonyos-arkui' };
+      return { ...result, backend: 'harmonyos-arkui', producer: 'harmonyos-uitest' };
     },
     back: () => backHarmony(device),
     home: () => homeHarmony(device),

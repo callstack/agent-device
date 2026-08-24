@@ -246,6 +246,7 @@ async function captureAppleRunnerSnapshot(
     nodes,
     truncated: result.truncated ?? false,
     backend: 'xctest' as const,
+    producer: 'apple-runner' as const,
     ...(result.quality ? { quality: result.quality } : {}),
     // Legacy runners without a quality verdict still surface their message text.
     ...(!result.quality && result.message ? { warnings: [result.message] } : {}),

@@ -10,12 +10,11 @@ import type {
   SettleObservation,
   InteractionPathId,
 } from '@agent-device/contracts/interaction';
-import { isApplePlatform } from '@agent-device/kernel/device';
 import {
+  stripInternalInteractionDiagnostics,
   transformInteractionResponseData,
   type InteractionResponseDataTransformCommand,
 } from '../../core/interaction-response-data-transform.ts';
-import { normalizeAppleRunnerResultForResponse } from '../../platforms/apple/core/runner/runner-result-response-normalization.ts';
 import { issueSettleRefs } from '../session-snapshot.ts';
 import type { RecordedTargetCapture } from '../session-target-evidence.ts';
 import type { SessionState } from '../types.ts';
@@ -315,19 +314,15 @@ export async function buildTargetedTouchResponsePayloads(params: {
 }
 
 export function transformTouchResponseData(params: {
-  session: SessionState;
   command?: InteractionResponseDataTransformCommand;
   flags: CommandFlags | undefined;
   data: Record<string, unknown> | undefined;
 }): Record<string, unknown> | undefined {
-  const base = isApplePlatform(params.session.device.platform)
-    ? normalizeAppleRunnerResultForResponse(params.data)
-    : params.data;
-  if (!params.command) return base;
+  if (!params.command) return stripInternalInteractionDiagnostics(params.data);
   return transformInteractionResponseData({
     command: params.command,
     input: params.flags as Record<string, unknown> | undefined,
-    data: base,
+    data: params.data,
   });
 }
 

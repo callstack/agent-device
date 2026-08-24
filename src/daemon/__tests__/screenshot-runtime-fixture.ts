@@ -73,7 +73,11 @@ export function screenshotRuntimeFixture(
   });
   const captureSnapshot = vi.fn(
     async (input: CaptureSnapshotInput): Promise<SnapshotResult> =>
-      options.snapshotResult?.(input) ?? { nodes: [], backend: 'android' },
+      options.snapshotResult?.(input) ?? {
+        nodes: [],
+        backend: 'android',
+        producer: 'android-uiautomator',
+      },
   );
   const tapPoint = vi.fn(async (_input: TapPointInput) => ({}));
   // R43: `scroll` is the neighbouring command the device-lock tests use to prove serialization,

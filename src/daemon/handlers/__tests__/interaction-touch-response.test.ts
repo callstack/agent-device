@@ -2,6 +2,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction.ts';
+import { transformTouchResponseData } from '../interaction-touch-response.ts';
 import {
   getRuntimeBindings,
   mockFillPoint,
@@ -72,6 +73,21 @@ beforeEach(() => {
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
 
+test('commandless longpress response omits internal interaction diagnostics', () => {
+  expect(
+    transformTouchResponseData({
+      flags: {},
+      data: {
+        currentUptimeMs: 900,
+        gestureStartUptimeMs: 100,
+        gestureEndUptimeMs: 800,
+        sequenceResults: [{ index: 0, success: true }],
+        completedSteps: 1,
+      },
+    }),
+  ).toEqual({ completedSteps: 1 });
+});
+
 test('press @ref --verify surfaces evidence through the interactionResultExtra allowlist', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'verify-press';
@@ -114,6 +130,7 @@ test('press @ref --verify surfaces evidence through the interactionResultExtra a
       },
     ],
     backend: 'xctest',
+    producer: 'apple-runner',
   });
 
   const response = await handleInteractionCommands({
@@ -229,6 +246,7 @@ test('fill selector --verify surfaces evidence through the interactionResultExtr
       },
     ],
     backend: 'xctest',
+    producer: 'apple-runner',
   });
 
   const response = await handleInteractionCommands({
@@ -297,6 +315,7 @@ test('fill @ref --verify surfaces evidence in the ref response branch', async ()
       },
     ],
     backend: 'xctest',
+    producer: 'apple-runner',
   });
 
   const response = await handleInteractionCommands({

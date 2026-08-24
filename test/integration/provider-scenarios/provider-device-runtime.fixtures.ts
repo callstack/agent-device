@@ -435,6 +435,7 @@ function createFakeProviderInteractor(device: DeviceInfo, calls: FakeProviderCal
         });
         return {
           backend: 'android',
+          producer: 'android-uiautomator',
           nodes: [
             {
               index: 0,

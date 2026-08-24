@@ -89,6 +89,7 @@ function waitRuntimeHarness(
       : {
           nodes: polls[Math.min(pollIndex++, polls.length - 1)] ?? [],
           backend: 'web',
+          producer: 'agent-browser',
         },
   );
   const findTextFact = options.findText ?? findTextUnavailable;

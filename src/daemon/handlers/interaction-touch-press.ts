@@ -129,7 +129,6 @@ function buildTargetedRuntimeOptions(
         result,
         staleRefsWarning,
         publicData: transformTouchResponseData({
-          session,
           command: command === 'longpress' || command === 'hover' ? undefined : command,
           flags: req.flags,
           data: result.backendResult,

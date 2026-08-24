@@ -55,6 +55,7 @@ test('Apple snapshot host preserves non-app macOS surface capture and menubar id
     nodes: [{ index: 0, depth: 0, type: 'MenuBar', label: 'System menu' }],
     truncated: false,
     backend: 'macos-helper',
+    producer: 'macos-helper',
   });
 });
 
@@ -79,6 +80,7 @@ test('Linux snapshot host preserves interactive ancestor projection before depth
   expect(snapshotLinux).toHaveBeenCalledWith('desktop', signal);
   expect(result).toEqual({
     backend: 'linux-atspi',
+    producer: 'linux-atspi',
     truncated: false,
     nodes: [
       { index: 0, depth: 0, type: 'Application', label: 'App', parentIndex: undefined },

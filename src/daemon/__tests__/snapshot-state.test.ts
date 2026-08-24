@@ -43,6 +43,22 @@ test('buildSnapshotState carries structured snapshot quality verdicts', () => {
   });
 });
 
+// One channel, several producers: the state must keep who acquired the tree, not just where
+// it came from (an `xctest`-channel tree here is an Appium page-source acquisition).
+test('buildSnapshotState carries the acquisition producer beside the channel', () => {
+  const state = buildSnapshotState(
+    {
+      nodes: [{ index: 0, type: 'Application' }],
+      backend: 'xctest',
+      producer: 'appium-source',
+    },
+    undefined,
+  );
+
+  expect(state.backend).toBe('xctest');
+  expect(state.producer).toBe('appium-source');
+});
+
 test('buildSnapshotState preserves Android effective geometry for post-wire consumers', () => {
   const xml = `<hierarchy>
   <node class="android.widget.FrameLayout" bounds="[0,0][400,800]" visible-to-user="true">

@@ -280,8 +280,11 @@ class WebDriverInteractor implements Interactor {
 
   async snapshot(_options?: SnapshotOptions): Promise<SnapshotResult> {
     this.requireSupport('snapshot');
+    // Spelled as a correlated pair per channel so the SnapshotProvenance union accepts it.
     return {
-      backend: this.backend,
+      ...(this.backend === 'xctest'
+        ? { backend: 'xctest' as const, producer: 'appium-source' as const }
+        : { backend: 'android' as const, producer: 'appium-source' as const }),
       nodes: parseWebDriverSource(await this.client.source()),
     };
   }

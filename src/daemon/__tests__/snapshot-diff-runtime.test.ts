@@ -27,6 +27,7 @@ const unavailable = Object.freeze({
 
 const baseCapture: SnapshotResult = Object.freeze({
   backend: 'android',
+  producer: 'android-uiautomator',
   nodes: [{ index: 0, depth: 0, type: 'Button', label: 'Before' }],
   truncated: false,
 });

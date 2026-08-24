@@ -34,6 +34,7 @@ export type AndroidSnapshotCapture = AndroidSnapshotCaptureData & {
 
 export type AndroidSnapshotPublicationInput = AndroidSnapshotCaptureData & {
   backend: Extract<SnapshotBackend, 'android'>;
+  producer: 'android-uiautomator';
 };
 
 export function createAndroidSnapshotCapture(
@@ -48,7 +49,11 @@ export function createAndroidSnapshotCapture(
 export function androidSnapshotPublicationInput(
   capture: AndroidSnapshotCapture,
 ): AndroidSnapshotPublicationInput {
-  const publication: AndroidSnapshotPublicationInput = { ...capture, backend: 'android' };
+  const publication: AndroidSnapshotPublicationInput = {
+    ...capture,
+    backend: 'android',
+    producer: 'android-uiautomator',
+  };
   const evidence = capture[androidCaptureEvidence];
   attachSnapshotClickabilityEvidence(publication, evidence.clickability);
   if (evidence.occlusionContext) {

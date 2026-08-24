@@ -79,6 +79,7 @@ test.each([
   async ({ device, legacy }) => {
     const captureSurface = vi.fn(async () => ({
       backend: 'linux-atspi' as const,
+      producer: 'linux-atspi' as const,
       nodes: [],
       truncated: false,
     }));
@@ -144,6 +145,7 @@ test.each([
 function lifecycleHost(
   captureSurface: SnapshotRuntimeHost['captureSurface'] = async () => ({
     backend: 'linux-atspi' as const,
+    producer: 'linux-atspi' as const,
     nodes: [],
     truncated: false,
   }),
@@ -209,6 +211,7 @@ function expectLinuxNavigationAndKeyboardFacts(
 test('the Linux surface capture composes the per-capture signal with the request scope signal', async () => {
   const captureSurface = vi.fn<SnapshotRuntimeHost['captureSurface']>(async () => ({
     backend: 'linux-atspi' as const,
+    producer: 'linux-atspi' as const,
     nodes: [],
     truncated: false,
   }));

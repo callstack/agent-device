@@ -36,12 +36,16 @@ test('wait text passes its poll deadline signal to the Apple runner fast path', 
       await new Promise((resolve) => {
         observedSignal = input.signal;
         if (input.signal?.aborted) {
-          resolve({ backend: 'xctest', nodes: [] });
+          resolve({ backend: 'xctest', producer: 'apple-runner', nodes: [] });
           return;
         }
-        input.signal?.addEventListener('abort', () => resolve({ backend: 'xctest', nodes: [] }), {
-          once: true,
-        });
+        input.signal?.addEventListener(
+          'abort',
+          () => resolve({ backend: 'xctest', producer: 'apple-runner', nodes: [] }),
+          {
+            once: true,
+          },
+        );
       }),
   );
   const runtime = createSelectorRuntimeForDevice({
@@ -96,6 +100,7 @@ test('daemon wait stable pins private-ax on emitted snapshot runner requests', a
   sessionStore.set(sessionName, session);
   const capture = vi.fn(async (_input: CaptureSnapshotInput): Promise<SnapshotResult> => ({
     backend: 'xctest',
+    producer: 'apple-runner',
     nodes,
     quality: {
       state: 'recovered',

@@ -257,7 +257,7 @@ class LimrunIosInteractor implements Interactor {
   async snapshot(_options?: SnapshotOptions): Promise<SnapshotResult> {
     const treeJson = await this.session.client.elementTree();
     const parsed = JSON.parse(treeJson) as IosTreeNode | IosTreeNode[];
-    return { nodes: flattenIosTree(parsed), backend: 'xctest' };
+    return { nodes: flattenIosTree(parsed), backend: 'xctest', producer: 'limrun-ios-tree' };
   }
 
   async back(): Promise<void> {

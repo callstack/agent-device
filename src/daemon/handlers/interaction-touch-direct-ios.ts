@@ -46,7 +46,6 @@ export async function dispatchDirectIosSelectorTap(
     const actionFinishedAt = Date.now();
     const point = readPointFromDirectSelectorTapResult(data);
     const publicData = transformTouchResponseData({
-      session,
       command: readInteractionResponseDataTransformCommand(handlerParams.req.command, 'press'),
       flags: handlerParams.req.flags,
       data,
