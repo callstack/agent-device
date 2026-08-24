@@ -308,19 +308,44 @@ test('a provider owner that cannot capture fails closed instead of borrowing the
 // the SAME binding rather than reaching a second capture owner.
 // ---------------------------------------------------------------------------
 
+/**
+ * The 1ms timeout races the real clock: on a loaded CI host the first capture can take longer
+ * than 1ms to resolve, so `runWithinWaitDeadline` classifies it `capture-stalled` (or, once a
+ * later poll is readable, `capture-truncated`) instead of a completed target-absent poll, and
+ * `maybeWaitTimeoutSurfaceResponse` skips the decoration outright (see wait-current-surface.ts).
+ * A fake clock removes the race the same way `runFill` does in
+ * packages/provider-webdriver/src/webdriver-interactor.test.ts: virtual time only advances when
+ * `advanceTimersByTimeAsync` says so, so the mocked (instant, non-timer) capture always resolves
+ * before the deadline timer is due, on any host (docs/agents/testing.md: production time must
+ * never be real time in tests).
+ */
 test('a timed-out wait decorates its failure through the same single binding', async () => {
-  const harness = waitRuntimeHarness({
-    nodesPerPoll: [[{ index: 0, depth: 0, type: 'Button', label: 'Checkout', hittable: true }]],
-  });
+  vi.useFakeTimers();
+  try {
+    const harness = waitRuntimeHarness({
+      nodesPerPoll: [[{ index: 0, depth: 0, type: 'Button', label: 'Checkout', hittable: true }]],
+    });
 
-  const { response } = await runWait(['text', 'Ready', '1'], harness);
+    // Settled-shaped from the start: a rejection that lands while the clock is being advanced
+    // would otherwise be unhandled until the await below.
+    const pending = runWait(['text', 'Ready', '1'], harness).then(
+      (value) => ({ rejected: false, value }) as const,
+      (error: unknown) => ({ rejected: true, error }) as const,
+    );
+    await vi.advanceTimersByTimeAsync(5_000);
+    const settled = await pending;
+    if (settled.rejected) throw settled.error;
+    const { response } = settled.value;
 
-  expect(response.ok).toBe(false);
-  if (response.ok) return;
-  expect(response.error.message).toContain('wait timed out for text: Ready');
-  expect(response.error.message).toContain('Current surface: Checkout');
-  expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
-  expect(harness.bindDevice).toHaveBeenCalledTimes(1);
+    expect(response.ok).toBe(false);
+    if (response.ok) return;
+    expect(response.error.message).toContain('wait timed out for text: Ready');
+    expect(response.error.message).toContain('Current surface: Checkout');
+    expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
+    expect(harness.bindDevice).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 // ---------------------------------------------------------------------------
