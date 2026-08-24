@@ -77,24 +77,22 @@ jobs:
             --argjson iosBuild "$IOS_BUILD" \
             --arg androidName "$ANDROID_NAME" \
             --argjson androidBuild "$ANDROID_BUILD" \
-            '{
-              include: [
-                {
-                  name: "iOS Release",
-                  platform: "ios",
-                  runsOn: (if $iosBuild then "macos-26" else "ubuntu-latest" end),
-                  artifactName: $iosName,
-                  build: $iosBuild
-                },
-                {
-                  name: "Android Release",
-                  platform: "android",
-                  runsOn: "ubuntu-latest",
-                  artifactName: $androidName,
-                  build: $androidBuild
-                }
-              ]
-            }')"
+            '[
+              {
+                name: "iOS Release",
+                platform: "ios",
+                runsOn: (if $iosBuild then "macos-26" else "ubuntu-latest" end),
+                artifactName: $iosName,
+                build: $iosBuild
+              },
+              {
+                name: "Android Release",
+                platform: "android",
+                runsOn: "ubuntu-latest",
+                artifactName: $androidName,
+                build: $androidBuild
+              }
+            ] | { include: map(select(.build)) }')"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
   release:

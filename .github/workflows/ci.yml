@@ -153,6 +153,12 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: mcp-metadata }
 
+      # Slowest guard (~3 min), so it runs last and structural failures surface
+      # before it. Runs on plain Node via the shared install above.
+      - name: Check numeric ranges
+        uses: ./.github/actions/run-gate
+        with: { gate: freerange }
+
   # History-backed compatibility gates share one deep checkout: fallow,
   # replay-compat, and daemon-wire-compat all need either full history or tags,
   # which no shallow unit lane can read.
@@ -379,21 +385,6 @@ jobs:
           args: |
             --base
             ${{ github.event.pull_request.base.sha }}
-
-  freerange:
-    name: FreeRange
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Check numeric ranges
-        uses: ./.github/actions/run-gate
-        with: { gate: freerange }
 
   integration:
     name: Integration Tests
