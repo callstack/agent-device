@@ -121,6 +121,11 @@ async function runFindEvidence(context: LinuxContext): Promise<void> {
 }
 
 async function runDiffEvidence(context: LinuxContext): Promise<void> {
+  await runStep(context, 'reset the calculator before diff', [
+    'open',
+    'gnome-calculator',
+    '--relaunch',
+  ]);
   await runStep(context, 'capture the diff baseline', ['snapshot', '-i']);
   await runStep(context, 'mutate the calculator before diff', ['click', 'role=button label=1']);
   const diff = await runStep(context, 'read the live snapshot diff', ['diff', 'snapshot', '-i']);
