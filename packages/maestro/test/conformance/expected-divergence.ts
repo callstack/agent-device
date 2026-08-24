@@ -39,7 +39,7 @@ export const FLOW_DIVERGENCES: Record<string, FlowDivergence> = {
   'upstream/067_assertTrue_pass': {
     classification: 'we-reject',
     reason:
-      'assertTrue supports literal values and bare ${VAR} lookups (#1295); this flow\'s condition is a JS expression (${1+1}), which stays unsupported by the #1292 lookup-only decision.',
+      "assertTrue supports literal values and bare ${VAR} lookups (#1295); this flow's condition is a JS expression (${1+1}), which stays unsupported by the #1292 lookup-only decision.",
     unsupported: ['assertTrue (JS expression payload)'],
     tracking: 'https://github.com/callstack/agent-device/issues/1292',
   },
