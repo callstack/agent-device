@@ -70,7 +70,7 @@ describe('fuzz invariant classifier', () => {
 
 describe('fuzz harness self-check', () => {
   // One run asserts both the report and its envelope: a second full self-check would cost five
-  // more worker startups in the serialized subprocess-stub project (#1823) for no new signal.
+  // more real worker startups (#1823) for no new signal.
   it('catches every seeded violation kind and writes the self-check envelope', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzz-selfcheck-'));
     const { status, stdout } = runHarness([

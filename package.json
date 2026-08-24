@@ -171,7 +171,7 @@
     "test-app:maestro:ios": "pnpm test-app:maestro --platform ios",
     "test-app:maestro:android": "pnpm test-app:maestro --platform android",
     "test": "pnpm test:unit",
-    "test:unit": "vitest run --project unit-core --project subprocess-stub --project fuzz-worker",
+    "test:unit": "vitest run --project unit-core --project fuzz-worker",
     "test:maestro-compat": "vitest run --project unit-core packages/maestro src/daemon/adapters/maestro src/compat/__tests__/replay-input.test.ts",
     "test:coverage": "vitest run --coverage --project=!fuzz-worker && pnpm test:fuzz-worker",
     "test:coverage:ci": "vitest run --coverage --project=!fuzz-worker && pnpm test:fuzz-worker",

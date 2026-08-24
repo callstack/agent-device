@@ -37,7 +37,7 @@ export type FakeAdbProviderExtras = AndroidAdbProvider extends infer P
  * installs per request and the provider-scenario lane exercises. Prefer this
  * over PATH-stub subprocess helpers (`withMockedAdb`): no PATH
  * mutation, no spawns, no real subprocess waits, so converted files can leave
- * the serialized `subprocess-stub` project (#1823).
+ * SUBPROCESS_STUB_TESTS in vitest.config.ts (#1823).
  *
  * The fake `exec` receives device-scoped args without a leading
  * `-s <serial>`: scoped providers are per-device, and raw `runCmd('adb', …)`

@@ -24,7 +24,8 @@ const workspaceAliases = workspaceSourceAliases(repoRoot);
 // (`vitest related` over the mutated files) and hands it over through
 // AGENT_DEVICE_MUTATION_TEST_FILES; the fallback is the deterministic unit suite,
 // which keeps `pnpm exec stryker run` usable by hand. Excluded either way: the
-// serialized groups (subprocess-stub and fuzz-worker) and the CLI-capture tests — see
+// real-subprocess-spawn tests (SERIALIZED_TESTS — #1823, only `fuzz-worker` still
+// runs them in a serialized Vitest project) and the CLI-capture tests — see
 // scripts/mutation/test-scope.ts for why, and why excluding them cannot hide a
 // surviving mutant.
 const scope = readTestScope();
