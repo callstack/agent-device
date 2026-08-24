@@ -28,8 +28,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Text-only assertions run before the toolchain setup, so a grep failure does
-  # not wait on an install.
+  # The Swift trailing-comma assertion is text-only and runs before the toolchain setup, so a
+  # grep failure does not wait on an install. The DI-seams check below needs a real TypeScript
+  # runtime (#1976 / PR #2006), so it runs after Setup toolchain instead.
   lint:
     name: Lint & Format
     runs-on: ubuntu-latest
@@ -63,38 +64,23 @@ jobs:
             exit 1
           fi
 
-      # Same false-green shape as the check above, plus a narrower pattern (#1976). Two kinds
-      # of `?: typeof X` are excluded as not being test-only DI seams:
-      #   - `typeof fetch`: fetchImpl?/fetch? params inject the one global with no module
-      #     boundary `vi.mock` can intercept. src/cli/auth-session.ts, cloud-profile.ts, and
-      #     remote/daemon-proxy.ts use the seam for exact per-call assertions in their unit
-      #     tests, while the CLI-level tests use `vi.stubGlobal('fetch', ...)` where the seam
-      #     isn't reachable — a deliberate, exercised seam, not a leftover one.
-      #   - `typeof SOME_CONSTANT` (SCREAMING_SNAKE_CASE): derives a literal union type from a
-      #     constant, e.g. `dispatchPath?: typeof MAESTRO_COORDINATE_FALLBACK_PATH` in
-      #     src/daemon/handlers/interaction-touch-response.ts. Not an injectable seam at all —
-      #     the pattern only ever matched it by syntax coincidence.
-      - name: Fail if test-only DI seams reappear in production code
-        run: |
-          mapfile -d '' -t seam_files < <(git ls-files -z -- 'src' | grep -zvE '/__tests__/|\.test\.ts$')
-          if [ "${#seam_files[@]}" -eq 0 ]; then
-            echo "No production src/ files are tracked; the DI-seam check has nothing to scan." >&2
-            exit 1
-          fi
-          set +e
-          grep -PnH '\?\s*:\s*typeof\s+(?!fetch\b)(?![A-Z][A-Z0-9_]*\b)' "${seam_files[@]}"
-          status=$?
-          set -e
-          if [ "$status" -eq 0 ]; then
-            echo "Found test-only DI seams (optional typeof params) in production code."
-            exit 1
-          elif [ "$status" -ne 1 ]; then
-            echo "grep exited $status while scanning src/ for DI seams; treating an unreadable scan as a failure instead of a silent pass."
-            exit 1
-          fi
-
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
+
+      # Same false-green shape as the Swift check above (#1976). An earlier revision of this
+      # gate (PR #2006, first review pass) fixed the exit-code handling but kept the ban/allow
+      # decision as a regex that exempted matches by the *spelling* of the typeof target
+      # (`typeof fetch` always passed, SCREAMING_SNAKE_CASE targets always passed) — a name-based
+      # semantic allowlist that would silently pass a new, genuinely test-only `typeof fetch` seam
+      # anywhere in the tree while banning an equally legitimate seam under any other name.
+      # scripts/di-seams instead checks each match against an explicit, typed, per-site allowlist
+      # (scripts/di-seams/approved.ts) keyed by (file, field, typeof-target): a triple is exempt
+      # only because it was individually reviewed and named, never because of how it is spelled.
+      # The gate fails just as hard on a stale approval (one whose triple no longer matches
+      # anything) as on an unapproved seam, so the allowlist can't drift out of sync with the code
+      # it describes. See scripts/di-seams/model.ts and its tests.
+      - name: Fail if test-only DI seams reappear in production code
+        run: pnpm check:di-seams
 
       - name: Run oxlint
         uses: ./.github/actions/run-gate
