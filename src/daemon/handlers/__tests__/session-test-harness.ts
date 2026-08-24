@@ -14,7 +14,23 @@ vi.mock('node:timers/promises', async (importOriginal) => {
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
+  const resolveTargetDevice = vi.fn();
+  return {
+    ...actual,
+    dispatchCommand: vi.fn(async () => ({})),
+    resolveTargetDevice,
+    resolveTargetDeviceSelection: vi.fn(async (...args: unknown[]) => {
+      const device = await resolveTargetDevice(...args);
+      return {
+        device,
+        reason: 'explicit-selector',
+        source: 'local',
+        candidateCount: 1,
+        booted: device.booted,
+        bootOccurred: false,
+      };
+    }),
+  };
 });
 vi.mock('../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
