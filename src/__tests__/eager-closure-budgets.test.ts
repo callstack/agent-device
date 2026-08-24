@@ -127,21 +127,16 @@ test('an entry that evaluates only itself is described without pretending to an 
   expect(describeClosurePressure(graph, '/repo/solo.ts', '/repo')).toContain('only itself');
 });
 
-test('discovery is recursive and reads TRACKED files only', () => {
-  // Two holes in one fixture, because both are about discovery seeing the wrong set of files.
-  //
-  // Recursion: a one-level `readdir` of `src/facades` omits `src/facades/nested/x.ts`, which R11's
-  // scan covers -- the two gates would disagree about what a façade is, and this one would be the
-  // lenient half.
-  //
-  // Tracked-only: the first fix for the recursion hole replaced R11's `listSourceFiles()` with a
-  // raw filesystem walk, which regressed R11 itself. A layering gate describes COMMITTED state, so
-  // an uncommitted scratch file under a scanned path must stay invisible -- otherwise someone's
-  // local experiment fails a gate that is supposed to describe the repository (#1965 review).
-  //
-  // Both only exist relative to git, so this builds a real repository rather than a bare tmpdir,
-  // following `scripts/layering/platform-package-repository.test.ts`.
-  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'eager-closure-discovery-'));
+/**
+ * A committed fixture repository: one workspace package with a manifest export target, a
+ * top-level façade, a nested façade, and a test source. Everything here is TRACKED, so anything a
+ * caller writes afterwards is by definition uncommitted scratch.
+ *
+ * A real git repo rather than a bare tmpdir because tracked-vs-untracked only exists relative to
+ * git, following `scripts/layering/platform-package-repository.test.ts`.
+ */
+function mkGitFixtureRepo(prefix: string): string {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   const pkgDir = path.join(repo, 'packages/demo');
   fs.mkdirSync(path.join(pkgDir, 'src/facades/nested'), { recursive: true });
   fs.writeFileSync(
@@ -159,6 +154,25 @@ test('discovery is recursive and reads TRACKED files only', () => {
     ['-c', 'user.name=Gate', '-c', 'user.email=gate@example.test', 'commit', '-qm', 'base'],
     { cwd: repo },
   );
+  return repo;
+}
+
+test('discovery is recursive and reads TRACKED files only', () => {
+  // Two holes in one fixture, because both are about discovery seeing the wrong set of files.
+  //
+  // Recursion: a one-level `readdir` of `src/facades` omits `src/facades/nested/x.ts`, which R11's
+  // scan covers -- the two gates would disagree about what a façade is, and this one would be the
+  // lenient half.
+  //
+  // Tracked-only: the first fix for the recursion hole replaced R11's `listSourceFiles()` with a
+  // raw filesystem walk, which regressed R11 itself. A layering gate describes COMMITTED state, so
+  // an uncommitted scratch file under a scanned path must stay invisible -- otherwise someone's
+  // local experiment fails a gate that is supposed to describe the repository (#1965 review).
+  //
+  // Both only exist relative to git, so this builds a real repository rather than a bare tmpdir,
+  // following `scripts/layering/platform-package-repository.test.ts`.
+  const repo = mkGitFixtureRepo('eager-closure-discovery-');
+  const pkgDir = path.join(repo, 'packages/demo');
 
   // Written AFTER the commit and never added: a contributor's local scratch façade.
   fs.writeFileSync(path.join(pkgDir, 'src/facades/scratch.ts'), 'export const e = 5;\n');
@@ -179,6 +193,64 @@ test('discovery is recursive and reads TRACKED files only', () => {
   expect(discovered, 'nor is an untracked file beside a tracked nested façade').not.toContain(
     'packages/demo/src/facades/nested/scratch.ts',
   );
+});
+
+test('an untracked PACKAGE contributes no entry surface, however its manifest reads', () => {
+  // Leak 1, and the reason the previous fixture was not enough: it only covered untracked files
+  // under `src/facades/`. Manifest-derived targets bypassed that intersection entirely, because
+  // `readWorkspacePackages` enumerated `packages/` with `readdirSync`. A package directory a
+  // contributor has created but never committed would then contribute entry surfaces to R11 and
+  // to the budget gate's exhaustiveness check — failing both on scratch work (#1965 review).
+  const repo = mkGitFixtureRepo('eager-closure-untracked-package-');
+
+  // Never added: a whole scratch package, manifest and source.
+  const scratchPkg = path.join(repo, 'packages/scratch');
+  fs.mkdirSync(path.join(scratchPkg, 'src/facades'), { recursive: true });
+  fs.writeFileSync(
+    path.join(scratchPkg, 'package.json'),
+    JSON.stringify({ name: '@agent-device/scratch', exports: { '.': './src/index.ts' } }),
+  );
+  fs.writeFileSync(path.join(scratchPkg, 'src/index.ts'), 'export const z = 0;\n');
+  fs.writeFileSync(path.join(scratchPkg, 'src/facades/thing.ts'), 'export const y = 0;\n');
+
+  const discovered = discoverFacadeEntryFiles(repo);
+  expect(discovered, 'the committed package is still found').toContain(
+    'packages/demo/src/facades/nested/deep.ts',
+  );
+  expect(discovered, "an untracked package's manifest target is not committed state").not.toContain(
+    'packages/scratch/src/index.ts',
+  );
+  expect(discovered, "nor is an untracked package's façade file").not.toContain(
+    'packages/scratch/src/facades/thing.ts',
+  );
+});
+
+test('a dirty manifest naming an UNTRACKED target contributes no entry surface', () => {
+  // Leak 2: the manifest file itself is tracked, so restricting manifests to tracked ones does not
+  // close this — the working-tree EDIT names a target that was never committed. `existsSync` used
+  // to admit it. Manifest-derived targets are now intersected with the tracked production set too,
+  // so every path the function returns is committed whatever its origin.
+  const repo = mkGitFixtureRepo('eager-closure-dirty-manifest-');
+  const pkgDir = path.join(repo, 'packages/demo');
+
+  // Uncommitted edit to a TRACKED manifest, pointing at an uncommitted file that does exist.
+  fs.writeFileSync(
+    path.join(pkgDir, 'package.json'),
+    JSON.stringify({
+      name: '@agent-device/demo',
+      exports: { '.': './src/entry.ts', './draft': './src/draft.ts' },
+    }),
+  );
+  fs.writeFileSync(path.join(pkgDir, 'src/draft.ts'), 'export const w = 0;\n');
+
+  const discovered = discoverFacadeEntryFiles(repo);
+  expect(discovered, 'the committed export target is still found').toContain(
+    'packages/demo/src/entry.ts',
+  );
+  expect(
+    discovered,
+    'a target named only by an uncommitted manifest edit is not committed state',
+  ).not.toContain('packages/demo/src/draft.ts');
 });
 
 test('no entry path is budgeted twice, checked before any Set could absorb it', () => {

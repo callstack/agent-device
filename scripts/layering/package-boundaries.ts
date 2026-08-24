@@ -18,7 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseImports } from './model.ts';
-import { listTrackedProductionSources } from './tracked-sources.ts';
+import { listTrackedPackageManifests, listTrackedProductionSources } from './tracked-sources.ts';
 
 export type PackageBoundaryViolation = {
   rule: string;
@@ -55,13 +55,21 @@ export function specifierSites(file: string, source: string): SpecifierSite[] {
   return parseImports(source).map((edge) => ({ file, line: edge.line, specifier: edge.spec }));
 }
 
+/**
+ * Every workspace package a gate may reason about, read from TRACKED manifests only.
+ *
+ * A `readdirSync` of `packages/` would also pick up a directory a contributor created but never
+ * committed, and its `exports` map would then contribute entry surfaces to R11 and to the
+ * ADR-0019 loading-shape budgets -- gates whose whole claim is that they describe committed state
+ * (#1965 review). R13's `readTrackedPlatformPackageDeclarations` already enumerated its manifests
+ * this way; this closes the same hole for every workspace package, at the source rather than by
+ * filtering the output.
+ */
 export function readWorkspacePackages(repoRoot: string): WorkspacePackage[] {
-  const packagesDir = path.join(repoRoot, 'packages');
-  if (!fs.existsSync(packagesDir)) return [];
   const packages: WorkspacePackage[] = [];
-  for (const entry of fs.readdirSync(packagesDir).sort()) {
-    const manifestPath = path.join(packagesDir, entry, 'package.json');
-    if (!fs.existsSync(manifestPath)) continue;
+  for (const manifestFile of listTrackedPackageManifests(repoRoot).sort()) {
+    const entry = path.posix.basename(path.posix.dirname(manifestFile));
+    const manifestPath = path.join(repoRoot, manifestFile);
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
       name?: string;
       private?: boolean;
@@ -275,11 +283,17 @@ export function rootExternalDependencyRanges(repoRoot: string): Map<string, stri
  * working directory instead of the committed tree (#1965 review).
  */
 export function facadeEntryFiles(repoRoot: string): string[] {
+  const tracked = new Set(listTrackedProductionSources(repoRoot));
   const found = new Set<string>();
+  // Manifests are already tracked-only, but a tracked manifest's WORKING-TREE content can name a
+  // target that is not committed yet, so the targets are intersected too. Both origins go through
+  // the same tracked set: every path this returns is committed, whatever produced it.
   for (const pkg of readWorkspacePackages(repoRoot)) {
-    for (const target of pkg.exportTargets.values()) found.add(target);
+    for (const target of pkg.exportTargets.values()) {
+      if (tracked.has(target)) found.add(target);
+    }
   }
-  for (const file of listTrackedProductionSources(repoRoot)) {
+  for (const file of tracked) {
     if (file.includes('/src/facades/')) found.add(file);
   }
   return [...found].filter((file) => fs.existsSync(path.join(repoRoot, file))).sort();

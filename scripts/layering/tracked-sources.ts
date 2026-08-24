@@ -27,6 +27,23 @@ const TRACKED_SOURCE_PATHSPECS = [
   'packages/*/src/**/*.ts',
 ];
 
+/**
+ * Every tracked `packages/<pkg>/package.json`, repo-root-relative.
+ *
+ * The manifest half of the same rule. A package directory a contributor has created but not
+ * committed declares no entry surfaces as far as any gate is concerned -- otherwise scratch work
+ * changes what R11 and the loading-shape budgets police (#1965 review, second tracked-only pass).
+ * `platform-package-repository.ts` already reads its manifests this way for R13; this is the same
+ * enumeration widened to every workspace package.
+ */
+export function listTrackedPackageManifests(repoRoot: string): string[] {
+  const out = execFileSync('git', ['ls-files', 'packages/*/package.json'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  return out.split('\n').filter(Boolean);
+}
+
 /** Every tracked `.ts` source file under the scanned roots, repo-root-relative. */
 export function listTrackedTypeScriptFiles(repoRoot: string): string[] {
   const out = execFileSync('git', ['ls-files', ...TRACKED_SOURCE_PATHSPECS], {

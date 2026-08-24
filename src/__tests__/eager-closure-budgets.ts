@@ -144,7 +144,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/facades/divergence.ts': 3,
   'packages/contracts/src/facades/interaction.ts': 25,
   'packages/contracts/src/facades/observability.ts': 7,
-  'packages/contracts/src/facades/platform.ts': 42,
+  'packages/contracts/src/facades/platform.ts': 47,
   'packages/contracts/src/facades/progress.ts': 1,
   'packages/contracts/src/facades/recording.ts': 3,
   'packages/contracts/src/facades/remote.ts': 2,
@@ -166,7 +166,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/platform-module.ts': 5,
   'packages/contracts/src/platform-runtime-host.ts': 1,
   'packages/contracts/src/platform-runtime-operations.ts': 2,
-  'packages/contracts/src/platform-runtime-unavailable.ts': 15,
+  'packages/contracts/src/platform-runtime-unavailable.ts': 20,
   'packages/contracts/src/platform-runtime.ts': 6,
   'packages/contracts/src/record-runtime-cutover.ts': 7,
   'packages/contracts/src/screen-recording-runtime-plan.ts': 5,
@@ -233,6 +233,14 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
 
   // --- @agent-device/xml ---
   'packages/xml/src/index.ts': 3,
+
+  // Added by #1993 (device-inventory context moved out of core).
+  'packages/contracts/src/back-runtime.ts': 4,
+  'packages/contracts/src/home-runtime.ts': 4,
+  'packages/contracts/src/interactor-operation-catalog.ts': 9,
+  'packages/contracts/src/keyboard-runtime.ts': 4,
+  'packages/contracts/src/orientation-runtime.ts': 4,
+  'packages/contracts/src/tv-remote-runtime.ts': 4,
 });
 
 /**
@@ -252,8 +260,8 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
  */
 export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'src/cli.ts': 362,
-  'src/platform-runtime.ts': 31,
-  'src/core/dispatch.ts': 100,
+  'src/platform-runtime.ts': 36,
+  'src/core/dispatch.ts': 94,
   'src/core/capabilities.ts': 76,
   'src/core/command-descriptor/registry.ts': 66,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,
