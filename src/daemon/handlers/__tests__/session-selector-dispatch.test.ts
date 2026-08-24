@@ -50,11 +50,11 @@ function keyboardCapableRuntime(
     owner: localRuntimeOwner(device.platform),
     facts,
     operations: {
-      keyboardStatus: async () => ({ visible: false }),
+      keyboardStatus: async () => ({ kind: 'ime-probe', visible: false }),
       keyboardDismiss:
         overrides?.keyboardDismiss ??
         (async () => ({ kind: 'ime-probe', dismissed: true, visible: false })),
-      keyboardEnter: async () => ({}),
+      keyboardEnter: async () => ({ kind: 'visibility-echo' }),
     },
     [Symbol.asyncDispose]: async () => {},
   } satisfies DeviceBinding<PlatformRuntimeOperations>;
@@ -119,11 +119,10 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
   expect(sessionStore.get(sessionName)?.refFrameState).toBeUndefined();
 });
 
-// #1955 review: `runSessionOrSelectorDispatch` used to expire the frame only after a successful
-// `execute`, so a rejecting/timed-out invocation left a stale frame active. ADR 0014 requires
-// expiry immediately before the mutating call, with no success-only rollback. The inner assertion
-// pins the exact pre-invocation seam — the frame must already be expired by the time the mutating
-// call is reached, not just eventually after the whole dispatch settles.
+// ADR 0014 requires the frame to expire immediately before the mutating call, with no
+// success-only rollback. The inner assertion pins the exact pre-invocation seam — the frame must
+// already be expired by the time the mutating call is reached, not just eventually after the
+// whole dispatch settles.
 test('keyboard dismiss expires the frame before the invocation runs, even when it rejects', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'kb-reject';

@@ -173,8 +173,12 @@ export type SnapshotOptions = BaseSnapshotOptions & {
 /**
  * Android's live IME status read. Optional on {@link Interactor}: parity with the retired leaf,
  * which refused `status`/`get` on every other family (no other platform's runner exposes one).
+ * A single-member discriminated union rather than a bare object so the daemon can derive its wire
+ * `platform` label from `kind` the same way it does for dismiss and enter — an owner can only ever
+ * produce its own result shape.
  */
-export type KeyboardStatusResult = {
+export type KeyboardStatusResult = Readonly<{
+  kind: 'ime-probe';
   visible: boolean;
   inputType?: string;
   type?: string;
@@ -182,14 +186,14 @@ export type KeyboardStatusResult = {
   focusedPackage?: string;
   focusedResourceId?: string;
   inputOwner?: string;
-};
+}>;
 
 /**
  * Owner-shaped dismiss evidence, discriminated by which owner produced it: Android's IME probe
  * fields, or iOS's `mechanism` disclosure (#1598), or HarmonyOS's bare acknowledgment (its HDC
  * key press reports nothing beyond success). The daemon derives the wire `platform` label from
- * `kind` rather than re-deriving it from the device (#1955 review), so an owner can only ever
- * produce its own result shape — an android-probe result under an `ios` label is unrepresentable.
+ * `kind` rather than re-deriving it from the device, so an owner can only ever produce its own
+ * result shape — an android-probe result under an `ios` label is unrepresentable.
  */
 export type KeyboardDismissResult =
   | Readonly<{
@@ -214,11 +218,16 @@ export type KeyboardDismissResult =
     }>
   | Readonly<{ kind: 'acknowledged' }>;
 
-/** Only the Apple runner echoes visibility around the return-key press; every other owner is blind. */
-export type KeyboardEnterResult = {
-  visible?: boolean;
-  wasVisible?: boolean;
-};
+/**
+ * Only the Apple runner echoes visibility around the return-key press; Android and HarmonyOS
+ * acknowledge with no fields beyond success. Kind is owner-specific, not just content-shaped —
+ * Android's and HarmonyOS's acknowledgments are structurally identical, so only the discriminant
+ * itself tells the daemon which owner actually pressed enter.
+ */
+export type KeyboardEnterResult =
+  | Readonly<{ kind: 'visibility-echo'; visible?: boolean; wasVisible?: boolean }>
+  | Readonly<{ kind: 'android-acknowledged' }>
+  | Readonly<{ kind: 'harmonyos-acknowledged' }>;
 
 export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & {
   nodes?: RawSnapshotNode[];

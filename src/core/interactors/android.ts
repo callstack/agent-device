@@ -120,11 +120,11 @@ export function createAndroidInteractor(
     setOrientation: (orientation) => setAndroidOrientation(device, orientation),
     appSwitcher: () => appSwitcherAndroid(device),
     tvRemote: (button, durationMs) => pressAndroidTvRemote(device, button, durationMs),
-    keyboardStatus: () => getAndroidKeyboardState(device),
+    keyboardStatus: async () => ({ kind: 'ime-probe', ...(await getAndroidKeyboardState(device)) }),
     keyboardDismiss: async () => ({ kind: 'ime-probe', ...(await dismissAndroidKeyboard(device)) }),
     keyboardEnter: async () => {
       await pressAndroidEnter(device);
-      return {};
+      return { kind: 'android-acknowledged' };
     },
     readClipboard: () => readAndroidClipboardText(device),
     writeClipboard: (text) => writeAndroidClipboardText(device, text),

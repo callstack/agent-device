@@ -185,6 +185,7 @@ export function createAppleInteractor(
         runnerOpts,
       );
       return {
+        kind: 'visibility-echo',
         visible: readRunnerBoolean(result, 'visible'),
         wasVisible: readRunnerBoolean(result, 'wasVisible'),
       };

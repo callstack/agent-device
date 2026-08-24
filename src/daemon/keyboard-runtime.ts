@@ -1,6 +1,8 @@
 import type {
   KeyboardActionInput,
   KeyboardDismissResult,
+  KeyboardEnterResult,
+  KeyboardStatusResult,
 } from '@agent-device/contracts/keyboard-runtime';
 import {
   keyboardDismissUse,
@@ -13,7 +15,7 @@ import type {
   RuntimeOperationKey,
   RuntimeUse,
 } from '@agent-device/contracts/platform-runtime';
-import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { isKeyboardAction, type KeyboardAction } from '../utils/keyboard-actions.ts';
 import { successText } from '../utils/success-text.ts';
@@ -62,18 +64,18 @@ function normalizeKeyboardAction(action: KeyboardAction): KeyboardRuntimeAction 
   return action;
 }
 
-/** The literal the legacy leaf reported: `harmonyos`/`android` verbatim, every iOS-family OS as `ios`. */
-function keyboardPlatformLabel(device: DeviceInfo): 'android' | 'harmonyos' | 'ios' {
-  if (device.platform === 'harmonyos') return 'harmonyos';
-  if (isIosFamily(device)) return 'ios';
-  return 'android';
-}
-
 /**
- * `dismiss`'s wire `platform` label is derived from which owner shape came back (#1955 review),
- * not re-derived from the device the way `status`/`enter` still do — an owner can only ever
- * produce its own {@link KeyboardDismissResult} kind, so this mapping can't disagree with reality.
+ * Every action's wire `platform` label is derived from which owner shape actually came back, not
+ * re-derived from the device: each owner can only ever produce its own result `kind`, so these
+ * mappings can't disagree with reality the way a separate device-platform guess could.
  */
+const KEYBOARD_STATUS_PLATFORM_LABEL: Record<
+  KeyboardStatusResult['kind'],
+  'android' | 'harmonyos' | 'ios'
+> = {
+  'ime-probe': 'android',
+};
+
 const KEYBOARD_DISMISS_PLATFORM_LABEL: Record<
   KeyboardDismissResult['kind'],
   'android' | 'harmonyos' | 'ios'
@@ -81,6 +83,15 @@ const KEYBOARD_DISMISS_PLATFORM_LABEL: Record<
   'ime-probe': 'android',
   mechanism: 'ios',
   acknowledged: 'harmonyos',
+};
+
+const KEYBOARD_ENTER_PLATFORM_LABEL: Record<
+  KeyboardEnterResult['kind'],
+  'android' | 'harmonyos' | 'ios'
+> = {
+  'visibility-echo': 'ios',
+  'android-acknowledged': 'android',
+  'harmonyos-acknowledged': 'harmonyos',
 };
 
 function keyboardActionInput(context: DaemonCommandContext): KeyboardActionInput {
@@ -128,11 +139,10 @@ async function admitKeyboardAction<
 /** `keyboard status` — Android-only; every other owner refuses. */
 function executeKeyboardStatus(
   runtime: BoundDeviceRuntime<typeof keyboardStatusUse>,
-  platform: 'android' | 'harmonyos' | 'ios',
   context: DaemonCommandContext,
 ): Promise<Record<string, unknown>> {
   return runtime.operations.keyboardStatus(keyboardActionInput(context)).then((state) => ({
-    platform,
+    platform: KEYBOARD_STATUS_PLATFORM_LABEL[state.kind],
     action: 'status',
     visible: state.visible,
     inputType: state.inputType,
@@ -184,11 +194,11 @@ async function executeKeyboardDismiss(
 /** `keyboard enter`. */
 async function executeKeyboardEnter(
   runtime: BoundDeviceRuntime<typeof keyboardEnterUse>,
-  platform: 'android' | 'harmonyos' | 'ios',
   context: DaemonCommandContext,
 ): Promise<Record<string, unknown>> {
   const result = await runtime.operations.keyboardEnter(keyboardActionInput(context));
-  if (platform === 'ios') {
+  const platform = KEYBOARD_ENTER_PLATFORM_LABEL[result.kind];
+  if (result.kind === 'visibility-echo') {
     return {
       platform,
       action: 'enter',
@@ -211,12 +221,11 @@ export async function resolveBoundKeyboardRuntime(
   } & RuntimeAdmissionBindings & { positionals: readonly string[] },
 ): Promise<ResolvedKeyboardExecution> {
   const action = readKeyboardAction(params.positionals);
-  const platform = keyboardPlatformLabel(params.device);
   const { device, inspectFacts, bindDevice } = params;
   if (action === 'status') {
     return await admitKeyboardAction(
       { command: 'keyboard status', device, use: keyboardStatusUse, inspectFacts, bindDevice },
-      (runtime, context) => executeKeyboardStatus(runtime, platform, context),
+      (runtime, context) => executeKeyboardStatus(runtime, context),
     );
   }
   if (action === 'dismiss') {
@@ -227,7 +236,7 @@ export async function resolveBoundKeyboardRuntime(
   }
   return await admitKeyboardAction(
     { command: 'keyboard enter', device, use: keyboardEnterUse, inspectFacts, bindDevice },
-    (runtime, context) => executeKeyboardEnter(runtime, platform, context),
+    (runtime, context) => executeKeyboardEnter(runtime, context),
   );
 }
 

@@ -210,9 +210,9 @@ async function assertFormInput(context: LiveContext): Promise<void> {
   assert.equal(editable.json?.data?.pass, true, JSON.stringify(editable.json));
 
   await runStep(context, 'seed email field', ['fill', 'id="field-email"', 'ada@example']);
-  // #1955 review: pin the exact point a truncated field value first appears, rather than
-  // inferring it from the final read. If this fails, `fill` itself lost the seed — the
-  // dismiss/refocus/type steps below never ran on the wrong content in the first place.
+  // Pins the exact point a truncated field value first appears, rather than inferring it from
+  // the final read. If this fails, `fill` itself lost the seed — the dismiss/refocus/type steps
+  // below never ran on the wrong content in the first place.
   const seededEmail = await runStep(context, 'read seeded email before dismiss', [
     'get',
     'attrs',
@@ -241,10 +241,8 @@ async function assertFormInput(context: LiveContext): Promise<void> {
     C.keyboard,
     'dismiss reports dismissed=true and visible=false while before/after pixels differ',
   );
-  // #1955 review: pin whether `keyboard dismiss` itself clears the field, independent of the
-  // coordinate refocus + type steps that follow. This PR changes only executeKeyboardDismiss's
-  // wire-response shape (a `kind` discriminant), not the runner command dismiss dispatches or
-  // any field content — this assertion is the evidence for that, not an assumption of it.
+  // Pins whether `keyboard dismiss` itself clears the field, independent of the coordinate
+  // refocus + type steps that follow.
   const emailAfterDismiss = await runStep(context, 'read email after dismiss', [
     'get',
     'attrs',

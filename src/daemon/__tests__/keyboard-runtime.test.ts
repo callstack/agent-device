@@ -24,8 +24,7 @@ import { resolveBoundKeyboardRuntime } from '../keyboard-runtime.ts';
 
 // File-scoped ids, not the widely shared 'emulator-5554'/'ios-simulator' literals: these owner
 // bindings' `local-family` kind reaches the real on-disk device-claim admission (`require-owner`
-// policy), so a shared id risks a cross-file claim collision under parallel test-file execution
-// (#1955 review).
+// policy), so a shared id risks a cross-file claim collision under parallel test-file execution.
 const androidDevice: DeviceInfo = {
   id: 'keyboard-runtime-5554',
   name: 'Pixel',
@@ -68,6 +67,7 @@ function runtimeHarness(
   }>,
 ) {
   const keyboardStatus = vi.fn<() => Promise<KeyboardStatusResult>>(async () => ({
+    kind: 'ime-probe',
     visible: true,
   }));
   const keyboardDismiss = vi.fn<() => Promise<KeyboardDismissResult>>(async () => ({
@@ -75,7 +75,9 @@ function runtimeHarness(
     dismissed: true,
     visible: false,
   }));
-  const keyboardEnter = vi.fn<() => Promise<KeyboardEnterResult>>(async () => ({}));
+  const keyboardEnter = vi.fn<() => Promise<KeyboardEnterResult>>(async () => ({
+    kind: 'android-acknowledged',
+  }));
   const runtimeFacts: RuntimeFacts<PlatformRuntimeOperations> = {
     device: { ...deviceShape(device), providerMode: 'local' },
     operations: keyboardRuntimeOperationFacts(
@@ -103,6 +105,7 @@ test('android status admits keyboardStatusUse and reports the platform-shaped st
     enter: available,
   });
   harness.keyboardStatus.mockResolvedValue({
+    kind: 'ime-probe',
     visible: true,
     inputType: 'text',
     type: 'ime',
@@ -393,7 +396,11 @@ test('iOS enter reports visibility evidence; android enter reports only success'
     dismiss: available,
     enter: available,
   });
-  iosHarness.keyboardEnter.mockResolvedValue({ visible: false, wasVisible: true });
+  iosHarness.keyboardEnter.mockResolvedValue({
+    kind: 'visibility-echo',
+    visible: false,
+    wasVisible: true,
+  });
   const iosResolved = await resolveBoundKeyboardRuntime({
     device: iosDevice,
     positionals: ['enter'],
@@ -430,6 +437,29 @@ test('iOS enter reports visibility evidence; android enter reports only success'
       message: 'Keyboard enter pressed',
     });
   }
+});
+
+test('harmonyos enter reports only success, distinctly from android despite an identical shape', async () => {
+  const harness = runtimeHarness(harmonyDevice, 'harmonyos', {
+    status: unavailable,
+    dismiss: available,
+    enter: available,
+  });
+  harness.keyboardEnter.mockResolvedValue({ kind: 'harmonyos-acknowledged' });
+
+  const resolved = await resolveBoundKeyboardRuntime({
+    device: harmonyDevice,
+    positionals: ['enter'],
+    inspectFacts: harness.inspectFacts,
+    bindDevice: harness.bindDevice,
+  });
+  expect(resolved.ok).toBe(true);
+  if (!resolved.ok) return;
+  expect(await resolved.execute({})).toEqual({
+    platform: 'harmonyos',
+    action: 'enter',
+    message: 'Keyboard enter pressed',
+  });
 });
 
 test('rejects an unknown subcommand before inspection or binding', async () => {

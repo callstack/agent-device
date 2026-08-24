@@ -203,7 +203,7 @@ test.each([
       // File-scoped id, not the widely shared 'emulator-5554' literal: this owner binding's
       // `local-family` kind reaches the real on-disk device-claim admission (`require-owner`
       // policy), so a shared id risks a cross-file claim collision under parallel test-file
-      // execution (#1955 review).
+      // execution.
       id: 'tv-remote-runtime-5554',
       name: 'Pixel',
       platform: 'android',

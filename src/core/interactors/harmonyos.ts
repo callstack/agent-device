@@ -58,7 +58,7 @@ export function createHarmonyInteractor(device: DeviceInfo, _runner?: RunnerCont
     },
     keyboardEnter: async () => {
       await pressHarmonyKeyboardKey(device, 'Enter');
-      return {};
+      return { kind: 'harmonyos-acknowledged' };
     },
     readClipboard: unsupported('clipboard'),
     writeClipboard: unsupported('clipboard'),

@@ -30,14 +30,10 @@ import {
  * the {@link NavigationInteractorOperation} union type is derived from it below, and
  * `LOCAL_BINDERS`/`PROVIDER_BINDERS`'s `Record<NavigationInteractorOperation, …>` types are then
  * checked against that derived union — so a member can never be added to one and silently missing
- * from another (#1955 review: an earlier design declared the walk list as a plain
- * `readonly NavigationInteractorOperation[]`, independently of the union it walked, which would
- * have compiled even missing a member; a caller-maintained `operations: [...]` array duplicating
- * this same set was removed for the identical reason in an earlier review round). Not
- * caller-supplied: `facts[operation]` is the only thing that decides whether an operation binds —
- * a key this tuple names but the caller's facts never define is simply never available
- * (`facts[operation]?.available` reads `undefined`), which is how a caller passing a narrower,
- * dedicated facts object (e.g. Limrun's keyboard-less navigation facts) opts a subset out.
+ * from another. Not caller-supplied: `facts[operation]` is the only thing that decides whether an
+ * operation binds — a key this tuple names but the caller's facts never define is simply never
+ * available (`facts[operation]?.available` reads `undefined`), which is how a caller passing a
+ * narrower, dedicated facts object (e.g. Limrun's keyboard-less navigation facts) opts a subset out.
  */
 const NAVIGATION_INTERACTOR_OPERATIONS = [
   'back',

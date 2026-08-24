@@ -26,7 +26,7 @@ import { createRequestHandler } from './test-device-runtime-gateway.ts';
 // File-scoped id, not the widely shared 'ios-simulator' literal: this owner binding's
 // `local-family` kind reaches the real on-disk device-claim admission (`require-owner`
 // policy), so a shared id risks a cross-file claim collision under parallel test-file
-// execution (#1955 review).
+// execution.
 const appleDevice = {
   id: 'back-runtime-ios-simulator',
   name: 'iPhone',

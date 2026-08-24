@@ -49,9 +49,8 @@ test('skips an operation the facts refused', () => {
   expect(operations.home).toBeUndefined();
 });
 
-// #1955 review: the facts a caller passes are the ONLY source of truth for what binds — there is
-// no separate, caller-maintained operation list that could drift from them. An operation the
-// facts admit binds even if the caller only meant to name a couple of others.
+// The facts a caller passes are the ONLY source of truth for what binds — there is no separate,
+// caller-maintained operation list that could drift from them.
 test('binds every admitted operation the facts name, not just the ones a caller had in mind', () => {
   const operations = bindAdmittedLocalInteractorOperations({
     device,
@@ -65,10 +64,9 @@ test('binds every admitted operation the facts name, not just the ones a caller 
   expect(operations.tvRemote).toBeTypeOf('function');
 });
 
-// #1955 review: the walk list and the per-operation binder records are both derived from one
-// canonical tuple now, so they can't drift at the type level — this pins the runtime behavior
-// that actually matters: every one of the seven operations binds when its fact admits it, not
-// just the two or three most tests happen to exercise.
+// The walk list and the per-operation binder records are derived from one canonical tuple, so
+// they can't drift at the type level; this pins the runtime behavior — every one of the seven
+// operations binds when its fact admits it, not just the two or three most tests exercise.
 test('binds every one of the seven navigation operations when every fact admits it', async () => {
   const back = vi.fn(async () => undefined);
   const home = vi.fn(async () => undefined);

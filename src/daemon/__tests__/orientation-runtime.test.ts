@@ -5,7 +5,7 @@ import { expect, test, vi } from 'vitest';
 // the real `adb`-backed `ensureNoAndroidBlockingDialogReady` check. Stub the owner-level dialog
 // probe the same way `request-router-android-modal.test.ts` does, so that check short-circuits to
 // "clear" without spawning `adb` — matching the daemon's own real guard seam instead of dodging
-// the device platform this test is named for (#1955 review).
+// the device platform this test is named for.
 vi.mock('../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/android/app-lifecycle.ts')>();
   return {
@@ -46,7 +46,7 @@ import { createRequestHandler } from './test-device-runtime-gateway.ts';
 
 // File-scoped id, not a shared literal: this owner binding's `local-family` kind reaches the
 // real on-disk device-claim admission (`require-owner` policy), so a shared id risks a
-// cross-file claim collision under parallel test-file execution (#1955 review).
+// cross-file claim collision under parallel test-file execution.
 const testDevice = {
   id: 'orientation-runtime-device',
   name: 'Pixel',
