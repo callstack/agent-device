@@ -188,6 +188,13 @@ in force, a parent-only payload fits arithmetically, so the downgrade branch is 
 not an expected path. The record-time self-check (step 5 below) runs against the reduced tuple, so a
 `verified` claim is always honest for exactly what was written.
 
+> **Amendment (#1398, ADR 0017):** action-mode evidence gains a second, independent cause for this same
+> `"unverifiable"` downgrade — a matched node whose label carries an app-rendered echo of a literal the
+> recording session already parameterized. Unlike the size-overflow case, the label is also redacted to
+> its placeholder before the downgrade, so the literal itself never reaches the payload either. Landmark
+> mode (`wait`) does not use this downgrade; it drops the annotation entirely (see the #1349 amendment
+> above). See ADR 0017's session-scoped echo protection amendment for the full mechanism.
+
 **Local identity.** Two nodes share local identity when both carry `id` and the normalized ids are equal;
 or, when the recording carries no `id`, when their normalized roles are equal and their normalized labels
 are equal (label absent on both sides counts as equal; label present on exactly one side is a mismatch).
@@ -266,6 +273,11 @@ A recorded `id` never matches a node without that id.
 >   identity is near-vacuous, and an unannotated wait keeps its existing selector-existence semantics
 >   instead of failing closed on evidence that never discriminated anything. ADR 0016's destination
 >   guard consumes exactly this: a qualifying guard is a selector wait with a `verified` annotation.
+>   **Amendment (#1398, ADR 0017):** the same no-annotation outcome now also fires when the matched
+>   node's identity carries an app-rendered echo of a literal the recording session already
+>   parameterized via `fill --record-as` — a placeholder written into a recorded label could never
+>   verify against the live tree's real value at replay time, so the evidence is dropped rather than
+>   published unverified. See ADR 0017's session-scoped echo protection amendment for the mechanism.
 > - **`get` — unchanged**; already covered by the pre-dispatch path and the post-resolution guard.
 > - **`is` (all predicates except `exists`) — covered, `pre-dispatch`, the `get` pattern end-to-end.**
 >   `is` resolves a unique node immediately, so pre-action verification is semantically valid; the

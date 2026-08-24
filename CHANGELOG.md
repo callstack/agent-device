@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Parameterized `fill --record-as` protection is now recording-session-scoped instead of
+  fill-step-scoped (ADR 0017 amendment): a later, unrelated recorded action (`wait`, `is`, `get`) can no
+  longer re-serialize an app-rendered echo of an already-parameterized value into its own result or
+  `target-v1` identity evidence. An echoing `wait` landmark no longer qualifies as an ADR 0016
+  destination guard, so `session save-script` refuses it and directs the author to a stable landmark
+  instead of silently publishing the secret. The protection uses one small, explicit, ephemeral,
+  never-serialized per-session map populated only from values the author already opted to parameterize;
+  ordinary non-parameterized recordings are unaffected (#1398).
 - Android covered-state publication now has one owner: same-window surfaces remain visible for
   diagnosis, while the daemon marks exactly ordered covered controls non-actionable with
   `interactionBlocked: "covered"`. Helper-only `drawing-order` stays private rather than entering

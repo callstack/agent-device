@@ -14,7 +14,11 @@ import {
 import {
   parameterizeRecordedFillPayload,
   parameterizeRecordedFillTargetEvidence,
+  parameterizeRecordedResultEcho,
+  parameterizeTargetEvidenceEcho,
+  targetEvidenceCarriesLiteral,
 } from './parameterized-recorded-fill.ts';
+import type { TargetEvidenceMode } from './session-target-evidence.ts';
 
 export type RecordActionEntry = {
   command: string;
@@ -24,6 +28,15 @@ export type RecordActionEntry = {
   result?: Record<string, unknown>;
   targetEvidence?: TargetAnnotationV1;
   targetEvidences?: MultiTargetAnnotationV1;
+  /**
+   * #1398: which `computeTargetEvidence` mode produced `targetEvidence`, so
+   * session-scoped echo protection (below) can apply the SAME
+   * landmark-vs-action treatment #1349 already established for identity-empty
+   * evidence. Defaults to `action` when absent — every call site other than
+   * `wait`'s landmark recording computes action-mode evidence and never needs
+   * to set this explicitly.
+   */
+  targetEvidenceMode?: TargetEvidenceMode;
   /**
    * #1271 stage 2 (ADR 0012 amendment): an observation-only command
    * (`snapshot`/`get`/`is`/read-only `find`) dispatched OUT OF BAND — typed by
@@ -47,7 +60,21 @@ export function recordActionEntry(
   if (entry.flags?.noRecord) return undefined;
   if (isExcludedRepairSegmentObservation(session, entry)) return undefined;
   if (entry.flags) applyRecordedSaveScriptFlags(session, entry.flags);
-  const recordedEntry = parameterizeRecordedFill(entry);
+  const fillLiteral = readRecordedFillLiteral(entry);
+  // #1398: register the literal only AFTER protecting this SAME entry, so a
+  // fill's own recording is never passed through the session-wide substring
+  // scan against the value it JUST introduced — that pass is coarser
+  // (content-aware substring, not the fill boundary's exact-field match) and
+  // would otherwise mangle unrelated short incidental substrings (e.g. a
+  // one-character `--record-as` value colliding with ordinary words) in the
+  // very entry that introduced it. The session-wide guarantee is for LATER,
+  // distinct actions, exactly as #1398 frames it; this entry keeps only the
+  // existing fill-step-scoped exact-match protection below.
+  const recordedEntry = applySessionEchoProtection(
+    session,
+    parameterizeRecordedFill(entry, fillLiteral),
+  );
+  if (fillLiteral) registerRecordedFillLiteral(session, fillLiteral);
   const action: SessionAction = {
     ts: Date.now(),
     command: recordedEntry.command,
@@ -70,6 +97,22 @@ export function recordActionEntry(
   return action;
 }
 
+type FillLiteral = { literal: string; placeholder: string };
+
+/** The (literal, placeholder) pair a `fill --record-as` entry carries, or `undefined` for an ordinary fill/other command. */
+function readRecordedFillLiteral(entry: RecordActionEntry): FillLiteral | undefined {
+  if (entry.command !== 'fill' || typeof entry.flags.recordAs !== 'string') return undefined;
+  const variableName = validateRecordedInputVariableName(entry.flags.recordAs);
+  const placeholder = recordedInputPlaceholder(variableName);
+  const literal = inferFillText({
+    ts: 0,
+    command: entry.command,
+    positionals: entry.positionals,
+    flags: entry.flags,
+  });
+  return { literal, placeholder };
+}
+
 /**
  * #1348: the recorder is the first durable boundary. The live request keeps
  * the literal fill value through device execution, but the SessionAction gets
@@ -79,16 +122,12 @@ export function recordActionEntry(
  * value labels in ADR 0012 evidence are parameterized without rewriting
  * unrelated identity fragments.
  */
-function parameterizeRecordedFill(entry: RecordActionEntry): RecordActionEntry {
-  if (entry.command !== 'fill' || typeof entry.flags.recordAs !== 'string') return entry;
-  const variableName = validateRecordedInputVariableName(entry.flags.recordAs);
-  const placeholder = recordedInputPlaceholder(variableName);
-  const literal = inferFillText({
-    ts: 0,
-    command: entry.command,
-    positionals: entry.positionals,
-    flags: entry.flags,
-  });
+function parameterizeRecordedFill(
+  entry: RecordActionEntry,
+  fillLiteral: FillLiteral | undefined,
+): RecordActionEntry {
+  if (!fillLiteral) return entry;
+  const { literal, placeholder } = fillLiteral;
   return {
     ...entry,
     positionals: replaceFillText(entry.positionals, placeholder),
@@ -99,6 +138,127 @@ function parameterizeRecordedFill(entry: RecordActionEntry): RecordActionEntry {
       placeholder,
     ),
   };
+}
+
+/**
+ * #1398 (ADR 0017 session-scoped echo protection amendment): remember an
+ * explicitly parameterized literal for the REST of this recording session, so
+ * a later, unrelated action's own recorded evidence can be checked against
+ * it. A whitespace-only or empty resolved value is deliberately excluded —
+ * it keeps only the fill-step-scoped protection `parameterizeRecordedFill`
+ * already gives it above. Collapsing arbitrary later strings on a value with
+ * no discriminating content would be a disproportionate readability cost for
+ * a value that reveals nothing distinctive if echoed, and an empty literal
+ * would match every string.
+ *
+ * The map is keyed by literal, so two DIFFERENT `--record-as` names that
+ * happen to share the same typed value (a password/confirm-password pair,
+ * say) are genuinely indistinguishable from a later echo's perspective — the
+ * literal alone cannot say which fill produced it. The first-registered name
+ * wins deterministically rather than a later, unrelated fill silently
+ * re-attributing an earlier echo to its own name; the literal itself is
+ * redacted either way, so this only affects WHICH placeholder name is used,
+ * never whether the value is protected.
+ */
+function registerRecordedFillLiteral(session: SessionState, fillLiteral: FillLiteral): void {
+  if (!fillLiteral.literal.trim()) return;
+  session.recordedFillLiterals ??= new Map();
+  if (session.recordedFillLiterals.has(fillLiteral.literal)) return;
+  session.recordedFillLiterals.set(fillLiteral.literal, fillLiteral.placeholder);
+}
+
+/**
+ * #1398: apply every literal registered so far in THIS session to the
+ * CURRENT entry, whatever command produced it. A no-op fast path keeps
+ * ordinary, non-parameterized recordings byte-for-byte unchanged. Pairs are
+ * applied longest-literal-first so one registered value that happens to be a
+ * substring of another (e.g. a username that is a prefix of a password) is
+ * never partially consumed by the shorter pair first.
+ */
+function applySessionEchoProtection(
+  session: SessionState,
+  entry: RecordActionEntry,
+): RecordActionEntry {
+  const literals = session.recordedFillLiterals;
+  if (!literals || literals.size === 0) return entry;
+  const pairs = [...literals].sort(([a], [b]) => b.length - a.length);
+
+  let result = entry.result;
+  for (const [literal, placeholder] of pairs) {
+    result = parameterizeRecordedResultEcho(result, literal, placeholder);
+  }
+
+  const evidenceMode = entry.targetEvidenceMode ?? 'action';
+  const targetEvidence =
+    evidenceMode === 'landmark'
+      ? redactLandmarkEvidenceEcho(entry.targetEvidence, pairs)
+      : redactActionModeEvidenceEcho(entry.targetEvidence, pairs);
+  const targetEvidences = entry.targetEvidences
+    ? {
+        source: redactActionModeEvidenceEcho(entry.targetEvidences.source, pairs),
+        destination: redactActionModeEvidenceEcho(entry.targetEvidences.destination, pairs),
+      }
+    : entry.targetEvidences;
+
+  return { ...entry, result, targetEvidence, targetEvidences };
+}
+
+/**
+ * #1398: a landmark-mode echo is treated exactly like #1349's existing
+ * identity-empty case — record NO annotation rather than a placeholder that
+ * could never replay-match (the app re-echoes the REAL value at replay time,
+ * so a recorded `${VAR}` label can only ever mismatch it). A `wait` used as
+ * an ADR 0016 destination guard requires `verification: "verified"`, so a
+ * landmark whose only identity is a parameterized-value echo simply stops
+ * qualifying as a guard — publication refuses it and directs the author to a
+ * different, non-value-bearing landmark, same as the motivating scenario.
+ */
+function redactLandmarkEvidenceEcho(
+  evidence: TargetAnnotationV1 | undefined,
+  pairs: readonly (readonly [string, string])[],
+): TargetAnnotationV1 | undefined {
+  if (!evidence) return evidence;
+  const echoed = pairs.some(([literal]) => targetEvidenceCarriesLiteral(evidence, literal));
+  return echoed ? undefined : evidence;
+}
+
+/**
+ * #1398: action-mode evidence (`get`, `is`, and mutating element-targeting
+ * actions) is required by ADR 0012/0016 and must never be silently dropped.
+ * An echoed literal-bearing label is redacted to its placeholder AND
+ * `verification` is downgraded to `"unverifiable"` — the SAME fail-closed
+ * downgrade decision 3's writer-parser invariant already uses for an
+ * oversized payload. That fails the action's replay loudly
+ * (`identity-unverifiable`) instead of silently weakening it to
+ * selector-only matching or falsely claiming `verified` against a label that
+ * can never match again.
+ */
+function redactActionModeEvidenceEcho(
+  evidence: TargetAnnotationV1,
+  pairs: readonly (readonly [string, string])[],
+): TargetAnnotationV1;
+function redactActionModeEvidenceEcho(
+  evidence: TargetAnnotationV1 | undefined,
+  pairs: readonly (readonly [string, string])[],
+): TargetAnnotationV1 | undefined;
+function redactActionModeEvidenceEcho(
+  evidence: TargetAnnotationV1 | undefined,
+  pairs: readonly (readonly [string, string])[],
+): TargetAnnotationV1 | undefined {
+  if (!evidence) return evidence;
+  // Every registered pair is checked, not just the first match — a label can
+  // legitimately echo more than one already-parameterized value (e.g. "Signed
+  // in as bob, session hunter2-secret" after separate USERNAME and PASSWORD
+  // fills), and leaving a later literal untouched would defeat the guarantee
+  // for that value alone.
+  let redacted = evidence;
+  let echoed = false;
+  for (const [literal, placeholder] of pairs) {
+    if (!targetEvidenceCarriesLiteral(redacted, literal)) continue;
+    redacted = parameterizeTargetEvidenceEcho(redacted, literal, placeholder);
+    echoed = true;
+  }
+  return echoed ? { ...redacted, verification: 'unverifiable' } : evidence;
 }
 
 function replaceFillText(positionals: string[], placeholder: string): string[] {

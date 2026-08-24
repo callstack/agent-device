@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { emitDiagnostic } from '../../../src/utils/diagnostics.ts';
+import { INTERNAL_COMMANDS } from '../../../src/command-catalog.ts';
 import { test } from 'vitest';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { androidSettingsXml, createAndroidSettingsWorld } from './android-world.ts';
@@ -387,6 +388,123 @@ test('parameterized fill publishes only ${VAR} and replay resolves it immediatel
         );
         assertRpcError(unarmed, 'INVALID_ARGS', /requires an armed script recording/);
         assert.equal(world.textInjectionCalls.length, callsBeforeUnarmed);
+        await client.sessions.close();
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+}, 20_000);
+
+// #1398: a LATER, distinct read-only action can independently observe an
+// app-rendered echo of an already-parameterized fill's literal — here, a
+// confirmation label containing the typed search term, the exact scenario
+// that motivated the issue (a provider scenario whose destination guard
+// waited on a populated field carrying the opaque input value). The fix must
+// keep the literal out of session state/publication AND refuse to let an
+// echoing landmark serve as the ADR 0016 destination guard, through the real
+// provider/publication path rather than a serializer helper.
+function settingsXmlWithSearchResult(searchText: string): string {
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<hierarchy rotation="0">',
+    '  <node index="0" text="" resource-id="com.android.settings:id/main_content_scrollable_container" class="android.widget.ScrollView" package="com.android.settings" content-desc="" bounds="[0,0][390,600]" clickable="false" enabled="true">',
+    '    <node index="0" text="Apps" resource-id="android:id/title" class="android.widget.TextView" package="com.android.settings" content-desc="" bounds="[24,124][152,178]" clickable="true" enabled="true" focusable="true" focused="false" />',
+    `    <node index="1" text="${searchText}" resource-id="com.android.settings:id/search" class="android.widget.EditText" package="com.android.settings" content-desc="Search" bounds="[16,24][374,80]" clickable="true" enabled="true" focusable="true" focused="true" password="false" />`,
+    ...(searchText
+      ? [
+          `    <node index="2" text="Results for ${searchText}" resource-id="com.android.settings:id/results_summary" class="android.widget.TextView" package="com.android.settings" content-desc="" bounds="[24,190][350,244]" clickable="false" enabled="true" />`,
+        ]
+      : []),
+    '  </node>',
+    '</hierarchy>',
+  ].join('\n');
+}
+
+test('#1398: a read-only wait recorded after a parameterized fill never re-serializes an app-rendered echo, and cannot serve as the destination guard', async () => {
+  const secret = 'OpaqueEchoValue1398';
+  let injectedText: string | undefined;
+  await withProviderScenarioResource(
+    async () =>
+      await createAndroidSettingsWorld({
+        nativeTextInjection: true,
+        onTextInjection: (request) => {
+          injectedText = request.text;
+        },
+        snapshotXml: () => settingsXmlWithSearchResult(injectedText ?? ''),
+      }),
+    async (world) => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-echo-protection-'));
+      const scriptPath = path.join(root, 'echo-protection.ad');
+      const client = world.daemon.client();
+      try {
+        await client.apps.open({ app: 'settings', saveScript: scriptPath, ...world.selection });
+        const snapshot = await client.capture.snapshot({
+          interactiveOnly: true,
+          ...world.selection,
+        });
+        const search = snapshot.nodes.find((node) => node.label === 'Search');
+        assert.ok(search?.ref);
+
+        await client.interactions.fill({
+          ref: `@${search.ref}`,
+          text: secret,
+          recordAs: 'SEARCH_TERM',
+          settle: true,
+          settleQuietMs: 1,
+          timeoutMs: 1_000,
+          ...world.selection,
+        });
+
+        // The app echoes the typed value back in an unrelated confirmation
+        // label. A wait on it records, but must never carry the literal.
+        await client.command.wait({
+          selector: 'id="com.android.settings:id/results_summary"',
+          ...world.selection,
+        });
+
+        const stateBeforeGuard = JSON.stringify(world.daemon.session()?.actions);
+        assert.equal(stateBeforeGuard.includes(secret), false, stateBeforeGuard);
+        assert.match(stateBeforeGuard, /\$\{SEARCH_TERM\}/);
+
+        // Being the only wait so far, it cannot serve as the destination
+        // guard: its ONLY identity was the parameterized-value echo, so
+        // landmark evidence was dropped rather than published unverifiable.
+        const refusedPublish = await world.daemon.callCommand(
+          INTERNAL_COMMANDS.sessionSaveScript,
+          [scriptPath],
+          world.selection,
+        );
+        assertRpcError(refusedPublish, 'COMMAND_FAILED', /destination guard/);
+
+        // Recording a stable, non-value-bearing landmark — mirroring the
+        // real-world fix of switching to the "Apps" landmark — recovers a
+        // valid guard.
+        await client.command.wait({ selector: 'label="Apps"', ...world.selection });
+        const published = await client.sessions.saveScript({ path: scriptPath });
+        assert.equal(published.savedScript, scriptPath);
+
+        const script = fs.readFileSync(scriptPath, 'utf8');
+        assert.equal(script.includes(secret), false, script);
+        assert.match(script, /\$\{SEARCH_TERM\}/);
+
+        const lines = script.split('\n');
+        const resultsLineIndex = lines.findIndex((line) => line.includes('results_summary'));
+        assert.ok(resultsLineIndex > 0, script);
+        assert.equal(
+          lines[resultsLineIndex - 1]?.includes('agent-device:target-v1'),
+          false,
+          script,
+        );
+        const guardLineIndex = lines.findIndex(
+          (line) => line.startsWith('wait ') && line.includes('Apps'),
+        );
+        assert.ok(guardLineIndex > 0, script);
+        assert.match(
+          lines[guardLineIndex - 1] ?? '',
+          /agent-device:target-v1.*"verification":"verified"/,
+        );
+
         await client.sessions.close();
       } finally {
         fs.rmSync(root, { recursive: true, force: true });

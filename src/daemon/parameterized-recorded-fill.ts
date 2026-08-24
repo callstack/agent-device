@@ -128,7 +128,100 @@ export function parameterizeRecordedFillPayload<
   } as TPayload;
 }
 
+/**
+ * #1398: content-aware echo redaction for a LATER, unrelated action's own
+ * recorded result payload. Unlike `parameterizeRecordedFillPayload`, this
+ * never force-replaces a field just because it holds a string — that
+ * shortcut is only valid for a fill's OWN semantic `text` field, which by
+ * construction equals the literal. Here `literal` is a DIFFERENT, earlier
+ * action's already-parameterized value, so every string field must be
+ * checked for actually containing it before anything is rewritten.
+ */
+export function parameterizeRecordedResultEcho<
+  TPayload extends Record<string, unknown> | undefined,
+>(payload: TPayload, literal: string, placeholder: string): TPayload {
+  if (!payload) return payload;
+  return parameterizeBackendOutput(payload, literal, placeholder) as TPayload;
+}
+
+/**
+ * #1398: content-aware label redaction for a LATER, unrelated action's own
+ * identity evidence. Unlike `parameterizeRecordedFillTargetEvidence` (which
+ * matches only an EXACT value-bearing label, correct for the originating
+ * fill's own field), a cross-step echo is typically a label that CONTAINS
+ * the literal inside app-authored surrounding text — a search result, a
+ * confirmation banner, a destination landmark ("Welcome, <value>") — so this
+ * does a substring-aware replacement, exactly like the result-payload echo
+ * scrub above, over `label`/`ancestry[].label`/`scrollRegion.label` only.
+ */
+export function parameterizeTargetEvidenceEcho(
+  evidence: TargetAnnotationV1,
+  literal: string,
+  placeholder: string,
+): TargetAnnotationV1;
+export function parameterizeTargetEvidenceEcho(
+  evidence: TargetAnnotationV1 | undefined,
+  literal: string,
+  placeholder: string,
+): TargetAnnotationV1 | undefined;
+export function parameterizeTargetEvidenceEcho(
+  evidence: TargetAnnotationV1 | undefined,
+  literal: string,
+  placeholder: string,
+): TargetAnnotationV1 | undefined {
+  if (!evidence) return evidence;
+  return {
+    ...evidence,
+    ...(evidence.label !== undefined
+      ? { label: parameterizeSensitiveString(evidence.label, literal, placeholder) }
+      : {}),
+    ancestry: evidence.ancestry.map((entry) => ({
+      ...entry,
+      ...(entry.label !== undefined
+        ? { label: parameterizeSensitiveString(entry.label, literal, placeholder) }
+        : {}),
+    })),
+    ...(evidence.scrollRegion
+      ? {
+          scrollRegion: {
+            ...evidence.scrollRegion,
+            ...(evidence.scrollRegion.label !== undefined
+              ? {
+                  label: parameterizeSensitiveString(
+                    evidence.scrollRegion.label,
+                    literal,
+                    placeholder,
+                  ),
+                }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+/** Whether any label tier of the evidence carries the literal as a substring. */
+export function targetEvidenceCarriesLiteral(
+  evidence: TargetAnnotationV1,
+  literal: string,
+): boolean {
+  if (evidence.label !== undefined && evidence.label.includes(literal)) return true;
+  if (evidence.ancestry.some((entry) => entry.label?.includes(literal) === true)) return true;
+  if (evidence.scrollRegion?.label?.includes(literal) === true) return true;
+  return false;
+}
+
 /** Parameterize exact accessibility labels without rewriting identity fragments. */
+export function parameterizeRecordedFillTargetEvidence(
+  evidence: TargetAnnotationV1,
+  literal: string,
+  placeholder: string,
+): TargetAnnotationV1;
+export function parameterizeRecordedFillTargetEvidence(
+  evidence: TargetAnnotationV1 | undefined,
+  literal: string,
+  placeholder: string,
+): TargetAnnotationV1 | undefined;
 export function parameterizeRecordedFillTargetEvidence(
   evidence: TargetAnnotationV1 | undefined,
   literal: string,

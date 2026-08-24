@@ -415,6 +415,18 @@ export type SessionState = {
   pendingRecordAndHeal?: { expectedFrom: number; actionsCountAtDivergence: number };
   actions: SessionAction[];
   /**
+   * #1398 (ADR 0017 session-scoped echo protection amendment): explicit,
+   * ephemeral `literal -> ${VAR}` placeholder map, populated only from the
+   * SAME pair `fill --record-as` (ADR 0017) already computes as each
+   * parameterized fill records. Consulted by `recordActionEntry` so a LATER
+   * recorded action's own result/target evidence never re-serializes an
+   * app-rendered echo of an already-authored literal. In-memory only for
+   * this session's lifetime: never read by the script writer, the event
+   * log, or diagnostics, and dropped with the session. Owned by
+   * `src/daemon/session-action-recorder.ts`.
+   */
+  recordedFillLiterals?: Map<string, string>;
+  /**
    * Neutral session-owned app-log resource. Durable coordinates are persisted
    * independently; the in-memory handle is never serialized or reconstructed
    * by SessionStore.

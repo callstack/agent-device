@@ -86,6 +86,86 @@ or whitespace. If the replay is itself being recorded or repaired, the recorder 
 original placeholder rather than serializing the expanded value. Embedded interpolation remains
 ordinary script input; safe authoring emits one complete placeholder token.
 
+### Session-scoped echo protection (amendment, #1398)
+
+> **Status: accepted.** Amends the data-flow boundary above from fill-step-scoped to
+> recording-session-scoped, per issue [#1398](https://github.com/callstack/agent-device/issues/1398).
+
+The boundary above protects only the originating fill's own request/recording path. After
+[#1349](https://github.com/callstack/agent-device/issues/1349), a later read-only action —
+`wait`'s landmark-mode evidence, `is`, `get` — records `target-v1` identity evidence and a result
+payload independently, computed from whatever the app renders at that later step. That capture has no
+memory of an earlier fill's literal, so an app-rendered echo of it (the filled field's own displayed
+value; a search result, validation message, or confirmation label containing it; a destination landmark
+whose accessible label includes it) can re-enter session state and publication through a completely
+different, unparameterized action — even though the originating fill was parameterized.
+
+**The guarantee is now recording-session-scoped, not fill-step-scoped.** For the lifetime of one
+recording session, no later recorded action's own result payload or `target-v1`/`targets-v1` identity
+evidence may re-serialize an app-rendered echo of a literal the session already parameterized.
+
+The mechanism is the smallest explicit, ephemeral state that can recognize a later echo:
+`SessionState.recordedFillLiterals`, an in-memory `Map<literal, placeholder>` populated only by the SAME
+(literal, placeholder) pair a `fill --record-as` entry already computes for its own boundary above — one
+entry per parameterized fill, added only after that fill's own entry has been recorded. It is never
+serialized (not to the script, the session event log, or diagnostics), has no read API beyond the
+recorder that owns it, and disappears with the session.
+
+This is not a reversal of the "no secret-to-name table" rule in the Mapping contract above. That rule
+rejects retaining state to influence a *naming* decision — comparing a new `--record-as` value against
+prior ones to infer or deduplicate a variable name. `recordedFillLiterals` never informs a naming
+decision: every entry's placeholder is exactly the name the author already chose, and the map is
+consulted only to recognize that same, already-named value reappearing in unrelated later evidence — a
+redaction lookup, not a secret registry with a naming or comparison API.
+
+**Two treatments, by data class:**
+
+- **Result/event/backend-output fields** (display data, never compared at replay): content-aware
+  substring redaction, reusing the same recursive backend-output scrub the fill boundary already applies
+  to its own entry, generalized over every literal registered so far in the session. Pairs are applied
+  longest-literal-first so one registered value that is a substring of another (e.g. a username that is a
+  prefix of a password) is never partially consumed by the shorter pair first.
+- **`target-v1`/`targets-v1` identity evidence** (`label`, `ancestry[].label`, `scrollRegion.label` — the
+  fields replay's own classification compares): never silently text-substituted while still claiming a
+  trustworthy identity. Replay compares recorded identity against the *live* tree, which legitimately
+  re-renders the real value again at replay time; a placeholder written into a recorded identity field
+  could therefore never verify correctly. Instead:
+  - **Landmark mode (`wait`).** An echo is treated exactly like #1349's existing identity-empty case: no
+    annotation is recorded, and the wait keeps its selector-existence semantics. Because ADR 0016's
+    destination guard requires `verification: "verified"`, a landmark whose only identity is a
+    parameterized-value echo simply stops qualifying as a guard — `session save-script` refuses it with
+    the existing "record a selector-targeted wait on a labeled or id-bearing landmark" recovery,
+    reproducing the motivating scenario's real resolution (switching the guard to the stable `Apps`
+    landmark) as an enforced outcome rather than an authoring convention.
+  - **Action mode (`get`, `is`, mutating element-targeting actions).** ADR 0012/0016 require identity
+    evidence for every element-targeting recorded action and forbid silently dropping it, so an echo here
+    is never dropped. The literal-bearing label(s) are redacted to the placeholder (content-aware,
+    substring-based — unlike the exact-match fill-boundary redaction, because a cross-step echo is
+    typically surrounded by app-authored text such as "Welcome, `<value>`") and `verification` is
+    downgraded to `"unverifiable"` — the same fail-closed downgrade decision 3's writer-parser invariant
+    already uses for an oversized payload. That fails the action's replay loudly
+    (`identity-unverifiable`) rather than silently weakening it to selector-only matching or publishing a
+    label that could never match again.
+
+**Explicit scope limits:**
+
+- A whitespace-only or empty resolved fill value is excluded from the session-wide registry; it keeps
+  only the existing fill-step-scoped protection above. Collapsing arbitrary later strings on a value with
+  no discriminating content is a disproportionate readability cost for a value that reveals nothing
+  distinctive if echoed, and would corrupt unrelated short incidental substrings throughout the rest of
+  the recording.
+- The originating fill's own recorded entry is protected only by the existing exact-match fill-boundary
+  pass; it is never passed through the coarser, substring-based session-wide pass using the pair it just
+  contributed. The session-wide guarantee is for later, distinct actions, exactly as #1398 frames it.
+- An author's own explicitly typed selector or positional text is not scanned — only derived, resolved
+  evidence and result payloads are. An author who types the secret directly into a new selector is making
+  the same choice as an unparameterized fill/type value; that remains literal script content.
+- The registry is keyed by literal, so two distinct `--record-as` names that happen to share the same
+  typed value (a password/confirm-password pair, say) are genuinely indistinguishable from a later
+  echo's perspective — the literal alone cannot say which fill produced it. The first-registered name
+  wins deterministically; the literal is redacted either way, so this only affects which placeholder
+  name a later echo is attributed to, never whether the value is protected.
+
 ## Consequences
 
 - Secret-bearing login/bootstrap scripts can use ADR 0016 active publication safely.
@@ -93,4 +173,6 @@ ordinary script input; safe authoring emits one complete placeholder token.
   script content and help warns accordingly.
 - `type` and mutating `find ... fill|type` parameterization are not added by this decision. They require
   their own surface and provenance design if needed.
-- No new publication format, variable store, secret registry, or sensitivity heuristic is introduced.
+- No new publication format, variable store, or sensitivity heuristic is introduced. The #1398 amendment
+  adds one ephemeral, non-serialized, per-session redaction map with no naming or lookup-by-name API —
+  never a persistent secret registry.

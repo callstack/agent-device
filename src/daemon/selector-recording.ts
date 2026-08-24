@@ -151,7 +151,10 @@ export function recordIfSession(
     // class AND the provenance — so an authored plan step recorded through
     // this same path keeps its place in the healed script.
     interactiveObservation: isInteractiveObservation(req),
-    ...(targetEvidence ? { targetEvidence } : {}),
+    // #1398: lets session-scoped echo protection apply the SAME
+    // landmark-vs-action treatment #1349 already established for
+    // identity-empty evidence.
+    ...(targetEvidence ? { targetEvidence, targetEvidenceMode: evidenceMode ?? 'action' } : {}),
   });
 }
 

@@ -14,8 +14,10 @@ const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
 
 export const DAEMON_MODULARITY_BASELINE = {
   sessionState: {
-    writerOwnedFields: 21,
-    ownerFileClaims: 25,
+    // #1398: +1 field (`recordedFillLiterals`), +1 owner claim (its single owner,
+    // src/daemon/session-action-recorder.ts).
+    writerOwnedFields: 22,
+    ownerFileClaims: 26,
   },
   largestTypeCycle: {
     zoneMembers: LARGEST_TYPE_CYCLE_ZONE_CEILINGS,

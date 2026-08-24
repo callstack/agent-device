@@ -318,3 +318,314 @@ test('#1533: an ARMED authoring lifecycle still takes the ingress (retarget + fo
     authoringPublication('armed', { path: '/tmp/out.ad', force: true }),
   );
 });
+
+// #1398: session-scoped echo protection. A LATER, unrelated action can
+// independently observe an app-rendered echo of an earlier parameterized
+// fill's literal (its own displayed value, a search result, a confirmation
+// label, a caller-authored destination landmark). These tests prove the
+// echo never reaches `session.actions` regardless of which later command
+// records it, while never falsely claiming replay-verified identity.
+
+test('#1398: a landmark-mode wait recorded after a parameterized fill drops identity evidence that echoes the literal', () => {
+  const session = makeIosSession('default');
+  const literal = 'hunter2-secret';
+
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="password"', literal],
+    flags: { recordAs: 'PASSWORD' },
+    result: { text: literal },
+  });
+  recordActionEntry(session, {
+    command: 'wait',
+    positionals: ['role="heading"'],
+    flags: {},
+    result: { waitedMs: 12, text: `Welcome, ${literal}`, hint: `matched Welcome, ${literal}` },
+    targetEvidence: {
+      role: 'heading',
+      label: `Welcome, ${literal}`,
+      ancestry: [{ role: 'window' }],
+      sibling: 0,
+      viewportOrder: 0,
+      verification: 'verified',
+    },
+    targetEvidenceMode: 'landmark',
+  });
+
+  const wait = session.actions[1];
+  expect(wait?.command).toBe('wait');
+  expect(wait?.targetEvidence).toBeUndefined();
+  expect(wait?.result).toEqual({
+    waitedMs: 12,
+    text: 'Welcome, ${PASSWORD}',
+    hint: 'matched Welcome, ${PASSWORD}',
+  });
+  expect(JSON.stringify(session.actions)).not.toContain(literal);
+});
+
+test('#1398: a landmark-mode wait drops identity evidence when the echo is only in the ancestry chain', () => {
+  const session = makeIosSession('default');
+  const literal = 'hunter2-secret';
+
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="password"', literal],
+    flags: { recordAs: 'PASSWORD' },
+    result: { text: literal },
+  });
+  recordActionEntry(session, {
+    command: 'wait',
+    positionals: ['role="button" label="Continue"'],
+    flags: {},
+    result: { waitedMs: 5 },
+    targetEvidence: {
+      role: 'button',
+      label: 'Continue',
+      ancestry: [{ role: 'group', label: `Signed in as ${literal}` }],
+      sibling: 0,
+      viewportOrder: 0,
+      verification: 'verified',
+    },
+    targetEvidenceMode: 'landmark',
+  });
+
+  expect(session.actions[1]?.targetEvidence).toBeUndefined();
+});
+
+test('#1398: action-mode evidence (get/is) redacts an echoed label and downgrades to unverifiable instead of dropping required identity evidence', () => {
+  const session = makeIosSession('default');
+  const literal = 'hunter2-secret';
+
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="password"', literal],
+    flags: { recordAs: 'PASSWORD' },
+    result: { text: literal },
+  });
+  recordActionEntry(session, {
+    command: 'is',
+    positionals: ['visible', 'id="password"'],
+    flags: {},
+    result: {},
+    targetEvidence: {
+      role: 'textinput',
+      label: `Password: ${literal}`,
+      ancestry: [{ role: 'form', label: 'Credentials' }],
+      sibling: 0,
+      viewportOrder: 0,
+      verification: 'verified',
+    },
+  });
+
+  expect(session.actions[1]?.targetEvidence).toEqual({
+    role: 'textinput',
+    label: 'Password: ${PASSWORD}',
+    ancestry: [{ role: 'form', label: 'Credentials' }],
+    sibling: 0,
+    viewportOrder: 0,
+    verification: 'unverifiable',
+  });
+  expect(JSON.stringify(session.actions)).not.toContain(literal);
+});
+
+test('#1398: action-mode evidence redacts EVERY registered literal echoed in the same label, not just the first match', () => {
+  const session = makeIosSession('default');
+
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="username"', 'bob'],
+    flags: { recordAs: 'USERNAME' },
+    result: { text: 'bob' },
+  });
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="password"', 'hunter2-secret'],
+    flags: { recordAs: 'PASSWORD' },
+    result: { text: 'hunter2-secret' },
+  });
+  recordActionEntry(session, {
+    command: 'is',
+    positionals: ['visible', 'id="session-banner"'],
+    flags: {},
+    result: {},
+    targetEvidence: {
+      role: 'text',
+      label: 'Signed in as bob, session hunter2-secret',
+      ancestry: [],
+      sibling: 0,
+      viewportOrder: 0,
+      verification: 'verified',
+    },
+  });
+
+  expect(session.actions[2]?.targetEvidence).toEqual({
+    role: 'text',
+    label: 'Signed in as ${USERNAME}, session ${PASSWORD}',
+    ancestry: [],
+    sibling: 0,
+    viewportOrder: 0,
+    verification: 'unverifiable',
+  });
+  const serialized = JSON.stringify(session.actions);
+  expect(serialized).not.toContain('bob');
+  expect(serialized).not.toContain('hunter2-secret');
+});
+
+test('#1398: two distinct --record-as names sharing the same literal value deterministically keep the first-registered name', () => {
+  const session = makeIosSession('default');
+
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="password"', 'hunter2'],
+    flags: { recordAs: 'PASSWORD' },
+    result: { text: 'hunter2' },
+  });
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="confirm"', 'hunter2'],
+    flags: { recordAs: 'CONFIRM_PASSWORD' },
+    result: { text: 'hunter2' },
+  });
+  recordActionEntry(session, {
+    command: 'wait',
+    positionals: ['id="confirmation-banner"'],
+    flags: {},
+    result: { waitedMs: 1, text: 'Passwords match: hunter2' },
+  });
+
+  expect(session.actions[2]?.result).toEqual({
+    waitedMs: 1,
+    text: 'Passwords match: ${PASSWORD}',
+  });
+  expect(JSON.stringify(session.actions)).not.toContain('hunter2');
+});
+
+test('#1398: dual-endpoint (targetEvidences) evidence is protected independently per endpoint', () => {
+  const session = makeIosSession('default');
+  const literal = 'hunter2-secret';
+
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="password"', literal],
+    flags: { recordAs: 'PASSWORD' },
+    result: { text: literal },
+  });
+  recordActionEntry(session, {
+    command: 'drag',
+    positionals: ['id="source"', 'id="dest"'],
+    flags: {},
+    result: {},
+    targetEvidences: {
+      source: {
+        role: 'button',
+        label: 'Drag me',
+        ancestry: [],
+        sibling: 0,
+        viewportOrder: 0,
+        verification: 'verified',
+      },
+      destination: {
+        role: 'dropzone',
+        label: literal,
+        ancestry: [],
+        sibling: 0,
+        viewportOrder: 0,
+        verification: 'verified',
+      },
+    },
+  });
+
+  const drag = session.actions[1];
+  expect(drag?.targetEvidences?.source).toEqual({
+    role: 'button',
+    label: 'Drag me',
+    ancestry: [],
+    sibling: 0,
+    viewportOrder: 0,
+    verification: 'verified',
+  });
+  expect(drag?.targetEvidences?.destination).toEqual({
+    role: 'dropzone',
+    label: '${PASSWORD}',
+    ancestry: [],
+    sibling: 0,
+    viewportOrder: 0,
+    verification: 'unverifiable',
+  });
+});
+
+test('#1398: multiple registered literals apply longest-first so a shorter value never partially consumes a longer one', () => {
+  const session = makeIosSession('default');
+
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="password"', 'bob123'],
+    flags: { recordAs: 'PASSWORD' },
+    result: { text: 'bob123' },
+  });
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="username"', 'bob'],
+    flags: { recordAs: 'USERNAME' },
+    result: { text: 'bob' },
+  });
+  recordActionEntry(session, {
+    command: 'wait',
+    positionals: ['text="Welcome bob123!"'],
+    flags: {},
+    result: { waitedMs: 1, text: 'Welcome bob123!' },
+  });
+
+  expect(session.actions[2]?.result).toEqual({ waitedMs: 1, text: 'Welcome ${PASSWORD}!' });
+});
+
+test('#1398: a whitespace-only --record-as value keeps only fill-step-scoped protection (not registered session-wide)', () => {
+  const session = makeIosSession('default');
+  const whitespace = '   ';
+
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="password"', whitespace],
+    flags: { recordAs: 'PASSWORD' },
+    result: { text: whitespace },
+  });
+  expect(session.recordedFillLiterals).toBeUndefined();
+
+  recordActionEntry(session, {
+    command: 'wait',
+    positionals: ['text="a b c"'],
+    flags: {},
+    result: { waitedMs: 1, text: 'a b c' },
+  });
+
+  expect(session.actions[1]?.result).toEqual({ waitedMs: 1, text: 'a b c' });
+});
+
+test('#1398: ordinary recordings with no --record-as fill are completely unaffected', () => {
+  const session = makeIosSession('default');
+  recordActionEntry(session, {
+    command: 'wait',
+    positionals: ['role="heading" label="Home"'],
+    flags: {},
+    result: { waitedMs: 2, text: 'Home' },
+    targetEvidence: {
+      role: 'heading',
+      label: 'Home',
+      ancestry: [],
+      sibling: 0,
+      viewportOrder: 0,
+      verification: 'verified',
+    },
+    targetEvidenceMode: 'landmark',
+  });
+
+  expect(session.recordedFillLiterals).toBeUndefined();
+  expect(session.actions[0]?.targetEvidence).toEqual({
+    role: 'heading',
+    label: 'Home',
+    ancestry: [],
+    sibling: 0,
+    viewportOrder: 0,
+    verification: 'verified',
+  });
+});

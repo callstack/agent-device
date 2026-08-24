@@ -85,6 +85,11 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   // a second durable owner as the execution seam stays package-bound.
   lease: ['src/daemon/handlers/session-open-execution.ts'],
   deviceClaim: ['src/daemon/handlers/session-open-execution.ts'],
+
+  // #1398 (ADR 0017 session-scoped echo protection amendment): the ephemeral
+  // literal->placeholder registry is populated and consulted only at the
+  // recorder's single choke point.
+  recordedFillLiterals: ['src/daemon/session-action-recorder.ts'],
 };
 
 /**

@@ -26,7 +26,9 @@ Normative summary; the binding contracts and refusal cases are in [Decision](#de
   what lets a one-shot client keep the daemon alive on a close-less handoff.
 - Sensitive `fill` inputs must be recorded as placeholders via `fill --record-as <VAR>`
   (ADR 0017, shipped for #1348); unparameterized `fill`/`type` values persist literally into the
-  artifact, so a secret entered without `--record-as` is published.
+  artifact, so a secret entered without `--record-as` is published. The protection is
+  recording-session-scoped (ADR 0017's #1398 amendment): a later action's own recorded evidence can
+  never re-serialize an app-rendered echo of an already-parameterized value either.
 
 ## Context
 
@@ -186,6 +188,13 @@ record one. V1 does not infer a screen identity from a snapshot or synthesize an
 > `identity-mismatch` `REPLAY_DIVERGENCE` before the wait reports success. The reshuffled-screen
 > false-pass below is covered by a provider-scenario regression (record → publish → replay against a
 > reshuffled tree whose same-label node sits under a different id/ancestry).
+>
+> **Amendment (#1398, ADR 0017).** An identity-empty landmark is not the only case that fails to
+> qualify: a selector wait whose only identity is an app-rendered echo of a literal the recording
+> session already parameterized via `fill --record-as` also records no annotation (ADR 0017's
+> session-scoped echo protection), so it does not qualify as a destination guard either. Publication
+> refuses it with the same recovery hint, directing the author to a stable, non-value-bearing landmark
+> — an enforced version of exactly the fix issue #1398's motivating scenario applied by hand.
 
 The original selector-level caveat, retained as context: the guard proved that an element matching its
 selector exists, not that it is the same landmark element observed while authoring, so a reshuffled
@@ -228,6 +237,11 @@ sensitive fills: `fill ... --record-as PASSWORD` sends the live text to the app 
 This is opt-in and fill-only. Unparameterized fill/type inputs remain literal artifact content, so
 authors must use ADR 0017 for each sensitive fill and avoid secret-bearing `type` steps. CLI help states
 both the safe workflow and the remaining literal-input warning next to publication guidance.
+
+ADR 0017's #1398 amendment extends this protection to the whole recording session: a later, unrelated
+recorded action can no longer re-serialize an app-rendered echo of an already-parameterized literal into
+its own result or `target-v1` evidence, so a value protected once by `--record-as` stays protected for
+every action recorded after it in the same session, not only its own originating fill.
 
 ### Artifact contract
 
