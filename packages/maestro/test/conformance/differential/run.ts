@@ -160,7 +160,10 @@ function matchesDeclaredDivergence(
     : false;
 }
 
-function runScenario(scenario: DifferentialScenario, options: RunnerOptions): ScenarioReport {
+export function runScenario(
+  scenario: DifferentialScenario,
+  options: RunnerOptions,
+): ScenarioReport {
   const flowPath = path.join(CONFORMANCE_DIR, scenario.flow);
   const platformArgs = options.platform ? ['--platform', options.platform] : [];
 

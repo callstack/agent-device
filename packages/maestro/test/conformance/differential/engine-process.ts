@@ -12,7 +12,9 @@ export type EngineResult = {
 export function runMaestroEngine(command: string, args: string[]): EngineResult {
   const [bin = '', ...rest] = command.split(' ').filter(Boolean);
   const result = spawnSync(bin, [...rest, ...args], { stdio: 'inherit', cwd: process.cwd() });
-  return buildEngineResult('maestro', result, () => 'behavioral');
+  // Maestro does not expose typed failure provenance. Until it does, a non-zero exit cannot
+  // safely satisfy a behavioral divergence waiver.
+  return buildEngineResult('maestro', result, () => 'infrastructure');
 }
 
 export function classifyAgentDeviceFailure(stdout: string): 'behavioral' | 'infrastructure' {
