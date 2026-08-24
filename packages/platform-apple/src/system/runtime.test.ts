@@ -47,6 +47,24 @@ test.each([
   },
 );
 
+/**
+ * `trigger-app-event` carried no Apple admission closure at all: its retired bucket was
+ * `{ simulator, device }` flat, so every leaf with a constructible interactor admits it — macOS
+ * included, unlike clipboard.
+ */
+test.each([
+  { appleOs: 'ios', kind: 'simulator', expected: true },
+  { appleOs: 'ios', kind: 'device', expected: true },
+  { appleOs: 'macos', kind: 'device', expected: true },
+  { appleOs: 'tvos', kind: 'simulator', expected: true },
+  { appleOs: 'watchos', kind: 'simulator', expected: false },
+] as const)(
+  'trigger-app-event on an Apple $appleOs $kind is available: $expected',
+  ({ appleOs, kind, expected }) => {
+    expect(appleSystemFacts(appleDevice(appleOs, kind)).triggerAppEvent.available).toBe(expected);
+  },
+);
+
 test('a non-simulator, non-device Apple kind is refused by kind, with its own reason', () => {
   const facts = appleSystemFacts(appleDevice('ios', 'emulator'));
   expect(facts.readClipboard).toEqual({

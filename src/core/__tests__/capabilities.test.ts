@@ -276,13 +276,14 @@ test('Linux supports desktop interaction commands and blocks mobile/unsupported 
       'scroll',
       'snapshot',
       'swipe',
+      'trigger-app-event',
       'type',
       'wait',
     ],
     [{ device: linuxDevice, expected: true, label: 'on Linux' }],
   );
   assertCommandSupport(
-    ['alert', 'perf', 'settings', 'trigger-app-event'],
+    ['alert', 'perf', 'settings'],
     [{ device: linuxDevice, expected: false, label: 'on Linux' }],
   );
 });
@@ -312,13 +313,14 @@ test('web supports only the initial browser interaction slice', () => {
       'scroll',
       'snapshot',
       'swipe',
+      'trigger-app-event',
       'type',
       'wait',
     ],
     [{ device: webDevice, expected: true, label: 'on web' }],
   );
   assertCommandSupport(
-    ['alert', 'perf', 'settings', 'trigger-app-event'],
+    ['alert', 'perf', 'settings'],
     [{ device: webDevice, expected: false, label: 'on web' }],
   );
   assertCommandSupport(

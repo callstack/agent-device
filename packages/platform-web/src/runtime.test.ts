@@ -199,13 +199,18 @@ test.each([
   },
 );
 
-test('clipboard and the app switcher never carried a web capability bucket', async () => {
+test('clipboard, the app switcher and app events never carried a web capability bucket', async () => {
   const binding = await createWebPlatformRuntime(host({ mode: 'transport-composed' })).bind({
     device,
     intent: { kind: 'ordinary' },
     scope: scope(),
   });
-  for (const operation of ['readClipboard', 'writeClipboard', 'appSwitcher'] as const) {
+  for (const operation of [
+    'readClipboard',
+    'writeClipboard',
+    'appSwitcher',
+    'triggerAppEvent',
+  ] as const) {
     expect(binding.facts.operations[operation]).toEqual({
       available: false,
       reason: 'unsupported-platform-leaf',

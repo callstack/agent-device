@@ -311,6 +311,9 @@ test('admits both clipboard halves and the app switcher on every real Android ki
     // R56: `app-switcher` shares `home`'s cell — one `input keyevent` on every real kind.
     expect(binding.facts.operations.appSwitcher).toEqual({ available: true });
     expect(binding.operations.appSwitcher).toBeTypeOf('function');
+    // R57: the deep link opens through `am start` on the same cell.
+    expect(binding.facts.operations.triggerAppEvent).toEqual({ available: true });
+    expect(binding.operations.triggerAppEvent).toBeTypeOf('function');
   }
 });
 
@@ -338,6 +341,7 @@ test('the synthetic Android simulator cell refuses back/home/orientation/keyboar
     'readClipboard',
     'writeClipboard',
     'appSwitcher',
+    'triggerAppEvent',
   ] as const) {
     expect(facts.operations[operation].available).toBe(false);
     expect(binding.operations[operation]).toBeUndefined();

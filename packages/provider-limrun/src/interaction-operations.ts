@@ -17,6 +17,7 @@ import {
   scrollRuntimeOperationFacts,
 } from '@agent-device/contracts/scroll-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
@@ -278,6 +279,21 @@ export function limrunAppSwitcherOperationFacts(
     liveSessionUnavailable ??
     (device.platform === 'android' ? available : appSwitcherUnavailableIos);
   return Object.freeze({ ...appSwitcherRuntimeOperationFacts({ appSwitcher: cell }) });
+}
+
+/**
+ * `trigger-app-event` is the one system leaf both direct-session legs genuinely serve: each
+ * implements `open`, and a deep link is exactly what that method routes (`openUrl` on iOS, the
+ * local Android interactor's `am start` on Android).
+ */
+export function limrunAppEventOperationFacts(
+  device: DeviceInfo,
+  liveSessionUnavailable?: RuntimeOperationUnavailability,
+) {
+  void device;
+  return Object.freeze({
+    ...appEventRuntimeOperationFacts({ triggerAppEvent: liveSessionUnavailable ?? available }),
+  });
 }
 
 export function limrunKeyboardOperationFacts(

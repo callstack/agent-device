@@ -3,6 +3,7 @@ import { bindAdmittedProviderInteractorOperations } from '@agent-device/contract
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test } from 'vitest';
 import {
+  limrunAppEventOperationFacts,
   limrunAppSwitcherOperationFacts,
   limrunClipboardOperationFacts,
   limrunNavigationOperationFacts,
@@ -87,6 +88,18 @@ test('app-switcher rides the Android interactor and is refused on the iOS leg', 
   expect(
     limrunAppSwitcherOperationFacts(androidMobileDevice, liveSessionUnavailable).appSwitcher,
   ).toEqual(liveSessionUnavailable);
+});
+
+// R57: app-event delivery is the one system leaf BOTH direct-session legs serve, because each
+// implements `open` and a deep link is exactly what that method routes.
+test('app-event delivery is admitted on both direct-session legs', () => {
+  expect(limrunAppEventOperationFacts(androidMobileDevice).triggerAppEvent).toEqual({
+    available: true,
+  });
+  expect(limrunAppEventOperationFacts(iosDevice).triggerAppEvent).toEqual({ available: true });
+  expect(limrunAppEventOperationFacts(iosDevice, liveSessionUnavailable).triggerAppEvent).toEqual(
+    liveSessionUnavailable,
+  );
 });
 
 test('the iOS leg admits back/orientation but explicitly refuses home and tv-remote', () => {

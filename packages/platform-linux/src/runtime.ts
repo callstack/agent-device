@@ -197,6 +197,8 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     // The Linux interactor's own `appSwitcher` throws unsupported, and the retired descriptor
     // declared `linux: {}`, so no Linux cell was ever admitted.
     appSwitcher: linuxPlatformLeafUnavailable,
+    // The retired `trigger-app-event` descriptor declared `linux: {}`.
+    triggerAppEvent: linuxPlatformLeafUnavailable,
     keyboardStatus: linuxPlatformLeafUnavailable,
     keyboardDismiss: linuxPlatformLeafUnavailable,
     keyboardEnter: linuxPlatformLeafUnavailable,

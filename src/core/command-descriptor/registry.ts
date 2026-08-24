@@ -38,6 +38,7 @@ import {
   gestureRuntimePlanUses,
   homeRuntimeUse,
   hoverRuntimeUses,
+  appEventRuntimeUse,
   appSwitcherRuntimeUse,
   clipboardRuntimePlanUses,
   keyboardRuntimePlanUses,
@@ -850,14 +851,16 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/push.ts'] as const } : {}),
     catalog: { group: 'public', key: 'triggerAppEvent' },
     frameworkTier: 'extended',
+    // R57 retires this command's capability bucket and its `dispatch` leaf together: admission is
+    // the owner's `triggerAppEvent` fact, and the only execution is that one bound operation. The
+    // event name, payload, and URL template stay daemon policy (ADR 0019 §2 — a facet input names
+    // no command, request, or CLI flag), so the owner receives a URL to open.
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
-    dispatch: {},
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: [appEventRuntimeUse] },
   },
   {
     name: 'open',

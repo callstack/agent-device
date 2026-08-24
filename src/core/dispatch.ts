@@ -5,7 +5,6 @@ import type { Rect } from '@agent-device/kernel/snapshot';
 import { emitDiagnostic, withDiagnosticTimer } from '../utils/diagnostics.ts';
 import { readLocationCoordinate } from '../utils/location-coordinates.ts';
 import { successText, withSuccessText } from '../utils/success-text.ts';
-import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
 import type { DescriptorDispatchCommandName } from './command-descriptor/registry.ts';
 import type { DispatchContext } from './dispatch-context.ts';
 import { getInteractor } from './interactors.ts';
@@ -116,8 +115,6 @@ type DispatchHandler = (args: DispatchHandlerArgs) => Promise<Record<string, unk
  * behaviorless.
  */
 const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
-  'trigger-app-event': ({ device, interactor, positionals, context }) =>
-    handleTriggerAppEventCommand(device, interactor, positionals, context),
   settings: ({ device, interactor, positionals, context }) =>
     handleSettingsCommand(device, interactor, positionals, context),
 };
@@ -153,23 +150,6 @@ async function dispatchKnownCommand(
 // ---------------------------------------------------------------------------
 // Command handlers
 // ---------------------------------------------------------------------------
-
-async function handleTriggerAppEventCommand(
-  device: DeviceInfo,
-  interactor: Interactor,
-  positionals: string[],
-  context: DispatchContext | undefined,
-): Promise<Record<string, unknown>> {
-  const { eventName, payload } = parseTriggerAppEventArgs(positionals);
-  const eventUrl = resolveAppEventUrl(device, eventName, payload);
-  await interactor.open(eventUrl, { appBundleId: context?.appBundleId });
-  return {
-    event: eventName,
-    eventUrl,
-    transport: 'deep-link',
-    ...successText(`Triggered app event: ${eventName}`),
-  };
-}
 
 async function handleSettingsCommand(
   device: DeviceInfo,

@@ -15,6 +15,7 @@ import {
 import {
   limrunInteractionOperationFacts,
   limrunKeyboardOperationFacts,
+  limrunAppEventOperationFacts,
   limrunAppSwitcherOperationFacts,
   limrunClipboardOperationFacts,
   limrunNavigationOperationFacts,
@@ -189,6 +190,7 @@ export function limrunAppLogFacts(
       ...limrunKeyboardOperationFacts(device),
       ...limrunClipboardOperationFacts(device),
       ...limrunAppSwitcherOperationFacts(device),
+      ...limrunAppEventOperationFacts(device),
       ensureReady: available,
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,
@@ -238,6 +240,7 @@ export function limrunAppLogRecoveryFacts(
       ...limrunKeyboardOperationFacts(device, liveSessionUnavailable),
       ...limrunClipboardOperationFacts(device, liveSessionUnavailable),
       ...limrunAppSwitcherOperationFacts(device, liveSessionUnavailable),
+      ...limrunAppEventOperationFacts(device, liveSessionUnavailable),
       ensureReady: liveSessionUnavailable,
       bootTarget: liveSessionUnavailable,
       bootTargetHeadless: liveSessionUnavailable,

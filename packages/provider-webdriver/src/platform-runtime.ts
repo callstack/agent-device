@@ -24,6 +24,7 @@ import {
 } from '@agent-device/contracts/scroll-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
@@ -220,6 +221,12 @@ const appSwitcherUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'This WebDriver provider runtime does not expose the app switcher for this device.',
+} as const);
+
+const appEventUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'This WebDriver provider runtime does not expose app-event delivery for this device.',
 } as const);
 
 const appStateUnavailable = Object.freeze({
@@ -449,6 +456,7 @@ function webDriverFacts(
       readClipboard: inactiveSession,
       writeClipboard: inactiveSession,
       appSwitcher: inactiveSession,
+      triggerAppEvent: inactiveSession,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: inactiveSession,
         prepareApplicationOpen: inactiveSession,
@@ -486,6 +494,7 @@ function webDriverFacts(
     readClipboard: clipboardUnavailable,
     writeClipboard: clipboardUnavailable,
     appSwitcher: appSwitcherUnavailable,
+    triggerAppEvent: appEventUnavailable,
     lifecycle: webDriverLifecycleFacts(device),
   });
   // Both capture cells need the same reachability: an interactor this provider can drive, on a
@@ -558,6 +567,11 @@ function webDriverFacts(
       }),
       ...appSwitcherRuntimeOperationFacts({
         appSwitcher: interactorCell(reachable, appSwitcherUnavailable),
+      }),
+      // The deep link opens through the same reachable interactor `open` every lifecycle command
+      // drives on this provider.
+      ...appEventRuntimeOperationFacts({
+        triggerAppEvent: interactorCell(reachable, appEventUnavailable),
       }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       ensureReady: available,

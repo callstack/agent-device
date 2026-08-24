@@ -154,9 +154,10 @@ export const LINUX_PLATFORM_COVERAGE = {
   [C.install]: gap('No Linux-specific application installation command evidence exists yet'),
   [C.reinstall]: gap('No Linux-specific application reinstallation command evidence exists yet'),
   [C.push]: gap('No Linux-specific push delivery command evidence exists yet'),
-  [C.triggerAppEvent]: denial(
-    'trigger-app-event',
-    'Linux capability declaration rejects native application event delivery',
+  [C.triggerAppEvent]: contract(
+    LINUX_RUNTIME_EVIDENCE.path,
+    LINUX_RUNTIME_EVIDENCE.test,
+    'the exact-owner runtime fact rejects native application event delivery on Linux',
   ),
   [C.open]: live('the existing Linux replay opens gnome-calculator'),
   [C.prepare]: contract(

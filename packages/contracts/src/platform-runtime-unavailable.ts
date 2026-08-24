@@ -26,6 +26,7 @@ import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
 import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
 import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
 import { appSwitcherRuntimeOperationFacts } from './app-switcher-runtime.ts';
+import { appEventRuntimeOperationFacts } from './app-event-runtime.ts';
 import { touchRuntimeOperationFacts } from './touch-runtime.ts';
 
 /**
@@ -58,6 +59,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   readClipboard: RuntimeOperationUnavailability;
   writeClipboard: RuntimeOperationUnavailability;
   appSwitcher: RuntimeOperationUnavailability;
+  triggerAppEvent: RuntimeOperationUnavailability;
   readiness?: RuntimeOperationUnavailability;
   shutdown?: RuntimeOperationUnavailability;
   lifecycle: ApplicationLifecycleOperationFacts;
@@ -117,6 +119,7 @@ export function createUnavailablePlatformRuntimeFacts(
     readClipboard,
     writeClipboard,
     appSwitcher,
+    triggerAppEvent,
     readiness,
     shutdown,
     lifecycle,
@@ -188,6 +191,7 @@ export function createUnavailablePlatformRuntimeFacts(
       }),
       ...clipboardRuntimeOperationFacts({ read: readClipboard, write: writeClipboard }),
       ...appSwitcherRuntimeOperationFacts({ appSwitcher }),
+      ...appEventRuntimeOperationFacts({ triggerAppEvent }),
       ensureReady: readiness,
       bootTarget: readiness,
       bootTargetHeadless: readiness,
@@ -243,6 +247,9 @@ function freezeUnavailableFacts(
     // The app switcher is the springboard surface `home` drives, and differs by owner the same
     // way: an owner states it for its exact leaf rather than inheriting a sibling's gap.
     appSwitcher: Object.freeze({ ...unavailable.appSwitcher }),
+    // App-event delivery opens a URL on the device, which is not something a transport gap can
+    // speak for: each owner states whether it can open one at all.
+    triggerAppEvent: Object.freeze({ ...unavailable.triggerAppEvent }),
     lifecycle: applicationLifecycleOperationFacts(unavailable.lifecycle),
   });
 }

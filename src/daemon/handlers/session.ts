@@ -6,10 +6,7 @@ import { handleRuntimeCommand } from './session-runtime-command.ts';
 import { requireRuntimeBinding, requireRuntimeFacts } from './session-runtime-admission.ts';
 import { handleOpenCommand } from './session-open.ts';
 import { composeOpenWithInitialSnapshot } from './session-open-foreground.ts';
-import {
-  handleKeyboardCommand,
-  handleTriggerAppEventCommand,
-} from './session-selector-dispatch.ts';
+import { handleKeyboardCommand, handleAppEventCommand } from './session-selector-dispatch.ts';
 import { handleCloseCommand } from './session-close.ts';
 import { handleSessionAppDeploymentCommand } from './session-app-deployment-route.ts';
 import { runBatchCommands } from './session-batch.ts';
@@ -216,7 +213,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
   release_materialized_paths: async ({ req }) =>
     await handleReleaseMaterializedPathsCommand({ req }),
   push: handleSessionAppDeploymentCommand,
-  'trigger-app-event': handleTriggerAppEventCommand,
+  'trigger-app-event': handleAppEventCommand,
   open: async ({
     req,
     sessionName,

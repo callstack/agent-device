@@ -194,6 +194,12 @@ test.each([
       hint: 'app-switcher is not supported on Vega OS.',
     });
     expect(binding.operations.appSwitcher).toBeUndefined();
+    expect(binding.facts.operations.triggerAppEvent).toMatchObject({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: 'trigger-app-event is not supported on Vega OS.',
+    });
+    expect(binding.operations.triggerAppEvent).toBeUndefined();
     expectLifecycleFacts(binding, legacy);
   },
 );

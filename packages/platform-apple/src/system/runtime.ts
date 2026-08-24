@@ -1,3 +1,4 @@
+import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
@@ -45,11 +46,28 @@ function appleClipboardFact(device: DeviceInfo): RuntimeOperationFact {
   return os === 'macos' ? available : clipboardLeafUnavailable;
 }
 
-/** The system-surface cells: clipboard read/write. */
+const appEventKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'trigger-app-event is supported on Apple simulators and physical devices.',
+} as const);
+
+/**
+ * No apple-family closure ever gated `trigger-app-event` beyond its capability bucket
+ * (`{ simulator, device }`): the deep link opens through the same interactor `open` every Apple
+ * leaf drives. watchOS is the one narrowing, for want of a constructible interactor at all.
+ */
+function appleAppEventFact(device: DeviceInfo): RuntimeOperationFact {
+  if (device.kind !== 'simulator' && device.kind !== 'device') return appEventKindUnavailable;
+  return resolveDeviceAppleOs(device) === 'watchos' ? clipboardOsUnavailable : available;
+}
+
+/** The system-surface cells: clipboard read/write and app-event delivery. */
 export function appleSystemFacts(device: DeviceInfo) {
   const clipboard = appleClipboardFact(device);
   return Object.freeze({
     ...clipboardRuntimeOperationFacts({ read: clipboard, write: clipboard }),
+    ...appEventRuntimeOperationFacts({ triggerAppEvent: appleAppEventFact(device) }),
   });
 }
 

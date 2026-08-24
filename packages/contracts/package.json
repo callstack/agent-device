@@ -35,6 +35,10 @@
       "types": "./src/app-deployment-runtime-plan.ts",
       "default": "./src/app-deployment-runtime-plan.ts"
     },
+    "./app-event-runtime": {
+      "types": "./src/app-event-runtime.ts",
+      "default": "./src/app-event-runtime.ts"
+    },
     "./app-inventory-runtime": {
       "types": "./src/app-inventory-runtime.ts",
       "default": "./src/app-inventory-runtime.ts"

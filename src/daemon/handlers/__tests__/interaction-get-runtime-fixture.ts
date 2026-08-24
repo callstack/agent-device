@@ -173,6 +173,7 @@ function elementReadFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOpera
     readClipboard: unavailable,
     writeClipboard: unavailable,
     appSwitcher: unavailable,
+    triggerAppEvent: unavailable,
     screenshot: unavailable,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: unavailable,

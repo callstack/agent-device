@@ -53,6 +53,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/android-system-chrome',
   '@agent-device/contracts/app-deployment-runtime',
   '@agent-device/contracts/app-deployment-runtime-plan',
+  '@agent-device/contracts/app-event-runtime',
   '@agent-device/contracts/app-inventory-runtime',
   '@agent-device/contracts/app-log-runtime',
   '@agent-device/contracts/app-state-runtime',

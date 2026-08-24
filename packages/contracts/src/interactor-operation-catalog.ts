@@ -1,6 +1,10 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { bindLocalBackInteractor, bindProviderBackInteractor } from './back-runtime.ts';
 import {
+  bindLocalAppEventInteractor,
+  bindProviderAppEventInteractor,
+} from './app-event-runtime.ts';
+import {
   bindLocalAppSwitcherInteractor,
   bindProviderAppSwitcherInteractor,
 } from './app-switcher-runtime.ts';
@@ -57,6 +61,7 @@ const CATALOG_INTERACTOR_OPERATIONS = [
   'readClipboard',
   'writeClipboard',
   'appSwitcher',
+  'triggerAppEvent',
 ] as const;
 
 export type CatalogInteractorOperation = (typeof CATALOG_INTERACTOR_OPERATIONS)[number];
@@ -88,6 +93,7 @@ const LOCAL_BINDERS: Readonly<
   readClipboard: bindLocalClipboardReadInteractor,
   writeClipboard: bindLocalClipboardWriteInteractor,
   appSwitcher: bindLocalAppSwitcherInteractor,
+  triggerAppEvent: bindLocalAppEventInteractor,
 });
 
 const PROVIDER_BINDERS: Readonly<
@@ -106,6 +112,7 @@ const PROVIDER_BINDERS: Readonly<
   readClipboard: bindProviderClipboardReadInteractor,
   writeClipboard: bindProviderClipboardWriteInteractor,
   appSwitcher: bindProviderAppSwitcherInteractor,
+  triggerAppEvent: bindProviderAppEventInteractor,
 });
 
 /**

@@ -104,6 +104,7 @@ function createAdmissionFacts(
       readClipboard: unavailable,
       writeClipboard: unavailable,
       appSwitcher: unavailable,
+      triggerAppEvent: unavailable,
       ...touchRuntimeOperationFacts({
         tap: unavailable,
         longPress: unavailable,

@@ -1,12 +1,12 @@
-import { dispatchCommand } from '../../core/dispatch.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import type { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
 import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
-import { errorResponse, requireCommandSupported } from './response.ts';
+import { errorResponse } from './response.ts';
 import { recordSessionAction } from './handler-utils.ts';
+import { resolveBoundAppEventRuntime } from '../app-event-runtime.ts';
 import { resolveBoundKeyboardRuntime } from '../keyboard-runtime.ts';
 import { resolveRefFrameEffect } from '../daemon-command-registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
@@ -31,10 +31,10 @@ type SessionCommandPrepareOutcome =
  * The one orchestration every session/selector-route leaf shares: guard, resolve the device,
  * admit-then-prepare via the caller's own strategy, expire the ref frame if the command mutates
  * (immediately before the prepared invocation runs, never after), derive and record the next
- * session. `prepare` is where the two strategies session-route commands use today diverge —
- * {@link legacySessionDispatchExecute} for a still-legacy command (capability gate, then
- * `dispatchCommand`), or a bind-and-execute thunk like `keyboard`'s below for a migrated one —
- * everything around it is identical either way, so it lives here once instead of once per command.
+ * session. `prepare` is where each leaf's own admission and binding lives; everything around it
+ * is identical, so it lives here once instead of once per command. Every leaf on this route now
+ * supplies a bind-and-execute thunk — R57 retired the last capability-gate-then-`dispatchCommand`
+ * one with `trigger-app-event`.
  */
 // fallow-ignore-next-line complexity
 async function runSessionOrSelectorDispatch(params: {
@@ -99,33 +99,6 @@ async function runSessionOrSelectorDispatch(params: {
     }
   }
   return { ok: true, data: result ?? {} };
-}
-
-/** The still-legacy `prepare` thunk: the capability gate is admission (nothing mutated yet if it
- * refuses); `dispatchCommand` is the invocation, deferred until `runSessionOrSelectorDispatch` has
- * expired the ref frame. Every remaining unmigrated session-route command passes this until its
- * own migration replaces it with a bind-and-execute thunk, same as `keyboard`'s
- * {@link handleKeyboardCommand} below. */
-function legacySessionDispatchExecute(
-  command: string,
-  positionals: string[],
-  req: DaemonRequest,
-  logPath: string,
-): (
-  device: DeviceInfo,
-  session: SessionState | undefined,
-) => Promise<SessionCommandPrepareOutcome> {
-  return async (device, session) => {
-    const unsupported = requireCommandSupported(command, device);
-    if (unsupported) return { ok: false, response: unsupported };
-    return {
-      ok: true,
-      execute: () =>
-        dispatchCommand(device, command, positionals, req.flags?.out, {
-          ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
-        }),
-    };
-  };
 }
 
 /**
@@ -209,13 +182,46 @@ export async function handleKeyboardCommand(params: {
   });
 }
 
-export async function handleTriggerAppEventCommand(params: {
+/**
+ * `trigger-app-event`'s migrated `prepare` thunk (ADR 0019 §9): bind the one use its fact admits —
+ * admission only, no device I/O and no argument read yet — and defer the bound runtime's own
+ * `execute` as the invocation `runSessionOrSelectorDispatch` runs after expiring the frame.
+ */
+function appEventSessionExecute(
+  positionals: string[],
+  inspectFacts: InspectDeviceRuntimeFacts | undefined,
+  bindDevice: BindDeviceRuntime | undefined,
+  req: DaemonRequest,
+  logPath: string,
+): (
+  device: DeviceInfo,
+  session: SessionState | undefined,
+) => Promise<SessionCommandPrepareOutcome> {
+  return async (device, session) => {
+    const bound = await resolveBoundAppEventRuntime({
+      device,
+      positionals,
+      inspectFacts,
+      bindDevice,
+    });
+    if (!bound.ok) return { ok: false, response: bound.response };
+    const dispatchContext = {
+      ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
+      surface: session?.surface,
+    };
+    return { ok: true, execute: () => bound.execute(dispatchContext) };
+  };
+}
+
+export async function handleAppEventCommand(params: {
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, sessionStore } = params;
+  const { req, sessionName, logPath, sessionStore, inspectFacts, bindDevice } = params;
   const positionals = req.positionals ?? [];
   return await runSessionOrSelectorDispatch({
     req,
@@ -223,12 +229,7 @@ export async function handleTriggerAppEventCommand(params: {
     sessionStore,
     command: PUBLIC_COMMANDS.triggerAppEvent,
     positionals,
-    prepare: legacySessionDispatchExecute(
-      PUBLIC_COMMANDS.triggerAppEvent,
-      positionals,
-      req,
-      logPath,
-    ),
+    prepare: appEventSessionExecute(positionals, inspectFacts, bindDevice, req, logPath),
     deriveNextSession: async (session, result) => {
       const eventUrl = typeof result?.eventUrl === 'string' ? result.eventUrl : undefined;
       const nextAppBundleId = eventUrl

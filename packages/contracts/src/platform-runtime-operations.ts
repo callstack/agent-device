@@ -30,6 +30,7 @@ import type { TvRemoteRuntimeOperations } from './tv-remote-runtime.ts';
 import type { KeyboardRuntimeOperations } from './keyboard-runtime.ts';
 import type { ClipboardRuntimeOperations } from './clipboard-runtime.ts';
 import type { AppSwitcherRuntimeOperations } from './app-switcher-runtime.ts';
+import type { AppEventRuntimeOperations } from './app-event-runtime.ts';
 import type { TouchRuntimeOperations } from './touch-runtime.ts';
 import type {
   DeviceReadinessRuntimeHost,
@@ -76,6 +77,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   KeyboardRuntimeOperations &
   ClipboardRuntimeOperations &
   AppSwitcherRuntimeOperations &
+  AppEventRuntimeOperations &
   TouchRuntimeOperations &
   DeviceReadinessRuntimeOperations &
   DeviceShutdownRuntimeOperations &
@@ -106,6 +108,7 @@ export const keyboardStatusUse = defineUse({ required: ['keyboardStatus'] });
 export const keyboardDismissUse = defineUse({ required: ['keyboardDismiss'] });
 export const keyboardEnterUse = defineUse({ required: ['keyboardEnter'] });
 export const appSwitcherRuntimeUse = defineUse({ required: ['appSwitcher'] });
+export const appEventRuntimeUse = defineUse({ required: ['triggerAppEvent'] });
 export const clipboardReadUse = defineUse({ required: ['readClipboard'] });
 export const clipboardWriteUse = defineUse({ required: ['writeClipboard'] });
 export const tapPointUse = defineUse({ required: ['tapPoint'] });

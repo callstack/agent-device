@@ -85,6 +85,7 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.swipe,
   PUBLIC_COMMANDS.test,
   PUBLIC_COMMANDS.trace,
+  PUBLIC_COMMANDS.triggerAppEvent,
   PUBLIC_COMMANDS.tvRemote,
   PUBLIC_COMMANDS.type,
   PUBLIC_COMMANDS.viewport,

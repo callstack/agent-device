@@ -140,7 +140,7 @@ export const WEB_PLATFORM_COVERAGE = {
   ),
   [C.clipboard]: contract(
     'packages/platform-web/src/runtime.test.ts',
-    'clipboard and the app switcher never carried a web capability bucket',
+    'clipboard, the app switcher and app events never carried a web capability bucket',
     'the exact-owner runtime fact rejects native clipboard operations on the web target',
   ),
   [C.keyboard]: contract(
@@ -163,7 +163,11 @@ export const WEB_PLATFORM_COVERAGE = {
     'push reports the runtime-owned unavailable readiness and push facts',
     'the web runtime fact rejects native push notification delivery',
   ),
-  [C.triggerAppEvent]: denial('Web capability model rejects native app event delivery'),
+  [C.triggerAppEvent]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'clipboard, the app switcher and app events never carried a web capability bucket',
+    'the exact-owner runtime fact rejects native app-event delivery on the web target',
+  ),
   [C.open]: live('the managed browser opens the local fixture page'),
   [C.prepare]: contract(
     'packages/platform-web/src/runtime.test.ts',
@@ -267,7 +271,7 @@ export const WEB_PLATFORM_COVERAGE = {
   [C.viewport]: live('viewport resizes the browser and the PNG reports 640x480 dimensions'),
   [C.appSwitcher]: contract(
     'packages/platform-web/src/runtime.test.ts',
-    'clipboard and the app switcher never carried a web capability bucket',
+    'clipboard, the app switcher and app events never carried a web capability bucket',
     'the exact-owner runtime fact rejects native app-switcher navigation on the web target',
   ),
   [C.installFromSource]: contract(

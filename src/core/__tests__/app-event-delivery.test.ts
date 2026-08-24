@@ -2,7 +2,10 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { dispatchCommand } from '../dispatch.ts';
+import { bindLocalAppEventInteractor } from '@agent-device/contracts/app-event-runtime';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { parseTriggerAppEventArgs, resolveAppEventUrl } from '../app-events.ts';
+import { getInteractor } from '../interactors.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   ANDROID_EMULATOR,
@@ -10,6 +13,29 @@ import {
   MACOS_DEVICE,
 } from '../../__tests__/test-utils/device-fixtures.ts';
 import { mkdtempForTest } from '../../__tests__/test-utils/tmp-dir.ts';
+
+/**
+ * The composed `trigger-app-event` path as R57 left it: the daemon's own policy resolves the
+ * event URL, and the bound `triggerAppEvent` operation opens it through the selected owner's
+ * interactor. This helper is the same composition `daemon/app-event-runtime.ts` performs, minus
+ * the request plumbing, so these tests keep asserting the real shell invocation the retired
+ * `dispatchCommand('trigger-app-event', …)` used to reach.
+ */
+async function triggerAppEvent(
+  device: DeviceInfo,
+  positionals: string[],
+  options: { appBundleId?: string } = {},
+): Promise<{ event: string; eventUrl: string; transport: 'deep-link' }> {
+  const { eventName, payload } = parseTriggerAppEventArgs(positionals);
+  const eventUrl = resolveAppEventUrl(device, eventName, payload);
+  const operations = bindLocalAppEventInteractor({
+    device,
+    signal: new AbortController().signal,
+    resolveInteractor: async (owned, runner) => await getInteractor(owned, runner),
+  });
+  await operations.triggerAppEvent({ eventUrl, options });
+  return { event: eventName, eventUrl, transport: 'deep-link' };
+}
 
 test('trigger-app-event reports missing URL template as UNSUPPORTED_OPERATION', async () => {
   const previousGlobalTemplate = process.env.AGENT_DEVICE_APP_EVENT_URL_TEMPLATE;
@@ -19,7 +45,7 @@ test('trigger-app-event reports missing URL template as UNSUPPORTED_OPERATION', 
 
   try {
     await assert.rejects(
-      () => dispatchCommand(ANDROID_EMULATOR, 'trigger-app-event', ['screenshot_taken']),
+      () => triggerAppEvent(ANDROID_EMULATOR, ['screenshot_taken']),
       (error: unknown) => {
         assert.equal(error instanceof AppError, true);
         assert.equal((error as AppError).code, 'UNSUPPORTED_OPERATION');
@@ -43,11 +69,7 @@ test('trigger-app-event validates payload JSON', async () => {
     'myapp://agent-device/event?name={event}&payload={payload}';
   try {
     await assert.rejects(
-      () =>
-        dispatchCommand(ANDROID_EMULATOR, 'trigger-app-event', [
-          'screenshot_taken',
-          '{invalid-json',
-        ]),
+      () => triggerAppEvent(ANDROID_EMULATOR, ['screenshot_taken', '{invalid-json']),
       (error: unknown) => {
         assert.equal(error instanceof AppError, true);
         assert.equal((error as AppError).code, 'INVALID_ARGS');
@@ -82,7 +104,7 @@ test('trigger-app-event opens deep link with encoded event payload', async () =>
     'myapp://agent-device/event?name={event}&payload={payload}&platform={platform}';
 
   try {
-    const result = await dispatchCommand(ANDROID_EMULATOR, 'trigger-app-event', [
+    const result = await triggerAppEvent(ANDROID_EMULATOR, [
       'screenshot_taken',
       '{"source":"qa","count":2}',
     ]);
@@ -127,9 +149,7 @@ test('trigger-app-event prefers platform-specific template over global template'
   process.env.AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE = 'myapp://android?name={event}';
 
   try {
-    const result = await dispatchCommand(ANDROID_EMULATOR, 'trigger-app-event', [
-      'screenshot_taken',
-    ]);
+    const result = await triggerAppEvent(ANDROID_EMULATOR, ['screenshot_taken']);
     assert.equal(result?.eventUrl, 'myapp://android?name=screenshot_taken');
   } finally {
     process.env.PATH = previousPath;
@@ -167,13 +187,9 @@ test('trigger-app-event supports iOS device path and prefers iOS template', asyn
     'myapp://ios?name={event}&payload={payload}';
 
   try {
-    const result = await dispatchCommand(
-      IOS_DEVICE,
-      'trigger-app-event',
-      ['screenshot_taken', '{"source":"ios"}'],
-      undefined,
-      { appBundleId: 'com.example.app' },
-    );
+    const result = await triggerAppEvent(IOS_DEVICE, ['screenshot_taken', '{"source":"ios"}'], {
+      appBundleId: 'com.example.app',
+    });
     const expectedUrl = 'myapp://ios?name=screenshot_taken&payload=%7B%22source%22%3A%22ios%22%7D';
     assert.equal(result?.eventUrl, expectedUrl);
     const args = (await fs.readFile(argsLogPath, 'utf8')).trim().split('\n').filter(Boolean);
@@ -224,7 +240,7 @@ test('trigger-app-event supports macOS and prefers macOS template', async () => 
     'myapp://macos?name={event}&payload={payload}&platform={platform}';
 
   try {
-    const result = await dispatchCommand(MACOS_DEVICE, 'trigger-app-event', [
+    const result = await triggerAppEvent(MACOS_DEVICE, [
       'screenshot_taken',
       '{"source":"desktop"}',
     ]);
@@ -253,7 +269,7 @@ test('trigger-app-event rejects invalid event names', async () => {
     'myapp://agent-device/event?name={event}';
   try {
     await assert.rejects(
-      () => dispatchCommand(ANDROID_EMULATOR, 'trigger-app-event', ['bad event']),
+      () => triggerAppEvent(ANDROID_EMULATOR, ['bad event']),
       (error: unknown) => {
         assert.equal(error instanceof AppError, true);
         assert.equal((error as AppError).code, 'INVALID_ARGS');
@@ -275,11 +291,7 @@ test('trigger-app-event rejects payloads that exceed size limits', async () => {
   const oversizedPayload = JSON.stringify({ value: 'x'.repeat(9000) });
   try {
     await assert.rejects(
-      () =>
-        dispatchCommand(ANDROID_EMULATOR, 'trigger-app-event', [
-          'screenshot_taken',
-          oversizedPayload,
-        ]),
+      () => triggerAppEvent(ANDROID_EMULATOR, ['screenshot_taken', oversizedPayload]),
       (error: unknown) => {
         assert.equal(error instanceof AppError, true);
         assert.equal((error as AppError).code, 'INVALID_ARGS');
@@ -299,7 +311,7 @@ test('trigger-app-event rejects event URLs that exceed length limits', async () 
   process.env.AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE = `myapp://${'a'.repeat(5000)}?name={event}`;
   try {
     await assert.rejects(
-      () => dispatchCommand(ANDROID_EMULATOR, 'trigger-app-event', ['screenshot_taken']),
+      () => triggerAppEvent(ANDROID_EMULATOR, ['screenshot_taken']),
       (error: unknown) => {
         assert.equal(error instanceof AppError, true);
         assert.equal((error as AppError).code, 'INVALID_ARGS');

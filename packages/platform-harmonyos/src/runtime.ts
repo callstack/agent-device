@@ -25,6 +25,7 @@ import {
 } from '@agent-device/contracts/scroll-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
@@ -276,6 +277,8 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // `app-switcher` for both HarmonyOS kinds: it rides the same hdc-driven key input `home`
         // does, so it shares that cell.
         ...appSwitcherRuntimeOperationFacts({ appSwitcher: harmonyFocusFact(device) }),
+        // HarmonyOS never carried a `trigger-app-event` bucket and is absent from the overlay.
+        ...appEventRuntimeOperationFacts({ triggerAppEvent: harmonyPlatformLeafUnavailable }),
         ...orientationRuntimeOperationFacts({ orientation: harmonyPlatformLeafUnavailable }),
         ...tvRemoteRuntimeOperationFacts({ tvRemote: harmonyPlatformLeafUnavailable }),
         ...keyboardRuntimeOperationFacts({

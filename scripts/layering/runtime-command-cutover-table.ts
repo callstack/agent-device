@@ -30,7 +30,7 @@ import { retiredDispatchProjectionViolations } from './runtime-command-cutover-d
  * leaves follow: back at R42, home at R43, orientation at R44, tv-remote at R45, and the
  * action-selected keyboard at R46.
  * The gesture cluster follows the touch leaves: gesture at R52, scroll at R53, swipe at R54.
- * Wave 6 closure starts at R55 clipboard, then R56 app-switcher.
+ * Wave 6 closure starts at R55 clipboard, then R56 app-switcher and R57 trigger-app-event.
  */
 export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
   {
@@ -1134,7 +1134,36 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
     },
     extensions: [appSwitcherRetiredDispatchProjectionProof],
   },
+  {
+    rule: 'R57 trigger-app-event-runtime-cutover',
+    command: 'trigger-app-event',
+    subject: 'app-event delivery',
+    tier: 'request-scoped',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The dispatch-table arm and its `core/dispatch.ts` handler, plus the session route's
+      // last capability-gate-then-`dispatchCommand` thunk: with `trigger-app-event` bound, every
+      // leaf on that route supplies a bind-and-execute thunk instead. The daemon route function
+      // is `handleAppEventCommand` now, so the retired name is genuinely absent rather than
+      // shadowed by a surviving namesake.
+      routeNames: ['handleTriggerAppEventCommand', 'legacySessionDispatchExecute'],
+    },
+    runtimeTypeNames: ['AppEventRuntimeOperations'],
+    operations: { names: ['triggerAppEvent'] },
+    singularExecution: {
+      routes: ['resolveBoundAppEventRuntime'],
+      operations: ['triggerAppEvent'],
+      operationOwners: { triggerAppEvent: ['executeAppEvent'] },
+    },
+    extensions: [appEventRetiredDispatchProjectionProof],
+  },
 ];
+
+function appEventRetiredDispatchProjectionProof(
+  sources: ReadonlyMap<string, string>,
+): UnruledViolation[] {
+  return retiredDispatchProjectionViolations(sources, 'trigger-app-event');
+}
 
 function appSwitcherRetiredDispatchProjectionProof(
   sources: ReadonlyMap<string, string>,

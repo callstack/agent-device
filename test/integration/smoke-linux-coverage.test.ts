@@ -50,8 +50,9 @@ test('Linux coverage report has the expected classification counts', () => {
     // inventory remains a gap because local Linux screenshot paths are not daemon-downloadable.
     // Keyboard, orientation and tv-remote were already fact-owned command-contract rows rather
     // than catalog denials; R56 moves app-switcher the same way, for the same reason.
-    capabilityDenial: 6,
-    contract: 22,
+    // R57 moves trigger-app-event from capability-denial to command-contract: it is fact-owned now.
+    capabilityDenial: 5,
+    contract: 23,
     gap: 9,
     live: 17,
     total: 54,
