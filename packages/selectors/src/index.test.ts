@@ -136,22 +136,33 @@ test('recorded-target resolution keeps the matched domain from the alternative t
  * Functions are bound to the target so a counted traversal cannot re-enter the
  * proxy.
  */
-const SCAN_METHODS = ['filter', 'map', 'flatMap', 'forEach', 'reduce', 'some'] as const;
-type ScanPasses = { iterated: number } & Record<(typeof SCAN_METHODS)[number], number>;
+const SCAN_METHODS = [
+  'filter',
+  'map',
+  'flatMap',
+  'forEach',
+  'reduce',
+  'reduceRight',
+  'some',
+  'every',
+  'find',
+  'findIndex',
+  'findLast',
+  'findLastIndex',
+  'includes',
+  'indexOf',
+] as const;
+type ScanMethod = (typeof SCAN_METHODS)[number];
+type ScanPasses = { iterated: number } & Record<ScanMethod, number>;
 
 function observeTreeTraversals(nodes: SnapshotNode[]): {
   observed: SnapshotNode[];
   passes: ScanPasses;
 } {
-  const passes: ScanPasses = {
-    iterated: 0,
-    filter: 0,
-    map: 0,
-    flatMap: 0,
-    forEach: 0,
-    reduce: 0,
-    some: 0,
-  };
+  const passes = Object.fromEntries([
+    ['iterated', 0],
+    ...SCAN_METHODS.map((method) => [method, 0]),
+  ]) as ScanPasses;
   const observed = new Proxy(nodes, {
     get(target, property) {
       if (property === Symbol.iterator) passes.iterated += 1;
@@ -181,7 +192,15 @@ test('recorded-target resolution adds no second matching pass per selector alter
     flatMap: 0,
     forEach: 0,
     reduce: 0,
+    reduceRight: 0,
     some: 0,
+    every: 0,
+    find: 0,
+    findIndex: 0,
+    findLast: 0,
+    findLastIndex: 0,
+    includes: 0,
+    indexOf: 0,
   });
 
   const unresolved = observeTreeTraversals(nodes);
@@ -200,7 +219,15 @@ test('recorded-target resolution adds no second matching pass per selector alter
     flatMap: 8,
     forEach: 0,
     reduce: 0,
+    reduceRight: 0,
     some: 0,
+    every: 0,
+    find: 0,
+    findIndex: 0,
+    findLast: 0,
+    findLastIndex: 0,
+    includes: 0,
+    indexOf: 0,
   });
 });
 
