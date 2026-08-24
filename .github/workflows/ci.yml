@@ -208,92 +208,6 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: daemon-wire-compat }
 
-  # The runner's pure-decision XCTests, on the macOS host with no simulator (#1781 A7).
-  # Which tests that reaches is not a list: it is everything the macOS build compiles, and
-  # the simulator-only tests keep themselves out with an `os(iOS)` guard (see the
-  # classification note in RunnerTests.swift). The `-skip-testing:` entry is validated by
-  # `pnpm check:xctest-selection` for the same reason the nightly's is:
-  # `RunnerTests/testCommand` is the runner's 24-hour server entry point, and a typo
-  # re-arms the hang. The lane's reporter asserts the executed count equals the reach the
-  # check derives from source, so a build without the compile flag or a guard that
-  # compiles a file out reads as red rather than as a smaller green.
-  #
-  # Kill criterion: if the host run proves flaky where the simulator run of the same
-  # tests is not (a platform-branch difference this classification missed), gate the
-  # offender `os(iOS)` and it returns to the simulator lanes; if that happens to more
-  # than a handful, the host lane is the wrong tool and goes.
-  swift-runner-host-tests:
-    name: Swift Runner Host XCTests
-    runs-on: macos-26
-    timeout-minutes: 20
-    env:
-      AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1'
-      AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/swift-runner-unit-derived
-      RESULT_BUNDLE_PATH: ${{ github.workspace }}/.tmp/xctest-host/RunnerTests.xcresult
-      RESULT_SUMMARY_PATH: ${{ github.workspace }}/.tmp/xctest-host/test-results-summary.json
-      XCTEST_LANE: host
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Restore and compile Swift runner unit-test surface
-        uses: ./.github/actions/setup-apple-runner-build
-        with:
-          derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
-          cache-key-prefix: swift-runner-unit
-          gate: swift-runner-macos
-          xcuitest-platform: macos
-          xcuitest-destination: platform=macOS,arch=arm64
-
-      - name: Run the host-runnable runner XCTests
-        run: |
-          set -euo pipefail
-          XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"
-          test -n "$XCTESTRUN_PATH"
-          mkdir -p "$(dirname "$RESULT_BUNDLE_PATH")"
-          xcodebuild test-without-building \
-            -xctestrun "$XCTESTRUN_PATH" \
-            -destination 'platform=macOS,arch=arm64' \
-            -skip-testing:AgentDeviceRunnerUITests/RunnerTests/testCommand \
-            -resultBundlePath "$RESULT_BUNDLE_PATH"
-
-      # Same shape as xctest-nightly.yml: extract is best-effort, the report step asserts.
-      - name: Extract the test-results summary
-        if: always()
-        run: |
-          set -uo pipefail
-          [ -d "$RESULT_BUNDLE_PATH" ] || exit 0
-          xcrun xcresulttool get test-results summary --path "$RESULT_BUNDLE_PATH" --compact \
-            > "$RESULT_SUMMARY_PATH" 2>/dev/null ||
-            xcrun xcresulttool get test-results summary --path "$RESULT_BUNDLE_PATH" \
-              > "$RESULT_SUMMARY_PATH" 2>/dev/null ||
-            rm -f "$RESULT_SUMMARY_PATH"
-          exit 0
-
-      - name: Report the run and assert it executed the source-derived set
-        if: always()
-        run: |
-          set -euo pipefail
-          if [ ! -s "$RESULT_SUMMARY_PATH" ]; then
-            echo 'No usable test-results summary was produced, so nothing here can show a test ran.'
-            echo 'The suite step above failed before or during the run; read its log first.'
-            echo '### iOS runner host XCTest lane' >> "$GITHUB_STEP_SUMMARY"
-            echo 'No result-bundle summary; see the run log and the uploaded bundle.' >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          node --experimental-strip-types scripts/xctest-run-summary.ts
-
-      - name: Upload result bundle
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: xctest-host-results-${{ github.run_id }}-${{ github.run_attempt }}
-          path: .tmp/xctest-host
-          if-no-files-found: warn
-
   # Typecheck and package verification share one checkout and install; both
   # need the default toolchain only, and the package step re-pins Node itself.
   typecheck-package:
@@ -335,12 +249,23 @@ jobs:
       - name: Verify the published package on Node.js 22.12
         run: node --experimental-strip-types scripts/check-package.ts
 
+  # Runs the full unit + provider-integration suites under coverage with
+  # thresholds, so a separate unit-tests job would rerun the same tests. The
+  # suite is sharded across runners; each shard writes a blob report and the
+  # Coverage Report job merges them, evaluates thresholds once over the full
+  # suite, and produces every coverage artifact (vitest.config.ts carries the
+  # shard/merge switches).
   coverage:
-    # Runs the full unit + provider-integration suites under coverage with
-    # thresholds, so a separate unit-tests job would rerun the same tests.
     name: Coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    env:
+      AGENT_DEVICE_COVERAGE_SHARD: ${{ matrix.shard }}/2
+      OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -351,30 +276,74 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Test changed-line coverage gate
+        if: matrix.shard == 1
         uses: ./.github/actions/run-gate
         with: { gate: coverage-model }
 
-      - name: Run coverage
-        id: run-coverage
-        env:
-          OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+      - name: Run coverage shard
         uses: ./.github/actions/run-gate
         with: { gate: unit-ci }
+
       # The TMPDIR redirection both test lanes depend on (#1593/#1595). The check is a real
       # package script that no workflow ran: it is reachable only through `check:unit`, an
-      # aggregate CI never invokes, so a leak regression could not fail a PR. Placed here
-      # because this is the lane whose instrumented suite would leak a run directory.
+      # aggregate CI never invokes, so a leak regression could not fail a PR. Runs per shard,
+      # because a leak lands on whichever runner executed the leaking file.
       - name: Check for leaked temp directories
         uses: ./.github/actions/run-gate
         with: { gate: tmpdir-leaks }
 
-      # Reuses the lcov the coverage step just wrote (never runs coverage twice)
-      # and fails when changed-line coverage < the threshold in
+      - name: Upload coverage blob
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-blob-${{ matrix.shard }}
+          path: .vitest-reports/
+          if-no-files-found: error
+
+  coverage-report:
+    name: Coverage Report
+    needs: coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AGENT_DEVICE_COVERAGE_MERGE: '1'
+      OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Download coverage blobs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: coverage-blob-*
+          path: .tmp/coverage-blobs
+
+      # download-artifact nests each artifact in its own subdirectory; the blob
+      # merge reads one flat directory.
+      - name: Collect coverage blobs
+        run: |
+          set -euo pipefail
+          mkdir -p .vitest-reports
+          find .tmp/coverage-blobs -name '*.json' -exec mv {} .vitest-reports/ \;
+          ls .vitest-reports
+
+      # Reuses the blobs the shards wrote (never reruns tests) and fails when
+      # merged changed-line coverage < the threshold in
       # scripts/coverage-changed/model.ts. The `coverage-waiver` PR label maps to
       # the waiver env, which skips the failure but still prints the numbers.
-      # Gated on the coverage step's own outcome (#1781 A5): when `Run coverage`
-      # fails, lcov.info is never written, so this step would just re-report that
+      # Gated on the merge step's own outcome (#1781 A5): when it fails,
+      # lcov.info is never written, so this step would just re-report that
       # failure as its own red ("no lcov report") instead of a coverage verdict.
+      - name: Merge coverage shards
+        id: run-coverage
+        uses: ./.github/actions/run-gate
+        with: { gate: unit-ci }
+
       - name: Enforce changed-line coverage gate
         if: steps.run-coverage.outcome == 'success' && github.event_name == 'pull_request'
         env:

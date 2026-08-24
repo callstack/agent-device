@@ -5,7 +5,7 @@
 //
 // Three lanes run the `AgentDeviceRunnerUITests` bundle, and each reaches a different set:
 //
-//   - host    ci.yml, macOS host, every PR: the whole bundle as compiled for macOS, minus
+//   - host    macos.yml, macOS host, every PR: the whole bundle as compiled for macOS, minus
 //             `-skip-testing:` — the pure runner-decision tests, whose guard is
 //             `#if AGENT_DEVICE_RUNNER_UNIT_TESTS` alone.
 //   - pr      ios.yml, iOS Simulator, every PR: the hand-written `-only-testing:` list.
@@ -49,7 +49,7 @@ const repoRoot = path.resolve(import.meta.dirname, '..');
 const packageAppleRunnerScript = path.join(repoRoot, 'scripts/package-apple-runner-source.mjs');
 
 /** The macOS host lane, which runs the whole macOS-compiled bundle on every PR. */
-export const HOST_WORKFLOW_FILE = '.github/workflows/ci.yml';
+export const HOST_WORKFLOW_FILE = '.github/workflows/macos.yml';
 
 /** The PR lane, whose `-only-testing:` list decides what every pull request runs on the simulator. */
 export const PR_WORKFLOW_FILE = '.github/workflows/ios.yml';
