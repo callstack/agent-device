@@ -57,16 +57,18 @@ export async function typeAndroid(device: DeviceInfo, text: string, delayMs = 0)
     );
     return;
   }
-  assertAndroidShellTextSupported(text);
   // The shell path needs the input-method read anyway, and it also names the device's active IME.
   // If that is the helper, its batch channel writes the whole string in one broadcast instead of
   // ceil(n/8) `input text` spawns — no flag, no IME switch, nothing this process had to arrange.
+  // Read it before refusing anything: what the text has to be encodable for is not known until the
+  // channel is, and the broadcast channel carries any Unicode.
   const inputState = await readAndroidShellTextInputState(device, 'type');
   const helperPackage = androidImeHelperInputMethod(inputState);
   if (helperPackage) {
     await typeAndroidImeHelper(device, helperPackage, text, delayMs);
     return;
   }
+  assertAndroidShellTextSupported(text);
   assertAndroidShellInputIsAppOwned(inputState, 'type');
   if (delayMs > 0 && Array.from(text).length > 1) {
     await typeAndroidShell(device, { action: 'type', text, chunkSize: 1, delayMs });
@@ -108,7 +110,6 @@ export async function fillAndroid(
     );
     return completeAndroidFillVerification(text, beforeTarget, verification);
   }
-  assertAndroidShellTextSupported(text);
 
   const textCodePointLength = Array.from(text).length;
   const attempts: Array<{
@@ -138,8 +139,9 @@ export async function fillAndroid(
 
   for (const attempt of attempts) {
     await focusAndroid(device, x, y);
-    // Same read, same reason as `typeAndroid`: when the helper is the active IME its channel
-    // replaces both the delete-key clear and the chunked write for the rest of this fill.
+    // Same read, same reason, same ordering as `typeAndroid`: when the helper is the active IME its
+    // channel replaces both the delete-key clear and the chunked write for the rest of this fill,
+    // and the ASCII limit that would refuse this text applies only once the shell path is chosen.
     const inputState = await readAndroidShellTextInputState(device, 'fill');
     const helperPackage = androidImeHelperInputMethod(inputState);
     if (helperPackage) {
@@ -154,6 +156,7 @@ export async function fillAndroid(
       );
       return completeAndroidFillVerification(text, beforeTarget, verification);
     }
+    assertAndroidShellTextSupported(text);
     assertAndroidShellInputIsAppOwned(inputState, 'fill');
     const clearCount = clampCount(
       textCodePointLength + attempt.clearPadding,

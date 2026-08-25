@@ -105,16 +105,66 @@ test('fillAndroid detects unknown active IME package during verification', async
   assert.equal(snapshotCount, 2);
 });
 
-test('typeAndroid rejects unicode text without provider-native injection', async () => {
-  await assert.rejects(
-    () => typeAndroid(ANDROID_EMULATOR, '很 ☝ 😀'),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.code, 'COMMAND_FAILED');
-      assert.match(error.message, /provider-native text injection/i);
-      assert.equal(error.details?.backend, 'adb-shell');
-      return true;
+// The ASCII limit belongs to the shell writer, so it is enforced only once the active input method
+// has been read and turned out not to be the helper — never before that read.
+
+test('typeAndroid rejects unicode text once a third-party IME puts it on the shell path', async () => {
+  const calls: string[][] = [];
+  await withFillAdb(
+    async (args) => {
+      calls.push(args);
+      if (args.join('\n') === 'shell\ndumpsys\ninput_method') {
+        return adbResult(vendorImeWithAppFocusInputMethodDump());
+      }
+      return adbResult('');
     },
+    async () => {
+      await assert.rejects(
+        () => typeAndroid(ANDROID_EMULATOR, '很 ☝ 😀'),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'COMMAND_FAILED');
+          assert.match(error.message, /provider-native text injection/i);
+          assert.equal(error.details?.backend, 'adb-shell');
+          return true;
+        },
+      );
+    },
+  );
+
+  assert.equal(calls.filter(isTextInput).length, 0);
+});
+
+test('fillAndroid rejects unicode text once a third-party IME puts it on the shell path', async () => {
+  const calls: string[][] = [];
+  await withFillAdb(
+    async (args) => {
+      calls.push(args);
+      if (args.join('\n') === 'shell\ndumpsys\ninput_method') {
+        return adbResult(vendorImeWithAppFocusInputMethodDump());
+      }
+      return adbResult('');
+    },
+    () => androidInputXml({ text: 'Search Products' }),
+    async () => {
+      await assert.rejects(
+        () => fillAndroid(ANDROID_EMULATOR, 10, 10, '很 ☝ 😀'),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'COMMAND_FAILED');
+          assert.match(error.message, /provider-native text injection/i);
+          assert.equal(error.details?.backend, 'adb-shell');
+          return true;
+        },
+      );
+    },
+  );
+
+  assert.equal(calls.filter(isTextInput).length, 0);
+  assert.equal(
+    calls.some(isDeleteKey),
+    false,
+    'refusing the text must not have cleared the field first',
   );
 });
 
