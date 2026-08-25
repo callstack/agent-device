@@ -7,6 +7,7 @@ import {
   dismissAndroidKeyboard,
   getAndroidKeyboardState,
   getAndroidKeyboardStatusWithAdb,
+  readAndroidClipboardWithAdb,
   writeAndroidClipboardWithAdb,
 } from '../device-input-state.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
@@ -230,6 +231,38 @@ test('writeAndroidClipboardWithAdb leaves safe text unquoted', async () => {
   await writeAndroidClipboardWithAdb(adb, 'android-otp');
 
   assert.deepEqual(calls, [['shell', 'cmd', 'clipboard', 'set', 'text', 'android-otp']]);
+});
+
+// A successful `clipboard get text` puts the clipboard's *contents* on stdout, so the missing-shell
+// prose is only ever evidence about a call that failed. Reading it on a clean exit turned a user who
+// had copied one of these phrases into a device that "does not support" its own working clipboard.
+test('readAndroidClipboardWithAdb returns contents that read like an adb refusal', async () => {
+  for (const contents of ['Unknown command: clipboard', 'No shell command implementation.']) {
+    const adb: AndroidAdbExecutor = async () => ({ stdout: contents, stderr: '', exitCode: 0 });
+    assert.equal(await readAndroidClipboardWithAdb(adb), contents);
+  }
+});
+
+test('readAndroidClipboardWithAdb still reports a genuine missing shell command', async () => {
+  const adb: AndroidAdbExecutor = async () => ({
+    stdout: '',
+    stderr: 'Unknown command: clipboard',
+    exitCode: 255,
+  });
+
+  await assertRejectsAppError(() => readAndroidClipboardWithAdb(adb), {
+    code: 'UNSUPPORTED_OPERATION',
+  });
+});
+
+test('readAndroidClipboardWithAdb reports a non-zero failure that names no missing command', async () => {
+  const adb: AndroidAdbExecutor = async () => ({
+    stdout: '',
+    stderr: 'error: device offline',
+    exitCode: 1,
+  });
+
+  await assert.rejects(() => readAndroidClipboardWithAdb(adb));
 });
 
 test('dismissAndroidKeyboard skips keyevent when keyboard is already hidden', async () => {

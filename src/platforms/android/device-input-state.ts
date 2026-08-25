@@ -320,16 +320,17 @@ async function runAndroidClipboardShellCommand(
   operation: 'read' | 'write',
 ): Promise<string> {
   const result = await adb(args, { allowFailure: true });
+  // A clean exit settles it before the prose is consulted at all: on a successful read `stdout` is
+  // the clipboard's contents, and a user who has copied one of the missing-shell phrases must not
+  // have their own text mistaken for adb refusing the command.
+  if (result.exitCode === 0) return result.stdout;
   if (isClipboardShellUnsupported(result.stdout, result.stderr)) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       `Android shell clipboard ${operation} is not supported on this device.`,
     );
   }
-  if (result.exitCode !== 0) {
-    throw androidAdbResultError(`Failed to ${operation} Android clipboard text`, result);
-  }
-  return result.stdout;
+  throw androidAdbResultError(`Failed to ${operation} Android clipboard text`, result);
 }
 
 function normalizeAndroidClipboardText(stdout: string): string {

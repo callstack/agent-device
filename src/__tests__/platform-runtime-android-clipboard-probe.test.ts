@@ -65,10 +65,26 @@ describe('android clipboard shell probe: what each adb result is allowed to prov
     await expect(probe()).resolves.toBe('probe-failed');
   });
 
-  // Recognized absence outranks the exit code: adb reports the missing shell command non-zero, so
-  // reading the code first would turn every honest `unsupported` into a refusal.
-  test('missing-shell prose on a non-zero exit still reads as unsupported', async () => {
-    runAndroidAdb.mockResolvedValueOnce(adbResult(1, '', 'Unknown command: clipboard'));
+  // adb reports the missing shell command non-zero, so the prose is only ever evidence about a
+  // call that failed -- which is exactly why it must not be read on a call that succeeded.
+  test.each([
+    ['stderr', '', 'Unknown command: clipboard'],
+    ['stdout', 'No shell command implementation.', ''],
+  ])('missing-shell prose on %s of a non-zero exit reads as unsupported', async (_c, out, err) => {
+    runAndroidAdb.mockResolvedValueOnce(adbResult(1, out, err));
     await expect(probe()).resolves.toBe('unsupported');
+  });
+
+  // The second planted red: on a clean exit stdout is the clipboard's *contents*, so reading the
+  // prose first let a user who had copied one of these phrases -- from a terminal, a bug report,
+  // this very file -- brand their own working clipboard `unsupported` for the owner's lifetime.
+  test.each([
+    ['unknown command'],
+    ['no shell command implementation'],
+    ['adb said: Unknown command: clipboard'],
+    ['No shell command implementation.'],
+  ])('a clipboard holding %j is still supported', async (contents) => {
+    runAndroidAdb.mockResolvedValueOnce(adbResult(0, contents));
+    await expect(probe()).resolves.toBe('supported');
   });
 });
