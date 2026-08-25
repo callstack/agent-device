@@ -168,6 +168,35 @@ test('agent-browser close failure does not clear the daemon-owned record', async
   expect(ownedProcessRecords.clear).not.toHaveBeenCalled();
 });
 
+test('agent-browser semantic close failure does not clear the daemon-owned record', async () => {
+  const ownedProcessRecords: OwnedProcessRecordStore = {
+    replace: vi.fn(),
+    clear: vi.fn(),
+    read: vi.fn(() => []),
+  };
+
+  await withManagedAgentBrowserProvider(
+    {
+      session: 'web-session',
+      openWebSessionNames: () => ['web-session'],
+      ownedProcessRecords,
+    },
+    async (provider) => {
+      await withCommandExecutorOverride(
+        async () =>
+          jsonResult({
+            success: false,
+            code: 'CLOSE_FAILED',
+            error: 'browser stayed open',
+          }),
+        async () => await assert.rejects(async () => await provider.close()),
+      );
+    },
+  );
+
+  expect(ownedProcessRecords.clear).not.toHaveBeenCalled();
+});
+
 test('agent-browser provider ignores provider-startup cleanup failures', async () => {
   const calls: AgentBrowserCall[] = [];
   mockProviderStartupCleanup.mockRejectedValue(new Error('ps failed'));

@@ -155,6 +155,25 @@ test('post-publication abort does not kill the adopted process', async () => {
   await expect(process.wait).resolves.toMatchObject({ exitCode: 0 });
 });
 
+test('publishes the post-exec simulator identity after readiness', async () => {
+  const root = mkdtempForTestSync('agent-device-recording-post-exec-');
+  const outputPath = path.join(root, 'capture.mp4');
+  const running = background(47, `xcrun simctl io ${simulator.id} recordVideo ${outputPath}`);
+  const postExecCommand = `/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/Resources/bin/simctl io ${simulator.id} recordVideo ${outputPath}`;
+  setTimeout(() => {
+    processes.commands.set(47, postExecCommand);
+    fs.writeFileSync(outputPath, 'recording');
+  }, 25);
+
+  const process = await withTransport(
+    running.process,
+    async () => await startAppleSimulatorRecording(simulator, outputPath),
+  );
+
+  expect(process.markers?.[0]).toMatchObject({ pid: 47, command: postExecCommand });
+  await expect(process.terminate()).resolves.toBeUndefined();
+});
+
 test('stops a locally launched simulator recorder after xcrun execs the simctl binary', async () => {
   const root = mkdtempForTestSync('agent-device-recording-xcrun-exec-');
   const outputPath = path.join(root, 'capture.mp4');

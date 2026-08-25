@@ -74,7 +74,12 @@ export async function startAppleSimulatorRecording(
   }
   try {
     await waitForReadiness(outputPath, background.wait, signal);
-    const markers = await resolveManagedProcessTree(rootMarker);
+    // `runCmdBackground('xcrun', ...)` may briefly expose its shell wrapper before that
+    // process execs CoreSimulator's `simctl`. Read the root identity again after the output
+    // proves the recorder is ready so the durable descriptor and generic startup reaper share
+    // the stable post-exec identity already used by the live Apple matcher.
+    const postExecRootMarker = (await resolveManagedProcessIdentity(rootMarker.pid)) ?? rootMarker;
+    const markers = await resolveManagedProcessTree(postExecRootMarker);
     return createAppleSimulatorProcess(background, markers);
   } catch (error) {
     await terminateManagedProcessSet(
