@@ -34,20 +34,28 @@ test('close on a tenant-isolated session with no lease ever allocated admits wit
   assert.equal(result, undefined);
 });
 
-test('close on a tenant-isolated session record with no lease field admits without throwing', () => {
+test('close on a lease-less but stored tenant-isolated session still requires a lease id', () => {
+  // #2016 follow-up: a *stored* session under tenant isolation is keyed by
+  // tenant, not by run, so a lease-less stored session could belong to
+  // another run in the same tenant. The bypass must not treat "this session
+  // record has no lease field" as proof there's nothing to protect — only
+  // "no session record exists at all" (the actual deferred-connect case)
+  // qualifies.
   const registry = new LeaseRegistry();
   const session = makeIosSession('default');
 
-  const result = assertRequestLeaseAdmission(
-    makeRequest({
-      command: 'close',
-      meta: { tenantId: 'tenant-a', runId: 'run-1', sessionIsolation: 'tenant' },
-    }),
-    registry,
-    session,
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({
+          command: 'close',
+          meta: { tenantId: 'tenant-a', runId: 'run-1', sessionIsolation: 'tenant' },
+        }),
+        registry,
+        session,
+      ),
+    /tenant isolation requires lease id/,
   );
-
-  assert.equal(result, undefined);
 });
 
 test('close with an app target still requires a lease id even with no lease anywhere', () => {

@@ -1,4 +1,4 @@
-import { afterAll, test, expect } from 'vitest';
+import { afterAll, test, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -23,6 +23,7 @@ import { resolveSessionRequestLogPath } from '../session-store.ts';
 import type { DaemonRequest } from '../types.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
+import { handleCloseCommand } from '../handlers/session-close.ts';
 
 const TEST_ROOT = mkdtempForTestSync('agent-device-request-execution-scope-');
 const LOG_PATH = path.join(TEST_ROOT, 'diagnostics.log');
@@ -752,6 +753,95 @@ test('runLocked rejects a request canceled while waiting for its execution lock'
   } finally {
     clearRequestCanceled(requestId);
   }
+});
+
+// #2016 router-level regression: a deferred remote connection (`connect`
+// succeeded, `open` never ran, so the daemon never allocated a lease or
+// created a session) reaches `close`'s own SESSION_NOT_FOUND outcome
+// through the real tenant-scoping + locked-admission pipeline, rather than
+// throwing the generic tenant-isolation error before `handleCloseCommand`
+// ever runs. No provider is touched — there is nothing to release.
+test('router: deferred tenant connect with no daemon session closes as SESSION_NOT_FOUND without touching the provider', async () => {
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const leaseRegistry = new LeaseRegistry();
+  const release = vi.fn(async () => ({}));
+
+  const scope = await createRequestExecutionScope({
+    req: makeRequest({
+      session: 'default',
+      command: 'close',
+      meta: { tenantId: 'tenant-a', runId: 'run-1', sessionIsolation: 'tenant' },
+    }),
+    sessionStore,
+    leaseRegistry,
+  });
+  expect(scope.sessionName).toBe('tenant-a:default');
+
+  const response = await scope.runLocked(async () =>
+    handleCloseCommand({
+      req: scope.req,
+      sessionName: scope.sessionName,
+      logPath: scope.requestLogPath,
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider: { release },
+    }),
+  );
+
+  expect(response.ok).toBe(false);
+  if (!response.ok) {
+    expect(response.error.code).toBe('SESSION_NOT_FOUND');
+  }
+  expect(release).not.toHaveBeenCalled();
+});
+
+// The same deferred connection, but with an app-target `close <app>`. This
+// must not reach `handleCloseCommand` at all — an app-target close with no
+// session resolves its device straight from flags, so it stays behind full
+// lease/tenant admission (the router rejects it before dispatch).
+test('router: deferred tenant connect still refuses an app-target close before dispatch', async () => {
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const leaseRegistry = new LeaseRegistry();
+
+  const scope = await createRequestExecutionScope({
+    req: makeRequest({
+      session: 'default',
+      command: 'close',
+      positionals: ['com.example.app'],
+      meta: { tenantId: 'tenant-a', runId: 'run-1', sessionIsolation: 'tenant' },
+    }),
+    sessionStore,
+    leaseRegistry,
+  });
+
+  await expect(scope.runLocked(async () => 'unreachable')).rejects.toThrow(
+    /tenant isolation requires lease id/,
+  );
+});
+
+// A stored session that already exists under this tenant-scoped name but
+// happens to carry no lease must still be refused: it could belong to a
+// different run in the same tenant (sessions are tenant-scoped, not
+// run-scoped), so a missing lease field alone is not proof of ownership.
+test('router: an existing lease-less session under tenant isolation still refuses close', async () => {
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  sessionStore.set('tenant-a:default', makeIosSession('tenant-a:default'));
+  const leaseRegistry = new LeaseRegistry();
+
+  const scope = await createRequestExecutionScope({
+    req: makeRequest({
+      session: 'default',
+      command: 'close',
+      meta: { tenantId: 'tenant-a', runId: 'run-1', sessionIsolation: 'tenant' },
+    }),
+    sessionStore,
+    leaseRegistry,
+  });
+  expect(scope.sessionName).toBe('tenant-a:default');
+
+  await expect(scope.runLocked(async () => 'unreachable')).rejects.toThrow(
+    /tenant isolation requires lease id/,
+  );
 });
 
 function makeRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
