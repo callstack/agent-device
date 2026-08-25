@@ -348,8 +348,8 @@ test('producer maps each platform to its resolved lookup and matrix artifact nam
     },
   });
   assert.equal(result.status, 0, result.stderr);
-  const matrixLine = fs.readFileSync(outputPath, 'utf8').trim();
-  assert.match(matrixLine, /^matrix=/);
+  const outputLines = fs.readFileSync(outputPath, 'utf8').trim().split('\n');
+  const matrixLine = outputLines.find((line) => line.startsWith('matrix='));
   const matrix = JSON.parse(matrixLine.slice('matrix='.length));
   assert.deepEqual(
     matrix.include.map(({ platform, artifactName }) => ({ platform, artifactName })),
@@ -358,11 +358,108 @@ test('producer maps each platform to its resolved lookup and matrix artifact nam
       { platform: 'android', artifactName: 'fingerprint.android-hash.android' },
     ],
   );
+  assert.deepEqual(
+    outputLines.find((line) => line.startsWith('has-work=')),
+    'has-work=true',
+  );
   assert.deepEqual(fs.readFileSync(resolverLog, 'utf8').trim().split('\n'), ['ios', 'android']);
   assert.deepEqual(fs.readFileSync(nodeLog, 'utf8').trim().split('\n'), [
     '.github/actions/setup-fixture-app/trusted-artifact.mjs find octo/repo fingerprint.ios-hash.ios current-head',
     '.github/actions/setup-fixture-app/trusted-artifact.mjs find octo/repo fingerprint.android-hash.android current-head',
   ]);
+});
+
+test('fingerprint matrix covers all four cache combinations and gates has-work on both-cached', (t) => {
+  const workflow = parse(fs.readFileSync('.github/workflows/test-app-build-cache.yml', 'utf8'));
+  const fingerprintStep = workflow.jobs.fingerprint.steps.find((step) => step.id === 'fingerprint');
+  // #2034: an empty `include` matrix is legal JSON but GitHub Actions rejects
+  // it as `strategy.matrix`, so the `release` job must be skipped -- not
+  // handed a zero-length matrix -- whenever both fixtures are cached.
+  assert.equal(
+    workflow.jobs.fingerprint.outputs['has-work'],
+    '${{ steps.fingerprint.outputs.has-work }}',
+  );
+  assert.equal(workflow.jobs.release.if, "needs.fingerprint.outputs.has-work == 'true'");
+
+  const run = fingerprintStep.run
+    .replaceAll('${{ github.event.pull_request.head.sha || github.sha }}', 'current-head')
+    .replaceAll('${{ github.repository }}', 'octo/repo')
+    .replaceAll('${{ github.event_name }}', 'push')
+    .replaceAll('${{ github.event.pull_request.head.repo.full_name }}', '');
+
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-matrix-combinations-'));
+  t.after(() => fs.rmSync(tempRoot, { force: true, recursive: true }));
+  const actionDir = path.join(tempRoot, '.github/actions/setup-fixture-app');
+  const binDir = path.join(tempRoot, 'bin');
+  fs.mkdirSync(actionDir, { recursive: true });
+  fs.mkdirSync(binDir);
+  fs.writeFileSync(
+    path.join(actionDir, 'resolve-artifact-name.sh'),
+    ['#!/bin/sh', 'printf "fingerprint.%s-hash.%s\\n" "$1" "$1"', ''].join('\n'),
+  );
+  fs.chmodSync(path.join(actionDir, 'resolve-artifact-name.sh'), 0o755);
+  fs.writeFileSync(
+    path.join(binDir, 'node'),
+    [
+      '#!/bin/sh',
+      // Invoked as: node trusted-artifact.mjs find <repo> <name> <sha>
+      'name="$4"',
+      'case "$name" in',
+      '  *.ios) [ "$TEST_IOS_CACHED" = 1 ] && printf "111"; true ;;',
+      '  *.android) [ "$TEST_ANDROID_CACHED" = 1 ] && printf "222"; true ;;',
+      'esac',
+      '',
+    ].join('\n'),
+  );
+  fs.chmodSync(path.join(binDir, 'node'), 0o755);
+
+  const runFingerprint = (iosCached, androidCached) => {
+    const outputPath = path.join(tempRoot, `output-${iosCached}-${androidCached}`);
+    const result = spawnSync('bash', ['-c', run], {
+      cwd: tempRoot,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GITHUB_OUTPUT: outputPath,
+        PATH: `${binDir}:${process.env.PATH}`,
+        TEST_ANDROID_CACHED: androidCached ? '1' : '0',
+        TEST_IOS_CACHED: iosCached ? '1' : '0',
+      },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const lines = fs.readFileSync(outputPath, 'utf8').trim().split('\n');
+    const matrixLine = lines.find((line) => line.startsWith('matrix='));
+    const hasWorkLine = lines.find((line) => line.startsWith('has-work='));
+    return {
+      hasWork: hasWorkLine.slice('has-work='.length),
+      matrix: JSON.parse(matrixLine.slice('matrix='.length)),
+    };
+  };
+
+  const bothCached = runFingerprint(true, true);
+  assert.deepEqual(bothCached.matrix, { include: [] });
+  assert.equal(bothCached.hasWork, 'false');
+
+  const iosOnlyCached = runFingerprint(true, false);
+  assert.deepEqual(
+    iosOnlyCached.matrix.include.map((entry) => entry.platform),
+    ['android'],
+  );
+  assert.equal(iosOnlyCached.hasWork, 'true');
+
+  const androidOnlyCached = runFingerprint(false, true);
+  assert.deepEqual(
+    androidOnlyCached.matrix.include.map((entry) => entry.platform),
+    ['ios'],
+  );
+  assert.equal(androidOnlyCached.hasWork, 'true');
+
+  const neitherCached = runFingerprint(false, false);
+  assert.deepEqual(
+    neitherCached.matrix.include.map((entry) => entry.platform),
+    ['ios', 'android'],
+  );
+  assert.equal(neitherCached.hasWork, 'true');
 });
 
 test('artifact name resolver scopes both platforms and rejects invalid output', (t) => {

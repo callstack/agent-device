@@ -33,6 +33,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       matrix: ${{ steps.fingerprint.outputs.matrix }}
+      has-work: ${{ steps.fingerprint.outputs.has-work }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -94,10 +95,12 @@ jobs:
               }
             ] | { include: map(select(.build)) }')"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "has-work=$(jq -r '.include | length > 0' <<<"$MATRIX")" >> "$GITHUB_OUTPUT"
 
   release:
     name: ${{ matrix.name }}
     needs: fingerprint
+    if: needs.fingerprint.outputs.has-work == 'true'
     runs-on: ${{ matrix.runsOn }}
     timeout-minutes: 60
     concurrency:
