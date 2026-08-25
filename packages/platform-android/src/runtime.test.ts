@@ -196,8 +196,18 @@ test('rejects the non-discovered Android simulator cell for appstate', async () 
   expect(binding.operations.appState).toBeUndefined();
 });
 
-function androidNavigationHostFixture() {
+function androidNavigationHostFixture(
+  runAdb?: (
+    device: DeviceInfo,
+    args: readonly string[],
+  ) => Promise<{
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+  }>,
+) {
   return {
+    androidTools: { runAdb: runAdb ?? (async () => ({ stdout: '', stderr: '', exitCode: 0 })) },
     processTransports: { resolve: async () => ({ mode: 'local' as const }) },
     appInventory: {
       apple: { listApps: async () => [] },
@@ -568,3 +578,72 @@ function gestureHost(): PlatformRuntimeHost {
     screenRecording: { android: { resolve: async () => ({ mode: 'local' as const }) } },
   } as unknown as PlatformRuntimeHost;
 }
+
+// R55 defect, found on a Pixel 9 Pro XL / Android 36 emulator: the retired bucket admitted both
+// clipboard halves on every real Android kind, `capabilities` advertised `clipboard`, and
+// `clipboard read` then failed with `UNSUPPORTED_OPERATION` from the leaf. Admission now probes
+// the same condition the leaf checks, so a build with no clipboard shell command refuses up front.
+test.each([
+  ['no shell command implementation', 'cmd: No shell command implementation.'],
+  ['unknown command', 'Unknown command: clipboard'],
+])('refuses both clipboard halves when adb reports %s', async (_name, stdout) => {
+  const binding = await createAndroidPlatformRuntime(
+    androidNavigationHostFixture(async () => ({ stdout, stderr: '', exitCode: 0 })),
+  ).bind({
+    device: { ...device, id: 'android-no-clipboard-shell', kind: 'device' },
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+
+  for (const key of ['readClipboard', 'writeClipboard'] as const) {
+    expect(binding.facts.operations[key]).toMatchObject({
+      available: false,
+      reason: 'owner-capability-missing',
+    });
+    // Never admitted, so never bound: nothing can throw `unsupported` after the fact.
+    expect(binding.operations[key]).toBeUndefined();
+  }
+  // The probe is scoped to the clipboard; neighbouring adb-driven cells stay admitted.
+  expect(binding.facts.operations.appSwitcher).toEqual({ available: true });
+});
+
+test('probes the clipboard shell once per device, not once per inspection', async () => {
+  const runAdb = vi.fn(async (_device: DeviceInfo, _args: readonly string[]) => ({
+    stdout: '',
+    stderr: '',
+    exitCode: 0,
+  }));
+  const runtime = createAndroidPlatformRuntime(androidNavigationHostFixture(runAdb));
+  const target = { ...device, id: 'android-probe-cache', kind: 'device' as const };
+
+  await runtime.inspectFacts(target);
+  await runtime.inspectFacts(target);
+
+  const clipboardProbes = runAdb.mock.calls.filter((call) => call[1].includes('clipboard'));
+  expect(clipboardProbes).toHaveLength(1);
+});
+
+test('an adb failure leaves the clipboard admitted rather than inventing an unsupported build', async () => {
+  const binding = await createAndroidPlatformRuntime(
+    androidNavigationHostFixture(async () => {
+      throw new Error('adb: device offline');
+    }),
+  ).bind({
+    device: { ...device, id: 'android-adb-offline', kind: 'device' },
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+
+  // The probe is definitive in one direction only: adb naming the condition means unsupported, a
+  // probe that cannot run means unknown. Reporting unknown as unsupported would hide a working
+  // clipboard behind a transport hiccup.
+  expect(binding.facts.operations.readClipboard).toEqual({ available: true });
+});

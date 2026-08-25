@@ -4,6 +4,23 @@ import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor } from '@agent-device/contracts/interaction';
 import { createWebDriverPlatformRuntimeOwner } from './platform-runtime.ts';
+import {
+  createCloudWebDriverCapabilities,
+  type CloudWebDriverCapabilityOverrides,
+} from './capabilities.ts';
+import type { CloudWebDriverPlatform } from './runtime.ts';
+
+/** The declared map fact generation now reads. Defaults to a provider with no overrides. */
+function capabilities(
+  platform: CloudWebDriverPlatform = 'android',
+  overrides?: CloudWebDriverCapabilityOverrides,
+) {
+  return createCloudWebDriverCapabilities({
+    provider: 'browserstack',
+    platform,
+    ...(overrides ? { overrides } : {}),
+  });
+}
 
 const device: DeviceInfo = {
   platform: 'android',
@@ -20,6 +37,7 @@ test('direct WebDriver network uses only the canonical session log and preserves
     host: host(run),
     owner: providerRuntimeOwner('browserstack', 'android'),
     ownsDevice: () => true,
+    capabilities: capabilities(),
   });
   const binding = await owner.bind({
     device,
@@ -79,6 +97,7 @@ test.each([
     host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
     owner: providerRuntimeOwner('browserstack', String(_name).toLowerCase()),
     ownsDevice: () => true,
+    capabilities: capabilities(),
   });
   const binding = await owner.bind({
     device: runtimeDevice,
@@ -162,6 +181,7 @@ test.each([
         runtimeDevice.platform === 'apple' ? 'ios' : 'android',
       ),
       ownsDevice: () => true,
+      capabilities: capabilities(),
       deployment: {
         fact: () => ({ available: true }),
         deployApp,
@@ -219,6 +239,7 @@ test('captures through only the active exact WebDriver interactor', async () => 
     host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
     owner: providerRuntimeOwner('browserstack', 'android'),
     ownsDevice: () => true,
+    capabilities: capabilities(),
     snapshotAvailable: true,
     getInteractor,
   });
@@ -309,6 +330,7 @@ test.each([
     host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
     owner: providerRuntimeOwner('browserstack', 'android'),
     ownsDevice: () => true,
+    capabilities: capabilities(),
     ...state,
     getInteractor,
   });
@@ -488,6 +510,7 @@ test.each([
     host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
     owner: providerRuntimeOwner('browserstack', 'android'),
     ownsDevice: () => true,
+    capabilities: capabilities(),
     getInteractor: () => ({}) as unknown as Interactor,
   });
   const facts = await owner.inspectFacts(owned);
@@ -509,6 +532,7 @@ test('closes every WebDriver gesture and scroll cell when the interactor is unre
     host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
     owner: providerRuntimeOwner('browserstack', 'android'),
     ownsDevice: () => true,
+    capabilities: capabilities(),
     getInteractor: undefined,
   });
   const facts = await owner.inspectFacts(device);
@@ -524,5 +548,56 @@ test('closes every WebDriver gesture and scroll cell when the interactor is unre
       available: false,
       reason: 'unsupported-provider-mode',
     });
+  }
+});
+
+// The defect this pins: a provider configured with `capabilityOverrides` used to be admitted from
+// interactor reachability alone, so `capabilities` advertised the operation and the interactor's
+// own `requireSupport` threw `UNSUPPORTED_OPERATION` after binding. Admission and execution now
+// read the same declared map (ADR 0019 §2).
+test.each([
+  ['clipboard.read', 'readClipboard'],
+  ['clipboard.write', 'writeClipboard'],
+  ['appSwitcher', 'appSwitcher'],
+  ['back', 'back'],
+  ['home', 'home'],
+  ['orientation', 'setOrientation'],
+] as const)(
+  'an unsupported %s override is refused at admission, not after binding',
+  async (operation, factKey) => {
+    const owner = createWebDriverPlatformRuntimeOwner({
+      host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+      owner: providerRuntimeOwner('browserstack', 'android'),
+      ownsDevice: () => true,
+      capabilities: capabilities('android', { [operation]: 'unsupported' }),
+      getInteractor: () => ({}) as unknown as Interactor,
+    });
+
+    const facts = await owner.inspectFacts(device);
+
+    expect(facts.operations[factKey]).toMatchObject({
+      available: false,
+      reason: 'owner-capability-missing',
+    });
+    // The refusal carries the capability map author's own wording.
+    const fact = facts.operations[factKey];
+    expect(fact.available === false && String(fact.hint)).toContain(operation);
+  },
+);
+
+test('a reachable provider with no overrides still admits its declared operations', async () => {
+  const owner = createWebDriverPlatformRuntimeOwner({
+    host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+    owner: providerRuntimeOwner('browserstack', 'android'),
+    ownsDevice: () => true,
+    capabilities: capabilities(),
+    getInteractor: () => ({}) as unknown as Interactor,
+  });
+
+  const facts = await owner.inspectFacts(device);
+
+  // `partial` counts as supported, matching `capabilitySupported` in the interactor.
+  for (const key of ['readClipboard', 'writeClipboard', 'appSwitcher', 'back', 'home'] as const) {
+    expect(facts.operations[key].available).toBe(true);
   }
 });

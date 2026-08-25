@@ -15,9 +15,4 @@ export async function runAndroidAdb(
   return await resolveAndroidAdbExecutor(device)(args, options);
 }
 
-export function isClipboardShellUnsupported(stdout: string, stderr: string): boolean {
-  const haystack = `${stdout}\n${stderr}`.toLowerCase();
-  return (
-    haystack.includes('no shell command implementation') || haystack.includes('unknown command')
-  );
-}
+export { isAndroidClipboardShellUnsupported as isClipboardShellUnsupported } from '@agent-device/contracts/android-clipboard-support';

@@ -477,7 +477,7 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
         captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
       },
     },
-    extensions: [snapshotRetiredDispatchProjectionProof],
+    extensions: [retiredDispatchProjectionProof('snapshot')],
   },
   {
     rule: 'R33 diff-runtime-cutover',
@@ -511,7 +511,7 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
         captureSnapshotWithoutActiveApp: ['selectSnapshotWithoutActiveApp'],
       },
     },
-    extensions: [diffRetiredDispatchProjectionProof],
+    extensions: [retiredDispatchProjectionProof('diff')],
   },
   {
     rule: 'R35 find-runtime-cutover',
@@ -1108,7 +1108,7 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
         writeClipboard: ['executeClipboardWrite'],
       },
     },
-    extensions: [clipboardRetiredDispatchProjectionProof],
+    extensions: [retiredDispatchProjectionProof('clipboard')],
   },
   {
     rule: 'R56 app-switcher-runtime-cutover',
@@ -1134,7 +1134,7 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       operations: ['appSwitcher'],
       operationOwners: { appSwitcher: ['executeAppSwitcher'] },
     },
-    extensions: [appSwitcherRetiredDispatchProjectionProof],
+    extensions: [retiredDispatchProjectionProof('app-switcher')],
   },
   {
     rule: 'R57 trigger-app-event-runtime-cutover',
@@ -1157,7 +1157,7 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       operations: ['triggerAppEvent'],
       operationOwners: { triggerAppEvent: ['executeAppEvent'] },
     },
-    extensions: [appEventRetiredDispatchProjectionProof],
+    extensions: [retiredDispatchProjectionProof('trigger-app-event')],
   },
   {
     rule: 'R58 settings-runtime-cutover',
@@ -1194,7 +1194,7 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       operations: ['setSetting'],
       operationOwners: { setSetting: ['executeSetSetting'] },
     },
-    extensions: [settingsRetiredDispatchProjectionProof],
+    extensions: [retiredDispatchProjectionProof('settings')],
   },
   {
     rule: 'R59 alert-runtime-cutover',
@@ -1234,7 +1234,7 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
         dismissAlert: ['executeDismissAlert'],
       },
     },
-    extensions: [alertRetiredDispatchProjectionProof],
+    extensions: [retiredDispatchProjectionProof('alert')],
   },
   {
     rule: 'R61 react-native-runtime-cutover',
@@ -1259,56 +1259,19 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       operations: ['tapPoint'],
       operationOwners: { tapPoint: ['createTapTouchExecutor'] },
     },
-    extensions: [reactNativeRetiredDispatchProjectionProof],
+    extensions: [retiredDispatchProjectionProof('react-native')],
   },
 ];
 
-function reactNativeRetiredDispatchProjectionProof(
-  sources: ReadonlyMap<string, string>,
-): UnruledViolation[] {
-  return retiredDispatchProjectionViolations(sources, 'react-native');
-}
-
-function alertRetiredDispatchProjectionProof(
-  sources: ReadonlyMap<string, string>,
-): UnruledViolation[] {
-  return retiredDispatchProjectionViolations(sources, 'alert');
-}
-
-function settingsRetiredDispatchProjectionProof(
-  sources: ReadonlyMap<string, string>,
-): UnruledViolation[] {
-  return retiredDispatchProjectionViolations(sources, 'settings');
-}
-
-function appEventRetiredDispatchProjectionProof(
-  sources: ReadonlyMap<string, string>,
-): UnruledViolation[] {
-  return retiredDispatchProjectionViolations(sources, 'trigger-app-event');
-}
-
-function appSwitcherRetiredDispatchProjectionProof(
-  sources: ReadonlyMap<string, string>,
-): UnruledViolation[] {
-  return retiredDispatchProjectionViolations(sources, 'app-switcher');
-}
-
-function clipboardRetiredDispatchProjectionProof(
-  sources: ReadonlyMap<string, string>,
-): UnruledViolation[] {
-  return retiredDispatchProjectionViolations(sources, 'clipboard');
-}
-
-function snapshotRetiredDispatchProjectionProof(
-  sources: ReadonlyMap<string, string>,
-): UnruledViolation[] {
-  return retiredDispatchProjectionViolations(sources, 'snapshot');
-}
-
-function diffRetiredDispatchProjectionProof(
-  sources: ReadonlyMap<string, string>,
-): UnruledViolation[] {
-  return retiredDispatchProjectionViolations(sources, 'diff');
+/**
+ * Every migrated row proves the same thing about its own command: the retired dispatch projection
+ * is gone. One factory carries the command, so a new row states its name once in the row literal
+ * instead of adding a ninth identically-shaped wrapper below.
+ */
+function retiredDispatchProjectionProof(
+  command: string,
+): (sources: ReadonlyMap<string, string>) => UnruledViolation[] {
+  return (sources) => retiredDispatchProjectionViolations(sources, command);
 }
 
 /** The record mechanics policy predates the row model and reports `path: message`. */

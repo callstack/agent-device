@@ -19,6 +19,10 @@
       "types": "./src/alert-runtime.ts",
       "default": "./src/alert-runtime.ts"
     },
+    "./android-clipboard-support": {
+      "types": "./src/android-clipboard-support.ts",
+      "default": "./src/android-clipboard-support.ts"
+    },
     "./android-input-ownership": {
       "types": "./src/android-input-ownership.ts",
       "default": "./src/android-input-ownership.ts"

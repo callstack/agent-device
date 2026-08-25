@@ -50,6 +50,7 @@ import { bindAndroidScreenRecordingRuntime } from './recording/runtime.ts';
 import { ensureAndroidReady } from './readiness/runtime.ts';
 import { readAndroidAppState } from './app-state.ts';
 import { bindAndroidApplicationLifecycle } from './lifecycle.ts';
+import { isAndroidClipboardShellUnsupported } from '@agent-device/contracts/android-clipboard-support';
 import {
   androidAppDeploymentFacts,
   createAndroidAppDeploymentOperations,
@@ -203,6 +204,12 @@ function androidTouchFact(device: DeviceInfo) {
   return device.kind === 'simulator' ? focusKindUnavailable : available;
 }
 
+const clipboardShellUnavailable = Object.freeze({
+  available: false,
+  reason: 'owner-capability-missing',
+  hint: 'This Android build ships no shell implementation for the clipboard service, so adb cannot read or write the clipboard on it.',
+} as const);
+
 const tvRemoteUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-device-kind',
@@ -219,9 +226,31 @@ function androidTvRemoteFact(device: DeviceInfo): RuntimeOperationFact {
 
 export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createAndroidAppLogRuntime(host);
+  /**
+   * `cmd clipboard` is not implemented on every Android build. The retired capability bucket
+   * admitted the clipboard on every real Android kind and the leaf discovered the refusal only
+   * once a read or write had already run — a device `capabilities` advertised and execution then
+   * rejected. ADR 0019 §2 requires the opposite, so support is a fact, and the fact needs a probe.
+   *
+   * Cached per device for this owner's lifetime: a build's shell command set cannot change while
+   * the device is up, and admission would otherwise pay an adb round trip per request.
+   */
+  const clipboardShell = new Map<string, Promise<boolean>>();
+  const clipboardShellSupported = async (device: DeviceInfo): Promise<boolean> => {
+    let probe = clipboardShell.get(device.id);
+    if (!probe) {
+      probe = probeAndroidClipboardShell(host, device);
+      clipboardShell.set(device.id, probe);
+    }
+    return await probe;
+  };
   const inspectFacts = async (device: Parameters<typeof appLogs.inspectFacts>[0]) => {
     const logs = await appLogs.inspectFacts(device);
     const deployment = androidAppDeploymentFacts(device);
+    const clipboardCell =
+      device.kind === 'simulator' || !(await clipboardShellSupported(device))
+        ? clipboardShellUnavailable
+        : available;
     return Object.freeze({
       device: logs.device,
       operations: {
@@ -304,12 +333,9 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           dismiss: androidTouchFact(device),
           enter: androidTouchFact(device),
         }),
-        // `cmd clipboard get/set text` runs over adb on every real Android kind, so read and
-        // write share the same cell the retired `clipboard` bucket declared.
-        ...clipboardRuntimeOperationFacts({
-          read: androidTouchFact(device),
-          write: androidTouchFact(device),
-        }),
+        // Read and write share one cell: `cmd clipboard` either has a shell implementation on this
+        // build or it has none, and no Android build ships one half of it.
+        ...clipboardRuntimeOperationFacts({ read: clipboardCell, write: clipboardCell }),
         ensureReady: available,
         bootTarget: available,
         bootTargetHeadless: device.kind === 'emulator' ? available : headlessUnavailable,
@@ -436,4 +462,27 @@ function androidInteractionOperations(
       pause: async (milliseconds) => await host.clock.sleep(milliseconds, request.scope.signal),
     }),
   };
+}
+
+/**
+ * Asks the device, once, whether its clipboard service answers shell commands at all.
+ *
+ * Definitive only in one direction. adb naming the condition means unsupported; a probe that
+ * cannot run (offline transport, adb failure) says nothing about shell support, so it reports
+ * supported and leaves the real transport error to the operation that actually runs.
+ */
+async function probeAndroidClipboardShell(
+  host: PlatformRuntimeHost,
+  device: DeviceInfo,
+): Promise<boolean> {
+  try {
+    const result = await host.androidTools.runAdb(
+      device,
+      ['shell', 'cmd', 'clipboard', 'get', 'text'],
+      { allowFailure: true },
+    );
+    return !isAndroidClipboardShellUnsupported(result.stdout, result.stderr);
+  } catch {
+    return true;
+  }
 }
