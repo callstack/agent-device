@@ -11,6 +11,10 @@ export type {
   AppOpenResult,
   AppPushOptions,
   AppTriggerEventOptions,
+  DeviceSelectionMetadata,
+  DeviceSelectionReason,
+  DeviceSelectionRetrySelector,
+  DeviceSelectionSource,
   MaterializationReleaseOptions,
   MaterializationReleaseResult,
 } from '../client-app.ts';
@@ -41,12 +45,6 @@ export type {
   DeviceShutdownOptions,
   StartupPerfSample,
 } from '../client-device-view.ts';
-export type {
-  DeviceSelectionMetadata,
-  DeviceSelectionReason,
-  DeviceSelectionRetrySelector,
-  DeviceSelectionSource,
-} from '../device-selection.ts';
 export type {
   ClickOptions,
   DragOptions,

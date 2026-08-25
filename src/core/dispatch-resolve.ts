@@ -1,6 +1,7 @@
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import {
+  hasExplicitDeviceIdentitySelector,
   isApplePlatform,
   isIosFamily,
   matchesDeviceSelector,
@@ -21,11 +22,13 @@ import {
   readDeviceInventory,
   shouldPropagateDeviceInventoryProbeError,
 } from '../request/device-inventory-context.ts';
-import {
-  buildDeviceSelectionResult,
-  resolveInventoryDeviceSelection,
-  type DeviceSelectionResult,
-} from './device-selection-resolver.ts';
+import type { DeviceSelectionResult } from './device-selection-resolver.ts';
+
+type DeviceSelectionResolver = typeof import('./device-selection-resolver.ts');
+
+async function loadDeviceSelectionResolver(): Promise<DeviceSelectionResolver> {
+  return await import('./device-selection-resolver.ts');
+}
 export type ResolveDeviceFlags = Pick<
   CliFlags,
   | 'platform'
@@ -149,7 +152,7 @@ function shouldUseAppleSimulatorFallback(
 }
 
 function hasExplicitAppleDeviceSelector(selector: AppleDeviceSelector): boolean {
-  return Boolean(selector.udid || selector.serial || selector.deviceName);
+  return hasExplicitDeviceIdentitySelector(selector);
 }
 
 export async function resolveTargetDevice(
@@ -184,7 +187,7 @@ export async function resolveTargetDeviceSelection(
       }
       const inventory = await readDeviceInventory(inventoryRequest);
       const devices = [...inventory.devices];
-      const explicitSelector = hasExplicitDeviceSelector(flags);
+      const resolver = await loadDeviceSelectionResolver();
 
       if (shouldUseAppleResolution(selector)) {
         const selection = await resolveAppleDeviceSelection(
@@ -195,7 +198,7 @@ export async function resolveTargetDeviceSelection(
             allowLocalSimulatorFallback: inventory.source === 'local',
             appleSimulatorAppTarget: options.appleSimulatorAppTarget,
             source: inventory.source,
-            explicitSelector,
+            resolver,
           },
         );
         return cacheResolvedTargetDevice(cacheKey, selection);
@@ -203,11 +206,10 @@ export async function resolveTargetDeviceSelection(
 
       return cacheResolvedTargetDevice(
         cacheKey,
-        await resolveInventoryDeviceSelection({
+        await resolver.resolveInventoryDeviceSelection({
           devices,
           selector,
           source: inventory.source,
-          explicitSelector,
         }),
       );
     },
@@ -223,27 +225,26 @@ async function resolveAppleDeviceSelection(
     allowLocalSimulatorFallback?: boolean;
     appleSimulatorAppTarget?: string;
     source: 'local' | 'provider';
-    explicitSelector: boolean;
+    resolver: DeviceSelectionResolver;
   },
 ): Promise<DeviceSelectionResult> {
-  if (context.source === 'provider' && !context.explicitSelector) {
-    return await resolveInventoryDeviceSelection({
+  if (context.source === 'provider') {
+    return await context.resolver.resolveInventoryDeviceSelection({
       devices,
       selector,
       source: 'provider',
-      explicitSelector: false,
     });
   }
 
   const appMatchedSimulator = await findBootedAppleSimulatorWithApp(devices, selector, context);
   if (appMatchedSimulator) {
-    return buildAppleDeviceSelection(appMatchedSimulator, devices, selector, context);
+    return await buildAppleDeviceSelection(appMatchedSimulator, devices, selector, context);
   }
 
   const selected = await resolveAppleInventoryCandidate(devices, selector, context);
   const simulatorFallback = await resolveAppleSimulatorFallback(selector, context, selected);
   if (simulatorFallback) return simulatorFallback;
-  if (selected) return buildAppleDeviceSelection(selected, devices, selector, context);
+  if (selected) return await buildAppleDeviceSelection(selected, devices, selector, context);
   throw new AppError('DEVICE_NOT_FOUND', 'No devices found', { selector });
 }
 
@@ -252,16 +253,15 @@ async function resolveAppleInventoryCandidate(
   selector: AppleDeviceSelector,
   context: {
     source: 'local' | 'provider';
-    explicitSelector: boolean;
+    resolver: DeviceSelectionResolver;
   },
 ): Promise<DeviceInfo | undefined> {
   try {
     return (
-      await resolveInventoryDeviceSelection({
+      await context.resolver.resolveInventoryDeviceSelection({
         devices,
         selector,
         source: context.source,
-        explicitSelector: context.explicitSelector,
       })
     ).device;
   } catch (error) {
@@ -275,6 +275,7 @@ async function resolveAppleSimulatorFallback(
   context: {
     simulatorSetPath?: string;
     allowLocalSimulatorFallback?: boolean;
+    resolver: DeviceSelectionResolver;
   },
   selected: DeviceInfo | undefined,
 ): Promise<DeviceSelectionResult | undefined> {
@@ -291,11 +292,10 @@ async function resolveAppleSimulatorFallback(
       iosSimulatorSetPath: context.simulatorSetPath,
       kind: 'simulator',
     });
-    return await resolveInventoryDeviceSelection({
+    return await context.resolver.resolveInventoryDeviceSelection({
       devices: localDevices,
       selector,
       source: 'local',
-      explicitSelector: false,
     });
   } catch (error) {
     if (shouldPropagateDeviceInventoryProbeError(error)) throw error;
@@ -303,28 +303,21 @@ async function resolveAppleSimulatorFallback(
   }
 }
 
-function buildAppleDeviceSelection(
+async function buildAppleDeviceSelection(
   device: DeviceInfo,
   devices: DeviceInfo[],
   selector: AppleDeviceSelector,
   context: {
     source: 'local' | 'provider';
-    explicitSelector: boolean;
+    resolver: DeviceSelectionResolver;
   },
-): DeviceSelectionResult {
-  return buildDeviceSelectionResult({
-    device,
+): Promise<DeviceSelectionResult> {
+  return await context.resolver.resolveInventoryDeviceSelection({
     devices,
     selector,
     source: context.source,
-    explicitSelector: context.explicitSelector,
+    selectedDevice: device,
   });
-}
-
-function hasExplicitDeviceSelector(flags: ResolveDeviceFlags): boolean {
-  return [flags.platform, flags.target, flags.device, flags.udid, flags.serial].some(
-    (value) => typeof value === 'string' && value.trim().length > 0,
-  );
 }
 
 export function buildDeviceInventoryRequestFromFlags(

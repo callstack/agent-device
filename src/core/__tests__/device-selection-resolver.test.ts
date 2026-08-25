@@ -21,7 +21,6 @@ test('explicit identity selector wins before local inference', async () => {
     devices: [ANDROID_EMULATOR, SECOND_BOOTED_ANDROID_EMULATOR],
     selector: { platform: 'android', serial: SECOND_BOOTED_ANDROID_EMULATOR.id },
     source: 'local',
-    explicitSelector: true,
   });
 
   assert.equal(selection.device.id, SECOND_BOOTED_ANDROID_EMULATOR.id);
@@ -34,7 +33,6 @@ test('a single booted local candidate wins and reports its precedence reason', a
     devices: [IOS_SIMULATOR, { ...IOS_SIMULATOR, id: 'sim-stopped', booted: false }],
     selector: { platform: 'ios' },
     source: 'local',
-    explicitSelector: false,
   });
 
   assert.equal(selection.device.id, IOS_SIMULATOR.id);
@@ -47,7 +45,6 @@ test('a single bootable local candidate is selectable without a preliminary devi
     devices: [STOPPED_ANDROID_EMULATOR],
     selector: { platform: 'android' },
     source: 'local',
-    explicitSelector: false,
   });
 
   assert.equal(selection.device.id, STOPPED_ANDROID_EMULATOR.id);
@@ -86,7 +83,6 @@ test('multiple equally eligible local candidates fail with structured retry sele
         devices: [ANDROID_EMULATOR, SECOND_BOOTED_ANDROID_EMULATOR],
         selector: { platform: 'android' },
         source: 'local',
-        explicitSelector: false,
       }),
     (error: unknown) =>
       error instanceof AppError &&
@@ -105,7 +101,6 @@ test('no compatible candidate fails closed without substituting another platform
         devices: [IOS_SIMULATOR],
         selector: { platform: 'android' },
         source: 'local',
-        explicitSelector: false,
       }),
     (error: unknown) => error instanceof AppError && error.code === 'DEVICE_NOT_FOUND',
   );
@@ -116,7 +111,6 @@ test('provider inference only accepts one authoritative candidate', async () => 
     devices: [ANDROID_EMULATOR],
     selector: { platform: 'android' },
     source: 'provider',
-    explicitSelector: false,
   });
 
   assert.equal(selection.reason, 'single-provider-device');
@@ -128,18 +122,6 @@ test('provider inference only accepts one authoritative candidate', async () => 
         devices: [ANDROID_EMULATOR, SECOND_BOOTED_ANDROID_EMULATOR],
         selector: { platform: 'android' },
         source: 'provider',
-        explicitSelector: false,
-      }),
-    (error: unknown) => error instanceof AppError && error.code === 'AMBIGUOUS_MATCH',
-  );
-
-  await assert.rejects(
-    () =>
-      resolveInventoryDeviceSelection({
-        devices: [ANDROID_EMULATOR, SECOND_BOOTED_ANDROID_EMULATOR],
-        selector: { platform: 'android' },
-        source: 'provider',
-        explicitSelector: true,
       }),
     (error: unknown) => error instanceof AppError && error.code === 'AMBIGUOUS_MATCH',
   );

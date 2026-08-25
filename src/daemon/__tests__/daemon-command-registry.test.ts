@@ -183,7 +183,8 @@ test('daemon command registry preserves provider device resolution traits', () =
   assert.equal(
     resolveProviderDeviceResolutionIntent(makeRequest(PUBLIC_COMMANDS.test), {
       hasExistingSession: false,
-      hasExplicitDeviceSelector: false,
+      hasExplicitDeviceIdentity: false,
+      hasDeviceSelectionInput: false,
     }),
     'skip',
   );
@@ -195,7 +196,8 @@ test('daemon command registry preserves provider device resolution traits', () =
       },
       {
         hasExistingSession: false,
-        hasExplicitDeviceSelector: true,
+        hasExplicitDeviceIdentity: false,
+        hasDeviceSelectionInput: true,
       },
     ),
     'skip',
@@ -203,16 +205,26 @@ test('daemon command registry preserves provider device resolution traits', () =
   assert.equal(
     resolveProviderDeviceResolutionIntent(makeRequest(PUBLIC_COMMANDS.open), {
       hasExistingSession: false,
-      hasExplicitDeviceSelector: false,
+      hasExplicitDeviceIdentity: false,
+      hasDeviceSelectionInput: false,
     }),
     'sessionless-default-device',
   );
   assert.equal(
     resolveProviderDeviceResolutionIntent(makeRequest(PUBLIC_COMMANDS.apps), {
       hasExistingSession: true,
-      hasExplicitDeviceSelector: true,
+      hasExplicitDeviceIdentity: true,
+      hasDeviceSelectionInput: true,
     }),
     'explicit-device',
+  );
+  assert.equal(
+    resolveProviderDeviceResolutionIntent(makeRequest(PUBLIC_COMMANDS.capabilities), {
+      hasExistingSession: true,
+      hasExplicitDeviceIdentity: false,
+      hasDeviceSelectionInput: true,
+    }),
+    'existing-session',
   );
 });
 
@@ -229,7 +241,8 @@ test('every lease-route command skips sessionless provider-device resolution', (
     assert.equal(
       resolveProviderDeviceResolutionIntent(makeRequest(command), {
         hasExistingSession: false,
-        hasExplicitDeviceSelector: true,
+        hasExplicitDeviceIdentity: false,
+        hasDeviceSelectionInput: true,
       }),
       'skip',
       `${command} must not resolve a provider device sessionless`,

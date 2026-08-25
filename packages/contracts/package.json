@@ -107,10 +107,6 @@
       "types": "./src/facades/device.ts",
       "default": "./src/facades/device.ts"
     },
-    "./device-selection": {
-      "types": "./src/device-selection.ts",
-      "default": "./src/device-selection.ts"
-    },
     "./device-readiness-runtime": {
       "types": "./src/device-readiness-runtime.ts",
       "default": "./src/device-readiness-runtime.ts"

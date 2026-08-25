@@ -366,6 +366,37 @@ test('resolveTargetDeviceSelection reports one candidate for an explicit Apple i
   assert.equal(selection.candidateCount, 1);
 });
 
+test('platform-only local selection reports inferred precedence instead of explicit identity', async () => {
+  const selection = await withTestDeviceInventory(
+    {
+      local: async () => [bootedSimulator, simulator],
+    },
+    async () => await resolveTargetDeviceSelectionInContext({ platform: 'ios' }),
+  );
+
+  assert.equal(selection.device.id, bootedSimulator.id);
+  assert.equal(selection.reason, 'single-booted-local');
+  assert.equal(selection.source, 'local');
+});
+
+test('platform-only provider selection reports provider inference', async () => {
+  const selection = await withTestDeviceInventory(
+    {
+      provider: {
+        discover: async () => ({ kind: 'inventory', devices: [physical] }),
+      },
+      local: async () => {
+        throw new Error('provider inventory should not fall back to local discovery');
+      },
+    },
+    async () => await resolveTargetDeviceSelectionInContext({ platform: 'ios' }),
+  );
+
+  assert.equal(selection.device.id, physical.id);
+  assert.equal(selection.reason, 'single-provider-device');
+  assert.equal(selection.source, 'provider');
+});
+
 test('resolveTargetDevice preserves Apple simulator preference with injected inventory', async () => {
   const result = await withTestDeviceInventory(
     {

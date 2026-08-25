@@ -14,7 +14,33 @@ import type {
   DeviceCommandBaseOptions,
 } from './client-connection.ts';
 import type { AgentDeviceSessionDevice, StartupPerfSample } from './client-device-view.ts';
-import type { DeviceSelectionMetadata } from './device-selection.ts';
+
+export type DeviceSelectionReason =
+  | 'explicit-selector'
+  | 'existing-session'
+  | 'single-booted-local'
+  | 'single-bootable-local'
+  | 'preferred-local'
+  | 'single-provider-device';
+
+export type DeviceSelectionSource = 'session' | 'local' | 'provider';
+
+export type DeviceSelectionRetrySelector = {
+  flag: '--device' | '--serial' | '--udid';
+  value: string;
+};
+
+/** Deterministic device-selection evidence shared by daemon responses and the published client. */
+export type DeviceSelectionMetadata = {
+  reason: DeviceSelectionReason;
+  source: DeviceSelectionSource;
+  candidateCount: number;
+  /** Whether the selected inventory record was already booted at resolution time. */
+  booted: boolean;
+  /** Whether the selected lifecycle prepared a previously stopped local target. */
+  bootOccurred: boolean;
+  retrySelectors?: DeviceSelectionRetrySelector[];
+};
 
 export type AppInstallOptions = AgentDeviceRequestOverrides &
   AgentDeviceSelectionOptions & {

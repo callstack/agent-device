@@ -5,7 +5,7 @@ import { ensureDeviceReady } from '../device-ready.ts';
 import { getRunnerSessionSnapshot } from '../../platforms/apple/core/runner/runner-client.ts';
 import { resolveTargetDevice } from '../../core/dispatch.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { hasExplicitDeviceSelector } from '../device-selector-intent.ts';
+import { hasDeviceSelectionInput, hasExplicitDeviceSelector } from '../device-selector-intent.ts';
 import { listSessionSelectorConflicts } from '../session-selector.ts';
 import { isIosSimulator } from '../device-targets.ts';
 import { errorResponse } from './response.ts';
@@ -17,7 +17,7 @@ export function requireSessionOrExplicitSelector(
   session: SessionState | undefined,
   flags: DaemonRequest['flags'] | undefined,
 ): DaemonResponse | null {
-  if (session || hasExplicitDeviceSelector(flags)) {
+  if (session || hasDeviceSelectionInput(flags)) {
     return null;
   }
   return errorResponse(
@@ -36,9 +36,9 @@ export async function resolveCommandDevice(params: {
   ensureReady?: boolean;
   androidAvdSelection?: 'running-only' | 'include-stopped';
 }): Promise<DeviceInfo> {
-  const shouldUseExplicitSelector = hasExplicitDeviceSelector(params.flags);
+  const shouldUseExplicitIdentity = hasExplicitDeviceSelector(params.flags);
   const device =
-    shouldUseExplicitSelector || !params.session
+    shouldUseExplicitIdentity || !params.session
       ? await resolveTargetDevice(params.flags ?? {}, {
           androidAvdSelection: params.androidAvdSelection,
         })

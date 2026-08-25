@@ -135,15 +135,19 @@ export function resolveRefFrameEffect(req: DaemonRequest): RefFrameEffect | unde
 
 export function resolveProviderDeviceResolutionIntent(
   req: DaemonRequest,
-  params: { hasExistingSession: boolean; hasExplicitDeviceSelector: boolean },
+  params: {
+    hasExistingSession: boolean;
+    hasExplicitDeviceIdentity: boolean;
+    hasDeviceSelectionInput: boolean;
+  },
 ): DaemonProviderDeviceResolutionIntent {
   if (params.hasExistingSession) {
-    return shouldPreferExplicitDeviceOverExistingSession(req) && params.hasExplicitDeviceSelector
+    return shouldPreferExplicitDeviceOverExistingSession(req) && params.hasExplicitDeviceIdentity
       ? 'explicit-device'
       : 'existing-session';
   }
   if (shouldSkipSessionlessProviderDevice(req)) return 'skip';
-  if (params.hasExplicitDeviceSelector) return 'explicit-device';
+  if (params.hasDeviceSelectionInput) return 'explicit-device';
   return usesSessionlessDefaultProviderDevice(req) ? 'sessionless-default-device' : 'skip';
 }
 

@@ -82,6 +82,9 @@ test('help workflow prints the compact workflow card with a version header and s
   assert.match(result.stdout, /no CSS selectors/);
   assert.match(result.stdout, /help scripting/);
   assert.match(result.stdout, /help gestures/);
+  assert.match(result.stdout, /Selection: explicit --device\/--udid\/--serial/);
+  assert.match(result.stdout, /--platform\/--target only filter/);
+  assert.match(result.stdout, /bounded retry selectors/);
 });
 
 test('help workflow encourages chaining confident steps and requires the end state to be on screen', async () => {
@@ -141,7 +144,7 @@ test('help workflow advertises open --foreground and snapshot -i --actions', asy
   assert.equal(result.calls.length, 0);
   assert.match(
     result.stdout,
-    /Known app: open <app> --foreground -> snapshot\. Bare form needs one running app on one iOS sim; capture failure keeps session open/,
+    /open --foreground -> snapshot\. Selection: explicit --device\/--udid\/--serial/,
   );
   assert.match(
     result.stdout,

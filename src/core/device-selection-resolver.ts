@@ -3,8 +3,9 @@ import type {
   DeviceSelectionReason,
   DeviceSelectionRetrySelector,
   DeviceSelectionSource,
-} from '@agent-device/contracts/device-selection';
+} from '@agent-device/contracts/client';
 import {
+  hasExplicitDeviceIdentitySelector,
   isSerialAddressablePlatform,
   matchesDeviceSelector,
   resolveDevice,
@@ -23,10 +24,11 @@ export async function resolveInventoryDeviceSelection(params: {
   devices: readonly DeviceInfo[];
   selector: DeviceSelector;
   source: InventoryDeviceSelectionSource;
-  explicitSelector: boolean;
+  selectedDevice?: DeviceInfo;
   allowBootableLocal?: boolean;
 }): Promise<DeviceSelectionResult> {
-  const { devices, selector, source, explicitSelector } = params;
+  const { devices, selector, source } = params;
+  const explicitSelector = hasExplicitDeviceIdentitySelector(selector);
   const allowBootableLocal = params.allowBootableLocal ?? true;
   const eligibleDevices =
     explicitSelector || source === 'provider' || allowBootableLocal
@@ -41,27 +43,26 @@ export async function resolveInventoryDeviceSelection(params: {
     matchesDeviceSelector(device, selector, { includeExplicitSelectors: explicitSelector }),
   );
   try {
-    const device = await resolveDevice(eligibleDevices, selector);
+    const device = params.selectedDevice ?? (await resolveDevice(eligibleDevices, selector));
     return buildDeviceSelectionResult({
       device,
       devices: eligibleDevices,
       selector,
       source,
-      explicitSelector,
     });
   } catch (error) {
     throw withDeviceRetrySelectors(error, candidates);
   }
 }
 
-export function buildDeviceSelectionResult(params: {
+function buildDeviceSelectionResult(params: {
   device: DeviceInfo;
   devices: readonly DeviceInfo[];
   selector: DeviceSelector;
   source: InventoryDeviceSelectionSource;
-  explicitSelector: boolean;
 }): DeviceSelectionResult {
-  const { device, devices, selector, source, explicitSelector } = params;
+  const { device, devices, selector, source } = params;
+  const explicitSelector = hasExplicitDeviceIdentitySelector(selector);
   const candidates = devices.filter((candidate) =>
     matchesDeviceSelector(candidate, selector, { includeExplicitSelectors: explicitSelector }),
   );
@@ -80,7 +81,7 @@ export function buildDeviceSelectionResult(params: {
 }
 
 function hasExplicitProviderIdentity(selector: DeviceSelector): boolean {
-  return Boolean(selector.deviceName || selector.udid || selector.serial);
+  return hasExplicitDeviceIdentitySelector(selector);
 }
 
 export function resolveExistingSessionDeviceSelection(device: DeviceInfo): DeviceSelectionResult {
@@ -126,7 +127,6 @@ async function resolveSingleProviderDevice(
       devices,
       selector,
       source: 'provider',
-      explicitSelector: false,
     });
   }
 

@@ -1,25 +1,27 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import { hasExplicitDeviceIdentitySelector } from '@agent-device/kernel/device';
 
-const EXPLICIT_DEVICE_SELECTOR_KEYS: ReadonlyArray<keyof CommandFlags> = [
-  'platform',
-  'target',
-  'device',
-  'udid',
-  'serial',
-];
+const DEVICE_FILTER_KEYS: ReadonlyArray<keyof CommandFlags> = ['platform', 'target'];
 
-const LOCKABLE_DEVICE_SELECTOR_KEYS: ReadonlyArray<keyof CommandFlags> = [
-  ...EXPLICIT_DEVICE_SELECTOR_KEYS,
+const LOCKABLE_DEVICE_SCOPE_KEYS: ReadonlyArray<keyof CommandFlags> = [
   'iosSimulatorDeviceSet',
   'androidDeviceAllowlist',
 ];
 
 export function hasExplicitDeviceSelector(flags: CommandFlags | undefined): boolean {
-  return hasAnySelectorValue(flags, EXPLICIT_DEVICE_SELECTOR_KEYS);
+  return hasExplicitDeviceIdentitySelector({
+    deviceName: flags?.device,
+    udid: flags?.udid,
+    serial: flags?.serial,
+  });
+}
+
+export function hasDeviceSelectionInput(flags: CommandFlags | undefined): boolean {
+  return hasExplicitDeviceSelector(flags) || hasAnySelectorValue(flags, DEVICE_FILTER_KEYS);
 }
 
 export function hasLockableDeviceSelector(flags: CommandFlags | undefined): boolean {
-  return hasAnySelectorValue(flags, LOCKABLE_DEVICE_SELECTOR_KEYS);
+  return hasDeviceSelectionInput(flags) || hasAnySelectorValue(flags, LOCKABLE_DEVICE_SCOPE_KEYS);
 }
 
 export function hasSelectorValue(value: unknown): value is string {

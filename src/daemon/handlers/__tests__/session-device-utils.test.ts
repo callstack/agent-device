@@ -2,6 +2,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../../types.ts';
 
 import {
+  resolveCommandDevice,
   refreshSessionDeviceIfNeeded,
   selectorTargetsSessionDevice,
 } from '../session-device-utils.ts';
@@ -17,6 +18,9 @@ vi.mock('../../../core/dispatch.ts', () => ({
 }));
 vi.mock('../../../provider-device-runtime.ts', () => ({
   isActiveProviderDevice: vi.fn(() => false),
+}));
+vi.mock('../../device-ready.ts', () => ({
+  ensureDeviceReady: vi.fn(async () => {}),
 }));
 
 const mockGetRunnerSessionSnapshot = vi.mocked(getRunnerSessionSnapshot);
@@ -60,6 +64,21 @@ test('refreshSessionDeviceIfNeeded keeps iOS simulator session device on non-mac
   );
 
   expect(device).toBe(iosSimulatorSession.device);
+});
+
+test('resolveCommandDevice keeps an existing session for a platform-only filter', async () => {
+  const device = await withMockedPlatform(
+    'linux',
+    async () =>
+      await resolveCommandDevice({
+        session: iosSimulatorSession,
+        flags: { platform: 'ios' },
+        ensureReady: false,
+      }),
+  );
+
+  expect(device).toBe(iosSimulatorSession.device);
+  expect(mockResolveTargetDevice).not.toHaveBeenCalled();
 });
 
 test('refreshSessionDeviceIfNeeded keeps provider-owned iOS simulators out of local refresh', async () => {

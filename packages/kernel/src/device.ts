@@ -68,6 +68,15 @@ export type DeviceSelector = {
   serial?: string;
 };
 
+/** Device identity is narrower than platform/target filtering for precedence decisions. */
+export function hasExplicitDeviceIdentitySelector(
+  selector: Pick<DeviceSelector, 'deviceName' | 'udid' | 'serial'>,
+): boolean {
+  return [selector.deviceName, selector.udid, selector.serial].some(
+    (value) => typeof value === 'string' && value.trim().length > 0,
+  );
+}
+
 type DeviceSelectionContext = {
   simulatorSetPath?: string;
 };
