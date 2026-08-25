@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import type { AndroidClipboardShellSupport } from '@agent-device/contracts/android-clipboard-support';
 import type {
   DeviceBinding,
   PlatformRuntimeHost,
@@ -32,6 +33,7 @@ test.each([
     stdout: 'mCurrentFocus=Window{1 u0 com.example.app/.MainActivity}',
   }));
   const host = {
+    androidTools: { probeClipboardShellSupport: async () => 'supported' as const },
     commands: {
       which: async () => 'tool',
       run: async () => ({ stdout: '1', stderr: '', exitCode: 0 }),
@@ -156,6 +158,7 @@ test.each([
 test('rejects the non-discovered Android simulator cell for appstate', async () => {
   const runtimeDevice = { ...device, kind: 'simulator' as const };
   const host = {
+    androidTools: { probeClipboardShellSupport: async () => 'supported' as const },
     processTransports: { resolve: async () => ({ mode: 'local' as const }) },
     localInteractors: { resolve: async () => ({}) },
     appState: {
@@ -197,17 +200,13 @@ test('rejects the non-discovered Android simulator cell for appstate', async () 
 });
 
 function androidNavigationHostFixture(
-  runAdb?: (
-    device: DeviceInfo,
-    args: readonly string[],
-  ) => Promise<{
-    stdout: string;
-    stderr: string;
-    exitCode: number;
-  }>,
+  probeClipboardShellSupport: () => Promise<AndroidClipboardShellSupport> = async () => 'supported',
 ) {
   return {
-    androidTools: { runAdb: runAdb ?? (async () => ({ stdout: '', stderr: '', exitCode: 0 })) },
+    androidTools: {
+      probeClipboardShellSupport,
+      runAdb: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+    },
     processTransports: { resolve: async () => ({ mode: 'local' as const }) },
     appInventory: {
       apple: { listApps: async () => [] },
@@ -417,6 +416,7 @@ test.each([
   'classifies the Android %s lifecycle denominator against the legacy dispatch cell',
   async (_name, runtimeDevice, legacy) => {
     const host = {
+      androidTools: { probeClipboardShellSupport: async () => 'supported' as const },
       processTransports: { resolve: async () => ({ mode: 'local' as const }) },
       appInventory: {
         apple: { listApps: async () => [] },
@@ -568,6 +568,7 @@ test('binds only the Android gesture tiers the target admitted', async () => {
 
 function gestureHost(): PlatformRuntimeHost {
   return {
+    androidTools: { probeClipboardShellSupport: async () => 'supported' as const },
     processTransports: { resolve: async () => ({ mode: 'local' as const }) },
     appInventory: {
       apple: { listApps: async () => [] },
@@ -583,12 +584,9 @@ function gestureHost(): PlatformRuntimeHost {
 // clipboard halves on every real Android kind, `capabilities` advertised `clipboard`, and
 // `clipboard read` then failed with `UNSUPPORTED_OPERATION` from the leaf. Admission now probes
 // the same condition the leaf checks, so a build with no clipboard shell command refuses up front.
-test.each([
-  ['no shell command implementation', 'cmd: No shell command implementation.'],
-  ['unknown command', 'Unknown command: clipboard'],
-])('refuses both clipboard halves when adb reports %s', async (_name, stdout) => {
+test('refuses both clipboard halves when the build reports no clipboard shell', async () => {
   const binding = await createAndroidPlatformRuntime(
-    androidNavigationHostFixture(async () => ({ stdout, stderr: '', exitCode: 0 })),
+    androidNavigationHostFixture(async () => 'unsupported'),
   ).bind({
     device: { ...device, id: 'android-no-clipboard-shell', kind: 'device' },
     intent: { kind: 'ordinary' },
@@ -611,29 +609,29 @@ test.each([
   expect(binding.facts.operations.appSwitcher).toEqual({ available: true });
 });
 
-test('probes the clipboard shell once per device, not once per inspection', async () => {
-  const runAdb = vi.fn(async (_device: DeviceInfo, _args: readonly string[]) => ({
-    stdout: '',
-    stderr: '',
-    exitCode: 0,
-  }));
-  const runtime = createAndroidPlatformRuntime(androidNavigationHostFixture(runAdb));
-  const target = { ...device, id: 'android-probe-cache', kind: 'device' as const };
+test.each([['supported'], ['unsupported']] as const)(
+  'caches a definitive %s verdict instead of re-probing per inspection',
+  async (verdict) => {
+    const probe = vi.fn(async () => verdict);
+    const runtime = createAndroidPlatformRuntime(androidNavigationHostFixture(probe));
+    const target = { ...device, id: `android-probe-cache-${verdict}`, kind: 'device' as const };
 
-  await runtime.inspectFacts(target);
-  await runtime.inspectFacts(target);
+    await runtime.inspectFacts(target);
+    await runtime.inspectFacts(target);
 
-  const clipboardProbes = runAdb.mock.calls.filter((call) => call[1].includes('clipboard'));
-  expect(clipboardProbes).toHaveLength(1);
-});
+    expect(probe).toHaveBeenCalledTimes(1);
+  },
+);
 
-test('an adb failure leaves the clipboard admitted rather than inventing an unsupported build', async () => {
+// The failure path is the one that recreates the defect if it guesses. A probe that never got an
+// answer must not report the clipboard available — execution would then refuse the very capability
+// `capabilities` advertised — and must not be remembered, or one transport blip decides the
+// question for the owner's whole life.
+test('a failed probe refuses rather than fabricating availability', async () => {
   const binding = await createAndroidPlatformRuntime(
-    androidNavigationHostFixture(async () => {
-      throw new Error('adb: device offline');
-    }),
+    androidNavigationHostFixture(async () => 'probe-failed'),
   ).bind({
-    device: { ...device, id: 'android-adb-offline', kind: 'device' },
+    device: { ...device, id: 'android-probe-failed', kind: 'device' },
     intent: { kind: 'ordinary' },
     scope: {
       signal: new AbortController().signal,
@@ -642,8 +640,42 @@ test('an adb failure leaves the clipboard admitted rather than inventing an unsu
     },
   });
 
-  // The probe is definitive in one direction only: adb naming the condition means unsupported, a
-  // probe that cannot run means unknown. Reporting unknown as unsupported would hide a working
-  // clipboard behind a transport hiccup.
-  expect(binding.facts.operations.readClipboard).toEqual({ available: true });
+  for (const key of ['readClipboard', 'writeClipboard'] as const) {
+    expect(binding.facts.operations[key]).toMatchObject({ available: false });
+    expect(binding.operations[key]).toBeUndefined();
+  }
+  // The refusal says it could not determine support, not that the build lacks it.
+  const fact = binding.facts.operations.readClipboard;
+  expect(fact.available === false && String(fact.hint)).toMatch(/could not determine/i);
+});
+
+test('a failed probe is not cached, so the next inspection asks again', async () => {
+  const probe = vi
+    .fn<() => Promise<AndroidClipboardShellSupport>>()
+    .mockResolvedValueOnce('probe-failed')
+    .mockResolvedValue('supported');
+  const runtime = createAndroidPlatformRuntime(androidNavigationHostFixture(probe));
+  const target = { ...device, id: 'android-probe-retry', kind: 'device' as const };
+
+  const first = await runtime.inspectFacts(target);
+  const second = await runtime.inspectFacts(target);
+
+  expect(first.operations.readClipboard.available).toBe(false);
+  expect(second.operations.readClipboard.available).toBe(true);
+  expect(probe).toHaveBeenCalledTimes(2);
+});
+
+test('a host with no clipboard probe refuses rather than assuming support', async () => {
+  const host = androidNavigationHostFixture();
+  const withoutProbe = { ...host, androidTools: {} } as unknown as PlatformRuntimeHost;
+
+  const facts = await createAndroidPlatformRuntime(withoutProbe).inspectFacts({
+    ...device,
+    id: 'android-no-probe',
+    kind: 'device',
+  });
+
+  // Absence of a probe is absence of evidence, not evidence of support.
+  expect(facts.operations.readClipboard.available).toBe(false);
+  expect(facts.operations.writeClipboard.available).toBe(false);
 });

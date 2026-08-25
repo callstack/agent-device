@@ -1,5 +1,6 @@
 import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
 import type { JsonObject, JsonValue } from './json.ts';
+import type { AndroidClipboardShellSupport } from './android-clipboard-support.ts';
 
 export type HostCommandRequest = Readonly<{
   executable: string;
@@ -68,6 +69,22 @@ export type AppleToolHost = Readonly<{
 
 /** Device-scoped Android transport selected by root composition; packages own all adb arguments. */
 export type AndroidToolHost = Readonly<{
+  /**
+   * Asks this device whether its clipboard service answers shell commands, as typed evidence.
+   *
+   * A host method rather than a `runAdb` call the caller classifies itself: normalizing adb's
+   * output is Android tool knowledge, and it happens once here rather than in every owner that
+   * needs the verdict.
+   *
+   * Optional, and its absence is not permission to assume support: a host that cannot probe
+   * leaves the owner unable to establish the capability, so the clipboard is refused rather than
+   * admitted. Only fabricated availability is forbidden — a refusal on incomplete information is
+   * the safe answer.
+   */
+  probeClipboardShellSupport?(
+    device: DeviceInfo,
+    signal?: AbortSignal,
+  ): Promise<AndroidClipboardShellSupport>;
   runAdb(
     device: DeviceInfo,
     args: readonly string[],

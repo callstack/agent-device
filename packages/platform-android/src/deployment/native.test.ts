@@ -28,6 +28,7 @@ function hostFixture(options: { bundletool?: boolean; bundletoolJar?: string } =
     },
     androidDeployment: { bundletoolJar: options.bundletoolJar },
     androidTools: {
+      probeClipboardShellSupport: async () => 'supported' as const,
       runAdb: async (_device, args, commandOptions, signal) =>
         await run({ executable: 'adb', args, ...commandOptions }, signal),
       installPackage: async (_device, packagePath, options, signal) =>
