@@ -236,21 +236,19 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
    * the device is up, and admission would otherwise pay an adb round trip per request.
    */
   const clipboardShell = new Map<string, Promise<boolean>>();
-  const clipboardShellSupported = async (device: DeviceInfo): Promise<boolean> => {
+  const clipboardFact = async (device: DeviceInfo): Promise<RuntimeOperationFact> => {
+    if (device.kind === 'simulator') return clipboardShellUnavailable;
     let probe = clipboardShell.get(device.id);
     if (!probe) {
       probe = probeAndroidClipboardShell(host, device);
       clipboardShell.set(device.id, probe);
     }
-    return await probe;
+    return (await probe) ? available : clipboardShellUnavailable;
   };
   const inspectFacts = async (device: Parameters<typeof appLogs.inspectFacts>[0]) => {
     const logs = await appLogs.inspectFacts(device);
     const deployment = androidAppDeploymentFacts(device);
-    const clipboardCell =
-      device.kind === 'simulator' || !(await clipboardShellSupported(device))
-        ? clipboardShellUnavailable
-        : available;
+    const clipboardCell = await clipboardFact(device);
     return Object.freeze({
       device: logs.device,
       operations: {

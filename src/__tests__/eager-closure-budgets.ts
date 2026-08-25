@@ -114,6 +114,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
 
   // --- @agent-device/contracts ---
   'packages/contracts/src/alert-contract.ts': 1,
+  'packages/contracts/src/android-clipboard-support.ts': 1,
   'packages/contracts/src/android-input-ownership.ts': 1,
   'packages/contracts/src/android-snapshot-quality.ts': 1,
   'packages/contracts/src/android-system-chrome.ts': 1,

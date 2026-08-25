@@ -1,3 +1,4 @@
+import { retiredDispatchProjectionViolations } from './runtime-command-cutover-descriptor.ts';
 import { parseSync } from 'oxc-parser';
 import { propertyName, visitAst, type ProductionSource } from './cutover-policy-ast.ts';
 import { lineOf } from './runtime-command-cutover-ast.ts';
@@ -10,6 +11,17 @@ export {
   prepareLifecycleRouteBindingViolations,
   runtimeLifecycleRouteBindingViolations,
 } from './runtime-command-cutover-lifecycle.ts';
+
+/**
+ * Every migrated row proves the same thing about its own command: the retired dispatch projection
+ * is gone. One factory carries the command, so a row states its name once in the row literal
+ * rather than adding another identically-shaped wrapper beside the table.
+ */
+export function retiredDispatchProjectionProof(
+  command: string,
+): (sources: ReadonlyMap<string, string>) => UnruledViolation[] {
+  return (sources) => retiredDispatchProjectionViolations(sources, command);
+}
 
 type AstNode = Record<string, unknown>;
 
