@@ -373,7 +373,7 @@ test('producer maps each platform to its resolved lookup and matrix artifact nam
     assert.equal(result.status, 0, result.stderr);
     const lines = fs.readFileSync(outputPath, 'utf8').trim().split('\n');
     return {
-      hasWork: lines.find((line) => line.startsWith('has-work=')),
+      hasWork: lines.find((line) => line.startsWith('has-work=')).slice('has-work='.length),
       matrix: JSON.parse(lines.find((line) => line.startsWith('matrix=')).slice('matrix='.length)),
     };
   };
@@ -386,7 +386,7 @@ test('producer maps each platform to its resolved lookup and matrix artifact nam
       { platform: 'android', artifactName: 'fingerprint.android-hash.android' },
     ],
   );
-  assert.equal(neitherCached.hasWork, 'has-work=true');
+  assert.equal(neitherCached.hasWork, 'true');
   assert.deepEqual(fs.readFileSync(resolverLog, 'utf8').trim().split('\n'), ['ios', 'android']);
   assert.deepEqual(fs.readFileSync(nodeLog, 'utf8').trim().split('\n'), [
     '.github/actions/setup-fixture-app/trusted-artifact.mjs find octo/repo fingerprint.ios-hash.ios current-head',
@@ -401,12 +401,12 @@ test('producer maps each platform to its resolved lookup and matrix artifact nam
     iosCached.matrix.include.map(({ platform }) => platform),
     ['android'],
   );
-  assert.equal(iosCached.hasWork, 'has-work=true');
+  assert.equal(iosCached.hasWork, 'true');
 
   writeNodeStub(['ios', 'android']);
   const bothCached = runFingerprint('output-both-cached');
   assert.deepEqual(bothCached.matrix, { include: [] });
-  assert.equal(bothCached.hasWork, 'has-work=false');
+  assert.equal(bothCached.hasWork, 'false');
 });
 
 test('artifact name resolver scopes both platforms and rejects invalid output', (t) => {
