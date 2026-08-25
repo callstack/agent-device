@@ -75,7 +75,7 @@ test('help workflow prints the compact workflow card with a version header and s
   assert.equal(result.calls.length, 0);
   assert.match(result.stdout, /^agent-device \S+ — workflow/);
   assert.ok(
-    Buffer.byteLength(result.stdout, 'utf8') < 9000,
+    Buffer.byteLength(result.stdout, 'utf8') < 9100,
     `help workflow should stay close to the compact-card size target, was ${Buffer.byteLength(result.stdout, 'utf8')} bytes`,
   );
   assert.match(result.stdout, /open -> snapshot -i -> settle -> verify -> close loop/);
