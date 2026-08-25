@@ -525,7 +525,7 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       // memberships. Every route name survived — what changed is that the mutating target
       // capture now enters resolveBoundSelectorCapture like every selector read, which is why
       // the shared owners below carry find's captures too.
-      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS', 'WEB_QUERY_COMMANDS'],
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
     },
     runtimeTypeNames: ['SnapshotRuntimeOperations', 'ElementTextRuntimeOperations'],
     operations: {
@@ -597,7 +597,7 @@ export const MIGRATED_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
     // it from both sides: each must still be declared in production source and must no longer
     // list `is`, so neither an invented name nor a skipped deletion can satisfy it.
     legacyRetirement: {
-      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS', 'WEB_QUERY_COMMANDS'],
+      staticCommandSets: ['HARMONYOS_SUPPORTED_COMMANDS'],
     },
     runtimeTypeNames: ['SnapshotRuntimeOperations'],
     operations: { names: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'] },

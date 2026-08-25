@@ -42,6 +42,8 @@ import {
   resolveDeviceAppleOs,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
+import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
+import { appleAudioProbeCaptureFact, createAppleAudioProbeOperations } from './audio/runtime.ts';
 import { appleGestureAndScrollFacts } from './gesture-facts.ts';
 import { createAppleAppLogRuntime } from './logs/runtime.ts';
 import { dumpAppleNetworkTraffic } from './network/runtime.ts';
@@ -73,6 +75,11 @@ const viewportUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
   hint: 'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.',
+} as const);
+const audioQueryUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'the stateless audio page probe is a web-session operation; Apple targets use the host capture.',
 } as const);
 /**
  * Focus drives touch through the Apple interactor, which exists for the simulator and physical
@@ -303,6 +310,10 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
         ...appleNavigationFacts(device),
         ...appleSystemFacts(device),
+        ...audioProbeRuntimeOperationFacts({
+          capture: appleAudioProbeCaptureFact(device),
+          query: audioQueryUnavailable,
+        }),
         ensureReady: readiness,
         bootTarget: boot,
         bootTargetHeadless: headlessUnavailable,
@@ -336,6 +347,9 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             owner,
             signal: request.scope.signal,
           }),
+        ),
+        ...whenAdmitted(facts.operations.audioProbeStart, () =>
+          createAppleAudioProbeOperations({ host, device: request.device, owner }),
         ),
         ...whenAdmitted(facts.operations.captureSnapshot, () =>
           bindAppleSnapshotRuntime(host, {

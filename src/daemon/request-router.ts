@@ -65,6 +65,10 @@ import {
   type AppLogAdmissionLedger,
 } from './app-log-admission-ledger.ts';
 import {
+  createAudioProbeAdmissionLedger,
+  type AudioProbeAdmissionLedger,
+} from './audio-probe-admission-ledger.ts';
+import {
   createScreenRecordingAdmissionLedger,
   type ScreenRecordingAdmissionLedger,
 } from './screen-recording-admission-ledger.ts';
@@ -93,6 +97,7 @@ export type RequestRouterDeps = {
   deviceInventoryGateways: ComposedDeviceInventoryGateways;
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
+  audioProbeAdmissionLedger?: AudioProbeAdmissionLedger;
   screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
   providerRuntimeIds?: readonly string[];
   providerRuntimeRequiredIds?: readonly string[];
@@ -124,6 +129,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     deviceInventoryGateways,
     deviceRuntimeGateway,
     appLogAdmissionLedger = createAppLogAdmissionLedger(),
+    audioProbeAdmissionLedger = createAudioProbeAdmissionLedger(),
     screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger(),
     providerRuntimeIds,
     providerRuntimeRequiredIds,
@@ -289,6 +295,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         scope: requestScope,
       }),
       appLogAdmissionLedger,
+      audioProbeAdmissionLedger,
       screenRecordingAdmissionLedger,
       requestScope,
       retainDeviceExecutionLock: lockedScope.retainDeviceExecutionLock,

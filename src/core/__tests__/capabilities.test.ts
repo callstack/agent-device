@@ -301,21 +301,7 @@ test('web supports only the initial browser interaction slice', () => {
   );
 });
 
-test('audio probe support is limited to browser and host-rendered audio targets', () => {
-  const hostAudioSupported = process.platform === 'darwin';
-  assertCommandSupport(
-    ['audio'],
-    [
-      { device: webDevice, expected: true, label: 'on web' },
-      { device: macOsDevice, expected: hostAudioSupported, label: 'on macOS host' },
-      { device: iosSimulator, expected: hostAudioSupported, label: 'on iOS simulator' },
-      { device: androidEmulator, expected: hostAudioSupported, label: 'on Android emulator' },
-      { device: iosDevice, expected: false, label: 'on iOS physical device' },
-      { device: androidDevice, expected: false, label: 'on Android physical device' },
-      { device: linuxDevice, expected: false, label: 'on Linux desktop' },
-    ],
-  );
-});
+
 
 test('apple selector does not match web platform', () => {
   assert.equal(matchesPlatformSelector(webDevice, 'apple'), false);

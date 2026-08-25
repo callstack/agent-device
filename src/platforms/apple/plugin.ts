@@ -1,6 +1,5 @@
 import type { PlatformPlugin } from '@agent-device/contracts/platform';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { isAudioProbeSupportedDevice } from '@agent-device/contracts/audio-probe-support';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerContext } from '@agent-device/contracts/interaction';
 
@@ -25,7 +24,6 @@ const supportsCoreDevicePhysicalOperation = (device: DeviceInfo): boolean =>
 // the command-descriptor registry (a command absent here has no Apple gate).
 const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean> = {
   [PUBLIC_COMMANDS.perf]: supportsCoreDevicePhysicalOperation,
-  [PUBLIC_COMMANDS.audio]: isAudioProbeSupportedDevice,
 };
 
 const APPLE_UNSUPPORTED_HINT_BY_DEFAULT: Record<

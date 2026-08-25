@@ -1,4 +1,11 @@
 import { beforeEach, expect, test, vi } from 'vitest';
+import type { AudioProbeLiveHandle } from '@agent-device/contracts/audio-probe-runtime';
+import {
+  createDurableResourceEnvelope,
+  encodeDurableDescriptor,
+  hostAudioProbeDescriptorCodec,
+} from '@agent-device/capture-kit';
+import { audioProbeResourceStore } from '../../audio-probe-resource-store.ts';
 import {
   sessionCloseShutdownFixture,
   type SessionState,
@@ -8,6 +15,7 @@ const {
   AppError,
   handleSessionCommands,
   LeaseRegistry,
+  localRuntimeOwner,
   makeSession,
   makeSessionStore,
   mockCleanupAndroidNativePerfSession,
@@ -158,8 +166,59 @@ test('close stops active Android native perf capture before deleting session', a
 test('close stops active host audio probe before deleting session', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'macos-active-audio-probe-session';
-  const kill = vi.fn();
-  const session = {
+  const statusPath = path.join(os.tmpdir(), 'missing-audio-probe.json');
+  const startedAt = Date.now() - 2000;
+  const stoppedResult = {
+    audio: 'probe' as const,
+    state: 'stopped' as const,
+    active: false,
+    heard: false,
+    source: 'system-audio' as const,
+    backend: 'macos-screencapturekit',
+    durationMs: 10000,
+    elapsedMs: 2000,
+    bucketMs: 1000,
+    sampleCount: 2,
+    sourceCount: 1,
+    rmsDbfs: [] as number[],
+    peakDbfs: [] as number[],
+  };
+  const finish = vi.fn(async () => ({ status: 'completed' as const, result: stoppedResult }));
+  const handle: AudioProbeLiveHandle = {
+    inspect: () => ({
+      source: 'system-audio' as const,
+      backend: 'macos-screencapturekit',
+      sourceCount: 1,
+      notes: [],
+      statusPath,
+      startedAt,
+      durationMs: 10000,
+      bucketMs: 1000,
+    }),
+    status: async () => stoppedResult,
+    finish,
+    forceCleanup: async () => ({ status: 'cleaned' }) as const,
+    [Symbol.asyncDispose]: async () => {},
+  };
+  const envelope = createDurableResourceEnvelope({
+    resourceKind: 'audio-probe',
+    sessionId: sessionName,
+    device: { id: 'macos', family: 'apple', appleOs: 'macos', kind: 'device' },
+    owner: localRuntimeOwner('apple'),
+    fence: { token: sessionName + '-fence', generation: 1 },
+    lifecycle: 'open',
+    descriptor: encodeDurableDescriptor(hostAudioProbeDescriptorCodec, {
+      backend: 'macos-screencapturekit',
+      source: 'system-audio',
+      sourceCount: 1,
+      notes: [],
+      statusPath,
+      startedAt,
+      durationMs: 10000,
+      bucketMs: 1000,
+    }),
+  });
+  const session: SessionState = {
     ...makeSession(sessionName, {
       platform: 'apple',
       appleOs: 'macos',
@@ -168,25 +227,13 @@ test('close stops active host audio probe before deleting session', async () => 
       kind: 'device',
       booted: true,
     }),
-    audioProbe: {
-      platform: 'host-system-audio',
-      source: 'system-audio',
-      backend: 'macos-screencapturekit',
-      sourceCount: 1,
-      notes: [
-        'Audio probe samples host system audio through ScreenCaptureKit for this macOS session; it is not app-instrumented audio.',
-        'Screen Recording permission is required for host system audio capture.',
-        'Other audible host apps can contribute to the measured buckets.',
-      ],
-      child: { kill, pid: 1234 },
-      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-      statusPath: path.join(os.tmpdir(), 'missing-audio-probe.json'),
-      startedAt: Date.now() - 2000,
-      durationMs: 10000,
-      bucketMs: 1000,
-    },
-  } as SessionState;
+    audioProbe: { handle, envelope },
+  };
   sessionStore.set(sessionName, session);
+  audioProbeResourceStore.write(
+    audioProbeResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName)),
+    envelope,
+  );
 
   const response = await handleSessionCommands({
     req: {
@@ -203,8 +250,7 @@ test('close stops active host audio probe before deleting session', async () => 
   });
 
   expect(response?.ok).toBe(true);
-  expect(kill).toHaveBeenCalledWith('SIGTERM');
-  expect(session.audioProbe).toBeUndefined();
+  expect(finish).toHaveBeenCalledOnce();
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 

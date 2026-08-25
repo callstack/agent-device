@@ -1,73 +1,77 @@
-import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
+import path from 'node:path';
 import { normalizeError } from '@agent-device/kernel/errors';
 import {
-  resolveHostAudioProbeBackend,
-  type HostAudioProbeBackend,
-} from '../../platforms/audio-probe-backend.ts';
-import { resolveWebProvider } from '../../platforms/web/provider.ts';
-import { runHostSystemAudioProbeCommand } from '../audio-probe.ts';
+  parseAudioProbeRequest,
+  resolveAudioRuntimePlan,
+  type AudioProbeRequest,
+  type audioProbeStartUse,
+} from '@agent-device/contracts/audio-runtime-plan';
+import { emptyAudioProbeResult } from '@agent-device/contracts/audio-probe-result';
+import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import type { AudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
+import {
+  adoptStartedAudioProbe,
+  audioProbeDurableResource,
+  finishLiveAudioProbe,
+} from '../audio-probe-session-resource.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../request-runtime-binding.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';
-
-const AUDIO_ACTIONS = ['probe'] as const;
-const AUDIO_PROBE_ACTIONS = ['start', 'status', 'stop'] as const;
-const AUDIO_ACTIONS_MESSAGE = 'audio requires probe';
-const AUDIO_PROBE_ACTIONS_MESSAGE = `audio probe requires ${AUDIO_PROBE_ACTIONS.join(', ')}`;
 
 type AudioParams = {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
+  inspectFacts: InspectDeviceRuntimeFacts;
+  bindDevice: BindDeviceRuntime;
+  audioProbeAdmissionLedger: AudioProbeAdmissionLedger;
+  throwIfCanceled(): void;
 };
 
 export async function handleAudioCommand(params: AudioParams): Promise<DaemonResponse> {
-  const request = resolveAudioCommandRequest(params);
-  if (!request.ok) return request;
-  const hostBackend = await resolveHostAudioProbeBackend(request.session.device);
-  if (hostBackend) {
-    return await handleHostSystemAudioCommand(params, request, hostBackend);
-  }
-  const provider = resolveWebProvider();
-  if (!provider.probeAudio) {
-    return errorResponse('UNSUPPORTED_OPERATION', 'audio is not supported by this web provider');
-  }
-
   try {
-    return {
-      ok: true,
-      data: await provider.probeAudio({
-        action: request.probeAction,
-        durationMs: request.durationMs,
-        bucketMs: request.bucketMs,
-      }),
-    };
+    return await handleAudioCommandUnsafe(params);
   } catch (error) {
     return { ok: false, error: normalizeError(error) };
   }
 }
 
-function resolveAudioCommandRequest(params: AudioParams):
-  | {
-      ok: true;
-      session: SessionState;
-      probeAction: 'start' | 'status' | 'stop';
-      durationMs: number;
-      bucketMs: number;
-    }
-  | DaemonFailureResponse {
+async function handleAudioCommandUnsafe(params: AudioParams): Promise<DaemonResponse> {
   const sessionResult = resolveAudioSession(params);
   if (!sessionResult.ok) return sessionResult;
-  const actionResult = resolveAudioProbeAction(params.req);
-  if (!actionResult.ok) return actionResult;
-  const timingResult = resolveAudioProbeTiming(params.req, actionResult.probeAction);
-  if (!timingResult.ok) return timingResult;
-  return {
-    ok: true,
-    session: sessionResult.session,
-    probeAction: actionResult.probeAction,
-    ...timingResult.timing,
-  };
+  const session = sessionResult.session;
+  const request = parseAudioProbeRequest(params.req.positionals);
+  // Facts, not a capability bucket, decide which of the two owner paths this device has —
+  // side-effect-free per ADR 0019 §9; the one bind below uses the plan's own use.
+  const facts = await params.inspectFacts(session.device);
+  const startFact = facts.operations.audioProbeStart;
+  const queryFact = facts.operations.audioProbeQuery;
+  const mode = startFact.available ? 'capture' : queryFact.available ? 'query' : undefined;
+  if (mode === undefined) return audioUnsupportedResponse(startFact, queryFact);
+  const plan = resolveAudioRuntimePlan({ probeAction: request.probeAction, mode });
+  switch (plan.kind) {
+    case 'query': {
+      const runtime = await params.bindDevice(session.device, plan.use);
+      return {
+        ok: true,
+        data: await runtime.operations.audioProbeQuery({
+          action: plan.action,
+          durationMs: request.durationMs,
+          bucketMs: request.bucketMs,
+        }),
+      };
+    }
+    case 'capture-start':
+      return await startAudioProbe(params, session, request, plan.use);
+    case 'capture-status':
+      return await audioProbeStatus(params, session);
+    case 'capture-stop':
+      return await stopAudioProbe(params, session);
+  }
 }
 
 function resolveAudioSession(
@@ -75,105 +79,115 @@ function resolveAudioSession(
 ): { ok: true; session: SessionState } | DaemonFailureResponse {
   const session = params.sessionStore.get(params.sessionName);
   if (!session) return errorResponse('SESSION_NOT_FOUND', 'audio requires an active session');
-  return isCommandSupportedOnDevice('audio', session.device)
-    ? { ok: true, session }
-    : errorResponse(
-        'UNSUPPORTED_OPERATION',
-        'audio is supported for web browser sessions, macOS sessions, iOS simulators, and Android emulators on macOS hosts',
-      );
+  return { ok: true, session };
 }
 
-type ResolvedAudioCommandRequest = Extract<
-  ReturnType<typeof resolveAudioCommandRequest>,
-  { ok: true }
->;
+function audioUnsupportedResponse(
+  startFact: RuntimeOperationFact,
+  queryFact: RuntimeOperationFact,
+): DaemonFailureResponse {
+  const hint =
+    (!startFact.available ? startFact.hint : undefined) ??
+    (!queryFact.available ? queryFact.hint : undefined);
+  return errorResponse(
+    'UNSUPPORTED_OPERATION',
+    hint ??
+      'audio is supported for web browser sessions, macOS sessions, iOS simulators, and Android emulators on macOS hosts',
+  );
+}
 
-async function handleHostSystemAudioCommand(
+async function startAudioProbe(
   params: AudioParams,
-  request: ResolvedAudioCommandRequest,
-  backend: HostAudioProbeBackend,
+  session: SessionState,
+  request: AudioProbeRequest,
+  use: typeof audioProbeStartUse,
 ): Promise<DaemonResponse> {
-  try {
-    return {
-      ok: true,
-      data: await runHostSystemAudioProbeCommand({
-        session: request.session,
-        sessionName: params.sessionName,
-        sessionStore: params.sessionStore,
-        backend,
-        probeAction: request.probeAction,
-        durationMs: request.durationMs,
-        bucketMs: request.bucketMs,
-      }),
-    };
-  } catch (error) {
-    return { ok: false, error: normalizeError(error) };
+  // Start restarts an already-running probe (legacy parity), completing it through the durable
+  // coordinator so the previous envelope terminalizes before a new fence is minted.
+  if (session.audioProbe) {
+    await finishLiveAudioProbe({
+      session,
+      sessionName: params.sessionName,
+      sessionStore: params.sessionStore,
+    });
+    const refreshed = params.sessionStore.get(params.sessionName);
+    if (!refreshed) return errorResponse('SESSION_NOT_FOUND', 'audio requires an active session');
+    session = refreshed;
   }
-}
-
-function resolveAudioProbeAction(
-  req: DaemonRequest,
-): { ok: true; probeAction: 'start' | 'status' | 'stop' } | DaemonFailureResponse {
-  const audioAction = readAudioAction(req.positionals?.[0]);
-  if (!audioAction) return errorResponse('INVALID_ARGS', AUDIO_ACTIONS_MESSAGE);
-  const probeAction = readAudioProbeAction(req.positionals?.[1]);
-  if (!probeAction) return errorResponse('INVALID_ARGS', AUDIO_PROBE_ACTIONS_MESSAGE);
-  return { ok: true, probeAction };
-}
-
-function resolveAudioProbeTiming(
-  req: DaemonRequest,
-  probeAction: 'start' | 'status' | 'stop',
-): { ok: true; timing: { durationMs: number; bucketMs: number } } | DaemonFailureResponse {
-  if (probeAction !== 'start' && req.positionals && req.positionals.length > 2) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'audio probe duration and bucket are only supported with audio probe start',
-    );
-  }
-  const durationMs = readBoundedInteger(req.positionals?.[2], {
-    defaultValue: 10_000,
-    min: 100,
-    max: 120_000,
-    message: 'audio probe duration must be an integer in range 100..120000 ms',
+  const runtime = await params.bindDevice(session.device, use);
+  const resourcePath = audioProbeDurableResource.store.resolvePath(
+    params.sessionStore.resolveSessionDir(params.sessionName),
+  );
+  const fence = audioProbeDurableResource.createNextFence({
+    admissionLedger: params.audioProbeAdmissionLedger,
+    resourcePath,
+    device: session.device,
   });
-  if (durationMs instanceof Error) return errorResponse('INVALID_ARGS', durationMs.message);
-
-  const bucketMs = readBoundedInteger(req.positionals?.[3], {
-    defaultValue: 1_000,
-    min: 100,
-    max: 10_000,
-    message: 'audio probe bucket must be an integer in range 100..10000 ms',
+  const statusPath = path.join(
+    params.sessionStore.ensureSessionDir(params.sessionName),
+    'audio-probe.json',
+  );
+  const started = await runtime.operations.audioProbeStart({
+    sessionId: params.sessionName,
+    statusPath,
+    durationMs: request.durationMs,
+    bucketMs: request.bucketMs,
+    fence,
   });
-  if (bucketMs instanceof Error) return errorResponse('INVALID_ARGS', bucketMs.message);
-  return { ok: true, timing: { durationMs, bucketMs } };
+  await adoptStartedAudioProbe({
+    admissionLedger: params.audioProbeAdmissionLedger,
+    session,
+    sessionName: params.sessionName,
+    sessionStore: params.sessionStore,
+    device: session.device,
+    owner: runtime.owner,
+    fence,
+    ...started,
+    throwIfCanceled: params.throwIfCanceled,
+  });
+  const adopted = params.sessionStore.get(params.sessionName)?.audioProbe;
+  if (!adopted) throw new TypeError('Audio probe adoption did not publish a live handle');
+  return { ok: true, data: await adopted.handle.status() };
 }
 
-function readAudioAction(value: string | undefined): 'probe' | undefined {
-  const action = (value ?? 'probe').toLowerCase();
-  return AUDIO_ACTIONS.includes(action as (typeof AUDIO_ACTIONS)[number]) ? 'probe' : undefined;
-}
-
-function readAudioProbeAction(value: string | undefined): 'start' | 'status' | 'stop' | undefined {
-  const probeAction = (value ?? 'status').toLowerCase();
-  return AUDIO_PROBE_ACTIONS.includes(probeAction as (typeof AUDIO_PROBE_ACTIONS)[number])
-    ? (probeAction as 'start' | 'status' | 'stop')
-    : undefined;
-}
-
-function readBoundedInteger(
-  value: string | undefined,
-  params: { defaultValue: number; min: number; max: number; message: string },
-): number | Error {
-  if (value === undefined) return params.defaultValue;
-  const parsed = Number.parseInt(value, 10);
-  if (
-    !Number.isInteger(parsed) ||
-    String(parsed) !== value ||
-    parsed < params.min ||
-    parsed > params.max
-  ) {
-    return new Error(params.message);
+async function audioProbeStatus(
+  params: AudioParams,
+  session: SessionState,
+): Promise<DaemonResponse> {
+  const probe = session.audioProbe;
+  if (!probe) return { ok: true, data: inactiveAudioProbeResult() };
+  const data = await probe.handle.status();
+  if (data.state === 'stopped') {
+    // The sampler completed on its own: finish through the coordinator so the envelope
+    // terminalizes and the slot clears, but answer with the observed status.
+    await finishLiveAudioProbe({
+      session,
+      sessionName: params.sessionName,
+      sessionStore: params.sessionStore,
+    });
   }
-  return parsed;
+  return { ok: true, data };
+}
+
+async function stopAudioProbe(params: AudioParams, session: SessionState): Promise<DaemonResponse> {
+  if (!session.audioProbe) return { ok: true, data: inactiveAudioProbeResult() };
+  const completion = await finishLiveAudioProbe({
+    session,
+    sessionName: params.sessionName,
+    sessionStore: params.sessionStore,
+  });
+  return { ok: true, data: completion };
+}
+
+function inactiveAudioProbeResult() {
+  return emptyAudioProbeResult({
+    state: 'stopped',
+    source: 'system-audio',
+    backend: 'host-system-audio',
+    durationMs: 0,
+    bucketMs: 0,
+    sourceCount: 0,
+    reason: 'not-started',
+    notes: ['No active host audio probe is running.'],
+  });
 }

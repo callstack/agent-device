@@ -87,9 +87,21 @@
       "types": "./src/audio-probe-result.ts",
       "default": "./src/audio-probe-result.ts"
     },
+    "./audio-probe-runtime": {
+      "types": "./src/audio-probe-runtime.ts",
+      "default": "./src/audio-probe-runtime.ts"
+    },
+    "./audio-probe-runtime-host": {
+      "types": "./src/audio-probe-runtime-host.ts",
+      "default": "./src/audio-probe-runtime-host.ts"
+    },
     "./audio-probe-support": {
       "types": "./src/audio-probe-support.ts",
       "default": "./src/audio-probe-support.ts"
+    },
+    "./audio-runtime-plan": {
+      "types": "./src/audio-runtime-plan.ts",
+      "default": "./src/audio-runtime-plan.ts"
     },
     "./back-mode": {
       "types": "./src/back-mode.ts",

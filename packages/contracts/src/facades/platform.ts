@@ -45,6 +45,29 @@ export {
   isAudioProbeSupportedDevice,
   isHostSystemAudioProbeDevice,
 } from '../audio-probe-support.ts';
+export {
+  AUDIO_PROBE_RESOURCE_KIND,
+  audioProbeRuntimeOperationFacts,
+} from '../audio-probe-runtime.ts';
+export type {
+  AudioProbeCompletion,
+  AudioProbeLiveHandle,
+  AudioProbeLiveSnapshot,
+  AudioProbeQueryAction,
+  AudioProbeQueryInput,
+  AudioProbeReattachInput,
+  AudioProbeRuntimeOperations,
+  AudioProbeStartInput,
+  AudioProbeStartResult,
+} from '../audio-probe-runtime.ts';
+export type {
+  AudioProbeRuntimeHost,
+  HostAudioCaptureBackendInfo,
+  HostAudioCaptureProcess,
+  HostSystemAudioCaptureHost,
+  WebAudioProbeHost,
+  WebAudioProbeTransport,
+} from '../audio-probe-runtime-host.ts';
 export type { PlatformPlugin } from '../platform-plugin.ts';
 export type {
   AndroidAppDeploymentExecutor,

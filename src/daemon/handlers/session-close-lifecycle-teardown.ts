@@ -5,12 +5,12 @@ import { SessionStore } from '../session-store.ts';
 import { cleanupRetainedMaterializedPathsForSession } from '../materialized-path-registry.ts';
 import {
   reportSessionCleanupFailures,
+  finishSessionAudioProbe,
   finishSessionScreenRecording,
   stopSessionAndroidNativePerfCapture,
   stopSessionAndroidSnapshotHelper,
   stopSessionAppLog,
   stopSessionApplePerfCapture,
-  stopSessionAudioProbe,
   type SessionCleanupFailure,
 } from '../session-teardown.ts';
 import { hasRuntimeTransportHints, runtimeHintValues } from './session-runtime.ts';
@@ -146,9 +146,9 @@ async function stopBestEffortSessionResources(
   await attemptCleanup('app_log', () =>
     stopSessionAppLog({ session, sessionName: session.name, sessionStore }),
   );
-  await attemptCleanup('audio_probe', async () => {
-    await stopSessionAudioProbe(session, 'session-close');
-  });
+  await attemptCleanup('audio_probe', () =>
+    finishSessionAudioProbe({ session, sessionName: session.name, sessionStore }),
+  );
   await attemptCleanup('apple_perf', () => stopSessionApplePerfCapture(session));
   await attemptCleanup('android_native_perf', () => stopSessionAndroidNativePerfCapture(session));
   await attemptCleanup('android_snapshot_helper', () => stopSessionAndroidSnapshotHelper(session));

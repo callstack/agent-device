@@ -163,6 +163,10 @@ const tvRemoteUnavailable = vegaUnavailable(
   'unsupported-device-kind',
   'tv-remote currently supports only Vega Virtual Devices.',
 );
+const audioProbeUnavailable = vegaUnavailable(
+  'unsupported-platform-leaf',
+  'audio is supported for web browser sessions, macOS sessions, iOS simulators, and Android emulators on macOS hosts',
+);
 
 function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> {
   const supported = device.kind === 'emulator' && device.target === 'tv';
@@ -199,6 +203,8 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     keyboardStatus: keyboardUnavailable,
     keyboardDismiss: keyboardUnavailable,
     keyboardEnter: keyboardUnavailable,
+    audioProbeCapture: audioProbeUnavailable,
+    audioProbeQuery: audioProbeUnavailable,
     readiness: unsupportedPlatformLeaf,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: openTarget,

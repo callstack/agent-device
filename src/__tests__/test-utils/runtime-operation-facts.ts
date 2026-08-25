@@ -1,4 +1,5 @@
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
+import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
@@ -71,6 +72,7 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   awaitAlert: unavailable,
   acceptAlert: unavailable,
   dismissAlert: unavailable,
+  ...audioProbeRuntimeOperationFacts({ capture: unavailable, query: unavailable }),
 });
 
 /** Default facts for tests that are unrelated to application lifecycle commands. */

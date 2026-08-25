@@ -19,6 +19,7 @@ import {
   unavailableInspectFacts,
 } from './test-device-runtime-gateway.ts';
 import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
+import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
 import type { DaemonRequest } from '../types.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 
@@ -51,6 +52,7 @@ function baseChainParams(sessionName: string) {
       reason: 'test-no-recovery',
     }),
     screenRecordingAdmissionLedger: createScreenRecordingAdmissionLedger(),
+    audioProbeAdmissionLedger: createAudioProbeAdmissionLedger(),
     requestScope: {
       signal: new AbortController().signal,
       diagnostics: { emit: () => {} },

@@ -16,16 +16,15 @@ import type {
 } from '@agent-device/kernel/contracts';
 import type { DeviceInfo, PlatformSelector } from '@agent-device/kernel/device';
 import type { Rect, SnapshotState, SnapshotCaptureBackend } from '@agent-device/kernel/snapshot';
-import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
 import type { SnapshotFreshnessWindow } from '../snapshot/snapshot-freshness/index.ts';
 // Type-only import; erased at runtime. ref-frame.ts imports SessionState from
 // here, so this back-edge must stay type-only to avoid a runtime cycle.
 import type { SnapshotDiagnosticsState } from '@agent-device/contracts/capture';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type {
-  AudioProbeSource,
   AppLogFailure,
   AppLogLiveHandle,
+  AudioProbeLiveHandle,
   DurableResourceEnvelope,
   ScreenRecordingLiveHandle,
 } from '@agent-device/contracts/platform';
@@ -232,7 +231,6 @@ export type PendingInteractionOutcome = {
   preSignature: InteractionSurfaceEntry[];
 };
 
-type SessionRecordingProcessChild = Pick<ExecBackgroundResult['child'], 'kill' | 'pid'>;
 
 export type SessionState = {
   name: string;
@@ -350,18 +348,10 @@ export type SessionState = {
   nativePerf?: {
     android?: AndroidNativePerfSession;
   };
+  /** Native sampler mechanics stay behind the adopted runtime handle. */
   audioProbe?: {
-    platform: 'host-system-audio';
-    source: AudioProbeSource;
-    backend: string;
-    sourceCount: number;
-    notes: string[];
-    child: SessionRecordingProcessChild;
-    wait: Promise<ExecResult>;
-    statusPath: string;
-    startedAt: number;
-    durationMs: number;
-    bucketMs: number;
+    handle: AudioProbeLiveHandle;
+    envelope: DurableResourceEnvelope<'audio-probe'>;
   };
   /** Session was created by record start and should be released when recording stops. */
   recordOnlySession?: boolean;

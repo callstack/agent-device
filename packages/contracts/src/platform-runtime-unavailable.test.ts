@@ -53,6 +53,8 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
     awaitAlert: { available: false, reason: 'unsupported-provider-mode' },
     acceptAlert: { available: false, reason: 'unsupported-provider-mode' },
     dismissAlert: { available: false, reason: 'unsupported-provider-mode' },
+    audioProbeCapture: { available: false, reason: 'unsupported-provider-mode' },
+    audioProbeQuery: { available: false, reason: 'unsupported-provider-mode' },
     lifecycle,
   });
 

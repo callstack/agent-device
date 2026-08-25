@@ -110,7 +110,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/ad-script/src/index.ts': 37,
 
   // --- @agent-device/capture-kit ---
-  'packages/capture-kit/src/index.ts': 26,
+  'packages/capture-kit/src/index.ts': 29,
 
   // --- @agent-device/contracts ---
   'packages/contracts/src/alert-contract.ts': 1,
@@ -129,7 +129,10 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/application-lifecycle-runtime.ts': 1,
   'packages/contracts/src/async-lifecycle.ts': 1,
   'packages/contracts/src/audio-probe-result.ts': 1,
+  'packages/contracts/src/audio-probe-runtime.ts': 1,
+  'packages/contracts/src/audio-probe-runtime-host.ts': 1,
   'packages/contracts/src/audio-probe-support.ts': 5,
+  'packages/contracts/src/audio-runtime-plan.ts': 5,
   'packages/contracts/src/back-mode.ts': 1,
   'packages/contracts/src/click-button.ts': 3,
   'packages/contracts/src/command-platform-execution.ts': 2,
@@ -145,7 +148,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/facades/divergence.ts': 3,
   'packages/contracts/src/facades/interaction.ts': 25,
   'packages/contracts/src/facades/observability.ts': 7,
-  'packages/contracts/src/facades/platform.ts': 56,
+  'packages/contracts/src/facades/platform.ts': 57,
   'packages/contracts/src/facades/progress.ts': 1,
   'packages/contracts/src/facades/recording.ts': 3,
   'packages/contracts/src/facades/remote.ts': 2,
@@ -169,7 +172,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/platform-module.ts': 5,
   'packages/contracts/src/platform-runtime-host.ts': 1,
   'packages/contracts/src/platform-runtime-operations.ts': 2,
-  'packages/contracts/src/platform-runtime-unavailable.ts': 28,
+  'packages/contracts/src/platform-runtime-unavailable.ts': 29,
   'packages/contracts/src/platform-runtime.ts': 6,
   'packages/contracts/src/record-runtime-cutover.ts': 7,
   'packages/contracts/src/react-native-overlay.ts': 1,
@@ -286,14 +289,14 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // neither has a lazy seam to hide behind -- unlike `src/daemon/code-signature-cache.ts`, which
   // the same PR added and only a source checkout reaches, and which therefore loads on demand
   // (`resolveLocalDaemonCodeSignature`) rather than appearing here.
-  'src/cli.ts': 365,
-  'src/platform-runtime.ts': 44,
+  'src/cli.ts': 366,
+  'src/platform-runtime.ts': 45,
   'src/core/dispatch.ts': 79,
   'src/core/capabilities.ts': 74,
-  'src/core/command-descriptor/registry.ts': 66,
+  'src/core/command-descriptor/registry.ts': 67,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,
   'src/core/interactors/register-builtins.ts': 72,
-  'src/daemon/session-teardown.ts': 90,
+  'src/daemon/session-teardown.ts': 92,
 });
 
 function toRows(

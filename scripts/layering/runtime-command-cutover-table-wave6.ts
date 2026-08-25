@@ -1,5 +1,8 @@
 import type { MigratedCommandCutover } from './runtime-command-cutover-model.ts';
-import { retiredDispatchProjectionProof } from './runtime-command-cutover-extensions.ts';
+import {
+  audioProbeSessionStateOwnershipViolations,
+  retiredDispatchProjectionProof,
+} from './runtime-command-cutover-extensions.ts';
 
 /**
  * Wave 6's rows (#1739): the seven named command units that left `platformExecution: legacy` for
@@ -194,5 +197,58 @@ export const WAVE_6_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       operationOwners: { tapPoint: ['createTapTouchExecutor'] },
     },
     extensions: [retiredDispatchProjectionProof('react-native')],
+  },
+  {
+    rule: 'R60 audio-runtime-cutover',
+    command: 'audio',
+    subject: 'audio probe',
+    tier: 'durable-resource',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      // The hand-rolled probe lifecycle (raw child + status polling on SessionState), the
+      // dynamic host-backend resolver, and the `WEB_QUERY_COMMANDS` capability graft that gave
+      // web its bucket outside the descriptor.
+      modulePaths: [
+        'src/daemon/audio-probe.ts',
+        'src/platforms/audio-probe-backend.ts',
+        'src/platforms/apple/os/macos/audio-probe.ts',
+      ],
+      importPatterns: [
+        /(?:^|\/)daemon\/audio-probe(?:\.[cm]?[jt]s)?$/,
+        /(?:^|\/)platforms\/audio-probe-backend(?:\.[cm]?[jt]s)?$/,
+        /(?:^|\/)macos\/audio-probe(?:\.[cm]?[jt]s)?$/,
+      ],
+      routeNames: [
+        'runHostSystemAudioProbeCommand',
+        'stopSessionAudioProbe',
+        'resolveHostAudioProbeBackend',
+        'HostAudioProbeBackend',
+        'macOsScreenCaptureKitAudioProbeBackend',
+        'WEB_QUERY_COMMANDS',
+        'addWebCommandCapabilities',
+      ],
+    },
+    admissionMember: {
+      forms: ['computed-property'],
+      files: ['src/platforms/apple/plugin.ts', 'src/core/interactors/register-builtins.ts'],
+      message: 'A plugin retains a legacy audio support or hint closure',
+    },
+    runtimeTypeNames: ['AudioProbeRuntimeOperations', 'AudioProbeLiveHandle'],
+    operations: {
+      names: ['audioProbeStart', 'audioProbeReattach', 'audioProbeCleanup', 'audioProbeQuery'],
+    },
+    singularExecution: {
+      // Action-selected (R35's lesson): facts pick the capture or query path, the plan picks the
+      // use, and the handler binds exactly once; status/stop operate the adopted live handle.
+      routes: ['handleAudioCommand'],
+      operations: ['audioProbeStart', 'audioProbeReattach', 'audioProbeCleanup', 'audioProbeQuery'],
+      operationOwners: {
+        audioProbeStart: ['startAudioProbe'],
+        audioProbeQuery: ['handleAudioCommandUnsafe'],
+        audioProbeReattach: ['createAudioProbeRecoveryControl'],
+        audioProbeCleanup: ['createAudioProbeRecoveryControl'],
+      },
+    },
+    lifecycleProof: audioProbeSessionStateOwnershipViolations,
   },
 ];

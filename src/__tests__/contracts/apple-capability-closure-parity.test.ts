@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { isAudioProbeSupportedDevice } from '@agent-device/contracts/audio-probe-support';
 import {
   resolveDeviceAppleOs,
   DEVICE_TARGETS,
@@ -54,10 +53,8 @@ const coreDeviceOnlyPhysicalOperationHint = (device: DeviceInfo): string | undef
 // in `packages/platform-apple/src/runtime.ts` and its `system/`, `navigation/` siblings.
 const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   perf: supportsCoreDevicePhysicalOperation,
-  // `audio` was never part of the AppleOS-table relocation — it is the standalone
-  // `isAudioProbeSupportedDevice` predicate. Included here so the key-set assertion stays strict
-  // (it catches a dropped command) and confirms no rebase altered it.
-  audio: isAudioProbeSupportedDevice,
+  // `audio`'s standalone predicate left with R60: the owner packages state the capture cells as
+  // facts, so the plugin closure is gone and the key-set assertion pins `perf` alone.
 };
 const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
   perf: coreDeviceOnlyPhysicalOperationHint,

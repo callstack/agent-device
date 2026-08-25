@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
-  isIosFamily,
-  isMacOs,
   DEVICE_TARGETS,
   PLATFORMS,
   type DeviceInfo,
@@ -42,8 +40,7 @@ import { registerBuiltinPlatformPlugins } from '../interactors/register-builtins
 //         the owning
 //         PlatformPlugin's `capability.supportsByDefault` / `unsupportedHintByDefault`
 //         (ADR-0009: relocate, never flatten). Most such closures are Apple
-//         family gates; audio is also an Android gate because Android emulator capture
-//         depends on the macOS host backend. The independent copies below
+//         family gates. The independent copies below
 //         are the oracle: they pin (a) that production admission (`isCommand
 //         SupportedOnDevice`) and hint output (`unsupportedHintForDevice`) are unchanged
 //         across the full {platform x command x device-kind x target} matrix, and (b)
@@ -100,12 +97,6 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
 // (b.2) Independent copies of the per-command supports()/unsupportedHint()
 // contracts. Kept in sync by hand so this oracle stays independent of production.
 // ---------------------------------------------------------------------------
-const supportsHostAudioProbe = (device: DeviceInfo): boolean =>
-  device.platform === 'web' ||
-  (process.platform === 'darwin' &&
-    (isMacOs(device) ||
-      (isIosFamily(device) && device.kind === 'simulator') ||
-      (device.platform === 'android' && device.kind === 'emulator')));
 const supportsCoreDevicePhysicalOperation = (device: DeviceInfo): boolean =>
   device.platform !== 'apple' ||
   device.kind !== 'device' ||
@@ -119,9 +110,8 @@ const coreDeviceOnlyPhysicalOperationHint = (device: DeviceInfo): string | undef
 // gains/loses a closure (or whose closure body changes) breaks parity.
 const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   perf: supportsCoreDevicePhysicalOperation,
-  // `alert`'s closure left with R59, whose cutover made the owner's own alert facts the whole
-  // admission; the per-leaf verdicts it encoded are pinned in `platform-apple/src/system/`.
-  audio: supportsHostAudioProbe,
+  // `alert`'s closure left with R59 and `audio`'s with R60; each cutover made the owner's own
+  // facts the whole admission, with the per-leaf verdicts pinned in the owner packages.
 };
 const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
   perf: coreDeviceOnlyPhysicalOperationHint,
@@ -295,10 +285,9 @@ test('(b.2) the relocated Apple closures match the independent command contracts
 });
 
 test('(b.2) non-Apple families only carry their own non-portable support gates', () => {
-  // Most relocated closures are Apple-only. Audio is the one host-dependent command that also
-  // gates Android emulator support on macOS hosts, so Android carries only that predicate —
-  // R45 deleted its `tv-remote` closure along with the descriptor's capability bucket.
-  assert.deepEqual(Object.keys(getPlugin('android').capability.supportsByDefault ?? {}), ['audio']);
+  // Most relocated closures are Apple-only. R60 deleted Android's last predicate (`audio`)
+  // along with the descriptor's capability bucket; the owner's facts state the cells now.
+  assert.deepEqual(Object.keys(getPlugin('android').capability.supportsByDefault ?? {}), []);
   assert.equal(getPlugin('android').capability.unsupportedHintByDefault, undefined);
   // R42/R43/R45 deleted Vega's only closures (back/home/tv-remote); nothing replaces them.
   for (const platform of ['vega', 'linux', 'web'] as const) {

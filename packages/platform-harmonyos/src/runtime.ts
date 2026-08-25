@@ -32,6 +32,7 @@ import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-sw
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
+import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { localRuntimeOwner, whenAdmitted } from '@agent-device/contracts/platform-runtime';
 import {
   bindLocalScreenshotInteractor,
@@ -208,6 +209,12 @@ const harmonyKeyboardStatusUnavailable = Object.freeze({
   hint: 'keyboard status/get is not available through the public HarmonyOS HDC API; use keyboard dismiss or enter',
 } as const);
 
+const audioProbeUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'audio is supported for web browser sessions, macOS sessions, iOS simulators, and Android emulators on macOS hosts',
+} as const);
+
 export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createHarmonyAppLogRuntime(host);
   const inspectFacts = async (device: Parameters<typeof appLogs.inspectFacts>[0]) => {
@@ -304,6 +311,10 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         ...clipboardRuntimeOperationFacts({
           read: harmonyPlatformLeafUnavailable,
           write: harmonyPlatformLeafUnavailable,
+        }),
+        ...audioProbeRuntimeOperationFacts({
+          capture: audioProbeUnavailable,
+          query: audioProbeUnavailable,
         }),
         ensureReady: available,
         bootTarget: unavailable,

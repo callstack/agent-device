@@ -331,6 +331,8 @@ function unavailableProviderBinding(
     awaitAlert: unavailable,
     acceptAlert: unavailable,
     dismissAlert: unavailable,
+    audioProbeCapture: unavailable,
+    audioProbeQuery: unavailable,
     lifecycle: unavailableProviderLifecycleFacts(unavailable),
   });
 }
@@ -371,6 +373,8 @@ function unavailableProviderFacts(runtime: ProviderDeviceRuntime, device: Device
       awaitAlert: unavailable,
       acceptAlert: unavailable,
       dismissAlert: unavailable,
+      audioProbeCapture: unavailable,
+      audioProbeQuery: unavailable,
       readiness: unavailable,
       lifecycle: unavailableProviderLifecycleFacts(unavailable),
     },

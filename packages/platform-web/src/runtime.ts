@@ -54,6 +54,10 @@ import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
+import {
+  audioProbeRuntimeOperationFacts,
+  type AudioProbeQueryInput,
+} from '@agent-device/contracts/audio-probe-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Interactor } from '@agent-device/contracts/interaction';
@@ -109,6 +113,11 @@ const prepareUnavailable = Object.freeze({
 const nativeRefUnavailable = Object.freeze({
   available: false,
   reason: 'owner-capability-missing',
+} as const);
+const audioCaptureUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'audio on web sessions is the stateless page probe; host capture is a macOS-host operation.',
 } as const);
 
 function webOptionalOperationFact(operation: unknown, browserDevice: RuntimeOperationFact) {
@@ -302,6 +311,15 @@ function bindWebRuntime(
           },
         }
       : {}),
+    ...whenAdmitted(facts.operations.audioProbeQuery, () => ({
+      audioProbeQuery: async (input: AudioProbeQueryInput) => {
+        const transport = await host.audioProbe.web.resolve(device);
+        if (transport === undefined) {
+          throw new AppError('UNSUPPORTED_OPERATION', 'audio is not supported by this web provider');
+        }
+        return await transport.probe(input);
+      },
+    })),
     ...availableApplicationLifecycleOperations(
       bindWebApplicationLifecycle({ host: host.localInteractors, device, signal }),
       facts.operations,
@@ -406,6 +424,9 @@ function webRuntimeFacts(
         read: navigationUnavailable,
         write: navigationUnavailable,
       }),
+      // Parity with the retired `WEB_QUERY_COMMANDS` graft, which admitted `audio` on every web
+      // device; the provider that carries no probe transport still refuses at execution.
+      ...audioProbeRuntimeOperationFacts({ capture: audioCaptureUnavailable, query: available }),
       ...appSwitcherRuntimeOperationFacts({ appSwitcher: navigationUnavailable }),
       ...appEventRuntimeOperationFacts({ triggerAppEvent: navigationUnavailable }),
       ...settingsRuntimeOperationFacts({ setSetting: navigationUnavailable }),

@@ -28,6 +28,7 @@ import type {
 } from '../request-runtime-binding.ts';
 import type { DeviceClaimReconciler } from '../device-claims.ts';
 import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
+import type { AudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
 import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform';
 
@@ -45,6 +46,7 @@ export type SessionCommandInput = {
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindExactDevice?: BindExactDeviceRuntime;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
+  audioProbeAdmissionLedger?: AudioProbeAdmissionLedger;
   screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
   requestScope?: PlatformRequestScope;
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
@@ -94,7 +96,9 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
   sessionStore,
   androidAdbExecutor,
   bindDevice,
+  inspectFacts,
   appLogAdmissionLedger,
+  audioProbeAdmissionLedger,
   throwIfCanceled,
 }) =>
   await handleSessionObservabilityCommands({
@@ -103,7 +107,9 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
     sessionStore,
     androidAdbExecutor,
     bindDevice,
+    inspectFacts,
     appLogAdmissionLedger,
+    audioProbeAdmissionLedger,
     throwIfCanceled,
   });
 
@@ -285,6 +291,7 @@ export async function handleSessionCommands(
     bindDevice,
     bindExactDevice,
     appLogAdmissionLedger,
+    audioProbeAdmissionLedger,
     screenRecordingAdmissionLedger,
     requestScope,
     retainDeviceExecutionLock,
@@ -310,6 +317,7 @@ export async function handleSessionCommands(
     bindDevice,
     bindExactDevice,
     appLogAdmissionLedger,
+    audioProbeAdmissionLedger,
     screenRecordingAdmissionLedger,
     requestScope,
     retainDeviceExecutionLock,

@@ -6,6 +6,7 @@ import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screens
 import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
+import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import type { LimrunPlatformRuntimeOwnerOptions } from './app-log-runtime.ts';
 import { isSupportedLimrunAppLogDevice } from './device.ts';
 import {
@@ -90,6 +91,11 @@ const portReverseUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'Limrun port reverse requires an active Android Limrun session.',
+} as const);
+const audioProbeUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun does not expose the audio probe.',
 } as const);
 
 /** Also read outside this module's own facts assembly: the owner's `bind` needs the same
@@ -195,6 +201,10 @@ export function limrunAppLogFacts(
       ...limrunAppEventOperationFacts(device),
       ...limrunSettingsOperationFacts(device),
       ...limrunAlertOperationFacts(device),
+      ...audioProbeRuntimeOperationFacts({
+        capture: audioProbeUnavailable,
+        query: audioProbeUnavailable,
+      }),
       ensureReady: available,
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,

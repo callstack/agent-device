@@ -28,11 +28,8 @@ export type CommandCapability = {
   web?: KindMatrix;
 };
 
-const WEB_DEVICE: KindMatrix = { device: true };
 const HARMONYOS_ALL: KindMatrix = { emulator: true, device: true };
 const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>(['perf']);
-const WEB_QUERY_COMMANDS = ['audio'] as const;
-const WEB_SUPPORTED_COMMANDS = new Set<string>(WEB_QUERY_COMMANDS);
 // Built from the additive command-descriptor registry (ADR-0008, Phase 1 step 3).
 // The hand-authored literal was deleted after #906 proved deriveCapabilityMatrix is
 // byte-equal to it (platform/kind buckets). The per-command `supports()` /
@@ -44,11 +41,9 @@ const WEB_SUPPORTED_COMMANDS = new Set<string>(WEB_QUERY_COMMANDS);
 export const BASE_COMMAND_CAPABILITY_MATRIX: Record<string, CommandCapability> =
   deriveCapabilityMatrix(commandDescriptors);
 
-const COMMAND_CAPABILITY_MATRIX = addHarmonyAndWebCommandCapabilities(
-  BASE_COMMAND_CAPABILITY_MATRIX,
-);
+const COMMAND_CAPABILITY_MATRIX = addHarmonyCommandCapabilities(BASE_COMMAND_CAPABILITY_MATRIX);
 
-function addHarmonyAndWebCommandCapabilities(
+function addHarmonyCommandCapabilities(
   matrix: Record<string, CommandCapability>,
 ): Record<string, CommandCapability> {
   const withHarmony: Record<string, CommandCapability> = {};
@@ -57,24 +52,7 @@ function addHarmonyAndWebCommandCapabilities(
       ? { ...capability, harmonyos: HARMONYOS_ALL }
       : capability;
   }
-  return addWebCommandCapabilities(withHarmony);
-}
-
-function addWebCommandCapabilities(
-  matrix: Record<string, CommandCapability>,
-): Record<string, CommandCapability> {
-  const result: Record<string, CommandCapability> = {};
-  for (const [command, capability] of Object.entries(matrix)) {
-    result[command] = WEB_SUPPORTED_COMMANDS.has(command)
-      ? { ...capability, web: WEB_DEVICE }
-      : capability;
-  }
-  for (const command of WEB_SUPPORTED_COMMANDS) {
-    if (!(command in matrix)) {
-      throw new Error(`Web command "${command}" missing from capability matrix`);
-    }
-  }
-  return result;
+  return withHarmony;
 }
 
 export function isCommandSupportedOnDevice(command: string, device: DeviceInfo): boolean {

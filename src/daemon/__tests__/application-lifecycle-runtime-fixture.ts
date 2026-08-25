@@ -201,6 +201,23 @@ function fixtureHost(
       android: Object.freeze({ resolve: async () => ({}) }),
       web: Object.freeze({ resolve: async () => undefined }),
     }),
+    audioProbe: Object.freeze({
+      hostCapture: Object.freeze({
+        info: Object.freeze({
+          source: 'system-audio' as const,
+          backend: 'fixture',
+          sourceCount: 0,
+          notes: () => [],
+        }),
+        start: async () => {
+          throw new Error('Audio probe is outside this lifecycle fixture.');
+        },
+        inspectProcess: async () => 'missing' as const,
+        terminateProcess: async () => 'already-missing' as const,
+      }),
+      web: Object.freeze({ resolve: async () => undefined }),
+      ownedProcesses: Object.freeze({ replace: () => {}, clear: () => {} }),
+    }),
   } as unknown as PlatformRuntimeHost;
 }
 

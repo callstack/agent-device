@@ -24,6 +24,7 @@ import {
   unavailableInspectFacts,
 } from './test-device-runtime-gateway.ts';
 import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
+import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
 
 function makeRequest(command: string, positionals: string[] = []): DaemonRequest {
   return {
@@ -55,6 +56,7 @@ function makeChainParams(req: DaemonRequest) {
       reason: 'test-no-recovery',
     }),
     screenRecordingAdmissionLedger: createScreenRecordingAdmissionLedger(),
+    audioProbeAdmissionLedger: createAudioProbeAdmissionLedger(),
     requestScope: {
       signal: new AbortController().signal,
       diagnostics: { emit: () => {} },

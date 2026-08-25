@@ -68,6 +68,8 @@ describe('composed platform runtime gateway', () => {
       acceptAlert: unavailable,
       dismissAlert: unavailable,
       touch: unavailable,
+      audioProbeCapture: unavailable,
+      audioProbeQuery: unavailable,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,
         prepareApplicationOpen: unavailable,
@@ -166,6 +168,8 @@ describe('composed platform runtime gateway', () => {
       awaitAlert: unavailable,
       acceptAlert: unavailable,
       dismissAlert: unavailable,
+      audioProbeCapture: unavailable,
+      audioProbeQuery: unavailable,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,
         prepareApplicationOpen: unavailable,

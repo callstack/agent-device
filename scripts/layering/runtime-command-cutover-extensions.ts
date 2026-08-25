@@ -35,6 +35,10 @@ const APP_LOG_SESSION_STATE_OWNERS = new Set([
   'src/daemon/app-log-session-resource.ts',
   'src/daemon/types.ts',
 ]);
+const AUDIO_PROBE_SESSION_STATE_OWNERS = new Set([
+  'src/daemon/audio-probe-session-resource.ts',
+  'src/daemon/types.ts',
+]);
 const APP_STATE_HANDLER_FILE = 'src/daemon/handlers/session-state.ts';
 const APP_STATE_LEGACY_IMPORT_SOURCES = new Set([
   '../../platforms/android/app-lifecycle.ts',
@@ -121,6 +125,35 @@ export function appLogSessionStateOwnershipViolations(
           file: file.path,
           line: lineOf(file.source, node),
           message: `session ${field} record constructed outside its owner`,
+        });
+      }
+    });
+  }
+  return violations;
+}
+
+/**
+ * The audio-probe session record mirrors app-log's single-owner rule (ADR 0019 §4-5): the
+ * durable coordinator's session slot is the only construction site for `session.audioProbe`.
+ */
+export function audioProbeSessionStateOwnershipViolations(
+  sources: ReadonlyMap<string, string>,
+): UnruledViolation[] {
+  const violations: UnruledViolation[] = [];
+  for (const file of productionSources(sources)) {
+    if (!file.path.startsWith('src/daemon/') || AUDIO_PROBE_SESSION_STATE_OWNERS.has(file.path)) {
+      continue;
+    }
+    const program = parseSync(file.path, file.source).program as AstNode;
+    visitAst(program, (node) => {
+      if (node['type'] !== 'Property' || node['kind'] !== 'init' || node['computed'] === true) {
+        return;
+      }
+      if (propertyName(node['key']) === 'audioProbe') {
+        violations.push({
+          file: file.path,
+          line: lineOf(file.source, node),
+          message: 'session audioProbe record constructed outside its owner',
         });
       }
     });

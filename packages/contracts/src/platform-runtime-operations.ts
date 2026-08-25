@@ -33,6 +33,8 @@ import type { AppSwitcherRuntimeOperations } from './app-switcher-runtime.ts';
 import type { AppEventRuntimeOperations } from './app-event-runtime.ts';
 import type { SettingsRuntimeOperations } from './settings-runtime.ts';
 import type { AlertRuntimeOperations } from './alert-runtime.ts';
+import type { AudioProbeRuntimeOperations } from './audio-probe-runtime.ts';
+import type { AudioProbeRuntimeHost } from './audio-probe-runtime-host.ts';
 import type { TouchRuntimeOperations } from './touch-runtime.ts';
 import type {
   DeviceReadinessRuntimeHost,
@@ -82,6 +84,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   AppEventRuntimeOperations &
   SettingsRuntimeOperations &
   AlertRuntimeOperations &
+  AudioProbeRuntimeOperations &
   TouchRuntimeOperations &
   DeviceReadinessRuntimeOperations &
   DeviceShutdownRuntimeOperations &
@@ -692,6 +695,7 @@ export type PlatformRuntimeHost = AppLogRuntimeHost &
       ): Promise<import('./platform-runtime-host.ts').HostTemporaryTextFile>;
     }>;
     screenRecording: ScreenRecordingRuntimeHost;
+    audioProbe: AudioProbeRuntimeHost;
     snapshot: SnapshotRuntimeHost;
     deviceReadiness: DeviceReadinessRuntimeHost;
     deviceShutdown: DeviceShutdownRuntimeHost;

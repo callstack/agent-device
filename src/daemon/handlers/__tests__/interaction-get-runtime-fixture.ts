@@ -180,6 +180,8 @@ function elementReadFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOpera
     acceptAlert: unavailable,
     dismissAlert: unavailable,
     screenshot: unavailable,
+    audioProbeCapture: unavailable,
+    audioProbeQuery: unavailable,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: unavailable,
       prepareApplicationOpen: unavailable,

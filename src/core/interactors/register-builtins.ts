@@ -3,8 +3,6 @@ import type { PlatformPlugin } from '@agent-device/contracts/platform';
 import { registerPlatformPlugin } from '../platform-plugin-registry.ts';
 import { applePlugin } from '../../platforms/apple/plugin.ts';
 import { vegaPlugin } from '../../platforms/vega/plugin.ts';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { isAudioProbeSupportedDevice } from '@agent-device/contracts/audio-probe-support';
 import type { Platform, DeviceInfo } from '@agent-device/kernel/device';
 
 // The builtin-plugin wiring lives at the interactor seam (src/core/interactors/) —
@@ -21,12 +19,7 @@ import type { Platform, DeviceInfo } from '@agent-device/kernel/device';
 const androidPlugin = {
   id: 'android',
   platforms: ['android'],
-  capability: {
-    bucket: 'android',
-    supportsByDefault: {
-      [PUBLIC_COMMANDS.audio]: isAudioProbeSupportedDevice,
-    },
-  },
+  capability: { bucket: 'android' },
   // Android exposes explicit frame-health and memory observations.
   perf: { supportsObservations: () => true },
   // Declares the platform-gated request provider resolver the Android family owns (the

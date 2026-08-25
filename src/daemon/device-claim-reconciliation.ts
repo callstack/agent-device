@@ -15,6 +15,8 @@ import type { DurableSessionResourceKind } from './durable-session-resource-kind
 import { safeSessionName } from './session-paths.ts';
 import { screenRecordingDurableResource } from './screen-recording-session-resource.ts';
 import { recoverScreenRecordingResourceAfterDaemonLock } from './screen-recording-resource-recovery.ts';
+import { audioProbeDurableResource } from './audio-probe-session-resource.ts';
+import { recoverAudioProbeResourceAfterDaemonLock } from './audio-probe-resource-recovery.ts';
 
 export function createDeviceClaimReconciler(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
@@ -59,7 +61,10 @@ export function createDeviceClaimReconciler(params: {
 
 type ClaimDurableResource = Readonly<{
   resourceKind: DurableSessionResourceKind;
-  store: typeof appLogDurableResource.store | typeof screenRecordingDurableResource.store;
+  store:
+    | typeof appLogDurableResource.store
+    | typeof screenRecordingDurableResource.store
+    | typeof audioProbeDurableResource.store;
   recover(
     params: Parameters<typeof createDeviceClaimReconciler>[0],
     sessionsDir: string,
@@ -84,6 +89,17 @@ const DEVICE_CLAIM_DURABLE_RESOURCES = {
     store: screenRecordingDurableResource.store,
     recover: async (params, sessionsDir, resourcePath) =>
       await recoverScreenRecordingResourceAfterDaemonLock({
+        sessionsDir,
+        resourcePath,
+        gateway: params.gateway,
+        scope: params.scope,
+      }),
+  },
+  'audio-probe': {
+    resourceKind: 'audio-probe',
+    store: audioProbeDurableResource.store,
+    recover: async (params, sessionsDir, resourcePath) =>
+      await recoverAudioProbeResourceAfterDaemonLock({
         sessionsDir,
         resourcePath,
         gateway: params.gateway,

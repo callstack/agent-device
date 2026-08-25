@@ -24,6 +24,7 @@ import {
   runtimeCommandRuntimePlanUses,
 } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import { appLogRuntimePlanUses } from '@agent-device/contracts/logs-runtime-plan';
+import { audioRuntimePlanUses } from '@agent-device/contracts/audio-runtime-plan';
 import { networkDumpUse } from '@agent-device/contracts/network-runtime-plan';
 import { inventoryUse } from '@agent-device/contracts/platform-module';
 import {
@@ -688,14 +689,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'preserve', sessionKind: 'observability' },
-    capability: {
-      apple: APPLE_SIM_AND_DEVICE,
-      android: { emulator: true },
-      linux: LINUX_NONE,
-    },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: audioRuntimePlanUses },
   },
   {
     name: 'replay',

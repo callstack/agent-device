@@ -12,6 +12,7 @@ import {
   narrowDeviceBinding,
   providerRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
+import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
@@ -400,6 +401,7 @@ function sourceRuntimeFacts(
       screenRecordingStart: unavailable,
       screenRecordingReattach: unavailable,
       screenRecordingCleanup: unavailable,
+      ...audioProbeRuntimeOperationFacts({ capture: unavailable, query: unavailable }),
       ensureReady: readinessAvailable ? { available: true } : unavailable,
       bootTarget: unavailable,
       bootTargetHeadless: unavailable,

@@ -264,6 +264,11 @@ const appStateUnavailable = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'WebDriver provider runtimes do not expose a foreground app-state operation.',
 } as const);
+const audioProbeUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'This WebDriver provider runtime does not expose the audio probe.',
+} as const);
 const prepareUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -525,6 +530,8 @@ function webDriverFacts(
       awaitAlert: inactiveSession,
       acceptAlert: inactiveSession,
       dismissAlert: inactiveSession,
+      audioProbeCapture: inactiveSession,
+      audioProbeQuery: inactiveSession,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: inactiveSession,
         prepareApplicationOpen: inactiveSession,
@@ -568,6 +575,8 @@ function webDriverFacts(
     awaitAlert: alertUnavailable,
     acceptAlert: alertUnavailable,
     dismissAlert: alertUnavailable,
+    audioProbeCapture: audioProbeUnavailable,
+    audioProbeQuery: audioProbeUnavailable,
     lifecycle: webDriverLifecycleFacts(device),
   });
   // Both capture cells need the same reachability: an interactor this provider can drive, on a

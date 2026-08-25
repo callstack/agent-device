@@ -2,12 +2,12 @@ import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { cleanupAppleXctracePerfCapture } from '../platforms/apple/core/perf-xctrace.ts';
 import { cleanupRetainedMaterializedPathsForSession } from './materialized-path-registry.ts';
-import { stopSessionAudioProbe } from './audio-probe.ts';
 import type { SessionState } from './types.ts';
 import type { SessionStore } from './session-store.ts';
 import { forceCleanupSessionAppLog } from './app-log-session-resource.ts';
 import { appLogResourceStore } from './app-log-resource-store.ts';
 import { finishLiveScreenRecording } from './screen-recording-session-resource.ts';
+import { finishLiveAudioProbe } from './audio-probe-session-resource.ts';
 import { openWebSessionNames } from './web-session-names.ts';
 
 // Android cleanup helpers and the web managed-browser provider stay behind dynamic imports: every
@@ -16,7 +16,6 @@ import { openWebSessionNames } from './web-session-names.ts';
 // next to the existing guard, matching register-builtins' interactor lazy pattern; the seam is
 // pinned by src/daemon/__tests__/session-teardown-import-closure.test.ts.
 
-export { stopSessionAudioProbe } from './audio-probe.ts';
 
 export async function stopSessionAppLog(params: {
   session: SessionState;
@@ -176,9 +175,7 @@ export async function teardownSessionResources(
     ...appLogSteps,
     {
       step: 'audio_probe',
-      run: async () => {
-        await stopSessionAudioProbe(session, 'session-teardown');
-      },
+      run: () => finishSessionAudioProbe({ session, sessionName, sessionStore }),
     },
     { step: 'apple_perf', run: () => stopSessionApplePerfCapture(session) },
     { step: 'android_native_perf', run: () => stopSessionAndroidNativePerfCapture(session) },
@@ -212,6 +209,20 @@ export async function finishSessionScreenRecording(params: {
   const currentSession = params.sessionStore.get(params.sessionName) ?? params.session;
   if (!currentSession.screenRecording) return;
   await finishLiveScreenRecording({
+    session: currentSession,
+    sessionName: params.sessionName,
+    sessionStore: params.sessionStore,
+  });
+}
+
+export async function finishSessionAudioProbe(params: {
+  session: SessionState;
+  sessionName: string;
+  sessionStore: SessionStore;
+}): Promise<void> {
+  const currentSession = params.sessionStore.get(params.sessionName) ?? params.session;
+  if (!currentSession.audioProbe) return;
+  await finishLiveAudioProbe({
     session: currentSession,
     sessionName: params.sessionName,
     sessionStore: params.sessionStore,

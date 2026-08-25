@@ -29,6 +29,7 @@ import { appSwitcherRuntimeOperationFacts } from './app-switcher-runtime.ts';
 import { appEventRuntimeOperationFacts } from './app-event-runtime.ts';
 import { settingsRuntimeOperationFacts } from './settings-runtime.ts';
 import { alertRuntimeOperationFacts } from './alert-runtime.ts';
+import { audioProbeRuntimeOperationFacts } from './audio-probe-runtime.ts';
 import { touchRuntimeOperationFacts } from './touch-runtime.ts';
 
 /**
@@ -67,6 +68,8 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   awaitAlert: RuntimeOperationUnavailability;
   acceptAlert: RuntimeOperationUnavailability;
   dismissAlert: RuntimeOperationUnavailability;
+  audioProbeCapture: RuntimeOperationUnavailability;
+  audioProbeQuery: RuntimeOperationUnavailability;
   readiness?: RuntimeOperationUnavailability;
   shutdown?: RuntimeOperationUnavailability;
   lifecycle: ApplicationLifecycleOperationFacts;
@@ -132,6 +135,8 @@ export function createUnavailablePlatformRuntimeFacts(
     awaitAlert,
     acceptAlert,
     dismissAlert,
+    audioProbeCapture,
+    audioProbeQuery,
     readiness,
     shutdown,
     lifecycle,
@@ -211,6 +216,10 @@ export function createUnavailablePlatformRuntimeFacts(
         accept: acceptAlert,
         dismiss: dismissAlert,
       }),
+      ...audioProbeRuntimeOperationFacts({
+        capture: audioProbeCapture,
+        query: audioProbeQuery,
+      }),
       ensureReady: readiness,
       bootTarget: readiness,
       bootTargetHeadless: readiness,
@@ -276,6 +285,10 @@ function freezeUnavailableFacts(
     awaitAlert: Object.freeze({ ...unavailable.awaitAlert }),
     acceptAlert: Object.freeze({ ...unavailable.acceptAlert }),
     dismissAlert: Object.freeze({ ...unavailable.dismissAlert }),
+    // Audio cells are stated by their owner (#1873): host capture and the page probe live on
+    // different families entirely, so neither may inherit a transport gap.
+    audioProbeCapture: Object.freeze({ ...unavailable.audioProbeCapture }),
+    audioProbeQuery: Object.freeze({ ...unavailable.audioProbeQuery }),
     lifecycle: applicationLifecycleOperationFacts(unavailable.lifecycle),
   });
 }

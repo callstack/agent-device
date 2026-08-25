@@ -27,6 +27,7 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../app-log.ts';
 import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
+import type { AudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
 import { appLogResourceStore } from '../app-log-resource-store.ts';
 import {
   adoptStartedSessionAppLog,
@@ -36,7 +37,10 @@ import {
   recordSessionAppLogFailure,
 } from '../app-log-session-resource.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
-import type { BindDeviceRuntime } from '../request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../request-runtime-binding.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from '../types.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';
@@ -53,7 +57,9 @@ type ObservabilityParams = {
   sessionStore: SessionStore;
   androidAdbExecutor?: AndroidAdbExecutor;
   bindDevice?: BindDeviceRuntime;
+  inspectFacts?: InspectDeviceRuntimeFacts;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
+  audioProbeAdmissionLedger?: AudioProbeAdmissionLedger;
   throwIfCanceled?: () => void;
 };
 type LogsHandlerParams = Omit<ObservabilityParams, 'bindDevice' | 'appLogAdmissionLedger'> & {
@@ -133,7 +139,7 @@ export async function handleSessionObservabilityCommands(
     return await handleNetworkCommand(params);
   }
   if (req.command === 'audio') {
-    return await handleAudioCommand(params);
+    return await handleAudioCommand(requireAudioSeams(params));
   }
 
   return null;
@@ -616,6 +622,28 @@ async function startSessionAppLog(
     return { ok: false, error: normalized };
   }
 }
+function requireAudioSeams(params: ObservabilityParams): Parameters<typeof handleAudioCommand>[0] {
+  if (!params.bindDevice || !params.inspectFacts) {
+    throw new AppError('COMMAND_FAILED', 'Device runtime gateway is not configured', {
+      reason: 'runtime-gateway-missing',
+    });
+  }
+  if (!params.audioProbeAdmissionLedger) {
+    throw new AppError('COMMAND_FAILED', 'Audio probe admission ledger is not configured', {
+      reason: 'runtime-gateway-missing',
+    });
+  }
+  return {
+    req: params.req,
+    sessionName: params.sessionName,
+    sessionStore: params.sessionStore,
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
+    audioProbeAdmissionLedger: params.audioProbeAdmissionLedger,
+    throwIfCanceled: params.throwIfCanceled ?? (() => {}),
+  };
+}
+
 function requireLogsHandlerParams(
   params: ObservabilityParams & { session: SessionState },
 ): LogsHandlerParams {
