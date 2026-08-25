@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
@@ -22,7 +21,7 @@ import { withCommandExecutorOverride, type ExecResult } from '../../utils/exec.t
 import { AppError } from '@agent-device/kernel/errors';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { installFakeManagedAgentBrowser } from './__tests__/test-utils.ts';
+import { installFakeManagedAgentBrowser, withNodeRuntime } from './__tests__/test-utils.ts';
 import type { OwnedProcessRecordStore } from '../../utils/owned-process-record.ts';
 
 type AgentBrowserCall = {
@@ -104,8 +103,8 @@ test('agent-browser provider runs provider-startup cleanup before the first mana
     { session: 'web-session', openWebSessionNames: () => [] },
     async (provider) => {
       await withCommandExecutorOverride(
-        async (cmd, args) => {
-          events.push(`${path.basename(cmd)} ${args[0] ?? ''}`);
+        async (_cmd, args) => {
+          events.push(`agent-browser ${agentBrowserCliArgs(args)[0] ?? ''}`);
           return jsonResult({ success: true, data: {} });
         },
         async () => await provider.open('https://example.test'),
@@ -291,7 +290,7 @@ test('agent-browser provider dumps session network requests', async () => {
   await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
     const calls: AgentBrowserCall[] = [];
     const executor = async (cmd: string, args: string[]): Promise<ExecResult> => {
-      calls.push({ cmd, args });
+      recordAgentBrowserCall(calls, cmd, args);
       return jsonResult({
         success: true,
         data: {
@@ -357,7 +356,7 @@ test('agent-browser provider probes page audio through eval', async () => {
     const calls: AgentBrowserCall[] = [];
     const audio = await withCommandExecutorOverride(
       async (cmd, args) => {
-        calls.push({ cmd, args });
+        recordAgentBrowserCall(calls, cmd, args);
         return jsonResult({
           success: true,
           data: {
@@ -422,9 +421,9 @@ test('agent-browser provider generated audio probe script samples streams discov
     const calls: AgentBrowserCall[] = [];
     const page = createAudioProbeScriptPage();
     const executor = async (cmd: string, args: string[]): Promise<ExecResult> => {
-      calls.push({ cmd, args });
-      assert.equal(args[0], 'eval');
-      const script = args[1];
+      const cliArgs = recordAgentBrowserCall(calls, cmd, args);
+      assert.equal(cliArgs[0], 'eval');
+      const script = cliArgs[1];
       if (typeof script !== 'string') throw new Error('Expected generated eval script');
       if (calls.length === 2) page.audio.srcObject = page.stream;
       return jsonResult({
@@ -478,7 +477,7 @@ test('agent-browser provider surfaces stale ref failures during requested snapsh
       () =>
         withCommandExecutorOverride(
           async (_cmd, args) => {
-            if (args[0] === 'snapshot') {
+            if (agentBrowserCliArgs(args)[0] === 'snapshot') {
               return jsonResult({
                 success: true,
                 data: {
@@ -502,7 +501,7 @@ test('agent-browser provider surfaces stale ref failures during requested snapsh
 test('agent-browser provider adds doctor guidance for missing binary and invalid JSON', async () => {
   // Pin a web-supported Node version so the missing-binary path yields the
   // setup hint instead of the Node upgrade hint on Node <24 hosts.
-  await withNodeRuntimeVersion('24.0.0', async () => {
+  await withNodeRuntime({ version: '24.0.0' }, async () => {
     const missingStateDir = mkdtempForTestSync('agent-device-web-provider-missing-');
     try {
       const provider = createAgentBrowserWebProvider({ stateDir: missingStateDir });
@@ -536,7 +535,7 @@ test('agent-browser provider adds doctor guidance for missing binary and invalid
 });
 
 test('agent-browser provider preserves Node version guidance for missing managed backend', async () => {
-  await withNodeRuntimeVersion('22.19.0', async () => {
+  await withNodeRuntime({ version: '22.19.0' }, async () => {
     const missingStateDir = mkdtempForTestSync('agent-device-web-provider-node-');
     try {
       const provider = createAgentBrowserWebProvider({ stateDir: missingStateDir });
@@ -561,56 +560,52 @@ async function withManagedAgentBrowserProvider(
     openWebSessionNames?: () => readonly string[];
     ownedProcessRecords?: OwnedProcessRecordStore;
   },
-  testFn: (provider: ReturnType<typeof createAgentBrowserWebProvider>) => void | Promise<void>,
+  testFn: (
+    provider: ReturnType<typeof createAgentBrowserWebProvider>,
+    install: ReturnType<typeof installFakeManagedAgentBrowser>,
+  ) => void | Promise<void>,
 ): Promise<void> {
-  const stateDir = mkdtempForTestSync('agent-device-web-provider-');
+  const stateDir = mkdtempForTestSync('agent device web provider ');
   try {
-    installFakeManagedAgentBrowser(stateDir);
+    const install = installFakeManagedAgentBrowser(stateDir);
     const provider = createAgentBrowserWebProvider({ ...options, stateDir });
-    await testFn(provider);
+    await testFn(provider, install);
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 }
 
-async function withNodeRuntimeVersion(
-  version: string,
-  testFn: () => void | Promise<void>,
-): Promise<void> {
-  const originalNodeVersion = process.versions.node;
-  const originalProcessVersion = process.version;
-  Object.defineProperty(process.versions, 'node', { value: version, configurable: true });
-  Object.defineProperty(process, 'version', { value: `v${version}`, configurable: true });
-  try {
-    await testFn();
-  } finally {
-    Object.defineProperty(process.versions, 'node', {
-      value: originalNodeVersion,
-      configurable: true,
-    });
-    Object.defineProperty(process, 'version', {
-      value: originalProcessVersion,
-      configurable: true,
-    });
-  }
-}
-
 function recordingExecutor(calls: AgentBrowserCall[]) {
   return async (cmd: string, args: string[]): Promise<ExecResult> => {
-    calls.push({ cmd, args });
+    recordAgentBrowserCall(calls, cmd, args);
     return jsonResult({ success: true, data: {} });
   };
 }
 
+/**
+ * The backend runs as `node <entry> <agent-browser args>`; that shape is owned
+ * and asserted by agent-browser-tool. Here it is only stripped, so provider
+ * tests read as the agent-browser CLI arguments they are about.
+ */
+function agentBrowserCliArgs(args: string[]): string[] {
+  return args.slice(1);
+}
+
+function recordAgentBrowserCall(calls: AgentBrowserCall[], cmd: string, args: string[]): string[] {
+  const cliArgs = agentBrowserCliArgs(args);
+  calls.push({ cmd, args: cliArgs });
+  return cliArgs;
+}
+
 function snapshotExecutor(calls: AgentBrowserCall[]) {
   return async (cmd: string, args: string[], options: { allowFailure?: boolean }) => {
-    calls.push({ cmd, args });
-    if (args[0] === 'snapshot') return snapshotPayload();
-    if (args.slice(0, 3).join(' ') === 'get box @e3') {
+    const cliArgs = recordAgentBrowserCall(calls, cmd, args);
+    if (cliArgs[0] === 'snapshot') return snapshotPayload();
+    if (cliArgs.slice(0, 3).join(' ') === 'get box @e3') {
       assert.equal(options.allowFailure, true);
       return jsonResult({ success: false, error: 'No box for element' }, 1);
     }
-    if (args[0] === 'get' && args[1] === 'box') return boxPayload(args[2]);
+    if (cliArgs[0] === 'get' && cliArgs[1] === 'box') return boxPayload(cliArgs[2]);
     return jsonResult({ success: true, data: {} });
   };
 }

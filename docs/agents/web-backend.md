@@ -8,6 +8,12 @@ Web automation uses a managed `agent-browser` backend as an implementation detai
 - Use `agent-device web doctor` to run the backend health check.
 - The managed install respects `--state-dir` / `AGENT_DEVICE_STATE_DIR`.
 - Web automation requires Node 24+ while the rest of agent-device keeps its Node 22 baseline.
+- Every backend call spawns the package's declared `bin` entry with the current Node runtime,
+  never the `node_modules/.bin` console shim: Windows ships that shim as `.cmd`, which
+  `child_process.spawn` refuses without a shell (CVE-2024-27980 hardening), and a shell would
+  reintroduce argument-quoting hazards. `runManagedAgentBrowser` is the only path that executes
+  the backend. Setup spawns `npm` from PATH as before, except on Windows, where a bare `npm` is
+  not spawnable and npm's own `npm-cli.js` runs under the current Node instead.
 
 Default first-run flow:
 

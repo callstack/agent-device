@@ -2,8 +2,12 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { runCmd } from '../../utils/exec.ts';
+import { runCmd, type ExecResult } from '../../utils/exec.ts';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
+import {
+  installManagedAgentBrowserPackage,
+  writeManagedAgentBrowserManifest,
+} from './agent-browser-install.ts';
 import { acquireProcessLock } from '../../utils/process-lock.ts';
 import { readProcessStartTime } from '../../utils/host-process.ts';
 import {
@@ -18,16 +22,15 @@ const MINIMUM_WEB_NODE_MAJOR = 24;
 const SETUP_TIMEOUT_MS = 5 * 60_000;
 const DOCTOR_TIMEOUT_MS = 60_000;
 
-export type AgentBrowserTool = {
-  command: string;
-  env?: NodeJS.ProcessEnv;
-};
-
 export type AgentBrowserToolStatus = {
   version: string;
   stateDir: string;
   installDir: string;
+  packageDir: string;
+  /** npm's console shim. Published since #833; informational — never spawned (#2022). */
   binaryPath: string;
+  /** Backend JS entry, undefined until the managed package is installed. */
+  entryScript: string | undefined;
   homeDir: string;
   runtimeHomeDir: string;
   socketDir: string;
@@ -36,15 +39,25 @@ export type AgentBrowserToolStatus = {
   nodeSupported: boolean;
 };
 
-export async function resolveAgentBrowserTool(options: {
+export type ManagedAgentBrowserRunOptions = {
   stateDir?: string;
-}): Promise<AgentBrowserTool> {
-  const status = getManagedAgentBrowserStatus(options);
-  if (status.installed) {
-    return createManagedTool(status);
-  }
+  timeoutMs: number;
+  allowFailure?: boolean;
+  signal?: AbortSignal;
+};
 
-  throw missingManagedToolError(status);
+/**
+ * The only way the managed backend is executed. Entry resolution, the Node
+ * runtime, the managed environment, and the spawn all live behind this call, so
+ * no caller can reintroduce the `.bin` shim that Windows cannot spawn (#2022).
+ */
+export async function runManagedAgentBrowser(
+  args: readonly string[],
+  options: ManagedAgentBrowserRunOptions,
+): Promise<ExecResult> {
+  const status = getManagedAgentBrowserStatus({ stateDir: options.stateDir });
+  if (!status.installed) throw missingManagedToolError(status);
+  return await spawnManagedAgentBrowser(status, args, options);
 }
 
 export async function setupManagedAgentBrowser(options: {
@@ -67,12 +80,23 @@ export async function setupManagedAgentBrowser(options: {
     const freshStatus = getManagedAgentBrowserStatus(options);
     if (freshStatus.installed) return freshStatus;
     fs.mkdirSync(freshStatus.installDir, { recursive: true });
-    await installAgentBrowserPackage(freshStatus);
-    await runManagedAgentBrowser(freshStatus, ['install'], { timeoutMs: SETUP_TIMEOUT_MS });
-    await runManagedAgentBrowser(freshStatus, ['doctor', '--offline', '--quick'], {
+    await installManagedAgentBrowserPackage({
+      packageRoot: path.join(freshStatus.installDir, 'package'),
+      packageSpec: `${AGENT_BROWSER}@${MANAGED_AGENT_BROWSER_VERSION}`,
+      timeoutMs: SETUP_TIMEOUT_MS,
+    });
+    // The backend entry only exists once npm has written the package.
+    const installedStatus = getManagedAgentBrowserStatus(options);
+    if (!installedStatus.entryScript) throw unusableInstallError(installedStatus);
+    await spawnManagedAgentBrowser(installedStatus, ['install'], { timeoutMs: SETUP_TIMEOUT_MS });
+    await spawnManagedAgentBrowser(installedStatus, ['doctor', '--offline', '--quick'], {
       timeoutMs: DOCTOR_TIMEOUT_MS,
     });
-    writeManifest(freshStatus);
+    writeManagedAgentBrowserManifest({
+      installDir: installedStatus.installDir,
+      packageName: AGENT_BROWSER,
+      version: MANAGED_AGENT_BROWSER_VERSION,
+    });
     return getManagedAgentBrowserStatus(options);
   } finally {
     await release();
@@ -86,7 +110,7 @@ export async function doctorManagedAgentBrowser(options: {
   if (!status.installed) {
     throw missingManagedToolError(status);
   }
-  const result = await runManagedAgentBrowser(status, ['doctor', '--offline', '--quick'], {
+  const result = await spawnManagedAgentBrowser(status, ['doctor', '--offline', '--quick'], {
     timeoutMs: DOCTOR_TIMEOUT_MS,
     allowFailure: true,
   });
@@ -98,17 +122,21 @@ export function getManagedAgentBrowserStatus(options: {
 }): AgentBrowserToolStatus {
   const stateDir = options.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR ?? defaultStateDir();
   const installDir = path.join(stateDir, 'tools', 'agent-browser', MANAGED_AGENT_BROWSER_VERSION);
+  const packageDir = resolveManagedPackageDir(installDir);
   const binaryPath = resolveManagedBinaryPath(installDir);
+  const entryScript = resolveManagedEntryScript(packageDir);
   const homeDir = path.join(installDir, 'home');
   const runtimeHomeDir = resolveManagedRuntimeHomeDir(installDir);
   const socketDir = resolveManagedSocketDir(installDir);
-  const installed = isExecutable(binaryPath) && hasManifest(installDir);
+  const installed = entryScript !== undefined && hasManifest(installDir);
   const nodeMajor = Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10);
   return {
     version: MANAGED_AGENT_BROWSER_VERSION,
     stateDir,
     installDir,
+    packageDir,
     binaryPath,
+    entryScript,
     homeDir,
     runtimeHomeDir,
     socketDir,
@@ -118,41 +146,19 @@ export function getManagedAgentBrowserStatus(options: {
   };
 }
 
-function createManagedTool(status: AgentBrowserToolStatus): AgentBrowserTool {
-  if (!status.installed) throw missingManagedToolError(status);
-  return {
-    command: status.binaryPath,
-    env: managedAgentBrowserEnv(status, process.env),
-  };
-}
-
-async function installAgentBrowserPackage(status: AgentBrowserToolStatus): Promise<void> {
-  const packageRoot = path.join(status.installDir, 'package');
-  fs.mkdirSync(packageRoot, { recursive: true });
-  await runCmd(
-    'npm',
-    [
-      'install',
-      '--prefix',
-      packageRoot,
-      '--no-audit',
-      '--no-fund',
-      '--no-save',
-      `${AGENT_BROWSER}@${MANAGED_AGENT_BROWSER_VERSION}`,
-    ],
-    { env: process.env, timeoutMs: SETUP_TIMEOUT_MS },
-  );
-}
-
-async function runManagedAgentBrowser(
+// `node <entry>`, never the `node_modules/.bin` shim: that shim is a `.cmd` on
+// Windows, which spawn refuses without a shell since CVE-2024-27980 (#2022).
+async function spawnManagedAgentBrowser(
   status: AgentBrowserToolStatus,
-  args: string[],
-  options: { timeoutMs: number; allowFailure?: boolean },
-) {
-  return await runCmd(status.binaryPath, args, {
+  args: readonly string[],
+  options: Omit<ManagedAgentBrowserRunOptions, 'stateDir'>,
+): Promise<ExecResult> {
+  if (!status.entryScript) throw missingManagedToolError(status);
+  return await runCmd(process.execPath, [status.entryScript, ...args], {
     allowFailure: options.allowFailure,
     env: managedAgentBrowserEnv(status, process.env),
     timeoutMs: options.timeoutMs,
+    signal: options.signal,
   });
 }
 
@@ -190,35 +196,54 @@ function ensureRuntimeHomeDir(status: AgentBrowserToolStatus): void {
   }
 }
 
-function writeManifest(status: AgentBrowserToolStatus): void {
-  fs.writeFileSync(
-    path.join(status.installDir, 'manifest.json'),
-    JSON.stringify(
-      {
-        package: AGENT_BROWSER,
-        version: MANAGED_AGENT_BROWSER_VERSION,
-        node: process.version,
-        installedAt: new Date().toISOString(),
-      },
-      null,
-      2,
-    ),
-    'utf8',
-  );
-}
-
 function hasManifest(installDir: string): boolean {
   return fs.existsSync(path.join(installDir, 'manifest.json'));
 }
 
+/**
+ * The backend's declared `bin` entry. Read from the installed manifest rather
+ * than hard-coded, because the path inside the package is the package's to
+ * choose (`bin/agent-browser.js` in 0.27.1).
+ */
+function resolveManagedEntryScript(packageDir: string): string | undefined {
+  let bin: unknown;
+  try {
+    const manifest: unknown = JSON.parse(
+      fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'),
+    );
+    bin =
+      typeof manifest === 'object' && manifest !== null
+        ? (manifest as { bin?: unknown }).bin
+        : undefined;
+  } catch {
+    return undefined;
+  }
+  const declaredPath =
+    typeof bin === 'string'
+      ? bin
+      : typeof bin === 'object' && bin !== null
+        ? (bin as Record<string, unknown>)[AGENT_BROWSER]
+        : undefined;
+  if (typeof declaredPath !== 'string') return undefined;
+  const entryScript = path.resolve(packageDir, declaredPath);
+  return isFile(entryScript) ? entryScript : undefined;
+}
+
+function isFile(filePath: string): boolean {
+  try {
+    return fs.statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function resolveManagedPackageDir(installDir: string): string {
+  return path.join(installDir, 'package', 'node_modules', AGENT_BROWSER);
+}
+
 function resolveManagedBinaryPath(installDir: string): string {
-  const packageRoot = path.join(installDir, 'package');
-  return path.join(
-    packageRoot,
-    'node_modules',
-    '.bin',
-    process.platform === 'win32' ? 'agent-browser.cmd' : 'agent-browser',
-  );
+  const shim = process.platform === 'win32' ? `${AGENT_BROWSER}.cmd` : AGENT_BROWSER;
+  return path.join(installDir, 'package', 'node_modules', '.bin', shim);
 }
 
 function missingManagedToolError(status: AgentBrowserToolStatus): AppError {
@@ -229,6 +254,17 @@ function missingManagedToolError(status: AgentBrowserToolStatus): AppError {
       status.nodeSupported === false
         ? `Web automation requires Node ${MINIMUM_WEB_NODE_MAJOR}+; current Node is ${process.version}.`
         : 'Run `agent-device web setup` to install the managed web backend.',
+  });
+}
+
+// npm exited 0 but left no runnable entry: reported apart from the
+// not-installed-yet case, whose "run web setup" hint is useless in `web setup`.
+function unusableInstallError(status: AgentBrowserToolStatus): AppError {
+  return new AppError('TOOL_MISSING', 'Managed web backend install produced no runnable entry.', {
+    version: MANAGED_AGENT_BROWSER_VERSION,
+    installDir: status.installDir,
+    packageDir: status.packageDir,
+    hint: `Remove ${status.installDir} and run \`agent-device web setup\` again.`,
   });
 }
 
@@ -254,15 +290,6 @@ function resolveManagedSocketDir(installDir: string): string {
 
 function isNoEntryError(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
-}
-
-function isExecutable(filePath: string): boolean {
-  try {
-    fs.accessSync(filePath, fs.constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function defaultStateDir(): string {

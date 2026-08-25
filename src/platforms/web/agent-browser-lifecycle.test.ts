@@ -283,7 +283,7 @@ test('records the managed browser daemon and Chrome fleet at the spawn owner', a
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
     mockRunCmd.mockResolvedValue({
       stdout: [
-        `  101     1 ${status.binaryPath}`,
+        `  101     1 ${process.execPath} ${status.entryScript}`,
         `  201   101 /Applications/Chromium.app/Contents/MacOS/Chromium ${marker}`,
         '  301   201 /Applications/Chromium.app/Contents/Frameworks/Chromium Helper --type=gpu',
         '  999     1 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -315,8 +315,10 @@ test('managed process summary includes the recordable agent-browser daemon', () 
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({ stateDir });
     expect(
-      summarizeManagedAgentBrowserProcesses([{ pid: 101, command: status.binaryPath }], status)
-        .processes[0]?.reason,
+      summarizeManagedAgentBrowserProcesses(
+        [{ pid: 101, command: `${process.execPath} ${status.entryScript}` }],
+        status,
+      ).processes[0]?.reason,
     ).toBe('agent-browser-daemon');
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });

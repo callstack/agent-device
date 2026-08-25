@@ -351,8 +351,10 @@ test('daemon session teardown closes an open web session immediately, not on age
   // fleet right away, the same way an explicit `session close` does, instead of leaving the
   // Chrome processes to agent-browser's own multi-minute idle timer.
   expect(mockRunCmd).toHaveBeenCalledTimes(1);
-  const [, args] = mockRunCmd.mock.calls[0] as [string, string[]];
-  expect(args).toEqual(['close', '--json', '--session', sessionName]);
+  const [cmd, args] = mockRunCmd.mock.calls[0] as [string, string[]];
+  // `node <entry> close ...`: the managed backend never runs through its `.bin` shim (#2022).
+  expect(cmd).toBe(process.execPath);
+  expect(args.slice(1)).toEqual(['close', '--json', '--session', sessionName]);
 });
 
 test('daemon session teardown surfaces a web close failure through the cleanup-failure channel', async () => {

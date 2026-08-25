@@ -1,4 +1,4 @@
-import { execFailureDetails, runCmd } from '../../utils/exec.ts';
+import { execFailureDetails } from '../../utils/exec.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { sleep } from '../../utils/timeouts.ts';
@@ -19,7 +19,7 @@ import type { WebProvider, WebSnapshotOptions, WebSnapshotResult } from './provi
 import {
   getManagedAgentBrowserStatus,
   mapManagedAgentBrowserError,
-  resolveAgentBrowserTool,
+  runManagedAgentBrowser,
 } from './agent-browser-tool.ts';
 import {
   cleanupManagedAgentBrowserOrphansForProviderStartup,
@@ -263,10 +263,9 @@ async function runAgentBrowserCommand(
   const status = getManagedAgentBrowserStatus({ stateDir: options.stateDir });
   try {
     await cleanupProviderStartupOrphans(options);
-    const tool = await resolveAgentBrowserTool({ stateDir: options.stateDir });
-    const result = await runCmd(tool.command, cliArgs, {
+    const result = await runManagedAgentBrowser(cliArgs, {
+      stateDir: options.stateDir,
       allowFailure: true,
-      env: tool.env,
       timeoutMs: AGENT_BROWSER_TIMEOUT_MS,
       signal,
     });

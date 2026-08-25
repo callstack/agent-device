@@ -129,7 +129,14 @@ test('daemon shutdown closes an open web session immediately, without waiting fo
   expect(stderrChunks.join('')).toBe('');
   expect(sessionStore.get(session.name)).toBeUndefined();
   const closeCall = mockRunCmd.mock.calls.find(([, args]) => (args as string[]).includes('close'));
-  expect(closeCall?.[1]).toEqual(['close', '--json', '--session', session.name]);
+  // `node <entry> close ...`: the managed backend never runs through its `.bin` shim (#2022).
+  expect(closeCall?.[0]).toBe(process.execPath);
+  expect((closeCall?.[1] as string[] | undefined)?.slice(1)).toEqual([
+    'close',
+    '--json',
+    '--session',
+    session.name,
+  ]);
 });
 
 test('daemon shutdown reports a web close failure on stderr instead of losing it silently', async () => {

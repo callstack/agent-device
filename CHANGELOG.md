@@ -33,6 +33,18 @@
   `-dev` prerelease marker so the version on `main` never equals a published version (registry
   scanners diff the tool surface per version string, and a moving surface under a released number
   reads as a republish). `release:prepare` refuses to publish while the `-dev` marker is in place.
+- Windows `--platform web` works again. `agent-device web setup` no longer fails with
+  `npm not found in PATH`, and every web command — including `web doctor` — no longer fails with
+  `spawn EINVAL`. The managed `agent-browser` backend is now launched as `node <js-entry>` on every
+  platform instead of through its `node_modules/.bin` console shim, which is a `.cmd` file on
+  Windows that `child_process.spawn` refuses without a shell (CVE-2024-27980 hardening);
+  `shell: true` would only trade that for argument-quoting hazards and a `DEP0190` warning on every
+  command. Setup spawns `npm` from PATH unchanged on macOS and Linux, and runs npm's own
+  `npm-cli.js` under the current Node only on Windows, where a bare `npm` is not spawnable. A
+  managed install now counts as present only when the backend package itself is, and
+  `web setup --json` / `web doctor --json` gain `entryScript` and `packageDir`; the published
+  `binaryPath` is unchanged and still names npm's console shim, now informational rather than the
+  spawned command (#2022).
 - Parameterized `fill --record-as` protection is now recording-session-scoped instead of
   fill-step-scoped (ADR 0017 amendment): a later, unrelated recorded action (`wait`, `is`, `get`) can no
   longer re-serialize an app-rendered echo of an already-parameterized value into its own result or
