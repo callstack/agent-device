@@ -119,7 +119,7 @@ test('usageForCommand resolves workflow help topic', async () => {
   if (help === null) throw new Error('Expected workflow help text');
   assert.match(help, /^agent-device \S+ — workflow/);
   assert.ok(
-    Buffer.byteLength(help, 'utf8') < 9100,
+    Buffer.byteLength(help, 'utf8') < 9000,
     `workflow help topic should stay close to the compact-card size target, was ${Buffer.byteLength(help, 'utf8')} bytes`,
   );
   assert.match(help, /open -> snapshot -i -> settle -> verify -> close loop/);
@@ -138,7 +138,7 @@ test('usageForCommand resolves workflow help topic', async () => {
   assert.match(help, /Shapes and platform quirks: help gestures/);
   assert.match(
     help,
-    /open --foreground -> snapshot\. Selection: explicit --device\/--udid\/--serial, then session, booted\/bootable local, or one provider; --platform\/--target only filter\./,
+    /open --foreground -> snapshot\. Selection: explicit --device\/--udid\/--serial, then session, booted\/bootable local, or provider; --platform\/--target only filter\./,
   );
   assert.match(help, /Never open artifact paths or invent package ids/);
   assert.match(

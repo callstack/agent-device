@@ -44,6 +44,17 @@ export type DaemonCommandDescriptor = {
   preferExplicitDeviceOverExistingSession?: boolean;
   allowSessionlessDefaultDevice?: (req: DaemonRequest) => boolean;
   skipSessionlessProviderDevice?: (req: DaemonRequest) => boolean;
+  /**
+   * #2016: this request shape is eligible for the sessionless,
+   * no-lease-anywhere lease-admission bypass — a session that was never
+   * created (deferred `connect`, `open` never ran) has no lease to admit or
+   * release. Only `close` declares it, and only for the plain-close shape
+   * (no app-target positional): `close <app>` resolves its device straight
+   * from flags when there's no session, so it must stay behind full
+   * lease/tenant admission. Declared here so `request-admission.ts` asks the
+   * registry instead of reclassifying `req.command`/`req.positionals` itself.
+   */
+  sessionlessPlainCloseAdmissionExempt?: (req: DaemonRequest) => boolean;
 };
 
 export type DaemonProviderDeviceResolutionIntent =
@@ -119,6 +130,12 @@ export function shouldPreferExplicitDeviceOverExistingSession(req: DaemonRequest
 export function usesSessionlessDefaultProviderDevice(req: DaemonRequest): boolean {
   const allow = getDaemonCommandDescriptor(req.command)?.allowSessionlessDefaultDevice;
   return typeof allow === 'function' ? allow(req) : false;
+}
+
+/** #2016: whether this request qualifies for the sessionless plain-close lease-admission bypass. */
+export function isSessionlessPlainCloseAdmissionExempt(req: DaemonRequest): boolean {
+  const exempt = getDaemonCommandDescriptor(req.command)?.sessionlessPlainCloseAdmissionExempt;
+  return typeof exempt === 'function' ? exempt(req) : false;
 }
 
 /**

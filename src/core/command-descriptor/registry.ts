@@ -170,6 +170,14 @@ const isShardedTestRequest = (req: DispatchedCommand): boolean =>
   req.command === 'test' &&
   (typeof req.flags?.shardAll === 'number' || typeof req.flags?.shardSplit === 'number');
 
+// #2016: a plain `close` (no app-target positional) has nothing to close via
+// flags, so it's the only close shape eligible for the sessionless
+// no-lease-anywhere admission bypass in request-admission.ts. `close <app>`
+// resolves its device straight from flags when there's no session and must
+// stay behind full lease/tenant admission.
+const isPlainCloseRequest = (req: DispatchedCommand): boolean =>
+  (req.positionals?.length ?? 0) === 0;
+
 // ADR 0014 request-sensitive ref-frame resolvers. The action is the leading
 // positional (see keyboard/alert daemon writers in src/commands/system/index.ts
 // and src/commands/capture/alert.ts). Only the read-only status probes preserve
@@ -922,6 +930,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       refFrameEffect: 'may-invalidate',
       allowInvalidRecording: true,
       saveScriptFlagOwner: true,
+      sessionlessPlainCloseAdmissionExempt: isPlainCloseRequest,
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
