@@ -90,17 +90,130 @@ extension RunnerTests {
     )
   }
 
+  /// A hand-driven clock for the commit waits. Time moves only where the wait sleeps, which is
+  /// what makes "the burst kept landing" and "the pipeline froze" expressible as two sequences of
+  /// the same length rather than as wall-clock luck.
+  final class CommitWaitClock {
+    private var current = Date(timeIntervalSinceReferenceDate: 0)
+    let startedAt = Date(timeIntervalSinceReferenceDate: 0)
+
+    var read: () -> Date { { self.current } }
+
+    func advance(_ seconds: TimeInterval) {
+      current = current.addingTimeInterval(seconds)
+    }
+
+    /// Defaults to a budget no test can exhaust, so a test that never advances the clock is
+    /// asking about settling rather than about time.
+    func budget(stallBudget: TimeInterval = 3600, ceiling: TimeInterval = 3600) -> SynthesizedCommitBudget {
+      SynthesizedCommitBudget(startedAt: startedAt, stallBudget: stallBudget, ceiling: ceiling)
+    }
+
+    /// Seconds elapsed on this clock, for asserting *when* a wait gave up.
+    var elapsed: TimeInterval { current.timeIntervalSince(startedAt) }
+  }
+
+  // #1874, through the shipped wait rather than a detached policy object: a burst that keeps
+  // landing must outlive the flat 3s deadline that used to govern it. Each poll advances the
+  // clock 2s and delivers one more character, so the wait is never idle for a full stall budget
+  // and must walk all the way to the match at t=6s. Reverting the wait to a flat deadline turns
+  // this red at the third poll.
+  func testCommitWaitOutlivesTheFlatDeadlineWhileTheExpectedPrefixGrows() {
+    let expected = "hardware"
+    let clock = CommitWaitClock()
+    var landed = 0
+    let outcome = Self.awaitSynthesizedCommitOutcome(
+      expectedText: expected,
+      placeholder: nil,
+      budget: clock.budget(stallBudget: 3, ceiling: 10),
+      now: clock.read,
+      observe: { String(expected.prefix(landed * 2)) },
+      waitForNextObservation: {
+        landed += 1
+        clock.advance(2)
+      }
+    )
+    XCTAssertEqual(outcome, .settled)
+    XCTAssertEqual(clock.elapsed, 8, "the wait must still be polling well past the 3s stall budget")
+  }
+
+  // The other half, and the reason the stall budget keeps the flat deadline's number: a pipeline
+  // that delivers nothing is condemned at exactly the instant it always was, so nothing that
+  // fails today starts passing merely by waiting longer.
+  func testCommitWaitCondemnsAFrozenPipelineAtTheStallBudget() {
+    let clock = CommitWaitClock()
+    let outcome = Self.awaitSynthesizedCommitOutcome(
+      expectedText: "hardware",
+      placeholder: nil,
+      budget: clock.budget(stallBudget: 3, ceiling: 10),
+      now: clock.read,
+      observe: { "ha" },
+      waitForNextObservation: { clock.advance(1) }
+    )
+    XCTAssertEqual(outcome, .notObserved)
+    XCTAssertEqual(clock.elapsed, 3, "a frozen prefix must give up on the stall budget, not the ceiling")
+  }
+
+  // Progress buys time, but not without bound: one character per stall window would otherwise
+  // hold the command open until the daemon's own 45s budget killed the request. Here every poll
+  // lands a character, so only the ceiling can stop it.
+  func testCommitWaitCeilingStopsAnIndefinitelyThrottledPipeline() {
+    let clock = CommitWaitClock()
+    var landed = 0
+    let outcome = Self.awaitSynthesizedCommitOutcome(
+      expectedText: String(repeating: "a", count: 100),
+      placeholder: nil,
+      budget: clock.budget(stallBudget: 3, ceiling: 10),
+      now: clock.read,
+      observe: { String(repeating: "a", count: landed) },
+      waitForNextObservation: {
+        landed += 1
+        clock.advance(2)
+      }
+    )
+    XCTAssertEqual(outcome, .notObserved)
+    XCTAssertEqual(clock.elapsed, 10, "the ceiling is absolute, however long characters keep arriving")
+  }
+
+  // Only forward movement is evidence the burst is still landing. A field the app clears
+  // mid-flight would otherwise reset the stall clock on every poll and hold every wedged wait
+  // open to the ceiling. Replacement mode, because that is where a non-matching value keeps
+  // polling rather than settling as `.diverged`.
+  func testCommitWaitTreatsARetreatingValueAsNoProgress() {
+    let clock = CommitWaitClock()
+    let observations = ["ada@", "", "ada@", "", "ada@"]
+    var index = 0
+    let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
+      expectedText: "ada@example",
+      placeholder: nil,
+      budget: clock.budget(stallBudget: 3, ceiling: 10),
+      now: clock.read,
+      observe: { observations[min(index, observations.count - 1)] },
+      waitForNextObservation: {
+        index += 1
+        clock.advance(1)
+      }
+    )
+    XCTAssertEqual(outcome, .notObserved)
+    XCTAssertEqual(clock.elapsed, 3, "churn between two values is not progress and must not buy time")
+  }
+
   // The regression behind #1874/#1844: the wait used to return Void, so an expired deadline was
   // indistinguishable from a commit and `type` reported ok over a partially committed field. The
   // CI signature was a field holding "h" out of "hardware-keyboard" with the command successful.
   func testSynthesizedCommitDeadlineIsNotReportedAsACommit() {
+    let clock = CommitWaitClock()
     var observations = 0
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: "hardware-keyboard",
       placeholder: nil,
-      isExpired: { observations >= 3 },
+      budget: clock.budget(stallBudget: 3, ceiling: 10),
+      now: clock.read,
       observe: { "h" },
-      waitForNextObservation: { observations += 1 }
+      waitForNextObservation: {
+        observations += 1
+        clock.advance(1)
+      }
     )
     XCTAssertEqual(outcome, .notObserved)
     XCTAssertEqual(observations, 3, "a pending prefix must keep polling until the deadline")
@@ -108,11 +221,13 @@ extension RunnerTests {
 
   func testSynthesizedCommitStopsAtTheFirstSettledObservation() {
     for observed in ["hardware-keyboard", "hardwarX", nil] {
+      let clock = CommitWaitClock()
       var polls = 0
       let outcome = Self.awaitSynthesizedCommitOutcome(
         expectedText: "hardware-keyboard",
         placeholder: nil,
-        isExpired: { false },
+        budget: clock.budget(),
+        now: clock.read,
         observe: { observed },
         waitForNextObservation: { polls += 1 }
       )
@@ -125,11 +240,13 @@ extension RunnerTests {
 
   func testSynthesizedCommitWalksAPrefixToCompletion() {
     let steps = ["", "hardware-", "hardware-keyboard"]
+    let clock = CommitWaitClock()
     var index = 0
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: "hardware-keyboard",
       placeholder: nil,
-      isExpired: { false },
+      budget: clock.budget(),
+      now: clock.read,
       observe: { steps[min(index, steps.count - 1)] },
       waitForNextObservation: { index += 1 }
     )
@@ -141,13 +258,20 @@ extension RunnerTests {
   // landing during the final poll sleep was condemned as never observed — a false failure under
   // exactly the loaded-host timing this wait exists for. Red against that ordering.
   func testCommitLandingDuringTheFinalSleepIsStillObserved() {
+    let clock = CommitWaitClock()
     var polls = 0
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: "hardware-keyboard",
       placeholder: nil,
-      isExpired: { polls >= 1 },
+      budget: clock.budget(stallBudget: 3, ceiling: 10),
+      now: clock.read,
+      // The value lands during the sleep that takes the clock past the stall budget: the read
+      // happens first, so it is still observed.
       observe: { polls == 0 ? "hardware-" : "hardware-keyboard" },
-      waitForNextObservation: { polls += 1 }
+      waitForNextObservation: {
+        polls += 1
+        clock.advance(9)
+      }
     )
     XCTAssertEqual(outcome, .settled)
   }
@@ -159,11 +283,13 @@ extension RunnerTests {
   func testClearAfterDispatchCannotTurnThePlaceholderIntoCommitEvidence() {
     let textBeforeDispatch = "0"
     let expectedText = textBeforeDispatch + ".00"
+    let clock = CommitWaitClock()
     var observations = 0
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: expectedText,
       placeholder: "0.00",
-      isExpired: { false },
+      budget: clock.budget(),
+      now: clock.read,
       observe: {
         observations += 1
         return "0.00"
@@ -188,10 +314,12 @@ extension RunnerTests {
       ("   ", ""),
     ]
     for testCase in cases {
+      let clock = CommitWaitClock()
       let outcome = Self.awaitSynthesizedCommitOutcome(
         expectedText: testCase.expectedText,
         placeholder: testCase.placeholder,
-        isExpired: { false },
+        budget: clock.budget(),
+        now: clock.read,
         observe: { testCase.expectedText },
         waitForNextObservation: {}
       )
@@ -215,24 +343,31 @@ extension RunnerTests {
       (expected: "ada@example", observedAfterDrop: "aexample"),
     ]
     for corruption in corruptions {
+      let appendClock = CommitWaitClock()
       XCTAssertEqual(
         Self.awaitSynthesizedCommitOutcome(
           expectedText: corruption.expected,
           placeholder: nil,
-          isExpired: { false },
+          budget: appendClock.budget(),
+          now: appendClock.read,
           observe: { corruption.observedAfterDrop },
           waitForNextObservation: {}
         ),
         .settled,
         "append-mode's diverge-trusting outcome must stay unchanged by this fix"
       )
+      let clock = CommitWaitClock()
       var polls = 0
       let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
         expectedText: corruption.expected,
         placeholder: nil,
-        isExpired: { polls >= 2 },
+        budget: clock.budget(stallBudget: 2, ceiling: 10),
+        now: clock.read,
         observe: { corruption.observedAfterDrop },
-        waitForNextObservation: { polls += 1 }
+        waitForNextObservation: {
+          polls += 1
+          clock.advance(1)
+        }
       )
       XCTAssertEqual(outcome, .notObserved, "expected \(corruption.expected), dropped to \(corruption.observedAfterDrop)")
       XCTAssertEqual(polls, 2, "a settled-but-wrong value must be polled until the deadline, not trusted early")
@@ -246,11 +381,13 @@ extension RunnerTests {
   // does not depend on prefix-walking to keep polling.
   func testSynthesizedReplacementCommitToleratesLagUntilExactMatch() {
     let steps = ["", "ad", "ada@example"]
+    let clock = CommitWaitClock()
     var index = 0
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: "ada@example",
       placeholder: nil,
-      isExpired: { false },
+      budget: clock.budget(),
+      now: clock.read,
       observe: { steps[min(index, steps.count - 1)] },
       waitForNextObservation: { index += 1 }
     )
@@ -261,13 +398,18 @@ extension RunnerTests {
   // Same ordering guarantee as `testCommitLandingDuringTheFinalSleepIsStillObserved`: the deadline
   // is checked AFTER an observation, so a match landing during the final poll sleep is still caught.
   func testSynthesizedReplacementCommitLandingDuringTheFinalSleepIsStillObserved() {
+    let clock = CommitWaitClock()
     var polls = 0
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: "ada@example",
       placeholder: nil,
-      isExpired: { polls >= 1 },
+      budget: clock.budget(stallBudget: 3, ceiling: 10),
+      now: clock.read,
       observe: { polls == 0 ? "ada@exampl" : "ada@example" },
-      waitForNextObservation: { polls += 1 }
+      waitForNextObservation: {
+        polls += 1
+        clock.advance(9)
+      }
     )
     XCTAssertEqual(outcome, .settled)
   }
@@ -275,11 +417,13 @@ extension RunnerTests {
   // Same placeholder-collision guard as append mode, and for the same reason: a pre-dispatch value
   // cannot identify what a later placeholder-equal AX value represents, so refuse before polling.
   func testSynthesizedReplacementCommitPlaceholderGuardRefusesWithoutPolling() {
+    let clock = CommitWaitClock()
     var observations = 0
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: "0.00",
       placeholder: "0.00",
-      isExpired: { false },
+      budget: clock.budget(),
+      now: clock.read,
       observe: {
         observations += 1
         return "0.00"

@@ -1,10 +1,10 @@
 import XCTest
 
-// How long the synthesized text-entry commit wait is willing to keep looking. Split out of
-// RunnerTests+SynthesizedTextEntry.swift so the policy is a pure, clock-injected value type the
-// macOS host lane can exercise without a simulator.
+// How long the synthesized text-entry commit wait keeps looking. Split out of
+// RunnerTests+SynthesizedTextEntry.swift only to keep that file inside its size budget; the
+// policy is consumed exclusively by the two commit waits there, which is also where it is tested.
 extension RunnerTests {
-  /// The commit wait's deadline.
+  /// One commit wait's deadline.
   ///
   /// A synthesized burst can be *throttled* rather than dropped: on a loaded simulator the
   /// characters keep landing, just slowly, and everything touching the input system slows with
@@ -21,12 +21,11 @@ extension RunnerTests {
   /// deadline used, so nothing that fails today starts passing merely by waiting longer: the wait
   /// extends only while characters are still arriving.
   ///
-  /// A reference type on purpose. Its two readers are separate escaping closures — the commit
-  /// wait's `observe` records into it, its `isExpired` reads it — and the whole fix is the
-  /// coupling between them. As a struct that coupling rests on Swift boxing one captured `var`,
-  /// which a later refactor could quietly break back into the flat deadline with every test still
-  /// green. Sharing one instance makes that unrepresentable instead of merely true today.
-  final class SynthesizedCommitBudget {
+  /// Owned by the wait that creates it: `awaitSynthesizedCommitOutcome` and its replacement
+  /// counterpart hold it as a local `var` across their own poll loop, so recording progress and
+  /// asking whether time is up are two statements in one function rather than a coupling between
+  /// separate closures.
+  struct SynthesizedCommitBudget {
     let startedAt: Date
     let stallBudget: TimeInterval
     let ceiling: TimeInterval
@@ -42,10 +41,19 @@ extension RunnerTests {
       self.lastProgressAt = startedAt
     }
 
+    /// The budget the shipped `type`/`fill` waits run under.
+    static func standard(startedAt: Date) -> SynthesizedCommitBudget {
+      SynthesizedCommitBudget(
+        startedAt: startedAt,
+        stallBudget: TextEntryTiming.synthesizedCommitStallTimeout,
+        ceiling: TextEntryTiming.synthesizedCommitCeiling
+      )
+    }
+
     /// Records one observation's expected-prefix length. Only forward movement counts: a shorter
     /// read (the app clearing the field mid-flight, an unreadable poll reporting -1) is not
     /// evidence the burst is still landing, so it neither buys time nor takes any back.
-    func record(expectedPrefixLength: Int, at now: Date) {
+    mutating func record(expectedPrefixLength: Int, at now: Date) {
       guard expectedPrefixLength > bestPrefixLength else { return }
       bestPrefixLength = expectedPrefixLength
       lastProgressAt = now

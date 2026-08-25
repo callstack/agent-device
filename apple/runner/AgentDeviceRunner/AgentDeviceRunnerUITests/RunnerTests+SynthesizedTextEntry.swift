@@ -260,13 +260,18 @@ extension RunnerTests {
     case notObserved
   }
 
-  /// The commit wait's decision, with observation, pacing and the clock injected so the deadline
-  /// branch is exercisable without a simulator (the macOS host lane runs this; the member wrapper
-  /// below binds the real XCUI reads).
+  /// The commit wait's decision, with observation, pacing and the clock injected so both deadline
+  /// branches are exercisable without a simulator (the macOS host lane runs this; the member
+  /// wrapper below binds the real XCUI reads).
+  ///
+  /// The budget is a local `var`, advanced from the same observation the progress check reads, so
+  /// "did the burst move" and "is time up" are two statements in one loop rather than a coupling
+  /// between separately-held state.
   static func awaitSynthesizedCommitOutcome(
     expectedText: String,
     placeholder: String?,
-    isExpired: () -> Bool,
+    budget: SynthesizedCommitBudget,
+    now: () -> Date,
     observe: () -> String?,
     waitForNextObservation: () -> Void
   ) -> SynthesizedTextCommitOutcome {
@@ -276,15 +281,21 @@ extension RunnerTests {
     if Self.textMatchesPlaceholder(expectedText, placeholder: placeholder) {
       return .notObserved
     }
+    var budget = budget
     // The deadline is checked AFTER an observation, never before one, so the last thing that
     // happens before condemning a commit is a read. Checking first would condemn a commit that
     // landed during the final poll sleep — the exact loaded-host timing this wait exists for.
     while true {
-      switch synthesizedTextCommitProgress(observedText: observe(), expectedText: expectedText) {
+      let observedText = observe()
+      switch synthesizedTextCommitProgress(observedText: observedText, expectedText: expectedText) {
       case .committed, .diverged:
         return .settled
       case .pending:
-        if isExpired() { return .notObserved }
+        budget.record(
+          expectedPrefixLength: Self.commonPrefixLength(observedText ?? "", expectedText),
+          at: now()
+        )
+        if budget.isExpired(at: now()) { return .notObserved }
         waitForNextObservation()
       }
     }
@@ -323,23 +334,33 @@ extension RunnerTests {
   static func awaitSynthesizedReplacementCommitOutcome(
     expectedText: String,
     placeholder: String?,
-    isExpired: () -> Bool,
+    budget: SynthesizedCommitBudget,
+    now: () -> Date,
     observe: () -> String?,
     waitForNextObservation: () -> Void
   ) -> SynthesizedTextCommitOutcome {
     if Self.textMatchesPlaceholder(expectedText, placeholder: placeholder) {
       return .notObserved
     }
+    var budget = budget
     while true {
-      if observe() == expectedText {
+      let observedText = observe()
+      if observedText == expectedText {
         return .settled
       }
-      if isExpired() { return .notObserved }
+      // Prefix growth cannot settle this wait — a value with a hole in the middle is still a
+      // failure, see the doc comment above — but it is the same evidence that the burst is still
+      // landing, so it buys the same time here as it does in append mode.
+      budget.record(
+        expectedPrefixLength: Self.commonPrefixLength(observedText ?? "", expectedText),
+        at: now()
+      )
+      if budget.isExpired(at: now()) { return .notObserved }
       waitForNextObservation()
     }
   }
 
-  /// The placeholder/deadline/observe/pacing ingredients shared by the append route
+  /// The placeholder/observe/pacing ingredients shared by the append route
   /// (`awaitSynthesizedFirstResponderCommit`) and the replacement route
   /// (`awaitSynthesizedReplacementCommit`). What must NOT be shared is which outcome function
   /// consumes them: see `awaitSynthesizedReplacementCommitOutcome`'s doc comment for why append
@@ -355,37 +376,25 @@ extension RunnerTests {
     expectedText: String
   ) -> (
     placeholder: String?,
-    isExpired: () -> Bool,
     observe: () -> String?,
     waitForNextObservation: () -> Void
   ) {
     let placeholder = resolveTextEntryElement(app: app, target: target)?.placeholderValue
     let waitStartedAt = Date()
-    // Throttling and a wedge are the same to a flat deadline, so the expected-prefix walk decides
-    // instead of the wall clock alone — the very distinction the cadence line below was added to
-    // make visible. See `SynthesizedCommitBudget`.
-    let budget = SynthesizedCommitBudget(
-      startedAt: waitStartedAt,
-      stallBudget: TextEntryTiming.synthesizedCommitStallTimeout,
-      ceiling: TextEntryTiming.synthesizedCommitCeiling
-    )
     return (
       placeholder: placeholder,
-      isExpired: { budget.isExpired(at: Date()) },
       observe: {
         let observedText = self.editableTextValue(
           for: self.resolveTextEntryElement(app: app, target: target),
           treatingPlaceholderAsEmpty: true
         )
-        let expectedPrefixLen = observedText.map { Self.commonPrefixLength($0, expectedText) } ?? -1
-        budget.record(expectedPrefixLength: expectedPrefixLen, at: Date())
         // Cadence evidence stays value-free: the polled value is user content typed through
         // `type`/`fill` and must never reach runner.log. Lengths and the expected-prefix walk
         // are enough to distinguish throttling (prefix grows slowly) from a wedge (it freezes).
         Self.logCommitCadence(
           elapsedMs: Int(waitStartedAt.timeIntervalSinceNow * -1000),
           observedLen: observedText?.count ?? -1,
-          expectedPrefixLen: expectedPrefixLen
+          expectedPrefixLen: observedText.map { Self.commonPrefixLength($0, expectedText) } ?? -1
         )
         return observedText
       },
@@ -421,7 +430,8 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: expectedText,
       placeholder: ingredients.placeholder,
-      isExpired: ingredients.isExpired,
+      budget: .standard(startedAt: waitStartedAt),
+      now: { Date() },
       observe: ingredients.observe,
       waitForNextObservation: ingredients.waitForNextObservation
     )
@@ -457,7 +467,8 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: expectedText,
       placeholder: ingredients.placeholder,
-      isExpired: ingredients.isExpired,
+      budget: .standard(startedAt: waitStartedAt),
+      now: { Date() },
       observe: ingredients.observe,
       waitForNextObservation: ingredients.waitForNextObservation
     )
