@@ -4,9 +4,13 @@ import type { AndroidToolHost } from '@agent-device/contracts/platform';
 export function createAndroidToolHost(): AndroidToolHost {
   return Object.freeze({
     /**
-     * Definitive in both directions where adb answers, and honest when it does not: a transport
-     * failure reports `probe-failed` rather than a guess, so admission can refuse instead of
-     * fabricating availability the operation would then reject.
+     * Definitive in both directions only where adb actually answers, and honest everywhere else.
+     * The probe runs with `allowFailure`, so a device that is offline, unauthorized, timed out or
+     * otherwise broken comes back as an ordinary non-zero result rather than a throw: only a clean
+     * exit proves the clipboard shell command exists, and only the recognized missing-shell prose
+     * proves it does not. Every other result -- non-zero without that prose, or a transport throw
+     * -- is `probe-failed`, so admission refuses instead of caching availability the operation
+     * would then reject.
      */
     probeClipboardShellSupport: async (device, signal) => {
       try {
@@ -16,9 +20,8 @@ export function createAndroidToolHost(): AndroidToolHost {
           allowFailure: true,
           signal,
         });
-        return isClipboardShellUnsupported(result.stdout, result.stderr)
-          ? 'unsupported'
-          : 'supported';
+        if (isClipboardShellUnsupported(result.stdout, result.stderr)) return 'unsupported';
+        return result.exitCode === 0 ? 'supported' : 'probe-failed';
       } catch {
         return 'probe-failed';
       }
