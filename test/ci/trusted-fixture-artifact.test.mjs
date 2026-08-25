@@ -334,17 +334,22 @@ test('producer maps each platform to its resolved lookup and matrix artifact nam
       '',
     ].join('\n'),
   );
-  const writeNodeStub = (cached) =>
+  // cachedPlatforms: which platform artifact-name suffixes (".ios", ".android")
+  // the lookup should report as already cached.
+  const writeNodeStub = (cachedPlatforms) =>
     fs.writeFileSync(
       path.join(binDir, 'node'),
       [
         '#!/bin/sh',
         'printf "%s\\n" "$*" >> "$TEST_NODE_LOG"',
-        cached ? 'printf "111"' : 'true',
+        'case "$4" in',
+        ...cachedPlatforms.map((platform) => `  *.${platform}) printf "111" ;;`),
+        '  *) true ;;',
+        'esac',
         '',
       ].join('\n'),
     );
-  writeNodeStub(false);
+  writeNodeStub([]);
   fs.chmodSync(path.join(binDir, 'node'), 0o755);
 
   const run = fingerprintStep.run
@@ -388,7 +393,17 @@ test('producer maps each platform to its resolved lookup and matrix artifact nam
     '.github/actions/setup-fixture-app/trusted-artifact.mjs find octo/repo fingerprint.android-hash.android current-head',
   ]);
 
-  writeNodeStub(true);
+  // A mistaken `length > 1` in the has-work check would pass here while
+  // wrongly suppressing this valid single-platform build.
+  writeNodeStub(['ios']);
+  const iosCached = runFingerprint('output-ios-cached');
+  assert.deepEqual(
+    iosCached.matrix.include.map(({ platform }) => platform),
+    ['android'],
+  );
+  assert.equal(iosCached.hasWork, 'has-work=true');
+
+  writeNodeStub(['ios', 'android']);
   const bothCached = runFingerprint('output-both-cached');
   assert.deepEqual(bothCached.matrix, { include: [] });
   assert.equal(bothCached.hasWork, 'has-work=false');
