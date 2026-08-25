@@ -69,6 +69,24 @@ export function assertRequestLeaseAdmission(
   const requestLeaseScope = resolveLeaseScope(req);
   assertProxyOpenLeaseMetadata(req, requestLeaseScope);
   const sessionLease = session?.lease;
+  // #2016: plain `close` (no app target) on a tenant-isolated connection
+  // whose lease was never allocated (e.g. `open` was never called) has no
+  // lease to admit or release. Falling through would make the generic
+  // tenant/run/lease check below throw "tenant isolation requires lease
+  // id.", which reads as an access-control failure instead of "nothing to
+  // close". Let the close handler's own session lookup (SESSION_NOT_FOUND,
+  // or a lease-less teardown) decide instead. Scoped to zero positionals so
+  // an app-target close (`close <app>`, which resolves its device straight
+  // from flags when there's no session) still goes through the normal
+  // lease/tenant check rather than closing an arbitrary device for free.
+  if (
+    !sessionLease &&
+    !requestLeaseScope.leaseId &&
+    req.command === 'close' &&
+    (req.positionals?.length ?? 0) === 0
+  ) {
+    return undefined;
+  }
   if (!sessionLease && req.meta?.sessionIsolation !== 'tenant') {
     if (!requestLeaseScope.leaseId) return undefined;
     if (!requestLeaseScope.tenantId && !requestLeaseScope.runId) return undefined;
