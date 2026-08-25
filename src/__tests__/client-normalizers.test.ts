@@ -28,20 +28,16 @@ test('normalizeOpenDevice accepts exactly the canonical leaf platforms', () => {
 test('normalizeDeviceSelection preserves structured resolver evidence and rejects malformed data', () => {
   assert.deepEqual(
     normalizeDeviceSelection({
-      reason: 'single-booted-local',
+      reason: 'single-app-installed-local',
       source: 'local',
-      candidateCount: 2,
-      booted: true,
+      candidateCount: 1,
       bootOccurred: false,
-      retrySelectors: [{ flag: '--udid', value: 'sim-1' }],
     }),
     {
-      reason: 'single-booted-local',
+      reason: 'single-app-installed-local',
       source: 'local',
-      candidateCount: 2,
-      booted: true,
+      candidateCount: 1,
       bootOccurred: false,
-      retrySelectors: [{ flag: '--udid', value: 'sim-1' }],
     },
   );
   assert.equal(
@@ -49,7 +45,6 @@ test('normalizeDeviceSelection preserves structured resolver evidence and reject
       reason: 'single-booted-local',
       source: 'local',
       candidateCount: -1,
-      booted: true,
       bootOccurred: false,
     }),
     undefined,

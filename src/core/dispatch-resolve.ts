@@ -3,12 +3,9 @@ import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import {
   hasExplicitDeviceIdentitySelector,
   isApplePlatform,
-  isIosFamily,
-  matchesDeviceSelector,
   resolveAppleSimulatorSetPathForSelector,
   type DeviceInfo,
   type DeviceTarget,
-  type PlatformSelector,
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -22,12 +19,17 @@ import {
   readDeviceInventory,
   shouldPropagateDeviceInventoryProbeError,
 } from '../request/device-inventory-context.ts';
-import type { DeviceSelectionResult } from './device-selection-resolver.ts';
+import type {
+  DeviceSelectionResult,
+  InventoryDeviceSelectionParams,
+} from './device-selection-resolver.ts';
 
-type DeviceSelectionResolver = typeof import('./device-selection-resolver.ts');
-
-async function loadDeviceSelectionResolver(): Promise<DeviceSelectionResolver> {
-  return await import('./device-selection-resolver.ts');
+/** Lazy owner seam: keeps the resolver out of the dispatch eager closure. */
+async function resolveInventorySelection(
+  params: InventoryDeviceSelectionParams,
+): Promise<DeviceSelectionResult> {
+  const { resolveInventoryDeviceSelection } = await import('./device-selection-resolver.ts');
+  return await resolveInventoryDeviceSelection(params);
 }
 export type ResolveDeviceFlags = Pick<
   CliFlags,
@@ -62,78 +64,12 @@ export type ResolveTargetDeviceOptions = {
   appleSimulatorAppTarget?: string;
 };
 
-async function findBootedAppleSimulatorWithApp(
-  devices: DeviceInfo[],
-  selector: AppleDeviceSelector,
-  context: {
-    allowLocalSimulatorFallback?: boolean;
-    appleSimulatorAppTarget?: string;
-  },
-): Promise<DeviceInfo | undefined> {
-  const appTarget = context.appleSimulatorAppTarget?.trim();
-  if (!appTarget || hasExplicitAppleDeviceSelector(selector)) return undefined;
-  if (context.allowLocalSimulatorFallback === false) return undefined;
-
-  const bootedSimulators = devices.filter(
-    (device) =>
-      matchesDeviceSelector(device, selector) &&
-      isIosFamily(device) &&
-      device.kind === 'simulator' &&
-      device.booted === true,
-  );
-  if (bootedSimulators.length < 2) return undefined;
-
-  const { findIosSimulatorInstalledApp } = await import('../platforms/apple/core/apps.ts');
-  const matches = (
-    await Promise.all(
-      bootedSimulators.map(async (device) =>
-        (await findIosSimulatorInstalledApp(device, appTarget)) ? device : undefined,
-      ),
-    )
-  ).filter((device): device is DeviceInfo => device !== undefined);
-
-  if (matches.length === 1) return matches[0];
-
-  if (matches.length === 0) {
-    throw new AppError('APP_NOT_INSTALLED', `No booted iOS simulator has ${appTarget} installed`, {
-      appTarget,
-      ...deviceCandidateDetails(bootedSimulators),
-      hint: 'Install the app on a booted simulator, or pass --udid to select the intended device explicitly.',
-    });
-  }
-
-  throw new AppError(
-    'AMBIGUOUS_MATCH',
-    `Multiple booted iOS simulators have ${appTarget} installed`,
-    {
-      appTarget,
-      ...deviceCandidateDetails(matches),
-      hint: 'Pass --udid to select the intended simulator explicitly.',
-    },
-  );
-}
-
-/**
- * The device-domain candidate list. Keyed `devices`, not `candidates`: the find
- * handler's element matches own that key with an incompatible shape
- * (src/utils/error-candidates.ts).
- */
-function deviceCandidateDetails(devices: DeviceInfo[]) {
-  return {
-    devices: devices.map((device) => ({ id: device.id, name: device.name })),
-    retrySelectors: devices.slice(0, 10).map((device) => ({
-      flag: '--udid' as const,
-      value: device.id,
-    })),
-  };
-}
-
 function canFallbackAfterAppleDeviceNotFound(
   error: unknown,
   selector: AppleDeviceSelector,
 ): boolean {
   return (
-    !hasExplicitAppleDeviceSelector(selector) &&
+    !hasExplicitDeviceIdentitySelector(selector) &&
     error instanceof AppError &&
     error.code === 'DEVICE_NOT_FOUND'
   );
@@ -144,15 +80,11 @@ function shouldUseAppleSimulatorFallback(
   selected: DeviceInfo | undefined,
 ): boolean {
   return (
-    !hasExplicitAppleDeviceSelector(selector) &&
+    !hasExplicitDeviceIdentitySelector(selector) &&
     (!selector.platform || selector.platform === 'apple' || selector.platform === 'ios') &&
     selector.target !== 'desktop' &&
     (!selected || selected.kind === 'device')
   );
-}
-
-function hasExplicitAppleDeviceSelector(selector: AppleDeviceSelector): boolean {
-  return hasExplicitDeviceIdentitySelector(selector);
 }
 
 export async function resolveTargetDevice(
@@ -187,18 +119,14 @@ export async function resolveTargetDeviceSelection(
       }
       const inventory = await readDeviceInventory(inventoryRequest);
       const devices = [...inventory.devices];
-      const resolver = await loadDeviceSelectionResolver();
 
-      if (shouldUseAppleResolution(selector)) {
-        const selection = await resolveAppleDeviceSelection(
+      if (isApplePlatform(selector.platform) && inventory.source === 'local') {
+        const selection = await resolveLocalAppleDeviceSelection(
           devices,
           selector as AppleDeviceSelector,
           {
             simulatorSetPath: iosSimulatorSetPath,
-            allowLocalSimulatorFallback: inventory.source === 'local',
             appleSimulatorAppTarget: options.appleSimulatorAppTarget,
-            source: inventory.source,
-            resolver,
           },
         );
         return cacheResolvedTargetDevice(cacheKey, selection);
@@ -206,7 +134,7 @@ export async function resolveTargetDeviceSelection(
 
       return cacheResolvedTargetDevice(
         cacheKey,
-        await resolver.resolveInventoryDeviceSelection({
+        await resolveInventorySelection({
           devices,
           selector,
           source: inventory.source,
@@ -217,74 +145,42 @@ export async function resolveTargetDeviceSelection(
   );
 }
 
-async function resolveAppleDeviceSelection(
+async function resolveLocalAppleDeviceSelection(
   devices: DeviceInfo[],
   selector: AppleDeviceSelector,
   context: {
     simulatorSetPath?: string;
-    allowLocalSimulatorFallback?: boolean;
     appleSimulatorAppTarget?: string;
-    source: 'local' | 'provider';
-    resolver: DeviceSelectionResolver;
   },
 ): Promise<DeviceSelectionResult> {
-  if (context.source === 'provider') {
-    return await context.resolver.resolveInventoryDeviceSelection({
+  let selection: DeviceSelectionResult | undefined;
+  try {
+    selection = await resolveInventorySelection({
       devices,
       selector,
-      source: 'provider',
+      source: 'local',
+      appleSimulatorAppTarget: context.appleSimulatorAppTarget,
     });
-  }
-
-  const appMatchedSimulator = await findBootedAppleSimulatorWithApp(devices, selector, context);
-  if (appMatchedSimulator) {
-    return await buildAppleDeviceSelection(appMatchedSimulator, devices, selector, context);
-  }
-
-  const selected = await resolveAppleInventoryCandidate(devices, selector, context);
-  const simulatorFallback = await resolveAppleSimulatorFallback(selector, context, selected);
-  if (simulatorFallback) return simulatorFallback;
-  if (selected) return await buildAppleDeviceSelection(selected, devices, selector, context);
-  throw new AppError('DEVICE_NOT_FOUND', 'No devices found', { selector });
-}
-
-async function resolveAppleInventoryCandidate(
-  devices: DeviceInfo[],
-  selector: AppleDeviceSelector,
-  context: {
-    source: 'local' | 'provider';
-    resolver: DeviceSelectionResolver;
-  },
-): Promise<DeviceInfo | undefined> {
-  try {
-    return (
-      await context.resolver.resolveInventoryDeviceSelection({
-        devices,
-        selector,
-        source: context.source,
-      })
-    ).device;
   } catch (error) {
-    if (canFallbackAfterAppleDeviceNotFound(error, selector)) return undefined;
-    throw error;
+    if (!canFallbackAfterAppleDeviceNotFound(error, selector)) throw error;
   }
+
+  const simulatorFallback = await resolveAppleSimulatorFallback(
+    selector,
+    context,
+    selection?.device,
+  );
+  if (simulatorFallback) return simulatorFallback;
+  if (selection) return selection;
+  throw new AppError('DEVICE_NOT_FOUND', 'No devices found', { selector });
 }
 
 async function resolveAppleSimulatorFallback(
   selector: AppleDeviceSelector,
-  context: {
-    simulatorSetPath?: string;
-    allowLocalSimulatorFallback?: boolean;
-    resolver: DeviceSelectionResolver;
-  },
+  context: { simulatorSetPath?: string },
   selected: DeviceInfo | undefined,
 ): Promise<DeviceSelectionResult | undefined> {
-  if (
-    context.allowLocalSimulatorFallback === false ||
-    !shouldUseAppleSimulatorFallback(selector, selected)
-  ) {
-    return undefined;
-  }
+  if (!shouldUseAppleSimulatorFallback(selector, selected)) return undefined;
   try {
     const localDevices = await listLocalDeviceInventory({
       platform: selector.platform ?? 'ios',
@@ -292,7 +188,7 @@ async function resolveAppleSimulatorFallback(
       iosSimulatorSetPath: context.simulatorSetPath,
       kind: 'simulator',
     });
-    return await context.resolver.resolveInventoryDeviceSelection({
+    return await resolveInventorySelection({
       devices: localDevices,
       selector,
       source: 'local',
@@ -301,23 +197,6 @@ async function resolveAppleSimulatorFallback(
     if (shouldPropagateDeviceInventoryProbeError(error)) throw error;
     return undefined;
   }
-}
-
-async function buildAppleDeviceSelection(
-  device: DeviceInfo,
-  devices: DeviceInfo[],
-  selector: AppleDeviceSelector,
-  context: {
-    source: 'local' | 'provider';
-    resolver: DeviceSelectionResolver;
-  },
-): Promise<DeviceSelectionResult> {
-  return await context.resolver.resolveInventoryDeviceSelection({
-    devices,
-    selector,
-    source: context.source,
-    selectedDevice: device,
-  });
 }
 
 export function buildDeviceInventoryRequestFromFlags(
@@ -356,20 +235,6 @@ export function buildDeviceInventoryRequestFromFlags(
 export async function withResolveTargetDeviceCacheScope<T>(task: () => Promise<T>): Promise<T> {
   if (resolveTargetDeviceCacheScope.getStore()) return await task();
   return await resolveTargetDeviceCacheScope.run(new Map(), task);
-}
-
-function isAppleResolutionSelector(selector: {
-  platform?: PlatformSelector;
-  target?: DeviceTarget;
-}): boolean {
-  return isApplePlatform(selector.platform);
-}
-
-function shouldUseAppleResolution(selector: {
-  platform?: PlatformSelector;
-  target?: DeviceTarget;
-}): boolean {
-  return isAppleResolutionSelector(selector);
 }
 
 function readResolveTargetDeviceCache(cacheKey: string): DeviceSelectionResult | undefined {

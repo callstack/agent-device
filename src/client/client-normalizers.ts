@@ -229,44 +229,40 @@ export function normalizeOpenDevice(
   };
 }
 
+const DEVICE_SELECTION_REASONS: readonly DeviceSelectionMetadata['reason'][] = [
+  'explicit-selector',
+  'existing-session',
+  'single-booted-local',
+  'single-bootable-local',
+  'single-app-installed-local',
+  'preferred-local',
+  'single-provider-device',
+];
+
+const DEVICE_SELECTION_SOURCES: readonly DeviceSelectionMetadata['source'][] = [
+  'session',
+  'local',
+  'provider',
+];
+
 export function normalizeDeviceSelection(value: unknown): DeviceSelectionMetadata | undefined {
   if (!isRecord(value)) return undefined;
-  const reason = value.reason;
-  const source = value.source;
-  const candidateCount = value.candidateCount;
+  const { reason, source, candidateCount, bootOccurred } = value;
   if (
-    ![
-      'explicit-selector',
-      'existing-session',
-      'single-booted-local',
-      'single-bootable-local',
-      'preferred-local',
-      'single-provider-device',
-    ].includes(reason as string) ||
-    !['session', 'local', 'provider'].includes(source as string) ||
+    !DEVICE_SELECTION_REASONS.includes(reason as DeviceSelectionMetadata['reason']) ||
+    !DEVICE_SELECTION_SOURCES.includes(source as DeviceSelectionMetadata['source']) ||
     typeof candidateCount !== 'number' ||
     !Number.isInteger(candidateCount) ||
     candidateCount < 0 ||
-    typeof value.booted !== 'boolean' ||
-    typeof value.bootOccurred !== 'boolean'
+    typeof bootOccurred !== 'boolean'
   ) {
     return undefined;
   }
-  const retrySelectors = Array.isArray(value.retrySelectors)
-    ? value.retrySelectors.filter(
-        (selector): selector is { flag: '--device' | '--serial' | '--udid'; value: string } =>
-          isRecord(selector) &&
-          ['--device', '--serial', '--udid'].includes(selector.flag as string) &&
-          typeof selector.value === 'string',
-      )
-    : [];
   return {
     reason: reason as DeviceSelectionMetadata['reason'],
     source: source as DeviceSelectionMetadata['source'],
     candidateCount,
-    booted: value.booted,
-    bootOccurred: value.bootOccurred,
-    ...(retrySelectors.length > 0 ? { retrySelectors } : {}),
+    bootOccurred,
   };
 }
 

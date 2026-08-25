@@ -6,22 +6,14 @@ import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
+  const { selectionFromResolveTargetDevice } =
+    await import('../../__tests__/device-selection-stub.ts');
   const resolveTargetDevice = vi.fn();
   return {
     ...actual,
     dispatchCommand: vi.fn(),
     resolveTargetDevice,
-    resolveTargetDeviceSelection: vi.fn(async (...args: unknown[]) => {
-      const device = await resolveTargetDevice(...args);
-      return {
-        device,
-        reason: 'explicit-selector',
-        source: 'local',
-        candidateCount: 1,
-        booted: device.booted,
-        bootOccurred: false,
-      };
-    }),
+    resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(resolveTargetDevice)),
   };
 });
 vi.mock('../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));

@@ -1,5 +1,5 @@
 import type { PlatformGatedProviderResolverKey } from '@agent-device/contracts/platform';
-import { resolveTargetDeviceSelection } from '../core/dispatch-resolve.ts';
+import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
 import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
 import { tryGetPlugin } from '../core/platform-plugin-registry.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../platforms/android/adb-executor.ts';
@@ -378,7 +378,7 @@ async function resolveProviderTargetDevice(req: DaemonRequest): Promise<DeviceIn
     req.command === 'open'
       ? buildOpenTargetDeviceResolutionOptions(req.positionals?.[0])
       : undefined;
-  return (await resolveTargetDeviceSelection(req.flags ?? {}, options)).device;
+  return await resolveTargetDevice(req.flags ?? {}, options);
 }
 
 async function requestPlatformProviderScopeWrappers(

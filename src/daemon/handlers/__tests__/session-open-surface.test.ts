@@ -72,7 +72,6 @@ test('buildOpenResult exposes typed device-selection evidence once at response l
       reason: 'single-booted-local',
       source: 'local',
       candidateCount: 1,
-      booted: true,
       bootOccurred: false,
     },
   });
@@ -81,7 +80,6 @@ test('buildOpenResult exposes typed device-selection evidence once at response l
     reason: 'single-booted-local',
     source: 'local',
     candidateCount: 1,
-    booted: true,
     bootOccurred: false,
   });
 });

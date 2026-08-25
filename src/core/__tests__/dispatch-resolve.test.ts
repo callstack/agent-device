@@ -195,6 +195,30 @@ test('resolveTargetDevice selects the unique booted simulator with the requested
   );
 });
 
+test('app-narrowed selection reports its own typed provenance, not a generic local reason', async () => {
+  // Two booted simulators, the app installed on exactly one: the resolver owns
+  // the narrowing, so the metadata must say so instead of `preferred-local`
+  // computed against the unnarrowed inventory.
+  mockListAppleDevices.mockResolvedValue([bootedSimulator, secondBootedSimulator]);
+  mockFindIosSimulatorInstalledApp.mockImplementation(async (device) =>
+    device.id === secondBootedSimulator.id ? 'com.example.demo' : undefined,
+  );
+
+  const selection = await withTestDeviceInventory(
+    { local: async (request) => await mockListAppleDevices(request) },
+    async () =>
+      await resolveTargetDeviceSelectionInContext(
+        { platform: 'ios' },
+        { appleSimulatorAppTarget: 'com.example.demo' },
+      ),
+  );
+
+  assert.equal(selection.device.id, secondBootedSimulator.id);
+  assert.equal(selection.reason, 'single-app-installed-local');
+  assert.equal(selection.source, 'local');
+  assert.equal(selection.candidateCount, 1);
+});
+
 test('resolveTargetDevice leaves platform-less static app selection to normal cross-platform resolution', async () => {
   // One booted device: cross-platform resolution answers without probing simulators for the app.
   const result = await withDeviceInventoryProvider(

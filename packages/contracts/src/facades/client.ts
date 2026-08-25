@@ -13,7 +13,6 @@ export type {
   AppTriggerEventOptions,
   DeviceSelectionMetadata,
   DeviceSelectionReason,
-  DeviceSelectionRetrySelector,
   DeviceSelectionSource,
   MaterializationReleaseOptions,
   MaterializationReleaseResult,

@@ -53,7 +53,6 @@ describe('openCliOutput', () => {
         reason: 'single-booted-local',
         source: 'local',
         candidateCount: 2,
-        booted: true,
         bootOccurred: false,
       },
       identifiers: { session: 'selected' },
@@ -64,7 +63,6 @@ describe('openCliOutput', () => {
         reason: 'single-booted-local',
         source: 'local',
         candidateCount: 2,
-        booted: true,
         bootOccurred: false,
       },
     });

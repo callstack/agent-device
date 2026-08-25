@@ -85,16 +85,8 @@ function selectionResponseData(
   selection: DeviceSelectionResult | undefined,
 ): Record<string, unknown> {
   if (!selection) return {};
-  return {
-    selection: {
-      reason: selection.reason,
-      source: selection.source,
-      candidateCount: selection.candidateCount,
-      booted: selection.booted,
-      bootOccurred: selection.bootOccurred,
-      ...(selection.retrySelectors ? { retrySelectors: selection.retrySelectors } : {}),
-    },
-  };
+  const { device: _device, ...metadata } = selection;
+  return { selection: metadata };
 }
 
 export function buildNextOpenSession(params: {

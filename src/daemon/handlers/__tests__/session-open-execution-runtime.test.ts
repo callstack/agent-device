@@ -4,31 +4,17 @@ import path from 'node:path';
 import type { DaemonRequest } from '../../types.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
-const { mockResolveTargetDevice, mockResolveTargetDeviceSelection } = vi.hoisted(() => {
-  const resolveTargetDevice = vi.fn();
-  return {
-    mockResolveTargetDevice: resolveTargetDevice,
-    mockResolveTargetDeviceSelection: vi.fn(async (...args: any[]) => {
-      const device = await resolveTargetDevice(...args);
-      return {
-        device,
-        reason: 'explicit-selector',
-        source: 'local',
-        candidateCount: 1,
-        booted: device?.booted === true,
-        bootOccurred: false,
-      };
-    }),
-  };
-});
+const mockResolveTargetDevice = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
+  const { selectionFromResolveTargetDevice } =
+    await import('../../__tests__/device-selection-stub.ts');
   return {
     ...actual,
     dispatchCommand: vi.fn(async () => ({})),
     resolveTargetDevice: mockResolveTargetDevice,
-    resolveTargetDeviceSelection: mockResolveTargetDeviceSelection,
+    resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(mockResolveTargetDevice)),
   };
 });
 vi.mock('../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));

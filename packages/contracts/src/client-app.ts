@@ -20,26 +20,19 @@ export type DeviceSelectionReason =
   | 'existing-session'
   | 'single-booted-local'
   | 'single-bootable-local'
+  | 'single-app-installed-local'
   | 'preferred-local'
   | 'single-provider-device';
 
 export type DeviceSelectionSource = 'session' | 'local' | 'provider';
-
-export type DeviceSelectionRetrySelector = {
-  flag: '--device' | '--serial' | '--udid';
-  value: string;
-};
 
 /** Deterministic device-selection evidence shared by daemon responses and the published client. */
 export type DeviceSelectionMetadata = {
   reason: DeviceSelectionReason;
   source: DeviceSelectionSource;
   candidateCount: number;
-  /** Whether the selected inventory record was already booted at resolution time. */
-  booted: boolean;
-  /** Whether the selected lifecycle prepared a previously stopped local target. */
+  /** Whether this request booted a previously stopped local virtual target during open. */
   bootOccurred: boolean;
-  retrySelectors?: DeviceSelectionRetrySelector[];
 };
 
 export type AppInstallOptions = AgentDeviceRequestOverrides &

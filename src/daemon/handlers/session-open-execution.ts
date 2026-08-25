@@ -4,7 +4,7 @@ import {
   openApplicationWithRuntimeHintClearUse,
 } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import {
-  markSelectionBootedAfterPreparation,
+  markSelectionBootOccurred,
   type DeviceSelectionResult,
 } from '../../core/device-selection-resolver.ts';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
@@ -204,7 +204,7 @@ export async function completeOpenCommand(params: {
   });
   sessionAppBundleId = outcome.appBundleId ?? sessionAppBundleId;
   const timing: OpenTiming = { ...outcome.timing };
-  const preparedSelection = markSelectionBootedAfterPreparation(selection);
+  const preparedSelection = markSelectionBootOccurred(selection);
   const startupSample = openTarget
     ? buildStartupPerfSample(openStartedAtMs, openTarget, sessionAppBundleId)
     : undefined;

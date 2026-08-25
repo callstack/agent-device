@@ -72,7 +72,6 @@ test('MCP open keeps device-selection evidence in structured content and JSON te
       reason: 'single-booted-local',
       source: 'local',
       candidateCount: 2,
-      booted: true,
       bootOccurred: false,
     },
   };
