@@ -8,13 +8,14 @@ import {
   formatDaemonCodeSignature,
   walkDaemonCodeGraph,
   type DaemonCodeFileStamp,
+  type DaemonCodeGraphWalk,
 } from './code-signature.ts';
 
 // Bump when the stored shape changes; old documents then miss instead of
 // parsing wrong. Only this module needs the guard: `code-signature.ts` is
 // itself inside the graph it walks, so changing the WALK invalidates every
 // document through the ordinary stamp comparison.
-const CACHE_FORMAT_VERSION = 1;
+const CACHE_FORMAT_VERSION = 2;
 // Per-user, and readable only by that user: `os.tmpdir()` is per-user on
 // macOS but the shared `/tmp` on Linux, where a single directory would mean
 // whichever uid ran first owns it and every other uid's publish fails EACCES
@@ -27,6 +28,7 @@ const CACHE_DOCUMENT_MODE = 0o600;
 type CacheDocument = {
   version: typeof CACHE_FORMAT_VERSION;
   files: DaemonCodeFileStamp[];
+  absent: string[];
 };
 
 /**
@@ -36,61 +38,66 @@ type CacheDocument = {
  * its edges means reading all ~800 files: ~30ms of a ~245ms invocation, for a
  * graph that is identical on every invocation but the first one after an edit.
  *
- * So the walk is cached and revalidated by `statSync` alone. For an edit to a
- * file ALREADY in the graph that is exactly as strong as the walk it
- * replaces: the signature itself treats a file's `size:mtime` as the stand-in
- * for its contents (`DaemonCodeFileStamp`), so a still-matching pair means an
- * unchanged file, therefore an unchanged specifier list, therefore an
- * unchanged graph. It is deliberately weaker in one direction, because the
- * set of files to revalidate is read out of the document: a module that JOINS
- * the graph without touching any recorded file — an import whose target did
- * not exist when the document was published and is created afterwards — stays
- * invisible until some recorded file changes. The cost is a source-checkout
- * dev loop reusing a daemon one edit stale; the next edit to any graph file
- * republishes.
+ * So the walk is cached and revalidated by `statSync` alone, which is exactly
+ * as strong as the walk it replaces because a document records the walk's
+ * whole input, not just its output. Every recorded file still matching its
+ * `size:mtime` means an unchanged file — that pair is what the signature
+ * already treats as the stand-in for contents (`DaemonCodeFileStamp`) —
+ * therefore an unchanged specifier list; and every path in `absent` still
+ * being absent means each of those specifiers still resolves where it did
+ * (`DaemonCodeGraphWalk`). Unchanged specifiers resolving unchanged is an
+ * unchanged graph, so re-walking could only rediscover the recorded stamps.
  *
- * Any mismatched, vanished, or newly non-file entry, and any unreadable,
- * malformed, foreign, or entry-less cache document, falls back to the full
- * walk, which republishes. The cache is a best-effort artifact under
- * `os.tmpdir()`, like the Swift toolchain cache: failing to read or write one
- * only costs the walk.
+ * Any mismatched, vanished, or newly non-file entry, any path recorded as
+ * absent that now exists, and any unreadable, malformed, foreign, or
+ * entry-less cache document, falls back to the full walk, which republishes.
+ * The cache is a best-effort artifact under `os.tmpdir()`, like the Swift
+ * toolchain cache: failing to read or write one only costs the walk.
  */
 export function resolveCachedDaemonCodeSignature(entryPath: string, root: string): string {
   const cachePath = resolveCachePath(entryPath, root);
   const entryLabel = buildDaemonCodeFileLabel(root, entryPath);
-  const validated = readValidatedStamps(cachePath, root, entryLabel);
-  if (validated) return formatDaemonCodeSignature(validated);
+  const validated = readValidatedWalk(cachePath, root, entryLabel);
+  if (validated) return formatDaemonCodeSignature(validated.files);
 
-  let stamps: DaemonCodeFileStamp[];
+  let walk: DaemonCodeGraphWalk;
   try {
-    stamps = walkDaemonCodeGraph(entryPath, root);
+    walk = walkDaemonCodeGraph(entryPath, root);
   } catch {
     return 'unknown';
   }
-  if (describesEntry(stamps, entryLabel)) publishStamps(cachePath, stamps);
-  return formatDaemonCodeSignature(stamps);
+  if (describesEntry(walk.files, entryLabel)) publishWalk(cachePath, walk);
+  return formatDaemonCodeSignature(walk.files);
 }
 
-/** The recorded stamps when every one of them still describes the file on disk. */
-function readValidatedStamps(
+/** The recorded walk when the filesystem still answers every probe the way it did. */
+function readValidatedWalk(
   cachePath: string,
   root: string,
   entryLabel: string,
-): DaemonCodeFileStamp[] | undefined {
-  const stamps = readCachedStamps(cachePath);
-  if (!stamps || !describesEntry(stamps, entryLabel)) return undefined;
-  for (const [label, size, mtimeMs] of stamps) {
-    let stat: fs.Stats;
-    try {
-      stat = fs.statSync(path.resolve(root, label));
-    } catch {
-      return undefined;
-    }
-    if (!stat.isFile() || stat.size !== size || Math.trunc(stat.mtimeMs) !== mtimeMs) {
+): DaemonCodeGraphWalk | undefined {
+  const walk = readCachedWalk(cachePath);
+  if (!walk || !describesEntry(walk.files, entryLabel)) return undefined;
+  for (const [label, size, mtimeMs] of walk.files) {
+    const stat = statCandidate(path.resolve(root, label));
+    if (!stat?.isFile() || stat.size !== size || Math.trunc(stat.mtimeMs) !== mtimeMs) {
       return undefined;
     }
   }
-  return stamps;
+  for (const label of walk.absentPaths) {
+    // A directory is still a resolution miss, so only a FILE appearing here
+    // moves an edge; that is the same question `walkDaemonCodeGraph` asked.
+    if (statCandidate(path.resolve(root, label))?.isFile()) return undefined;
+  }
+  return walk;
+}
+
+function statCandidate(candidatePath: string): fs.Stats | undefined {
+  try {
+    return fs.statSync(candidatePath);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -105,20 +112,23 @@ function describesEntry(stamps: readonly DaemonCodeFileStamp[], entryLabel: stri
   return stamps.some(([label]) => label === entryLabel);
 }
 
-function readCachedStamps(cachePath: string): DaemonCodeFileStamp[] | undefined {
-  const entries = readCachedEntries(cachePath);
-  if (!entries) return undefined;
-  const stamps: DaemonCodeFileStamp[] = [];
-  for (const entry of entries) {
+function readCachedWalk(cachePath: string): DaemonCodeGraphWalk | undefined {
+  const document = readCachedDocument(cachePath);
+  if (!document) return undefined;
+  const files: DaemonCodeFileStamp[] = [];
+  for (const entry of document.files) {
     const stamp = readStamp(entry);
     if (!stamp) return undefined;
-    stamps.push(stamp);
+    files.push(stamp);
   }
-  return stamps;
+  if (!document.absent.every((label) => typeof label === 'string')) return undefined;
+  return { files, absentPaths: document.absent as string[] };
 }
 
-/** The document's raw entries, or `undefined` for anything this format cannot own. */
-function readCachedEntries(cachePath: string): unknown[] | undefined {
+/** The document's raw arrays, or `undefined` for anything this format cannot own. */
+function readCachedDocument(
+  cachePath: string,
+): { files: unknown[]; absent: unknown[] } | undefined {
   const contents = readOwnedDocument(cachePath);
   if (contents === undefined) return undefined;
   let parsed: unknown;
@@ -130,7 +140,8 @@ function readCachedEntries(cachePath: string): unknown[] | undefined {
   if (!parsed || typeof parsed !== 'object') return undefined;
   const document = parsed as Partial<CacheDocument>;
   if (document.version !== CACHE_FORMAT_VERSION) return undefined;
-  return Array.isArray(document.files) ? document.files : undefined;
+  if (!Array.isArray(document.files) || !Array.isArray(document.absent)) return undefined;
+  return { files: document.files, absent: document.absent };
 }
 
 /** The document's text, but only when this user is the one who wrote it. */
@@ -164,8 +175,12 @@ function readStamp(entry: unknown): DaemonCodeFileStamp | undefined {
   return [label, size, mtimeMs];
 }
 
-function publishStamps(cachePath: string, files: DaemonCodeFileStamp[]): void {
-  const document: CacheDocument = { version: CACHE_FORMAT_VERSION, files };
+function publishWalk(cachePath: string, walk: DaemonCodeGraphWalk): void {
+  const document: CacheDocument = {
+    version: CACHE_FORMAT_VERSION,
+    files: [...walk.files],
+    absent: [...walk.absentPaths],
+  };
   try {
     fs.mkdirSync(path.dirname(cachePath), { recursive: true, mode: CACHE_DIRECTORY_MODE });
     publishFileSync({

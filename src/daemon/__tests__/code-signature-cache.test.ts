@@ -17,11 +17,21 @@ afterEach(() => {
  * buckets on `size:mtime`, not content (see the sibling walk tests), so a
  * same-length rewrite can land in the same bucket on a fast filesystem.
  *
+ * `dependency` names how the entry imports that file: extension-full by
+ * default, so that resolution has exactly one candidate, and extensionless for
+ * the tests about which candidate wins.
+ *
  * The cache's temporary directory is redirected inside the fixture, so the
  * documents a test sees are exactly the ones its own fixture published — never
  * a document a parallel worker owns in the run's shared `TMPDIR`.
  */
-function writeGraphFixture(prefix: string): {
+function writeGraphFixture(
+  prefix: string,
+  dependency: { specifier: string; fileName: string } = {
+    specifier: './dep.ts',
+    fileName: 'dep.ts',
+  },
+): {
   root: string;
   entryPath: string;
   depPath: string;
@@ -29,9 +39,9 @@ function writeGraphFixture(prefix: string): {
 } {
   const root = mkdtempForTestSync(prefix);
   const entryPath = path.join(root, 'src', 'daemon.ts');
-  const depPath = path.join(root, 'src', 'dep.ts');
+  const depPath = path.join(root, 'src', dependency.fileName);
   fs.mkdirSync(path.dirname(entryPath), { recursive: true });
-  fs.writeFileSync(entryPath, "import './dep.ts';\n", 'utf8');
+  fs.writeFileSync(entryPath, `import '${dependency.specifier}';\n`, 'utf8');
   fs.writeFileSync(depPath, 'export const dep = 1;\n', 'utf8');
   const cacheHome = path.join(root, 'cache-home');
   fs.mkdirSync(cacheHome, { recursive: true });
@@ -114,6 +124,76 @@ test('resolveCachedDaemonCodeSignature discovers an import edge added after the 
   }
 });
 
+test('resolveCachedDaemonCodeSignature re-walks when a higher-precedence extension appears', () => {
+  const { root, entryPath } = writeGraphFixture('agent-device-signature-cache-precedence-', {
+    specifier: './dep',
+    fileName: 'dep.js',
+  });
+  try {
+    const initial = resolveCachedDaemonCodeSignature(entryPath, root);
+    assert.equal(initial, computeDaemonCodeSignature(entryPath, root));
+
+    // Resolution probes `.ts` before `.js`, so `./dep` now means this file and
+    // `dep.js` has left the graph — while every file the cache recorded still
+    // stamps identically. A cache that only revalidates recorded stamps hands
+    // back a signature the daemon this client would reuse never reports.
+    fs.writeFileSync(path.join(root, 'src', 'dep.ts'), 'export const dep = 20000;\n', 'utf8');
+
+    const fresh = computeDaemonCodeSignature(entryPath, root);
+    assert.notEqual(fresh, initial);
+    assert.equal(resolveCachedDaemonCodeSignature(entryPath, root), fresh);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resolveCachedDaemonCodeSignature stays warm when a lower-precedence extension appears', () => {
+  const { root, entryPath } = writeGraphFixture('agent-device-signature-cache-behind-', {
+    specifier: './dep',
+    fileName: 'dep.ts',
+  });
+  try {
+    const expected = resolveCachedDaemonCodeSignature(entryPath, root);
+
+    // `.ts` already won, so resolution never probes this far and the graph is
+    // unchanged. Recording candidates BEHIND the winner would spend the whole
+    // point of the cache re-walking edits that cannot move an edge.
+    fs.writeFileSync(path.join(root, 'src', 'dep.js'), 'export const dep = 20000;\n', 'utf8');
+
+    // Uncached first, so the walk this comparison needs is not itself counted
+    // as a read the cached call made.
+    assert.equal(computeDaemonCodeSignature(entryPath, root), expected);
+
+    const readPaths = spyOnReads();
+    assert.equal(resolveCachedDaemonCodeSignature(entryPath, root), expected);
+    assert.deepEqual(
+      readPaths().filter((target) => target.startsWith(root)),
+      [],
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resolveCachedDaemonCodeSignature re-walks when a specifier that resolved to nothing gains a target', () => {
+  const { root, entryPath } = writeGraphFixture('agent-device-signature-cache-appears-');
+  try {
+    fs.appendFileSync(entryPath, "import './later';\n", 'utf8');
+    const initial = resolveCachedDaemonCodeSignature(entryPath, root);
+    assert.match(initial, /^graph:2:/);
+
+    // The entry is not rewritten to add this edge: the edge was always there,
+    // and only its target was missing when the document was published.
+    fs.writeFileSync(path.join(root, 'src', 'later.ts'), 'export const later = 1;\n', 'utf8');
+
+    const grown = resolveCachedDaemonCodeSignature(entryPath, root);
+    assert.match(grown, /^graph:3:/);
+    assert.equal(grown, computeDaemonCodeSignature(entryPath, root));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('resolveCachedDaemonCodeSignature re-walks when a cached graph file is deleted', () => {
   const { root, entryPath, depPath } = writeGraphFixture('agent-device-signature-cache-delete-');
   try {
@@ -137,10 +217,12 @@ test('resolveCachedDaemonCodeSignature re-walks when a cached graph file is dele
 // signature, because a wrong signature restarts a healthy daemon on every
 // invocation.
 const UNUSABLE_CACHE_DOCUMENTS = [
-  '{"version":1,"files":[["src/dep.ts",12,34]]',
-  '{"version":1,"files":[["src/dep.ts"]]}',
-  '{"version":99,"files":[]}',
-  '{"version":1,"files":[]}',
+  '{"version":2,"files":[["src/dep.ts",12,34]],"absent":[]',
+  '{"version":2,"files":[["src/dep.ts"]],"absent":[]}',
+  '{"version":2,"files":[["src/daemon.ts",1,2]]}',
+  '{"version":2,"files":[["src/daemon.ts",1,2]],"absent":[7]}',
+  '{"version":99,"files":[],"absent":[]}',
+  '{"version":2,"files":[],"absent":[]}',
   'null',
 ];
 
@@ -162,7 +244,7 @@ for (const document of UNUSABLE_CACHE_DOCUMENTS) {
 
 test('resolveCachedDaemonCodeSignature republishes over a zero-entry document instead of restarting the daemon forever', () => {
   const { root, entryPath, cacheHome } = writeGraphFixture('agent-device-signature-cache-empty-');
-  const emptyDocument = '{"version":1,"files":[]}';
+  const emptyDocument = '{"version":2,"files":[],"absent":[]}';
   try {
     const expected = resolveCachedDaemonCodeSignature(entryPath, root);
     const documents = listCacheDocuments(cacheHome);
@@ -197,10 +279,11 @@ test('resolveCachedDaemonCodeSignature refuses a document that omits the entry i
     for (const document of documents) {
       const parsed = JSON.parse(fs.readFileSync(document, 'utf8')) as {
         files: [string, number, number][];
+        absent: string[];
       };
       const files = parsed.files.filter(([label]) => label !== path.join('src', 'daemon.ts'));
       assert.equal(files.length, parsed.files.length - 1);
-      fs.writeFileSync(document, JSON.stringify({ version: 1, files }), 'utf8');
+      fs.writeFileSync(document, JSON.stringify({ ...parsed, files }), 'utf8');
     }
 
     assert.equal(resolveCachedDaemonCodeSignature(entryPath, root), expected);

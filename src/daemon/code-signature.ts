@@ -26,6 +26,25 @@ const RESOLVABLE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'] as 
  */
 export type DaemonCodeFileStamp = readonly [label: string, size: number, mtimeMs: number];
 
+/**
+ * One walk of the graph: the stamps that make up its signature, plus the paths
+ * whose ABSENCE that shape depended on.
+ *
+ * A file OUTSIDE the graph can still decide the graph. `./dep` means `dep.js`
+ * only for as long as `dep.ts` does not exist, because resolution probes the
+ * extensions in `RESOLVABLE_EXTENSIONS` order — and a specifier that resolves
+ * to nothing today is an edge whose target merely has not been written yet.
+ * `absentPaths` therefore carries every candidate probed and missed ahead of a
+ * specifier's winner, and every candidate of a specifier with no winner at
+ * all: creating any one of them redirects or adds an edge. Together with the
+ * stamps it is the complete input to this walk, which is what lets
+ * `code-signature-cache.ts` replay the result from `statSync` alone.
+ */
+export type DaemonCodeGraphWalk = {
+  readonly files: readonly DaemonCodeFileStamp[];
+  readonly absentPaths: readonly string[];
+};
+
 export function resolveDaemonCodeSignature(): string {
   const entryPath = process.argv[1];
   if (!entryPath) return 'unknown';
@@ -37,7 +56,7 @@ export function computeDaemonCodeSignature(
   root: string = findProjectRoot(),
 ): string {
   try {
-    return formatDaemonCodeSignature(walkDaemonCodeGraph(entryPath, root));
+    return formatDaemonCodeSignature(walkDaemonCodeGraph(entryPath, root).files);
   } catch {
     return 'unknown';
   }
@@ -45,14 +64,16 @@ export function computeDaemonCodeSignature(
 
 /**
  * Stamps every module reachable from `entryPath` through relative import
- * specifiers. Throws when the entry itself cannot be read; callers decide
- * whether that is an `'unknown'` signature or a cache miss.
+ * specifiers, and records what every resolution along the way needed to be
+ * missing. Throws when the entry itself cannot be read; callers decide whether
+ * that is an `'unknown'` signature or a cache miss.
  */
-export function walkDaemonCodeGraph(entryPath: string, root: string): DaemonCodeFileStamp[] {
+export function walkDaemonCodeGraph(entryPath: string, root: string): DaemonCodeGraphWalk {
   const normalizedRoot = path.resolve(root);
   const queue = [path.resolve(entryPath)];
   const visited = new Set<string>();
-  const stamps: DaemonCodeFileStamp[] = [];
+  const files: DaemonCodeFileStamp[] = [];
+  const absentPaths = new Set<string>();
 
   while (queue.length > 0) {
     const currentPath = queue.pop();
@@ -62,7 +83,7 @@ export function walkDaemonCodeGraph(entryPath: string, root: string): DaemonCode
     const stat = fs.statSync(currentPath);
     if (!stat.isFile()) continue;
 
-    stamps.push([
+    files.push([
       buildDaemonCodeFileLabel(normalizedRoot, currentPath),
       stat.size,
       Math.trunc(stat.mtimeMs),
@@ -70,14 +91,17 @@ export function walkDaemonCodeGraph(entryPath: string, root: string): DaemonCode
 
     const content = fs.readFileSync(currentPath, 'utf8');
     for (const specifier of collectRelativeImportSpecifiers(content)) {
-      const dependencyPath = resolveRelativeImportPath(currentPath, specifier);
-      if (dependencyPath) {
-        queue.push(dependencyPath);
+      const resolution = resolveRelativeImportPath(currentPath, specifier);
+      for (const missed of resolution.missedCandidates) {
+        absentPaths.add(buildDaemonCodeFileLabel(normalizedRoot, missed));
+      }
+      if (resolution.filePath) {
+        queue.push(resolution.filePath);
       }
     }
   }
 
-  return stamps;
+  return { files, absentPaths: [...absentPaths] };
 }
 
 /**
@@ -111,28 +135,38 @@ function collectRelativeImportSpecifiers(content: string): string[] {
   return [...specifiers];
 }
 
-function resolveRelativeImportPath(fromPath: string, specifier: string): string | null {
+/**
+ * What one specifier resolves to, and what that answer rests on: the
+ * candidates probed and missed AHEAD of the winner. Candidates behind it are
+ * never reached, so creating one of those cannot move the resolution and none
+ * is reported.
+ */
+type ImportResolution = {
+  readonly filePath: string | null;
+  readonly missedCandidates: readonly string[];
+};
+
+function resolveRelativeImportPath(fromPath: string, specifier: string): ImportResolution {
   const basePath = path.resolve(path.dirname(fromPath), specifier);
-  const direct = resolveExistingFile(basePath);
-  if (direct) return direct;
-
-  for (const extension of RESOLVABLE_EXTENSIONS) {
-    const withExtension = resolveExistingFile(`${basePath}${extension}`);
-    if (withExtension) return withExtension;
+  const missedCandidates: string[] = [];
+  for (const candidatePath of resolutionCandidates(basePath)) {
+    if (isExistingFile(candidatePath)) return { filePath: candidatePath, missedCandidates };
+    missedCandidates.push(candidatePath);
   }
-
-  for (const extension of RESOLVABLE_EXTENSIONS) {
-    const indexPath = resolveExistingFile(path.join(basePath, `index${extension}`));
-    if (indexPath) return indexPath;
-  }
-
-  return null;
+  return { filePath: null, missedCandidates };
 }
 
-function resolveExistingFile(candidatePath: string): string | null {
+/** Every path the specifier could name, in the order resolution prefers them. */
+function* resolutionCandidates(basePath: string): Generator<string> {
+  yield basePath;
+  for (const extension of RESOLVABLE_EXTENSIONS) yield `${basePath}${extension}`;
+  for (const extension of RESOLVABLE_EXTENSIONS) yield path.join(basePath, `index${extension}`);
+}
+
+function isExistingFile(candidatePath: string): boolean {
   try {
-    return fs.statSync(candidatePath).isFile() ? candidatePath : null;
+    return fs.statSync(candidatePath).isFile();
   } catch {
-    return null;
+    return false;
   }
 }
