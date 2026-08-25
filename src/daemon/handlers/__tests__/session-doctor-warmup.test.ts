@@ -6,6 +6,7 @@ import {
 } from '../../../platforms/apple/core/runner/runner-client.ts';
 import { isActiveProviderDevice } from '../../../provider-device-runtime.ts';
 import { handleDoctorCommand } from '../session-doctor.ts';
+import { createHostDiagnostics } from '../../../platform-runtime-host-diagnostics.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type { DaemonResponse } from '../../types.ts';
 
@@ -21,14 +22,8 @@ vi.mock('../session-doctor-device.ts', async (importOriginal) => {
     resolveDoctorDeviceForAppCheck: vi.fn(() => undefined),
   };
 });
-vi.mock('../session-doctor-toolchain.ts', () => ({
-  appendToolchainChecks: vi.fn(async () => {}),
-}));
 vi.mock('../session-doctor-app.ts', () => ({
   appendAppChecks: vi.fn(async () => {}),
-}));
-vi.mock('../session-doctor-android.ts', () => ({
-  appendAndroidChecks: vi.fn(async () => {}),
 }));
 vi.mock('../session-doctor-metro.ts', () => ({
   probeMetro: vi.fn(async () => ({ id: 'metro', status: 'pass', summary: 'mocked' })),
@@ -86,6 +81,7 @@ async function runDoctorWithSessionDevice(device: DeviceInfo): Promise<DaemonRes
     },
     sessionName: 'doctor-session',
     sessionStore,
+    hostDiagnostics: createHostDiagnostics(),
   });
 }
 

@@ -25,6 +25,22 @@ describe('platform-execution registry entry gate', () => {
     ).toEqual({ kind: 'none' });
   });
 
+  test('rejects host on a descriptor that keeps a capability bucket', () => {
+    expect(() =>
+      readDeclaredPlatformExecution({
+        name: 'planted',
+        capability: { apple: {}, android: {}, linux: {} },
+        platformExecution: { kind: 'host' },
+      }),
+    ).toThrow(/keeps a capability bucket/);
+  });
+
+  test('accepts host on a descriptor with no capability bucket', () => {
+    expect(
+      readDeclaredPlatformExecution({ name: 'planted', platformExecution: { kind: 'host' } }),
+    ).toEqual({ kind: 'host' });
+  });
+
   test('still rejects a malformed declaration', () => {
     expect(() =>
       readDeclaredPlatformExecution({ name: 'planted', platformExecution: { kind: 'inventory' } }),

@@ -93,6 +93,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/gesture-plan-types',
   '@agent-device/contracts/gesture-runtime',
   '@agent-device/contracts/home-runtime',
+  '@agent-device/contracts/host-diagnostics',
   '@agent-device/contracts/interaction',
   '@agent-device/contracts/interaction-error',
   '@agent-device/contracts/interaction-guarantees',

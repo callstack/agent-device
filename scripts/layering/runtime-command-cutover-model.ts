@@ -88,6 +88,17 @@ export type InventoryCutover = CutoverIdentity &
     singularExecution: Readonly<{ gatewayProof: CutoverCheck }>;
   }>;
 
+/**
+ * A host-diagnostic command (ADR 0019 `host` execution) binds no device runtime either: its
+ * singular-execution proof is the identity of the neutral host-diagnostics surface its handler
+ * must consume, mirroring the inventory shape.
+ */
+export type HostCutover = CutoverIdentity &
+  Readonly<{
+    execution: 'host';
+    singularExecution: Readonly<{ gatewayProof: CutoverCheck }>;
+  }>;
+
 type DeviceRuntimeBase = CutoverIdentity &
   Readonly<{
     execution: 'device-runtime';
@@ -158,7 +169,7 @@ export type DeviceRuntimeCutover = NamedOperationCutover | PatternOperationCutov
  * retired, how its admission is derived, and what makes its execution singular.
  * `cutoverRowDefects` rejects the claims the type system cannot require.
  */
-export type MigratedCommandCutover = InventoryCutover | DeviceRuntimeCutover;
+export type MigratedCommandCutover = InventoryCutover | HostCutover | DeviceRuntimeCutover;
 
 const RETIREMENT_FORMS = [
   'modulePaths',
@@ -216,7 +227,7 @@ export function cutoverRowDefects(row: MigratedCommandCutover): string[] {
 }
 
 function executionDefects(row: MigratedCommandCutover): string[] {
-  if (row.execution === 'inventory') {
+  if (row.execution === 'inventory' || row.execution === 'host') {
     return row.singularExecution?.gatewayProof === undefined
       ? ['declares no singular gateway proof']
       : [];

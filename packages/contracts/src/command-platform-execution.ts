@@ -5,6 +5,13 @@ import { runtimeUseIdentity } from './platform-runtime-use.ts';
 export type CommandPlatformExecution =
   | Readonly<{ kind: 'none' }>
   | Readonly<{ kind: 'legacy' }>
+  /**
+   * Host-scoped diagnostics (ADR 0019): platform families contribute host toolchain and
+   * environment probes through the neutral host-diagnostics surface; the command binds no
+   * device runtime as its own execution shape — any device-runtime leg rides an already
+   * migrated command's declared use.
+   */
+  | Readonly<{ kind: 'host' }>
   | Readonly<{ kind: 'inventory'; use: InventoryUse }>
   | Readonly<{ kind: 'device-runtime'; use: RuntimeUseDeclaration }>
   | Readonly<{
@@ -22,6 +29,7 @@ export function assertCommandPlatformExecution(
   const keys = Object.keys(declaration).sort();
   if (declaration['kind'] === 'none' && sameKeys(keys, ['kind'])) return;
   if (declaration['kind'] === 'legacy' && sameKeys(keys, ['kind'])) return;
+  if (declaration['kind'] === 'host' && sameKeys(keys, ['kind'])) return;
   if (
     declaration['kind'] === 'inventory' &&
     sameKeys(keys, ['kind', 'use']) &&
@@ -103,6 +111,6 @@ function sameKeys(actual: readonly string[], expected: readonly string[]): boole
 
 function invalidPlatformExecution(): TypeError {
   return new TypeError(
-    'Command platform execution must declare exactly one of none, legacy, inventory, or device-runtime',
+    'Command platform execution must declare exactly one of none, legacy, host, inventory, or device-runtime',
   );
 }

@@ -21,7 +21,8 @@ type PlatformExecutionDeclarationSite = {
  * registry-load error and the migration denominator stays machine-readable.
  *
  * `none` with a capability bucket is also rejected: a capability bucket is
- * platform admission, so the command executes platform behavior.
+ * platform admission, so the command executes platform behavior. `host` is held
+ * to the same rule — host-scoped diagnostics carry no per-device admission.
  *
  * This gate sees one descriptor at a time. Platform execution delegated to
  * another command is covered by the CLI-route dominance gate in
@@ -33,13 +34,16 @@ export function readDeclaredPlatformExecution(
   const declared = descriptor.platformExecution;
   if (declared === undefined) {
     throw new TypeError(
-      `Command descriptor "${descriptor.name}" must declare platformExecution (none, legacy, inventory, or device-runtime); there is no registry-entry default`,
+      `Command descriptor "${descriptor.name}" must declare platformExecution (none, legacy, host, inventory, or device-runtime); there is no registry-entry default`,
     );
   }
   assertCommandPlatformExecution(declared);
-  if (declared.kind === 'none' && descriptor.capability !== undefined) {
+  if (
+    (declared.kind === 'none' || declared.kind === 'host') &&
+    descriptor.capability !== undefined
+  ) {
     throw new TypeError(
-      `Command descriptor "${descriptor.name}" declares platformExecution none but keeps a capability bucket; a command with platform admission is not platform-free`,
+      `Command descriptor "${descriptor.name}" declares platformExecution ${declared.kind} but keeps a capability bucket; a command with platform admission is not platform-free`,
     );
   }
   return declared;

@@ -257,11 +257,17 @@ const LINUX_NONE = {};
 //              use. Outside the migration denominator.
 //   `legacy` — unmigrated platform execution. This is the denominator: the
 //              tracker closes when no descriptor declares it.
+//   `host`   — host-scoped diagnostics: platform families contribute host
+//              probes through the neutral host-diagnostics surface; the
+//              descriptor binds no device runtime of its own.
 // The migrated modes (`inventory`, `device-runtime`) are declared inline with
 // the use they name.
 // ---------------------------------------------------------------------------
 const NO_PLATFORM_EXECUTION = { kind: 'none' } as const;
 const LEGACY_PLATFORM_EXECUTION = { kind: 'legacy' } as const;
+// Host-scoped diagnostics (ADR 0019): platform families contribute host probes through the
+// neutral host-diagnostics surface; the descriptor binds no device runtime of its own.
+const HOST_PLATFORM_EXECUTION = { kind: 'host' } as const;
 
 /**
  * The daemon/recording traits every generic-route mutating command shares. The legacy execution
@@ -567,7 +573,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: HOST_PLATFORM_EXECUTION,
   },
   {
     name: 'apps',

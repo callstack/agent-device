@@ -57,9 +57,12 @@ those descriptors or authorize a second local/provider chooser.
   Concrete platform process objects never cross the seam.
 - The migration unit is one command descriptor across its full existing denominator: every inventory
   source or every supported device-runtime cell. A descriptor has exactly one explicitly declared
-  platform-execution shape at every committed state — `none`, legacy, inventory-backed, or
-  device-runtime-backed — and a migrated command has no legacy execution fallback. `none` declares
-  the absence of platform execution and is never a migration target or source.
+  platform-execution shape at every committed state — `none`, legacy, host-diagnostic, inventory-backed,
+  or device-runtime-backed — and a migrated command has no legacy execution fallback. `none` declares
+  the absence of platform execution and is never a migration target or source. `host` declares
+  host-scoped diagnostics: platform families contribute host toolchain and environment probes through
+  the neutral host-diagnostics surface, the command binds no device runtime as its own execution
+  shape, and any device-runtime leg rides an already migrated command's declared use.
 - Broader adoption pauses after the first real slices. Evidence records one decision: continue,
   revise the seam and rerun the checkpoint, or stop with every landed command still coherent.
 - Post-checkpoint units are move-dominated: platform mechanics leave root `src/` for platform

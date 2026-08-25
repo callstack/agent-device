@@ -1,13 +1,16 @@
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import { isIosFamily, publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { emitRequestProgress } from '../../request/progress.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
+import {
+  listLocalDeviceInventory,
+  shouldPropagateDeviceInventoryProbeError,
+} from '../../request/device-inventory-context.ts';
 import { readVersion } from '../../utils/version.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
-import { appendAndroidChecks } from './session-doctor-android.ts';
 import { appendAppChecks, type DoctorAppInventory } from './session-doctor-app.ts';
 import {
   appendDeviceInventoryCheck,
@@ -27,14 +30,12 @@ import {
   sortChecks,
   summarizeDoctorStatus,
 } from './session-doctor-output.ts';
-import { appendToolchainChecks } from './session-doctor-toolchain.ts';
 import type { DoctorOptions } from './session-doctor-types.ts';
 import type { DoctorCheck, DoctorCommandResult } from '@agent-device/contracts/observability';
-import {
-  hasCachedAppleRunnerArtifact,
-  prewarmAppleRunnerCache,
-} from '../../platforms/apple/core/runner/runner-client.ts';
-import { appendWebBrowserLifecycleCheck } from './session-doctor-web.ts';
+import type {
+  HostDiagnostics,
+  HostDiagnosticsContext,
+} from '@agent-device/contracts/host-diagnostics';
 import { resolveAndroidSerialAllowlist } from '../../utils/device-isolation.ts';
 import type { InstalledAppInfo } from '@agent-device/contracts/app-inventory-runtime';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
@@ -46,12 +47,15 @@ export async function handleDoctorCommand(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
-  androidAdbExecutor?: AndroidAdbExecutor;
+  /** Opaque provider-scope transport override; the android family narrows it back. */
+  androidAdbExecutor?: unknown;
+  hostDiagnostics?: HostDiagnostics;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse | null> {
   const { req, sessionName, sessionStore, androidAdbExecutor, inspectFacts, bindDevice } = params;
   if (req.command !== PUBLIC_COMMANDS.doctor) return null;
+  const hostDiagnostics = requireHostDiagnostics(params.hostDiagnostics);
 
   const session = sessionStore.get(sessionName);
   const options = readDoctorOptions(req, session);
@@ -73,21 +77,58 @@ export async function handleDoctorCommand(params: {
     return doctorResponse(checks, options);
   }
 
+  const context = hostDiagnosticsContext(options, stateDir, androidAdbExecutor);
   const inventory = await appendDeviceInventoryCheck(checks, req, session);
-  await appendToolchainChecks(checks, session?.device.platform ?? inventory?.platform);
+  const toolchain = await hostDiagnostics.toolchainCheck(
+    session?.device.platform ?? inventory?.platform,
+    context,
+  );
+  if (toolchain) appendDoctorCheck(checks, toolchain);
   const appCheckDevice = await appendLocalDoctorChecks({
-    androidAdbExecutor,
     checks,
+    context,
+    hostDiagnostics,
     inventory,
     options,
     session,
-    stateDir,
     inspectFacts,
     bindDevice,
     req,
   });
-  await appendIosRunnerWarmupCheck(checks, appCheckDevice ?? resolveWarmupSimulator(inventory));
+  const warmupDevice = appCheckDevice ?? resolveWarmupSimulator(inventory);
+  if (warmupDevice) {
+    const warmup = await hostDiagnostics.warmupCheck(warmupDevice, context);
+    if (warmup) appendDoctorCheck(checks, warmup);
+  }
   return doctorResponse(checks, options, { device: appCheckDevice, includeMetro: true, inventory });
+}
+
+function requireHostDiagnostics(value: HostDiagnostics | undefined): HostDiagnostics {
+  if (!value) {
+    throw new AppError('COMMAND_FAILED', 'Host diagnostics gateway is not configured', {
+      reason: 'runtime-gateway-missing',
+    });
+  }
+  return value;
+}
+
+function hostDiagnosticsContext(
+  options: DoctorOptions,
+  stateDir: string,
+  androidAdbExecutor: unknown,
+): HostDiagnosticsContext {
+  return Object.freeze({
+    stateDir,
+    metroPort: options.metroPort,
+    shouldProbeMetro: options.shouldProbeMetro,
+    isProviderDevice: (device: DeviceInfo) => isActiveProviderDevice(device),
+    emitProgress: (message: string) =>
+      emitRequestProgress({ type: 'command', status: 'progress', message }),
+    listLocalDeviceInventory: async (query: Parameters<typeof listLocalDeviceInventory>[0]) =>
+      await listLocalDeviceInventory(query),
+    shouldPropagateInventoryProbeError: shouldPropagateDeviceInventoryProbeError,
+    transportOverrides: Object.freeze({ androidAdb: androidAdbExecutor }),
+  });
 }
 
 // Doctor doubles as the fresh-machine warmup: when an iOS simulator is in
@@ -105,42 +146,6 @@ function resolveWarmupSimulator(
   return simulators.find((device) => device.booted === true) ?? simulators[0];
 }
 
-async function appendIosRunnerWarmupCheck(
-  checks: DoctorCheck[],
-  device: DeviceInfo | undefined,
-): Promise<void> {
-  if (!device || !isIosFamily(device) || device.kind !== 'simulator') return;
-  // The warmup drives local xcodebuild: skip on non-macOS hosts and for
-  // provider-backed devices, whose runner lives with the remote daemon.
-  // (--remote returns before device checks and never reaches here.)
-  if (process.platform !== 'darwin' || isActiveProviderDevice(device)) return;
-  emitRequestProgress({
-    type: 'command',
-    status: 'progress',
-    message: `Checking iOS runner build cache (${device.name})...`,
-  });
-  if (await hasCachedAppleRunnerArtifact(device)) {
-    appendDoctorCheck(checks, {
-      id: 'ios-runner-cache',
-      status: 'pass',
-      summary: 'iOS runner artifact cached; first open skips the runner build',
-    });
-    return;
-  }
-  void prewarmAppleRunnerCache(device, {});
-  emitRequestProgress({
-    type: 'command',
-    status: 'progress',
-    message: `Warming iOS runner build cache in the background (${device.name})...`,
-  });
-  appendDoctorCheck(checks, {
-    id: 'ios-runner-cache',
-    status: 'pass',
-    summary:
-      'iOS runner build started in the background; the first open gets faster once it completes',
-    hint: 'Run `agent-device prepare ios-runner` to wait for a fully warmed runner instead.',
-  });
-}
 
 function resolveDoctorStateDir(sessionStore: SessionStore, sessionName: string): string {
   const sessionsDir = path.dirname(sessionStore.resolveSessionDir(sessionName));
@@ -148,32 +153,24 @@ function resolveDoctorStateDir(sessionStore: SessionStore, sessionName: string):
 }
 
 async function appendLocalDoctorChecks(params: {
-  androidAdbExecutor?: AndroidAdbExecutor;
   checks: DoctorCheck[];
+  context: HostDiagnosticsContext;
+  hostDiagnostics: HostDiagnostics;
   inventory: DoctorDeviceInventory | undefined;
   options: DoctorOptions;
   session: SessionState | undefined;
-  stateDir: string;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
   req: DaemonRequest;
 }): Promise<DeviceInfo | undefined> {
-  const {
-    checks,
-    inventory,
-    options,
-    session,
-    androidAdbExecutor,
-    stateDir,
-    inspectFacts,
-    bindDevice,
-    req,
-  } = params;
+  const { checks, context, hostDiagnostics, inventory, options, session, inspectFacts, bindDevice, req } =
+    params;
   const appCheckDevice =
     session?.device ?? resolveDoctorDeviceForAppCheck(checks, inventory, options.targetApp);
   if (appCheckDevice) {
     await appendDeviceScopedDoctorChecks(checks, {
-      androidAdbExecutor,
+      context,
+      hostDiagnostics,
       device: appCheckDevice,
       options,
       session,
@@ -185,14 +182,15 @@ async function appendLocalDoctorChecks(params: {
   if (options.shouldProbeMetro) {
     appendDoctorCheck(checks, await probeMetro(options.metroHost, options.metroPort, options.kind));
   }
-  await appendWebBrowserLifecycleCheck(checks, stateDir);
+  appendDoctorChecks(checks, ...(await hostDiagnostics.ambientChecks(context)));
   return appCheckDevice;
 }
 
 async function appendDeviceScopedDoctorChecks(
   checks: DoctorCheck[],
   params: {
-    androidAdbExecutor?: AndroidAdbExecutor;
+    context: HostDiagnosticsContext;
+    hostDiagnostics: HostDiagnostics;
     device: DeviceInfo;
     options: DoctorOptions;
     session: SessionState | undefined;
@@ -201,7 +199,7 @@ async function appendDeviceScopedDoctorChecks(
     req: DaemonRequest;
   },
 ): Promise<void> {
-  const { androidAdbExecutor, device, options, session, inspectFacts, bindDevice, req } = params;
+  const { context, hostDiagnostics, device, options, session, inspectFacts, bindDevice, req } = params;
   let listInstalledApps: DoctorAppInventory | undefined;
   try {
     listInstalledApps = await resolveDoctorAppInventoryForDoctor({
@@ -224,12 +222,7 @@ async function appendDeviceScopedDoctorChecks(
     targetApp: options.targetApp,
     listInstalledApps,
   });
-  await appendAndroidChecks(checks, {
-    androidAdbExecutor,
-    device,
-    metroPort: options.metroPort,
-    shouldProbeMetro: options.shouldProbeMetro,
-  });
+  appendDoctorChecks(checks, ...(await hostDiagnostics.deviceChecks(device, context)));
 }
 
 async function resolveDoctorAppInventoryForDoctor(

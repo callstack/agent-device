@@ -7,8 +7,8 @@ const NORMAL_IME = 'com.google.android.inputmethod.latin/.LatinIME';
 // probeAndroidTestIme reads the helper's service component from the bundled artifact; inject a
 // fixture so the orphan-detection checks pass on a fresh checkout that hasn't packaged
 // android/ime-helper/dist (CI's Coverage job runs no packaging step).
-vi.mock('../../../platforms/android/ime-helper.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/android/ime-helper.ts')>();
+vi.mock('../ime-helper.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../ime-helper.ts')>();
   return {
     ...actual,
     resolveAndroidImeHelperArtifact: vi.fn(async () => ({
@@ -28,12 +28,13 @@ vi.mock('../../../platforms/android/ime-helper.ts', async (importOriginal) => {
 });
 
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
-import { appendAndroidChecks } from '../session-doctor-android.ts';
+import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
+import { androidDeviceChecks } from '../doctor.ts';
 import {
   resetAndroidTestImeActivationCacheForTests,
   setAndroidTestImeActiveForTests,
-} from '../../../platforms/android/ime-lifecycle.ts';
-import type { AndroidAdbExecutor } from '../../../platforms/android/adb-executor.ts';
+} from '../ime-lifecycle.ts';
+import type { AndroidAdbExecutor } from '../adb-executor.ts';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 
 afterEach(() => {
@@ -52,14 +53,21 @@ function fakeAdb(currentIme: string, previousIme = 'null'): AndroidAdbExecutor {
   };
 }
 
-async function runImeCheck(adb: AndroidAdbExecutor): Promise<DoctorCheck | undefined> {
-  const checks: DoctorCheck[] = [];
-  await appendAndroidChecks(checks, {
-    device: ANDROID_EMULATOR,
+function contextWith(adb: AndroidAdbExecutor): HostDiagnosticsContext {
+  return Object.freeze({
+    stateDir: '/tmp/state',
     metroPort: 8081,
     shouldProbeMetro: false,
-    androidAdbExecutor: adb,
+    isProviderDevice: () => false,
+    emitProgress: () => {},
+    listLocalDeviceInventory: async () => [],
+    shouldPropagateInventoryProbeError: () => false,
+    transportOverrides: Object.freeze({ androidAdb: adb }),
   });
+}
+
+async function runImeCheck(adb: AndroidAdbExecutor): Promise<DoctorCheck | undefined> {
+  const checks = await androidDeviceChecks(ANDROID_EMULATOR, contextWith(adb));
   return checks.find((check) => check.id === 'android-test-ime');
 }
 

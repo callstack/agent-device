@@ -161,6 +161,41 @@ export function audioProbeSessionStateOwnershipViolations(
   return violations;
 }
 
+const DOCTOR_HANDLER_FILE = 'src/daemon/handlers/session-doctor.ts';
+const DOCTOR_HOST_DIAGNOSTICS_METHODS = [
+  'toolchainCheck',
+  'deviceChecks',
+  'ambientChecks',
+  'warmupCheck',
+] as const;
+
+/**
+ * R62's singular-execution proof, mirroring R17's shape for the host tier: doctor's handler
+ * consumes every method of the injected neutral host-diagnostics surface, so no platform probe
+ * can quietly move back into the daemon behind one forgotten call site.
+ */
+export function doctorHostDiagnosticsViolations(
+  sources: ReadonlyMap<string, string>,
+): UnruledViolation[] {
+  const source = sources.get(DOCTOR_HANDLER_FILE);
+  if (source === undefined) {
+    return [
+      { file: DOCTOR_HANDLER_FILE, line: 1, message: 'doctor host-diagnostics handler is missing' },
+    ];
+  }
+  const violations: UnruledViolation[] = [];
+  for (const method of DOCTOR_HOST_DIAGNOSTICS_METHODS) {
+    if (!source.includes(`hostDiagnostics.${method}(`)) {
+      violations.push({
+        file: DOCTOR_HANDLER_FILE,
+        line: 1,
+        message: `doctor handler must consume hostDiagnostics.${method}`,
+      });
+    }
+  }
+  return violations;
+}
+
 /**
  * Source-executed TypeScript must stay parseable by the Node 22 type-stripping runtime.
  * Not command-specific: it is declared on the logs row so its violations carry R14, the

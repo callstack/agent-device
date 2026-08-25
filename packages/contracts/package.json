@@ -183,6 +183,10 @@
       "types": "./src/gesture-plan.ts",
       "default": "./src/gesture-plan.ts"
     },
+    "./host-diagnostics": {
+      "types": "./src/host-diagnostics.ts",
+      "default": "./src/host-diagnostics.ts"
+    },
     "./gesture-plan-types": {
       "types": "./src/gesture-plan-types.ts",
       "default": "./src/gesture-plan-types.ts"

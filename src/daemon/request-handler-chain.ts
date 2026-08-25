@@ -16,6 +16,7 @@ import type {
 import type { DeviceClaimReconciler } from './device-claims.ts';
 import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
 import type { AudioProbeAdmissionLedger } from './audio-probe-admission-ledger.ts';
+import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform';
 import type { RequestPlatformProviderScope } from './request-platform-providers.ts';
@@ -46,6 +47,7 @@ type RequestHandlerChainParams = {
   appLogAdmissionLedger?: AppLogAdmissionLedger;
   audioProbeAdmissionLedger: AudioProbeAdmissionLedger;
   screenRecordingAdmissionLedger: ScreenRecordingAdmissionLedger;
+  hostDiagnostics?: HostDiagnostics;
   requestScope: PlatformRequestScope;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   throwIfCanceled(): void;
@@ -150,6 +152,7 @@ async function runSessionHandler(
       appLogAdmissionLedger: params.appLogAdmissionLedger,
       audioProbeAdmissionLedger: params.audioProbeAdmissionLedger,
       screenRecordingAdmissionLedger: params.screenRecordingAdmissionLedger,
+      hostDiagnostics: params.hostDiagnostics,
       requestScope: params.requestScope,
       retainDeviceExecutionLock: params.retainDeviceExecutionLock,
       throwIfCanceled: params.throwIfCanceled,

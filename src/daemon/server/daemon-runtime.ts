@@ -9,6 +9,7 @@ import {
   createPlatformRuntimeGateway,
   createPlatformDeviceInventoryGateways,
 } from '../../platform-runtime.ts';
+import { createHostDiagnostics } from '../../platform-runtime-host-diagnostics.ts';
 import {
   createDefaultProviderRuntimeComposition,
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS,
@@ -254,6 +255,7 @@ export async function startDaemonRuntime(
   });
   const appLogAdmissionLedger = createAppLogAdmissionLedger();
   const audioProbeAdmissionLedger = createAudioProbeAdmissionLedger();
+  const hostDiagnostics = createHostDiagnostics();
   const screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger();
   const version = readVersion();
   const token = crypto.randomBytes(24).toString('hex');
@@ -316,6 +318,7 @@ export async function startDaemonRuntime(
     deviceRuntimeGateway,
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
+    hostDiagnostics,
     screenRecordingAdmissionLedger,
     appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,
     appleRunnerScreenRecordingTransport:

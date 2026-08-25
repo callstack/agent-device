@@ -1,16 +1,8 @@
-import { inspectManagedAgentBrowserProcesses } from '../../platforms/web/agent-browser-lifecycle.ts';
-import { getManagedAgentBrowserStatus } from '../../platforms/web/agent-browser-tool.ts';
-import { appendDoctorCheck } from './session-doctor-output.ts';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
+import { inspectManagedAgentBrowserProcesses } from './agent-browser-lifecycle.ts';
+import { getManagedAgentBrowserStatus } from './agent-browser-tool.ts';
 
-export async function appendWebBrowserLifecycleCheck(
-  checks: DoctorCheck[],
-  stateDir: string,
-): Promise<void> {
-  appendDoctorCheck(checks, await webBrowserLifecycleCheck(stateDir));
-}
-
-async function webBrowserLifecycleCheck(stateDir: string): Promise<DoctorCheck> {
+export async function webBrowserLifecycleCheck(stateDir: string): Promise<DoctorCheck> {
   const status = getManagedAgentBrowserStatus({ stateDir });
   if (!status.installed) {
     return {

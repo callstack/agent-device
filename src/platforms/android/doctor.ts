@@ -1,36 +1,58 @@
-import {
-  resolveAndroidAdbExecutor,
-  type AndroidAdbExecutor,
-} from '../../platforms/android/adb-executor.ts';
+import { access } from 'node:fs/promises';
+import path from 'node:path';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { normalizeError } from '@agent-device/kernel/errors';
+import type { DoctorCheck } from '@agent-device/contracts/observability';
+import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
+import { commandFirstLine } from '../toolchain-probe.ts';
+import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
 import {
   isAndroidTestImeActive,
   readAndroidDefaultInputMethod,
   ANDROID_TEST_IME_SETTINGS_KEYS,
-} from '../../platforms/android/ime-lifecycle.ts';
-import { resolveAndroidImeHelperArtifact } from '../../platforms/android/ime-helper.ts';
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import { normalizeError } from '@agent-device/kernel/errors';
-import { appendDoctorCheck } from './session-doctor-output.ts';
-import type { DoctorCheck } from '@agent-device/contracts/observability';
+} from './ime-lifecycle.ts';
+import { resolveAndroidImeHelperArtifact } from './ime-helper.ts';
 
 const ANDROID_PROBE_TIMEOUT_MS = 2000;
 
-export async function appendAndroidChecks(
-  checks: DoctorCheck[],
-  params: {
-    device: DeviceInfo;
-    metroPort: number;
-    shouldProbeMetro: boolean;
-    androidAdbExecutor?: AndroidAdbExecutor;
-  },
-): Promise<void> {
-  const { device, metroPort, shouldProbeMetro, androidAdbExecutor } = params;
-  if (device.platform !== 'android') return;
-  const adb = resolveAndroidAdbExecutor(device, androidAdbExecutor);
-  if (shouldProbeMetro) {
-    appendDoctorCheck(checks, await probeAndroidReverse(adb, device.id, metroPort));
+type AndroidLicenseState = 'accepted' | 'missing' | 'unknown';
+type AndroidToolchainProbe = {
+  license: AndroidLicenseState;
+  sdkRoot: string | undefined;
+  versionLine: string | undefined;
+};
+
+export async function androidToolchainCheck(): Promise<DoctorCheck> {
+  const sdkRoot = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
+  const license = await androidLicenseState(sdkRoot);
+  const versionLine = await commandFirstLine('adb', ['version']);
+  if (!versionLine) return missingAndroidAdbCheck(sdkRoot, license);
+
+  return androidAdbCheck({
+    license,
+    sdkRoot,
+    versionLine,
+  });
+}
+
+/** The android family's device diagnostics: Metro reverse mapping plus orphaned test-IME. */
+export async function androidDeviceChecks(
+  device: DeviceInfo,
+  context: HostDiagnosticsContext,
+): Promise<readonly DoctorCheck[]> {
+  if (device.platform !== 'android') return [];
+  // The provider-scope override travels opaquely through the neutral context; this family is
+  // the one owner that narrows it back to its own executor type.
+  const adb = resolveAndroidAdbExecutor(
+    device,
+    context.transportOverrides.androidAdb as AndroidAdbExecutor | undefined,
+  );
+  const checks: DoctorCheck[] = [];
+  if (context.shouldProbeMetro) {
+    checks.push(await probeAndroidReverse(adb, device.id, context.metroPort));
   }
-  appendDoctorCheck(checks, await probeAndroidTestIme(adb, device));
+  checks.push(await probeAndroidTestIme(adb, device));
+  return checks;
 }
 
 async function probeAndroidTestIme(
@@ -140,5 +162,56 @@ async function probeAndroidReverse(
       hint: normalized.message,
       evidence: { code: normalized.code },
     };
+  }
+}
+
+function androidAdbCheck(probe: AndroidToolchainProbe): DoctorCheck {
+  return {
+    id: 'toolchain',
+    status: androidToolchainStatus(probe),
+    summary: probe.versionLine
+      ? `Android toolchain: ${probe.versionLine}; ${androidSdkSummary(probe.sdkRoot)}.`
+      : 'Android toolchain: adb is present but version check failed.',
+    hint:
+      probe.license === 'missing'
+        ? 'Accept Android SDK licenses before installing/building apps.'
+        : undefined,
+    command: probe.license === 'missing' ? 'sdkmanager --licenses' : undefined,
+    evidence: {
+      adbVersion: probe.versionLine ?? null,
+      androidHome: probe.sdkRoot ?? null,
+      license: probe.license,
+    },
+  };
+}
+
+function androidToolchainStatus(probe: AndroidToolchainProbe): DoctorCheck['status'] {
+  return probe.versionLine && probe.sdkRoot && probe.license !== 'missing' ? 'pass' : 'info';
+}
+
+function androidSdkSummary(sdkRoot: string | undefined): string {
+  return sdkRoot ? 'ANDROID_HOME/ANDROID_SDK_ROOT set' : 'ANDROID_HOME unset';
+}
+
+function missingAndroidAdbCheck(
+  sdkRoot: string | undefined,
+  license: AndroidLicenseState,
+): DoctorCheck {
+  return {
+    id: 'toolchain',
+    status: 'info',
+    summary: 'Android toolchain: adb not found on PATH.',
+    hint: 'Install Android platform-tools or add adb to PATH.',
+    evidence: { androidHome: sdkRoot ?? null, license },
+  };
+}
+
+async function androidLicenseState(sdkRoot: string | undefined): Promise<AndroidLicenseState> {
+  if (!sdkRoot) return 'unknown';
+  try {
+    await access(path.join(sdkRoot, 'licenses', 'android-sdk-license'));
+    return 'accepted';
+  } catch {
+    return 'missing';
   }
 }

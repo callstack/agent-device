@@ -31,6 +31,7 @@ import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import type { AudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
 import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform';
+import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 
 export type SessionCommandInput = {
   req: DaemonRequest;
@@ -48,6 +49,7 @@ export type SessionCommandInput = {
   appLogAdmissionLedger?: AppLogAdmissionLedger;
   audioProbeAdmissionLedger?: AudioProbeAdmissionLedger;
   screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
+  hostDiagnostics?: HostDiagnostics;
   requestScope?: PlatformRequestScope;
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   throwIfCanceled?: () => void;
@@ -165,6 +167,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
     sessionName,
     sessionStore,
     androidAdbExecutor,
+    hostDiagnostics,
     inspectFacts,
     bindDevice,
   }) =>
@@ -173,6 +176,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
       sessionName,
       sessionStore,
       androidAdbExecutor,
+      hostDiagnostics,
       inspectFacts,
       bindDevice,
     }),

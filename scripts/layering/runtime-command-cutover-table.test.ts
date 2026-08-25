@@ -639,6 +639,7 @@ test('every daemon-routed migrated descriptor has exactly one cutover row', () =
       (descriptor) =>
         descriptor.daemon !== undefined &&
         (descriptor.platformExecution.kind === 'inventory' ||
+          descriptor.platformExecution.kind === 'host' ||
           descriptor.platformExecution.kind === 'device-runtime'),
     )
     .map(({ name }) => name)

@@ -1,6 +1,7 @@
 import type { MigratedCommandCutover } from './runtime-command-cutover-model.ts';
 import {
   audioProbeSessionStateOwnershipViolations,
+  doctorHostDiagnosticsViolations,
   retiredDispatchProjectionProof,
 } from './runtime-command-cutover-extensions.ts';
 
@@ -250,5 +251,34 @@ export const WAVE_6_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       },
     },
     lifecycleProof: audioProbeSessionStateOwnershipViolations,
+  },
+  {
+    rule: 'R62 doctor-host-cutover',
+    command: 'doctor',
+    subject: 'host diagnostics',
+    tier: 'request-scoped',
+    execution: 'host',
+    legacyRetirement: {
+      // The three daemon modules that owned platform probe bodies (and their platform imports),
+      // plus the retired append helpers. The probes moved to their owning families behind the
+      // neutral host-diagnostics surface; the daemon keeps only orchestration.
+      modulePaths: [
+        'src/daemon/handlers/session-doctor-toolchain.ts',
+        'src/daemon/handlers/session-doctor-android.ts',
+        'src/daemon/handlers/session-doctor-web.ts',
+      ],
+      importPatterns: [
+        /(?:^|\/)handlers\/session-doctor-toolchain(?:\.[cm]?[jt]s)?$/,
+        /(?:^|\/)handlers\/session-doctor-android(?:\.[cm]?[jt]s)?$/,
+        /(?:^|\/)handlers\/session-doctor-web(?:\.[cm]?[jt]s)?$/,
+      ],
+      routeNames: [
+        'appendToolchainChecks',
+        'appendAndroidChecks',
+        'appendWebBrowserLifecycleCheck',
+        'appendIosRunnerWarmupCheck',
+      ],
+    },
+    singularExecution: { gatewayProof: doctorHostDiagnosticsViolations },
   },
 ];
