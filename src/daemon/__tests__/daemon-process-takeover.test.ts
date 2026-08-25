@@ -57,3 +57,13 @@ test('stops a branch-named daemon before replacement can strand its session', as
   await stopProcessForTakeover(pid, { ...TAKEOVER_TIMEOUTS, expectedStartTime: startTime });
   assert.equal(isProcessAlive(pid), false);
 });
+
+test('does not stop a branch-named daemon when process identity is missing', async () => {
+  const { pid, entryPath } = spawnFakeDaemonFromBranchNamedCheckout();
+  assert.equal(entryPath.toLowerCase().includes('agent-device'), false);
+
+  assert.equal(isAgentDeviceDaemonProcess(pid, undefined), false);
+
+  await stopProcessForTakeover(pid, { ...TAKEOVER_TIMEOUTS, expectedStartTime: undefined });
+  assert.equal(isProcessAlive(pid), true);
+});

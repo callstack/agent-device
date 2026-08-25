@@ -1844,44 +1844,6 @@ test('computeDaemonCodeSignature ignores a relative-path-shaped string that is n
   }
 });
 
-test('stopDaemonProcessForTakeover terminates a matching daemon process', async (t) => {
-  const root = mkdtempForTestSync('agent-device-daemon-test-');
-  const daemonDir = path.join(root, 'agent-device', 'dist', 'src', 'internal');
-  const daemonScriptPath = path.join(daemonDir, 'daemon.js');
-  fs.mkdirSync(daemonDir, { recursive: true });
-  fs.writeFileSync(daemonScriptPath, 'setInterval(() => {}, 1000);\n', 'utf8');
-  const daemonProcess = runCmdBackground(process.execPath, [daemonScriptPath], {
-    stdio: 'ignore',
-    allowFailure: true,
-    captureOutput: false,
-  });
-  void daemonProcess.wait.catch(() => {});
-  const child = daemonProcess.child;
-  const pid = child.pid;
-  assert.ok(pid, 'spawned child should have a pid');
-
-  try {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    if (readProcessCommand(pid) === null) {
-      t.skip('process command inspection is unavailable in this environment');
-      return;
-    }
-    assert.equal(isProcessAlive(pid), true);
-    await stopProcessForTakeover(pid, {
-      termTimeoutMs: 1_500,
-      killTimeoutMs: 1_500,
-    });
-    const exited = await waitForProcessExit(pid, 1500);
-    assert.equal(exited, true);
-  } finally {
-    if (isProcessAlive(pid)) {
-      process.kill(pid, 'SIGKILL');
-      await waitForProcessExit(pid, 1_500);
-    }
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
 test('stopDaemonProcessForTakeover does not terminate non-daemon process', async () => {
   const daemonProcess = runCmdBackground(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
     stdio: 'ignore',
@@ -1899,6 +1861,7 @@ test('stopDaemonProcessForTakeover does not terminate non-daemon process', async
     await stopProcessForTakeover(pid, {
       termTimeoutMs: 100,
       killTimeoutMs: 100,
+      expectedStartTime: undefined,
     });
     assert.equal(isProcessAlive(pid), true);
   } finally {

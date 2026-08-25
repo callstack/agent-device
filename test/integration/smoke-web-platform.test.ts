@@ -159,6 +159,7 @@ async function cleanupWebShutdownSmoke(
       await stopProcessForTakeover(daemonPid, {
         termTimeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS,
         killTimeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS,
+        expectedStartTime: undefined,
       });
     } catch (error) {
       errors.push(error);
