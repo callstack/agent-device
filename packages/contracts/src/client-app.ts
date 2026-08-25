@@ -15,6 +15,26 @@ import type {
 } from './client-connection.ts';
 import type { AgentDeviceSessionDevice, StartupPerfSample } from './client-device-view.ts';
 
+export type DeviceSelectionReason =
+  | 'explicit-selector'
+  | 'existing-session'
+  | 'single-booted-local'
+  | 'single-bootable-local'
+  | 'single-app-installed-local'
+  | 'preferred-local'
+  | 'single-provider-device';
+
+export type DeviceSelectionSource = 'session' | 'local' | 'provider';
+
+/** Deterministic device-selection evidence shared by daemon responses and the published client. */
+export type DeviceSelectionMetadata = {
+  reason: DeviceSelectionReason;
+  source: DeviceSelectionSource;
+  candidateCount: number;
+  /** Whether this request booted a previously stopped local virtual target during open. */
+  bootOccurred: boolean;
+};
+
 export type AppInstallOptions = AgentDeviceRequestOverrides &
   AgentDeviceSelectionOptions & {
     app?: string;
@@ -73,6 +93,7 @@ export type AppOpenResult = {
   appId?: string;
   startup?: StartupPerfSample;
   runtime?: SessionRuntimeHints;
+  selection?: DeviceSelectionMetadata;
   device?: AgentDeviceSessionDevice;
   /**
    * Initial interactive snapshot captured immediately after an open that

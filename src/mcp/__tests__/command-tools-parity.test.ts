@@ -65,6 +65,27 @@ test('MCP collection results use object envelopes without changing object result
   }
 });
 
+test('MCP open keeps device-selection evidence in structured content and JSON text data', async () => {
+  const openResult = {
+    session: 'selected',
+    selection: {
+      reason: 'single-booted-local',
+      source: 'local',
+      candidateCount: 2,
+      bootOccurred: false,
+    },
+  };
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async () => openResult,
+  });
+
+  const result = await executor.execute('open', { app: 'Settings', mcpOutputFormat: 'json' });
+
+  assert.deepEqual(result.structuredContent, openResult);
+  assert.deepEqual(JSON.parse(result.content[0]?.text ?? '{}').selection, openResult.selection);
+});
+
 test('MCP fill projects target-bound unconfirmed verification through its advertised schema', async () => {
   const fillResult = {
     targetKind: 'point',
@@ -121,7 +142,7 @@ test('MCP fill projects target-bound unconfirmed verification through its advert
   assert.notDeepEqual(validateAgainstSchema(missingTarget, fillTool.outputSchema), []);
 });
 
-test('MCP applies config-backed command defaults with explicit-input precedence and applicability', async () => {
+test('MCP applies config-backed command defaults; explicit operator input is refused', async () => {
   const home = mkdtempForTestSync('agent-device-mcp-config-');
   temporaryDirectory = home;
   const configuredXctestrun = path.join(home, 'configured.xctestrun');
@@ -142,11 +163,20 @@ test('MCP applies config-backed command defaults with explicit-input precedence 
   });
 
   await executor.execute('snapshot', {});
-  await executor.execute('snapshot', { iosXctestrunFile: '/explicit/runner.xctestrun' });
+  // Operator-owned inputs are env/config-only: the explicit value is refused
+  // with guidance instead of overriding the operator's configuration.
+  const refused = await executor.execute('snapshot', {
+    iosXctestrunFile: '/explicit/runner.xctestrun',
+  });
 
   assert.deepEqual(
     calls.map((request) => request.flags?.iosXctestrunFile),
-    [configuredXctestrun, '/explicit/runner.xctestrun'],
+    [configuredXctestrun],
+  );
+  assert.equal(refused.isError, true);
+  assert.match(
+    refused.content[0]?.text ?? '',
+    /iosXctestrunFile is not accepted as a tool argument/,
   );
   assert.ok(calls.every((request) => request.command === 'snapshot'));
   assert.ok(calls.every((request) => request.flags?.appsFilter === undefined));

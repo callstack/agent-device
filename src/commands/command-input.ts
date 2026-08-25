@@ -568,6 +568,11 @@ function requiredFieldNames(fields: CommandFieldMap): string[] {
   return Object.entries(fields).flatMap(([key, field]) => (field.required ? [key] : []));
 }
 
+/** Names of the retired fields — declared for migration guidance, absent from the schema. */
+export function retiredFieldNames(fields: CommandFieldMap): string[] {
+  return Object.entries(fields).flatMap(([key, field]) => (field.retired ? [key] : []));
+}
+
 function optionalRecord(
   record: Record<string, unknown>,
   key: string,

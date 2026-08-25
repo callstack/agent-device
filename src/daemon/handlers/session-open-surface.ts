@@ -8,6 +8,7 @@ import {
 import type { SessionRuntimeHints, SessionState } from '../types.ts';
 import { successText } from '../../utils/success-text.ts';
 import type { StartupPerfSample } from './session-startup-metrics.ts';
+import type { DeviceSelectionResult } from '../../core/device-selection-resolver.ts';
 
 export function buildOpenResult(params: {
   sessionName: string;
@@ -24,6 +25,7 @@ export function buildOpenResult(params: {
   runtime?: SessionRuntimeHints;
   runtimeHintCount: (runtime: SessionRuntimeHints) => number;
   sessionReused: boolean;
+  selection?: DeviceSelectionResult;
 }): Record<string, unknown> {
   const {
     sessionName,
@@ -40,6 +42,7 @@ export function buildOpenResult(params: {
     runtime,
     runtimeHintCount,
     sessionReused,
+    selection,
   } = params;
   const result: Record<string, unknown> = {
     session: sessionName,
@@ -49,6 +52,7 @@ export function buildOpenResult(params: {
     requestLogPath,
     eventLogPath,
     sessionReused,
+    ...selectionResponseData(selection),
   };
   if (appName) result.appName = appName;
   if (appBundleId) result.appBundleId = appBundleId;
@@ -75,6 +79,14 @@ export function buildOpenResult(params: {
     ...result,
     ...successText(`Opened: ${appName ?? appBundleId ?? sessionName}`),
   };
+}
+
+function selectionResponseData(
+  selection: DeviceSelectionResult | undefined,
+): Record<string, unknown> {
+  if (!selection) return {};
+  const { device: _device, ...metadata } = selection;
+  return { selection: metadata };
 }
 
 export function buildNextOpenSession(params: {

@@ -138,7 +138,7 @@ test('usageForCommand resolves workflow help topic', async () => {
   assert.match(help, /Shapes and platform quirks: help gestures/);
   assert.match(
     help,
-    /Known app: open <app> --foreground -> snapshot\. Bare form needs one running app on one iOS sim; capture failure keeps session open/,
+    /open --foreground -> snapshot\. Selection: explicit --device\/--udid\/--serial, then session, booted\/bootable local, or one provider; --platform\/--target only filter\./,
   );
   assert.match(help, /Never open artifact paths or invent package ids/);
   assert.match(

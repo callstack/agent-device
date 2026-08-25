@@ -150,6 +150,11 @@ await client.capture.snapshot({ interactiveOnly: true });
 const closed = await client.sessions.close();
 ```
 
+`apps.open` also returns a response-level `selection` record describing whether the target came
+from an explicit selector, an existing session, one local booted/bootable candidate, the one booted
+simulator with the app installed, or one provider-owned candidate. Ambiguous requests fail with
+structured retry selectors instead of silently retargeting.
+
 Use `client.sessions.artifacts({ provider, providerSessionId })` with `closed.provider?.providerSessionId` to fetch provider-hosted video and log URLs after close. See the [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), and [Limrun](/docs/limrun) guides for provider-specific setup.
 
 ## Web sessions

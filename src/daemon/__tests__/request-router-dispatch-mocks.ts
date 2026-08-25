@@ -6,18 +6,26 @@ const dispatchMocks = vi.hoisted(() => ({
 
 vi.mock('../../core/dispatch-resolve.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../core/dispatch-resolve.ts')>();
+  const { selectionFromResolveTargetDevice } = await import('./device-selection-stub.ts');
   return {
     ...actual,
     resolveTargetDevice: dispatchMocks.resolveTargetDevice,
+    resolveTargetDeviceSelection: vi.fn(
+      selectionFromResolveTargetDevice(dispatchMocks.resolveTargetDevice),
+    ),
   };
 });
 
 vi.mock('../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
+  const { selectionFromResolveTargetDevice } = await import('./device-selection-stub.ts');
   return {
     ...actual,
     dispatchCommand: vi.fn(async () => ({})),
     resolveTargetDevice: dispatchMocks.resolveTargetDevice,
+    resolveTargetDeviceSelection: vi.fn(
+      selectionFromResolveTargetDevice(dispatchMocks.resolveTargetDevice),
+    ),
   };
 });
 

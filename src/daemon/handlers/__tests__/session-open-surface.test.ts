@@ -56,6 +56,34 @@ test('buildOpenResult exposes the Vega serial without leaking an internal platfo
   assert.equal(result.target, 'tv');
 });
 
+test('buildOpenResult exposes typed device-selection evidence once at response level', () => {
+  const result = buildOpenResult({
+    sessionName: 'ios-selection',
+    sessionStateDir: '/tmp/state',
+    runnerLogPath: '/tmp/runner.log',
+    requestLogPath: '/tmp/request.ndjson',
+    eventLogPath: '/tmp/events.ndjson',
+    surface: 'app',
+    device: IOS_SIMULATOR,
+    runtimeHintCount: () => 0,
+    sessionReused: false,
+    selection: {
+      device: IOS_SIMULATOR,
+      reason: 'single-booted-local',
+      source: 'local',
+      candidateCount: 1,
+      bootOccurred: false,
+    },
+  });
+
+  assert.deepEqual(result.selection, {
+    reason: 'single-booted-local',
+    source: 'local',
+    candidateCount: 1,
+    bootOccurred: false,
+  });
+});
+
 // --- #1533: a re-open cannot resurrect a terminal authoring lifecycle ---
 //
 // This surface used to decide recording on its own (`existingSession.recordSession || saveScript`),

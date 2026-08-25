@@ -27,6 +27,13 @@ export type CommandMetadata<Name extends string, Input> = {
   mcpDetail?: string;
   inputSchema: JsonSchema;
   readInput: (input: unknown) => Input;
+  /**
+   * Released input keys the command removed. Excluded from `inputSchema` (not
+   * advertised), but still recognized: `readInput` throws migration guidance
+   * when one is supplied. The MCP admission boundary reads this so it lets a
+   * retired key reach that message instead of rejecting it as unknown.
+   */
+  retiredInputKeys?: readonly string[];
 };
 
 export type ExecutableCommandContract<Name extends string, Input, Result> = CommandMetadata<

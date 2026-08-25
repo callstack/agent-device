@@ -1,5 +1,10 @@
 import { defineCommandMetadata } from './command-contract.ts';
-import { fieldsInputSchema, readFieldInput, type CommandFieldMap } from './command-input.ts';
+import {
+  fieldsInputSchema,
+  readFieldInput,
+  retiredFieldNames,
+  type CommandFieldMap,
+} from './command-input.ts';
 
 export function defineFieldCommandMetadata<
   const TName extends string,
@@ -10,5 +15,6 @@ export function defineFieldCommandMetadata<
     description,
     inputSchema: fieldsInputSchema(fields),
     readInput: (input) => readFieldInput(input, fields),
+    retiredInputKeys: retiredFieldNames(fields),
   });
 }

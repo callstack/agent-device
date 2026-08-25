@@ -3,6 +3,10 @@ import {
   openApplicationWithRuntimeHintApplyUse,
   openApplicationWithRuntimeHintClearUse,
 } from '@agent-device/contracts/application-lifecycle-runtime-plan';
+import {
+  markSelectionBootOccurred,
+  type DeviceSelectionResult,
+} from '../../core/device-selection-resolver.ts';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -141,6 +145,7 @@ export async function completeOpenCommand(params: {
   applyRuntimeHints?: RuntimeHintApplyOperation;
   existingSession?: SessionState;
   deviceClaim?: DeviceClaimSessionOwnership;
+  selection?: DeviceSelectionResult;
 }): Promise<DaemonResponse> {
   const {
     req,
@@ -158,6 +163,7 @@ export async function completeOpenCommand(params: {
     applyRuntimeHints,
     existingSession,
     deviceClaim,
+    selection,
   } = params;
   const shouldRelaunch = req.flags?.relaunch === true;
   let sessionAppBundleId = appBundleId;
@@ -198,6 +204,7 @@ export async function completeOpenCommand(params: {
   });
   sessionAppBundleId = outcome.appBundleId ?? sessionAppBundleId;
   const timing: OpenTiming = { ...outcome.timing };
+  const preparedSelection = markSelectionBootOccurred(selection);
   const startupSample = openTarget
     ? buildStartupPerfSample(openStartedAtMs, openTarget, sessionAppBundleId)
     : undefined;
@@ -260,6 +267,7 @@ export async function completeOpenCommand(params: {
     runtime: runtimeHints,
     runtimeHintCount: countConfiguredRuntimeHints,
     sessionReused: existingSession !== undefined,
+    selection: preparedSelection,
   });
   applyOrdinaryScriptRecordingOpenOutcome({
     session: nextSession,
@@ -397,6 +405,7 @@ export async function openNewSessionWithDeviceClaim(params: {
   applyRuntimeHints?: RuntimeHintApplyOperation;
   clearRuntimeHints?: RuntimeHintClearOperation;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+  selection?: DeviceSelectionResult;
 }): Promise<DaemonResponse> {
   const {
     req,
@@ -411,6 +420,7 @@ export async function openNewSessionWithDeviceClaim(params: {
     applyRuntimeHints,
     clearRuntimeHints,
     reconcileOrphanedDeviceClaim,
+    selection,
   } = params;
   const conflict = findNewSessionDeviceConflict({ req, device, sessionStore });
   if (conflict) return conflict;
@@ -472,6 +482,7 @@ export async function openNewSessionWithDeviceClaim(params: {
       applyRuntimeHints,
       surface,
       deviceClaim,
+      selection,
     });
     if (!response.ok) await rollbackNewSessionClaim(deviceClaim, effects);
     return response;

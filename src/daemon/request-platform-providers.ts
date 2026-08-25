@@ -14,7 +14,8 @@ import { withWebProvider, type WebProvider } from '../platforms/web/provider.ts'
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppleSimulatorScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-transport.ts';
 import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-runner-transport.ts';
-import { hasExplicitDeviceSelector } from './device-selector-intent.ts';
+import { hasDeviceSelectionInput, hasExplicitDeviceSelector } from './device-selector-intent.ts';
+import { buildOpenTargetDeviceResolutionOptions } from './open-device-selection.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 import { resolveProviderDeviceResolutionIntent } from './daemon-command-registry.ts';
 
@@ -351,7 +352,8 @@ async function resolveScopedProviderDevice(
 ): Promise<DeviceInfo | undefined> {
   const intent = resolveProviderDeviceResolutionIntent(req, {
     hasExistingSession: Boolean(existingSession),
-    hasExplicitDeviceSelector: hasExplicitDeviceSelector(req.flags),
+    hasExplicitDeviceIdentity: hasExplicitDeviceSelector(req.flags),
+    hasDeviceSelectionInput: hasDeviceSelectionInput(req.flags),
   });
   switch (intent) {
     case 'existing-session':
@@ -362,13 +364,21 @@ async function resolveScopedProviderDevice(
       // scope for this request", never a failed request — the command's own
       // device resolution still reports its errors downstream.
       try {
-        return await resolveTargetDevice(req.flags ?? {});
+        return await resolveProviderTargetDevice(req);
       } catch {
         return undefined;
       }
     case 'skip':
       return undefined;
   }
+}
+
+async function resolveProviderTargetDevice(req: DaemonRequest): Promise<DeviceInfo> {
+  const options =
+    req.command === 'open'
+      ? buildOpenTargetDeviceResolutionOptions(req.positionals?.[0])
+      : undefined;
+  return await resolveTargetDevice(req.flags ?? {}, options);
 }
 
 async function requestPlatformProviderScopeWrappers(

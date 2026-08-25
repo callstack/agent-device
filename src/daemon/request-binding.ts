@@ -1,5 +1,5 @@
 import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
-import { hasExplicitDeviceSelector } from './device-selector-intent.ts';
+import { hasDeviceSelectionInput } from './device-selector-intent.ts';
 import { applyRequestLockPolicy } from './request-lock-policy.ts';
 import { buildOpenTargetDeviceResolutionOptions } from './open-device-selection.ts';
 import { buildReplayTargetDeviceResolution } from './replay-device-selection.ts';
@@ -87,7 +87,7 @@ function resolveReplayDeviceLock(req: DaemonRequest) {
 }
 
 function resolveExplicitDeviceLock(req: DaemonRequest) {
-  return hasExplicitDeviceSelector(req.flags) ? { flags: req.flags ?? {}, options: {} } : undefined;
+  return hasDeviceSelectionInput(req.flags) ? { flags: req.flags ?? {}, options: {} } : undefined;
 }
 
 function sessionExecutionLockKey(sessionName: string): RequestExecutionLockKey {

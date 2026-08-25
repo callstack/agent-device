@@ -127,7 +127,7 @@ export function getAndroidImeHelperDeviceKey(device: DeviceInfo): string {
  * run, a second daemon on the same emulator, or an `open --no-test-ime` onto a device that already
  * carries the helper all leave the channel available with an empty activation cache.
  */
-export function isAndroidImeHelperPackage(packageName: string | undefined): boolean {
+export function isAndroidImeHelperPackage(packageName: string | undefined): packageName is string {
   return packageName === ANDROID_IME_HELPER_PACKAGE;
 }
 

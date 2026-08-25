@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- Security (MCP/AI-SDK tool surface): the operator-owned endpoint and path inputs — `daemonBaseUrl`,
+  the Metro `proxyBaseUrl`, `stateDir`, `cwd`, `iosSimulatorDeviceSet`, `iosXctestrunFile`,
+  `iosXctestDerivedDataPath`, `iosXctestEnvDir` — follow the credential inputs off the
+  model-writable tool surface: no longer advertised, refused as explicit input with guidance, and
+  resolved from env/config only (a model-writable `daemonBaseUrl`/`proxyBaseUrl` would redirect the
+  env-resolved token to an arbitrary server). Dropping these plus the credential fields shrinks
+  `tools/list` by roughly half. CLI flags and the SDK client options are unchanged.
+- MCP tool descriptions now declare their enforced client timeout envelope (90s default, 180s
+  install, 300s+ lease allocation, unbounded only for the streaming `test` runner), sourced from
+  the descriptor registry's timeout policy so the declared number cannot drift from the enforced
+  one.
+- Security (MCP/AI-SDK tool surface): the shared command-tool executor now enforces the advertised
+  tool schema as an admission boundary — every raw `tools/call` argument must appear in the tool's
+  advertised (`additionalProperties: false`) schema, or it is refused before config/env resolution.
+  Hiding a key from `tools/list` alone was insufficient: the router forwards raw arguments verbatim
+  and the MCP config resolver read `config`/`remoteConfig` as CLI flags, so a model-supplied config
+  file could load `daemonBaseUrl`/`daemonAuthToken` and redirect the operator's token to an
+  arbitrary endpoint. Deny-by-default closes that, the operator keys, and any unknown key at once;
+  operator env/config defaults still resolve (they never arrive as tool input). Retired keys are
+  still admitted so their migration guidance answers.
+- Security (MCP/AI-SDK tool surface): `daemonAuthToken` and the Metro `bearerToken` are no longer
+  advertised as tool input properties, and an explicit value is refused with guidance instead of
+  being forwarded. Credentials are operator-owned: set `AGENT_DEVICE_DAEMON_AUTH_TOKEN` (or
+  `daemonAuthToken` in `~/.agent-device/config.json`) and `AGENT_DEVICE_METRO_BEARER_TOKEN` on the
+  process serving the tools. The model both reads untrusted app UI text and picks tool arguments,
+  so a model-writable credential parameter was a prompt-injection exfiltration path. CLI flags
+  (`--daemon-auth-token`, `--bearer-token`) and env/config resolution are unchanged.
+- Release hygiene: after `npm publish`, `release:mark-dev` moves `main` to the next patch with a
+  `-dev` prerelease marker so the version on `main` never equals a published version (registry
+  scanners diff the tool surface per version string, and a moving surface under a released number
+  reads as a republish). `release:prepare` refuses to publish while the `-dev` marker is in place.
 - Parameterized `fill --record-as` protection is now recording-session-scoped instead of
   fill-step-scoped (ADR 0017 amendment): a later, unrelated recorded action (`wait`, `is`, `get`) can no
   longer re-serialize an app-rendered echo of an already-parameterized value into its own result or

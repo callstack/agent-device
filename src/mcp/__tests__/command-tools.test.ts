@@ -27,11 +27,11 @@ test('MCP command tool executor hides client creation behind an execution adapte
   });
 
   const result = await executor.execute('wait', {
-    stateDir: '/tmp/agent-device-mcp',
+    includeCost: true,
     mcpOutputFormat: 'optimized',
   });
 
-  assert.deepEqual(createdConfigs, [{ stateDir: '/tmp/agent-device-mcp' }]);
+  assert.deepEqual(createdConfigs, [{ cost: true }]);
   assert.deepEqual(calls, [
     {
       client,
@@ -120,7 +120,7 @@ test('MCP tool schemas add MCP client config fields at the MCP boundary', () => 
   const devicesTool = listCommandTools().find((tool) => tool.name === 'devices');
 
   assert.ok(devicesTool);
-  assert.ok('stateDir' in (devicesTool.inputSchema.properties ?? {}));
+  assert.equal('stateDir' in (devicesTool.inputSchema.properties ?? {}), false);
   assert.deepEqual(
     (devicesTool.inputSchema.properties?.mcpOutputFormat as { enum?: unknown[] } | undefined)?.enum,
     ['optimized', 'json'],
@@ -810,7 +810,7 @@ test('MCP tool error is a ref-issuing result: isError, structuredContent, and pi
     },
   });
 
-  const result = await executor.execute('replay', { positionals: ['/tmp/flow.ad'] });
+  const result = await executor.execute('replay', { path: '/tmp/flow.ad' });
 
   assert.equal(result.isError, true);
   const structured = result.structuredContent as {
@@ -908,7 +908,7 @@ test("MCP projections carry a caution divergence's alternateFrom (structuredCont
     },
   });
 
-  const result = await executor.execute('replay', { positionals: ['/tmp/flow.ad'] });
+  const result = await executor.execute('replay', { path: '/tmp/flow.ad' });
   assert.equal(result.isError, true);
   const structured = result.structuredContent as {
     details?: { divergence?: { resume?: { from?: number; alternateFrom?: number } } };
@@ -1064,7 +1064,6 @@ const UNDESCRIBED_TOOL_INPUTS = new Set([
   'logs.message',
   'logs.restart',
   'metro.action',
-  'metro.bearerToken',
   'metro.bridgeScope',
   'metro.bundleUrl',
   'metro.installDependenciesIfNeeded',
@@ -1077,7 +1076,6 @@ const UNDESCRIBED_TOOL_INPUTS = new Set([
   'metro.port',
   'metro.probeTimeoutMs',
   'metro.projectRoot',
-  'metro.proxyBaseUrl',
   'metro.publicBaseUrl',
   'metro.reuseExisting',
   'metro.runtimeFilePath',

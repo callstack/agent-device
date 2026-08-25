@@ -72,6 +72,17 @@ when a running daemon needs to pick up a new TypeScript build.
 `pnpm package:npm` is a release guard, not a routine development command. Use the specific commands
 above while iterating.
 
+### The version on main never equals a published version
+
+`release:publish` runs `release:mark-dev` right after `npm publish`, moving `package.json` (and the
+synchronized `server.json`) to the next patch with a `-dev` prerelease marker (for example
+`0.20.11-dev`). Commit that bump as part of the release. The invariant it protects: MCP registry
+scanners diff the repository's tool surface per version string, so a released number left on `main`
+while `main` keeps changing is indistinguishable from a republished ("rug-pull") version.
+`release:prepare` enforces the inverse direction and refuses to publish while the `-dev` marker is
+still in place — set the real release version first (for example `npm version patch`, which strips
+the prerelease marker), commit, then publish.
+
 ### Released-surface baselines roll forward on publish
 
 Compatibility gates baseline against the last **released tag**, not against `main`, so publishing is

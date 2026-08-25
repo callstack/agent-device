@@ -46,6 +46,28 @@ describe('openCliOutput', () => {
     expect(output.text).toBe(`Opened: authoring\nWarning: ${warning}`);
   });
 
+  test('preserves device-selection evidence in the CLI payload', () => {
+    const output = openCliOutput({
+      session: 'selected',
+      selection: {
+        reason: 'single-booted-local',
+        source: 'local',
+        candidateCount: 2,
+        bootOccurred: false,
+      },
+      identifiers: { session: 'selected' },
+    });
+
+    expect(output.data).toMatchObject({
+      selection: {
+        reason: 'single-booted-local',
+        source: 'local',
+        candidateCount: 2,
+        bootOccurred: false,
+      },
+    });
+  });
+
   // #1671 P1: the composed open --foreground snapshot must render on default
   // stdout through the PRODUCTION formatter route (the family-registry entry
   // the CLI resolves, not a helper mock), printing the same interactive tree

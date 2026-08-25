@@ -124,6 +124,11 @@ test('fillAndroid clears then commits non-ASCII text through the test IME and ve
     false,
     'the ASCII shell input path must not run while the test IME is active',
   );
+  assert.equal(
+    calls.filter((args) => args[1] === 'input' && args[2] === 'tap').length,
+    1,
+    'one focus tap serves both channel resolution and the first helper attempt',
+  );
 });
 
 // The device, not this daemon process, decides which IME is active. A previous run (or another
@@ -205,6 +210,59 @@ test('fillAndroid batches ASCII text when the device is already on the helper IM
     calls.some((args) => args.includes('KEYCODE_DEL')),
     false,
     'the helper clears the field over the broadcast channel, not with delete keyevents',
+  );
+  assert.equal(
+    calls.filter((args) => args[1] === 'input' && args[2] === 'tap').length,
+    1,
+    'the focus tap that resolved the channel is the first helper attempt’s focus — no second tap',
+  );
+});
+
+test('fillAndroid re-focuses the target when the first helper attempt fails verification', async () => {
+  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+  let currentText = 'stale value';
+  let commits = 0;
+  const calls: string[][] = [];
+  const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
+    exec: async (args) => {
+      calls.push(args);
+      if (args[1] === 'am' && args[2] === 'broadcast') {
+        const action = args[args.indexOf('-a') + 1];
+        if (action === 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT') {
+          currentText = '';
+        } else if (action === 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64') {
+          commits += 1;
+          currentText += decodeBroadcastText(args);
+        }
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    // The first commit never lands in the tree — the not-yet-bound InputConnection case the helper
+    // retry exists for — so every verification sample keeps showing the stale value until the
+    // second attempt's commit.
+    captureXml: () => androidInputXml({ text: commits >= 2 ? currentText : 'stale value' }),
+  });
+
+  await withAndroidAdbProvider(
+    { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      await fillAndroid(ANDROID_EMULATOR, 10, 10, 'filed the expense');
+    },
+  );
+
+  assert.equal(currentText, 'filed the expense');
+  assert.equal(
+    calls.filter((args) => args[1] === 'input' && args[2] === 'tap').length,
+    2,
+    'the retry attempt must re-focus the target before its clear-and-commit round',
+  );
+  assert.equal(
+    calls.filter((args) => args.includes('com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT'))
+      .length,
+    2,
+    'each helper attempt clears before it commits',
   );
 });
 

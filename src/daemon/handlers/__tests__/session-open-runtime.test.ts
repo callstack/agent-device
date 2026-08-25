@@ -2,9 +2,18 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 
+const mockResolveTargetDevice = vi.hoisted(() => vi.fn());
+
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
+  const { selectionFromResolveTargetDevice } =
+    await import('../../__tests__/device-selection-stub.ts');
+  return {
+    ...actual,
+    dispatchCommand: vi.fn(async () => ({})),
+    resolveTargetDevice: mockResolveTargetDevice,
+    resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(mockResolveTargetDevice)),
+  };
 });
 vi.mock('../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
@@ -51,7 +60,6 @@ import {
   mockBindDeviceRuntime,
   mockInspectDeviceRuntimeFacts,
 } from './session-command-harness.ts';
-import { resolveTargetDevice } from '../../../core/dispatch.ts';
 import { applyRuntimeHintValues } from '../../../platform-runtime-runtime-hints.ts';
 import { resolveAndroidPackageForOpen } from '../../../platform-runtime-open-target.ts';
 import { dispatchApplicationLifecycleEffect } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
@@ -65,7 +73,6 @@ import {
 } from './session-open-runtime.fixtures.ts';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
-const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintValues);
 const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
 

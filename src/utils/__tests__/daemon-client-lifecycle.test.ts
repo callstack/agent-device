@@ -582,10 +582,10 @@ test('sendToDaemon prints a takeover notice before replacing an unreachable daem
 
   const stateDir = makeTempStateDir('agent-device-daemon-unreachable-takeover-');
   const paths = resolveDaemonPaths(stateDir);
-  // Grab a loopback port with no listener so the recorded daemon is unreachable.
+  // Bind fresh BEFORE freeing the port below: a later bind can reclaim it and skip the takeover.
+  const freshDaemon = await startHttpDaemonFixture({ via: 'fresh-daemon' });
   const unreachable = await startHttpDaemonFixture({ via: 'unused' });
   await closeLoopbackServer(unreachable.server);
-  const freshDaemon = await startHttpDaemonFixture({ via: 'fresh-daemon' });
   vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
   installSpawnedHttpDaemon(paths, freshDaemon.port);
   writeDaemonInfo(paths, {

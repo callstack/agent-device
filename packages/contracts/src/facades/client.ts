@@ -11,6 +11,9 @@ export type {
   AppOpenResult,
   AppPushOptions,
   AppTriggerEventOptions,
+  DeviceSelectionMetadata,
+  DeviceSelectionReason,
+  DeviceSelectionSource,
   MaterializationReleaseOptions,
   MaterializationReleaseResult,
 } from '../client-app.ts';

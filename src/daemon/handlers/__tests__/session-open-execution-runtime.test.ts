@@ -4,9 +4,18 @@ import path from 'node:path';
 import type { DaemonRequest } from '../../types.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
+const mockResolveTargetDevice = vi.hoisted(() => vi.fn());
+
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
+  const { selectionFromResolveTargetDevice } =
+    await import('../../__tests__/device-selection-stub.ts');
+  return {
+    ...actual,
+    dispatchCommand: vi.fn(async () => ({})),
+    resolveTargetDevice: mockResolveTargetDevice,
+    resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(mockResolveTargetDevice)),
+  };
 });
 vi.mock('../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
@@ -53,7 +62,6 @@ import {
   mockBindDeviceRuntime,
   mockInspectDeviceRuntimeFacts,
 } from './session-command-harness.ts';
-import { resolveTargetDevice } from '../../../core/dispatch.ts';
 import {
   applyRuntimeHintValues,
   clearRuntimeHintValues,
@@ -68,7 +76,6 @@ import {
 } from './session-open-runtime.fixtures.ts';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
-const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintValues);
 const mockClearRuntimeHints = vi.mocked(clearRuntimeHintValues);
 const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
