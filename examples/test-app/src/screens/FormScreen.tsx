@@ -108,7 +108,7 @@ export function FormScreen(props: FormScreenProps) {
           accessibilityLabel="Full name"
           label="Full name"
           onChangeText={(value) => props.onChange('name', value)}
-          placeholder="Ada Lovelace"
+          placeholder="Type your full name"
           testID="field-name"
           value={props.form.name}
         />
@@ -119,7 +119,7 @@ export function FormScreen(props: FormScreenProps) {
           label="Email"
           onChangeText={(value) => props.onChange('email', value)}
           onSubmitEditing={() => Keyboard.dismiss()}
-          placeholder="ada@example.com"
+          placeholder="Type your email"
           returnKeyType="done"
           testID="field-email"
           value={props.form.email}
