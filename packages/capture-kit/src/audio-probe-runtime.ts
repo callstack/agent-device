@@ -62,30 +62,36 @@ type HostAudioProbeDescriptorDecode = DurableDescriptorCodec<
   typeof AUDIO_PROBE_RESOURCE_KIND
 >['decode'];
 
+const hasValidHostAudioProbeFields = (body: Record<string, unknown>): boolean =>
+  isNonEmptyString(body.backend) &&
+  (body.source === 'system-audio' || body.source === 'media-elements') &&
+  isBoundedInteger(body.sourceCount, 0) &&
+  isStringArray(body.notes) &&
+  isNonEmptyString(body.statusPath) &&
+  isBoundedInteger(body.startedAt, 1) &&
+  isBoundedInteger(body.durationMs, 1) &&
+  isBoundedInteger(body.bucketMs, 1);
+
 const decodeHostAudioProbeDescriptor: HostAudioProbeDescriptorDecode = (body) => {
-  if (!isNonEmptyString(body.backend)) return invalidHostAudioProbeDescriptor();
-  if (body.source !== 'system-audio' && body.source !== 'media-elements') {
-    return invalidHostAudioProbeDescriptor();
+  const valid = hasValidHostAudioProbeFields(body);
+  const marker = valid ? decodeMarker(body.marker) : 'invalid';
+  if (!valid || marker === 'invalid') {
+    return { status: 'invalid', message: 'Audio probe descriptor body is invalid' };
   }
-  if (!isBoundedInteger(body.sourceCount, 0)) return invalidHostAudioProbeDescriptor();
-  if (!isStringArray(body.notes)) return invalidHostAudioProbeDescriptor();
-  if (!isNonEmptyString(body.statusPath)) return invalidHostAudioProbeDescriptor();
-  if (!isBoundedInteger(body.startedAt, 1)) return invalidHostAudioProbeDescriptor();
-  if (!isBoundedInteger(body.durationMs, 1)) return invalidHostAudioProbeDescriptor();
-  if (!isBoundedInteger(body.bucketMs, 1)) return invalidHostAudioProbeDescriptor();
-  const marker = decodeMarker(body.marker);
-  if (marker === 'invalid') return invalidHostAudioProbeDescriptor();
+  const decoded = body as unknown as Omit<HostAudioProbeDescriptor, 'notes' | 'marker'> & {
+    notes: readonly string[];
+  };
   return {
     status: 'decoded',
     descriptor: Object.freeze({
-      backend: body.backend,
-      source: body.source,
-      sourceCount: body.sourceCount,
-      notes: Object.freeze([...body.notes]),
-      statusPath: body.statusPath,
-      startedAt: body.startedAt,
-      durationMs: body.durationMs,
-      bucketMs: body.bucketMs,
+      backend: decoded.backend,
+      source: decoded.source,
+      sourceCount: decoded.sourceCount,
+      notes: Object.freeze([...decoded.notes]),
+      statusPath: decoded.statusPath,
+      startedAt: decoded.startedAt,
+      durationMs: decoded.durationMs,
+      bucketMs: decoded.bucketMs,
       ...(marker === undefined ? {} : { marker }),
     }),
   };
@@ -230,6 +236,31 @@ function assertConfirmedAudioProbeCleanup(outcome: CleanupOutcome): void {
       hint: 'Keep audio-probe.resource.json and retry stop through its exact runtime owner.',
     },
   );
+}
+
+/**
+ * The complete capture-side operation set shared by every darwin-hosted owner family: one start
+ * pipeline plus the cleanup-only recovery pair, bound to the owner's exact identity.
+ */
+export function createHostAudioProbeCaptureOperations(params: {
+  host: HostSystemAudioCaptureHost;
+  device: DeviceInfo;
+  owner: RuntimeOwnerRef;
+}): Readonly<{
+  audioProbeStart(input: AudioProbeStartInput): Promise<AudioProbeStartResult>;
+  audioProbeReattach(
+    input: AudioProbeReattachInput,
+  ): Promise<ReattachOutcome<AudioProbeLiveHandle, AudioProbeCompletion>>;
+  audioProbeCleanup(input: AudioProbeReattachInput): Promise<CleanupOutcome>;
+}> {
+  const { host, device, owner } = params;
+  const recovery = createHostAudioProbeRecoveryOperations({ host });
+  return Object.freeze({
+    audioProbeStart: async (input: AudioProbeStartInput) =>
+      await startHostAudioProbe({ host, device, owner, input }),
+    audioProbeReattach: recovery.audioProbeReattach,
+    audioProbeCleanup: recovery.audioProbeCleanup,
+  });
 }
 
 /**
@@ -383,10 +414,6 @@ function finalizeStatus(
 
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
-
-function invalidHostAudioProbeDescriptor(): ReturnType<HostAudioProbeDescriptorDecode> {
-  return { status: 'invalid', message: 'Audio probe descriptor body is invalid' };
 }
 
 function decodeMarker(value: unknown): ManagedProcessIdentity | undefined | 'invalid' {

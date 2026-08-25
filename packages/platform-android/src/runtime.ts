@@ -45,10 +45,8 @@ import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  androidAudioProbeCaptureFact,
-  createAndroidAudioProbeOperations,
-} from './audio-runtime.ts';
+import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit';
+import { androidAudioProbeCaptureFact } from './audio-runtime.ts';
 import { createAndroidAppLogRuntime } from './logs/runtime.ts';
 import { dumpAndroidNetworkTraffic } from './network/runtime.ts';
 import { bindAndroidScreenRecordingRuntime } from './recording/runtime.ts';
@@ -424,7 +422,11 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
             await dumpAndroidNetworkTraffic(host, request.device, input, request.scope.signal),
           ...recording,
           ...whenAdmitted(facts.operations.audioProbeStart, () =>
-            createAndroidAudioProbeOperations({ host, device: request.device, owner }),
+            createHostAudioProbeCaptureOperations({
+              host: host.audioProbe.hostCapture,
+              device: request.device,
+              owner,
+            }),
           ),
           ...androidInteractionOperations(host, request, facts),
           ensureReady: async (input: EnsureReadyInput) =>

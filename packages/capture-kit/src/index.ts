@@ -11,11 +11,9 @@ export {
 } from './app-log-runtime.ts';
 export { createAppLogLiveHandle, createAppLogLiveHandleFromFinish } from './app-log-live-handle.ts';
 export {
-  createHostAudioProbeRecoveryOperations,
+  createHostAudioProbeCaptureOperations,
   hostAudioProbeDescriptorCodec,
-  startHostAudioProbe,
 } from './audio-probe-runtime.ts';
-export type { HostAudioProbeDescriptor } from './audio-probe-runtime.ts';
 export { createScreenRecordingLiveHandle } from './screen-recording-live-handle.ts';
 export { createScreenRecordingCompletion } from './screen-recording-completion.ts';
 export { assertScreenRecordingOptionsSupported } from './screen-recording-options.ts';

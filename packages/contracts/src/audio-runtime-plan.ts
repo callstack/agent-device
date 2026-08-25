@@ -12,7 +12,7 @@ export const audioProbeStartUse = defineUse({ required: ['audioProbeStart'] });
 export const audioProbeRecoveryUse = defineUse({
   required: ['audioProbeReattach', 'audioProbeCleanup'],
 });
-export const audioProbeQueryUse = defineUse({ required: ['audioProbeQuery'] });
+const audioProbeQueryUse = defineUse({ required: ['audioProbeQuery'] });
 
 export const audioRuntimePlanUses = Object.freeze([
   audioProbeStartUse,

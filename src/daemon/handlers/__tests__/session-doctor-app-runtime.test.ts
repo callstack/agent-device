@@ -27,9 +27,6 @@ vi.mock('../session-doctor-device.ts', async (importOriginal) => {
 vi.mock('../session-doctor-metro.ts', () => ({
   probeMetro: vi.fn(async () => ({ id: 'metro', status: 'pass', summary: 'mocked' })),
 }));
-vi.mock('../session-doctor-web.ts', () => ({
-  appendWebBrowserLifecycleCheck: vi.fn(async () => {}),
-}));
 
 test('doctor app checks retain runtime admission failures as a failed target-app check', async () => {
   const sessionName = 'doctor-app-runtime-failure';

@@ -56,7 +56,7 @@ async function acquireAudioProbeRecoveryControl(
   });
 }
 
-export function createAudioProbeRecoveryControl(params: {
+function createAudioProbeRecoveryControl(params: {
   runtime: AudioProbeRecoveryRuntime;
   dispose(): Promise<void>;
 }): DurableCaptureRecoveryControl<'audio-probe', AudioProbeLiveHandle, AudioProbeCompletion> {

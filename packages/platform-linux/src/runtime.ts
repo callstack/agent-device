@@ -116,7 +116,7 @@ const clipboardKindUnavailable = unavailableLinuxRuntimeFact(
 // `orientation`, `tv-remote`, and every keyboard action never carried a Linux capability bucket
 // at all (the retired descriptors declared `linux: {}`), so they are unavailable unconditionally.
 const linuxPlatformLeafUnavailable = unsupportedPlatformLeaf;
-const audioProbeUnavailable = unavailableLinuxRuntimeFact(
+const linuxAudioProbeUnavailable = unavailableLinuxRuntimeFact(
   'unsupported-platform-leaf',
   'audio is supported for web browser sessions, macOS sessions, iOS simulators, and Android emulators on macOS hosts',
 );
@@ -213,8 +213,8 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     keyboardStatus: linuxPlatformLeafUnavailable,
     keyboardDismiss: linuxPlatformLeafUnavailable,
     keyboardEnter: linuxPlatformLeafUnavailable,
-    audioProbeCapture: audioProbeUnavailable,
-    audioProbeQuery: audioProbeUnavailable,
+    audioProbeCapture: linuxAudioProbeUnavailable,
+    audioProbeQuery: linuxAudioProbeUnavailable,
     readiness: unsupportedPlatformLeaf,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: openTarget,

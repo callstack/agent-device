@@ -43,7 +43,8 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
-import { appleAudioProbeCaptureFact, createAppleAudioProbeOperations } from './audio/runtime.ts';
+import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit';
+import { appleAudioProbeCaptureFact } from './audio/runtime.ts';
 import { appleGestureAndScrollFacts } from './gesture-facts.ts';
 import { createAppleAppLogRuntime } from './logs/runtime.ts';
 import { dumpAppleNetworkTraffic } from './network/runtime.ts';
@@ -349,7 +350,11 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           }),
         ),
         ...whenAdmitted(facts.operations.audioProbeStart, () =>
-          createAppleAudioProbeOperations({ host, device: request.device, owner }),
+          createHostAudioProbeCaptureOperations({
+            host: host.audioProbe.hostCapture,
+            device: request.device,
+            owner,
+          }),
         ),
         ...whenAdmitted(facts.operations.captureSnapshot, () =>
           bindAppleSnapshotRuntime(host, {

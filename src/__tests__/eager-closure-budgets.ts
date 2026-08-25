@@ -162,6 +162,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/gesture-admission.ts': 6,
   'packages/contracts/src/gesture-runtime.ts': 5,
   'packages/contracts/src/gesture-plan.ts': 12,
+  'packages/contracts/src/host-diagnostics.ts': 1,
   'packages/contracts/src/interaction-error.ts': 1,
   'packages/contracts/src/interaction-guarantees.ts': 1,
   'packages/contracts/src/interactor-types.ts': 1,
