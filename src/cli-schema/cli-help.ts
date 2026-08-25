@@ -143,7 +143,7 @@ Snapshots and refs:
   snapshot reads visible state; snapshot -i gets current interactive refs only -- the fast path before an interaction. Default text is agent-facing and token-efficient; --raw/--json only for the full provider tree.
   Legend: @e12 [button] label="Add to cart" enabled hittable -> press @e12. [off-screen below] -> scroll down (a hint, not a ref).
   Refs stay valid until you press/click/fill/type/scroll/back/wait-for-async-UI, or otherwise change app state; open/--relaunch clears the stored snapshot outright.
-  Prefer --settle and continue from its settled diff when it shows the next target; refresh with snapshot -i only when you did not settle, settle reported not settled, or its output lacks what you need. A known selector/label after a mutation is often enough, since interaction commands refresh state internally.
+  Prefer --settle and continue from its settled diff when it shows the next target; refresh with snapshot -i only when you did not settle, it reported not settled, or its output lacks what you need. A known selector/label after a mutation is often enough, since interaction commands refresh state internally.
   Truncated preview: snapshot -s @e12 (the current concrete ref), not get text. Missing target in a list: scroll down/up (not bottom/top unless the task wants the edge), then snapshot -i. TV/D-pad focus: help tv.
 
 Selectors:
