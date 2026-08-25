@@ -45,7 +45,14 @@ extension RunnerTests {
     static let pollInterval: TimeInterval = 0.02
     static let warmupValueTimeout: TimeInterval = 0.4
     static let verificationStabilityWindow: TimeInterval = 0.2
-    static let synthesizedCommitTimeout: TimeInterval = 3.0
+    /// How long the commit wait tolerates seeing NO further progress toward the expected value.
+    /// Numerically the flat deadline this replaced, so a pipeline that delivers nothing is
+    /// condemned at exactly the same instant it always was (see `SynthesizedCommitBudget`).
+    static let synthesizedCommitStallTimeout: TimeInterval = 3.0
+    /// The commit wait's absolute bound, however long characters keep arriving. Sits well inside
+    /// the daemon's per-command budget (`RUNNER_COMMAND_TIMEOUT_MS`, 45s), which also has to cover
+    /// focus, clear and verification around this wait.
+    static let synthesizedCommitCeiling: TimeInterval = 10.0
     static let synthesizedCommitPollInterval: TimeInterval = 0.2
   }
 
@@ -384,7 +391,7 @@ extension RunnerTests {
     var latest = resolveTextEntryElement(app: app, target: target)
     let keyboardVisibleAtEntry = isKeyboardVisible(app: app)
     let deadline = Date().addingTimeInterval(timeout)
-    let hardwareKeyboardFallback = Date().addingTimeInterval(
+    var hardwareKeyboardFallback = Date().addingTimeInterval(
       min(TextEntryTiming.hardwareKeyboardFallbackTimeout, timeout)
     )
     var sawSoftwareKeyboard = false
@@ -404,8 +411,19 @@ extension RunnerTests {
         return latest
       }
       sawSoftwareKeyboard = sawSoftwareKeyboard || keyboardElementExists(app: app)
-      if !sawSoftwareKeyboard && Date() >= hardwareKeyboardFallback && latest != nil {
-        return latest
+      // A responder that takes no software keyboard (hardware keyboard connected, or a custom
+      // `inputView`) would otherwise burn the whole readinessTimeout waiting for one that is never
+      // coming. Leaving that window a bare wall-clock guess made readiness a function of ambient
+      // simulator state (#1874): on a loaded host the keyboard is merely late, and returning here
+      // handed the caller an element that had not taken focus yet. Ask the target itself instead,
+      // and re-arm rather than re-asking every poll — the query is cheap, not free.
+      if !sawSoftwareKeyboard, Date() >= hardwareKeyboardFallback, let candidate = latest {
+        if keyboardFocusConfirmed(app: app, element: candidate) {
+          return candidate
+        }
+        hardwareKeyboardFallback = Date().addingTimeInterval(
+          TextEntryTiming.hardwareKeyboardFallbackTimeout
+        )
       }
       sleepFor(TextEntryTiming.pollInterval)
     }
@@ -462,6 +480,41 @@ extension RunnerTests {
   /// so callers must keep waiting rather than typing into the previously-focused field.
   private func keyboardBecameVisible(app: XCUIApplication, wasVisibleAtEntry: Bool) -> Bool {
     return !wasVisibleAtEntry && isKeyboardVisible(app: app)
+  }
+
+  /// Positive evidence that this element — the one readiness is about to hand its caller — holds
+  /// keyboard focus. Readable even with no software keyboard on screen, which is what lets the
+  /// hardware-keyboard fallback stop guessing from a wall clock.
+  ///
+  /// This is the same app-wide predicate `focusedTextInput` refuses to trust on iOS, used the
+  /// other way round. There, the query PICKS the target, so a stale or unrelated match becomes
+  /// the field that gets typed into. Here the target is already chosen and the query only
+  /// corroborates it: at most one element holds keyboard focus, so an answer that is not this
+  /// element is a refusal, not a substitution. Every way of being wrong therefore ends as `false`
+  /// and costs the remaining readiness timeout — exactly what the wait would spend with no
+  /// fallback at all.
+  func keyboardFocusConfirmed(app: XCUIApplication, element: XCUIElement) -> Bool {
+#if os(iOS)
+    return safely("TEXT_ENTRY_FOCUS_CONFIRMED", false) {
+      // An element that no longer resolves reads as identifier "" and frame `.zero`, which would
+      // match any focused element that also reports an empty frame. Require a real frame first,
+      // so a dead handle cannot corroborate anything.
+      let frame = element.frame
+      guard !frame.isEmpty else {
+        return false
+      }
+      let focused = app
+        .descendants(matching: .any)
+        .matching(NSPredicate(format: "hasKeyboardFocus == 1"))
+        .firstMatch
+      guard focused.exists else {
+        return false
+      }
+      return focused.identifier == element.identifier && focused.frame == frame
+    }
+#else
+    return false
+#endif
   }
 
   private func keyboardElementExists(app: XCUIApplication) -> Bool {

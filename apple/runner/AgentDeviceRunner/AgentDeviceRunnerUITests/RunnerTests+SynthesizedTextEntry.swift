@@ -360,23 +360,32 @@ extension RunnerTests {
     waitForNextObservation: () -> Void
   ) {
     let placeholder = resolveTextEntryElement(app: app, target: target)?.placeholderValue
-    let deadline = Date().addingTimeInterval(TextEntryTiming.synthesizedCommitTimeout)
     let waitStartedAt = Date()
+    // Throttling and a wedge are the same to a flat deadline, so the expected-prefix walk decides
+    // instead of the wall clock alone — the very distinction the cadence line below was added to
+    // make visible. See `SynthesizedCommitBudget`.
+    let budget = SynthesizedCommitBudget(
+      startedAt: waitStartedAt,
+      stallBudget: TextEntryTiming.synthesizedCommitStallTimeout,
+      ceiling: TextEntryTiming.synthesizedCommitCeiling
+    )
     return (
       placeholder: placeholder,
-      isExpired: { Date() >= deadline },
+      isExpired: { budget.isExpired(at: Date()) },
       observe: {
         let observedText = self.editableTextValue(
           for: self.resolveTextEntryElement(app: app, target: target),
           treatingPlaceholderAsEmpty: true
         )
+        let expectedPrefixLen = observedText.map { Self.commonPrefixLength($0, expectedText) } ?? -1
+        budget.record(expectedPrefixLength: expectedPrefixLen, at: Date())
         // Cadence evidence stays value-free: the polled value is user content typed through
         // `type`/`fill` and must never reach runner.log. Lengths and the expected-prefix walk
         // are enough to distinguish throttling (prefix grows slowly) from a wedge (it freezes).
         Self.logCommitCadence(
           elapsedMs: Int(waitStartedAt.timeIntervalSinceNow * -1000),
           observedLen: observedText?.count ?? -1,
-          expectedPrefixLen: observedText.map { Self.commonPrefixLength($0, expectedText) } ?? -1
+          expectedPrefixLen: expectedPrefixLen
         )
         return observedText
       },

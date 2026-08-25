@@ -416,11 +416,13 @@ extension RunnerTests {
     // poll and the value never becomes "abc" — under the replacement-mode outcome function that is
     // correctly a failure (see `testSynthesizedReplacementCommitCatchesDroppedMiddleCharacters` for
     // why it must NOT be waved through as success), so this call runs the real 3-second deadline
-    // (`TextEntryTiming.synthesizedCommitTimeout`) before returning. That is deliberate here, not a
-    // flake: this test only runs in the nightly XCUITest lane (see `runner-xctest-local-run-gotchas`
-    // memory / ios.yml's `-only-testing:` allowlist), where a few extra seconds is a non-issue, and
-    // the alternative — asserting `nil` on a wiring path that can never actually observe the
-    // expected text — would silently reintroduce the exact bug this fix closes.
+    // (`TextEntryTiming.synthesizedCommitStallTimeout`; a nil read never advances the expected
+    // prefix, so `SynthesizedCommitBudget` grants it no extra time) before returning. That is
+    // deliberate here, not a flake: this test only runs in the nightly XCUITest lane (see
+    // `runner-xctest-local-run-gotchas` memory / ios.yml's `-only-testing:` allowlist), where a
+    // few extra seconds is a non-issue, and the alternative — asserting `nil` on a wiring path
+    // that can never actually observe the expected text — would silently reintroduce the exact
+    // bug this fix closes.
     XCTAssertEqual(result.failure, .commitNotObserved)
   }
 

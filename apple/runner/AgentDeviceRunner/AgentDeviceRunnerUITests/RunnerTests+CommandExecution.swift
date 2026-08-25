@@ -379,9 +379,13 @@ extension RunnerTests {
     )
     let tapResponse = try executeOnMainPrepared(command: tapCommand, activeApp: app)
     XCTAssertTrue(tapResponse.ok, String(describing: tapResponse.error))
-    XCTAssertFalse(
+    // A precondition, not a product claim. The fixture's empty `inputView` is what keeps the
+    // keyboard down, but nothing in this bundle owns the simulator's own keyboard settings, so an
+    // ambient flip that raised one here would be an environment fact — and reporting it as a
+    // failed assertion is what made this read as a product regression on unrelated PRs (#1874).
+    try XCTSkipIf(
       isKeyboardVisible(app: app),
-      "the test must exercise a focused responder with the software keyboard hidden"
+      "software keyboard is up: this simulator cannot exercise the hidden-keyboard responder path"
     )
 
     let failureCountBefore = currentXCTestFailureCount()
@@ -405,6 +409,56 @@ extension RunnerTests {
     XCTAssertEqual(secondTypeResponse.error?.code, "TEXT_INPUT_NOT_FOCUSED")
     XCTAssertFalse(didRecordXCTestFailure(since: secondFailureCountBefore))
     XCTAssertEqual(String(describing: textField.value ?? ""), "hardware-keyboard")
+  }
+
+  // `waitForTextEntryReadiness`'s hardware-keyboard fallback returns early only on confirmed
+  // focus (#1874), and `keyboardFocusConfirmed` reads that from the app-wide focus predicate this
+  // bundle otherwise refuses to trust. Two XCTest facts it rests on, neither a repository
+  // invariant: the predicate reports a responder that shows NO software keyboard at all, and it
+  // names the element well enough to tell the tapped field from another one. The fixture field is
+  // the exact shape the fallback exists for — a real responder with an empty `inputView` — so this
+  // is where both are observable. If either regressed, readiness would silently stop taking the
+  // fallback and spend the full readinessTimeout on every hardware-keyboard field, which no other
+  // assertion would notice.
+  func testHardwareKeyboardResponderConfirmsItsOwnKeyboardFocus() throws {
+    app.launchArguments = ["--agent-device-text-entry-regression"]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+
+    let textField = app.textFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    let otherElement = app.staticTexts["Agent Device Runner"]
+    XCTAssertTrue(otherElement.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertFalse(
+      keyboardFocusConfirmed(app: app, element: textField),
+      "an untapped field must not confirm focus, or the fallback would fire immediately"
+    )
+
+    let tapCommand = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"tap-focus-confirmation","selectorKey":"id","selectorValue":"agent-device-hardware-keyboard-input"}"#
+    )
+    let tapResponse = try executeOnMainPrepared(command: tapCommand, activeApp: app)
+    XCTAssertTrue(tapResponse.ok, String(describing: tapResponse.error))
+    try XCTSkipIf(
+      isKeyboardVisible(app: app),
+      "software keyboard is up: this simulator cannot exercise the hidden-keyboard responder path"
+    )
+
+    let deadline = Date().addingTimeInterval(TextEntryTiming.readinessTimeout)
+    var confirmed = keyboardFocusConfirmed(app: app, element: textField)
+    while !confirmed && Date() < deadline {
+      sleepFor(TextEntryTiming.pollInterval)
+      confirmed = keyboardFocusConfirmed(app: app, element: textField)
+    }
+    XCTAssertTrue(confirmed, "a tapped responder must confirm its own keyboard focus")
+    XCTAssertFalse(
+      keyboardFocusConfirmed(app: app, element: otherElement),
+      "focus held by another element must read as a refusal, never as this element's focus"
+    )
   }
 
   func testBareDelayedTypeFailsWhenTappedInputDisappearsMidCommand() throws {
