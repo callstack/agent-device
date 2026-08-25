@@ -384,62 +384,34 @@ export type {
   TypeTextRuntimeOperationFacts,
   TypeTextRuntimeOperations,
 } from '../type-text-runtime.ts';
-export {
-  bindLocalBackInteractor,
-  bindProviderBackInteractor,
-  backRuntimeOperationFacts,
-} from '../back-runtime.ts';
+export { backRuntimeOperationFacts, bindBack } from '../back-runtime.ts';
 export type {
   BackInput,
   BackRuntimeOperationFacts,
   BackRuntimeOperations,
-  LocalBackInteractorResolver,
-  ProviderBackInteractorResolver,
 } from '../back-runtime.ts';
-export {
-  bindLocalHomeInteractor,
-  bindProviderHomeInteractor,
-  homeRuntimeOperationFacts,
-} from '../home-runtime.ts';
+export { bindHome, homeRuntimeOperationFacts } from '../home-runtime.ts';
 export type {
   HomeInput,
   HomeRuntimeOperationFacts,
   HomeRuntimeOperations,
-  LocalHomeInteractorResolver,
-  ProviderHomeInteractorResolver,
 } from '../home-runtime.ts';
-export {
-  bindLocalOrientationInteractor,
-  bindProviderOrientationInteractor,
-  orientationRuntimeOperationFacts,
-} from '../orientation-runtime.ts';
+export { bindOrientation, orientationRuntimeOperationFacts } from '../orientation-runtime.ts';
 export type {
-  LocalOrientationInteractorResolver,
   OrientationRuntimeOperationFacts,
   OrientationRuntimeOperations,
-  ProviderOrientationInteractorResolver,
   SetOrientationInput,
   SetOrientationResult,
 } from '../orientation-runtime.ts';
-export {
-  bindLocalTvRemoteInteractor,
-  bindProviderTvRemoteInteractor,
-  tvRemoteRuntimeOperationFacts,
-} from '../tv-remote-runtime.ts';
+export { bindTvRemote, tvRemoteRuntimeOperationFacts } from '../tv-remote-runtime.ts';
 export type {
-  LocalTvRemoteInteractorResolver,
-  ProviderTvRemoteInteractorResolver,
   TvRemoteInput,
   TvRemoteRuntimeOperationFacts,
   TvRemoteRuntimeOperations,
 } from '../tv-remote-runtime.ts';
 export {
-  bindLocalKeyboardStatusInteractor,
-  bindProviderKeyboardStatusInteractor,
-  bindLocalKeyboardDismissInteractor,
-  bindProviderKeyboardDismissInteractor,
-  bindLocalKeyboardEnterInteractor,
-  bindProviderKeyboardEnterInteractor,
+  KEYBOARD_ACTION_LABELS,
+  bindKeyboardAction,
   keyboardRuntimeOperationFacts,
 } from '../keyboard-runtime.ts';
 export type {
@@ -452,8 +424,6 @@ export type {
   KeyboardRuntimeOperations,
   KeyboardStatusResult,
   KeyboardStatusRuntimeOperations,
-  LocalKeyboardInteractorResolver,
-  ProviderKeyboardInteractorResolver,
 } from '../keyboard-runtime.ts';
 export { APPLE_MULTI_TOUCH_UNSUPPORTED_HINTS } from '../apple-multitouch-support.ts';
 export { viewportRuntimeOperationFacts } from '../viewport-runtime.ts';

@@ -1,10 +1,7 @@
 import { expect, test, vi } from 'vitest';
-import {
-  bindLocalBackInteractor,
-  bindProviderBackInteractor,
-  backRuntimeOperationFacts,
-} from './back-runtime.ts';
+import { bindBack, backRuntimeOperationFacts } from './back-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
+import { localInteractorSource, providerInteractorSource } from './interactor-operation-binding.ts';
 
 const device = {
   platform: 'android',
@@ -13,6 +10,15 @@ const device = {
   kind: 'emulator',
   booted: true,
 } as const;
+
+const bindBackLocal = (
+  params: Parameters<typeof localInteractorSource>[0] & { signal: AbortSignal },
+) => bindBack(params.signal, localInteractorSource(params));
+const bindBackProvider = (
+  params: Parameters<typeof providerInteractorSource>[0] extends infer P
+    ? Omit<P, 'operation'> & { signal: AbortSignal }
+    : never,
+) => bindBack(params.signal, providerInteractorSource({ ...params, operation: 'back' }));
 
 test('builds the exact back operation fact catalog', () => {
   const back = { available: true } as const;
@@ -24,7 +30,7 @@ test('a local binding drives the interactor with the requested mode', async () =
   const resolveInteractor = vi.fn(async () => ({ back }) as unknown as Interactor);
   const signal = new AbortController().signal;
 
-  const operations = bindLocalBackInteractor({ device, signal, resolveInteractor });
+  const operations = bindBackLocal({ device, signal, resolveInteractor });
   await operations.back({
     mode: 'system',
     options: { appBundleId: 'com.example.app' },
@@ -45,7 +51,7 @@ test('a provider binding drives its own resolved interactor', async () => {
   const resolveInteractor = vi.fn(() => ({ back }) as unknown as Interactor);
   const signal = new AbortController().signal;
 
-  const operations = bindProviderBackInteractor({ device, signal, resolveInteractor });
+  const operations = bindBackProvider({ device, signal, resolveInteractor });
   await operations.back({ execution: { requestId: 'back-2' } });
 
   expect(resolveInteractor).toHaveBeenCalledWith({
@@ -57,7 +63,7 @@ test('a provider binding drives its own resolved interactor', async () => {
 });
 
 test('a provider binding fails closed when its exact owner exposes no interactor', async () => {
-  const operations = bindProviderBackInteractor({
+  const operations = bindBackProvider({
     device,
     signal: new AbortController().signal,
     resolveInteractor: () => undefined,
@@ -75,7 +81,7 @@ test('an already-cancelled request never resolves an interactor', async () => {
   const back = vi.fn(async () => undefined);
   const resolveInteractor = vi.fn(async () => ({ back }) as unknown as Interactor);
 
-  const operations = bindLocalBackInteractor({
+  const operations = bindBackLocal({
     device,
     signal: controller.signal,
     resolveInteractor,

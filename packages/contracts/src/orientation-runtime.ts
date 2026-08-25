@@ -1,10 +1,3 @@
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  localInteractorSource,
-  providerInteractorSource,
-  type LocalInteractorOperationResolver,
-  type ProviderInteractorOperationResolver,
-} from './interactor-operation-binding.ts';
 import type { DeviceRotation } from './device-rotation.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
@@ -46,7 +39,7 @@ export function orientationRuntimeOperationFacts(
  * owner is already chosen by the time a binder is called, so each entry point supplies its own
  * resolution and this holds only what both share: the runner context and the rotation itself.
  */
-function bindOrientation(
+export function bindOrientation(
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): OrientationRuntimeOperations {
@@ -61,32 +54,4 @@ function bindOrientation(
       return await interactor.setOrientation(input.rotation);
     },
   });
-}
-
-export type LocalOrientationInteractorResolver = LocalInteractorOperationResolver;
-
-export function bindLocalOrientationInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: LocalOrientationInteractorResolver;
-  }>,
-): OrientationRuntimeOperations {
-  return bindOrientation(params.signal, localInteractorSource(params));
-}
-
-export type ProviderOrientationInteractorResolver = ProviderInteractorOperationResolver;
-
-/** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
-export function bindProviderOrientationInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: ProviderOrientationInteractorResolver;
-  }>,
-): OrientationRuntimeOperations {
-  return bindOrientation(
-    params.signal,
-    providerInteractorSource({ ...params, operation: 'orientation' }),
-  );
 }

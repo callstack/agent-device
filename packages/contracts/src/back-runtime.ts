@@ -1,10 +1,3 @@
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  localInteractorSource,
-  providerInteractorSource,
-  type LocalInteractorOperationResolver,
-  type ProviderInteractorOperationResolver,
-} from './interactor-operation-binding.ts';
 import type { BackMode, Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
@@ -43,7 +36,7 @@ export function backRuntimeOperationFacts(
  * owner is already chosen by the time a binder is called, so each entry point supplies its own
  * resolution and this holds only what both share: the runner context and the navigation itself.
  */
-function bindBack(
+export function bindBack(
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): BackRuntimeOperations {
@@ -58,29 +51,4 @@ function bindBack(
       await interactor.back(input.mode);
     },
   });
-}
-
-export type LocalBackInteractorResolver = LocalInteractorOperationResolver;
-
-export function bindLocalBackInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: LocalBackInteractorResolver;
-  }>,
-): BackRuntimeOperations {
-  return bindBack(params.signal, localInteractorSource(params));
-}
-
-export type ProviderBackInteractorResolver = ProviderInteractorOperationResolver;
-
-/** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
-export function bindProviderBackInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: ProviderBackInteractorResolver;
-  }>,
-): BackRuntimeOperations {
-  return bindBack(params.signal, providerInteractorSource({ ...params, operation: 'back' }));
 }

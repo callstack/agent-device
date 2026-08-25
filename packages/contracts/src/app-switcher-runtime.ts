@@ -1,10 +1,3 @@
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  localInteractorSource,
-  providerInteractorSource,
-  type LocalInteractorOperationResolver,
-  type ProviderInteractorOperationResolver,
-} from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
@@ -39,7 +32,7 @@ export function appSwitcherRuntimeOperationFacts(
  * owner is already chosen by the time a binder is called, so each entry point supplies its own
  * resolution and this holds only what both share: the runner context and the reveal itself.
  */
-function bindAppSwitcher(
+export function bindAppSwitcher(
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): AppSwitcherRuntimeOperations {
@@ -54,32 +47,4 @@ function bindAppSwitcher(
       await interactor.appSwitcher();
     },
   });
-}
-
-export type LocalAppSwitcherInteractorResolver = LocalInteractorOperationResolver;
-
-export function bindLocalAppSwitcherInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: LocalAppSwitcherInteractorResolver;
-  }>,
-): AppSwitcherRuntimeOperations {
-  return bindAppSwitcher(params.signal, localInteractorSource(params));
-}
-
-export type ProviderAppSwitcherInteractorResolver = ProviderInteractorOperationResolver;
-
-/** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
-export function bindProviderAppSwitcherInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: ProviderAppSwitcherInteractorResolver;
-  }>,
-): AppSwitcherRuntimeOperations {
-  return bindAppSwitcher(
-    params.signal,
-    providerInteractorSource({ ...params, operation: 'app-switcher' }),
-  );
 }

@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { bindLocalAppEventInteractor } from '@agent-device/contracts/app-event-runtime';
+import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { parseTriggerAppEventArgs, resolveAppEventUrl } from '../app-events.ts';
 import { getInteractor } from '../interactors.ts';
@@ -28,12 +28,13 @@ async function triggerAppEvent(
 ): Promise<{ event: string; eventUrl: string; transport: 'deep-link' }> {
   const { eventName, payload } = parseTriggerAppEventArgs(positionals);
   const eventUrl = resolveAppEventUrl(device, eventName, payload);
-  const operations = bindLocalAppEventInteractor({
+  const operations = bindAdmittedLocalInteractorOperations({
     device,
     signal: new AbortController().signal,
-    resolveInteractor: async (owned, runner) => await getInteractor(owned, runner),
+    resolveInteractor: async (owned: DeviceInfo, runner) => await getInteractor(owned, runner),
+    facts: { triggerAppEvent: { available: true } },
   });
-  await operations.triggerAppEvent({ eventUrl, options });
+  await operations.triggerAppEvent?.({ eventUrl, options });
   return { event: eventName, eventUrl, transport: 'deep-link' };
 }
 

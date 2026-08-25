@@ -15,8 +15,6 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
   bindProviderApplicationLifecycleInteractor,
-  bindProviderKeyboardDismissInteractor,
-  bindProviderKeyboardEnterInteractor,
   bindProviderSnapshotInteractor,
   bindProviderTouchInteractor,
   invokeApplicationClose,
@@ -34,6 +32,7 @@ import {
   type RuntimeFacts,
   touchRuntimeOperationFacts,
 } from '@agent-device/contracts/platform';
+import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../src/__tests__/test-utils/runtime-operation-facts.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
@@ -157,15 +156,12 @@ async function bindProviderScenarioPlatformRuntime(
         signal: request.scope.signal,
         resolveInteractor: (runner) => runtime.getInteractor(request.device, runner),
       }),
-      ...bindProviderKeyboardDismissInteractor({
+      // The interactor catalog binds every keyboard leg this provider's facts admit.
+      ...bindAdmittedProviderInteractorOperations({
         device: request.device,
         signal: request.scope.signal,
         resolveInteractor: (runner) => runtime.getInteractor(request.device, runner),
-      }),
-      ...bindProviderKeyboardEnterInteractor({
-        device: request.device,
-        signal: request.scope.signal,
-        resolveInteractor: (runner) => runtime.getInteractor(request.device, runner),
+        facts: facts.operations,
       }),
       ...bindProviderTouchInteractor({
         device: request.device,

@@ -1,10 +1,7 @@
 import { expect, test, vi } from 'vitest';
-import {
-  appEventRuntimeOperationFacts,
-  bindLocalAppEventInteractor,
-  bindProviderAppEventInteractor,
-} from './app-event-runtime.ts';
+import { appEventRuntimeOperationFacts, bindAppEvent } from './app-event-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
+import { localInteractorSource, providerInteractorSource } from './interactor-operation-binding.ts';
 
 const device = {
   platform: 'android',
@@ -13,6 +10,19 @@ const device = {
   kind: 'emulator',
   booted: true,
 } as const;
+
+const bindAppEventLocal = (
+  params: Parameters<typeof localInteractorSource>[0] & { signal: AbortSignal },
+) => bindAppEvent(params.signal, localInteractorSource(params));
+const bindAppEventProvider = (
+  params: Parameters<typeof providerInteractorSource>[0] extends infer P
+    ? Omit<P, 'operation'> & { signal: AbortSignal }
+    : never,
+) =>
+  bindAppEvent(
+    params.signal,
+    providerInteractorSource({ ...params, operation: 'trigger-app-event' }),
+  );
 
 test('builds the exact app-event operation fact catalog', () => {
   const triggerAppEvent = { available: true } as const;
@@ -26,7 +36,7 @@ test('a local binding opens the resolved event URL against the session app', asy
   const resolveInteractor = vi.fn(async () => ({ open }) as unknown as Interactor);
   const signal = new AbortController().signal;
 
-  const operations = bindLocalAppEventInteractor({ device, signal, resolveInteractor });
+  const operations = bindAppEventLocal({ device, signal, resolveInteractor });
   await operations.triggerAppEvent({
     eventUrl: 'myapp://agent-device/event?name=checkout',
     options: { appBundleId: 'com.example.app' },
@@ -45,7 +55,7 @@ test('a local binding opens the resolved event URL against the session app', asy
 });
 
 test('a provider binding fails closed when its exact owner exposes no interactor', async () => {
-  const operations = bindProviderAppEventInteractor({
+  const operations = bindAppEventProvider({
     device,
     signal: new AbortController().signal,
     resolveInteractor: () => undefined,
@@ -63,7 +73,7 @@ test('an already-cancelled request never resolves an interactor', async () => {
   const open = vi.fn(async () => undefined);
   const resolveInteractor = vi.fn(async () => ({ open }) as unknown as Interactor);
 
-  const operations = bindLocalAppEventInteractor({
+  const operations = bindAppEventLocal({
     device,
     signal: controller.signal,
     resolveInteractor,

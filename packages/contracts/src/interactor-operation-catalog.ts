@@ -1,145 +1,104 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { bindLocalBackInteractor, bindProviderBackInteractor } from './back-runtime.ts';
+import { bindAlertLeg } from './alert-runtime.ts';
+import { bindAppEvent } from './app-event-runtime.ts';
+import { bindAppSwitcher } from './app-switcher-runtime.ts';
+import { bindBack } from './back-runtime.ts';
+import { bindClipboardRead, bindClipboardWrite } from './clipboard-runtime.ts';
+import { bindHome } from './home-runtime.ts';
+import { KEYBOARD_ACTION_LABELS, bindKeyboardAction } from './keyboard-runtime.ts';
+import { bindOrientation } from './orientation-runtime.ts';
+import { bindSetSetting } from './settings-runtime.ts';
+import { bindTvRemote } from './tv-remote-runtime.ts';
 import {
-  bindLocalAppEventInteractor,
-  bindProviderAppEventInteractor,
-} from './app-event-runtime.ts';
-import {
-  bindLocalAppSwitcherInteractor,
-  bindProviderAppSwitcherInteractor,
-} from './app-switcher-runtime.ts';
-import {
-  bindLocalClipboardReadInteractor,
-  bindLocalClipboardWriteInteractor,
-  bindProviderClipboardReadInteractor,
-  bindProviderClipboardWriteInteractor,
-} from './clipboard-runtime.ts';
-import { bindLocalHomeInteractor, bindProviderHomeInteractor } from './home-runtime.ts';
-import {
-  bindLocalKeyboardDismissInteractor,
-  bindLocalKeyboardEnterInteractor,
-  bindLocalKeyboardStatusInteractor,
-  bindProviderKeyboardDismissInteractor,
-  bindProviderKeyboardEnterInteractor,
-  bindProviderKeyboardStatusInteractor,
-} from './keyboard-runtime.ts';
-import {
-  bindLocalOrientationInteractor,
-  bindProviderOrientationInteractor,
-} from './orientation-runtime.ts';
-import type {
-  LocalInteractorOperationResolver,
-  ProviderInteractorOperationResolver,
+  localInteractorSource,
+  providerInteractorSource,
+  type LocalInteractorOperationResolver,
+  type ProviderInteractorOperationResolver,
 } from './interactor-operation-binding.ts';
+import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
-import { bindLocalSettingsInteractor, bindProviderSettingsInteractor } from './settings-runtime.ts';
-import {
-  bindLocalAlertAcceptInteractor,
-  bindLocalAlertDismissInteractor,
-  bindLocalAlertReadInteractor,
-  bindLocalAlertWaitInteractor,
-  bindProviderAlertAcceptInteractor,
-  bindProviderAlertDismissInteractor,
-  bindProviderAlertReadInteractor,
-  bindProviderAlertWaitInteractor,
-} from './alert-runtime.ts';
-import {
-  bindLocalTvRemoteInteractor,
-  bindProviderTvRemoteInteractor,
-} from './tv-remote-runtime.ts';
+
+/**
+ * How a facet turns one resolved interactor into its own typed operations. Every catalog member
+ * shares this shape, which is what lets one adapter drive all of them: the facet owns what the
+ * operation *does*, and this module owns only which interactor it reaches and how a refusal reads.
+ */
+type InteractorOperationBinder = (
+  signal: AbortSignal,
+  resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
+) => Partial<PlatformRuntimeOperations>;
+
+type InteractorOperationDefinition = Readonly<{
+  /** The facts key that admits it, and the operations key it binds. */
+  operation: keyof PlatformRuntimeOperations;
+  /** How a provider fail-closed refusal names this operation to the caller. */
+  label: string;
+  bind: InteractorOperationBinder;
+}>;
 
 /**
  * Every operation whose whole binding is "one fact, one bind call, no owner mechanics in between"
- * — the navigation/keyboard leaves and the system-surface leaves that joined them in Wave 6. This
- * tuple is the single canonical declaration: the {@link CatalogInteractorOperation} union type is
- * derived from it below, and `LOCAL_BINDERS`/`PROVIDER_BINDERS`'s
- * `Record<CatalogInteractorOperation, …>` types are then checked against that derived union — so a
- * member can never be added to one and silently missing from another. Not caller-supplied:
- * `facts[operation]` is the only thing that decides whether an operation binds — a key this tuple
- * names but the caller's facts never define is simply never available
- * (`facts[operation]?.available` reads `undefined`), which is how a caller passing a narrower,
- * dedicated facts object (e.g. Limrun's keyboard-less navigation facts) opts a subset out.
+ * — the navigation/keyboard leaves and the system-surface leaves that joined them in Wave 6.
+ *
+ * One row per operation, declared once. It used to take three parallel declarations — a name
+ * tuple, a local binder map, and a provider binder map — plus a mirrored
+ * `bindLocal…Interactor`/`bindProvider…Interactor` pair in each facet whose only difference was
+ * which interactor source to use and which label to name in a refusal. Both of those now live
+ * here, in the two adapters below, so adding an operation is adding one row.
+ *
+ * Not caller-supplied: `facts[operation]` alone decides whether an operation binds, so a row whose
+ * key the caller's facts never define is simply never available — which is how an owner with a
+ * narrower, dedicated facts object (Limrun's keyboard-less navigation facts) opts a subset out.
  */
-const CATALOG_INTERACTOR_OPERATIONS = [
-  'back',
-  'home',
-  'setOrientation',
-  'tvRemote',
-  'keyboardStatus',
-  'keyboardDismiss',
-  'keyboardEnter',
-  'readClipboard',
-  'writeClipboard',
-  'appSwitcher',
-  'triggerAppEvent',
-  'setSetting',
-  'readAlert',
-  'awaitAlert',
-  'acceptAlert',
-  'dismissAlert',
-] as const;
+const INTERACTOR_OPERATIONS = [
+  { operation: 'back', label: 'back', bind: bindBack },
+  { operation: 'home', label: 'home', bind: bindHome },
+  { operation: 'setOrientation', label: 'orientation', bind: bindOrientation },
+  { operation: 'tvRemote', label: 'tv-remote', bind: bindTvRemote },
+  {
+    operation: 'keyboardStatus',
+    label: KEYBOARD_ACTION_LABELS.keyboardStatus,
+    bind: (signal, resolve) => bindKeyboardAction('keyboardStatus', signal, resolve),
+  },
+  {
+    operation: 'keyboardDismiss',
+    label: KEYBOARD_ACTION_LABELS.keyboardDismiss,
+    bind: (signal, resolve) => bindKeyboardAction('keyboardDismiss', signal, resolve),
+  },
+  {
+    operation: 'keyboardEnter',
+    label: KEYBOARD_ACTION_LABELS.keyboardEnter,
+    bind: (signal, resolve) => bindKeyboardAction('keyboardEnter', signal, resolve),
+  },
+  { operation: 'readClipboard', label: 'clipboard read', bind: bindClipboardRead },
+  { operation: 'writeClipboard', label: 'clipboard write', bind: bindClipboardWrite },
+  { operation: 'appSwitcher', label: 'app-switcher', bind: bindAppSwitcher },
+  { operation: 'triggerAppEvent', label: 'trigger-app-event', bind: bindAppEvent },
+  { operation: 'setSetting', label: 'settings', bind: bindSetSetting },
+  {
+    operation: 'readAlert',
+    label: 'alert get',
+    bind: (signal, resolve) => bindAlertLeg('readAlert', signal, resolve),
+  },
+  {
+    operation: 'awaitAlert',
+    label: 'alert wait',
+    bind: (signal, resolve) => bindAlertLeg('awaitAlert', signal, resolve),
+  },
+  {
+    operation: 'acceptAlert',
+    label: 'alert accept',
+    bind: (signal, resolve) => bindAlertLeg('acceptAlert', signal, resolve),
+  },
+  {
+    operation: 'dismissAlert',
+    label: 'alert dismiss',
+    bind: (signal, resolve) => bindAlertLeg('dismissAlert', signal, resolve),
+  },
+] as const satisfies readonly InteractorOperationDefinition[];
 
-export type CatalogInteractorOperation = (typeof CATALOG_INTERACTOR_OPERATIONS)[number];
-
-type LocalBinderParams = Readonly<{
-  device: DeviceInfo;
-  signal: AbortSignal;
-  resolveInteractor: LocalInteractorOperationResolver;
-}>;
-type ProviderBinderParams = Readonly<{
-  device: DeviceInfo;
-  signal: AbortSignal;
-  resolveInteractor: ProviderInteractorOperationResolver;
-}>;
-
-const LOCAL_BINDERS: Readonly<
-  Record<
-    CatalogInteractorOperation,
-    (params: LocalBinderParams) => Partial<PlatformRuntimeOperations>
-  >
-> = Object.freeze({
-  back: bindLocalBackInteractor,
-  home: bindLocalHomeInteractor,
-  setOrientation: bindLocalOrientationInteractor,
-  tvRemote: bindLocalTvRemoteInteractor,
-  keyboardStatus: bindLocalKeyboardStatusInteractor,
-  keyboardDismiss: bindLocalKeyboardDismissInteractor,
-  keyboardEnter: bindLocalKeyboardEnterInteractor,
-  readClipboard: bindLocalClipboardReadInteractor,
-  writeClipboard: bindLocalClipboardWriteInteractor,
-  appSwitcher: bindLocalAppSwitcherInteractor,
-  triggerAppEvent: bindLocalAppEventInteractor,
-  setSetting: bindLocalSettingsInteractor,
-  readAlert: bindLocalAlertReadInteractor,
-  awaitAlert: bindLocalAlertWaitInteractor,
-  acceptAlert: bindLocalAlertAcceptInteractor,
-  dismissAlert: bindLocalAlertDismissInteractor,
-});
-
-const PROVIDER_BINDERS: Readonly<
-  Record<
-    CatalogInteractorOperation,
-    (params: ProviderBinderParams) => Partial<PlatformRuntimeOperations>
-  >
-> = Object.freeze({
-  back: bindProviderBackInteractor,
-  home: bindProviderHomeInteractor,
-  setOrientation: bindProviderOrientationInteractor,
-  tvRemote: bindProviderTvRemoteInteractor,
-  keyboardStatus: bindProviderKeyboardStatusInteractor,
-  keyboardDismiss: bindProviderKeyboardDismissInteractor,
-  keyboardEnter: bindProviderKeyboardEnterInteractor,
-  readClipboard: bindProviderClipboardReadInteractor,
-  writeClipboard: bindProviderClipboardWriteInteractor,
-  appSwitcher: bindProviderAppSwitcherInteractor,
-  triggerAppEvent: bindProviderAppEventInteractor,
-  setSetting: bindProviderSettingsInteractor,
-  readAlert: bindProviderAlertReadInteractor,
-  awaitAlert: bindProviderAlertWaitInteractor,
-  acceptAlert: bindProviderAlertAcceptInteractor,
-  dismissAlert: bindProviderAlertDismissInteractor,
-});
+export type CatalogInteractorOperation = (typeof INTERACTOR_OPERATIONS)[number]['operation'];
 
 /**
  * The operation-facts slice every caller already holds: an owner's full `RuntimeFacts.operations`
@@ -152,31 +111,28 @@ type CatalogOperationFacts = Readonly<
   Partial<Record<CatalogInteractorOperation, RuntimeOperationFact>>
 >;
 
-/** Walks every catalog operation against one binder table, binding each the facts admitted. */
+type CatalogBindParams<Resolver> = Readonly<{
+  device: DeviceInfo;
+  signal: AbortSignal;
+  resolveInteractor: Resolver;
+  facts: CatalogOperationFacts;
+}>;
+
+/**
+ * Walks the catalog once, binding each operation the facts admitted through whichever interactor
+ * source the caller's entry point supplies. The source is the only thing that differs between a
+ * local owner and a provider.
+ */
 function bindAdmittedInteractorOperations<Resolver>(
-  binders: Readonly<
-    Record<
-      CatalogInteractorOperation,
-      (params: {
-        device: DeviceInfo;
-        signal: AbortSignal;
-        resolveInteractor: Resolver;
-      }) => Partial<PlatformRuntimeOperations>
-    >
-  >,
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: Resolver;
-    facts: CatalogOperationFacts;
-  }>,
+  params: CatalogBindParams<Resolver>,
+  source: (
+    definition: InteractorOperationDefinition,
+  ) => (runner: RunnerContext) => Promise<Interactor>,
 ): Partial<PlatformRuntimeOperations> {
-  const { device, signal, resolveInteractor, facts } = params;
   const bound: Partial<PlatformRuntimeOperations> = {};
-  for (const operation of CATALOG_INTERACTOR_OPERATIONS) {
-    if (facts[operation]?.available) {
-      Object.assign(bound, binders[operation]({ device, signal, resolveInteractor }));
-    }
+  for (const definition of INTERACTOR_OPERATIONS) {
+    if (!params.facts[definition.operation]?.available) continue;
+    Object.assign(bound, definition.bind(params.signal, source(definition)));
   }
   return bound;
 }
@@ -187,28 +143,20 @@ function bindAdmittedInteractorOperations<Resolver>(
  * ternary that read them.
  */
 export function bindAdmittedLocalInteractorOperations(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: LocalInteractorOperationResolver;
-    facts: CatalogOperationFacts;
-  }>,
+  params: CatalogBindParams<LocalInteractorOperationResolver>,
 ): Partial<PlatformRuntimeOperations> {
-  return bindAdmittedInteractorOperations(LOCAL_BINDERS, params);
+  return bindAdmittedInteractorOperations(params, () => localInteractorSource(params));
 }
 
 /**
- * Binds whichever provider operations the owner's own facts admitted. Provider bindings fail
- * closed when their exact owner no longer exposes its interactor (see the individual
- * `bindProvider…Interactor` functions this table dispatches to).
+ * Binds whichever provider operations the owner's own facts admitted, failing closed when the
+ * exact owner no longer exposes its interactor. Each refusal names the operation the caller asked
+ * for, which is what the per-operation `label` carries.
  */
 export function bindAdmittedProviderInteractorOperations(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: ProviderInteractorOperationResolver;
-    facts: CatalogOperationFacts;
-  }>,
+  params: CatalogBindParams<ProviderInteractorOperationResolver>,
 ): Partial<PlatformRuntimeOperations> {
-  return bindAdmittedInteractorOperations(PROVIDER_BINDERS, params);
+  return bindAdmittedInteractorOperations(params, (definition) =>
+    providerInteractorSource({ ...params, operation: definition.label }),
+  );
 }

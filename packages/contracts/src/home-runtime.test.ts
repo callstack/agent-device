@@ -1,10 +1,7 @@
 import { expect, test, vi } from 'vitest';
-import {
-  bindLocalHomeInteractor,
-  bindProviderHomeInteractor,
-  homeRuntimeOperationFacts,
-} from './home-runtime.ts';
+import { bindHome, homeRuntimeOperationFacts } from './home-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
+import { localInteractorSource, providerInteractorSource } from './interactor-operation-binding.ts';
 
 const device = {
   platform: 'android',
@@ -13,6 +10,15 @@ const device = {
   kind: 'emulator',
   booted: true,
 } as const;
+
+const bindHomeLocal = (
+  params: Parameters<typeof localInteractorSource>[0] & { signal: AbortSignal },
+) => bindHome(params.signal, localInteractorSource(params));
+const bindHomeProvider = (
+  params: Parameters<typeof providerInteractorSource>[0] extends infer P
+    ? Omit<P, 'operation'> & { signal: AbortSignal }
+    : never,
+) => bindHome(params.signal, providerInteractorSource({ ...params, operation: 'home' }));
 
 test('builds the exact home operation fact catalog', () => {
   const home = { available: true } as const;
@@ -24,7 +30,7 @@ test('a local binding drives the interactor with no arguments', async () => {
   const resolveInteractor = vi.fn(async () => ({ home }) as unknown as Interactor);
   const signal = new AbortController().signal;
 
-  const operations = bindLocalHomeInteractor({ device, signal, resolveInteractor });
+  const operations = bindHomeLocal({ device, signal, resolveInteractor });
   await operations.home({
     options: { appBundleId: 'com.example.app' },
     execution: { logPath: '/tmp/daemon.log', requestId: 'home-1' },
@@ -44,7 +50,7 @@ test('a provider binding drives its own resolved interactor', async () => {
   const resolveInteractor = vi.fn(() => ({ home }) as unknown as Interactor);
   const signal = new AbortController().signal;
 
-  const operations = bindProviderHomeInteractor({ device, signal, resolveInteractor });
+  const operations = bindHomeProvider({ device, signal, resolveInteractor });
   await operations.home({ execution: { requestId: 'home-2' } });
 
   expect(resolveInteractor).toHaveBeenCalledWith({
@@ -56,7 +62,7 @@ test('a provider binding drives its own resolved interactor', async () => {
 });
 
 test('a provider binding fails closed when its exact owner exposes no interactor', async () => {
-  const operations = bindProviderHomeInteractor({
+  const operations = bindHomeProvider({
     device,
     signal: new AbortController().signal,
     resolveInteractor: () => undefined,
@@ -74,7 +80,7 @@ test('an already-cancelled request never resolves an interactor', async () => {
   const home = vi.fn(async () => undefined);
   const resolveInteractor = vi.fn(async () => ({ home }) as unknown as Interactor);
 
-  const operations = bindLocalHomeInteractor({
+  const operations = bindHomeLocal({
     device,
     signal: controller.signal,
     resolveInteractor,

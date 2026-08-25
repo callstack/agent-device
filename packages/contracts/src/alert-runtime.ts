@@ -1,10 +1,3 @@
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  localInteractorSource,
-  providerInteractorSource,
-  type LocalInteractorOperationResolver,
-  type ProviderInteractorOperationResolver,
-} from './interactor-operation-binding.ts';
 import type { AlertInteractorOptions, Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SessionSurface } from './session-surface.ts';
@@ -111,7 +104,7 @@ function alertInteractorOptions(input: AlertRuntimeInput): AlertInteractorOption
 
 type AlertLeg = 'readAlert' | 'awaitAlert' | 'acceptAlert' | 'dismissAlert';
 
-function bindAlertLeg<Leg extends AlertLeg>(
+export function bindAlertLeg<Leg extends AlertLeg>(
   leg: Leg,
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
@@ -122,84 +115,4 @@ function bindAlertLeg<Leg extends AlertLeg>(
       return await interactor[leg](alertInteractorOptions(input));
     },
   }) as Readonly<Record<Leg, (input: AlertRuntimeInput) => Promise<Record<string, unknown>>>>;
-}
-
-export type LocalAlertInteractorResolver = LocalInteractorOperationResolver;
-export type ProviderAlertInteractorResolver = ProviderInteractorOperationResolver;
-
-type LocalAlertBinding = Readonly<{
-  device: DeviceInfo;
-  signal: AbortSignal;
-  resolveInteractor: LocalAlertInteractorResolver;
-}>;
-
-type ProviderAlertBinding = Readonly<{
-  device: DeviceInfo;
-  signal: AbortSignal;
-  resolveInteractor: ProviderAlertInteractorResolver;
-}>;
-
-export function bindLocalAlertReadInteractor(
-  params: LocalAlertBinding,
-): AlertReadRuntimeOperations {
-  return bindAlertLeg('readAlert', params.signal, localInteractorSource(params));
-}
-
-export function bindLocalAlertWaitInteractor(
-  params: LocalAlertBinding,
-): AlertWaitRuntimeOperations {
-  return bindAlertLeg('awaitAlert', params.signal, localInteractorSource(params));
-}
-
-export function bindLocalAlertAcceptInteractor(
-  params: LocalAlertBinding,
-): AlertAcceptRuntimeOperations {
-  return bindAlertLeg('acceptAlert', params.signal, localInteractorSource(params));
-}
-
-export function bindLocalAlertDismissInteractor(
-  params: LocalAlertBinding,
-): AlertDismissRuntimeOperations {
-  return bindAlertLeg('dismissAlert', params.signal, localInteractorSource(params));
-}
-
-/** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
-export function bindProviderAlertReadInteractor(
-  params: ProviderAlertBinding,
-): AlertReadRuntimeOperations {
-  return bindAlertLeg(
-    'readAlert',
-    params.signal,
-    providerInteractorSource({ ...params, operation: 'alert get' }),
-  );
-}
-
-export function bindProviderAlertWaitInteractor(
-  params: ProviderAlertBinding,
-): AlertWaitRuntimeOperations {
-  return bindAlertLeg(
-    'awaitAlert',
-    params.signal,
-    providerInteractorSource({ ...params, operation: 'alert wait' }),
-  );
-}
-
-export function bindProviderAlertAcceptInteractor(
-  params: ProviderAlertBinding,
-): AlertAcceptRuntimeOperations {
-  return bindAlertLeg(
-    'acceptAlert',
-    params.signal,
-    providerInteractorSource({ ...params, operation: 'alert accept' }),
-  );
-}
-
-export function bindProviderAlertDismissInteractor(
-  params: ProviderAlertBinding,
-): AlertDismissRuntimeOperations {
-  return bindAlertLeg(
-    'dismissAlert',
-    params.signal,
-    providerInteractorSource({ ...params, operation: 'alert dismiss' }),
-  );
 }

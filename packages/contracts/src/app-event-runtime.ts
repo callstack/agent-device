@@ -1,10 +1,3 @@
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  localInteractorSource,
-  providerInteractorSource,
-  type LocalInteractorOperationResolver,
-  type ProviderInteractorOperationResolver,
-} from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
@@ -46,7 +39,7 @@ export function appEventRuntimeOperationFacts(
  * owner is already chosen by the time a binder is called, so each entry point supplies its own
  * resolution and this holds only what both share: the runner context and the delivery itself.
  */
-function bindAppEvent(
+export function bindAppEvent(
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): AppEventRuntimeOperations {
@@ -61,32 +54,4 @@ function bindAppEvent(
       await interactor.open(input.eventUrl, { appBundleId: input.options?.appBundleId });
     },
   });
-}
-
-export type LocalAppEventInteractorResolver = LocalInteractorOperationResolver;
-
-export function bindLocalAppEventInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: LocalAppEventInteractorResolver;
-  }>,
-): AppEventRuntimeOperations {
-  return bindAppEvent(params.signal, localInteractorSource(params));
-}
-
-export type ProviderAppEventInteractorResolver = ProviderInteractorOperationResolver;
-
-/** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
-export function bindProviderAppEventInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: ProviderAppEventInteractorResolver;
-  }>,
-): AppEventRuntimeOperations {
-  return bindAppEvent(
-    params.signal,
-    providerInteractorSource({ ...params, operation: 'trigger-app-event' }),
-  );
 }

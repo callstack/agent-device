@@ -1,14 +1,11 @@
 import { expect, test, vi } from 'vitest';
 import {
-  bindLocalKeyboardDismissInteractor,
-  bindLocalKeyboardEnterInteractor,
-  bindLocalKeyboardStatusInteractor,
-  bindProviderKeyboardDismissInteractor,
-  bindProviderKeyboardEnterInteractor,
-  bindProviderKeyboardStatusInteractor,
+  KEYBOARD_ACTION_LABELS,
+  bindKeyboardAction,
   keyboardRuntimeOperationFacts,
 } from './keyboard-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
+import { localInteractorSource, providerInteractorSource } from './interactor-operation-binding.ts';
 
 const device = {
   platform: 'android',
@@ -17,6 +14,54 @@ const device = {
   kind: 'emulator',
   booted: true,
 } as const;
+
+// The composition the interactor catalog performs, spelled out so each assertion below
+// still exercises one facet executor reached through one interactor source.
+const bindLocalKeyboardStatusInteractor = (params: {
+  device: typeof device;
+  signal: AbortSignal;
+  resolveInteractor: any;
+}) => bindKeyboardAction('keyboardStatus', params.signal, localInteractorSource(params));
+const bindLocalKeyboardDismissInteractor = (params: {
+  device: typeof device;
+  signal: AbortSignal;
+  resolveInteractor: any;
+}) => bindKeyboardAction('keyboardDismiss', params.signal, localInteractorSource(params));
+const bindLocalKeyboardEnterInteractor = (params: {
+  device: typeof device;
+  signal: AbortSignal;
+  resolveInteractor: any;
+}) => bindKeyboardAction('keyboardEnter', params.signal, localInteractorSource(params));
+const bindProviderKeyboardStatusInteractor = (params: {
+  device: typeof device;
+  signal: AbortSignal;
+  resolveInteractor: any;
+}) =>
+  bindKeyboardAction(
+    'keyboardStatus',
+    params.signal,
+    providerInteractorSource({ ...params, operation: KEYBOARD_ACTION_LABELS.keyboardStatus }),
+  );
+const bindProviderKeyboardDismissInteractor = (params: {
+  device: typeof device;
+  signal: AbortSignal;
+  resolveInteractor: any;
+}) =>
+  bindKeyboardAction(
+    'keyboardDismiss',
+    params.signal,
+    providerInteractorSource({ ...params, operation: KEYBOARD_ACTION_LABELS.keyboardDismiss }),
+  );
+const bindProviderKeyboardEnterInteractor = (params: {
+  device: typeof device;
+  signal: AbortSignal;
+  resolveInteractor: any;
+}) =>
+  bindKeyboardAction(
+    'keyboardEnter',
+    params.signal,
+    providerInteractorSource({ ...params, operation: KEYBOARD_ACTION_LABELS.keyboardEnter }),
+  );
 
 test('builds the exact keyboard operation fact catalog', () => {
   const status = { available: true } as const;

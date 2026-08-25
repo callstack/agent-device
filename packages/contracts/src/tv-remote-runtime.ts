@@ -1,10 +1,3 @@
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  localInteractorSource,
-  providerInteractorSource,
-  type LocalInteractorOperationResolver,
-  type ProviderInteractorOperationResolver,
-} from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
@@ -47,7 +40,7 @@ export function tvRemoteRuntimeOperationFacts(
  * owner is already chosen by the time a binder is called, so each entry point supplies its own
  * resolution and this holds only what both share: the runner context and the button press itself.
  */
-function bindTvRemote(
+export function bindTvRemote(
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): TvRemoteRuntimeOperations {
@@ -62,32 +55,4 @@ function bindTvRemote(
       await interactor.tvRemote(input.button, input.durationMs);
     },
   });
-}
-
-export type LocalTvRemoteInteractorResolver = LocalInteractorOperationResolver;
-
-export function bindLocalTvRemoteInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: LocalTvRemoteInteractorResolver;
-  }>,
-): TvRemoteRuntimeOperations {
-  return bindTvRemote(params.signal, localInteractorSource(params));
-}
-
-export type ProviderTvRemoteInteractorResolver = ProviderInteractorOperationResolver;
-
-/** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
-export function bindProviderTvRemoteInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: ProviderTvRemoteInteractorResolver;
-  }>,
-): TvRemoteRuntimeOperations {
-  return bindTvRemote(
-    params.signal,
-    providerInteractorSource({ ...params, operation: 'tv-remote' }),
-  );
 }

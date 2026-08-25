@@ -1,10 +1,3 @@
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  localInteractorSource,
-  providerInteractorSource,
-  type LocalInteractorOperationResolver,
-  type ProviderInteractorOperationResolver,
-} from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
@@ -36,7 +29,7 @@ export function homeRuntimeOperationFacts(
  * owner is already chosen by the time a binder is called, so each entry point supplies its own
  * resolution and this holds only what both share: the runner context and the navigation itself.
  */
-function bindHome(
+export function bindHome(
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): HomeRuntimeOperations {
@@ -51,29 +44,4 @@ function bindHome(
       await interactor.home();
     },
   });
-}
-
-export type LocalHomeInteractorResolver = LocalInteractorOperationResolver;
-
-export function bindLocalHomeInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: LocalHomeInteractorResolver;
-  }>,
-): HomeRuntimeOperations {
-  return bindHome(params.signal, localInteractorSource(params));
-}
-
-export type ProviderHomeInteractorResolver = ProviderInteractorOperationResolver;
-
-/** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
-export function bindProviderHomeInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: ProviderHomeInteractorResolver;
-  }>,
-): HomeRuntimeOperations {
-  return bindHome(params.signal, providerInteractorSource({ ...params, operation: 'home' }));
 }

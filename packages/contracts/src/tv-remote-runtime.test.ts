@@ -1,10 +1,7 @@
 import { expect, test, vi } from 'vitest';
-import {
-  bindLocalTvRemoteInteractor,
-  bindProviderTvRemoteInteractor,
-  tvRemoteRuntimeOperationFacts,
-} from './tv-remote-runtime.ts';
+import { bindTvRemote, tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
+import { localInteractorSource, providerInteractorSource } from './interactor-operation-binding.ts';
 
 const device = {
   platform: 'vega',
@@ -13,6 +10,15 @@ const device = {
   kind: 'emulator',
   booted: true,
 } as const;
+
+const bindTvRemoteLocal = (
+  params: Parameters<typeof localInteractorSource>[0] & { signal: AbortSignal },
+) => bindTvRemote(params.signal, localInteractorSource(params));
+const bindTvRemoteProvider = (
+  params: Parameters<typeof providerInteractorSource>[0] extends infer P
+    ? Omit<P, 'operation'> & { signal: AbortSignal }
+    : never,
+) => bindTvRemote(params.signal, providerInteractorSource({ ...params, operation: 'tv-remote' }));
 
 test('builds the exact tv-remote operation fact catalog', () => {
   const tvRemote = { available: true } as const;
@@ -24,7 +30,7 @@ test('a local binding drives the interactor with the button and duration', async
   const resolveInteractor = vi.fn(async () => ({ tvRemote }) as unknown as Interactor);
   const signal = new AbortController().signal;
 
-  const operations = bindLocalTvRemoteInteractor({ device, signal, resolveInteractor });
+  const operations = bindTvRemoteLocal({ device, signal, resolveInteractor });
   await operations.tvRemote({
     button: 'down',
     durationMs: 250,
@@ -48,7 +54,7 @@ test('a provider binding drives its own resolved interactor', async () => {
   const resolveInteractor = vi.fn(() => ({ tvRemote }) as unknown as Interactor);
   const signal = new AbortController().signal;
 
-  const operations = bindProviderTvRemoteInteractor({ device, signal, resolveInteractor });
+  const operations = bindTvRemoteProvider({ device, signal, resolveInteractor });
   await operations.tvRemote({ button: 'select', execution: { requestId: 'tv-remote-2' } });
 
   expect(resolveInteractor).toHaveBeenCalledWith({
@@ -60,7 +66,7 @@ test('a provider binding drives its own resolved interactor', async () => {
 });
 
 test('a provider binding fails closed when its exact owner exposes no interactor', async () => {
-  const operations = bindProviderTvRemoteInteractor({
+  const operations = bindTvRemoteProvider({
     device,
     signal: new AbortController().signal,
     resolveInteractor: () => undefined,
@@ -78,7 +84,7 @@ test('an already-cancelled request never resolves an interactor', async () => {
   const tvRemote = vi.fn(async () => undefined);
   const resolveInteractor = vi.fn(async () => ({ tvRemote }) as unknown as Interactor);
 
-  const operations = bindLocalTvRemoteInteractor({
+  const operations = bindTvRemoteLocal({
     device,
     signal: controller.signal,
     resolveInteractor,

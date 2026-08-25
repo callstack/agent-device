@@ -1,12 +1,11 @@
 import { expect, test, vi } from 'vitest';
 import {
-  bindLocalClipboardReadInteractor,
-  bindLocalClipboardWriteInteractor,
-  bindProviderClipboardReadInteractor,
-  bindProviderClipboardWriteInteractor,
+  bindClipboardRead,
+  bindClipboardWrite,
   clipboardRuntimeOperationFacts,
 } from './clipboard-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
+import { localInteractorSource, providerInteractorSource } from './interactor-operation-binding.ts';
 
 const device = {
   platform: 'android',
@@ -15,6 +14,37 @@ const device = {
   kind: 'emulator',
   booted: true,
 } as const;
+
+// The composition the interactor catalog performs, spelled out so each assertion below
+// still exercises one facet executor reached through one interactor source.
+const bindLocalClipboardReadInteractor = (params: {
+  device: typeof device;
+  signal: AbortSignal;
+  resolveInteractor: any;
+}) => bindClipboardRead(params.signal, localInteractorSource(params));
+const bindLocalClipboardWriteInteractor = (params: {
+  device: typeof device;
+  signal: AbortSignal;
+  resolveInteractor: any;
+}) => bindClipboardWrite(params.signal, localInteractorSource(params));
+const bindProviderClipboardReadInteractor = (params: {
+  device: typeof device;
+  signal: AbortSignal;
+  resolveInteractor: any;
+}) =>
+  bindClipboardRead(
+    params.signal,
+    providerInteractorSource({ ...params, operation: 'clipboard read' }),
+  );
+const bindProviderClipboardWriteInteractor = (params: {
+  device: typeof device;
+  signal: AbortSignal;
+  resolveInteractor: any;
+}) =>
+  bindClipboardWrite(
+    params.signal,
+    providerInteractorSource({ ...params, operation: 'clipboard write' }),
+  );
 
 test('builds the exact clipboard operation fact catalog', () => {
   const read = { available: true } as const;

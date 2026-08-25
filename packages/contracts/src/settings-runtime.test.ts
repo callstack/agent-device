@@ -1,10 +1,7 @@
 import { expect, test, vi } from 'vitest';
-import {
-  bindLocalSettingsInteractor,
-  bindProviderSettingsInteractor,
-  settingsRuntimeOperationFacts,
-} from './settings-runtime.ts';
+import { bindSetSetting, settingsRuntimeOperationFacts } from './settings-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
+import { localInteractorSource, providerInteractorSource } from './interactor-operation-binding.ts';
 
 const device = {
   platform: 'apple',
@@ -14,6 +11,15 @@ const device = {
   kind: 'simulator',
   booted: true,
 } as const;
+
+const bindSetSettingLocal = (
+  params: Parameters<typeof localInteractorSource>[0] & { signal: AbortSignal },
+) => bindSetSetting(params.signal, localInteractorSource(params));
+const bindSetSettingProvider = (
+  params: Parameters<typeof providerInteractorSource>[0] extends infer P
+    ? Omit<P, 'operation'> & { signal: AbortSignal }
+    : never,
+) => bindSetSetting(params.signal, providerInteractorSource({ ...params, operation: 'settings' }));
 
 test('builds the exact settings operation fact catalog', () => {
   const setSetting = { available: true } as const;
@@ -27,7 +33,7 @@ test('a local binding forwards the neutral mutation to its owner', async () => {
   const resolveInteractor = vi.fn(async () => ({ setSetting }) as unknown as Interactor);
   const signal = new AbortController().signal;
 
-  const operations = bindLocalSettingsInteractor({ device, signal, resolveInteractor });
+  const operations = bindSetSettingLocal({ device, signal, resolveInteractor });
   const result = await operations.setSetting({
     setting: 'location',
     state: 'set',
@@ -50,7 +56,7 @@ test('a local binding forwards the neutral mutation to its owner', async () => {
 });
 
 test('a provider binding fails closed when its exact owner exposes no interactor', async () => {
-  const operations = bindProviderSettingsInteractor({
+  const operations = bindSetSettingProvider({
     device,
     signal: new AbortController().signal,
     resolveInteractor: () => undefined,
@@ -70,7 +76,7 @@ test('an already-cancelled request never resolves an interactor', async () => {
   const setSetting = vi.fn(async () => undefined);
   const resolveInteractor = vi.fn(async () => ({ setSetting }) as unknown as Interactor);
 
-  const operations = bindLocalSettingsInteractor({
+  const operations = bindSetSettingLocal({
     device,
     signal: controller.signal,
     resolveInteractor,

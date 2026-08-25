@@ -1,10 +1,7 @@
 import { expect, test, vi } from 'vitest';
-import {
-  bindLocalOrientationInteractor,
-  bindProviderOrientationInteractor,
-  orientationRuntimeOperationFacts,
-} from './orientation-runtime.ts';
+import { bindOrientation, orientationRuntimeOperationFacts } from './orientation-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
+import { localInteractorSource, providerInteractorSource } from './interactor-operation-binding.ts';
 
 const device = {
   platform: 'android',
@@ -13,6 +10,16 @@ const device = {
   kind: 'emulator',
   booted: true,
 } as const;
+
+const bindOrientationLocal = (
+  params: Parameters<typeof localInteractorSource>[0] & { signal: AbortSignal },
+) => bindOrientation(params.signal, localInteractorSource(params));
+const bindOrientationProvider = (
+  params: Parameters<typeof providerInteractorSource>[0] extends infer P
+    ? Omit<P, 'operation'> & { signal: AbortSignal }
+    : never,
+) =>
+  bindOrientation(params.signal, providerInteractorSource({ ...params, operation: 'orientation' }));
 
 test('builds the exact orientation operation fact catalog', () => {
   const orientation = { available: true } as const;
@@ -26,7 +33,7 @@ test('a local binding drives the interactor with the requested rotation and retu
   const resolveInteractor = vi.fn(async () => ({ setOrientation }) as unknown as Interactor);
   const signal = new AbortController().signal;
 
-  const operations = bindLocalOrientationInteractor({ device, signal, resolveInteractor });
+  const operations = bindOrientationLocal({ device, signal, resolveInteractor });
   const result = await operations.setOrientation({
     rotation: 'landscape-left',
     options: { appBundleId: 'com.example.app' },
@@ -48,7 +55,7 @@ test('a provider binding drives its own resolved interactor', async () => {
   const resolveInteractor = vi.fn(() => ({ setOrientation }) as unknown as Interactor);
   const signal = new AbortController().signal;
 
-  const operations = bindProviderOrientationInteractor({ device, signal, resolveInteractor });
+  const operations = bindOrientationProvider({ device, signal, resolveInteractor });
   await operations.setOrientation({
     rotation: 'portrait',
     execution: { requestId: 'orientation-2' },
@@ -63,7 +70,7 @@ test('a provider binding drives its own resolved interactor', async () => {
 });
 
 test('a provider binding fails closed when its exact owner exposes no interactor', async () => {
-  const operations = bindProviderOrientationInteractor({
+  const operations = bindOrientationProvider({
     device,
     signal: new AbortController().signal,
     resolveInteractor: () => undefined,
@@ -81,7 +88,7 @@ test('an already-cancelled request never resolves an interactor', async () => {
   const setOrientation = vi.fn(async () => undefined);
   const resolveInteractor = vi.fn(async () => ({ setOrientation }) as unknown as Interactor);
 
-  const operations = bindLocalOrientationInteractor({
+  const operations = bindOrientationLocal({
     device,
     signal: controller.signal,
     resolveInteractor,

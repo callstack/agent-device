@@ -1,10 +1,3 @@
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  localInteractorSource,
-  providerInteractorSource,
-  type LocalInteractorOperationResolver,
-  type ProviderInteractorOperationResolver,
-} from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
@@ -76,7 +69,7 @@ async function resolveClipboardInteractor(
   });
 }
 
-function bindClipboardRead(
+export function bindClipboardRead(
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): ClipboardReadRuntimeOperations {
@@ -88,7 +81,7 @@ function bindClipboardRead(
   });
 }
 
-function bindClipboardWrite(
+export function bindClipboardWrite(
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): ClipboardWriteRuntimeOperations {
@@ -98,55 +91,4 @@ function bindClipboardWrite(
       await interactor.writeClipboard(input.text);
     },
   });
-}
-
-export type LocalClipboardInteractorResolver = LocalInteractorOperationResolver;
-export type ProviderClipboardInteractorResolver = ProviderInteractorOperationResolver;
-
-export function bindLocalClipboardReadInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: LocalClipboardInteractorResolver;
-  }>,
-): ClipboardReadRuntimeOperations {
-  return bindClipboardRead(params.signal, localInteractorSource(params));
-}
-
-/** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
-export function bindProviderClipboardReadInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: ProviderClipboardInteractorResolver;
-  }>,
-): ClipboardReadRuntimeOperations {
-  return bindClipboardRead(
-    params.signal,
-    providerInteractorSource({ ...params, operation: 'clipboard read' }),
-  );
-}
-
-export function bindLocalClipboardWriteInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: LocalClipboardInteractorResolver;
-  }>,
-): ClipboardWriteRuntimeOperations {
-  return bindClipboardWrite(params.signal, localInteractorSource(params));
-}
-
-/** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
-export function bindProviderClipboardWriteInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: ProviderClipboardInteractorResolver;
-  }>,
-): ClipboardWriteRuntimeOperations {
-  return bindClipboardWrite(
-    params.signal,
-    providerInteractorSource({ ...params, operation: 'clipboard write' }),
-  );
 }

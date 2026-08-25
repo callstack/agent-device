@@ -1,10 +1,3 @@
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  localInteractorSource,
-  providerInteractorSource,
-  type LocalInteractorOperationResolver,
-  type ProviderInteractorOperationResolver,
-} from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SettingOptions } from './settings.ts';
@@ -49,7 +42,7 @@ export function settingsRuntimeOperationFacts(
  * owner is already chosen by the time a binder is called, so each entry point supplies its own
  * resolution and this holds only what both share: the runner context and the mutation itself.
  */
-function bindSetSetting(
+export function bindSetSetting(
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): SettingsRuntimeOperations {
@@ -69,32 +62,4 @@ function bindSetSetting(
       );
     },
   });
-}
-
-export type LocalSettingsInteractorResolver = LocalInteractorOperationResolver;
-
-export function bindLocalSettingsInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: LocalSettingsInteractorResolver;
-  }>,
-): SettingsRuntimeOperations {
-  return bindSetSetting(params.signal, localInteractorSource(params));
-}
-
-export type ProviderSettingsInteractorResolver = ProviderInteractorOperationResolver;
-
-/** Provider bindings fail closed when their exact owner no longer exposes its interactor. */
-export function bindProviderSettingsInteractor(
-  params: Readonly<{
-    device: DeviceInfo;
-    signal: AbortSignal;
-    resolveInteractor: ProviderSettingsInteractorResolver;
-  }>,
-): SettingsRuntimeOperations {
-  return bindSetSetting(
-    params.signal,
-    providerInteractorSource({ ...params, operation: 'settings' }),
-  );
 }

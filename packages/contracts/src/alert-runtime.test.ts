@@ -1,12 +1,6 @@
 import { expect, test, vi } from 'vitest';
-import {
-  alertRuntimeOperationFacts,
-  bindLocalAlertAcceptInteractor,
-  bindLocalAlertDismissInteractor,
-  bindLocalAlertReadInteractor,
-  bindLocalAlertWaitInteractor,
-  bindProviderAlertAcceptInteractor,
-} from './alert-runtime.ts';
+import { alertRuntimeOperationFacts, bindAlertLeg } from './alert-runtime.ts';
+import { localInteractorSource, providerInteractorSource } from './interactor-operation-binding.ts';
 import type { AlertInteractorOptions, Interactor } from './interactor-types.ts';
 
 const device = {
@@ -17,6 +11,39 @@ const device = {
   kind: 'simulator',
   booted: true,
 } as const;
+
+// The composition the interactor catalog performs, spelled out so each assertion below
+// still exercises one facet executor reached through one interactor source.
+const bindLocalAlertReadInteractor = (params: {
+  device: typeof device;
+  signal: AbortSignal;
+  resolveInteractor: any;
+}) => bindAlertLeg('readAlert', params.signal, localInteractorSource(params));
+const bindLocalAlertWaitInteractor = (params: {
+  device: typeof device;
+  signal: AbortSignal;
+  resolveInteractor: any;
+}) => bindAlertLeg('awaitAlert', params.signal, localInteractorSource(params));
+const bindLocalAlertAcceptInteractor = (params: {
+  device: typeof device;
+  signal: AbortSignal;
+  resolveInteractor: any;
+}) => bindAlertLeg('acceptAlert', params.signal, localInteractorSource(params));
+const bindLocalAlertDismissInteractor = (params: {
+  device: typeof device;
+  signal: AbortSignal;
+  resolveInteractor: any;
+}) => bindAlertLeg('dismissAlert', params.signal, localInteractorSource(params));
+const bindProviderAlertAcceptInteractor = (params: {
+  device: typeof device;
+  signal: AbortSignal;
+  resolveInteractor: any;
+}) =>
+  bindAlertLeg(
+    'acceptAlert',
+    params.signal,
+    providerInteractorSource({ ...params, operation: 'alert accept' }),
+  );
 
 test('builds the exact alert operation fact catalog', () => {
   const read = { available: true } as const;

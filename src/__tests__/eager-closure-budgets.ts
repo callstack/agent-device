@@ -243,23 +243,23 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/xml/src/index.ts': 3,
 
   // Added by #1993 (device-inventory context moved out of core).
-  'packages/contracts/src/back-runtime.ts': 4,
+  'packages/contracts/src/back-runtime.ts': 1,
   // Added by Wave 6 R55/R56/R57/R58/R59: the clipboard, app-switcher, app-event, settings and
   // alert facets,
   // plus the local interaction set Android and Linux used to hold a byte-identical copy of each.
   // The set is its own module rather than part of the interactor catalog so the catalog's closure
   // stays leaf-thin -- every module the set pulls in is one its two consumers already evaluate.
-  'packages/contracts/src/alert-runtime.ts': 4,
-  'packages/contracts/src/app-event-runtime.ts': 4,
-  'packages/contracts/src/app-switcher-runtime.ts': 4,
-  'packages/contracts/src/clipboard-runtime.ts': 4,
-  'packages/contracts/src/settings-runtime.ts': 4,
+  'packages/contracts/src/alert-runtime.ts': 1,
+  'packages/contracts/src/app-event-runtime.ts': 1,
+  'packages/contracts/src/app-switcher-runtime.ts': 1,
+  'packages/contracts/src/clipboard-runtime.ts': 1,
+  'packages/contracts/src/settings-runtime.ts': 1,
   'packages/contracts/src/local-interactor-operation-set.ts': 26,
-  'packages/contracts/src/home-runtime.ts': 4,
+  'packages/contracts/src/home-runtime.ts': 1,
   'packages/contracts/src/interactor-operation-catalog.ts': 14,
-  'packages/contracts/src/keyboard-runtime.ts': 4,
-  'packages/contracts/src/orientation-runtime.ts': 4,
-  'packages/contracts/src/tv-remote-runtime.ts': 4,
+  'packages/contracts/src/keyboard-runtime.ts': 3,
+  'packages/contracts/src/orientation-runtime.ts': 1,
+  'packages/contracts/src/tv-remote-runtime.ts': 1,
 });
 
 /**
