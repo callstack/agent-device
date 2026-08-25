@@ -48,28 +48,11 @@ export async function typeAndroid(device: DeviceInfo, text: string, delayMs = 0)
     emitAndroidTextDiagnostic('type', 'provider-native', text);
     return;
   }
-  if (isAndroidTestImeActive(device)) {
-    await typeAndroidImeHelper(
-      device,
-      await activatedAndroidImeHelperPackage(device),
-      text,
-      delayMs,
-    );
+  const channel = await admitAndroidTextChannel(device, 'type', text);
+  if (channel.backend === 'test-ime') {
+    await typeAndroidImeHelper(device, channel.packageName, text, delayMs);
     return;
   }
-  // The shell path needs the input-method read anyway, and it also names the device's active IME.
-  // If that is the helper, its batch channel writes the whole string in one broadcast instead of
-  // ceil(n/8) `input text` spawns — no flag, no IME switch, nothing this process had to arrange.
-  // Read it before refusing anything: what the text has to be encodable for is not known until the
-  // channel is, and the broadcast channel carries any Unicode.
-  const inputState = await readAndroidShellTextInputState(device, 'type');
-  const helperPackage = androidImeHelperInputMethod(inputState);
-  if (helperPackage) {
-    await typeAndroidImeHelper(device, helperPackage, text, delayMs);
-    return;
-  }
-  assertAndroidShellTextSupported(text);
-  assertAndroidShellInputIsAppOwned(inputState, 'type');
   if (delayMs > 0 && Array.from(text).length > 1) {
     await typeAndroidShell(device, { action: 'type', text, chunkSize: 1, delayMs });
     return;
@@ -98,19 +81,6 @@ export async function fillAndroid(
     const verification = await verifyAndroidFilledText(device, x, y, text, helper);
     return completeAndroidFillVerification(text, beforeTarget, verification);
   }
-  if (isAndroidTestImeActive(device)) {
-    const verification = await fillAndroidImeHelper(
-      device,
-      await activatedAndroidImeHelperPackage(device),
-      x,
-      y,
-      text,
-      beforeTarget,
-      helper,
-    );
-    return completeAndroidFillVerification(text, beforeTarget, verification);
-  }
-
   const textCodePointLength = Array.from(text).length;
   const attempts: Array<{
     clearPadding: number;
@@ -139,15 +109,11 @@ export async function fillAndroid(
 
   for (const attempt of attempts) {
     await focusAndroid(device, x, y);
-    // Same read, same reason, same ordering as `typeAndroid`: when the helper is the active IME its
-    // channel replaces both the delete-key clear and the chunked write for the rest of this fill,
-    // and the ASCII limit that would refuse this text applies only once the shell path is chosen.
-    const inputState = await readAndroidShellTextInputState(device, 'fill');
-    const helperPackage = androidImeHelperInputMethod(inputState);
-    if (helperPackage) {
+    const channel = await admitAndroidTextChannel(device, 'fill', text);
+    if (channel.backend === 'test-ime') {
       const verification = await fillAndroidImeHelper(
         device,
-        helperPackage,
+        channel.packageName,
         x,
         y,
         text,
@@ -156,8 +122,6 @@ export async function fillAndroid(
       );
       return completeAndroidFillVerification(text, beforeTarget, verification);
     }
-    assertAndroidShellTextSupported(text);
-    assertAndroidShellInputIsAppOwned(inputState, 'fill');
     const clearCount = clampCount(
       textCodePointLength + attempt.clearPadding,
       attempt.minClear,
@@ -184,17 +148,32 @@ export async function fillAndroid(
 }
 
 /**
- * The helper package this process switched the device to. The observed-IME route reads the package
- * off the device instead, so it never depends on a packaged artifact being present.
+ * Which channel writes this text on this device, already admitted: the helper's package for the
+ * broadcast, or the adb-shell channel once this text and the focused input pass its asserts. The
+ * helper IME serves whenever it is the device's active input method — because this process
+ * switched to it (the activation cache answers without a device read, off the packaged artifact's
+ * manifest), or because a previous run left it active and the input-method read observes it. That
+ * read precedes the shell asserts by construction: the ASCII limit belongs to the shell channel
+ * alone, and the helper's batch broadcast carries any Unicode in one spawn instead of ceil(n/8)
+ * `input text` chunks.
  */
-async function activatedAndroidImeHelperPackage(device: DeviceInfo): Promise<string> {
-  const artifact = await selectAndroidImeHelperArtifact(resolveAndroidAdbProvider(device));
-  return artifact.manifest.packageName;
-}
-
-function androidImeHelperInputMethod(state: AndroidKeyboardState | null): string | undefined {
-  const packageName = state?.inputMethodPackage;
-  return isAndroidImeHelperPackage(packageName) ? packageName : undefined;
+async function admitAndroidTextChannel(
+  device: DeviceInfo,
+  action: AndroidTextInputAction,
+  text: string,
+): Promise<{ backend: 'test-ime'; packageName: string } | { backend: 'adb-shell' }> {
+  if (isAndroidTestImeActive(device)) {
+    const artifact = await selectAndroidImeHelperArtifact(resolveAndroidAdbProvider(device));
+    return { backend: 'test-ime', packageName: artifact.manifest.packageName };
+  }
+  const inputState = await readAndroidShellTextInputState(device, action);
+  const packageName = inputState?.inputMethodPackage;
+  if (isAndroidImeHelperPackage(packageName)) {
+    return { backend: 'test-ime', packageName };
+  }
+  assertAndroidShellTextSupported(text);
+  assertAndroidShellInputIsAppOwned(inputState, action);
+  return { backend: 'adb-shell' };
 }
 
 async function typeAndroidImeHelper(
@@ -231,9 +210,10 @@ async function fillAndroidImeHelper(
 ): Promise<AndroidFillVerification> {
   const adb = resolveAndroidAdbExecutor(device);
   let lastVerification: AndroidFillVerification | null = null;
-  // One retry covers the rare not-yet-bound InputConnection right after focus.
+  // The caller focused the target while resolving the channel; the retry re-focuses because it
+  // covers the rare not-yet-bound InputConnection right after focus.
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    await focusAndroid(device, x, y);
+    if (attempt > 0) await focusAndroid(device, x, y);
     await clearAndroidImeHelperText(adb, packageName);
     if (text) await sendAndroidImeHelperText(adb, packageName, text);
     const verification = await verifyAndroidFilledText(device, x, y, text, helper);
