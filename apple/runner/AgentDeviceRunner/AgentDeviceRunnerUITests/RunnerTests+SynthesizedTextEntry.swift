@@ -264,9 +264,9 @@ extension RunnerTests {
   /// branches are exercisable without a simulator (the macOS host lane runs this; the member
   /// wrapper below binds the real XCUI reads).
   ///
-  /// The budget is a local `var`, advanced from the same observation the progress check reads, so
-  /// "did the burst move" and "is time up" are two statements in one loop rather than a coupling
-  /// between separately-held state.
+  /// The deadline is a local `var`, started from this loop's own first `now()` and advanced from
+  /// the same observation the progress check reads, so "did the burst move" and "is time up" are
+  /// two statements in one loop rather than a coupling between separately-held state.
   static func awaitSynthesizedCommitOutcome(
     expectedText: String,
     placeholder: String?,
@@ -281,7 +281,7 @@ extension RunnerTests {
     if Self.textMatchesPlaceholder(expectedText, placeholder: placeholder) {
       return .notObserved
     }
-    var budget = budget
+    var deadline = budget.deadline(startedAt: now())
     // The deadline is checked AFTER an observation, never before one, so the last thing that
     // happens before condemning a commit is a read. Checking first would condemn a commit that
     // landed during the final poll sleep — the exact loaded-host timing this wait exists for.
@@ -291,11 +291,14 @@ extension RunnerTests {
       case .committed, .diverged:
         return .settled
       case .pending:
-        budget.record(
+        // One clock sample, so the instant an observation is recorded at is the instant it is
+        // judged against.
+        let sampledAt = now()
+        deadline.record(
           expectedPrefixLength: Self.commonPrefixLength(observedText ?? "", expectedText),
-          at: now()
+          at: sampledAt
         )
-        if budget.isExpired(at: now()) { return .notObserved }
+        if deadline.isExpired(at: sampledAt) { return .notObserved }
         waitForNextObservation()
       }
     }
@@ -342,7 +345,7 @@ extension RunnerTests {
     if Self.textMatchesPlaceholder(expectedText, placeholder: placeholder) {
       return .notObserved
     }
-    var budget = budget
+    var deadline = budget.deadline(startedAt: now())
     while true {
       let observedText = observe()
       if observedText == expectedText {
@@ -351,11 +354,12 @@ extension RunnerTests {
       // Prefix growth cannot settle this wait — a value with a hole in the middle is still a
       // failure, see the doc comment above — but it is the same evidence that the burst is still
       // landing, so it buys the same time here as it does in append mode.
-      budget.record(
+      let sampledAt = now()
+      deadline.record(
         expectedPrefixLength: Self.commonPrefixLength(observedText ?? "", expectedText),
-        at: now()
+        at: sampledAt
       )
-      if budget.isExpired(at: now()) { return .notObserved }
+      if deadline.isExpired(at: sampledAt) { return .notObserved }
       waitForNextObservation()
     }
   }
@@ -430,7 +434,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: expectedText,
       placeholder: ingredients.placeholder,
-      budget: .standard(startedAt: waitStartedAt),
+      budget: .standard,
       now: { Date() },
       observe: ingredients.observe,
       waitForNextObservation: ingredients.waitForNextObservation
@@ -467,7 +471,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: expectedText,
       placeholder: ingredients.placeholder,
-      budget: .standard(startedAt: waitStartedAt),
+      budget: .standard,
       now: { Date() },
       observe: ingredients.observe,
       waitForNextObservation: ingredients.waitForNextObservation

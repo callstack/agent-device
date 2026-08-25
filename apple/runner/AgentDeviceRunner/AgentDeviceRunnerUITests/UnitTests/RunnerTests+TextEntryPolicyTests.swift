@@ -94,8 +94,8 @@ extension RunnerTests {
   /// what makes "the burst kept landing" and "the pipeline froze" expressible as two sequences of
   /// the same length rather than as wall-clock luck.
   final class CommitWaitClock {
+    private let origin = Date(timeIntervalSinceReferenceDate: 0)
     private var current = Date(timeIntervalSinceReferenceDate: 0)
-    let startedAt = Date(timeIntervalSinceReferenceDate: 0)
 
     var read: () -> Date { { self.current } }
 
@@ -103,15 +103,13 @@ extension RunnerTests {
       current = current.addingTimeInterval(seconds)
     }
 
-    /// Defaults to a budget no test can exhaust, so a test that never advances the clock is
-    /// asking about settling rather than about time.
-    func budget(stallBudget: TimeInterval = 3600, ceiling: TimeInterval = 3600) -> SynthesizedCommitBudget {
-      SynthesizedCommitBudget(startedAt: startedAt, stallBudget: stallBudget, ceiling: ceiling)
-    }
-
     /// Seconds elapsed on this clock, for asserting *when* a wait gave up.
-    var elapsed: TimeInterval { current.timeIntervalSince(startedAt) }
+    var elapsed: TimeInterval { current.timeIntervalSince(origin) }
   }
+
+  /// A budget no test can exhaust, so a test that never advances the clock is asking about
+  /// settling rather than about time.
+  static let unboundedCommitBudget = SynthesizedCommitBudget(stallBudget: 3600, ceiling: 3600)
 
   // #1874, through the shipped wait rather than a detached policy object: a burst that keeps
   // landing must outlive the flat 3s deadline that used to govern it. Each poll advances the
@@ -125,7 +123,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: expected,
       placeholder: nil,
-      budget: clock.budget(stallBudget: 3, ceiling: 10),
+      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
       now: clock.read,
       observe: { String(expected.prefix(landed * 2)) },
       waitForNextObservation: {
@@ -137,6 +135,31 @@ extension RunnerTests {
     XCTAssertEqual(clock.elapsed, 8, "the wait must still be polling well past the 3s stall budget")
   }
 
+  // Review finding: the wait's setup reads the field's placeholder first, and that is an AX
+  // round-trip which takes seconds on exactly the loaded host this budget exists for. An earlier
+  // revision started the clock before that read, so slow setup spent the budget and the wait gave
+  // up after a single poll — sooner than the flat deadline it replaced, in the one condition it
+  // was written for. The clock now starts inside the loop, so a slow setup buys nothing and costs
+  // nothing.
+  func testCommitWaitBudgetStartsAtTheLoopRatherThanBeforeIt() {
+    let clock = CommitWaitClock()
+    clock.advance(60)
+    var polls = 0
+    let outcome = Self.awaitSynthesizedCommitOutcome(
+      expectedText: "hardware",
+      placeholder: nil,
+      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
+      now: clock.read,
+      observe: { "ha" },
+      waitForNextObservation: {
+        polls += 1
+        clock.advance(1)
+      }
+    )
+    XCTAssertEqual(outcome, .notObserved)
+    XCTAssertEqual(polls, 3, "the wait must get its whole stall budget however slow its setup was")
+  }
+
   // The other half, and the reason the stall budget keeps the flat deadline's number: a pipeline
   // that delivers nothing is condemned at exactly the instant it always was, so nothing that
   // fails today starts passing merely by waiting longer.
@@ -145,7 +168,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: "hardware",
       placeholder: nil,
-      budget: clock.budget(stallBudget: 3, ceiling: 10),
+      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
       now: clock.read,
       observe: { "ha" },
       waitForNextObservation: { clock.advance(1) }
@@ -163,7 +186,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: String(repeating: "a", count: 100),
       placeholder: nil,
-      budget: clock.budget(stallBudget: 3, ceiling: 10),
+      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
       now: clock.read,
       observe: { String(repeating: "a", count: landed) },
       waitForNextObservation: {
@@ -186,7 +209,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: "ada@example",
       placeholder: nil,
-      budget: clock.budget(stallBudget: 3, ceiling: 10),
+      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
       now: clock.read,
       observe: { observations[min(index, observations.count - 1)] },
       waitForNextObservation: {
@@ -207,7 +230,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: "hardware-keyboard",
       placeholder: nil,
-      budget: clock.budget(stallBudget: 3, ceiling: 10),
+      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
       now: clock.read,
       observe: { "h" },
       waitForNextObservation: {
@@ -226,7 +249,7 @@ extension RunnerTests {
       let outcome = Self.awaitSynthesizedCommitOutcome(
         expectedText: "hardware-keyboard",
         placeholder: nil,
-        budget: clock.budget(),
+        budget: Self.unboundedCommitBudget,
         now: clock.read,
         observe: { observed },
         waitForNextObservation: { polls += 1 }
@@ -245,7 +268,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: "hardware-keyboard",
       placeholder: nil,
-      budget: clock.budget(),
+      budget: Self.unboundedCommitBudget,
       now: clock.read,
       observe: { steps[min(index, steps.count - 1)] },
       waitForNextObservation: { index += 1 }
@@ -263,7 +286,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: "hardware-keyboard",
       placeholder: nil,
-      budget: clock.budget(stallBudget: 3, ceiling: 10),
+      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
       now: clock.read,
       // The value lands during the sleep that takes the clock past the stall budget: the read
       // happens first, so it is still observed.
@@ -288,7 +311,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: expectedText,
       placeholder: "0.00",
-      budget: clock.budget(),
+      budget: Self.unboundedCommitBudget,
       now: clock.read,
       observe: {
         observations += 1
@@ -318,7 +341,7 @@ extension RunnerTests {
       let outcome = Self.awaitSynthesizedCommitOutcome(
         expectedText: testCase.expectedText,
         placeholder: testCase.placeholder,
-        budget: clock.budget(),
+        budget: Self.unboundedCommitBudget,
         now: clock.read,
         observe: { testCase.expectedText },
         waitForNextObservation: {}
@@ -348,7 +371,7 @@ extension RunnerTests {
         Self.awaitSynthesizedCommitOutcome(
           expectedText: corruption.expected,
           placeholder: nil,
-          budget: appendClock.budget(),
+          budget: Self.unboundedCommitBudget,
           now: appendClock.read,
           observe: { corruption.observedAfterDrop },
           waitForNextObservation: {}
@@ -361,7 +384,7 @@ extension RunnerTests {
       let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
         expectedText: corruption.expected,
         placeholder: nil,
-        budget: clock.budget(stallBudget: 2, ceiling: 10),
+        budget: SynthesizedCommitBudget(stallBudget: 2, ceiling: 10),
         now: clock.read,
         observe: { corruption.observedAfterDrop },
         waitForNextObservation: {
@@ -386,7 +409,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: "ada@example",
       placeholder: nil,
-      budget: clock.budget(),
+      budget: Self.unboundedCommitBudget,
       now: clock.read,
       observe: { steps[min(index, steps.count - 1)] },
       waitForNextObservation: { index += 1 }
@@ -403,7 +426,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: "ada@example",
       placeholder: nil,
-      budget: clock.budget(stallBudget: 3, ceiling: 10),
+      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
       now: clock.read,
       observe: { polls == 0 ? "ada@exampl" : "ada@example" },
       waitForNextObservation: {
@@ -422,7 +445,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: "0.00",
       placeholder: "0.00",
-      budget: clock.budget(),
+      budget: Self.unboundedCommitBudget,
       now: clock.read,
       observe: {
         observations += 1
