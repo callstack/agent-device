@@ -53,9 +53,12 @@ expanded global ordinal.
    diagnostic provenance. A global `displayOrdinal` may be retained as bounded display data, but
    never authorizes resume or appears inside the address.
 6. **Existing target evidence remains the contract.** The entry guard and element actions reuse
-   ADR 0012's `target-v1`/`targets-v1` annotations and verification. Fragment metadata uses
-   reserved comments so old readers ignore annotations; a new `include` control is rejected by an
-   old reader rather than silently flattened.
+   ADR 0012's `target-v1`/`targets-v1` annotations and verification. Every v1 native fragment and
+   composed parent starts with a required first-executable format guard (`fragment-v1` or
+   `composition-v1`). A new reader consumes that guard during preflight; an old reader treats it as
+   an unknown action and rejects it before dispatch, so it cannot execute a root `open` or a known
+   prefix before reaching `include`. Other fragment metadata and references remain reserved
+   comments, so old readers ignore those annotations rather than silently flattening composition.
 7. **Native fragment repair is explicit re-recording.** Native `.ad` `replay --save-script` does
    not flatten a composed plan into a monolithic healed script. Until fragment-specific repair is
    implemented, the caller re-records the affected fragment and explicitly repins its callers;
@@ -65,11 +68,11 @@ expanded global ordinal.
 
 ### Fragment artifact and lifecycle ownership
 
-A v1 fragment is a portable `.ad` body with a reserved header and no session lifecycle. Its shape is
-conceptually:
+A v1 fragment is a portable `.ad` body with a required first-executable format guard and no session
+lifecycle. Its shape is conceptually:
 
 ```text
-# agent-device:fragment-v1 {"format":1}
+fragment-v1
 context platform=ios target=mobile
 # agent-device:target-v1 {"id":"home","role":"heading","label":"Home","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}
 wait "id=\"home\""
@@ -78,10 +81,15 @@ click "label=\"Continue\""
 
 The exact writer surface belongs to the future implementation, but these invariants are fixed:
 
-- `fragment-v1` is a format marker, not an executable action. The fragment has no `open`, `close`,
-  or hidden launch action. The writer always emits the effective `context platform` and `target`,
-  and a parser rejects a fragment missing either constraint. Those values constrain the effective
-  platform/target but do not select a device or establish a session; the parent supplies those facts.
+- `fragment-v1` is the required first-executable format guard. The new reader consumes it during
+  source preflight; it is a format envelope, not a `SessionAction` and has no device side effect.
+  A composed native parent uses the corresponding `composition-v1` guard as its first executable
+  line, before root `open` or any `include`. An old reader parses either guard as an unknown action;
+  the existing `dispatchKnownCommand` seam rejects it with `INVALID_ARGS` before invoking any
+  platform handler. The fragment has no `open`, `close`, or hidden launch action. The writer always
+  emits the effective `context platform` and `target`, and a parser rejects a fragment missing
+  either constraint. Those values constrain the effective platform/target but do not select a
+  device or establish a session; the parent supplies those facts.
 - The first executable step is an identity-bearing selector `wait` with `target-v1` evidence whose
   `verification` is `verified`. It is the fragment's entry guard and is included in the fragment
   digest. The guard uses the existing landmark-mode polling and identity semantics; it is not a
@@ -192,6 +200,12 @@ the interpreter contributes the same invocation/provenance records when it loads
 Maestro's `runFlow` controls, scoped variables, optional behavior, and runtime repeats remain
 Maestro-owned as required by ADR 0015. The shared model prevents a second semantic implementation;
 it does not move `runFlow` out of that interpreter.
+
+A composed native parent has a required `composition-v1` first-executable guard before its root
+`open` or any `include`. A flat native `.ad` script without an include keeps the existing artifact
+shape and behavior. The guard is consumed by the new source preflight and is not a device action;
+its purpose is to make an old reader fail at the format boundary rather than partially execute a
+new composed artifact.
 
 V1 does not allow cross-format includes: native `.ad` `include` loads a native fragment, while
 Maestro `runFlow` loads Maestro programs. They share the composition contract, not a coercion path
@@ -425,38 +439,39 @@ projection is allowed to collapse a fragment failure to a parent global ordinal.
 
 ### Annotation compatibility and versioning
 
-`# agent-device:fragment-v1` and `# agent-device:fragment-ref-v1` are reserved comment forms. They
-are not target annotations, do not alter the existing `target-v1` binding rule, and are ignored by
-readers that do not know them. The first entry `wait` and every element-targeting action continue to
-carry the existing `target-v1`/`targets-v1` evidence, including its size limits, canonical field
-order, and fail-closed `verification` behavior.
+`fragment-v1` and `composition-v1` are reserved first-executable format guards, not comment forms or
+target annotations. `# agent-device:fragment-ref-v1` remains a reserved reference comment, and the
+first entry `wait` plus every element-targeting action continue to carry the existing
+`target-v1`/`targets-v1` evidence, including its size limits, canonical field order, and fail-closed
+`verification` behavior. Readers that do not know the reference annotation ignore that comment;
+readers that do not know the executable guard reject the artifact at its format boundary.
 
-An old reader given a composed parent sees the unknown comments as comments and the new `include`
-control as an ordinary parsed action, then the existing unknown-command rejection fails it before
-platform dispatch. It does not flatten or execute the expanded child body, although an old reader
-may already have executed an earlier known prefix because it has no v1 source-closure preflight;
-the new reader resolves and validates before any device action. An old reader given a fragment file
-directly continues its ordinary comment behavior, but a
-fragment is not a top-level replay artifact: an old reader may parse its lifecycle-free actions in an
-already-open caller session, and that legacy behavior is not a v1 safety guarantee. The new reader
-rejects direct replay with `fragment_composition_required`. Unknown future `fragment-vN` or
-`fragment-ref-vN` comments remain ordinary comments to an older reader; a new reader rejects a
-future format it cannot validate before device work.
+The new reader consumes the native guard during source preflight. An old reader given either a v1
+fragment or a composed parent parses the guard as an ordinary action, then the existing
+`dispatchKnownCommand` rejection in `src/core/dispatch.ts` throws `INVALID_ARGS` before the
+platform handler is invoked. It therefore cannot execute a root `open`, a known prefix, or an
+expanded child body. An old reader given an unguarded legacy `.ad` retains its existing behavior,
+including the possibility of executing a known prefix before a later unknown command; that legacy
+case is explicitly outside the v1 composed-artifact acceptance contract and is not safety evidence.
+The new reader rejects a fragment supplied as a top-level replay artifact with
+`fragment_composition_required`. Unknown future reference comments remain ordinary comments to an
+older reader, while an unknown future executable guard fails before device work.
 
-The old-reader claims are anchored by the existing unknown-command dispatch test
-`src/core/__tests__/dispatch-keyboard.test.ts` (the handler is never reached) and the future-comment
-coverage in `packages/ad-script/src/internal/__tests__/script.test.ts`. The fragment codec must add
-the corresponding planted-red tests for strict reserved-header/reference parsing; this ADR does not
-pretend those tests exist yet.
+The old-reader evidence points to the actual unknown-command seam in `src/core/dispatch.ts`; the
+current `src/core/__tests__/dispatch-keyboard.test.ts` does not prove this contract. The fragment
+codec implementation must add planted-red tests that run a guarded composition with `open` through
+the old dispatch path, assert the guard fails before the handler, and separately preserve the
+legacy-prefix fixture as out of scope. It must also add strict reserved-header/reference parsing
+tests; this ADR does not pretend those tests exist yet.
 
 Format-version changes, digest canonicalization changes, and address-shape changes are breaking
 composition boundaries. A reader must not reinterpret a v1 digest under a new canonicalizer. A
 minor additive annotation that preserves the v1 execution contract may remain an ignored comment,
 following ADR 0012's old-reader rule, but any change to lifecycle, entry verification, or digest
-meaning requires a new version and an explicit migration. The fragment header version gates the
-fragment body grammar, the reference version gates the pinned-reference schema, the address version
-gates the wire address, and the canonicalization version is part of the digest input; a mismatch in
-any one is a preflight `fragment_unsupported` error.
+meaning requires a new version and an explicit migration. The first-executable fragment or
+composition guard version gates the body grammar, the reference version gates the pinned-reference
+schema, the address version gates the wire address, and the canonicalization version is part of the
+digest input; a mismatch in any one is a preflight `fragment_unsupported` error.
 
 ### Repair and migration boundaries
 
@@ -550,10 +565,12 @@ The audited seam tests are `packages/ad-script/src/internal/__tests__/script.tes
 `src/replay/__tests__/script-source-bundle.test.ts`, and
 `packages/maestro/src/internal/__tests__/replay-plan.test.ts`,
 `source-closure.test.ts`, `program-loader.test.ts`,
-`src/core/__tests__/dispatch-keyboard.test.ts`, and
 `src/daemon/handlers/__tests__/session-replay-runtime.test.ts`. The planted-red checks below are
 unit or fixture assertions owned by the slice that introduces them; they are not a claim that this
 docs-only spike already has a structural gate.
+
+The old-reader dispatch seam is `src/core/dispatch.ts`; the existing keyboard-dispatch test is not
+evidence for unknown-command rejection.
 
 1. **Shared pure model and canonical fixtures.** Add typed composition nodes, fragment identity,
    invocation paths, local addresses, digest canonicalization, cycle/depth/size validation, and
@@ -565,14 +582,17 @@ docs-only spike already has a structural gate.
    `fragmentDigest` unchanged. Prove repeated logical steps get distinct control paths, and that a
    nonzero iteration path is reported but refused for v1 resume. Plant a missing address/digest edge
    and verify the unit gate names it before restoring the implementation.
-2. **Native fragment codec and source closure.** Extend the `.ad` codec with the fragment header,
-   pinned reference, include control, lifecycle admission, parse/write/parse round trips, relative
-   source resolution, and old-reader comment behavior. Extend the caller-side source bundle to ship
-   the complete closure and execute the exact verified bytes. Classify every existing descriptor that
-   is allowed in a fragment before exposing capture. Plant each of a missing digest, duplicate or
-   missing `callSiteId`, and an admitted `open`, then pass an `include` to the old reader and observe
-   each fail before any action. Also fixture the old reader's legacy parse of a direct lifecycle-free
-   body separately from the new reader's `fragment_composition_required` refusal.
+2. **Native fragment codec and source closure.** Extend the `.ad` codec with the first-executable
+   `fragment-v1`/`composition-v1` guards, pinned reference, include control, lifecycle admission,
+   parse/write/parse round trips, relative source resolution, and old-reader guard behavior. Extend
+   the caller-side source bundle to ship the complete closure and execute the exact verified bytes.
+   Classify every existing descriptor that is allowed in a fragment before exposing capture. Plant
+   each of a missing digest, duplicate or missing `callSiteId`, and an admitted `open`, then pass a
+   guarded composition containing `composition-v1`, `open`, and `include` to the old reader and
+   observe the guard fail before the `open` handler. Separately fixture an unguarded legacy script
+   with a known prefix before an unknown command as explicitly out-of-scope behavior; do not use it
+   as v1 safety evidence. Also test the new reader's `fragment_composition_required` refusal for a
+   direct fragment replay.
 3. **Capture and publication.** Add the explicit fragment capture aggregate and session commands.
    Reuse the existing recorder/evidence/parameterization and atomic writer seams. Test the automatic
    verified entry guard, identity-empty/ambiguous refusal, no `open`/`close`, retry after target
