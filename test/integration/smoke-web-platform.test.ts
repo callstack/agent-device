@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import path from 'node:path';
 import test from 'node:test';
@@ -21,6 +22,7 @@ import {
   expandProcessTree,
   isProcessAlive,
   listHostProcesses,
+  readProcessStartTime,
   stopPidsWithEscalation,
 } from '../../src/utils/host-process.ts';
 
@@ -37,6 +39,73 @@ const WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS = 5_000;
 // this pass for the wrong reason. A pass can then only mean the daemon's shutdown teardown
 // actively closed the browser, not that agent-browser's own idle timer beat this test's own wait.
 const WEB_SHUTDOWN_IDLE_TIMEOUT_MS = WEB_SHUTDOWN_SETTLE_TIMEOUT_MS + 60_000;
+
+type WebShutdownDaemonIdentity = {
+  pid: number;
+  startTime: string;
+};
+
+test('web shutdown cleanup reaps the exact daemon that survived graceful shutdown', async (t) => {
+  const root = mkdtempSync('/tmp/agent-device-web-shutdown-cleanup-');
+  const entryPath = path.join(root, 'src', 'daemon.ts');
+  mkdirSync(path.dirname(entryPath), { recursive: true });
+  writeFileSync(
+    entryPath,
+    [
+      "process.on('SIGTERM', () => process.send?.('sigterm-ignored'));",
+      "process.send?.('ready');",
+      'setInterval(() => {}, 1000);',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  const child = spawn(process.execPath, [entryPath], {
+    stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+  });
+  const daemonPid = child.pid ?? 0;
+  assert.ok(daemonPid > 0, 'expected the fake daemon to have a pid');
+  t.after(() => {
+    if (isProcessAlive(daemonPid)) process.kill(daemonPid, 'SIGKILL');
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('message', (message) => {
+      child.off('error', reject);
+      assert.equal(message, 'ready');
+      resolve();
+    });
+  });
+  let ignoredSigterm = false;
+  child.on('message', (message) => {
+    if (message === 'sigterm-ignored') ignoredSigterm = true;
+  });
+
+  const daemonStartTime = readProcessStartTime(daemonPid);
+  assert.ok(daemonStartTime, 'expected the fake daemon to report a start time');
+  await cleanupWebShutdownSmoke(
+    {
+      artifactDir: root,
+      common: [],
+      env: {},
+      screenshotPath: path.join(root, 'unused.png'),
+      server: createServer(),
+      stepHistory: [],
+      url: 'http://127.0.0.1',
+    },
+    { pid: daemonPid, startTime: daemonStartTime },
+    undefined,
+    { termTimeoutMs: 50, killTimeoutMs: 1_000 },
+  );
+
+  assert.equal(
+    ignoredSigterm,
+    true,
+    'expected cleanup to escalate after the child ignored SIGTERM',
+  );
+  assert.equal(isProcessAlive(daemonPid), false);
+});
 
 type StepRecord = {
   step: string;
@@ -99,7 +168,7 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
   // Cleanup authority lives entirely in `finally`, driven by these two, so a failed assertion
   // above (including the very failure this test exists to catch: processes still alive when the
   // fix regresses) can never leave a daemon or a Chrome fleet running on the host afterward.
-  let daemonPid: number | undefined;
+  let daemonIdentity: WebShutdownDaemonIdentity | undefined;
   let status: AgentBrowserToolStatus | undefined;
   try {
     await runStep(context, 'set up managed web backend', ['web', 'setup', '--json']);
@@ -115,7 +184,10 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
       `expected the managed browser fleet to be running after open, found none: ${formatProcessSummary(before)}`,
     );
 
-    daemonPid = readDaemonPid(stateDir);
+    const daemonPid = readDaemonPid(stateDir);
+    const daemonStartTime = readProcessStartTime(daemonPid);
+    assert.ok(daemonStartTime, 'expected the daemon process to report a start time');
+    daemonIdentity = { pid: daemonPid, startTime: daemonStartTime };
     assert.equal(isProcessAlive(daemonPid), true, 'expected a live daemon before SIGTERM');
 
     // The scenario #1868 is about: SIGTERM the daemon directly, the way an operator or an
@@ -138,7 +210,7 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
     // state-dir residue either, on top of the process-level proof above.
     await assertNoDaemonLeaks({ stateDir, daemonPids: [daemonPid], phase: 'after-shutdown' });
   } finally {
-    await cleanupWebShutdownSmoke(context, daemonPid, status);
+    await cleanupWebShutdownSmoke(context, daemonIdentity, status);
   }
 }
 
@@ -150,16 +222,20 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
 // alongside.
 async function cleanupWebShutdownSmoke(
   context: WebSmokeContext,
-  daemonPid: number | undefined,
+  daemonIdentity: WebShutdownDaemonIdentity | undefined,
   status: AgentBrowserToolStatus | undefined,
+  timeouts = {
+    termTimeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS,
+    killTimeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS,
+  },
 ): Promise<void> {
   const errors: unknown[] = [];
-  if (daemonPid !== undefined) {
+  if (daemonIdentity !== undefined) {
     try {
-      await stopProcessForTakeover(daemonPid, {
-        termTimeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS,
-        killTimeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS,
-        expectedStartTime: undefined,
+      await stopProcessForTakeover(daemonIdentity.pid, {
+        termTimeoutMs: timeouts.termTimeoutMs,
+        killTimeoutMs: timeouts.killTimeoutMs,
+        expectedStartTime: daemonIdentity.startTime,
       });
     } catch (error) {
       errors.push(error);

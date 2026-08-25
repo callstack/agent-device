@@ -67,3 +67,19 @@ test('does not stop a branch-named daemon when process identity is missing', asy
   await stopProcessForTakeover(pid, { ...TAKEOVER_TIMEOUTS, expectedStartTime: undefined });
   assert.equal(isProcessAlive(pid), true);
 });
+
+test('does not stop a branch-named daemon when the pid belongs to a different process lifetime', async () => {
+  const { pid, entryPath } = spawnFakeDaemonFromBranchNamedCheckout();
+  assert.equal(entryPath.toLowerCase().includes('agent-device'), false);
+
+  const actualStartTime = readProcessStartTime(pid);
+  assert.ok(actualStartTime, 'expected the spawned daemon to report a start time');
+  const staleStartTime = `${actualStartTime}-previous-lifetime`;
+  assert.equal(isAgentDeviceDaemonProcess(pid, staleStartTime), false);
+
+  await stopProcessForTakeover(pid, {
+    ...TAKEOVER_TIMEOUTS,
+    expectedStartTime: staleStartTime,
+  });
+  assert.equal(isProcessAlive(pid), true);
+});
