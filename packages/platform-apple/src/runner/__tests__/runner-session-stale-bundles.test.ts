@@ -69,9 +69,8 @@ vi.mock('../runner-io.ts', async () => {
 });
 
 vi.mock('../runner-transport.ts', async () => {
-  const actual = await vi.importActual<typeof import('../runner-transport.ts')>(
-    '../runner-transport.ts',
-  );
+  const actual =
+    await vi.importActual<typeof import('../runner-transport.ts')>('../runner-transport.ts');
   return {
     ...actual,
     sendRunnerCommandOnce: mockSendRunnerCommandOnce,
@@ -79,9 +78,8 @@ vi.mock('../runner-transport.ts', async () => {
 });
 
 vi.mock('../runner-xctestrun.ts', async () => {
-  const actual = await vi.importActual<typeof import('../runner-xctestrun.ts')>(
-    '../runner-xctestrun.ts',
-  );
+  const actual =
+    await vi.importActual<typeof import('../runner-xctestrun.ts')>('../runner-xctestrun.ts');
   return {
     ...actual,
     acquireXcodebuildSimulatorSetRedirect: mockAcquireXcodebuildSimulatorSetRedirect,
