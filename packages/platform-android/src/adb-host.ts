@@ -3,13 +3,13 @@ import type {
   AndroidImeHelperArtifact,
 } from '@agent-device/contracts/android-helper-artifacts';
 import type {
+  AndroidAdbExecutor,
   AndroidAdbExecutorOptions,
   AndroidAdbExecutorResult,
   AndroidAdbProcess,
   AndroidAdbProvider,
   AndroidAdbSpawnOptions,
-  AndroidAdbExecutor,
-} from './adb-executor.ts';
+} from './adb-transport.ts';
 
 // R13 bars platform packages from raw process, fs, and ambient host authority; the adb/IME
 // cluster reaches those primitives only through this explicitly injected host port. The root
@@ -108,4 +108,8 @@ export function requireAndroidAdbHost(): AndroidAdbHost {
     );
   }
   return boundHost;
+}
+
+export function emitAndroidAdbDiagnostic(event: AndroidAdbDiagnosticEvent): void {
+  requireAndroidAdbHost().emitDiagnostic(event);
 }

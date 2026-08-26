@@ -239,10 +239,10 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // Transitional #2041 subpaths for the extracted adb/IME cluster; the root shims re-export
   // them, so their closures carry what src/platforms/android/adb-executor.ts et al. carried
   // before the move. Deleted together with the shims once the perf/trace migration lands.
-  'packages/platform-android/src/adb-executor.ts': 5,
+  'packages/platform-android/src/adb-executor.ts': 10,
   'packages/platform-android/src/adb-host.ts': 1,
-  'packages/platform-android/src/ime-helper.ts': 7,
-  'packages/platform-android/src/ime-lifecycle.ts': 10,
+  'packages/platform-android/src/ime-helper.ts': 6,
+  'packages/platform-android/src/ime-lifecycle.ts': 17,
 
   // --- @agent-device/platform-apple ---
   'packages/platform-apple/src/index.ts': 1,

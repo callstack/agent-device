@@ -354,7 +354,7 @@ test('lifecycle durable proof rejects a generic capture-kit lifecycle role and a
         'hasTestImeRecoveryEvidence(input.stateDir); recoverTestImeStartup(input);',
       ],
       [
-        'packages/platform-android/src/ime-lifecycle.ts',
+        'packages/platform-android/src/ime-activation.ts',
         'const adb = resolveAndroidAdbExecutor(device);',
       ],
       [
@@ -383,7 +383,7 @@ test('planted red: lifecycle durable proof rejects a gateway that names a platfo
         'hasTestImeRecoveryEvidence(input.stateDir); recoverTestImeStartup(input);',
       ],
       [
-        'packages/platform-android/src/ime-lifecycle.ts',
+        'packages/platform-android/src/ime-activation.ts',
         'await waitForStartupRecoveryFence(options.stateDir); const adb = resolveAndroidAdbExecutor(device);',
       ],
     ]),
@@ -398,7 +398,7 @@ test('planted red: lifecycle durable proof rejects unevidenced Android startup r
       ['src/platform-runtime-gateway.ts', 'runStartupRecoveryFence();'],
       [APPLICATION_RESOURCES_FILE, 'recoverTestImeStartup(input);'],
       [
-        'packages/platform-android/src/ime-lifecycle.ts',
+        'packages/platform-android/src/ime-activation.ts',
         'await waitForStartupRecoveryFence(options.stateDir); const adb = resolveAndroidAdbExecutor(device);',
       ],
     ]),

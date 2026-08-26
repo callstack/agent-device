@@ -9,11 +9,8 @@ import {
   type AndroidImeHelperArtifact,
   type AndroidImeHelperManifest,
 } from '@agent-device/contracts/android-helper-artifacts';
-import {
-  androidAdbResultError,
-  type AndroidAdbExecutor,
-  type AndroidAdbProvider,
-} from './adb-executor.ts';
+import { androidAdbResultError } from './adb-failure.ts';
+import type { AndroidAdbExecutor, AndroidAdbProvider } from './adb-transport.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
 
 // Headless InputMethodService, driven over `adb shell am broadcast` (not `am instrument`).
