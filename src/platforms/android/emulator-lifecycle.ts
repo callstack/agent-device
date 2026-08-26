@@ -2,7 +2,8 @@ import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { ExecResult } from '../../utils/exec.ts';
-import { runCmd, runCmdDetached, whichCmd } from '../../utils/exec.ts';
+import { runCmdDetached, whichCmd } from '../../utils/exec.ts';
+import { runAndroidHostAdb } from './adb-host-transport.ts';
 import { Deadline, retryWithPolicy } from '../../utils/retry.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import { bootFailureHint, classifyBootFailure } from '../boot-diagnostics.ts';
@@ -154,7 +155,7 @@ async function readAndroidBootProp(
   timeoutMs = ANDROID_BOOT_PROP_TIMEOUT_MS,
   signal?: AbortSignal,
 ): Promise<ExecResult> {
-  return await runCmd('adb', ['-s', serial, 'shell', 'getprop', 'sys.boot_completed'], {
+  return await runAndroidHostAdb(['-s', serial, 'shell', 'getprop', 'sys.boot_completed'], {
     allowFailure: true,
     signal,
     timeoutMs,

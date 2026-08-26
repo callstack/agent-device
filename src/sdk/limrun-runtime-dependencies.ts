@@ -3,6 +3,7 @@ import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 // ProviderDeviceRuntime.getInteractor is synchronous, so this previously eager factory remains the
 // deliberate static edge; making it lazy would require a proxy interactor rather than this seam.
 import { createAndroidInteractor } from '../core/interactors/android.ts';
+import { runAndroidHostAdb } from '../platforms/android/adb-host-transport.ts';
 import { execFailureDetails, runCmd } from '../utils/exec.ts';
 import { readVersion } from '../utils/version.ts';
 
@@ -72,7 +73,7 @@ export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
       },
     },
     host: {
-      runAdb: async (args, options) => await runCmd('adb', args, options),
+      runAdb: async (args, options) => await runAndroidHostAdb(args, options),
       archiveDirectory: async ({ sourceDirectory, entryName, archivePath }) => {
         const args = ['-qr', archivePath, entryName];
         const result = await runCmd('zip', args, {
