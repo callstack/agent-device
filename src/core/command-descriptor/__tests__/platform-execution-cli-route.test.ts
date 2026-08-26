@@ -15,7 +15,13 @@ import { commandDescriptors } from '../registry.ts';
  * The registry entry gate inspects one descriptor at a time, so it cannot see a command
  * whose own module holds no platform code while its CLI route injects a *different*
  * command that does. Mode dominance closes that: if a CLI route dispatches command D,
- * the route's command may declare `none` only when D is `none` too.
+ * the route's command may declare `none` only when D is not itself still `legacy`.
+ *
+ * Mode dominance is scoped to hidden *legacy* execution, not to migration mode in general: a
+ * route may declare `none` while its CLI-injected dispatch target is already `device-runtime`,
+ * `inventory`, or `host` — that target's execution is accounted for under its own descriptor,
+ * not hidden behind the route's. Dispatching to a still-`legacy` command is the one shape this
+ * gate rejects, since that really would let unmigrated execution hide behind a `none` label.
  *
  * The dispatched pairs are read from the typed table at the construction seam rather
  * than recovered from syntax. The second test keeps that seam singular, which is what
@@ -48,7 +54,7 @@ function dominanceFailures(
   table: DispatchTable = CLI_INJECTED_DAEMON_DISPATCHES,
 ): string[] {
   return declaredPairs(table)
-    .filter(({ route, dispatched }) => kindOf(route) === 'none' && kindOf(dispatched) !== 'none')
+    .filter(({ route, dispatched }) => kindOf(route) === 'none' && kindOf(dispatched) === 'legacy')
     .map(
       ({ route, dispatched }) =>
         `${route} declares platformExecution none but its CLI route dispatches ${dispatched} (${String(kindOf(dispatched))})`,
@@ -254,16 +260,24 @@ function cliModulePaths(): string[] {
 }
 
 describe('platform-execution coherence across CLI route delegation', () => {
-  test('no none command dispatches a platform-executing command', () => {
+  test('no none command dispatches a still-legacy command', () => {
     expect(dominanceFailures(registryKind)).toEqual([]);
   });
 
-  test('planted red: react-devtools declared none is rejected by the declared pair', () => {
-    const plantedNone: PlatformExecutionKindOf = (command) =>
-      command === 'react-devtools' ? 'none' : registryKind(command);
+  test('a none route dispatching an already-migrated command is not a dominance failure', () => {
+    // react-devtools dispatches `runtime`, which is fully migrated (`device-runtime`, R31) — not
+    // hidden legacy execution — so react-devtools may honestly declare `none`.
+    expect(registryKind('runtime')).toBe('device-runtime');
+    expect(registryKind('react-devtools')).toBe('none');
+    expect(dominanceFailures(registryKind)).toEqual([]);
+  });
 
-    expect(dominanceFailures(plantedNone)).toEqual([
-      'react-devtools declares platformExecution none but its CLI route dispatches runtime (device-runtime)',
+  test('planted red: a route dispatching a still-legacy command is rejected', () => {
+    const plantedLegacyRuntime: PlatformExecutionKindOf = (command) =>
+      command === 'runtime' ? 'legacy' : registryKind(command);
+
+    expect(dominanceFailures(plantedLegacyRuntime)).toEqual([
+      'react-devtools declares platformExecution none but its CLI route dispatches runtime (legacy)',
     ]);
   });
 

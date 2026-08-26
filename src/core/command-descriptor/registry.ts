@@ -1555,10 +1555,14 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
-    // `react-devtools start` on a Limrun Android instance dispatches internal
-    // `runtime port-reverse`, which reaches a provider device runtime. Platform
-    // execution delegated through another command is still platform execution.
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    // Wave 6 residue: `react-devtools start` on a Limrun Android instance dispatches internal
+    // `runtime port-reverse` through the CLI-injected dispatch seam. `runtime` is itself fully
+    // migrated (`device-runtime`, R31), so the dispatched execution is accounted for under its
+    // own descriptor rather than hidden behind this one — this route owns no unmigrated platform
+    // execution of its own. The CLI-route dominance gate
+    // (`__tests__/platform-execution-cli-route.test.ts`) still rejects a `none` route whose
+    // CLI-injected dispatch target is still `legacy`.
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'web',
