@@ -537,6 +537,7 @@ export async function startDaemonRuntime(
         gateway: deviceRuntimeGateway,
         scope: createDaemonRecoveryPlatformScope(),
       }),
+      baseDir,
     );
     // Arms the initial idle-reap timer: a daemon that starts and never
     // receives a request must still be able to reap itself.
@@ -650,6 +651,7 @@ export async function startDaemonRuntime(
 async function reconcileDeviceClaimsForDaemonStartup(
   logPath: string,
   reconcile: DeviceClaimReconciler,
+  stateDir: string,
 ): Promise<void> {
   // Startup runs outside any diagnostics scope, where emitDiagnostic is a no-op,
   // so reconciliation has to open one of its own for its events to be recorded.
@@ -657,7 +659,7 @@ async function reconcileDeviceClaimsForDaemonStartup(
     { command: 'daemon', session: 'daemon', logPath, debug: true },
     async () => {
       try {
-        const summary = await reconcileOrphanedDeviceClaims(reconcile);
+        const summary = await reconcileOrphanedDeviceClaims(reconcile, stateDir);
         if (summary.examined > 0) {
           emitDiagnostic({ phase: 'device_claim_reconcile', data: summary });
           flushDiagnosticsToSessionFile({ force: true });

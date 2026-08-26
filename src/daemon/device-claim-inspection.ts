@@ -13,12 +13,13 @@ import {
   type OwnerLiveness,
 } from '../utils/owner-identity.ts';
 import { readHostProcessIdentityObservations } from '../utils/host-process.ts';
+import { isSupersededDaemonOwner } from './daemon-registration.ts';
 import { canonicalLocalDeviceKey, resolveDeviceClaimRoot } from './device-claim-paths.ts';
 import type { DeviceClaim } from './device-claims.ts';
 
 const DEVICE_CLAIM_SCHEMA_VERSION = 2;
 
-export type DeviceClaimClassification = OwnerLiveness | 'inconsistent';
+export type DeviceClaimClassification = OwnerLiveness | 'inconsistent' | 'owner-daemon-superseded';
 
 export type InspectedDeviceClaim = {
   fileName: string;
@@ -137,17 +138,20 @@ function classifyInspectedClaim(
   entry: InspectedDeviceClaim,
   observation: Parameters<typeof classifyOwnerLivenessFromObservation>[1],
 ): InspectedDeviceClaim {
-  if (!entry.claim) return entry;
-  return {
-    ...entry,
-    classification: classifyOwnerLivenessFromObservation(
-      {
-        owner: { pid: entry.claim.ownerPid, startTime: entry.claim.ownerStartTime },
-        stateDir: entry.claim.stateDir,
-      },
-      observation,
-    ),
-  };
+  const claim = entry.claim;
+  if (!claim) return entry;
+  const owner = { pid: claim.ownerPid, startTime: claim.ownerStartTime };
+  const liveness = classifyOwnerLivenessFromObservation(
+    { owner, stateDir: claim.stateDir },
+    observation,
+  );
+  // A live owner holds a device exclusively only while it can still be asked to
+  // release it. #2031: a replaced daemon keeps running and keeps its claim, but
+  // clients reach the successor published for its state dir instead, so the
+  // claim names a session no `session list` reports and no `close` can reach.
+  const superseded =
+    liveness === 'live' && isSupersededDaemonOwner({ ...owner, stateDir: claim.stateDir });
+  return { ...entry, classification: superseded ? 'owner-daemon-superseded' : liveness };
 }
 
 /** Claims hidden by the default status view and exposed through `device status --stale`. */
@@ -158,8 +162,31 @@ export function deviceClaimRequiresStaleInspection(
     case 'owner-process-dead':
     case 'owner-process-reused':
     case 'owner-state-dir-gone':
+    case 'owner-daemon-superseded':
       return true;
     case 'live':
+    case 'unknown':
+    case 'inconsistent':
+      return false;
+  }
+}
+
+/**
+ * Claims whose recorded owner can no longer release them, and which
+ * reconciliation may therefore settle once exact-owner resource recovery
+ * reaches a terminal state. Both members are proofs about the owner, never
+ * about the resource: `owner-process-dead` is a process that exited,
+ * `owner-daemon-superseded` one that still runs but no longer serves the state
+ * dir its claim was taken in.
+ */
+export function deviceClaimOwnerCannotRelease(classification: DeviceClaimClassification): boolean {
+  switch (classification) {
+    case 'owner-process-dead':
+    case 'owner-daemon-superseded':
+      return true;
+    case 'live':
+    case 'owner-process-reused':
+    case 'owner-state-dir-gone':
     case 'unknown':
     case 'inconsistent':
       return false;

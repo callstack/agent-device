@@ -30,6 +30,21 @@ export function ownerIdentityMatches(
 }
 
 /**
+ * Positive proof that two records name DIFFERENT processes. Deliberately not
+ * the negation of {@link ownerIdentityMatches}: equal pids with an unreadable
+ * start time on either side are unproven rather than different, so a caller
+ * that acts on this can never mistake one owner for two and hand its resource
+ * away.
+ */
+export function ownerIdentityDiffers(
+  left: Pick<OwnerIdentity, 'pid' | 'startTime'>,
+  right: Pick<OwnerIdentity, 'pid' | 'startTime'>,
+): boolean {
+  if (left.pid !== right.pid) return true;
+  return Boolean(left.startTime && right.startTime && left.startTime !== right.startTime);
+}
+
+/**
  * This is deliberately proof-oriented, in both directions. A filesystem read
  * error is not proof that an owner state directory disappeared, so callers
  * must surface it as an unknown owner rather than treating the resource as

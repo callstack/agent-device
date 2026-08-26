@@ -4,6 +4,7 @@ import path from 'node:path';
 import { test, vi } from 'vitest';
 import { readCurrentOwnerIdentity } from '../utils/owner-identity.ts';
 import { runCliCapture } from './cli-capture.ts';
+import { publishDaemonRegistration } from './test-utils/device-claim-store.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 vi.mock('../utils/host-process.ts', async (importOriginal) =>
@@ -189,6 +190,53 @@ test('states that nothing is claimed when every claim is stale', async () => {
     assert.match(result.stdout, /No live local device claims found\./);
     assert.match(result.stdout, /1 stale claim hidden/);
     assert.doesNotMatch(result.stdout, /Dead iPhone/);
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});
+
+test('names a replaced-but-running daemon owner as stale rather than a live holder', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
+  const stateDir = path.join(claimsDir, 'state');
+  try {
+    // #2031: the recorded owner still runs, but we are the daemon published for
+    // its state dir, so its session is one `session list` cannot report.
+    publishDaemonRegistration(stateDir, readCurrentOwnerIdentity());
+    fs.writeFileSync(
+      path.join(claimsDir, 'superseded.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        deviceKey: 'local:web:none:agent-browser-chrome',
+        device: {
+          platform: 'web',
+          id: 'agent-browser-chrome',
+          name: 'Chrome',
+          kind: 'device',
+        },
+        session: 'cwd:/w:default',
+        workspace: '/w',
+        stateDir,
+        ownerPid: process.ppid,
+        ownerStartTime: null,
+        ownerToken: 'superseded-token',
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      }),
+    );
+
+    const normal = await runCliCapture(['device', 'status'], {
+      env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+    });
+    assert.match(normal.stdout, /No live local device claims found\./);
+    assert.match(normal.stdout, /1 stale claim hidden/);
+
+    const stale = await runCliCapture(['device', 'status', '--stale', '--json'], {
+      env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+    });
+    const payload = JSON.parse(stale.stdout);
+    assert.equal(payload.data.claims.length, 1);
+    assert.equal(payload.data.claims[0].classification, 'owner-daemon-superseded');
+    assert.equal(payload.data.claims[0].owner.session, 'cwd:/w:default');
   } finally {
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }

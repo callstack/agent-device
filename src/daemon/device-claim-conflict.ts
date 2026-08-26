@@ -100,6 +100,7 @@ function conflictReason(classification: DeviceClaimClassification): DeviceClaimC
     case 'live':
       return 'DEVICE_CLAIM_LIVE_OWNER';
     case 'owner-process-dead':
+    case 'owner-daemon-superseded':
       return 'DEVICE_CLAIM_RECOVERY_PENDING';
     case 'owner-process-reused':
     case 'owner-state-dir-gone':

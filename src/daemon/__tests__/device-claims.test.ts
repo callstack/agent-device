@@ -11,6 +11,8 @@ import { canonicalLocalDeviceKey } from '../device-claim-paths.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { publishDaemonRegistration } from '../../__tests__/test-utils/device-claim-store.ts';
+import { readCurrentOwnerIdentity } from '../../utils/owner-identity.ts';
 
 vi.mock('../../utils/host-process.ts', async (importOriginal) =>
   (await import('../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
@@ -406,3 +408,123 @@ test.each([
     assert.equal(second.conflict.classification, 'live');
   },
 );
+
+/**
+ * A live owner that is not this process. The mocked host-process module reads a
+ * start time only for our own pid, so a claim recorded against our parent is a
+ * genuinely-alive foreign owner — what a running daemon looks like on disk.
+ */
+function rewriteClaimOwner(root: string, ownerPid: number): void {
+  const stored = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
+  fs.writeFileSync(claimPath(root), JSON.stringify({ ...stored, ownerPid, ownerStartTime: null }));
+}
+
+async function seedForeignLiveClaim(root: string, stateDir: string): Promise<void> {
+  fs.mkdirSync(stateDir, { recursive: true });
+  const seeded = await acquireDeviceClaim({
+    device,
+    session: 'cwd:/w:default',
+    workspace: '/w',
+    stateDir,
+  });
+  assert.equal(seeded.status, 'acquired');
+  rewriteClaimOwner(root, process.ppid);
+}
+
+test('reconciles a live claim whose owner is no longer the daemon published for its state dir', async () => {
+  const root = useClaimsRoot();
+  const stateDir = path.join(root, 'orphaned-state');
+  await seedForeignLiveClaim(root, stateDir);
+  // #2031: the recorded owner is a replaced-but-still-running daemon. We are the
+  // successor published for the same state dir, so its session is absent from
+  // `session list` and no close can ever reach it.
+  publishDaemonRegistration(stateDir, readCurrentOwnerIdentity());
+  let reconciledSession: string | undefined;
+  const reconcile = vi.fn(async (claim: { session: string }) => {
+    reconciledSession = claim.session;
+    return { status: 'reconciled' as const };
+  });
+
+  const second = await acquireDeviceClaim({
+    device,
+    session: 'cwd:/w:default',
+    workspace: '/w',
+    stateDir,
+    reconcileOrphanedDeviceClaim: reconcile,
+  });
+
+  assert.equal(second.status, 'acquired');
+  assert.equal(reconciledSession, 'cwd:/w:default');
+  assert.equal(inspectDeviceClaims({ serial: device.id })[0]?.claim?.ownerPid, process.pid);
+});
+
+test('keeps a live claim blocking while its owner is still the daemon published for its state dir', async () => {
+  const root = useClaimsRoot();
+  const stateDir = path.join(root, 'served-state');
+  await seedForeignLiveClaim(root, stateDir);
+  publishDaemonRegistration(stateDir, { pid: process.ppid, startTime: null });
+  const reconcile = vi.fn(async () => ({ status: 'reconciled' as const }));
+
+  const second = await acquireDeviceClaim({
+    device,
+    session: 'other',
+    workspace: '/w',
+    stateDir,
+    reconcileOrphanedDeviceClaim: reconcile,
+  });
+
+  assert.equal(second.status, 'conflict');
+  if (second.status !== 'conflict') return;
+  assert.equal(second.conflict.classification, 'live');
+  assert.equal(reconcile.mock.calls.length, 0);
+});
+
+test('never supersedes a live claim owner on a state dir with no published daemon', async () => {
+  const root = useClaimsRoot();
+  const stateDir = path.join(root, 'unpublished-state');
+  await seedForeignLiveClaim(root, stateDir);
+  const reconcile = vi.fn(async () => ({ status: 'reconciled' as const }));
+
+  const second = await acquireDeviceClaim({
+    device,
+    session: 'other',
+    workspace: '/w',
+    stateDir,
+    reconcileOrphanedDeviceClaim: reconcile,
+  });
+
+  assert.equal(second.status, 'conflict');
+  if (second.status !== 'conflict') return;
+  assert.equal(second.conflict.classification, 'live');
+  assert.equal(reconcile.mock.calls.length, 0);
+});
+
+test('never treats a claim owned by the inspecting process as superseded', async () => {
+  const root = useClaimsRoot();
+  const stateDir = path.join(root, 'self-state');
+  fs.mkdirSync(stateDir, { recursive: true });
+  const first = await acquireDeviceClaim({
+    device,
+    session: 'ours',
+    workspace: '/w',
+    stateDir,
+  });
+  assert.equal(first.status, 'acquired');
+  // A registration naming someone else cannot make us unreachable: a caller had
+  // to reach this process to ask, so our own sessions stay closeable.
+  publishDaemonRegistration(stateDir, { pid: process.ppid, startTime: 'other-start' });
+  const reconcile = vi.fn(async () => ({ status: 'reconciled' as const }));
+
+  const second = await acquireDeviceClaim({
+    device,
+    session: 'another',
+    workspace: '/w',
+    stateDir,
+    reconcileOrphanedDeviceClaim: reconcile,
+  });
+
+  assert.equal(second.status, 'conflict');
+  if (second.status !== 'conflict') return;
+  assert.equal(second.conflict.classification, 'live');
+  assert.equal(reconcile.mock.calls.length, 0);
+});

@@ -13,7 +13,12 @@ import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import { publishFileSync } from '../utils/atomic-file.ts';
 import { acquireProcessLock } from '../utils/process-lock.ts';
 import { ownerIdentityMatches, readCurrentOwnerIdentity } from '../utils/owner-identity.ts';
-import { inspectDeviceClaimFile, type InspectedDeviceClaim } from './device-claim-inspection.ts';
+import {
+  deviceClaimOwnerCannotRelease,
+  inspectDeviceClaimFile,
+  type DeviceClaimClassification,
+  type InspectedDeviceClaim,
+} from './device-claim-inspection.ts';
 import {
   canonicalLocalDeviceKey,
   resolveDeviceClaimPath,
@@ -204,7 +209,7 @@ async function resolveExistingClaim(params: {
   if (existing.claim && isCurrentClaimOwner(existing.claim, params, params.owner)) {
     return { status: 'acquired', ownership: ownershipFromClaim(existing.claim) };
   }
-  if (existing.classification !== 'owner-process-dead' || !existing.claim) {
+  if (!existing.claim || !deviceClaimOwnerCannotRelease(existing.classification)) {
     emitClaimConflict(params.deviceKey, existing);
     return { status: 'conflict', conflict: existing };
   }
@@ -274,23 +279,27 @@ export async function clearDeviceClaim(
 }
 
 /**
- * Reconciles claims whose owning process is provably gone and clears only
+ * Reconciles claims whose owner can no longer release them and clears only
  * claims whose attributable durable resources reached a safe terminal state.
  *
  * Claims are released on session close and daemon shutdown, but a process that
- * dies abruptly leaves its file behind for proof-oriented recovery.
+ * dies abruptly leaves its file behind for proof-oriented recovery, and #2031 a
+ * daemon that was replaced while still running leaves one no client can reach.
  *
- * The liveness check is repeated under the per-device lock immediately before
+ * The owner check is repeated under the per-device lock immediately before
  * reconciliation: claim paths are derived from the device key, so a concurrent
- * daemon can replace the same dead claim while this scan is still running.
+ * daemon can replace the same orphaned claim while this scan is still running.
  * Acting on the first read could clear the successor.
  *
  * Deliberately narrower than the CLI's stale filter: `owner-state-dir-gone`
  * describes a LIVE process whose state dir vanished, and deleting that claim
- * could hand its device to a second session.
+ * could hand its device to a second session. Narrower again for owners that are
+ * still running, which this sweep settles only inside `daemonStateDir` — see
+ * {@link sweepMayReconcile}.
  */
 export async function reconcileOrphanedDeviceClaims(
   reconcile: DeviceClaimReconciler,
+  daemonStateDir: string,
 ): Promise<{ examined: number; reconciled: number; retained: number; changed: number }> {
   const root = resolveDeviceClaimRoot();
   let entries: fs.Dirent[];
@@ -307,7 +316,12 @@ export async function reconcileOrphanedDeviceClaims(
     if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
     const filePath = path.join(root, entry.name);
     const scanned = inspectDeviceClaimFile(filePath);
-    if (scanned?.classification !== 'owner-process-dead' || !scanned.claim) continue;
+    if (
+      !scanned?.claim ||
+      !sweepMayReconcile(scanned.classification, scanned.claim.stateDir, daemonStateDir)
+    ) {
+      continue;
+    }
     examined += 1;
     const { deviceKey, ownerToken } = scanned.claim;
     // A file whose name is not the hash of its own device key is not the file
@@ -319,8 +333,9 @@ export async function reconcileOrphanedDeviceClaims(
     await withDeviceClaimLock(deviceKey, async () => {
       const current = inspectDeviceClaimFile(filePath);
       if (
-        current?.classification !== 'owner-process-dead' ||
-        current.claim?.ownerToken !== ownerToken
+        !current?.claim ||
+        !sweepMayReconcile(current.classification, current.claim.stateDir, daemonStateDir) ||
+        current.claim.ownerToken !== ownerToken
       ) {
         changed += 1;
         return;
@@ -334,6 +349,24 @@ export async function reconcileOrphanedDeviceClaims(
     });
   }
   return { examined, reconciled, retained, changed };
+}
+
+/**
+ * What the unattended startup sweep may settle. A proven-dead owner is
+ * reconciled wherever the host-global store holds it, but a superseded owner is
+ * still running: finalizing the durable resources attributed to it is only this
+ * daemon's business inside the state dir it now serves. A superseded owner
+ * elsewhere is settled by {@link acquireDeviceClaim} instead, at the one device
+ * a caller actually asked for.
+ */
+function sweepMayReconcile(
+  classification: DeviceClaimClassification,
+  ownerStateDir: string,
+  daemonStateDir: string,
+): boolean {
+  if (!deviceClaimOwnerCannotRelease(classification)) return false;
+  if (classification !== 'owner-daemon-superseded') return true;
+  return path.resolve(ownerStateDir) === path.resolve(daemonStateDir);
 }
 
 function emitClaimConflict(
