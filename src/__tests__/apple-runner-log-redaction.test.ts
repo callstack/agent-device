@@ -5,9 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const synthesizedTextEntryPath = path.join(
+const commitWaitPath = path.join(
   repoRoot,
-  'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SynthesizedTextEntry.swift',
+  'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SynthesizedCommitDeadline.swift',
 );
 
 // The synthesized bare-type commit wait polls the target field's live value on the shipped
@@ -34,7 +34,7 @@ function extractObserveClosure(source: string): string {
 }
 
 test('commit-wait cadence logging goes through the typed value-free boundary', () => {
-  const source = fs.readFileSync(synthesizedTextEntryPath, 'utf8');
+  const source = fs.readFileSync(commitWaitPath, 'utf8');
 
   assert.match(
     source,
