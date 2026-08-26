@@ -4,6 +4,7 @@ import { AppError, type NormalizedError } from '@agent-device/kernel/errors';
 import { createAgentDeviceClient } from '../agent-device-client.ts';
 import type { AgentDeviceClient } from '../client/client-types.ts';
 import type { JsonSchema } from '../commands/command-contract.ts';
+import { commonInputKeysHiddenFromAiSdk } from '../commands/command-input.ts';
 import { resolveCommandFrameworkTier } from '../core/command-descriptor/registry.ts';
 import { createCommandToolExecutor, listCommandTools } from '../mcp/command-tools.ts';
 import { formatToolErrorText } from '../mcp/tool-error.ts';
@@ -49,21 +50,11 @@ export type AgentDeviceTools = {
   toolApproval?: Partial<Record<string, ToolApprovalStatus>>;
 };
 
-// Hidden unconditionally, from both the schema the model sees and the input
-// `execute` forwards to the shared executor:
-//  - `session` is always pinned by this factory — the whole point is that a
-//    tool call can never target a session other than the one passed in.
-//  - `stateDir` selects which daemon state directory (and therefore which
-//    daemon/session namespace) a call resolves against. Left model-visible,
-//    it would let a call escape the pinned session into another daemon's
-//    state entirely, defeating that guarantee.
-//  - `mcpOutputFormat`, `includeCost`, `responseLevel` are MCP tool-config
-//    knobs, not command arguments; irrelevant here since `execute` below
-//    returns structuredContent directly and never reads a tool's rendered
-//    text, and shaping the response is this factory's decision, not the
-//    model's.
-const ALWAYS_HIDDEN_FIELDS = [
-  'session',
+// MCP tool-config knobs, not command arguments; irrelevant here since
+// `execute` below returns structuredContent directly and never reads a tool's
+// rendered text. Common pinned fields such as `session`/`platform` come from
+// the common input-field table.
+const AI_SDK_HIDDEN_MCP_FIELDS = [
   'stateDir',
   'mcpOutputFormat',
   'includeCost',
@@ -104,8 +95,10 @@ export async function createAgentDeviceTools(
   });
   const executor = createCommandToolExecutor();
 
-  const hiddenFields = new Set<string>(ALWAYS_HIDDEN_FIELDS);
-  if (platform) hiddenFields.add('platform');
+  const hiddenFields = new Set<string>([
+    ...AI_SDK_HIDDEN_MCP_FIELDS,
+    ...commonInputKeysHiddenFromAiSdk({ platformPinned: Boolean(platform) }),
+  ]);
 
   const tools: ToolSet = {};
   for (const definition of listCommandTools()) {

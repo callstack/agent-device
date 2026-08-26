@@ -5,6 +5,7 @@ import type {
   InteractionTarget,
 } from '@agent-device/contracts/client';
 import {
+  type CliFlags,
   readOptionalInteger as optionalInteger,
   readOptionalNumber as optionalNumberValue,
 } from '@agent-device/contracts/command';
@@ -17,6 +18,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import type { RepeatedInput } from '@agent-device/contracts/interaction';
 import type { JsonSchema } from './command-contract.ts';
+import { buildPrimaryEnvVarName } from '../utils/source-value.ts';
 
 const INTERACTION_TARGET_KINDS = ['ref', 'selector', 'point'] as const;
 
@@ -55,6 +57,228 @@ export type SelectorSnapshotInput = {
 
 export type PointInput = { x: number; y: number };
 type CommonInputOptions = { readTargetAlias?: boolean };
+type CommonInputKey = keyof CommonCommandInput;
+type CommonFlagKey = keyof CliFlags;
+type CommonInputSchemaPlacement = 'common' | 'mcp-recordable' | 'none';
+type CommonInputAiSdkHidden = 'always' | 'whenPlatformPinned';
+type CommonInputFieldDefinition = {
+  key: string;
+  schema: JsonSchema;
+  audience: Exclude<CommandInputAudience, 'retired'>;
+  schemaPlacement: CommonInputSchemaPlacement;
+  flagKey?: CommonFlagKey;
+  fromCliFlags?: true;
+  read?: (
+    record: Record<string, unknown>,
+    options: CommonInputOptions,
+  ) => [CommonInputKey, unknown];
+  project?: (input: CommonCommandInput) => [string, unknown];
+  aiSdkHidden?: CommonInputAiSdkHidden;
+  envName?: string | false;
+  configKey?: string | false;
+  guidance?: string;
+};
+
+const COMMON_INPUT_FIELDS: readonly CommonInputFieldDefinition[] = [
+  commonStringInput('session', 'Agent-device session name.', {
+    flagKey: 'session',
+    fromCliFlags: true,
+    aiSdkHidden: 'always',
+  }),
+  {
+    key: 'platform',
+    schema: {
+      type: 'string',
+      enum: PLATFORM_SELECTORS,
+      description: 'Platform selector used to resolve a device.',
+    },
+    audience: 'model',
+    schemaPlacement: 'common',
+    flagKey: 'platform',
+    fromCliFlags: true,
+    aiSdkHidden: 'whenPlatformPinned',
+    read: (record) => ['platform', optionalEnum(record, 'platform', PLATFORM_SELECTORS)],
+    project: (input) => ['platform', input.platform],
+  },
+  {
+    key: 'deviceTarget',
+    schema: {
+      type: 'string',
+      enum: DEVICE_TARGETS,
+      description: 'Device target form. Maps to the CLI --target flag.',
+    },
+    audience: 'model',
+    schemaPlacement: 'common',
+    flagKey: 'target',
+    fromCliFlags: true,
+    read: (record, options) => ['deviceTarget', readDeviceTarget(record, options)],
+    project: (input) => ['target', input.deviceTarget],
+  },
+  {
+    key: 'target',
+    schema: {
+      type: 'string',
+      enum: DEVICE_TARGETS,
+      description:
+        'Alias for deviceTarget on commands without a UI target field. Interaction commands reserve target for the UI element.',
+    },
+    audience: 'model',
+    schemaPlacement: 'common',
+  },
+  commonStringInput('device', 'Device name selector.', { flagKey: 'device', fromCliFlags: true }),
+  commonStringInput('udid', 'iOS device UDID selector.', { flagKey: 'udid', fromCliFlags: true }),
+  commonStringInput('serial', 'Android device or Vega VVD serial selector.', {
+    flagKey: 'serial',
+    fromCliFlags: true,
+  }),
+  commonStringInput(
+    'iosSimulatorDeviceSet',
+    'iOS simulator device-set path used for device resolution.',
+    {
+      audience: 'operator',
+      flagKey: 'iosSimulatorDeviceSet',
+      fromCliFlags: true,
+      envName: false,
+    },
+  ),
+  commonStringInput(
+    'iosXctestrunFile',
+    'Externally built iOS XCTest runner .xctestrun artifact path.',
+    {
+      audience: 'operator',
+      flagKey: 'iosXctestrunFile',
+      fromCliFlags: true,
+    },
+  ),
+  commonStringInput(
+    'iosXctestDerivedDataPath',
+    'Derived data path for external iOS XCTest runner execution.',
+    {
+      audience: 'operator',
+      flagKey: 'iosXctestDerivedDataPath',
+      fromCliFlags: true,
+    },
+  ),
+  commonStringInput('iosXctestEnvDir', 'Writable directory for iOS XCTest runner env overlays.', {
+    audience: 'operator',
+    flagKey: 'iosXctestEnvDir',
+    fromCliFlags: true,
+  }),
+  commonStringInput(
+    'androidDeviceAllowlist',
+    'Android serial allowlist used for device resolution.',
+    {
+      flagKey: 'androidDeviceAllowlist',
+      fromCliFlags: true,
+    },
+  ),
+  commonStringInput('daemonBaseUrl', 'Remote daemon base URL.', {
+    audience: 'operator',
+    flagKey: 'daemonBaseUrl',
+  }),
+  commonStringInput('daemonAuthToken', 'Remote daemon auth token.', {
+    audience: 'operator',
+    flagKey: 'daemonAuthToken',
+  }),
+  commonStringInput('tenant', 'Remote tenant identifier.', { flagKey: 'tenant' }),
+  commonStringInput('runId', 'Lease run identifier.', { flagKey: 'runId' }),
+  commonStringInput('leaseId', 'Existing lease identifier.', { flagKey: 'leaseId' }),
+  commonStringInput('cwd', 'Working directory for command execution.', {
+    audience: 'operator',
+    guidance:
+      'cwd is not accepted as a tool argument. Start the process serving these tools in the desired working directory, or pass absolute paths.',
+  }),
+  commonBooleanInput('debug', 'Enable debug diagnostics.'),
+  commonBooleanInput('noRecord', 'Do not record this action.', {
+    flagKey: 'noRecord',
+    fromCliFlags: true,
+    schemaPlacement: 'mcp-recordable',
+  }),
+];
+
+export function commonCommandInputFromFlags(flags: CliFlags): Record<string, unknown> {
+  return compactRecord(
+    Object.fromEntries(
+      COMMON_INPUT_FIELDS.flatMap((field) => {
+        if (!field.fromCliFlags || !field.flagKey || !field.read) return [];
+        const [key] = field.read({}, {});
+        return [[key, flags[field.flagKey]]];
+      }),
+    ),
+  );
+}
+
+export function commonCommandSupportedFlagKeys(): readonly CommonFlagKey[] {
+  return COMMON_INPUT_FIELDS.flatMap((field) => (field.flagKey ? [field.flagKey] : []));
+}
+
+export function commonInputSchemaProperty(key: string): JsonSchema | undefined {
+  return COMMON_INPUT_FIELDS.find((field) => field.key === key)?.schema;
+}
+
+export function commonInputKeysHiddenFromAiSdk(options: {
+  platformPinned: boolean;
+}): readonly string[] {
+  return COMMON_INPUT_FIELDS.flatMap((field) => {
+    if (field.aiSdkHidden === 'always') return [field.key];
+    if (field.aiSdkHidden === 'whenPlatformPinned' && options.platformPinned) return [field.key];
+    return [];
+  });
+}
+
+export function commonOperatorInputGuidance(): Readonly<Record<string, string>> {
+  return Object.fromEntries(
+    COMMON_INPUT_FIELDS.flatMap((field) =>
+      field.audience === 'operator' ? [[field.key, operatorInputGuidance(field)]] : [],
+    ),
+  );
+}
+
+function commonStringInput(
+  key: CommonInputKey,
+  description: string,
+  options: Partial<CommonInputFieldDefinition> = {},
+): CommonInputFieldDefinition {
+  return {
+    key,
+    schema: { type: 'string', description },
+    audience: options.audience ?? 'model',
+    schemaPlacement: options.schemaPlacement ?? 'common',
+    ...options,
+    read: (record) => [key, optionalString(record, key)],
+    project: (input) => [key, input[key]],
+  };
+}
+
+function commonBooleanInput(
+  key: CommonInputKey,
+  description: string,
+  options: Partial<CommonInputFieldDefinition> = {},
+): CommonInputFieldDefinition {
+  return {
+    key,
+    schema: { type: 'boolean', description },
+    audience: options.audience ?? 'model',
+    schemaPlacement: options.schemaPlacement ?? 'common',
+    ...options,
+    read: (record) => [key, optionalBoolean(record, key)],
+    project: (input) => [key, input[key]],
+  };
+}
+
+function operatorInputGuidance(field: CommonInputFieldDefinition): string {
+  if (field.guidance) return field.guidance;
+  const envName =
+    field.envName === false ? undefined : (field.envName ?? buildPrimaryEnvVarName(field.key));
+  const configKey = field.configKey === false ? undefined : (field.configKey ?? field.key);
+  const source =
+    envName && configKey
+      ? `the ${envName} environment variable (or ${configKey} in ~/.agent-device/config.json)`
+      : envName
+        ? `the ${envName} environment variable`
+        : `${configKey} in ~/.agent-device/config.json`;
+  return `${field.key} is not accepted as a tool argument. Set ${source} for the process serving these tools.`;
+}
 
 function commandInputSchema(
   properties: Record<string, JsonSchema>,
@@ -129,12 +353,13 @@ export function looseObjectSchema(description?: string): JsonSchema {
 }
 
 type FieldReader<T> = (record: Record<string, unknown>, key: string) => T | undefined;
+export type CommandInputAudience = 'model' | 'operator' | 'retired';
 
 export type CommandField<T> = {
   schema: JsonSchema;
   required: boolean;
   read: FieldReader<T>;
-  retired?: true;
+  audience: CommandInputAudience;
 };
 
 export type CommandFieldMap = Record<string, CommandField<unknown>>;
@@ -176,7 +401,7 @@ export function retiredField(message: string): CommandField<never> {
   return {
     schema: { type: 'null' },
     required: false,
-    retired: true,
+    audience: 'retired',
     read: (record, key) => {
       if (Object.hasOwn(record, key)) {
         throw new AppError('INVALID_ARGS', message);
@@ -312,31 +537,14 @@ export function readCommonInput(
   record: Record<string, unknown>,
   options: CommonInputOptions = {},
 ): CommonCommandInput {
-  return {
-    session: optionalString(record, 'session'),
-    platform: optionalEnum(record, 'platform', PLATFORM_SELECTORS),
-    deviceTarget: readDeviceTarget(record, options),
-    device: optionalString(record, 'device'),
-    udid: optionalString(record, 'udid'),
-    serial: optionalString(record, 'serial'),
-    iosSimulatorDeviceSet: optionalString(record, 'iosSimulatorDeviceSet'),
-    iosXctestrunFile: optionalString(record, 'iosXctestrunFile'),
-    iosXctestDerivedDataPath: optionalString(record, 'iosXctestDerivedDataPath'),
-    iosXctestEnvDir: optionalString(record, 'iosXctestEnvDir'),
-    androidDeviceAllowlist: optionalString(record, 'androidDeviceAllowlist'),
-    // Seam 2 of 3 for `--no-record` (see `commonInputFromFlags`). `readFieldInput`
-    // keeps ONLY declared metadata fields plus this common input, so a flag
-    // absent here is filtered out of every field-based command's input before
-    // the client ever sees it.
-    noRecord: optionalBoolean(record, 'noRecord'),
-    daemonBaseUrl: optionalString(record, 'daemonBaseUrl'),
-    daemonAuthToken: optionalString(record, 'daemonAuthToken'),
-    tenant: optionalString(record, 'tenant'),
-    runId: optionalString(record, 'runId'),
-    leaseId: optionalString(record, 'leaseId'),
-    cwd: optionalString(record, 'cwd'),
-    debug: optionalBoolean(record, 'debug'),
-  };
+  return compactRecord(
+    Object.fromEntries(
+      COMMON_INPUT_FIELDS.flatMap((field) => {
+        const read = field.read?.(record, options);
+        return read && read[1] !== undefined ? [read] : [];
+      }),
+    ),
+  ) as CommonCommandInput;
 }
 
 function readDeviceTarget(
@@ -459,32 +667,14 @@ export function optionalEnum<const T extends readonly string[]>(
 export function commonToClientOptions(
   input: CommonCommandInput,
 ): AgentDeviceRequestOverrides & AgentDeviceSelectionOptions {
-  return compactRecord({
-    // Seam 3 of 3 for `--no-record` (see `commonInputFromFlags`). Every
-    // `to*Options` projection (`toPressOptions`, `toGetOptions`, ...) rebuilds
-    // the client options object from this helper plus its own named fields, so
-    // a flag absent here is dropped even when the reader forwarded it and
-    // `readCommonInput` kept it.
-    noRecord: input.noRecord,
-    session: input.session,
-    platform: input.platform,
-    target: input.deviceTarget,
-    device: input.device,
-    udid: input.udid,
-    serial: input.serial,
-    iosSimulatorDeviceSet: input.iosSimulatorDeviceSet,
-    iosXctestrunFile: input.iosXctestrunFile,
-    iosXctestDerivedDataPath: input.iosXctestDerivedDataPath,
-    iosXctestEnvDir: input.iosXctestEnvDir,
-    androidDeviceAllowlist: input.androidDeviceAllowlist,
-    daemonBaseUrl: input.daemonBaseUrl,
-    daemonAuthToken: input.daemonAuthToken,
-    tenant: input.tenant,
-    runId: input.runId,
-    leaseId: input.leaseId,
-    cwd: input.cwd,
-    debug: input.debug,
-  }) as AgentDeviceRequestOverrides & AgentDeviceSelectionOptions;
+  return compactRecord(
+    Object.fromEntries(
+      COMMON_INPUT_FIELDS.flatMap((field) => {
+        const projected = field.project?.(input);
+        return projected && projected[1] !== undefined ? [projected] : [];
+      }),
+    ),
+  ) as AgentDeviceRequestOverrides & AgentDeviceSelectionOptions;
 }
 
 export function toClientInteractionTarget(target: InteractionTargetInput): InteractionTarget {
@@ -542,7 +732,7 @@ export function compactRecord(record: Record<string, unknown>): Record<string, u
 }
 
 function optionalField<T>(schema: JsonSchema, read: FieldReader<T>): CommandField<T> {
-  return { schema, required: false, read };
+  return { schema, required: false, read, audience: 'model' };
 }
 
 function integerSchemaWithBounds(
@@ -559,7 +749,7 @@ function integerSchemaWithBounds(
 function fieldProperties(fields: CommandFieldMap): Record<string, JsonSchema> {
   return Object.fromEntries(
     Object.entries(fields)
-      .filter(([, field]) => !field.retired)
+      .filter(([, field]) => field.audience !== 'retired')
       .map(([key, field]) => [key, field.schema]),
   );
 }
@@ -570,7 +760,9 @@ function requiredFieldNames(fields: CommandFieldMap): string[] {
 
 /** Names of the retired fields — declared for migration guidance, absent from the schema. */
 export function retiredFieldNames(fields: CommandFieldMap): string[] {
-  return Object.entries(fields).flatMap(([key, field]) => (field.retired ? [key] : []));
+  return Object.entries(fields).flatMap(([key, field]) =>
+    field.audience === 'retired' ? [key] : [],
+  );
 }
 
 function optionalRecord(
@@ -595,55 +787,11 @@ function optionalStringArray(record: Record<string, unknown>, key: string): stri
 }
 
 function commonProperties(): Record<string, JsonSchema> {
-  return {
-    session: { type: 'string', description: 'Agent-device session name.' },
-    platform: {
-      type: 'string',
-      enum: PLATFORM_SELECTORS,
-      description: 'Platform selector used to resolve a device.',
-    },
-    deviceTarget: {
-      type: 'string',
-      enum: DEVICE_TARGETS,
-      description: 'Device target form. Maps to the CLI --target flag.',
-    },
-    target: {
-      type: 'string',
-      enum: DEVICE_TARGETS,
-      description:
-        'Alias for deviceTarget on commands without a UI target field. Interaction commands reserve target for the UI element.',
-    },
-    device: { type: 'string', description: 'Device name selector.' },
-    udid: { type: 'string', description: 'iOS device UDID selector.' },
-    serial: { type: 'string', description: 'Android device or Vega VVD serial selector.' },
-    iosSimulatorDeviceSet: {
-      type: 'string',
-      description: 'iOS simulator device-set path used for device resolution.',
-    },
-    iosXctestrunFile: {
-      type: 'string',
-      description: 'Externally built iOS XCTest runner .xctestrun artifact path.',
-    },
-    iosXctestDerivedDataPath: {
-      type: 'string',
-      description: 'Derived data path for external iOS XCTest runner execution.',
-    },
-    iosXctestEnvDir: {
-      type: 'string',
-      description: 'Writable directory for iOS XCTest runner env overlays.',
-    },
-    androidDeviceAllowlist: {
-      type: 'string',
-      description: 'Android serial allowlist used for device resolution.',
-    },
-    daemonBaseUrl: { type: 'string', description: 'Remote daemon base URL.' },
-    daemonAuthToken: { type: 'string', description: 'Remote daemon auth token.' },
-    tenant: { type: 'string', description: 'Remote tenant identifier.' },
-    runId: { type: 'string', description: 'Lease run identifier.' },
-    leaseId: { type: 'string', description: 'Existing lease identifier.' },
-    cwd: { type: 'string', description: 'Working directory for command execution.' },
-    debug: { type: 'boolean', description: 'Enable debug diagnostics.' },
-  };
+  return Object.fromEntries(
+    COMMON_INPUT_FIELDS.flatMap((field) =>
+      field.schemaPlacement === 'common' ? [[field.key, field.schema]] : [],
+    ),
+  );
 }
 
 function interactionTargetSchema(): JsonSchema {

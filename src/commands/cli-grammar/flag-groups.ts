@@ -1,4 +1,5 @@
 import type { FlagKey } from './flag-types.ts';
+import { commonCommandSupportedFlagKeys } from '../command-input.ts';
 
 function flagKeys<const TKeys extends readonly FlagKey[]>(...keys: TKeys): TKeys {
   return keys;
@@ -45,22 +46,14 @@ export const REPEATED_TOUCH_FLAGS = flagKeys(
 export const SETTLE_FLAGS = flagKeys('settle', 'settleQuietMs', 'timeoutMs');
 export const REPLAY_FLAGS = flagKeys('replayUpdate', 'replayEnv');
 
-export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
+export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS: readonly FlagKey[] = flagKeys(
   'remoteConfig',
   'stateDir',
-  'daemonBaseUrl',
-  'daemonAuthToken',
   'daemonTransport',
   'daemonServerMode',
-  'tenant',
   'sessionIsolation',
-  'runId',
-  'leaseId',
   'leaseBackend',
   'sessionLock',
-  'platform',
-  'target',
-  'device',
   'providerApp',
   'providerOsVersion',
   'providerProject',
@@ -79,21 +72,7 @@ export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'awsAppArn',
   'awsRegion',
   'awsInteractionMode',
-  'udid',
-  'serial',
-  'iosSimulatorDeviceSet',
-  'iosXctestrunFile',
-  'iosXctestDerivedDataPath',
-  'iosXctestEnvDir',
-  'androidDeviceAllowlist',
-  'session',
-  // `--no-record` is genuinely common: it applies to every recordable command,
-  // mutations included. `--record` is NOT — it only means anything for the
-  // observation-only commands the repair-segment exclusion can drop
-  // (snapshot/get/is/find), so it is scoped per-command via each schema's
-  // `allowedFlags` instead of being accepted everywhere and silently ignored
-  // (#1271 stage 2).
-  'noRecord',
+  ...commonCommandSupportedFlagKeys(),
 );
 
 export const GLOBAL_FLAG_KEYS: ReadonlySet<FlagKey> = new Set([

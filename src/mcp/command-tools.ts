@@ -2,6 +2,10 @@ import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';
 import type { AgentDeviceClient } from '../client/client-types.ts';
 import type { JsonSchema } from '../commands/command-contract.ts';
 import type { CommandExecutionResult } from '../commands/command-surface.ts';
+import {
+  commonInputSchemaProperty,
+  commonOperatorInputGuidance,
+} from '../commands/command-input.ts';
 import { RESPONSE_LEVELS, type ResponseLevel } from '@agent-device/kernel/contracts';
 import { formatCliOutput } from '../commands/cli-output.ts';
 import {
@@ -21,6 +25,7 @@ import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
 import { resolveMcpConfigDefaults } from './tool-input-config.ts';
 import { projectStructuredContent } from './tool-result.ts';
 import { createToolRefPinStore, type ToolRefPinStore } from './tool-ref-pins.ts';
+import { buildPrimaryEnvVarName } from '../utils/source-value.ts';
 
 export type ToolResult = {
   isError: boolean;
@@ -65,28 +70,13 @@ type McpToolConfig = {
  * Metro clients fall back to their env vars on their own.
  */
 const OPERATOR_INPUT_GUIDANCE: Readonly<Record<string, string>> = {
+  ...commonOperatorInputGuidance(),
   // Credentials.
-  daemonAuthToken:
-    'daemonAuthToken is not accepted as a tool argument. Set the AGENT_DEVICE_DAEMON_AUTH_TOKEN environment variable (or daemonAuthToken in ~/.agent-device/config.json) for the process serving these tools.',
   bearerToken:
     'bearerToken is not accepted as a tool argument. Set the AGENT_DEVICE_METRO_BEARER_TOKEN or AGENT_DEVICE_DAEMON_AUTH_TOKEN environment variable for the process serving these tools.',
-  // Endpoints the resolved credentials are sent to.
-  daemonBaseUrl:
-    'daemonBaseUrl is not accepted as a tool argument. Set the AGENT_DEVICE_DAEMON_BASE_URL environment variable (or daemonBaseUrl in ~/.agent-device/config.json) for the process serving these tools.',
   proxyBaseUrl:
     'proxyBaseUrl is not accepted as a tool argument. Configure the remote proxy in the remote-config profile or operator config for the process serving these tools.',
-  // Operator infrastructure paths.
-  stateDir:
-    'stateDir is not accepted as a tool argument. Set the AGENT_DEVICE_STATE_DIR environment variable (or stateDir in ~/.agent-device/config.json) for the process serving these tools.',
-  cwd: 'cwd is not accepted as a tool argument. Start the process serving these tools in the desired working directory, or pass absolute paths.',
-  iosSimulatorDeviceSet:
-    'iosSimulatorDeviceSet is not accepted as a tool argument. Set iosSimulatorDeviceSet in ~/.agent-device/config.json for the process serving these tools.',
-  iosXctestrunFile:
-    'iosXctestrunFile is not accepted as a tool argument. Set the AGENT_DEVICE_IOS_XCTESTRUN_FILE environment variable (or iosXctestrunFile in ~/.agent-device/config.json) for the process serving these tools.',
-  iosXctestDerivedDataPath:
-    'iosXctestDerivedDataPath is not accepted as a tool argument. Set the AGENT_DEVICE_IOS_XCTEST_DERIVED_DATA_PATH environment variable (or iosXctestDerivedDataPath in ~/.agent-device/config.json) for the process serving these tools.',
-  iosXctestEnvDir:
-    'iosXctestEnvDir is not accepted as a tool argument. Set the AGENT_DEVICE_IOS_XCTEST_ENV_DIR environment variable (or iosXctestEnvDir in ~/.agent-device/config.json) for the process serving these tools.',
+  stateDir: operatorEnvConfigGuidance('stateDir'),
 };
 
 export function listCommandTools(): Array<{
@@ -364,18 +354,15 @@ function withMcpConfigSchema(
   schema: JsonSchema,
 ): JsonSchema & { properties: Record<string, JsonSchema> } {
   const noRecord = resolveCommandRecordsSessionAction(name);
+  const noRecordSchema = commonInputSchemaProperty('noRecord');
+  if (!noRecordSchema) {
+    throw new Error('Missing common noRecord schema.');
+  }
   return {
     ...schema,
     properties: {
       ...schema.properties,
-      ...(noRecord && !schema.properties?.noRecord
-        ? {
-            noRecord: {
-              type: 'boolean',
-              description: 'Do not record this action.',
-            },
-          }
-        : {}),
+      ...(noRecord && !schema.properties?.noRecord ? { noRecord: noRecordSchema } : {}),
       stateDir: { type: 'string', description: 'Agent-device state directory.' },
       mcpOutputFormat: {
         type: 'string',
@@ -396,6 +383,10 @@ function withMcpConfigSchema(
       },
     },
   };
+}
+
+function operatorEnvConfigGuidance(key: string): string {
+  return `${key} is not accepted as a tool argument. Set the ${buildPrimaryEnvVarName(key)} environment variable (or ${key} in ~/.agent-device/config.json) for the process serving these tools.`;
 }
 
 function renderToolText(params: {

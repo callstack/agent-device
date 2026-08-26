@@ -11,7 +11,11 @@ import {
   SELECTOR_EXPRESSION_REQUIRED_MESSAGE,
   splitSelectorFromArgs,
 } from '@agent-device/selectors';
-import { compactRecord, type SelectorSnapshotInput } from '../command-input.ts';
+import {
+  commonCommandInputFromFlags,
+  compactRecord,
+  type SelectorSnapshotInput,
+} from '../command-input.ts';
 import type {
   CommandInput,
   DaemonCommandRequest,
@@ -56,33 +60,7 @@ function readDeviceTarget(value: unknown): InternalRequestOptions['target'] | un
 }
 
 export function commonInputFromFlags(flags: CliFlags): Record<string, unknown> {
-  return compactRecord({
-    // `--no-record` is a COMMON flag (`COMMON_COMMAND_SUPPORTED_FLAG_KEYS`): it
-    // is accepted on, and meaningful for, every recordable command. It rides
-    // the common seam every reader already spreads, so a reader cannot forget
-    // it and a new reader inherits it for free. The three seams it must survive
-    // are this one, `readCommonInput`, and `commonToClientOptions`
-    // (`commands/command-input.ts`) — a drop at any one of them silently
-    // disables the flag (#1304/#1305 fixed only the reader layer, so the flag
-    // still never reached the daemon).
-    //
-    // `--record` deliberately does NOT ride here: it is scoped to the
-    // observation-only commands the repair-segment exclusion can drop
-    // (ADR 0012 decision 6 amendment), so it stays on the narrow
-    // `observationRecordInputFromFlags` seam below.
-    noRecord: flags.noRecord,
-    session: flags.session,
-    platform: flags.platform,
-    deviceTarget: flags.target,
-    device: flags.device,
-    udid: flags.udid,
-    serial: flags.serial,
-    iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
-    iosXctestrunFile: flags.iosXctestrunFile,
-    iosXctestDerivedDataPath: flags.iosXctestDerivedDataPath,
-    iosXctestEnvDir: flags.iosXctestEnvDir,
-    androidDeviceAllowlist: flags.androidDeviceAllowlist,
-  });
+  return commonCommandInputFromFlags(flags);
 }
 
 /**
