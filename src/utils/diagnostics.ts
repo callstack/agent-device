@@ -46,6 +46,9 @@ type DiagnosticsScope = DiagnosticsScopeOptions & {
   // events are streamed out and reset mid-flight.
   phaseCounts: Map<string, number>;
   sensitiveValues: Set<string>;
+  // Sorted-longest-first view of `sensitiveValues`, recomputed lazily after a
+  // registration invalidates it so replacement order stays deterministic.
+  sortedSensitiveValues?: string[];
 };
 
 const diagnosticsStorage = new AsyncLocalStorage<DiagnosticsScope>();
@@ -102,7 +105,10 @@ export function getDiagnosticsMeta(): {
 /** Register a caller-declared literal that must not reach this request's diagnostics. */
 export function registerDiagnosticSensitiveValue(value: string): void {
   if (!value) return;
-  diagnosticsStorage.getStore()?.sensitiveValues.add(value);
+  const scope = diagnosticsStorage.getStore();
+  if (!scope) return;
+  scope.sensitiveValues.add(value);
+  scope.sortedSensitiveValues = undefined;
 }
 
 /**
@@ -211,7 +217,15 @@ export function flushDiagnosticsToSessionFile(
     if (scope.logPath) {
       const pendingEvents = scope.events.slice(scope.liveWrittenEventCount);
       if (pendingEvents.length > 0) {
-        const lines = pendingEvents.map((entry) => JSON.stringify(redactScopeData(scope, entry)));
+        // Entries were fully redacted at emit time. `redactDiagnosticData` is
+        // idempotent over its own output (its replacements cannot re-match its
+        // patterns and strings stay length-bounded), so re-running it here
+        // cannot change bytes; only the caller-declared value replacement is
+        // repeated, so literals registered after an emit are still scrubbed.
+        const values = sortedScopeSensitiveValues(scope);
+        const lines = pendingEvents.map((entry) =>
+          JSON.stringify(replaceSensitiveValues(entry, values)),
+        );
         appendDiagnosticLine(scope.logPath, `${lines.join('\n')}\n`);
       }
       const logPath = scope.logPath;
@@ -227,7 +241,11 @@ export function flushDiagnosticsToSessionFile(
     fs.mkdirSync(baseDir, { recursive: true });
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filePath = path.join(baseDir, `${timestamp}-${scope.diagnosticId}.ndjson`);
-    const lines = scope.events.map((entry) => JSON.stringify(redactScopeData(scope, entry)));
+    // Same single-value-replacement re-pass as the logPath branch above.
+    const values = sortedScopeSensitiveValues(scope);
+    const lines = scope.events.map((entry) =>
+      JSON.stringify(replaceSensitiveValues(entry, values)),
+    );
     fs.writeFileSync(filePath, `${lines.join('\n')}\n`);
     scope.events = [];
     return { path: filePath };
@@ -236,10 +254,19 @@ export function flushDiagnosticsToSessionFile(
   }
 }
 
+/** Longest-first so an overlapping shorter literal cannot truncate a longer one. */
+function sortedScopeSensitiveValues(scope: DiagnosticsScope): readonly string[] {
+  if (!scope.sortedSensitiveValues) {
+    scope.sortedSensitiveValues = [...scope.sensitiveValues].sort(
+      (left, right) => right.length - left.length,
+    );
+  }
+  return scope.sortedSensitiveValues;
+}
+
 function redactScopeData<T>(scope: DiagnosticsScope, input: T): T {
   const redacted = redactDiagnosticData(input);
-  const values = [...scope.sensitiveValues].sort((left, right) => right.length - left.length);
-  return replaceSensitiveValues(redacted, values) as T;
+  return replaceSensitiveValues(redacted, sortedScopeSensitiveValues(scope)) as T;
 }
 
 function replaceSensitiveValues(value: unknown, sensitiveValues: readonly string[]): unknown {
@@ -265,7 +292,15 @@ function sanitizePathPart(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
+// Directories already ensured by appendDiagnosticLine. Debug-mode scopes
+// append one line per event, so without this memo every line pays a mkdir.
+const ensuredDiagnosticDirs = new Set<string>();
+
 function appendDiagnosticLine(logPath: string, line: string): void {
-  fs.mkdirSync(path.dirname(logPath), { recursive: true });
+  const dir = path.dirname(logPath);
+  if (!ensuredDiagnosticDirs.has(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    ensuredDiagnosticDirs.add(dir);
+  }
   fs.appendFileSync(logPath, line, 'utf8');
 }

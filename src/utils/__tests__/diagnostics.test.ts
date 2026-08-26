@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -88,4 +88,66 @@ test('diagnostics scrubs caller-declared recorded input literals regardless of f
   const diagnostics = fs.readFileSync(outputPath, 'utf8');
   assert.equal(diagnostics.includes(secret), false);
   assert.match(diagnostics, /Backend echoed \[REDACTED\]/);
+});
+
+test('overlapping sensitive values replace longest-first even when registered out of order', async () => {
+  const outputPath = path.join(mkdtempForTestSync('agent-device-diag-overlap-'), 'request.ndjson');
+  const shortLiteral = 'secret-value';
+  const longLiteral = `${shortLiteral}-extended`;
+
+  await withDiagnosticsScope({ command: 'fill', logPath: outputPath }, async () => {
+    registerDiagnosticSensitiveValue(shortLiteral);
+    registerDiagnosticSensitiveValue(longLiteral);
+    emitDiagnostic({
+      phase: 'platform_failure',
+      data: { message: `echoed ${longLiteral} tail` },
+    });
+    flushDiagnosticsToSessionFile({ force: true });
+  });
+
+  const diagnostics = fs.readFileSync(outputPath, 'utf8');
+  assert.equal(diagnostics.includes(longLiteral), false);
+  assert.equal(diagnostics.includes(shortLiteral), false);
+  // Shortest-first replacement would leave '[REDACTED]-extended' behind.
+  assert.match(diagnostics, /echoed \[REDACTED\] tail/);
+});
+
+test('a value registered after an emit but before flush is replaced in the flushed file', async () => {
+  const outputPath = path.join(
+    mkdtempForTestSync('agent-device-diag-late-register-'),
+    'request.ndjson',
+  );
+  const lateSecret = 'late-registered-opaque-literal';
+
+  await withDiagnosticsScope({ command: 'fill', logPath: outputPath }, async () => {
+    emitDiagnostic({
+      phase: 'platform_failure',
+      data: { message: `captured ${lateSecret}` },
+    });
+    registerDiagnosticSensitiveValue(lateSecret);
+    flushDiagnosticsToSessionFile({ force: true });
+  });
+
+  const diagnostics = fs.readFileSync(outputPath, 'utf8');
+  assert.equal(diagnostics.includes(lateSecret), false);
+  assert.match(diagnostics, /captured \[REDACTED\]/);
+});
+
+test('appendDiagnosticLine ensures the log directory once across appended lines', () => {
+  const logDir = mkdtempForTestSync('agent-device-diag-mkdir-');
+  const logPath = path.join(logDir, 'nested', 'request.ndjson');
+  const mkdirSpy = vi.spyOn(fs, 'mkdirSync');
+  try {
+    withDiagnosticsScope({ command: 'fill', logPath, debug: true }, () => {
+      for (let index = 0; index < 3; index += 1) {
+        emitDiagnostic({ phase: `iteration_${index}`, data: { index } });
+      }
+    });
+
+    const callsForLogDir = mkdirSpy.mock.calls.filter(([dir]) => dir === path.dirname(logPath));
+    assert.equal(callsForLogDir.length, 1);
+    assert.equal(fs.readFileSync(logPath, 'utf8').trim().split('\n').length, 3);
+  } finally {
+    mkdirSpy.mockRestore();
+  }
 });
