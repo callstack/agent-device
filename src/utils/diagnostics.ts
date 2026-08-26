@@ -46,6 +46,7 @@ type DiagnosticsScope = DiagnosticsScopeOptions & {
   // events are streamed out and reset mid-flight.
   phaseCounts: Map<string, number>;
   sensitiveValues: Set<string>;
+  ensuredDirectories: Set<string>;
   // Sorted-longest-first view of `sensitiveValues`, recomputed lazily after a
   // registration invalidates it so replacement order stays deterministic.
   sortedSensitiveValues?: string[];
@@ -72,6 +73,7 @@ export async function withDiagnosticsScope<T>(
     liveWrittenEventCount: 0,
     phaseCounts: new Map(),
     sensitiveValues: new Set(),
+    ensuredDirectories: new Set(),
   };
   return await diagnosticsStorage.run(scope, fn);
 }
@@ -145,11 +147,11 @@ export function emitDiagnostic(event: {
   const fileLine = `${JSON.stringify(payload)}\n`;
   try {
     if (scope.debug && scope.logPath) {
-      appendDiagnosticLine(scope.logPath, fileLine);
+      appendDiagnosticLine(scope, scope.logPath, fileLine);
       scope.liveWrittenEventCount = scope.events.length;
     }
     if (scope.traceLogPath) {
-      appendDiagnosticLine(scope.traceLogPath, fileLine);
+      appendDiagnosticLine(scope, scope.traceLogPath, fileLine);
     }
     if (scope.debug && !scope.logPath && !scope.traceLogPath) {
       process.stderr.write(`[agent-device][diag] ${fileLine}`);
@@ -221,7 +223,7 @@ export function flushDiagnosticsToSessionFile(
         const lines = pendingEvents.map((entry) =>
           JSON.stringify(replaceSensitiveValues(entry, values)),
         );
-        appendDiagnosticLine(scope.logPath, `${lines.join('\n')}\n`);
+        appendDiagnosticLine(scope, scope.logPath, `${lines.join('\n')}\n`);
       }
       const logRecord = scope.logRecord;
       scope.events = [];
@@ -283,14 +285,11 @@ function sanitizePathPart(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
-// Directories already ensured by appendDiagnosticLine; debug mode would mkdir per line otherwise.
-const ensuredDiagnosticDirs = new Set<string>();
-
-function appendDiagnosticLine(logPath: string, line: string): void {
+function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: string): void {
   const dir = path.dirname(logPath);
-  if (!ensuredDiagnosticDirs.has(dir)) {
+  if (!scope.ensuredDirectories.has(dir)) {
     fs.mkdirSync(dir, { recursive: true });
-    ensuredDiagnosticDirs.add(dir);
+    scope.ensuredDirectories.add(dir);
   }
   fs.appendFileSync(logPath, line, 'utf8');
 }

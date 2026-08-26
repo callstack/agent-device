@@ -151,3 +151,26 @@ test('appendDiagnosticLine ensures the log directory once across appended lines'
     mkdirSpy.mockRestore();
   }
 });
+
+test('a later diagnostics scope recreates a removed log directory', async () => {
+  const rootDir = mkdtempForTestSync('agent-device-diag-recreate-');
+  const logDir = path.join(rootDir, 'nested');
+  const logPath = path.join(logDir, 'request.ndjson');
+  const mkdirSpy = vi.spyOn(fs, 'mkdirSync');
+  try {
+    await withDiagnosticsScope({ command: 'first', logPath, debug: true }, () => {
+      emitDiagnostic({ phase: 'first_scope' });
+    });
+    fs.rmSync(logDir, { recursive: true, force: true });
+
+    await withDiagnosticsScope({ command: 'second', logPath, debug: true }, () => {
+      emitDiagnostic({ phase: 'second_scope' });
+    });
+
+    const callsForLogDir = mkdirSpy.mock.calls.filter(([dir]) => dir === logDir);
+    assert.equal(callsForLogDir.length, 2);
+    assert.match(fs.readFileSync(logPath, 'utf8'), /second_scope/);
+  } finally {
+    mkdirSpy.mockRestore();
+  }
+});
