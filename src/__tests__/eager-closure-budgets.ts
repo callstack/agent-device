@@ -297,7 +297,7 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // neither has a lazy seam to hide behind -- unlike `src/daemon/code-signature-cache.ts`, which
   // the same PR added and only a source checkout reaches, and which therefore loads on demand
   // (`resolveLocalDaemonCodeSignature`) rather than appearing here.
-  'src/cli.ts': 366,
+  'src/cli.ts': 364,
   'src/platform-runtime.ts': 45,
   'src/core/dispatch.ts': 79,
   'src/core/capabilities.ts': 74,

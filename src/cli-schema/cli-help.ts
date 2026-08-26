@@ -224,7 +224,7 @@ Replay divergence and repair:
 
 Batch:
   agent-device batch --steps '[{"command":"open","input":{"app":"settings"}},{"command":"wait","input":{"kind":"duration","durationMs":100}}]'
-  Step keys are command, input, and optional runtime; put command arguments inside input using the same fields as the MCP/Node command. Legacy positionals/flags steps still work with a deprecation warning. Never use args, step positionals, or flags in new batch JSON.
+  Step keys are command, input, and optional runtime; put command arguments inside input using the same fields as the MCP/Node command. The removed positionals/flags shape fails with an example showing how to migrate it.
   Maestro full-suite validation on connected devices uses one test command with a comma-separated --device list and --shard-all (--shard-split only to split suite entries across devices):
     agent-device test ./e2e/maestro --maestro --device udid1,emulator-5554 --shard-all 2
 
@@ -416,9 +416,8 @@ Diagnostics and traces:
     agent-device perf trace stop --kind perfetto
   Treat native perf output as the agent evidence: for example, state=stopped, outPath=/tmp/app.perfetto-trace, sizeBytes=5392410, method=adb-shell-perfetto. The 5.3 MB raw trace stays in the artifact.
   CPU reports return at most ten top functions in structured data and print five in default CLI output.
-  Prefer explicit perf frames, perf memory, perf cpu, or perf trace forms. Bare perf, perf sample, perf metrics, and metrics are deprecated compatibility forms until the next major release.
-  On Android, those deprecated aggregate forms retain the released dumpsys cpuinfo point sample for compatibility; new profiling workflows should use perf cpu profile.
-  Startup duration belongs to the open command's startup result; read it there instead of using aggregate perf.
+  Use explicit perf frames, perf memory, perf cpu, or perf trace forms. Aggregate perf was removed in 0.21: bare perf, perf sample, perf metrics, and metrics fail with exact replacements.
+  Startup duration belongs to the open command's startup result; read it there.
 
 Memory diagnostics:
   Use perf memory when the symptom is leak/growth/OOM suspicion and you need agent-readable evidence.

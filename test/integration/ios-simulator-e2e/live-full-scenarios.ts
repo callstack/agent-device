@@ -243,15 +243,12 @@ async function setMicrophonePermissionAndRestart(
 }
 
 export async function assertObservabilityAndArtifacts(context: LiveContext): Promise<void> {
-  const perf = await runStep(context, 'read fixture performance metrics', ['perf', 'metrics']);
+  const perf = await runStep(context, 'read fixture memory metrics', ['perf', 'memory', 'sample']);
   const metrics = perf.json?.data?.metrics;
-  assert.equal(metrics?.startup?.available, true, JSON.stringify(perf.json));
-  assert.ok(Number(metrics?.startup?.lastDurationMs) > 0, JSON.stringify(perf.json));
   assert.equal(metrics?.memory?.available, true, JSON.stringify(perf.json));
   assert.ok(Number(metrics?.memory?.residentMemoryKb) > 0, JSON.stringify(perf.json));
-  assert.equal(metrics?.cpu?.available, true, JSON.stringify(perf.json));
-  assert.ok(Number.isFinite(Number(metrics?.cpu?.usagePercent)), JSON.stringify(perf.json));
-  verifyCommand(context, C.perf, 'startup, memory, and CPU process metrics are typed and numeric');
+  assert.deepEqual(Object.keys(metrics ?? {}), ['memory']);
+  verifyCommand(context, C.perf, 'iOS process memory metrics are typed and numeric');
 
   const logsStart = await runStep(context, 'start fixture log stream', ['logs', 'start']);
   assert.equal(logsStart.json?.data?.started, true, JSON.stringify(logsStart.json));

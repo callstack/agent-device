@@ -2,7 +2,7 @@
 //
 // `bin.ts`'s `--help` fast path resolves a command alias (`tap`, `launch`, …) to its canonical
 // command before looking up static help text. #1618-adjacent: bin.ts once carried its own
-// hand-written two-entry table (`long-press`, `metrics`) instead of calling the real alias
+// hand-written two-entry table (`long-press`, `launch`) instead of calling the real alias
 // registry, `commands/cli-command-aliases.ts` (five entries). The table silently fell out of
 // sync — `tap`, `launch`, `relaunch` missed the fast path entirely and paid a full CLI bootstrap
 // just to print static help text — and nothing failed, because bin.ts's own top-level dispatch
@@ -45,7 +45,7 @@
 // would otherwise let the composition read correctly while calling something else entirely, and
 // a second `helpTarget` declaration would let the resolver run on an unrelated value.
 //
-// All three were false on the pre-fix bin.ts (no import; both 'long-press' and 'metrics' present
+// All three were false on the pre-fix bin.ts (no import; both 'long-press' and 'launch' present
 // as literals; no composition to find), so the set is a real regression pin, not just a
 // description of intent.
 //

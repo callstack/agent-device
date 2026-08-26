@@ -24,7 +24,6 @@ test('alias help output matches its canonical command', () => {
     ['launch', 'open'],
     ['relaunch', 'open'],
     ['long-press', 'longpress'],
-    ['metrics', 'perf'],
   ];
   for (const [alias, canonical] of cases) {
     const aliasHelp = buildCommandUsageText(normalizeCliCommandAlias(alias));

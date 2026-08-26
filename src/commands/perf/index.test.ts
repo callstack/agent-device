@@ -38,8 +38,10 @@ describe('perf command interface', () => {
     });
   });
 
-  test('retains optional aggregate compatibility and writes focused areas', () => {
-    expect(perfCliReader([], NO_FLAGS)).toEqual({});
+  test('rejects removed aggregate forms and writes focused areas', () => {
+    expectInvalidArgs(() => perfCliReader([], NO_FLAGS), 'Aggregate perf was removed');
+    expectInvalidArgs(() => perfCliReader(['sample'], NO_FLAGS), 'Aggregate perf was removed');
+    expectInvalidArgs(() => perfCliReader(['metrics'], NO_FLAGS), 'Aggregate perf was removed');
     expect(perfDaemonWriter({ area: 'frames' })).toMatchObject({
       command: 'perf',
       positionals: ['frames'],

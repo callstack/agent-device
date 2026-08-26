@@ -53,7 +53,7 @@ Notes:
 
 - `input` is required and uses the same fields as the matching MCP/Node command.
 - Unknown top-level step fields are rejected. Supported keys are `command`, `input`, and `runtime`.
-- CLI `--steps` and `--steps-file` still accept the legacy `positionals`/`flags` step shape with a deprecation warning. That compatibility path will be removed in the next major version.
+- The legacy `positionals`/`flags` step shape was removed in 0.21. Migrate each step to structured input, for example `{"command":"open","input":{"app":"settings","platform":"ios"}}`.
 - nested `batch` and `replay` steps are rejected.
 - `--on-error stop` is the supported behavior.
 

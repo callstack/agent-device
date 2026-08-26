@@ -283,102 +283,56 @@ test('network dump accepts explicit include flag and rejects conflicting values'
   }
 });
 
-test('deprecated aggregate perf forms retain released Android point CPU semantics', async () => {
-  const sessionStore = makeSessionStore('agent-device-session-observability-compat-perf-');
-  sessionStore.set(
-    'android',
-    makeAndroidSession('android', {
-      appBundleId: 'com.example.app',
-      actions: [
-        {
-          command: 'open',
-          positionals: ['com.example.app'],
-          flags: {},
-          ts: Date.parse('2026-04-01T10:00:00.000Z'),
-          result: {
-            startup: {
-              durationMs: 321,
-              measuredAt: '2026-04-01T10:00:00.000Z',
-              method: 'open-command-roundtrip',
+test.each([
+  [[]],
+  [['metrics']],
+  [['sample']],
+  [['snapshot']],
+  [['start']],
+  [['stop']],
+  [['report']],
+])(
+  'daemon rejects removed aggregate perf positionals %j with migration guidance',
+  async (positionals) => {
+    const sessionStore = makeSessionStore('agent-device-session-observability-compat-perf-');
+    sessionStore.set(
+      'android',
+      makeAndroidSession('android', {
+        appBundleId: 'com.example.app',
+        actions: [
+          {
+            command: 'open',
+            positionals: ['com.example.app'],
+            flags: {},
+            ts: Date.parse('2026-04-01T10:00:00.000Z'),
+            result: {
+              startup: {
+                durationMs: 321,
+                measuredAt: '2026-04-01T10:00:00.000Z',
+                method: 'open-command-roundtrip',
+              },
             },
           },
-        },
-      ],
-    }),
-  );
-  const { adbCalls, androidAdbExecutor } = makeLegacyPerfAdbExecutor();
+        ],
+      }),
+    );
+    const response = await handleSessionObservabilityCommands({
+      req: { token: 't', session: 'android', command: 'perf', positionals, flags: {} },
+      sessionName: 'android',
+      sessionStore,
+    });
 
-  const response = await handleSessionObservabilityCommands({
-    req: { token: 't', session: 'android', command: 'perf', positionals: [], flags: {} },
-    sessionName: 'android',
-    sessionStore,
-    androidAdbExecutor,
-  });
+    assert.equal(response?.ok, false);
+    if (response && !response.ok) {
+      assert.equal(response.error.code, 'INVALID_ARGS');
+      assert.match(response.error.message, /Aggregate perf was removed/);
+      assert.match(response.error.message, /perf frames/);
+      assert.match(response.error.message, /perf memory sample/);
+    }
+  },
+);
 
-  assert.ok(response?.ok);
-  if (!response?.ok) return;
-  const data = response.data as {
-    metrics: {
-      startup: Record<string, unknown>;
-      cpu: Record<string, unknown>;
-      memory: Record<string, unknown>;
-      fps: Record<string, unknown>;
-    };
-    warnings: string[];
-  };
-  assert.equal(data.metrics.startup.lastDurationMs, 321);
-  assert.equal(data.metrics.cpu.available, true);
-  assert.equal(data.metrics.cpu.usagePercent, 16);
-  assert.deepEqual(data.metrics.cpu.matchedProcesses, [
-    'com.example.app',
-    'com.example.app:worker',
-  ]);
-  assert.equal(data.metrics.memory.available, true);
-  assert.equal(data.metrics.fps.available, true);
-  assert.match(String(data.warnings), /deprecated compatibility forms/);
-  assert.equal(adbCalls.filter((args) => args.includes('cpuinfo')).length, 1);
-});
-
-function makeLegacyPerfAdbExecutor(): {
-  adbCalls: string[][];
-  androidAdbExecutor: AndroidAdbExecutor;
-} {
-  const adbCalls: string[][] = [];
-  const androidAdbExecutor: AndroidAdbExecutor = async (args) => {
-    adbCalls.push([...args]);
-    if (args.includes('cpuinfo')) return successfulAdbResult(legacyCpuInfoFixture());
-    if (args.includes('meminfo')) return successfulAdbResult('TOTAL PSS: 2048 TOTAL RSS: 4096');
-    if (args.includes('framestats')) return successfulAdbResult(legacyFrameStatsFixture());
-    throw new Error(`Unexpected adb call: ${args.join(' ')}`);
-  };
-  return { adbCalls, androidAdbExecutor };
-}
-
-function successfulAdbResult(stdout: string): { exitCode: number; stderr: string; stdout: string } {
-  return { exitCode: 0, stderr: '', stdout };
-}
-
-function legacyCpuInfoFixture(): string {
-  return [
-    '12.5% 1234/com.example.app: 7.5% user + 5% kernel',
-    '3.5% 5678/com.example.app:worker: 2% user + 1.5% kernel',
-    '2% 9999/com.example.other: 1% user + 1% kernel',
-  ].join('\n');
-}
-
-function legacyFrameStatsFixture(): string {
-  return [
-    'Applications Graphics Acceleration Info:',
-    'Uptime: 11000 Realtime: 11000',
-    '** Graphics info for pid 1234 [com.example.app] **',
-    'Stats since: 10000000000ns',
-    'Total frames rendered: 10',
-    'Janky frames: 2 (20.00%)',
-    'Number Frame deadline missed: 2',
-  ].join('\n');
-}
-
-test('perf memory sample routes to memory-only Android sampler', async () => {
+test('perf memory defaults to sample and routes to the memory-only Android sampler', async () => {
   const sessionStore = makeSessionStore('agent-device-session-observability-');
   sessionStore.set('android', {
     name: 'android',
@@ -414,7 +368,7 @@ test('perf memory sample routes to memory-only Android sampler', async () => {
       token: 't',
       session: 'android',
       command: 'perf',
-      positionals: ['memory', 'sample'],
+      positionals: ['memory'],
       flags: {},
     },
     sessionName: 'android',

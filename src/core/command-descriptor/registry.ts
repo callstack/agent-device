@@ -1088,7 +1088,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'recordTrace', refFrameEffect: 'preserve' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'find',

@@ -133,8 +133,6 @@ import type {
   MetroReloadResult,
 } from '@agent-device/contracts/remote';
 
-import type { RotateCommandResult } from '@agent-device/contracts/navigation';
-
 import type {
   NavigationCommandOptions,
   ProjectedNavigationCommandClient,
@@ -153,10 +151,6 @@ import type { CommandResult } from '../core/command-descriptor/command-result.ts
 export type { DiffSnapshotCommandResult } from '@agent-device/contracts/capture';
 export type { PrepareCommandResult, PushCommandResult } from '@agent-device/contracts/command';
 export type { TriggerAppEventCommandResult } from '@agent-device/contracts/device';
-export type {
-  /** @deprecated Renamed to `OrientationCommandResult`. Retained until the next major. */
-  RotateCommandResult,
-} from '@agent-device/contracts/navigation';
 export type { WaitCommandResult } from '@agent-device/contracts/wait';
 export type {
   DebugSymbolsOptions,
@@ -170,9 +164,6 @@ export type BackCommandOptions = DeviceCommandBaseOptions & NavigationCommandOpt
 
 export type OrientationCommandOptions = DeviceCommandBaseOptions &
   NavigationCommandOptions<'orientation'>;
-
-/** @deprecated Renamed to `OrientationCommandOptions`. Retained until the next major. */
-export type RotateCommandOptions = OrientationCommandOptions;
 
 export type AppSwitcherCommandOptions = DeviceCommandBaseOptions &
   NavigationCommandOptions<'app-switcher'>;
@@ -197,17 +188,7 @@ type NonNavigationCommandClient = {
 };
 
 export type AgentDeviceCommandClient = ProjectedNavigationCommandClient<DeviceCommandBaseOptions> &
-  NonNavigationCommandClient &
-  DeprecatedCommandClient;
-
-/** Renamed command methods retained for existing consumers until the next major. */
-type DeprecatedCommandClient = {
-  /**
-   * @deprecated Renamed to `orientation`. Delegates to it and returns the legacy
-   * `action: 'rotate'` response contract. Retained until the next major version.
-   */
-  rotate: (options: RotateCommandOptions) => Promise<RotateCommandResult>;
-};
+  NonNavigationCommandClient;
 
 export type AgentDeviceClient = {
   command: AgentDeviceCommandClient;
@@ -297,7 +278,7 @@ export type AgentDeviceClient = {
     run: (options: BatchRunOptions) => Promise<BatchRunResult>;
   };
   observability: {
-    perf: (options?: PerfOptions) => Promise<CommandRequestResult>;
+    perf: (options: PerfOptions) => Promise<CommandRequestResult>;
     logs: (options?: LogsOptions) => Promise<CommandRequestResult>;
     events: (options?: EventsOptions) => Promise<CommandRequestResult>;
     network: (options?: NetworkOptions) => Promise<CommandRequestResult>;

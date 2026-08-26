@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Breaking (0.21): removed aggregate performance compatibility (`perf`, `perf sample`, `perf metrics`, the `metrics` alias, optionless `client.observability.perf()`, and SDK `area: 'metrics'`). Use `perf frames`, `perf memory sample`, `perf cpu profile start|stop|report`, or `perf trace start|stop`; removed CLI and raw daemon forms fail with this migration guidance.
+- Breaking (0.21): removed legacy batch JSON steps with `positionals`/`flags`. Use `{"command":"...","input":{...}}`; rejected steps now include a concrete structured example.
+- Breaking (0.21): removed the deprecated Node client `command.rotate` wrapper and its `RotateCommandOptions` / `RotateCommandResult` exports. Use `command.orientation`; the already-removed CLI `rotate` form keeps its targeted migration error.
 - Security (MCP/AI-SDK tool surface): the operator-owned endpoint and path inputs — `daemonBaseUrl`,
   the Metro `proxyBaseUrl`, `stateDir`, `cwd`, `iosSimulatorDeviceSet`, `iosXctestrunFile`,
   `iosXctestDerivedDataPath`, `iosXctestEnvDir` — follow the credential inputs off the

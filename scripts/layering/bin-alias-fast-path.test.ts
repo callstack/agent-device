@@ -43,7 +43,6 @@ const REGISTRY_FIXTURE = `
 import type { CliFlags } from '@agent-device/contracts/command';
 const CLI_COMMAND_ALIASES = [
   { alias: 'long-press', command: 'longpress' },
-  { alias: 'metrics', command: 'perf' },
   { alias: 'tap', command: 'press' },
   { alias: 'launch', command: 'open' },
   { alias: 'relaunch', command: 'open', impliedFlags: ['relaunch'] },
@@ -55,7 +54,6 @@ test('registryAliasTokens reads every alias property value out of the registry s
   assert.deepEqual(registryAliasTokens(REGISTRY_FIXTURE), [
     'launch',
     'long-press',
-    'metrics',
     'relaunch',
     'tap',
   ]);
@@ -269,17 +267,16 @@ const commandHelp = buildCommandUsageText(normalizeCliCommandAlias(argv[1]));
 });
 
 test('localAliasLiterals reports every requested token present as a string literal', () => {
-  // The pre-fix bin.ts shape: a hand-written table re-declaring two of the five tokens.
+  // A stale bin.ts shape with a hand-written alias table.
   const preFixBinSource = `
 function normalizeHelpTarget(command) {
   if (command === 'long-press') return 'longpress';
-  if (command === 'metrics') return 'perf';
   return command;
 }
 `;
   assert.deepEqual(
-    localAliasLiterals(preFixBinSource, ['long-press', 'metrics', 'tap', 'launch', 'relaunch']),
-    ['long-press', 'metrics'],
+    localAliasLiterals(preFixBinSource, ['long-press', 'tap', 'launch', 'relaunch']),
+    ['long-press'],
   );
 });
 
@@ -294,7 +291,7 @@ import { normalizeCliCommandAlias } from './commands/cli-command-aliases.ts';
 const commandHelp = buildCommandUsageText(normalizeCliCommandAlias(helpTarget));
 `;
   assert.deepEqual(
-    localAliasLiterals(fixedBinSource, ['long-press', 'metrics', 'tap', 'launch', 'relaunch']),
+    localAliasLiterals(fixedBinSource, ['long-press', 'tap', 'launch', 'relaunch']),
     [],
   );
 });
@@ -305,7 +302,7 @@ test('the real tree imports the resolver, calls it into buildCommandUsageText, h
   const registrySource = readFileSync(path.join(repoRoot, ALIAS_REGISTRY_FILE), 'utf8');
   const binSource = readFileSync(path.join(repoRoot, BIN_FILE), 'utf8');
   const tokens = registryAliasTokens(registrySource);
-  assert.deepEqual(tokens, ['launch', 'long-press', 'metrics', 'relaunch', 'tap']);
+  assert.deepEqual(tokens, ['launch', 'long-press', 'relaunch', 'tap']);
   const localName = aliasResolverLocalName(binSource);
   assert.equal(localName, 'normalizeCliCommandAlias');
   assert.equal(helpTargetBindingName(binSource), 'helpTarget');

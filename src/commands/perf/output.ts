@@ -20,16 +20,6 @@ function formatObservationPerfOutput(data: Record<string, unknown>): string {
   const artifact = isRecord(data.artifact) ? data.artifact : undefined;
   if (artifact) return formatMemoryArtifactSummary(artifact);
   const metrics = isRecord(data.metrics) ? data.metrics : undefined;
-  return formatObservedMetrics(data, metrics);
-}
-
-function formatObservedMetrics(
-  data: Record<string, unknown>,
-  metrics: Record<string, unknown> | undefined,
-): string {
-  if (hasLegacyPerfWarning(data) && isRecord(metrics?.fps) && isRecord(metrics?.memory)) {
-    return formatLegacyMetricsOutput(data, metrics);
-  }
   return formatFocusedMetrics(metrics);
 }
 
@@ -37,57 +27,6 @@ function formatFocusedMetrics(metrics: Record<string, unknown> | undefined): str
   return isRecord(metrics?.fps)
     ? formatFramePerfOutput(metrics)
     : (formatMemoryPerfOutput(metrics) ?? 'Memory: unavailable - missing memory metric');
-}
-
-function hasLegacyPerfWarning(data: Record<string, unknown>): boolean {
-  return (
-    Array.isArray(data.warnings) &&
-    data.warnings.some(
-      (entry) => typeof entry === 'string' && entry.includes('deprecated compatibility forms'),
-    )
-  );
-}
-
-function formatLegacyMetricsOutput(
-  data: Record<string, unknown>,
-  metrics: Record<string, unknown>,
-): string {
-  const warning = Array.isArray(data.warnings)
-    ? data.warnings.find((entry): entry is string => typeof entry === 'string')
-    : undefined;
-  const summary = formatLegacyAggregateMetrics(metrics);
-  return warning ? `${summary}\nDeprecated: ${warning}` : summary;
-}
-
-function formatLegacyAggregateMetrics(metrics: Record<string, unknown>): string {
-  const fps = isRecord(metrics.fps) ? metrics.fps : undefined;
-  const resourceSummary = buildLegacyResourceSummary(metrics);
-  if (!fps) return formatLegacyUnavailable(resourceSummary, 'missing frame metric');
-  if (fps.available === false) {
-    return formatLegacyUnavailable(resourceSummary, readUnavailableReason(fps));
-  }
-  const frameSummary = formatFrameHealthSummary(fps);
-  return frameSummary
-    ? formatFrameHealthOutput(fps, frameSummary)
-    : formatLegacyUnavailable(resourceSummary, 'missing dropped-frame summary');
-}
-
-function buildLegacyResourceSummary(metrics: Record<string, unknown>): string | undefined {
-  const parts = [
-    formatCpuPerfSummary(isRecord(metrics.cpu) ? metrics.cpu : undefined),
-    formatMemoryPerfSummary(isRecord(metrics.memory) ? metrics.memory : undefined),
-  ].filter((part): part is string => Boolean(part));
-  return parts.length > 0 ? parts.join(', ') : undefined;
-}
-
-function formatLegacyUnavailable(resourceSummary: string | undefined, reason: string): string {
-  return resourceSummary ? `Performance: ${resourceSummary}` : formatPerfUnavailable(reason);
-}
-
-function formatCpuPerfSummary(cpu: Record<string, unknown> | undefined): string | undefined {
-  if (cpu?.available !== true) return undefined;
-  const usagePercent = readFiniteNumber(cpu.usagePercent);
-  return usagePercent === undefined ? undefined : `CPU ${formatPercent(usagePercent)}`;
 }
 
 function formatMemoryPerfOutput(metrics: Record<string, unknown> | undefined): string | undefined {

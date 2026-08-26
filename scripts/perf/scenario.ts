@@ -1,12 +1,10 @@
 import path from 'node:path';
 import type { ResolvedProfile } from './platform-profiles.ts';
 
-// A legacy-form batch step: maps through the exact documented CLI grammar.
-// `flags` uses internal CliFlags field names (e.g. snapshotInteractiveOnly).
+// A structured batch step: maps through the same command input as MCP and the Node client.
 export type BatchStepSpec = {
   command: string;
-  positionals?: string[];
-  flags?: Record<string, unknown>;
+  input: Record<string, unknown>;
 };
 
 type ScenarioStepBase = {
@@ -19,7 +17,7 @@ type ScenarioStepBase = {
 };
 
 // Discriminated on execMode so the invoker gets the right payload without `!`/`?? []`:
-// standalone carries full CLI args; batch carries one legacy batch step.
+// standalone carries full CLI args; batch carries one structured batch step.
 export type ScenarioStep =
   | (ScenarioStepBase & { execMode: 'standalone'; args: string[] })
   | (ScenarioStepBase & { execMode: 'batch'; step: BatchStepSpec; isSnapshot?: boolean });
@@ -56,32 +54,50 @@ export function buildSettingsTour(p: ResolvedProfile, ctx: StepContext): Scenari
         bat(
           'fill search',
           'fill',
-          { command: 'fill', positionals: [s.searchFieldEditable, 'general'] },
+          {
+            command: 'fill',
+            input: {
+              target: { kind: 'selector', selector: s.searchFieldEditable },
+              text: 'general',
+            },
+          },
           { freshRoot: true },
         ),
-        bat('type', 'type', { command: 'type', positionals: ['wifi'] }),
+        bat('type', 'type', { command: 'type', input: { text: 'wifi' } }),
         bat('get editable text', 'get', {
           command: 'get',
-          positionals: ['text', s.searchFieldEditable],
+          input: {
+            format: 'text',
+            target: { kind: 'selector', selector: s.searchFieldEditable },
+          },
         }),
-        bat('keyboard return', 'keyboard', { command: 'keyboard', positionals: ['return'] }),
+        bat('keyboard return', 'keyboard', { command: 'keyboard', input: { action: 'return' } }),
       ]
     : [
         // Android: tap the search entry first to reveal the editable, then type/fill it.
         bat(
           'press search field',
           'press',
-          { command: 'press', positionals: [s.searchField] },
+          {
+            command: 'press',
+            input: { target: { kind: 'selector', selector: s.searchField } },
+          },
           { freshRoot: true },
         ),
-        bat('type', 'type', { command: 'type', positionals: ['wifi'] }),
+        bat('type', 'type', { command: 'type', input: { text: 'wifi' } }),
         bat('fill search', 'fill', {
           command: 'fill',
-          positionals: [s.searchFieldEditable, 'general'],
+          input: {
+            target: { kind: 'selector', selector: s.searchFieldEditable },
+            text: 'general',
+          },
         }),
         bat('get editable text', 'get', {
           command: 'get',
-          positionals: ['text', s.searchFieldEditable],
+          input: {
+            format: 'text',
+            target: { kind: 'selector', selector: s.searchFieldEditable },
+          },
         }),
       ];
 
@@ -93,7 +109,10 @@ export function buildSettingsTour(p: ResolvedProfile, ctx: StepContext): Scenari
           bat(
             'press series (sequence)',
             'press',
-            { command: 'press', positionals: ['200', '95'], flags: { count: 2, intervalMs: 50 } },
+            {
+              command: 'press',
+              input: { target: { kind: 'point', x: 200, y: 95 }, count: 2, intervalMs: 50 },
+            },
             { freshRoot: true },
           ),
           bat(
@@ -101,8 +120,13 @@ export function buildSettingsTour(p: ResolvedProfile, ctx: StepContext): Scenari
             'swipe',
             {
               command: 'swipe',
-              positionals: ['200', '650', '200', '450', '120'],
-              flags: { count: 2, pauseMs: 50, pattern: 'ping-pong' },
+              input: {
+                from: { x: 200, y: 650 },
+                to: { x: 200, y: 450 },
+                count: 2,
+                pauseMs: 50,
+                pattern: 'ping-pong',
+              },
             },
             { freshRoot: true },
           ),
@@ -117,27 +141,30 @@ export function buildSettingsTour(p: ResolvedProfile, ctx: StepContext): Scenari
     bat(
       'snapshot -i (root)',
       'snapshot',
-      { command: 'snapshot', flags: { snapshotInteractiveOnly: true } },
+      { command: 'snapshot', input: { interactiveOnly: true } },
       { isSnapshot: true },
     ),
-    bat('snapshot (root)', 'snapshot', { command: 'snapshot' }, { isSnapshot: true }),
+    bat('snapshot (root)', 'snapshot', { command: 'snapshot', input: {} }, { isSnapshot: true }),
 
     // --- navigate into a sub-screen from a fresh root (freshRoot resets scroll so the
     //     deep-screen row is in view), read it, then return ---
     bat(
       'press → deep screen',
       'press',
-      { command: 'press', positionals: [s.deepScreen] },
+      {
+        command: 'press',
+        input: { target: { kind: 'selector', selector: s.deepScreen } },
+      },
       { freshRoot: true },
     ),
-    bat('snapshot (deep)', 'snapshot', { command: 'snapshot' }, { isSnapshot: true }),
+    bat('snapshot (deep)', 'snapshot', { command: 'snapshot', input: {} }, { isSnapshot: true }),
     bat(
       'snapshot -i (deep)',
       'snapshot',
-      { command: 'snapshot', flags: { snapshotInteractiveOnly: true } },
+      { command: 'snapshot', input: { interactiveOnly: true } },
       { isSnapshot: true },
     ),
-    bat('back', 'back', { command: 'back' }),
+    bat('back', 'back', { command: 'back', input: {} }),
 
     // --- iOS runner series commands surfaced by PR #643 ---
     ...iosRunnerSeries,
@@ -146,26 +173,38 @@ export function buildSettingsTour(p: ResolvedProfile, ctx: StepContext): Scenari
     bat(
       'wait text',
       'wait',
-      { command: 'wait', positionals: ['text', s.anchorText, '3000'] },
+      { command: 'wait', input: { text: s.anchorText, timeoutMs: 3000 } },
       { freshRoot: true },
     ),
-    bat('find', 'find', { command: 'find', positionals: [s.anchorText] }),
-    bat('get text', 'get', { command: 'get', positionals: ['text', s.anchorLabel] }),
-    bat('is visible', 'is', { command: 'is', positionals: ['visible', s.anchorLabel] }),
+    bat('find', 'find', { command: 'find', input: { query: s.anchorText } }),
+    bat('get text', 'get', {
+      command: 'get',
+      input: {
+        format: 'text',
+        target: { kind: 'selector', selector: s.anchorLabel },
+      },
+    }),
+    bat('is visible', 'is', {
+      command: 'is',
+      input: { predicate: 'visible', selector: s.anchorLabel },
+    }),
 
     // --- text entry (platform-specific order; see textEntry above) then scroll results ---
     ...textEntry,
-    bat('scroll down', 'scroll', { command: 'scroll', positionals: ['down'] }),
+    bat('scroll down', 'scroll', { command: 'scroll', input: { direction: 'down' } }),
 
     // --- artifact-producing commands; record brackets the rest so the clip has >1s of
     //     footage (an instant start→stop makes simctl recordVideo fail to finalize) ---
     std('record start', 'record', ['record', 'start', rec, '--hide-touches']),
-    bat('screenshot', 'screenshot', { command: 'screenshot', positionals: [shot] }),
-    bat('logs mark', 'logs', { command: 'logs', positionals: ['mark', 'perf-mark'] }),
-    bat('logs clear', 'logs', { command: 'logs', positionals: ['clear'] }),
+    bat('screenshot', 'screenshot', { command: 'screenshot', input: { path: shot } }),
+    bat('logs mark', 'logs', {
+      command: 'logs',
+      input: { action: 'mark', message: 'perf-mark' },
+    }),
+    bat('logs clear', 'logs', { command: 'logs', input: { action: 'clear' } }),
     std('trace start', 'trace', ['trace', 'start', trace]),
     std('trace stop', 'trace', ['trace', 'stop']),
-    bat('perf', 'perf', { command: 'perf' }),
+    bat('perf frames', 'perf', { command: 'perf', input: { area: 'frames' } }),
     std('record stop', 'record', ['record', 'stop']),
   ];
 }

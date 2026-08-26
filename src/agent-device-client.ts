@@ -29,7 +29,6 @@ import type {
   SwipeGestureOptions,
   TransformGestureOptions,
 } from '@agent-device/contracts/client';
-import type { OrientationCommandResult } from '@agent-device/contracts/navigation';
 import type { AgentArtifactsResult } from '@agent-device/contracts/observability';
 import type { MetroPrepareOptions } from '@agent-device/contracts/remote';
 import {
@@ -60,7 +59,6 @@ import type {
   AgentDeviceClient,
   AgentDeviceCommandClient,
   MetroPrepareResult,
-  RotateCommandResult,
 } from './client/client-types.ts';
 import { INTERNAL_COMMANDS } from './command-catalog.ts';
 import { buildRequestFlags } from './commands/command-flags.ts';
@@ -84,7 +82,7 @@ import { isRecord } from './utils/parsing.ts';
 import { readScreenshotResultData } from './utils/screenshot-result.ts';
 
 type ProjectedSystemCommandClient = ProjectedNavigationCommandClient<InternalRequestOptions> &
-  Pick<AgentDeviceCommandClient, 'appState' | 'keyboard' | 'clipboard' | 'rotate'>;
+  Pick<AgentDeviceCommandClient, 'appState' | 'keyboard' | 'clipboard'>;
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
@@ -434,7 +432,7 @@ export function createAgentDeviceClient(
       run: async (options) => await executeCommand('batch', options),
     },
     observability: {
-      perf: async (options = {}) => await executeCommand('perf', options),
+      perf: async (options) => await executeCommand('perf', options),
       logs: async (options = {}) => await executeCommand('logs', options),
       events: async (options = {}) => await executeCommand('events', options),
       network: async (options = {}) => await executeCommand('network', options),
@@ -579,17 +577,6 @@ function buildProjectedSystemCommandClient(
     methods[method] = async (options = {}) =>
       await executeCommand<CommandResult<typeof command>>(command as DaemonCommandName, options);
   }
-  // Deprecated (v0.18/v0.19): `rotate` was renamed to `orientation`. Retain a
-  // thin wrapper that delegates to `orientation` and restores the legacy
-  // `action: 'rotate'` response contract for existing consumers.
-  const orientation = methods.orientation;
-  if (!orientation) {
-    throw new Error('orientation client method missing from the system command family');
-  }
-  methods.rotate = async (options = {}) => {
-    const result = (await orientation(options)) as OrientationCommandResult;
-    return { ...result, action: 'rotate' } satisfies RotateCommandResult;
-  };
   return methods as unknown as ProjectedSystemCommandClient;
 }
 

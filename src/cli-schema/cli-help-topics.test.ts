@@ -240,7 +240,7 @@ test('usageForCommand resolves scripting help topic', async () => {
   assert.match(help, /state-repair means the script is correct but app state is not/);
   assert.match(help, /close --save-script\[=<out>\] \(default <stem>\.healed\.ad\)/);
   assert.match(help, /agent-device batch --steps '\[\{"command":"open"/);
-  assert.match(help, /Never use args, step positionals, or flags in new batch JSON/);
+  assert.match(help, /removed positionals\/flags shape fails with an example/);
   assert.match(help, /test \.\/e2e\/maestro --maestro --device udid1,emulator-5554 --shard-all 2/);
   assert.match(help, /Android adb screenrecord has a 180s limit/);
   assert.match(help, /--hide-touches skips that for the fastest raw recording/);

@@ -1,19 +1,12 @@
 import type { BatchStep } from '@agent-device/contracts/client';
-import { type SessionRuntimeHints } from '@agent-device/kernel/contracts';
-import { parseBatchStepRuntime } from '@agent-device/contracts/command';
-import { readInputFromCli } from '../commands/cli-grammar.ts';
-import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
-import type { CliFlags } from '@agent-device/contracts/command';
+import {
+  parseBatchStepRuntime,
+  readBatchStepInputObject,
+  readBatchStepRecord,
+} from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { isRecord } from '../utils/parsing.ts';
-import { assertCommandPositionalArity } from '../cli-schema/command-schema.ts';
-
-type LegacyCliBatchStep = {
-  command: CommandName;
-  positionals?: string[];
-  flags?: Record<string, unknown>;
-  runtime?: SessionRuntimeHints;
-};
+import { readStructuredBatchCommandName } from '../core/batch-policy.ts';
+import { assertAllowedKeys } from '../commands/command-input.ts';
 
 export function readCliBatchStepsJson(raw: string): BatchStep[] {
   let parsed: unknown;
@@ -25,118 +18,24 @@ export function readCliBatchStepsJson(raw: string): BatchStep[] {
   if (!Array.isArray(parsed) || parsed.length === 0) {
     throw new AppError('INVALID_ARGS', 'Batch steps must be a non-empty JSON array.');
   }
-  return normalizeCliBatchSteps(parsed);
+  return parsed.map((step, index) => readCliBatchStep(step, index + 1));
 }
 
-function normalizeCliBatchSteps(steps: unknown[]): BatchStep[] {
-  let sawLegacyStep = false;
-  const normalized = steps.map((step, index) => {
-    if (isStructuredBatchStepShape(step)) return readStructuredBatchStep(step, index + 1);
-    const legacyStep = readLegacyCliBatchStep(step, index + 1);
-    sawLegacyStep = true;
-    return legacyStepToStructuredStep(legacyStep);
-  });
-  if (sawLegacyStep) {
-    process.stderr.write(
-      'Warning: batch steps using positionals/flags are deprecated and will be removed in the next major version. Use {"command":"...","input":{...}} steps instead.\n',
-    );
-  }
-  return normalized;
-}
-
-function legacyStepToStructuredStep(legacyStep: LegacyCliBatchStep): BatchStep {
-  const input = readInputFromCli(
-    legacyStep.command,
-    legacyStep.positionals ?? [],
-    cliFlagsFromBatchStep(legacyStep.flags),
-  );
-  return {
-    command: legacyStep.command,
-    input,
-    ...(legacyStep.runtime === undefined ? {} : { runtime: legacyStep.runtime }),
-  };
-}
-
-function isStructuredBatchStepShape(step: unknown): step is Record<string, unknown> & BatchStep {
-  return isRecord(step) && 'input' in step && !('positionals' in step) && !('flags' in step);
-}
-
-function readStructuredBatchStep(
-  step: Record<string, unknown> & BatchStep,
-  stepNumber: number,
-): BatchStep {
-  const runtime = parseBatchStepRuntime(step.runtime, stepNumber);
-  const { runtime: _runtime, ...rest } = step;
-  return {
-    ...rest,
-    ...(runtime === undefined ? {} : { runtime }),
-  };
-}
-
-function readLegacyCliBatchStep(step: unknown, stepNumber: number): LegacyCliBatchStep {
-  if (!isRecord(step)) {
-    throw new AppError('INVALID_ARGS', `Invalid batch step ${stepNumber}.`);
-  }
-  assertLegacyBatchStepKeys(step, stepNumber);
-  const command = readLegacyCommand(step.command, stepNumber);
-  const positionals = readLegacyPositionals(step.positionals, stepNumber);
-  assertCommandPositionalArity(command, positionals ?? [], `Batch step ${stepNumber}`);
-  const flags = readLegacyFlags(step.flags, stepNumber);
-  const runtime = parseBatchStepRuntime(step.runtime, stepNumber);
-  return {
-    command,
-    ...(positionals === undefined ? {} : { positionals }),
-    ...(flags === undefined ? {} : { flags }),
-    ...(runtime === undefined ? {} : { runtime }),
-  };
-}
-
-function readLegacyCommand(value: unknown, stepNumber: number): CommandName {
-  const command = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (!command) throw new AppError('INVALID_ARGS', `Batch step ${stepNumber} requires command.`);
-  if (isCommandName(command)) return command;
-  throw new AppError(
-    'INVALID_ARGS',
-    `Batch step ${stepNumber} command is not available through command batch: ${String(value)}`,
-  );
-}
-
-function assertLegacyBatchStepKeys(record: Record<string, unknown>, stepNumber: number): void {
-  const unknownKeys = Object.keys(record).filter(
-    (key) => !['command', 'positionals', 'flags', 'runtime'].includes(key),
-  );
-  if (unknownKeys.length > 0) {
+function readCliBatchStep(step: unknown, stepNumber: number): BatchStep {
+  const record = readBatchStepRecord(step, stepNumber);
+  const removedFields = ['positionals', 'flags'].filter((field) => field in record);
+  if (removedFields.length > 0) {
+    const fields = removedFields.map((field) => `"${field}"`).join(', ');
     throw new AppError(
       'INVALID_ARGS',
-      `Batch step ${stepNumber} has unknown legacy field(s): ${unknownKeys.join(', ')}.`,
+      `Batch step ${stepNumber} uses removed field(s): ${fields}. Use {"command":"...","input":{...}}. Example: {"command":"open","input":{"app":"settings","platform":"ios"}}.`,
     );
   }
-}
-
-function readLegacyPositionals(value: unknown, stepNumber: number): string[] | undefined {
-  if (value === undefined) return undefined;
-  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Batch step ${stepNumber} positionals must contain only strings.`,
-    );
-  }
-  return value;
-}
-
-function readLegacyFlags(value: unknown, stepNumber: number): Record<string, unknown> | undefined {
-  if (value === undefined) return undefined;
-  if (!isRecord(value)) {
-    throw new AppError('INVALID_ARGS', `Batch step ${stepNumber} flags must be an object.`);
-  }
-  return value;
-}
-
-function cliFlagsFromBatchStep(flags: Record<string, unknown> | undefined): CliFlags {
+  assertAllowedKeys(record, ['command', 'input', 'runtime'], `Batch step ${stepNumber}`);
+  const runtime = parseBatchStepRuntime(record.runtime, stepNumber);
   return {
-    json: false,
-    help: false,
-    version: false,
-    ...(flags as Partial<CliFlags> | undefined),
+    command: readStructuredBatchCommandName(record.command, stepNumber),
+    input: readBatchStepInputObject(record, stepNumber),
+    ...(runtime === undefined ? {} : { runtime }),
   };
 }

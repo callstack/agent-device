@@ -47,41 +47,31 @@ test('perf frames prints compact platform-independent frame health summary by de
   assert.doesNotMatch(result.stdout, /android|Pixel|memory|cpu|gfxinfo/i);
 });
 
-test('perf metrics retains the released aggregate compatibility route', async () => {
-  const result = await runCliCapture(['perf', 'metrics', '--json'], async () => ({
-    ok: true,
-    data: { warnings: ['deprecated compatibility forms'] },
-  }));
+test.each([['perf', 'metrics'], ['perf', 'sample'], ['perf'], ['metrics']])(
+  '%s rejects the removed aggregate perf surface with migration guidance',
+  async (...command) => {
+    const result = await runCliCapture([...command, '--json'], async () => ({
+      ok: true,
+      data: {},
+    }));
 
-  assert.equal(result.code, null);
-  assert.deepEqual(result.calls[0]?.positionals, ['metrics']);
-});
+    assert.equal(result.code, 1);
+    assert.equal(result.calls.length, 0);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.error.code, 'INVALID_ARGS');
+    assert.match(payload.error.message, /Aggregate perf was removed/);
+    assert.match(payload.error.message, /perf frames/);
+    assert.match(payload.error.message, /perf memory sample/);
+    assert.match(payload.error.message, /perf cpu profile/);
+    assert.match(payload.error.message, /perf trace/);
+  },
+);
 
-test('deprecated aggregate perf output retains released CPU summary semantics', async () => {
-  const warning =
-    'perf metrics, bare perf, and perf sample are deprecated compatibility forms and will be removed in the next major release.';
-  const result = await runCliCapture(['perf', 'metrics'], async () => ({
-    ok: true,
-    data: {
-      metrics: {
-        cpu: { available: true, usagePercent: 16 },
-        memory: { available: true, totalPssKb: 2048 },
-        fps: { available: false, reason: 'No frame data.' },
-      },
-      warnings: [warning],
-    },
-  }));
-
-  assert.equal(result.code, null);
-  assert.equal(result.stdout, `Performance: CPU 16%, memory 2.0MB\nDeprecated: ${warning}\n`);
-});
-
-test('metrics alias retains the released aggregate compatibility route', async () => {
+test('metrics alias never reaches daemon dispatch', async () => {
   const result = await runCliCapture(['metrics', '--json'], async () => ({ ok: true, data: {} }));
 
-  assert.equal(result.code, null);
-  assert.equal(result.calls[0]?.command, 'perf');
-  assert.deepEqual(result.calls[0]?.positionals, []);
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
 });
 
 test('perf frames forwards frames area and prints focused frame summary', async () => {
@@ -142,6 +132,26 @@ test('perf memory sample forwards memory area and prints compact memory summary'
   assert.equal(result.code, null);
   assert.equal(result.calls[0]?.command, 'perf');
   assert.deepEqual(result.calls[0]?.positionals, ['memory', 'sample']);
+  assert.equal(result.stdout, 'Performance: memory 211MB\n');
+});
+
+test('perf memory preserves the focused sample default', async () => {
+  const result = await runCliCapture(['perf', 'memory'], async () => ({
+    ok: true,
+    data: {
+      metrics: {
+        memory: {
+          available: true,
+          totalPssKb: 216524,
+          topConsumers: [],
+        },
+      },
+    },
+  }));
+
+  assert.equal(result.code, null);
+  assert.equal(result.calls[0]?.command, 'perf');
+  assert.deepEqual(result.calls[0]?.positionals, ['memory']);
   assert.equal(result.stdout, 'Performance: memory 211MB\n');
 });
 
@@ -336,13 +346,6 @@ test('perf simpleperf output prints the shared bounded top CPU evidence', async 
   assert.match(result.stdout, /Top CPU self time:\n- 31.2% Java_com_example_Foo \(libapp\.so\)/);
 });
 
-test('bare perf retains the released aggregate compatibility route', async () => {
-  const result = await runCliCapture(['perf', '--json'], async () => ({ ok: true, data: {} }));
-
-  assert.equal(result.code, null);
-  assert.deepEqual(result.calls[0]?.positionals, []);
-});
-
 test('perf area and action positionals are case-insensitive', async () => {
   const result = await runCliCapture(['perf', 'FRAMES', 'SAMPLE', '--json'], async () => ({
     ok: true,
@@ -384,7 +387,7 @@ test('perf rejects unknown CLI area before daemon dispatch', async () => {
   assert.equal(result.calls.length, 0);
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.error.code, 'INVALID_ARGS');
-  assert.match(payload.error.message, /perf area must be metrics, frames, memory, cpu, or trace/i);
+  assert.match(payload.error.message, /perf area must be frames, memory, cpu, or trace/i);
 });
 
 test('perf cpu profile start forwards simpleperf kind and out path', async () => {

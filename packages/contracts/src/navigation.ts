@@ -39,18 +39,6 @@ export type OrientationCommandResult = {
   message: string;
 };
 
-/**
- * @deprecated The `rotate` command was renamed to `orientation`. This is the
- * legacy response contract (`action: 'rotate'`) that shipped in v0.18/v0.19,
- * retained for existing SDK consumers until the next major version. New code
- * should use {@link OrientationCommandResult}.
- */
-export type RotateCommandResult = {
-  action: 'rotate';
-  orientation: DeviceRotation;
-  message: string;
-};
-
 /** `app-switcher` — `{ action: 'app-switcher', message: 'Opened app switcher' }`. */
 export type AppSwitcherCommandResult = {
   action: 'app-switcher';

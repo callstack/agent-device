@@ -12,7 +12,11 @@ import {
 } from '../../cli-schema/command-schema.ts';
 import { isFlagSupportedForCommand } from '../../cli-schema/option-schema.ts';
 import { isKnownCliCommandName } from '../../command-catalog.ts';
-import { cliCommandAlias, normalizeCliCommandAlias } from '../../commands/cli-command-aliases.ts';
+import {
+  cliCommandAlias,
+  normalizeCliCommandAlias,
+  retiredCliCommandMessage,
+} from '../../commands/cli-command-aliases.ts';
 import { formatUnknownFlagMessage, suggestCommandFor } from './command-suggestions.ts';
 
 type ParsedArgs = {
@@ -393,11 +397,7 @@ export async function usageForCommand(command: string): Promise<string | null> {
 }
 
 function normalizeCommandAlias(command: string): string {
-  if (command.toLowerCase() === 'rotate') {
-    throw new AppError(
-      'INVALID_ARGS',
-      'rotate was renamed to orientation; for the two-finger gesture use: gesture rotate',
-    );
-  }
+  const retiredMessage = retiredCliCommandMessage(command);
+  if (retiredMessage) throw new AppError('INVALID_ARGS', retiredMessage);
   return normalizeCliCommandAlias(command);
 }

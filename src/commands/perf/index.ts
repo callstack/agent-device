@@ -1,7 +1,7 @@
 import type { PerfOptions } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
-import { enumField, stringField } from '../command-input.ts';
+import { enumField, requiredField, stringField } from '../command-input.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
@@ -9,9 +9,11 @@ import {
   isPerfAction,
   isPerfArea,
   isPerfKind,
+  isRemovedAggregatePerfToken,
   isPerfSubject,
   PERF_ACTION_ERROR_MESSAGE,
   PERF_ACTION_VALUES,
+  PERF_AGGREGATE_REMOVED_ERROR_MESSAGE,
   PERF_AREA_ERROR_MESSAGE,
   PERF_AREA_VALUES,
   PERF_KIND_ERROR_MESSAGE,
@@ -36,7 +38,7 @@ export const perfCommandMetadata = defineFieldCommandMetadata(
   PERF_COMMAND_NAME,
   perfCommandDescription,
   {
-    area: enumField(PERF_AREA_VALUES),
+    area: requiredField(enumField(PERF_AREA_VALUES)),
     subject: enumField(PERF_SUBJECT_VALUES),
     action: enumField(PERF_ACTION_VALUES),
     kind: enumField(PERF_KIND_VALUES),
@@ -52,9 +54,9 @@ export const perfCommandDefinition = defineExecutableCommand(perfCommandMetadata
 
 const perfCliSchema = {
   usageOverride:
-    'perf frames --json\n  agent-device perf memory sample --json\n  agent-device perf memory snapshot [--kind android-hprof|memgraph] [--out <path>]\n  agent-device perf cpu profile start --kind xctrace [--template <name>] --out <profile.trace>\n  agent-device perf cpu profile stop --kind xctrace --out <profile.trace>\n  agent-device perf cpu profile report --kind xctrace --out <report.json>\n  agent-device perf trace start|stop --kind xctrace [--template <name>] --out <path>\n  agent-device perf cpu profile start --kind simpleperf --out <cpu.perf.data>\n  agent-device perf cpu profile stop --kind simpleperf\n  agent-device perf cpu profile report --kind simpleperf --out <cpu-report.json>\n  agent-device perf trace start|stop --kind perfetto [--out <path>]\n\n  Deprecated compatibility: perf, perf sample, perf metrics, and metrics return aggregate evidence. Prefer an explicit area.',
+    'perf frames --json\n  agent-device perf memory sample --json\n  agent-device perf memory snapshot [--kind android-hprof|memgraph] [--out <path>]\n  agent-device perf cpu profile start --kind xctrace [--template <name>] --out <profile.trace>\n  agent-device perf cpu profile stop --kind xctrace --out <profile.trace>\n  agent-device perf cpu profile report --kind xctrace --out <report.json>\n  agent-device perf trace start|stop --kind xctrace [--template <name>] --out <path>\n  agent-device perf cpu profile start --kind simpleperf --out <cpu.perf.data>\n  agent-device perf cpu profile stop --kind simpleperf\n  agent-device perf cpu profile report --kind simpleperf --out <cpu-report.json>\n  agent-device perf trace start|stop --kind perfetto [--out <path>]\n\n  Aggregate perf was removed in 0.21. Use one of the explicit forms above.',
   listUsageOverride: 'perf',
-  positionalArgs: ['area?', 'subjectOrAction?', 'action?'],
+  positionalArgs: ['area', 'subjectOrAction?', 'action?'],
   allowedFlags: ['kind', 'perfTemplate', 'out'],
 } as const satisfies CommandSchemaOverride;
 
@@ -94,7 +96,7 @@ export const perfCommandFamily = defineCommandFamilyFromFacets({
 });
 
 function perfPositionals(input: PerfOptions): string[] {
-  const area = input.area ?? (input.action ? 'metrics' : undefined);
+  const area = input.area;
   if (area === 'cpu') {
     return nativePerfPositionals(
       [
@@ -133,12 +135,6 @@ function readPerfPositionals(
   positionals: string[],
   flags: Pick<PerfOptions, 'kind' | 'template' | 'out'> = {},
 ): Pick<PerfOptions, 'area' | 'subject' | 'action' | 'kind' | 'template' | 'out'> {
-  if (positionals[0] !== undefined && positionals[1] === undefined) {
-    const normalized = positionals[0].toLowerCase();
-    if (isPerfAction(normalized)) {
-      return { action: normalized, kind: readPerfKind(flags.kind), out: flags.out };
-    }
-  }
   const area = readPerfArea(positionals[0]);
   if (area === 'cpu') {
     return {
@@ -167,9 +163,12 @@ function readPerfPositionals(
   };
 }
 
-function readPerfArea(value: string | undefined): PerfArea | undefined {
+function readPerfArea(value: string | undefined): PerfArea {
   const normalized = value?.toLowerCase();
-  if (normalized === undefined || isPerfArea(normalized)) return normalized;
+  if (isRemovedAggregatePerfToken(normalized)) {
+    throw new AppError('INVALID_ARGS', PERF_AGGREGATE_REMOVED_ERROR_MESSAGE);
+  }
+  if (isPerfArea(normalized)) return normalized;
   throw new AppError('INVALID_ARGS', PERF_AREA_ERROR_MESSAGE);
 }
 

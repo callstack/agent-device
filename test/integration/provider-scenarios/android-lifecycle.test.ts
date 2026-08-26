@@ -980,11 +980,11 @@ async function runAndroidAppControlAndObservabilityWorkflow(
     ['shell', 'dumpsys', 'gfxinfo', 'com.example.demo', 'reset'],
   ]);
 
-  const invalidPerfAction = await world.daemon.callCommand('perf', ['metrics', 'poll'], {
+  const invalidPerfAction = await world.daemon.callCommand('perf', ['frames', 'poll'], {
     platform: 'android',
     serial: PROVIDER_SCENARIO_ANDROID.id,
   });
-  assertRpcError(invalidPerfAction, 'INVALID_ARGS', /perf action must be sample/i);
+  assertRpcError(invalidPerfAction, 'INVALID_ARGS', /perf action must be/i);
 
   const logsStop = await client.observability.logs({ action: 'stop', ...selection });
   assert.equal(logsStop.stopped, true);

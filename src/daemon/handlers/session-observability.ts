@@ -3,7 +3,9 @@ import {
   isPerfArea,
   isPerfKind,
   isPerfMemoryKind,
+  isRemovedAggregatePerfToken,
   PERF_ACTION_ERROR_MESSAGE,
+  PERF_AGGREGATE_REMOVED_ERROR_MESSAGE,
   PERF_AREA_ERROR_MESSAGE,
   PERF_KIND_ERROR_MESSAGE,
   PERF_MEMORY_KIND_ERROR_MESSAGE,
@@ -45,7 +47,6 @@ import { handleAudioCommand } from './session-audio.ts';
 import { handleNativePerfCommand as handleAndroidNativePerfCommand } from './session-native-perf.ts';
 import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
 import { buildPerfFramesResponseData, buildPerfMemoryResponseData } from './session-perf.ts';
-import { buildLegacyPerfMetricsResponseData } from './session-perf-legacy.ts';
 import { handleNetworkCommand } from './session-network.ts';
 
 type ObservabilityParams = {
@@ -204,7 +205,12 @@ type PerfCommandRequest =
   | {
       ok: true;
       native: false;
-      area: 'metrics' | 'frames' | 'memory';
+      area: 'frames';
+    }
+  | {
+      ok: true;
+      native: false;
+      area: 'memory';
       action: 'sample' | 'snapshot';
       kind?: PerfKind;
       out?: string;
@@ -224,22 +230,9 @@ function resolvePerfCommandRequest(req: DaemonRequest): PerfCommandRequest | Dae
     return errorResponse('INVALID_ARGS', PERF_ACTION_ERROR_MESSAGE);
   }
 
-  const kindResult = readPerfKind(req.flags?.kind);
-  if (kindResult instanceof AppError) {
-    return { ok: false, error: normalizeError(kindResult) };
-  }
-  const validationError =
-    validatePerfAreaAction(area, action) ?? validatePerfFlags(req, area, action, kindResult);
-  if (validationError) return validationError;
-
-  return {
-    ok: true,
-    native: false,
-    area,
-    action: action as 'sample' | 'snapshot',
-    kind: kindResult,
-    out: readOptionalStringFlag(req.flags?.out),
-  };
+  const kind = readPerfKind(req.flags?.kind);
+  if (kind instanceof AppError) return { ok: false, error: normalizeError(kind) };
+  return validatePerfAreaAction(req, area, action, kind);
 }
 
 async function buildPerfCommandData(
@@ -250,7 +243,7 @@ async function buildPerfCommandData(
   const { sessionName, sessionStore, androidAdbExecutor } = params;
   if (request.area === 'memory') {
     return await buildPerfMemoryResponseData(session, {
-      action: toPerfMemoryAction(request.action),
+      action: request.action,
       kind: request.kind,
       out: request.out,
       cwd: params.req.meta?.cwd,
@@ -259,19 +252,14 @@ async function buildPerfCommandData(
       androidAdb: androidAdbExecutor,
     });
   }
-  if (request.area === 'metrics') {
-    return await buildLegacyPerfMetricsResponseData(session, {
-      androidAdb: androidAdbExecutor,
-      sessionName,
-      sessionStore,
-    });
-  }
   return await buildPerfFramesResponseData(session, { androidAdb: androidAdbExecutor });
 }
 
 function readPerfArea(value: unknown): PerfArea | AppError {
-  if (value == null) return 'metrics';
-  const area = value.toString().toLowerCase();
+  if (isRemovedAggregatePerfToken(value)) {
+    return new AppError('INVALID_ARGS', PERF_AGGREGATE_REMOVED_ERROR_MESSAGE);
+  }
+  const area = typeof value === 'string' ? value.toLowerCase() : '';
   return isPerfArea(area) ? area : new AppError('INVALID_ARGS', PERF_AREA_ERROR_MESSAGE);
 }
 
@@ -289,30 +277,32 @@ function readPerfKind(value: unknown): PerfKind | undefined | AppError {
 }
 
 function validatePerfAreaAction(
+  req: DaemonRequest,
   area: Exclude<PerfArea, 'cpu' | 'trace'>,
   action: PerfAction,
-): DaemonFailureResponse | undefined {
-  if (area === 'metrics') {
-    return action === 'sample'
-      ? undefined
-      : errorResponse('INVALID_ARGS', 'perf metrics only supports sample');
+  kind: PerfKind | undefined,
+): Exclude<PerfCommandRequest, { native: true }> | DaemonFailureResponse {
+  if (area === 'frames') {
+    if (action !== 'sample') {
+      return errorResponse('INVALID_ARGS', 'perf frames only supports sample');
+    }
+    const flagError = validatePerfFlags(req, area, action, kind);
+    return flagError ?? { ok: true, native: false, area };
   }
-  if (area === 'memory') {
-    return isPerfMemoryAction(action)
-      ? undefined
-      : errorResponse('INVALID_ARGS', 'perf memory requires sample or snapshot');
+  if (action !== 'sample' && action !== 'snapshot') {
+    return errorResponse('INVALID_ARGS', 'perf memory requires sample or snapshot');
   }
-  if (action === 'sample') return undefined;
-  return errorResponse('INVALID_ARGS', 'perf frames only supports sample');
-}
-
-function isPerfMemoryAction(action: PerfAction): action is 'sample' | 'snapshot' {
-  return action === 'sample' || action === 'snapshot';
-}
-
-function toPerfMemoryAction(action: PerfAction): 'sample' | 'snapshot' {
-  if (isPerfMemoryAction(action)) return action;
-  throw new AppError('INVALID_ARGS', 'perf memory requires sample or snapshot');
+  const flagError = validatePerfFlags(req, area, action, kind);
+  return (
+    flagError ?? {
+      ok: true,
+      native: false,
+      area,
+      action,
+      kind,
+      out: readOptionalStringFlag(req.flags?.out),
+    }
+  );
 }
 
 function validatePerfFlags(

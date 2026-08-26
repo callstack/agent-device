@@ -1,6 +1,7 @@
 import { defineStringEnum } from './string-enum.ts';
 
-export const PERF_AREA_VALUES = ['metrics', 'frames', 'memory', 'cpu', 'trace'] as const;
+export const PERF_AREA_VALUES = ['frames', 'memory', 'cpu', 'trace'] as const;
+export const PERF_AGGREGATE_ALIAS = 'metrics';
 export const PERF_ACTION_VALUES = ['sample', 'snapshot', 'start', 'stop', 'report'] as const;
 export const PERF_SUBJECT_VALUES = ['profile'] as const;
 export const PERF_KIND_VALUES = [
@@ -22,9 +23,11 @@ export type PerfAction = (typeof PERF_ACTION_VALUES)[number];
 export type PerfSubject = (typeof PERF_SUBJECT_VALUES)[number];
 export type PerfKind = (typeof PERF_KIND_VALUES)[number];
 
-export const PERF_AREA_ERROR_MESSAGE = 'perf area must be metrics, frames, memory, cpu, or trace';
+export const PERF_AREA_ERROR_MESSAGE = 'perf area must be frames, memory, cpu, or trace';
 export const PERF_ACTION_ERROR_MESSAGE =
   'perf action must be sample, snapshot, start, stop, or report';
+export const PERF_AGGREGATE_REMOVED_ERROR_MESSAGE =
+  'Aggregate perf was removed. Use perf frames, perf memory sample, perf cpu profile start|stop|report, or perf trace start|stop.';
 export const PERF_SUBJECT_ERROR_MESSAGE = 'perf cpu requires profile';
 export const PERF_KIND_ERROR_MESSAGE =
   'perf --kind must be xctrace, simpleperf, perfetto, android-hprof, or memgraph';
@@ -40,3 +43,10 @@ export const isPerfSubject = PERF_SUBJECTS.is;
 export const isPerfKind = PERF_KINDS.is;
 
 export const isPerfMemoryKind = PERF_MEMORY_KINDS.is;
+
+export function isRemovedAggregatePerfToken(value: unknown): boolean {
+  if (value == null) return true;
+  if (typeof value !== 'string') return false;
+  const normalized = value.toLowerCase();
+  return normalized === PERF_AGGREGATE_ALIAS || isPerfAction(normalized);
+}

@@ -120,7 +120,7 @@ test('batch rejects structured replay steps before daemon dispatch', async () =>
   assert.match(result.stderr, /not available through command batch/);
 });
 
-test('batch rejects invalid structured runtime without falling back to legacy parsing', async () => {
+test('batch rejects invalid structured runtime', async () => {
   const result = await runCliCapture([
     'batch',
     '--steps',
@@ -130,30 +130,51 @@ test('batch rejects invalid structured runtime without falling back to legacy pa
   assert.equal(result.code, 1);
   assert.equal(result.calls.length, 0);
   assert.match(result.stderr, /Batch step 1 runtime is invalid/);
-  assert.doesNotMatch(result.stderr, /unknown legacy field\(s\): input/);
 });
 
-test('batch accepts legacy positionals/flags steps with deprecation warning', async () => {
+test.each([
+  ['missing command', '{"input":{}}', /command is not available through command batch/],
+  [
+    'non-string command',
+    '{"command":42,"input":{}}',
+    /command is not available through command batch/,
+  ],
+  ['non-object input', '{"command":"open","input":"nope"}', /input must be an object/],
+  [
+    'unknown top-level field',
+    '{"command":"open","input":{},"bogus":1}',
+    /has unknown field\(s\): bogus/,
+  ],
+])('batch rejects %s before daemon dispatch', async (_name, step, expected) => {
+  const result = await runCliCapture(['batch', '--steps', `[${step}]`]);
+
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stderr, expected);
+});
+
+test('batch rejects removed positionals/flags steps with exact migration guidance', async () => {
   const result = await runCliCapture([
     'batch',
     '--steps',
     '[{"command":"open","positionals":["settings"],"flags":{"platform":"ios"}}]',
     '--json',
   ]);
-  assert.equal(result.code, null);
-  assert.match(result.stderr, /positionals\/flags are deprecated.*next major version/);
-  assert.equal(result.calls.length, 1);
-  const req = result.calls[0]!;
-  assert.equal(req.command, 'batch');
-  assert.deepEqual((req.flags?.batchSteps ?? [])[0], {
-    command: 'open',
-    positionals: ['settings'],
-    flags: { platform: 'ios' },
-    runtime: undefined,
-  });
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.error.code, 'INVALID_ARGS');
+  assert.match(
+    payload.error.message,
+    /Batch step 1 uses removed field\(s\): "positionals", "flags"/,
+  );
+  assert.match(
+    payload.error.message,
+    /\{"command":"open","input":\{"app":"settings","platform":"ios"\}\}/,
+  );
 });
 
-test('batch rejects excess legacy positionals before daemon projection', async () => {
+test('batch rejects removed positionals before interpreting their contents', async () => {
   const result = await runCliCapture([
     'batch',
     '--steps',
@@ -162,13 +183,10 @@ test('batch rejects excess legacy positionals before daemon projection', async (
 
   assert.equal(result.code, 1);
   assert.equal(result.calls.length, 0);
-  assert.match(
-    result.stderr,
-    /Batch step 1 open accepts at most 2 positional argument\(s\), received 3/,
-  );
+  assert.match(result.stderr, /Batch step 1 uses removed field\(s\): "positionals"/);
 });
 
-test('batch accepts a multiword ref label in a legacy get step', async () => {
+test('batch rejects removed positionals even when they were previously normalizable', async () => {
   const result = await runCliCapture([
     'batch',
     '--steps',
@@ -176,23 +194,19 @@ test('batch accepts a multiword ref label in a legacy get step', async () => {
     '--json',
   ]);
 
-  assert.equal(result.code, null);
-  assert.equal(result.calls.length, 1);
-  assert.deepEqual((result.calls[0]?.flags?.batchSteps ?? [])[0]?.positionals, [
-    'text',
-    '@e5~s3',
-    'World Clock',
-  ]);
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stdout, /Batch step 1 uses removed field\(s\): \\"positionals\\"/);
 });
 
-test('batch rejects hybrid structured and legacy step shapes', async () => {
+test('batch rejects removed fields on an otherwise structured step', async () => {
   const result = await runCliCapture([
     'batch',
     '--steps',
     '[{"command":"open","input":{},"positionals":["settings"]}]',
   ]);
   assert.equal(result.code, 1);
-  assert.match(result.stderr, /unknown legacy field\(s\): input/);
+  assert.match(result.stderr, /Batch step 1 uses removed field\(s\): "positionals"/);
 });
 
 test('batch --steps-file returns clear error for missing file', async () => {

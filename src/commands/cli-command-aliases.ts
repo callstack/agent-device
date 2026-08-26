@@ -1,4 +1,8 @@
 import type { CliFlags } from '@agent-device/contracts/command';
+import {
+  PERF_AGGREGATE_ALIAS,
+  PERF_AGGREGATE_REMOVED_ERROR_MESSAGE,
+} from '@agent-device/contracts/observability';
 
 type BooleanCliFlagKey = {
   [Key in keyof CliFlags]-?: Exclude<CliFlags[Key], undefined> extends boolean ? Key : never;
@@ -15,15 +19,25 @@ const CLI_COMMAND_ALIASES: readonly CliCommandAlias[] = [
   { alias: 'tap', command: 'press' },
   { alias: 'launch', command: 'open' },
   { alias: 'relaunch', command: 'open', impliedFlags: ['relaunch'] },
-  { alias: 'metrics', command: 'perf' },
 ];
 
 const aliasByToken: ReadonlyMap<string, CliCommandAlias> = new Map(
   CLI_COMMAND_ALIASES.map((entry) => [entry.alias, entry]),
 );
 
+const ROTATE_REMOVED_ERROR_MESSAGE =
+  'rotate was renamed to orientation; for the two-finger gesture use: gesture rotate';
+const RETIRED_CLI_COMMANDS: ReadonlyMap<string, string> = new Map([
+  [PERF_AGGREGATE_ALIAS, PERF_AGGREGATE_REMOVED_ERROR_MESSAGE],
+  ['rotate', ROTATE_REMOVED_ERROR_MESSAGE],
+]);
+
 export function normalizeCliCommandAlias(command: string): string {
   return aliasByToken.get(command.toLowerCase())?.command ?? command;
+}
+
+export function retiredCliCommandMessage(command: string): string | undefined {
+  return RETIRED_CLI_COMMANDS.get(command.toLowerCase());
 }
 
 export function cliCommandAlias(rawCommand: string): CliCommandAlias | undefined {

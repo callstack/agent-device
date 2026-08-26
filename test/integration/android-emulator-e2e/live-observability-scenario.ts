@@ -29,22 +29,16 @@ export async function assertObservabilityAndArtifacts(context: LiveContext): Pro
 }
 
 async function assertMetrics(context: LiveContext): Promise<void> {
-  const perf = await runStep(context, 'read Android fixture performance metrics', [
+  const perf = await runStep(context, 'read Android fixture memory metrics', [
     'perf',
-    'metrics',
+    'memory',
+    'sample',
   ]);
   const metrics = perf.json?.data?.metrics;
-  assert.equal(metrics?.startup?.available, true, JSON.stringify(perf.json));
-  assert.ok(Number(metrics?.startup?.lastDurationMs) > 0, JSON.stringify(perf.json));
   assert.equal(metrics?.memory?.available, true, JSON.stringify(perf.json));
   assert.ok(Number(metrics?.memory?.totalPssKb) > 0, JSON.stringify(perf.json));
-  assert.equal(metrics?.cpu?.available, true, JSON.stringify(perf.json));
-  assert.ok(Number.isFinite(Number(metrics?.cpu?.usagePercent)), JSON.stringify(perf.json));
-  verifyCommand(
-    context,
-    C.perf,
-    'Android startup, PSS memory, and CPU metrics are typed and numeric',
-  );
+  assert.deepEqual(Object.keys(metrics ?? {}), ['memory']);
+  verifyCommand(context, C.perf, 'Android PSS memory metrics are typed and numeric');
 }
 
 async function assertLogs(context: LiveContext): Promise<void> {

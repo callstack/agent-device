@@ -29,6 +29,8 @@ export type { NetworkEntry } from '../network-log.ts';
 export {
   PERF_ACTION_ERROR_MESSAGE,
   PERF_ACTION_VALUES,
+  PERF_AGGREGATE_ALIAS,
+  PERF_AGGREGATE_REMOVED_ERROR_MESSAGE,
   PERF_AREA_ERROR_MESSAGE,
   PERF_AREA_VALUES,
   PERF_KIND_ERROR_MESSAGE,
@@ -40,6 +42,7 @@ export {
   isPerfArea,
   isPerfKind,
   isPerfMemoryKind,
+  isRemovedAggregatePerfToken,
   isPerfSubject,
 } from '../perf.ts';
 export type { PerfAction, PerfArea, PerfKind, PerfSubject } from '../perf.ts';
