@@ -98,12 +98,9 @@ export default defineConfig({
     // --no-isolate = 205s wall vs 48s (module state thrashes across files),
     // threads = no change.
     slowTestThreshold: 500,
-    // Vitest otherwise derives 11 workers from this 12-core host. Three
-    // concurrent Codex worktrees can then request 33 workers and starve the
-    // subprocess/test-server paths behind exact timeout budgets. Two workers
-    // per local invocation preserves useful parallelism while leaving host
-    // headroom. CI stays uncapped so Vitest derives the runner-appropriate
-    // worker count from the isolated machine's available CPU pool.
+    // Four workers gave a worthwhile solo-run speedup without approaching
+    // Vitest's 11-worker default on a 12-core host. CI stays uncapped so Vitest
+    // derives the runner-appropriate worker count from its available CPU pool.
     maxWorkers: resolveVitestMaxWorkers(),
     // hermetic-env-setup clears worker-scoped device claims after every case.
     // Capping explicit `test.concurrent` work at one enforces that teardown

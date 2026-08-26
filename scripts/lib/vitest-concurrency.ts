@@ -1,11 +1,12 @@
 import os from 'node:os';
 
 /**
- * Keep one Vitest invocation modest enough to coexist with two other Codex
- * worktrees on a 12-core development host: 3 agents + (3 suites * 2 workers)
- * leaves roughly 3 cores for runners, subprocesses, simulators, and the OS.
+ * Keep one Vitest invocation below Vitest's 11-worker host default while using
+ * enough of a typical development machine to overlap the suite's I/O and timer
+ * waits. Measured 2026-08-25 on coverage shard 1/2: four workers took 74s,
+ * versus 128s with two and 217s with one.
  */
-export const DEFAULT_VITEST_MAX_WORKERS = 2;
+export const DEFAULT_VITEST_MAX_WORKERS = 4;
 
 /**
  * Opt-in escape hatch for a solo local run that owns the whole machine (see

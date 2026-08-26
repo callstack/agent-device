@@ -20,7 +20,8 @@ type ProjectShape = { test?: { name?: string; setupFiles?: readonly string[] } }
 
 test('vitest caps aggregate worker concurrency for parallel worktrees', () => {
   assert.equal(vitestConfig.test?.maxWorkers, resolveVitestMaxWorkers());
-  assert.equal(resolveVitestMaxWorkers({}), DEFAULT_VITEST_MAX_WORKERS);
+  assert.equal(DEFAULT_VITEST_MAX_WORKERS, 4);
+  assert.equal(resolveVitestMaxWorkers({}), 4);
   assert.equal(resolveVitestMaxWorkers({ CI: 'true' }), undefined);
 });
 

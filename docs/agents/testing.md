@@ -179,5 +179,5 @@ or remove flakes.
   family before adding tests; never raise the pin.
 - Keep isolation enabled and the pool on forks — both alternatives were measured and did not help.
   The useful optimization is importing the module under test, not a platform barrel.
-- Raise the two-worker local cap only for a solo run: `AGENT_DEVICE_VITEST_MAX_WORKERS=<n>`
-  (clamped to host CPUs, ignored in CI).
+- Local Vitest runs use a four-worker cap. Override it when a run needs a different host share:
+  `AGENT_DEVICE_VITEST_MAX_WORKERS=<n>` (clamped to host CPUs, ignored in CI).
