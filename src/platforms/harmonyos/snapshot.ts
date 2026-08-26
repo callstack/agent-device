@@ -6,9 +6,26 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotOptions } from '@agent-device/contracts/interactor-types';
+import { createTtlMemo } from '../../utils/ttl-memo.ts';
 import { runHarmonyHdc } from './hdc.ts';
 
 const MAX_NODES = 5_000;
+
+// Gesture planning only reads the Application rect's width/height, but every
+// read paid a full layout dump (`uitest dumpLayout` + `file recv` + `rm`).
+// Edge scrolls run several passes back to back, so a short memo collapses
+// them into one dump while staying far below the cadence where a foreground
+// change between passes would matter. Residual risk: a physical rotation or a
+// split-screen/multi-window transition inside the TTL window that no hook
+// covers yields one stale plan until expiry; agent-device itself cannot
+// rotate HarmonyOS (setHarmonyOrientation throws UNSUPPORTED_OPERATION).
+const HARMONY_GESTURE_VIEWPORT_MEMO_TTL_MS = 2_000;
+const harmonyGestureViewportMemo = createTtlMemo<string, Rect>({
+  ttlMs: HARMONY_GESTURE_VIEWPORT_MEMO_TTL_MS,
+  // Eager expiry so long-lived daemon processes do not accumulate one entry
+  // per device forever.
+  scheduleExpiry: true,
+});
 
 type ArkUiLayoutNode = {
   attributes?: Record<string, unknown>;
@@ -44,6 +61,9 @@ export async function snapshotHarmony(
 
 /** Returns the current ArkUI application viewport for coordinate gestures. */
 export async function readHarmonyGestureViewport(device: DeviceInfo): Promise<Rect> {
+  const memoKey = device.id;
+  const cached = harmonyGestureViewportMemo.get(memoKey);
+  if (cached) return cached;
   const snapshot = await snapshotHarmony(device);
   const viewport = snapshot.nodes.find((node) => node.type === 'Application' && node.rect)?.rect;
   if (!viewport || viewport.width <= 0 || viewport.height <= 0) {
@@ -52,7 +72,17 @@ export async function readHarmonyGestureViewport(device: DeviceInfo): Promise<Re
       'HarmonyOS snapshot did not expose an application viewport',
     );
   }
+  harmonyGestureViewportMemo.set(memoKey, viewport);
   return viewport;
+}
+
+/**
+ * Drop the cached gesture viewport for `device`. Call after anything that can
+ * change the foreground app or window geometry (app open/close, home, back,
+ * app switcher) so the next plan reads a fresh dump.
+ */
+export function invalidateHarmonyGestureViewport(device: DeviceInfo): void {
+  harmonyGestureViewportMemo.delete(device.id);
 }
 
 export function parseHarmonyLayout(raw: string): ArkUiLayoutNode {

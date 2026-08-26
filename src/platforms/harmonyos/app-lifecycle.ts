@@ -2,6 +2,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '../../utils/exec.ts';
 import { runHarmonyHdc } from './hdc.ts';
+import { invalidateHarmonyGestureViewport } from './snapshot.ts';
 
 export function parseHarmonyBundleList(rawOutput: string): string[] {
   return rawOutput
@@ -229,8 +230,10 @@ export async function openHarmonyApp(
       details: { output: result.stdout.trim() },
     });
   }
+  invalidateHarmonyGestureViewport(device);
 }
 
 export async function closeHarmonyApp(device: DeviceInfo, bundleId: string): Promise<void> {
   await runHarmonyHdc(device, ['shell', 'aa', 'force-stop', bundleId]);
+  invalidateHarmonyGestureViewport(device);
 }

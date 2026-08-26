@@ -3,15 +3,20 @@ import { beforeEach, test, vi } from 'vitest';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-const { runHarmonyHdc, sleep, readHarmonyGestureViewport } = vi.hoisted(() => ({
-  runHarmonyHdc: vi.fn(),
-  sleep: vi.fn(),
-  readHarmonyGestureViewport: vi.fn(),
-}));
+const { runHarmonyHdc, sleep, readHarmonyGestureViewport, invalidateHarmonyGestureViewport } =
+  vi.hoisted(() => ({
+    runHarmonyHdc: vi.fn(),
+    sleep: vi.fn(),
+    readHarmonyGestureViewport: vi.fn(),
+    invalidateHarmonyGestureViewport: vi.fn(),
+  }));
 
 vi.mock('../hdc.ts', () => ({ runHarmonyHdc }));
 vi.mock('../../../utils/timeouts.ts', () => ({ sleep }));
-vi.mock('../snapshot.ts', () => ({ readHarmonyGestureViewport }));
+vi.mock('../snapshot.ts', () => ({
+  readHarmonyGestureViewport,
+  invalidateHarmonyGestureViewport,
+}));
 
 import {
   appSwitcherHarmony,
@@ -41,6 +46,7 @@ beforeEach(() => {
   runHarmonyHdc.mockReset();
   sleep.mockReset();
   readHarmonyGestureViewport.mockReset();
+  invalidateHarmonyGestureViewport.mockReset();
 });
 
 test('HarmonyOS input primitives use the documented uiInput command names', async () => {
