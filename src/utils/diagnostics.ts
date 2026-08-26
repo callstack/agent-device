@@ -92,14 +92,8 @@ export function getDiagnosticsMeta(): {
 } {
   const scope = diagnosticsStorage.getStore();
   if (!scope) return {};
-  return {
-    diagnosticId: scope.diagnosticId,
-    requestId: scope.requestId,
-    session: scope.session,
-    command: scope.command,
-    debug: scope.debug,
-    flushOnSuccess: scope.flushOnSuccess,
-  };
+  const { diagnosticId, requestId, session, command, debug, flushOnSuccess } = scope;
+  return { diagnosticId, requestId, session, command, debug, flushOnSuccess };
 }
 
 /** Register a caller-declared literal that must not reach this request's diagnostics. */
@@ -212,27 +206,27 @@ export function flushDiagnosticsToSessionFile(
   if (!scope) return null;
   if (!options.force && !scope.debug && !scope.flushOnSuccess) return null;
   if (scope.events.length === 0) return null;
+  const values = sortedScopeSensitiveValues(scope);
 
   try {
     if (scope.logPath) {
       const pendingEvents = scope.events.slice(scope.liveWrittenEventCount);
       if (pendingEvents.length > 0) {
-        // Entries were fully redacted at emit time. `redactDiagnosticData` is
-        // idempotent over its own output (its replacements cannot re-match its
-        // patterns and strings stay length-bounded), so re-running it here
-        // cannot change bytes; only the caller-declared value replacement is
-        // repeated, so literals registered after an emit are still scrubbed.
-        const values = sortedScopeSensitiveValues(scope);
+        // Data payloads are fully redacted once at emit time; this flush pass
+        // repeats only the caller-declared literal replacement so literals
+        // registered after an emit are still scrubbed. Metadata fields are
+        // generated identifiers and internal phase names, deliberately no
+        // longer re-normalized here. Replacement output is not length-bounded:
+        // a short literal can grow past `[REDACTED]`.
         const lines = pendingEvents.map((entry) =>
           JSON.stringify(replaceSensitiveValues(entry, values)),
         );
         appendDiagnosticLine(scope.logPath, `${lines.join('\n')}\n`);
       }
-      const logPath = scope.logPath;
       const logRecord = scope.logRecord;
       scope.events = [];
       scope.liveWrittenEventCount = 0;
-      return { path: logPath, ...(logRecord ? { ref: logRecord } : {}) };
+      return { path: scope.logPath, ...(logRecord ? { ref: logRecord } : {}) };
     }
 
     const sessionDir = sanitizePathPart(scope.session ?? 'default');
@@ -242,7 +236,6 @@ export function flushDiagnosticsToSessionFile(
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filePath = path.join(baseDir, `${timestamp}-${scope.diagnosticId}.ndjson`);
     // Same single-value-replacement re-pass as the logPath branch above.
-    const values = sortedScopeSensitiveValues(scope);
     const lines = scope.events.map((entry) =>
       JSON.stringify(replaceSensitiveValues(entry, values)),
     );
@@ -256,11 +249,9 @@ export function flushDiagnosticsToSessionFile(
 
 /** Longest-first so an overlapping shorter literal cannot truncate a longer one. */
 function sortedScopeSensitiveValues(scope: DiagnosticsScope): readonly string[] {
-  if (!scope.sortedSensitiveValues) {
-    scope.sortedSensitiveValues = [...scope.sensitiveValues].sort(
-      (left, right) => right.length - left.length,
-    );
-  }
+  scope.sortedSensitiveValues ??= [...scope.sensitiveValues].sort(
+    (left, right) => right.length - left.length,
+  );
   return scope.sortedSensitiveValues;
 }
 
@@ -292,8 +283,7 @@ function sanitizePathPart(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
-// Directories already ensured by appendDiagnosticLine. Debug-mode scopes
-// append one line per event, so without this memo every line pays a mkdir.
+// Directories already ensured by appendDiagnosticLine; debug mode would mkdir per line otherwise.
 const ensuredDiagnosticDirs = new Set<string>();
 
 function appendDiagnosticLine(logPath: string, line: string): void {
