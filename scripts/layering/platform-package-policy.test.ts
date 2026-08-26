@@ -30,7 +30,15 @@ function declarations(): PlatformPackageDeclaration[] {
             '@agent-device/platform-apple/runner/client',
             '@agent-device/platform-apple/runner/test-host',
           ]
-        : [`@agent-device/platform-${family}`],
+        : family === 'android'
+          ? [
+              '@agent-device/platform-android',
+              '@agent-device/platform-android/adb-executor',
+              '@agent-device/platform-android/adb-host',
+              '@agent-device/platform-android/ime-lifecycle',
+              '@agent-device/platform-android/ime-helper',
+            ]
+          : [`@agent-device/platform-${family}`],
   }));
 }
 
@@ -225,6 +233,8 @@ test('platform packages may import the xml vocabulary package', () => {
     "import { parseXml } from '@agent-device/xml';",
   );
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+});
+
 test('transitional #2041 android adb subpaths are importable only by their named shims', () => {
   const shimImport =
     "export { resolveAndroidAdbExecutor } from '@agent-device/platform-android/adb-executor';";

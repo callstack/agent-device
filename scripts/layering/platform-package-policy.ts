@@ -165,7 +165,6 @@ function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): Lay
           `${expectedDir} must export exactly its root façade '${expectedName}'` +
             (expectedSubpaths.length > 1
               ? ` plus the enumerated mechanics facet and transitional subpaths`
-
               : ''),
         ),
       );
