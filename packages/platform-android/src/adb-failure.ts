@@ -134,7 +134,6 @@ export function classifyAndroidAdbFailure(
 import { AppError } from '@agent-device/kernel/errors';
 import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
 import type { AndroidAdbExecutorResult } from './adb-transport.ts';
-import { requireAndroidAdbHost } from './adb-host.ts';
 
 /**
  * Enriches a failed adb command error in place with the classified hint,
@@ -178,12 +177,11 @@ function classifyAdbCommandError(error: AppError): AndroidAdbFailureClassificati
  * Site-provided `details` win on key collisions, and a site `hint` is preserved
  * over the classified one.
  *
- * Nonzero exits build their details via the host's execFailureDetails, whose
- * processExitError flag makes normalizeError append the first stderr line to
- * the curated message — the classified hint and the stderr-excerpt enrichment
- * compose instead of competing. Semantic failures thrown at exit 0 (e.g. an
- * `am start` error printed on a successful exit) stay unflagged so a stray
- * stderr line never decorates a message the process exit does not back up.
+ * Nonzero exits set processExitError so normalizeError appends the first stderr
+ * line to the curated message — the classified hint and stderr-excerpt
+ * enrichment compose instead of competing. Semantic failures thrown at exit 0
+ * (e.g. an `am start` error printed on a successful exit) stay unflagged so a
+ * stray stderr line never decorates a message the process exit does not back up.
  */
 export function androidAdbResultError(
   message: string,
@@ -193,7 +191,13 @@ export function androidAdbResultError(
   const failureDetails =
     result.exitCode === 0
       ? { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode, ...details }
-      : requireAndroidAdbHost().execFailureDetails(result, details);
+      : {
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+          processExitError: true,
+          ...details,
+        };
   return attachAdbFailureHint(new AppError('COMMAND_FAILED', message, failureDetails));
 }
 

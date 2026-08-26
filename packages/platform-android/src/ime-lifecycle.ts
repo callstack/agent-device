@@ -4,7 +4,7 @@
 // `ime-activation.ts` (the activation transaction), and `ime-restore.ts` (restore + startup
 // orphan recovery).
 
-import { runAndroidHostAdb } from './adb-executor.ts';
+import { runAndroidHostAdb } from './adb-host.ts';
 
 export { activateAndroidTestIme } from './ime-activation.ts';
 export {

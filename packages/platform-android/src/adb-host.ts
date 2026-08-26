@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type {
   AndroidHelperInstallDecision,
   AndroidImeHelperArtifact,
@@ -95,6 +96,14 @@ export type AndroidAdbHost = Readonly<{
 
 let boundHost: AndroidAdbHost | undefined;
 
+/** Scoped override for host-global and explicitly serial-qualified adb argv. */
+export type AndroidAdbHostTransport = (
+  args: string[],
+  options?: AndroidAdbExecutorOptions,
+) => Promise<AndroidAdbExecutorResult>;
+
+const androidAdbHostTransportScope = new AsyncLocalStorage<AndroidAdbHostTransport>();
+
 /** Composition-time wiring; the last bind wins so test harnesses can rebind. */
 export function bindAndroidAdbHost(host: AndroidAdbHost): void {
   boundHost = host;
@@ -108,6 +117,39 @@ export function requireAndroidAdbHost(): AndroidAdbHost {
     );
   }
   return boundHost;
+}
+
+/**
+ * Runs host-level adb through one package-owned failure contract. A scoped
+ * transport wins over the injected local host port; nested scopes are
+ * innermost-first and restore automatically.
+ */
+export async function runAndroidHostAdb(
+  args: string[],
+  options?: AndroidAdbExecutorOptions,
+): Promise<AndroidAdbExecutorResult> {
+  const host = requireAndroidAdbHost();
+  const transport = androidAdbHostTransportScope.getStore();
+  const result = host.coerceAdbResult(
+    transport
+      ? await transport(args, options)
+      : await host.execHostAdb(args, { ...options, allowFailure: true }),
+  );
+  if (!options?.allowFailure && result.exitCode !== 0) {
+    const { androidAdbResultError } = await import('./adb-failure.ts');
+    throw androidAdbResultError(
+      `adb ${args.join(' ')} exited with code ${result.exitCode}`,
+      result,
+    );
+  }
+  return result;
+}
+
+export async function withAndroidHostAdbTransport<T>(
+  transport: AndroidAdbHostTransport,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return await androidAdbHostTransportScope.run(transport, fn);
 }
 
 export function emitAndroidAdbDiagnostic(event: AndroidAdbDiagnosticEvent): void {
