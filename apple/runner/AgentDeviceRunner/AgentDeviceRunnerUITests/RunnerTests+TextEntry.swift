@@ -47,7 +47,7 @@ extension RunnerTests {
     static let verificationStabilityWindow: TimeInterval = 0.2
     /// How long the commit wait tolerates seeing NO further progress toward the expected value.
     /// Numerically the flat deadline this replaced, so a pipeline that delivers nothing is
-    /// condemned at exactly the same instant it always was (see `SynthesizedCommitBudget`).
+    /// condemned at exactly the same instant it always was (see `SynthesizedCommitDeadline`).
     static let synthesizedCommitStallTimeout: TimeInterval = 3.0
     /// The commit wait's absolute bound, however long characters keep arriving. Sits well inside
     /// the daemon's per-command budget (`RUNNER_COMMAND_TIMEOUT_MS`, 45s), which also has to cover

@@ -266,11 +266,13 @@ extension RunnerTests {
   ///
   /// The deadline is a local `var`, started from this loop's own first `now()` and advanced from
   /// the same observation the progress check reads, so "did the burst move" and "is time up" are
-  /// two statements in one loop rather than a coupling between separately-held state.
+  /// two statements in one loop. The budget defaults to the shipped one, so only a test that is
+  /// asking about time has to name it.
   static func awaitSynthesizedCommitOutcome(
     expectedText: String,
     placeholder: String?,
-    budget: SynthesizedCommitBudget,
+    stallBudget: TimeInterval = TextEntryTiming.synthesizedCommitStallTimeout,
+    ceiling: TimeInterval = TextEntryTiming.synthesizedCommitCeiling,
     now: () -> Date,
     observe: () -> String?,
     waitForNextObservation: () -> Void
@@ -281,7 +283,7 @@ extension RunnerTests {
     if Self.textMatchesPlaceholder(expectedText, placeholder: placeholder) {
       return .notObserved
     }
-    var deadline = budget.deadline(startedAt: now())
+    var deadline = SynthesizedCommitDeadline(startedAt: now(), stallBudget: stallBudget, ceiling: ceiling)
     // The deadline is checked AFTER an observation, never before one, so the last thing that
     // happens before condemning a commit is a read. Checking first would condemn a commit that
     // landed during the final poll sleep — the exact loaded-host timing this wait exists for.
@@ -337,7 +339,8 @@ extension RunnerTests {
   static func awaitSynthesizedReplacementCommitOutcome(
     expectedText: String,
     placeholder: String?,
-    budget: SynthesizedCommitBudget,
+    stallBudget: TimeInterval = TextEntryTiming.synthesizedCommitStallTimeout,
+    ceiling: TimeInterval = TextEntryTiming.synthesizedCommitCeiling,
     now: () -> Date,
     observe: () -> String?,
     waitForNextObservation: () -> Void
@@ -345,7 +348,7 @@ extension RunnerTests {
     if Self.textMatchesPlaceholder(expectedText, placeholder: placeholder) {
       return .notObserved
     }
-    var deadline = budget.deadline(startedAt: now())
+    var deadline = SynthesizedCommitDeadline(startedAt: now(), stallBudget: stallBudget, ceiling: ceiling)
     while true {
       let observedText = observe()
       if observedText == expectedText {
@@ -434,7 +437,6 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: expectedText,
       placeholder: ingredients.placeholder,
-      budget: .standard,
       now: { Date() },
       observe: ingredients.observe,
       waitForNextObservation: ingredients.waitForNextObservation
@@ -471,7 +473,6 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: expectedText,
       placeholder: ingredients.placeholder,
-      budget: .standard,
       now: { Date() },
       observe: ingredients.observe,
       waitForNextObservation: ingredients.waitForNextObservation

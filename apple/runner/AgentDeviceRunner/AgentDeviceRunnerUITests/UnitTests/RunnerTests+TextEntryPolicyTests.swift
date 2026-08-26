@@ -92,7 +92,8 @@ extension RunnerTests {
 
   /// A hand-driven clock for the commit waits. Time moves only where the wait sleeps, which is
   /// what makes "the burst kept landing" and "the pipeline froze" expressible as two sequences of
-  /// the same length rather than as wall-clock luck.
+  /// the same length rather than as wall-clock luck — and a test that never advances it cannot
+  /// expire any budget, so only a test asking about time names `stallBudget`/`ceiling`.
   final class CommitWaitClock {
     private let origin = Date(timeIntervalSinceReferenceDate: 0)
     private var current = Date(timeIntervalSinceReferenceDate: 0)
@@ -107,10 +108,6 @@ extension RunnerTests {
     var elapsed: TimeInterval { current.timeIntervalSince(origin) }
   }
 
-  /// A budget no test can exhaust, so a test that never advances the clock is asking about
-  /// settling rather than about time.
-  static let unboundedCommitBudget = SynthesizedCommitBudget(stallBudget: 3600, ceiling: 3600)
-
   // #1874, through the shipped wait rather than a detached policy object: a burst that keeps
   // landing must outlive the flat 3s deadline that used to govern it. Each poll advances the
   // clock 2s and delivers one more character, so the wait is never idle for a full stall budget
@@ -123,7 +120,8 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: expected,
       placeholder: nil,
-      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
+      stallBudget: 3,
+      ceiling: 10,
       now: clock.read,
       observe: { String(expected.prefix(landed * 2)) },
       waitForNextObservation: {
@@ -148,7 +146,8 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: "hardware",
       placeholder: nil,
-      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
+      stallBudget: 3,
+      ceiling: 10,
       now: clock.read,
       observe: { "ha" },
       waitForNextObservation: {
@@ -168,7 +167,8 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: "hardware",
       placeholder: nil,
-      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
+      stallBudget: 3,
+      ceiling: 10,
       now: clock.read,
       observe: { "ha" },
       waitForNextObservation: { clock.advance(1) }
@@ -186,7 +186,8 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: String(repeating: "a", count: 100),
       placeholder: nil,
-      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
+      stallBudget: 3,
+      ceiling: 10,
       now: clock.read,
       observe: { String(repeating: "a", count: landed) },
       waitForNextObservation: {
@@ -209,7 +210,8 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: "ada@example",
       placeholder: nil,
-      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
+      stallBudget: 3,
+      ceiling: 10,
       now: clock.read,
       observe: { observations[min(index, observations.count - 1)] },
       waitForNextObservation: {
@@ -230,7 +232,8 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: "hardware-keyboard",
       placeholder: nil,
-      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
+      stallBudget: 3,
+      ceiling: 10,
       now: clock.read,
       observe: { "h" },
       waitForNextObservation: {
@@ -249,8 +252,7 @@ extension RunnerTests {
       let outcome = Self.awaitSynthesizedCommitOutcome(
         expectedText: "hardware-keyboard",
         placeholder: nil,
-        budget: Self.unboundedCommitBudget,
-        now: clock.read,
+          now: clock.read,
         observe: { observed },
         waitForNextObservation: { polls += 1 }
       )
@@ -268,7 +270,6 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: "hardware-keyboard",
       placeholder: nil,
-      budget: Self.unboundedCommitBudget,
       now: clock.read,
       observe: { steps[min(index, steps.count - 1)] },
       waitForNextObservation: { index += 1 }
@@ -286,7 +287,8 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: "hardware-keyboard",
       placeholder: nil,
-      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
+      stallBudget: 3,
+      ceiling: 10,
       now: clock.read,
       // The value lands during the sleep that takes the clock past the stall budget: the read
       // happens first, so it is still observed.
@@ -311,7 +313,6 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedCommitOutcome(
       expectedText: expectedText,
       placeholder: "0.00",
-      budget: Self.unboundedCommitBudget,
       now: clock.read,
       observe: {
         observations += 1
@@ -341,8 +342,7 @@ extension RunnerTests {
       let outcome = Self.awaitSynthesizedCommitOutcome(
         expectedText: testCase.expectedText,
         placeholder: testCase.placeholder,
-        budget: Self.unboundedCommitBudget,
-        now: clock.read,
+          now: clock.read,
         observe: { testCase.expectedText },
         waitForNextObservation: {}
       )
@@ -371,8 +371,7 @@ extension RunnerTests {
         Self.awaitSynthesizedCommitOutcome(
           expectedText: corruption.expected,
           placeholder: nil,
-          budget: Self.unboundedCommitBudget,
-          now: appendClock.read,
+              now: appendClock.read,
           observe: { corruption.observedAfterDrop },
           waitForNextObservation: {}
         ),
@@ -384,7 +383,8 @@ extension RunnerTests {
       let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
         expectedText: corruption.expected,
         placeholder: nil,
-        budget: SynthesizedCommitBudget(stallBudget: 2, ceiling: 10),
+        stallBudget: 2,
+        ceiling: 10,
         now: clock.read,
         observe: { corruption.observedAfterDrop },
         waitForNextObservation: {
@@ -409,7 +409,6 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: "ada@example",
       placeholder: nil,
-      budget: Self.unboundedCommitBudget,
       now: clock.read,
       observe: { steps[min(index, steps.count - 1)] },
       waitForNextObservation: { index += 1 }
@@ -426,7 +425,8 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: "ada@example",
       placeholder: nil,
-      budget: SynthesizedCommitBudget(stallBudget: 3, ceiling: 10),
+      stallBudget: 3,
+      ceiling: 10,
       now: clock.read,
       observe: { polls == 0 ? "ada@exampl" : "ada@example" },
       waitForNextObservation: {
@@ -445,7 +445,6 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: "0.00",
       placeholder: "0.00",
-      budget: Self.unboundedCommitBudget,
       now: clock.read,
       observe: {
         observations += 1
@@ -584,7 +583,7 @@ extension RunnerTests {
     // correctly a failure (see `testSynthesizedReplacementCommitCatchesDroppedMiddleCharacters` for
     // why it must NOT be waved through as success), so this call runs the real 3-second deadline
     // (`TextEntryTiming.synthesizedCommitStallTimeout`; a nil read never advances the expected
-    // prefix, so `SynthesizedCommitBudget` grants it no extra time) before returning. That is
+    // prefix, so `SynthesizedCommitDeadline` grants it no extra time) before returning. That is
     // deliberate here, not a flake: this test only runs in the nightly XCUITest lane (see
     // `runner-xctest-local-run-gotchas` memory / ios.yml's `-only-testing:` allowlist), where a
     // few extra seconds is a non-issue, and the alternative — asserting `nil` on a wiring path
