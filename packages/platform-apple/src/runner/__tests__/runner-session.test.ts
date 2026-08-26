@@ -130,6 +130,7 @@ import {
   stopIosRunnerSession,
   validateRunnerDevice,
 } from '../runner-session.ts';
+import { IOS_RUNNER_CONTAINER_BUNDLE_IDS } from '../runner-xctestrun.ts';
 import {
   cleanupRunnerLeasesForOwner,
   prepareRunnerLeaseForStartup,
@@ -1505,6 +1506,33 @@ test('runner session stale bundle cleanup is best-effort when simctl stalls', as
 
   assert.equal(session.deviceId, device.id);
   assert.equal(mockRunCmdBackground.mock.calls.length, 1);
+});
+
+test('stale bundle uninstalls start concurrently', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-clean-concurrent-sim' };
+  const uninstallGates: Array<
+    (result: { exitCode: number; stdout: string; stderr: string }) => void
+  > = [];
+  mockRunXcrun.mockImplementation(async (args: string[]) => {
+    if (args.includes('uninstall')) {
+      return await new Promise((resolve) => {
+        uninstallGates.push(resolve);
+      });
+    }
+    return { exitCode: 0, stdout: '', stderr: '' };
+  });
+
+  const sessionPromise = ensureRunnerSession(device, { cleanStaleBundles: true });
+  // Both container bundle uninstalls must be in flight before either resolves.
+  await vi.waitFor(() =>
+    assert.equal(uninstallGates.length, IOS_RUNNER_CONTAINER_BUNDLE_IDS.length),
+  );
+  for (const resolve of uninstallGates) {
+    resolve({ exitCode: 0, stdout: '', stderr: '' });
+  }
+  const session = await sessionPromise;
+
+  assert.equal(session.deviceId, device.id);
 });
 
 test('runner session stop kills only owned stale xcodebuild runner processes without in-memory session', async () => {

@@ -369,13 +369,15 @@ async function cleanupStaleSimulatorRunnerBundles(device: DeviceInfo): Promise<v
     return;
   }
 
-  for (const bundleId of IOS_RUNNER_CONTAINER_BUNDLE_IDS) {
-    const result = await uninstallStaleSimulatorRunnerBundle(device, bundleId);
-    if (!result || isBenignSimulatorRunnerUninstallResult(result)) {
-      continue;
-    }
-    // Best-effort cleanup only; xcodebuild may still be able to install.
-  }
+  await Promise.allSettled(
+    IOS_RUNNER_CONTAINER_BUNDLE_IDS.map(async (bundleId) => {
+      const result = await uninstallStaleSimulatorRunnerBundle(device, bundleId);
+      if (!result || isBenignSimulatorRunnerUninstallResult(result)) {
+        return;
+      }
+      // Best-effort cleanup only; xcodebuild may still be able to install.
+    }),
+  );
 }
 
 async function uninstallStaleSimulatorRunnerBundle(
