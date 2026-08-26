@@ -134,7 +134,11 @@ export const LINUX_PLATFORM_COVERAGE = {
     LINUX_RUNTIME_EVIDENCE.test,
     'Linux runtime facts explicitly report network capture unavailable',
   ),
-  [C.audio]: denial('audio', 'Linux capability declaration rejects native audio probing'),
+  [C.audio]: contract(
+    LINUX_RUNTIME_EVIDENCE.path,
+    LINUX_RUNTIME_EVIDENCE.test,
+    'Linux runtime facts explicitly report audio probing unavailable',
+  ),
   [C.replay]: commandEvidenceLive(
     'the command-evidence lane replays a dedicated Linux script with a live session',
   ),

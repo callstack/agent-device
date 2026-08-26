@@ -89,7 +89,7 @@ export const WEB_PLATFORM_COVERAGE = {
     'web capability projection reflects runtime-owned unsupported operations',
   ),
   [C.doctor]: contract(
-    'src/daemon/handlers/__tests__/session-doctor-web.test.ts',
+    'src/platforms/web/__tests__/doctor.test.ts',
     'web doctor lifecycle check reports live managed Chrome process count',
     'web doctor reports managed browser lifecycle evidence',
   ),
@@ -127,7 +127,7 @@ export const WEB_PLATFORM_COVERAGE = {
   [C.network]: live('network dump returns the fixture GET request and requested headers'),
   [C.audio]: contract(
     'src/daemon/handlers/__tests__/session-audio.test.ts',
-    'audio probe forwards daemon millisecond timing to web provider',
+    'audio probe forwards daemon millisecond timing to the web query operation',
     'web audio probe forwards typed duration and bucket values',
   ),
   [C.replay]: contract(

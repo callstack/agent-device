@@ -139,7 +139,13 @@ test('live iOS scenarios reference fixture identifiers that exist', () => {
 });
 
 test('capability classifications match executable simulator behavior', () => {
-  const factOwnedCommands: readonly string[] = [PUBLIC_COMMANDS.viewport, PUBLIC_COMMANDS.tvRemote];
+  const factOwnedCommands: readonly string[] = [
+    PUBLIC_COMMANDS.viewport,
+    PUBLIC_COMMANDS.tvRemote,
+    // R60: the darwin-only ScreenCaptureKit gate moved from the capability catalog into the
+    // exact-owner runtime fact, so audio admission is no longer host-dependent here.
+    PUBLIC_COMMANDS.audio,
+  ];
   for (const [command, entry] of Object.entries(IOS_SIMULATOR_E2E_COVERAGE)) {
     if (factOwnedCommands.includes(command)) {
       assert.equal(
@@ -150,14 +156,6 @@ test('capability classifications match executable simulator behavior', () => {
       continue;
     }
     const supported = isCommandSupportedOnDevice(command, IOS_SIMULATOR);
-    if (command === PUBLIC_COMMANDS.audio) {
-      assert.equal(
-        supported,
-        process.platform === 'darwin',
-        'simulator audio admission follows host ScreenCaptureKit availability',
-      );
-      continue;
-    }
     if (entry.level === 'capability-denial') {
       assert.equal(supported, false, `${command} denial must match capability admission`);
     } else {

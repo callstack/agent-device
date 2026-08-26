@@ -100,7 +100,7 @@ export const MACOS_PLATFORM_COVERAGE = {
   ),
   [C.audio]: contract(
     'src/daemon/handlers/__tests__/session-audio.test.ts',
-    'audio probe starts macOS ScreenCaptureKit helper and reads status',
+    'audio probe start binds once, adopts the durable handle, and answers from it',
     'macOS audio probe starts the ScreenCaptureKit helper and reports its backend',
   ),
   [C.replay]: gap('No command-specific macOS replay evidence exists beyond the suite runner'),

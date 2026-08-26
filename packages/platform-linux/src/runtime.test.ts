@@ -121,6 +121,17 @@ test.each([
       device.kind === 'device' ? 'function' : 'undefined',
     );
     expectLinuxNavigationAndKeyboardFacts(binding, device);
+    // R60: audio probing never carried a Linux capability bucket, so every leaf refuses both
+    // probe operations at admission.
+    expect(binding.facts.operations.audioProbeStart).toMatchObject({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+    });
+    expect(binding.facts.operations.audioProbeQuery).toMatchObject({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+    });
+    expect(binding.operations.audioProbeStart).toBeUndefined();
     expect(binding.facts.operations.captureScreenshot.available).toBe(device.kind === 'device');
     expect(binding.operations.captureScreenshot).toBeTypeOf(
       device.kind === 'device' ? 'function' : 'undefined',

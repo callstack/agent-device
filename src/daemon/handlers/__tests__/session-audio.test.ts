@@ -275,6 +275,24 @@ test('audio probe start binds once, adopts the durable handle, and answers from 
   if (record.status === 'decoded') assert.equal(record.envelope.lifecycle, 'open');
 });
 
+test('audio probe starts host helper for iOS simulator audio', async () => {
+  const sessionStore = makeSessionStore('agent-device-session-audio-');
+  const session = makeIosSession('ios-sim');
+  sessionStore.set('ios-sim', session);
+  const runtime = fakeCaptureRuntime(session.device, runningStatus());
+  const { params } = audioParams('ios-sim', sessionStore, session.device, {
+    positionals: ['probe', 'start', '1000', '500'],
+    cells: { capture: true, query: false },
+    operations: runtime.operations,
+  });
+
+  const response = await handleAudioCommand(params as never);
+
+  assert.ok(response.ok);
+  assert.equal(runtime.startCalls.length, 1);
+  assert.ok(sessionStore.get('ios-sim')?.audioProbe);
+});
+
 test(ANDROID_AUDIO_CONTRACT_EVIDENCE.testName, async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
   const session = makeAndroidSession('android');
