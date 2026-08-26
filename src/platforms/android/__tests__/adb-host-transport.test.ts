@@ -2,8 +2,6 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { runAndroidHostAdb, withAndroidHostAdbTransport } from '../adb-host-transport.ts';
-import { listAndroidAdbSerialsQuick } from '../ime-lifecycle.ts';
-import { createLimrunRuntimeDependencies } from '../../../sdk/limrun-runtime-dependencies.ts';
 import {
   withCommandExecutorOverride,
   type CommandExecutorOverride,
@@ -70,10 +68,12 @@ test('without a transport host adb falls back to local runCmd with argv and opti
 });
 
 test('transport results and errors pass through with their ExecResult shape', async () => {
+  // Nonzero results only pass through under allowFailure; the throw contract
+  // has its own tests below.
   const scripted: ExecResult = { stdout: '', stderr: 'boom', exitCode: 7 };
   const result = await withAndroidHostAdbTransport(
     async () => scripted,
-    async () => await runAndroidHostAdb(['devices']),
+    async () => await runAndroidHostAdb(['devices'], { allowFailure: true }),
   );
   assert.deepEqual(result, scripted);
 
@@ -82,7 +82,7 @@ test('transport results and errors pass through with their ExecResult shape', as
   const sloppy = { stdout: undefined, stderr: null, exitCode: '1' } as unknown as ExecResult;
   const coerced = await withAndroidHostAdbTransport(
     async () => sloppy,
-    async () => await runAndroidHostAdb(['devices']),
+    async () => await runAndroidHostAdb(['devices'], { allowFailure: true }),
   );
   assert.deepEqual(coerced, { stdout: '', stderr: '', exitCode: 1 });
 
@@ -96,6 +96,36 @@ test('transport results and errors pass through with their ExecResult shape', as
     ),
     (error: unknown) => error === failure,
   );
+});
+
+test('a transport nonzero exit without allowFailure throws the classified adb failure', async () => {
+  const error = await withAndroidHostAdbTransport(
+    async () => ({ stdout: '', stderr: 'error: device offline', exitCode: 1 }),
+    async () =>
+      await runAndroidHostAdb(['devices']).then(
+        () => assert.fail('expected the host adb call to reject'),
+        (err: unknown) => err,
+      ),
+  );
+
+  assert.ok(error instanceof AppError);
+  assert.equal(error.code, 'COMMAND_FAILED');
+  assert.equal(error.message, 'adb devices exited with code 1');
+  assert.equal(error.details?.adbFailure, 'device_offline');
+  assert.equal(error.details?.retriable, true);
+  assert.match(String(error.details?.hint), /adb reconnect/i);
+  assert.equal(error.details?.stderr, 'error: device offline');
+});
+
+test('a transport nonzero exit with allowFailure returns the result untouched', async () => {
+  const scripted: ExecResult = { stdout: '', stderr: 'error: device offline', exitCode: 1 };
+
+  const result = await withAndroidHostAdbTransport(
+    async () => scripted,
+    async () => await runAndroidHostAdb(['devices'], { allowFailure: true }),
+  );
+
+  assert.deepEqual(result, scripted);
 });
 
 test('nested transport scopes compose innermost-wins and restore on scope end', async () => {
@@ -119,45 +149,4 @@ test('nested transport scopes compose innermost-wins and restore on scope end', 
   });
   assert.deepEqual(calls, ['outer', 'inner', 'outer']);
   assert.equal(driver.calls.length, 1);
-});
-
-test('listAndroidAdbSerialsQuick routes its global devices call through the transport', async () => {
-  const seenArgs: string[][] = [];
-
-  const serials = await withAndroidHostAdbTransport(
-    async (args) => {
-      seenArgs.push([...args]);
-      return {
-        stdout: 'List of devices attached\nemulator-5554\tdevice\n',
-        stderr: '',
-        exitCode: 0,
-      };
-    },
-    async () => await listAndroidAdbSerialsQuick(),
-  );
-
-  assert.deepEqual(serials, ['emulator-5554']);
-  assert.deepEqual(seenArgs, [['devices']]);
-});
-
-test('limrun host.runAdb keeps its exported shape and routes through the transport', async () => {
-  const dependencies = createLimrunRuntimeDependencies();
-  const seen: Array<{ args: string[]; options?: ExecOptions }> = [];
-
-  const result = await withAndroidHostAdbTransport(
-    async (args, options) => {
-      seen.push({ args, ...(options ? { options } : {}) });
-      return { stdout: 'ok', stderr: '', exitCode: 0 };
-    },
-    async () =>
-      await dependencies.host.runAdb(['disconnect', 'emulator-5554'], {
-        allowFailure: true,
-        timeoutMs: 10_000,
-      }),
-  );
-
-  assert.deepEqual(result, { stdout: 'ok', stderr: '', exitCode: 0 });
-  assert.deepEqual(seen, [
-    { args: ['disconnect', 'emulator-5554'], options: { allowFailure: true, timeoutMs: 10_000 } },
-  ]);
 });

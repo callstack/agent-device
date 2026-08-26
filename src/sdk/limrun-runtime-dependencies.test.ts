@@ -136,3 +136,29 @@ test('Limrun appstate forwards an in-flight abort through the provider ADB execu
   await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   assert.equal(observedSignal, controller.signal);
 });
+
+test('host.runAdb keeps its exported shape and routes through the host transport', async () => {
+  const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
+  const { withAndroidHostAdbTransport } = await import(
+    '../platforms/android/adb-host-transport.ts'
+  );
+  const dependencies = createLimrunRuntimeDependencies();
+  const seen: Array<{ args: string[]; options?: Record<string, unknown> }> = [];
+
+  const result = await withAndroidHostAdbTransport(
+    async (args, options) => {
+      seen.push({ args, ...(options ? { options } : {}) });
+      return { stdout: 'ok', stderr: '', exitCode: 0 };
+    },
+    async () =>
+      await dependencies.host.runAdb(['disconnect', 'emulator-5554'], {
+        allowFailure: true,
+        timeoutMs: 10_000,
+      }),
+  );
+
+  assert.deepEqual(result, { stdout: 'ok', stderr: '', exitCode: 0 });
+  assert.deepEqual(seen, [
+    { args: ['disconnect', 'emulator-5554'], options: { allowFailure: true, timeoutMs: 10_000 } },
+  ]);
+});
