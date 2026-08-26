@@ -7,6 +7,15 @@ vi.mock('../../../utils/exec.ts', async (importOriginal) => {
   return { ...actual, runCmd: vi.fn() };
 });
 
+const { invalidateHarmonyGestureViewport } = vi.hoisted(() => ({
+  invalidateHarmonyGestureViewport: vi.fn(),
+}));
+
+vi.mock('../snapshot.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../snapshot.ts')>()),
+  invalidateHarmonyGestureViewport,
+}));
+
 import {
   closeHarmonyApp,
   listHarmonyApps,
@@ -32,6 +41,7 @@ const DEVICE = {
 beforeEach(() => {
   vi.useRealTimers();
   mockRunCmd.mockReset();
+  invalidateHarmonyGestureViewport.mockReset();
 });
 
 afterEach(() => {
@@ -146,6 +156,7 @@ test('HarmonyOS lifecycle commands use HDC bundle and ability primitives', async
       ['-t', 'harmony-1', 'shell', 'aa', 'force-stop', 'com.example.application'],
     ],
   );
+  assert.deepEqual(invalidateHarmonyGestureViewport.mock.calls, [[DEVICE], [DEVICE]]);
 });
 
 test('HarmonyOS app listing filters user-installed bundles through Bundle Manager metadata', async () => {

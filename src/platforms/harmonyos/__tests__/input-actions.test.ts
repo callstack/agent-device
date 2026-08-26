@@ -75,6 +75,7 @@ test('HarmonyOS input primitives use the documented uiInput command names', asyn
     ],
   );
   assert.deepEqual(sleep.mock.calls, [[25], [50]]);
+  assert.deepEqual(invalidateHarmonyGestureViewport.mock.calls, [[DEVICE], [DEVICE], [DEVICE]]);
 });
 
 test('HarmonyOS scroll derives a viewport-aware swipe plan', async () => {
