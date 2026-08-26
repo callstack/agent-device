@@ -159,10 +159,6 @@ export async function openIosDevice(device: DeviceInfo): Promise<void> {
     return;
   }
   if (device.kind !== 'simulator') return;
-  // ensureBootedSimulator consults the recently-booted memo first, so a fresh
-  // Booted observation costs no `simctl list` spawn here. A booted simulator
-  // returns without focusing (focusExisting is unset), matching the old
-  // explicit state check.
   await ensureBootedSimulator(device);
 }
 
