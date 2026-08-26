@@ -139,9 +139,8 @@ test('Limrun appstate forwards an in-flight abort through the provider ADB execu
 
 test('host.runAdb keeps its exported shape and routes through the host transport', async () => {
   const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
-  const { withAndroidHostAdbTransport } = await import(
-    '../platforms/android/adb-host-transport.ts'
-  );
+  const { withAndroidHostAdbTransport } =
+    await import('../platforms/android/adb-host-transport.ts');
   const dependencies = createLimrunRuntimeDependencies();
   const seen: Array<{ args: string[]; options?: Record<string, unknown> }> = [];
 
