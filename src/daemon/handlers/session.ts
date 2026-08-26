@@ -1,4 +1,3 @@
-import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { handleReleaseMaterializedPathsCommand } from './session-app-source-deployment.ts';
@@ -42,7 +41,12 @@ export type SessionCommandInput = {
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
-  androidAdbExecutor?: AndroidAdbExecutor;
+  /**
+   * Request-scoped Android adb transport override, opaque to the daemon (the
+   * `transportOverrides` pattern from `@agent-device/contracts/host-diagnostics`); the
+   * platform owner narrows it at its own boundary.
+   */
+  androidAdbExecutor?: unknown;
   bindDevice?: BindDeviceRuntime;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindExactDevice?: BindExactDeviceRuntime;

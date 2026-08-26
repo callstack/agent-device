@@ -36,6 +36,10 @@
     "./bounds": {
       "types": "./src/bounds.ts",
       "default": "./src/bounds.ts"
+    },
+    "./keyed-lock": {
+      "types": "./src/keyed-lock.ts",
+      "default": "./src/keyed-lock.ts"
     }
   }
 }

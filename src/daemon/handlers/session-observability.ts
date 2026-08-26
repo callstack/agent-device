@@ -26,7 +26,6 @@ import {
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../app-log.ts';
 import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import type { AudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
@@ -53,7 +52,12 @@ type ObservabilityParams = {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
-  androidAdbExecutor?: AndroidAdbExecutor;
+  /**
+   * Request-scoped Android adb transport override, opaque to the daemon (the
+   * `transportOverrides` pattern from `@agent-device/contracts/host-diagnostics`); narrowed
+   * only at the perf-handler boundary below.
+   */
+  androidAdbExecutor?: unknown;
   bindDevice?: BindDeviceRuntime;
   inspectFacts?: InspectDeviceRuntimeFacts;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
@@ -163,6 +167,13 @@ async function handleEventsCommand(params: ObservabilityParams): Promise<DaemonR
 // perf
 // ---------------------------------------------------------------------------
 
+// The perf handlers are being rewritten in the in-flight perf/trace migration and still name
+// the concrete Android transport type; the opaque request-scoped override narrows to their own
+// declared parameter type at this boundary only (see #2041).
+type PerfAndroidAdbTransport = NonNullable<
+  Parameters<typeof buildPerfFramesResponseData>[1]
+>['androidAdb'];
+
 async function handlePerfCommand(params: ObservabilityParams): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore, androidAdbExecutor } = params;
   const session = sessionStore.get(sessionName);
@@ -179,7 +190,7 @@ async function handlePerfCommand(params: ObservabilityParams): Promise<DaemonRes
         sessionName,
         sessionStore,
         session,
-        androidAdbExecutor,
+        androidAdbExecutor: androidAdbExecutor as PerfAndroidAdbTransport,
         area: request.area,
       });
     }
@@ -249,10 +260,12 @@ async function buildPerfCommandData(
       cwd: params.req.meta?.cwd,
       sessionName,
       sessionStore,
-      androidAdb: androidAdbExecutor,
+      androidAdb: androidAdbExecutor as PerfAndroidAdbTransport,
     });
   }
-  return await buildPerfFramesResponseData(session, { androidAdb: androidAdbExecutor });
+  return await buildPerfFramesResponseData(session, {
+    androidAdb: androidAdbExecutor as PerfAndroidAdbTransport,
+  });
 }
 
 function readPerfArea(value: unknown): PerfArea | AppError {

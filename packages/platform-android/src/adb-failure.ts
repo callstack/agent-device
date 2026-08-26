@@ -112,7 +112,7 @@ const ANDROID_ADB_FAILURE_MATCHERS = [
   ],
 ] as const satisfies readonly AndroidAdbFailureMatcher[];
 
-const ANDROID_ADB_TIMEOUT_FAILURE: AndroidAdbFailureClassification = Object.freeze({
+export const ANDROID_ADB_TIMEOUT_FAILURE: AndroidAdbFailureClassification = Object.freeze({
   reason: 'timeout',
   hint: 'adb timed out — the adb server may be wedged. Run adb kill-server && adb start-server, check adb devices, then retry.',
 });

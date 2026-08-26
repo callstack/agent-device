@@ -410,6 +410,14 @@
     "./wait-runtime-plan": {
       "types": "./src/wait-runtime-plan.ts",
       "default": "./src/wait-runtime-plan.ts"
+    },
+    "./android-helper-artifacts": {
+      "types": "./src/android-helper-artifacts.ts",
+      "default": "./src/android-helper-artifacts.ts"
+    },
+    "./android-touch-plan": {
+      "types": "./src/android-touch-plan.ts",
+      "default": "./src/android-touch-plan.ts"
     }
   }
 }

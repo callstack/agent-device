@@ -40,28 +40,10 @@ export type AndroidHelperSessionOptions = { helperSessionScope?: AndroidHelperSe
 
 export type { AndroidAdbExecutor } from './adb-executor.ts';
 
-export type AndroidSnapshotHelperManifest = {
-  name: 'android-snapshot-helper';
-  version: string;
-  releaseTag?: string;
-  assetName?: string;
-  apkUrl: string | null;
-  sha256: string;
-  checksumName?: string;
-  packageName: string;
-  versionCode: number;
-  instrumentationRunner: string;
-  minSdk: number;
-  targetSdk?: number;
-  outputFormat: 'uiautomator-xml';
-  statusProtocol: 'android-snapshot-helper-v1';
-  installArgs: string[];
-};
-
-export type AndroidSnapshotHelperArtifact = {
-  apkPath: string;
-  manifest: AndroidSnapshotHelperManifest;
-};
+export type {
+  AndroidSnapshotHelperArtifact,
+  AndroidSnapshotHelperManifest,
+} from '@agent-device/contracts/android-helper-artifacts';
 
 export type AndroidSnapshotHelperInstallPolicy = 'missing-or-outdated' | 'always' | 'never';
 
