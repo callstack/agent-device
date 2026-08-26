@@ -211,13 +211,7 @@ extension AudioProbeBucket {
   }
 }
 
-// The probe is deliberately synchronous. The previous shape parked the CLI's main thread in a
-// semaphore while an unstructured Task ran the capture loop; in this one-shot process (no run
-// loop ever spins) the loop stalled at its first `Task.sleep` suspension and never flushed again,
-// so timed probes froze after their first bucket on every host-capture family. ScreenCaptureKit's
-// completion-handler APIs bridged through a semaphore — the exact pattern the screenshot path in
-// this helper already uses in production — keep every continuation on ScreenCaptureKit's own
-// callback queues, and the cadence loop is a plain Thread.sleep on the main thread.
+// This one-shot helper keeps ScreenCaptureKit callbacks and bucket cadence synchronous.
 func runAudioProbe(durationMs: Int, bucketMs: Int, outPath: String) throws -> AudioProbeResponse {
   guard #available(macOS 13.0, *) else {
     throw HelperError.commandFailed("audio probe requires macOS 13 or newer")

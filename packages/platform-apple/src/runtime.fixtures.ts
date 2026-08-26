@@ -38,6 +38,23 @@ export function platformRuntimeHostFixture(): PlatformRuntimeHost {
       },
     },
     localInteractors: { resolve: async () => ({}) as Interactor },
+    audioProbe: {
+      hostCapture: {
+        info: {
+          source: 'system-audio',
+          backend: 'fixture',
+          sourceCount: 0,
+          notes: () => [],
+        },
+        start: async () => {
+          throw new Error('Audio probe is outside this runtime fixture.');
+        },
+        inspectProcess: async () => 'missing',
+        terminateProcess: async () => 'already-missing',
+      },
+      web: { resolve: async () => undefined },
+      ownedProcesses: { replace: () => {}, clear: () => {} },
+    },
     applicationResources: {
       recoverStartupResources: async () => {},
       detachForDaemonShutdown: async () => {},

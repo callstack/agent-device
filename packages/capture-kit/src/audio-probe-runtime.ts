@@ -60,10 +60,7 @@ export async function startHostAudioProbe(params: {
     durationMs: input.durationMs,
     bucketMs: input.bucketMs,
   });
-  // A restart reuses the session's status path, and the previous run's file would satisfy the
-  // first-status wait with stale data. Clearing it before the spawn means any file observed
-  // afterwards was written by this helper: the previous handle's finish() has already terminated
-  // and awaited its process, so nothing else writes to this path.
+  // A restart reuses this path; only a post-spawn publication belongs to the new capture.
   await fs.rm(input.statusPath, { force: true });
   const process = await host.start({
     durationMs: input.durationMs,

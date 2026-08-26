@@ -22,6 +22,23 @@ const appStateUnavailable = {
   hint: 'Android appstate is supported only for Android emulators and devices.',
 } as const;
 const unknownKindDevice = { ...device, kind: 'unknown' } as unknown as DeviceInfo;
+const audioProbeHost: PlatformRuntimeHost['audioProbe'] = {
+  hostCapture: {
+    info: {
+      source: 'system-audio',
+      backend: 'fixture',
+      sourceCount: 0,
+      notes: () => [],
+    },
+    start: async () => {
+      throw new Error('Audio probe is outside this runtime fixture.');
+    },
+    inspectProcess: async () => 'missing',
+    terminateProcess: async () => 'already-missing',
+  },
+  web: { resolve: async () => undefined },
+  ownedProcesses: { replace: () => {}, clear: () => {} },
+};
 
 test.each([
   ['emulator', device],
@@ -60,6 +77,7 @@ test.each([
       androidEmulator: { discover: async () => [], launch: () => 1, terminate: async () => {} },
     },
     localInteractors: { resolve: async () => ({}) },
+    audioProbe: audioProbeHost,
     screenRecording: {
       android: {
         resolve: async () => ({
@@ -161,6 +179,7 @@ test('rejects the non-discovered Android simulator cell for appstate', async () 
     androidTools: { probeClipboardShellSupport: async () => 'supported' as const },
     processTransports: { resolve: async () => ({ mode: 'local' as const }) },
     localInteractors: { resolve: async () => ({}) },
+    audioProbe: audioProbeHost,
     appState: {
       android: { run: async () => ({ stdout: '' }) },
       harmonyos: { run: async () => ({ stdout: '' }) },
@@ -219,6 +238,7 @@ function androidNavigationHostFixture(
     },
     deviceReadiness: { android: { ensureReady: async (selected: DeviceInfo) => selected } },
     localInteractors: { resolve: async () => ({}) },
+    audioProbe: audioProbeHost,
     screenRecording: {
       android: {
         resolve: async () => ({
@@ -424,6 +444,7 @@ test.each([
         harmonyos: { listApps: async () => [] },
       },
       localInteractors: { resolve: async () => ({}) },
+      audioProbe: audioProbeHost,
       screenRecording: {
         android: {
           resolve: async () => ({
@@ -576,6 +597,7 @@ function gestureHost(): PlatformRuntimeHost {
       harmonyos: { listApps: async () => [] },
     },
     localInteractors: { resolve: async () => ({}) },
+    audioProbe: audioProbeHost,
     screenRecording: { android: { resolve: async () => ({ mode: 'local' as const }) } },
   } as unknown as PlatformRuntimeHost;
 }
