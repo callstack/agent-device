@@ -95,6 +95,44 @@ test('descriptor codec round-trips and rejects malformed bodies', () => {
   }
 });
 
+// Restart-after-stop reuses the session's status path; without the pre-spawn clear, the previous
+// run's file satisfies the first-status wait and the new probe reports the old run's snapshot.
+test('start never adopts a stale status file from a previous probe', async () => {
+  await withStatusDir(async (dir) => {
+    const statusPath = path.join(dir, 'audio-probe.json');
+    await fs.writeFile(
+      statusPath,
+      JSON.stringify({ state: 'stopped', rmsDbfs: [-9], peakDbfs: [-4], sampleCount: 40 }),
+    );
+    let terminated = 0;
+    const host = fakeHost({
+      start: async () => ({
+        marker,
+        wait: Promise.resolve({
+          stdout: '',
+          stderr: 'sampler died before publishing',
+          exitCode: 1,
+        }),
+        terminate: async () => {
+          terminated += 1;
+        },
+      }),
+    });
+
+    await assert.rejects(
+      startHostAudioProbe({
+        host,
+        device,
+        owner,
+        input: { sessionId: 's1', statusPath, durationMs: 1000, bucketMs: 500, fence },
+      }),
+      /sampler died before publishing/,
+    );
+    assert.equal(terminated, 1);
+    await assert.rejects(fs.access(statusPath), 'the stale status file must be cleared');
+  });
+});
+
 test('start terminates a sampler whose exact process identity cannot be resolved', async () => {
   await withStatusDir(async (dir) => {
     const statusPath = path.join(dir, 'audio-probe.json');

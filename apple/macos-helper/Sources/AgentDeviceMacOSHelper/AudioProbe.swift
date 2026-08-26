@@ -211,43 +211,34 @@ extension AudioProbeBucket {
   }
 }
 
+// The probe is deliberately synchronous. The previous shape parked the CLI's main thread in a
+// semaphore while an unstructured Task ran the capture loop; in this one-shot process (no run
+// loop ever spins) the loop stalled at its first `Task.sleep` suspension and never flushed again,
+// so timed probes froze after their first bucket on every host-capture family. ScreenCaptureKit's
+// completion-handler APIs bridged through a semaphore — the exact pattern the screenshot path in
+// this helper already uses in production — keep every continuation on ScreenCaptureKit's own
+// callback queues, and the cadence loop is a plain Thread.sleep on the main thread.
 func runAudioProbe(durationMs: Int, bucketMs: Int, outPath: String) throws -> AudioProbeResponse {
   guard #available(macOS 13.0, *) else {
     throw HelperError.commandFailed("audio probe requires macOS 13 or newer")
   }
-  let semaphore = DispatchSemaphore(value: 0)
-  var response: AudioProbeResponse?
-  var runError: Error?
-  Task {
-    do {
-      response = try await runAudioProbeAsync(durationMs: durationMs, bucketMs: bucketMs, outPath: outPath)
-    } catch {
-      runError = error
-    }
-    semaphore.signal()
-  }
-  semaphore.wait()
-  if let runError {
-    throw runError
-  }
-  guard let response else {
-    throw HelperError.commandFailed("audio probe failed")
-  }
-  return response
-}
 
-@available(macOS 13.0, *)
-private func runAudioProbeAsync(durationMs: Int, bucketMs: Int, outPath: String) async throws -> AudioProbeResponse {
-  let content: SCShareableContent
-  do {
-    content = try await SCShareableContent.current
-  } catch {
+  let contentSemaphore = DispatchSemaphore(value: 0)
+  var contentResult: SCShareableContent?
+  var contentError: Error?
+  SCShareableContent.getWithCompletionHandler { content, error in
+    contentResult = content
+    contentError = error
+    contentSemaphore.signal()
+  }
+  contentSemaphore.wait()
+  if let contentError {
     throw HelperError.commandFailed(
       "audio probe requires Screen Recording permission on macOS",
-      details: ["permission": "screen-recording", "error": error.localizedDescription]
+      details: ["permission": "screen-recording", "error": contentError.localizedDescription]
     )
   }
-  guard let display = content.displays.first else {
+  guard let display = contentResult?.displays.first else {
     throw HelperError.commandFailed("audio probe could not resolve a macOS display")
   }
 
@@ -267,18 +258,35 @@ private func runAudioProbeAsync(durationMs: Int, bucketMs: Int, outPath: String)
   let stream = SCStream(filter: filter, configuration: configuration, delegate: nil)
   let queue = DispatchQueue(label: "com.callstack.agent-device.audio-probe")
   try stream.addStreamOutput(output, type: .audio, sampleHandlerQueue: queue)
-  try await stream.startCapture()
+
+  let startSemaphore = DispatchSemaphore(value: 0)
+  var startError: Error?
+  stream.startCapture { error in
+    startError = error
+    startSemaphore.signal()
+  }
+  startSemaphore.wait()
+  if let startError {
+    throw HelperError.commandFailed(
+      "audio probe could not start the ScreenCaptureKit stream",
+      details: ["error": startError.localizedDescription]
+    )
+  }
   try writer.flushRunning()
 
   let deadline = Date().addingTimeInterval(Double(durationMs) / 1000)
   while Date() < deadline {
-    let remainingMs = Int(deadline.timeIntervalSinceNow * 1000)
-    let sleepMs = max(1, min(bucketMs, remainingMs))
-    try await Task.sleep(nanoseconds: UInt64(sleepMs) * 1_000_000)
+    let remainingMs = deadline.timeIntervalSinceNow * 1000
+    let sleepMs = max(1, min(Double(bucketMs), remainingMs))
+    Thread.sleep(forTimeInterval: sleepMs / 1000)
     try writer.flushRunning()
   }
 
-  try await stream.stopCapture()
+  let stopSemaphore = DispatchSemaphore(value: 0)
+  stream.stopCapture { _ in
+    stopSemaphore.signal()
+  }
+  stopSemaphore.wait()
   try writer.finish(reason: "completed")
   let data = try Data(contentsOf: URL(fileURLWithPath: outPath))
   return try JSONDecoder().decode(AudioProbeResponse.self, from: data)
