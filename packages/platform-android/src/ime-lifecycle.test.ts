@@ -4,6 +4,13 @@ import { bindAndroidAdbHostStub } from './adb-host.fixtures.ts';
 import { withAndroidHostAdbTransport } from './adb-executor.ts';
 import { listAndroidAdbSerialsQuick } from './ime-lifecycle.ts';
 
+test('quick serial listing keeps an unbound adb host port loud', async () => {
+  await assert.rejects(
+    async () => await listAndroidAdbSerialsQuick(),
+    /Android adb host port is not bound/,
+  );
+});
+
 test('quick serial listing routes its global devices call through the scoped transport', async () => {
   bindAndroidAdbHostStub();
   const seenArgs: string[][] = [];

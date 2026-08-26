@@ -4,7 +4,7 @@
 // `ime-activation.ts` (the activation transaction), and `ime-restore.ts` (restore + startup
 // orphan recovery).
 
-import { runAndroidHostAdb } from './adb-host.ts';
+import { requireAndroidAdbHost, runAndroidHostAdb } from './adb-host.ts';
 
 export { activateAndroidTestIme } from './ime-activation.ts';
 export {
@@ -23,6 +23,7 @@ export {
 
 // Serials only, with no full-inventory name, boot-state, or target probes.
 export async function listAndroidAdbSerialsQuick(): Promise<string[]> {
+  requireAndroidAdbHost();
   try {
     const result = await runAndroidHostAdb(['devices'], { timeoutMs: 5_000 });
     return result.stdout
