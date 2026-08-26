@@ -140,6 +140,10 @@ export async function pressHarmonyKeyboardKey(
   device: DeviceInfo,
   key: 'Enter' | 'Back',
 ): Promise<void> {
+  if (key === 'Back') {
+    await backHarmony(device);
+    return;
+  }
   await runHarmonyHdc(device, ['shell', 'uitest', 'uiInput', 'keyEvent', key]);
 }
 

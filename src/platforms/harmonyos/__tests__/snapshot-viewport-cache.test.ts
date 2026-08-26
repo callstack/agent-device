@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { beforeEach, test, vi } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const { runHarmonyHdc } = vi.hoisted(() => ({ runHarmonyHdc: vi.fn() }));
@@ -33,6 +33,10 @@ beforeEach(() => {
   scriptHarmonyLayoutDump(TALL_LAYOUT);
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 /** Scripts `uitest dumpLayout` + `file recv` so the pulled layout is `layout`. */
 function scriptHarmonyLayoutDump(layout: unknown): void {
   runHarmonyHdc.mockImplementation(async (_device: unknown, args: string[]) => {
@@ -54,6 +58,21 @@ test('repeated viewport reads within the TTL trigger a single layout dump', asyn
   assert.deepEqual(first, { x: 0, y: 0, width: 1080, height: 2340 });
   assert.deepEqual(second, first);
   assert.equal(dumpLayoutCallCount(), 1);
+});
+
+test('viewport cache expires after two seconds without explicit invalidation', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+
+  await readHarmonyGestureViewport(DEVICE_A);
+  assert.equal(dumpLayoutCallCount(), 1);
+
+  scriptHarmonyLayoutDump(WIDE_LAYOUT);
+  await vi.advanceTimersByTimeAsync(2_000);
+  const refreshed = await readHarmonyGestureViewport(DEVICE_A);
+
+  assert.deepEqual(refreshed, { x: 0, y: 0, width: 2340, height: 1080 });
+  assert.equal(dumpLayoutCallCount(), 2);
 });
 
 test('invalidating the viewport cache forces a fresh layout dump', async () => {
