@@ -140,6 +140,7 @@ function fakeCaptureRuntime(device: DeviceInfo, status: AudioProbeResult) {
             startedAt: Date.now(),
             durationMs: input.durationMs,
             bucketMs: input.bucketMs,
+            marker: { pid: 4242, startTime: 'boot+1', command: 'helper' },
           }),
         }),
       };

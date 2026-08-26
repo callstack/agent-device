@@ -216,6 +216,7 @@ test('close stops active host audio probe before deleting session', async () => 
       startedAt,
       durationMs: 10000,
       bucketMs: 1000,
+      marker: { pid: 4242, startTime: 'boot+1', command: 'helper' },
     }),
   });
   const session: SessionState = {

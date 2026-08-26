@@ -9,11 +9,9 @@ import type {
 } from '@agent-device/contracts/audio-probe-runtime-host';
 import type { HostCommandResult, ManagedProcessIdentity } from '@agent-device/contracts/platform';
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
-import {
-  createHostAudioProbeRecoveryOperations,
-  hostAudioProbeDescriptorCodec,
-  startHostAudioProbe,
-} from './audio-probe-runtime.ts';
+import { hostAudioProbeDescriptorCodec } from './audio-probe-descriptor.ts';
+import { createHostAudioProbeRecoveryOperations } from './audio-probe-recovery.ts';
+import { startHostAudioProbe } from './audio-probe-runtime.ts';
 import {
   createDurableResourceEnvelope,
   encodeDurableDescriptor,
@@ -91,9 +89,82 @@ test('descriptor codec round-trips and rejects malformed bodies', () => {
     { ...descriptorBody, source: 'radio' },
     { ...descriptorBody, statusPath: 42 },
     { ...descriptorBody, marker: { pid: 'x' } },
+    { ...descriptorBody, marker: undefined },
   ]) {
     assert.equal(hostAudioProbeDescriptorCodec.decode(broken as never).status, 'invalid');
   }
+});
+
+test('start terminates a sampler whose exact process identity cannot be resolved', async () => {
+  await withStatusDir(async (dir) => {
+    const statusPath = path.join(dir, 'audio-probe.json');
+    let terminated = 0;
+    const host = fakeHost({
+      start: async (input) => {
+        await fs.writeFile(
+          input.statusPath,
+          JSON.stringify({ state: 'running', rmsDbfs: [-10], peakDbfs: [-5], sampleCount: 1 }),
+        );
+        let exit: (result: HostCommandResult) => void = () => {};
+        const wait = new Promise<HostCommandResult>((resolve) => {
+          exit = resolve;
+        });
+        return {
+          wait,
+          terminate: async () => {
+            terminated += 1;
+            exit({ stdout: '', stderr: '', exitCode: 0 });
+          },
+        } satisfies HostAudioCaptureProcess;
+      },
+    });
+
+    await assert.rejects(
+      startHostAudioProbe({
+        host,
+        device,
+        owner,
+        input: { sessionId: 's1', statusPath, durationMs: 1000, bucketMs: 500, fence },
+      }),
+      /exposed no exact identity/,
+    );
+    assert.equal(terminated, 1);
+  });
+});
+
+// A markerless record (foreign or corrupted — start never publishes one) must never be treated as
+// finished or absent: recovery can neither prove the child exited nor terminate it by identity.
+test('a markerless record with a live status file is never read as completed or missing', async () => {
+  await withStatusDir(async (dir) => {
+    const statusPath = path.join(dir, 'audio-probe.json');
+    await fs.writeFile(
+      statusPath,
+      JSON.stringify({ state: 'running', rmsDbfs: [-10], peakDbfs: [-5], sampleCount: 1 }),
+    );
+    const { marker: _dropped, ...markerless } = { ...descriptorBody, statusPath };
+    const inspected: ManagedProcessIdentity[] = [];
+    const recovery = createHostAudioProbeRecoveryOperations({
+      host: fakeHost({
+        inspectProcess: async (target) => {
+          inspected.push(target);
+          return 'missing' as const;
+        },
+      }),
+    });
+
+    const reattached = await recovery.audioProbeReattach({ envelope: envelopeWith(markerless) });
+    assert.equal(reattached.status, 'unreattachable');
+    if (reattached.status === 'unreattachable') {
+      assert.equal(reattached.reason, 'descriptor-invalid');
+    }
+
+    const cleaned = await recovery.audioProbeCleanup({ envelope: envelopeWith(markerless) });
+    assert.equal(cleaned.status, 'cleanup-pending');
+    if (cleaned.status === 'cleanup-pending') {
+      assert.equal(cleaned.reason, 'manual-recovery-required');
+    }
+    assert.deepEqual(inspected, []);
+  });
 });
 
 test('start publishes handle and envelope only after the sampler writes status', async () => {

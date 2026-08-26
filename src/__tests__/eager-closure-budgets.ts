@@ -110,7 +110,8 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/ad-script/src/index.ts': 37,
 
   // --- @agent-device/capture-kit ---
-  'packages/capture-kit/src/index.ts': 29,
+  // R60 review: audio-probe split into descriptor/status/recovery/live-process modules (+3 files).
+  'packages/capture-kit/src/index.ts': 32,
 
   // --- @agent-device/contracts ---
   'packages/contracts/src/alert-contract.ts': 1,
@@ -297,7 +298,7 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'src/core/command-descriptor/registry.ts': 67,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,
   'src/core/interactors/register-builtins.ts': 72,
-  'src/daemon/session-teardown.ts': 92,
+  'src/daemon/session-teardown.ts': 95,
 });
 
 function toRows(

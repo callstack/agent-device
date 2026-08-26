@@ -10,10 +10,8 @@ export {
   decodeAppLogProcessMarker,
 } from './app-log-runtime.ts';
 export { createAppLogLiveHandle, createAppLogLiveHandleFromFinish } from './app-log-live-handle.ts';
-export {
-  createHostAudioProbeCaptureOperations,
-  hostAudioProbeDescriptorCodec,
-} from './audio-probe-runtime.ts';
+export { createHostAudioProbeCaptureOperations } from './audio-probe-runtime.ts';
+export { hostAudioProbeDescriptorCodec } from './audio-probe-descriptor.ts';
 export { createScreenRecordingLiveHandle } from './screen-recording-live-handle.ts';
 export { createScreenRecordingCompletion } from './screen-recording-completion.ts';
 export { assertScreenRecordingOptionsSupported } from './screen-recording-options.ts';
