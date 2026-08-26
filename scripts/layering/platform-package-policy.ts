@@ -23,21 +23,20 @@ const COMPOSITION_FILE = 'src/platform-runtime.ts';
 const RULE = 'R13 platform-package-substrate';
 const RAW_PROCESS_SPECIFIERS = new Set(['child_process', 'node:child_process']);
 
-// #2040: the Apple XCUITest runner client is colocated in platform-apple as a
-// transitional mechanics subtree. Its subpaths are the recorded seam for the
-// daemon/root consumers that have not migrated behind the composition gateway
-// yet (#1983); when that migration completes, these subpaths and every
-// exemption keyed on the subtree disappear and the family returns to a single
-// façade export.
+// #2040: the Apple XCUITest runner client is a platform-owned implementation
+// facet colocated in platform-apple as the src/runner/ subtree. Its subpaths
+// are the enumerated seam through which daemon/root consumers reach runner
+// mechanics directly (the runner-consumer migration behind the composition
+// gateway has no owner today; if one retires those direct consumers, the seam
+// narrows with it — the facet itself is durable Apple ownership, not a
+// temporary exception).
 export const APPLE_RUNNER_SUBTREE = 'packages/platform-apple/src/runner/';
 const APPLE_RUNNER_FACADE = '@agent-device/platform-apple/runner';
 const APPLE_RUNNER_CLIENT = '@agent-device/platform-apple/runner/client';
 const APPLE_RUNNER_TEST_HOST = '@agent-device/platform-apple/runner/test-host';
 const APPLE_RUNNER_CLIENT_COMPOSITION = 'src/platforms/apple/core/runner-client.ts';
 const APPLE_RUNNER_TEST_HOST_INSTALLER = 'scripts/vitest-apple-runner-host-setup.ts';
-const TRANSITIONAL_MECHANICS_SUBPATHS: Readonly<
-  Partial<Record<PlatformFamily, readonly string[]>>
-> = {
+const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly string[]>>> = {
   apple: [APPLE_RUNNER_FACADE, APPLE_RUNNER_CLIENT, APPLE_RUNNER_TEST_HOST],
 };
 
@@ -110,7 +109,7 @@ function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): Lay
         violation(`${expectedDir}/package.json`, 1, `${expectedDir} must be private`),
       );
     }
-    const expectedSubpaths = [expectedName, ...(TRANSITIONAL_MECHANICS_SUBPATHS[family] ?? [])];
+    const expectedSubpaths = [expectedName, ...(MECHANICS_FACET_SUBPATHS[family] ?? [])];
     if (
       declaration.exportedSubpaths.length !== expectedSubpaths.length ||
       expectedSubpaths.some((subpath) => !declaration.exportedSubpaths.includes(subpath))
@@ -120,8 +119,8 @@ function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): Lay
           `${expectedDir}/package.json`,
           1,
           `${expectedDir} must export exactly its root façade '${expectedName}'` +
-            (TRANSITIONAL_MECHANICS_SUBPATHS[family]
-              ? ` plus the enumerated transitional mechanics subpaths`
+            (MECHANICS_FACET_SUBPATHS[family]
+              ? ` plus the enumerated mechanics facet subpaths`
               : ''),
         ),
       );
@@ -142,10 +141,11 @@ function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): Lay
 function checkSource(file: string, source: string): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
   const ownerFamily = familyForPackageFile(file);
-  // The runner mechanics subtree owns its cache/lease files and usbmux sockets
-  // (fs/net/os) and reads process identity directly; raw process primitives
-  // stay banned below and host tooling still enters through the
-  // AppleRunnerHost port. The exemption dies with the #1983 fold-in.
+  // The runner mechanics facet owns its cache/lease files and usbmux sockets
+  // (fs/net/os) and reads process identity directly — that ownership is part
+  // of the facet's definition, so the ambient-host rules do not apply to it.
+  // Raw process primitives stay banned below and host tooling still enters
+  // through the AppleRunnerHost port.
   if (ownerFamily && isProductionSource(file) && !file.startsWith(APPLE_RUNNER_SUBTREE)) {
     violations.push(...checkPlatformPackageSourcePolicy(file, source, ownerFamily));
   }
@@ -179,9 +179,9 @@ function checkSource(file: string, source: string): LayeringViolation[] {
     } else if (
       importedFamily &&
       file !== COMPOSITION_FILE &&
-      // The runner façade subpath is the transitional #1983 seam: root code that
-      // has not migrated behind the gateway imports its types and host-free
-      // helpers directly. R11's workspace-dependency declarations bound the
+      // The runner façade subpath is the facet's consumer seam: root code
+      // that reaches runner mechanics directly imports its types and host-free
+      // helpers here. R11's workspace-dependency declarations bound the
       // importer set to the root package.
       site.spec !== APPLE_RUNNER_FACADE &&
       site.spec !== APPLE_RUNNER_CLIENT &&
@@ -277,5 +277,5 @@ export function checkPlatformPackagePolicy(
 }
 
 export function platformPackagePolicySummary(): string {
-  return 'R13 holds six private implementation-lazy platform packages above capture-kit behind one composition root, with the apple runner mechanics subtree as the enumerated transitional seam';
+  return 'R13 holds six private implementation-lazy platform packages above capture-kit behind one composition root, with the apple runner mechanics facet behind its enumerated seam';
 }

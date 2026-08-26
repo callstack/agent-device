@@ -133,8 +133,8 @@ test('only src/platform-runtime.ts may import a concrete platform package', () =
   }
 });
 
-test('the apple runner transitional subpaths are the enumerated exception', () => {
-  // The façade subpath is the recorded #1983 seam: root code may import it.
+test('the apple runner mechanics facet subpaths are the enumerated exception', () => {
+  // The façade subpath is the facet's consumer seam: root code may import it.
   const sources = validSources();
   sources.set(
     'src/daemon/selector-runtime.ts',
@@ -187,7 +187,7 @@ test('the apple runner transitional subpaths are the enumerated exception', () =
   );
 });
 
-test('the runner mechanics subtree is exempt from ambient-host and raw-process rules the right way around', () => {
+test('the runner mechanics facet is exempt from ambient-host and raw-process rules the right way around', () => {
   // Production runner mechanics may own files/sockets (fs/net/os) directly...
   const sources = validSources();
   sources.set(

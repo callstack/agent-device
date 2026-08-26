@@ -64,8 +64,8 @@ export type EagerClosureBudget = {
    * excluding just the entry turns the assertion into "this façade evaluates none of its own
    * mechanics", which is the actual ADR-0019 property.
    *
-   * Every package entry surface sets this true except the transitional runner
-   * mechanics entries (see PLATFORM_MECHANICS_ENTRY_PREFIX below), whose closure
+   * Every package entry surface sets this true except the runner mechanics
+   * facet entries (see PLATFORM_MECHANICS_ENTRY_PREFIX below), whose closure
    * IS the implementation.
    * Hub rows set it false -- a hub is a CONSUMER of façades, not neutral vocabulary, and three of
    * them legitimately hold the R3-permitted static platform seam that has not migrated yet.
@@ -323,12 +323,11 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
 });
 
 /**
- * The transitional runner mechanics subtree inside platform-apple (#2040). Its
- * entry surfaces ARE platform implementation, so the deny-platform assertion is
- * meaningless for them the same way it would be vacuous for a platform façade
- * without the entry-self-exclusion: the whole closure is the mechanics being
- * exported. Their weight stays pinned by the exact budgets; the deny question
- * returns with the #1983 fold-in, when these entries disappear.
+ * The runner mechanics facet inside platform-apple (#2040). Its entry surfaces
+ * ARE platform implementation, so the deny-platform assertion is meaningless
+ * for them the same way it would be vacuous for a platform façade without the
+ * entry-self-exclusion: the whole closure is the mechanics being exported.
+ * Their weight stays pinned by the exact budgets.
  */
 const PLATFORM_MECHANICS_ENTRY_PREFIX = 'packages/platform-apple/src/runner/';
 

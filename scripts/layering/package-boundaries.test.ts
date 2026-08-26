@@ -448,9 +448,9 @@ test('the real tree parses, declares, and passes R11', () => {
   ]);
   const platformApplePackage = packages.find((pkg) => pkg.name === '@agent-device/platform-apple');
   assert.ok(platformApplePackage, 'platform-apple package must exist');
-  // The root façade plus the enumerated transitional runner subpaths (#2040,
-  // folded when #1983 completes); any further subpath widens this key list and
-  // fails the assertion. R13 pins the same list from the manifest side.
+  // The root façade plus the runner mechanics facet's enumerated subpaths
+  // (#2040); any further subpath widens this key list and fails the
+  // assertion. R13 pins the same list from the manifest side.
   assert.deepEqual([...platformApplePackage.exportTargets.keys()].sort(), [
     '@agent-device/platform-apple',
     '@agent-device/platform-apple/runner',
