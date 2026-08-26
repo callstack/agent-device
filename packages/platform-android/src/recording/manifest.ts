@@ -1,10 +1,10 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type {
-  ScreenRecordingCompletion,
-  ScreenRecordingRuntimeOperations,
-  ScreenRecordingStartInput,
-} from '@agent-device/contracts/platform';
-import { SCREEN_RECORDING_RESOURCE_KIND } from '@agent-device/contracts/screen-recording-runtime';
+import {
+  type ScreenRecordingCompletion,
+  type ScreenRecordingRuntimeOperations,
+  type ScreenRecordingStartInput,
+  SCREEN_RECORDING_RESOURCE_KIND,
+} from '@agent-device/contracts/screen-recording-runtime';
 import {
   completionMatchesDescriptor,
   isValidAndroidRecordingDescriptor,

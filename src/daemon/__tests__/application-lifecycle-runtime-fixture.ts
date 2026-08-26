@@ -1,11 +1,13 @@
 import type {
   ApplicationLifecycleExecution,
   ApplicationLifecycleRuntimeOperations,
-  DeviceBinding,
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import type { DeviceBinding } from '@agent-device/contracts/platform-runtime';
+import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
-} from '@agent-device/contracts/platform';
-import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/platform-runtime-operations';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import { vi } from 'vitest';

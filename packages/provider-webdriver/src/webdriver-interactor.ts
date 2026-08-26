@@ -1,16 +1,18 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
+import type { BackMode } from '@agent-device/contracts/back-mode';
 import type {
-  BackMode,
   CloudTextEntryReadiness,
-  GesturePlan,
   Interactor,
   ScreenshotOptions,
-  ScrollDirection,
   SnapshotOptions,
   SnapshotResult,
-  TvRemoteButton,
-} from '@agent-device/contracts/interaction';
-import { buildScrollGesturePlan } from '@agent-device/contracts/scroll-gesture';
+} from '@agent-device/contracts/interactor-types';
+import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import {
+  type ScrollDirection,
+  buildScrollGesturePlan,
+} from '@agent-device/contracts/scroll-gesture';
+import type { TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { SettingOptions } from '@agent-device/contracts/settings';
 import { AppError } from '@agent-device/kernel/errors';
 import {

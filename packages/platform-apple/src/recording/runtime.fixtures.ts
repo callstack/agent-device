@@ -2,8 +2,8 @@ import type {
   AppleScreenRecordingRunnerRequest,
   ScreenRecordingFinalizer,
   ScreenRecordingRuntimeHost,
-  ScreenRecordingStartInput,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/screen-recording-runtime-host';
+import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppleScreenRecordingOperationHost } from './recovery.ts';
 

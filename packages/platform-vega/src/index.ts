@@ -1,8 +1,8 @@
 import type {
   InventoryPlatformModule,
-  PlatformRuntimeModule,
   PlatformModuleMetadata,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-module';
+import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-runtime-operations';
 
 const metadata = Object.freeze({
   family: 'vega',

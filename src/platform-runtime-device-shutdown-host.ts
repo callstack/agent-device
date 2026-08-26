@@ -4,7 +4,7 @@ import type {
   DeviceShutdownRuntimeDependencies,
   DeviceShutdownRuntimeHost,
   DeviceShutdownRuntimeLoaders,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/device-shutdown-runtime';
 
 /**
  * Neutral composition seam shared by canonical shutdown and legacy close.

@@ -1,4 +1,4 @@
-import type { AppLogOutputSink } from '@agent-device/contracts/platform';
+import type { AppLogOutputSink } from '@agent-device/contracts/app-log-runtime';
 import fs from 'node:fs';
 import { ensureAppLogPath } from './utils/app-log-files.ts';
 import { requireManagedSessionArtifactPath } from './utils/managed-session-artifact-path.ts';

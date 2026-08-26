@@ -80,7 +80,7 @@ export function createNetworkRuntime(
         },
         operations: networkFact.available ? { networkDump } : {},
         [Symbol.asyncDispose]: async () => {},
-      } satisfies import('@agent-device/contracts/platform').DeviceBinding<PlatformRuntimeOperations>,
+      } satisfies import('@agent-device/contracts/platform-runtime').DeviceBinding<PlatformRuntimeOperations>,
       use,
     );
   };

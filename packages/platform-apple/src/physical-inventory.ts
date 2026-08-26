@@ -1,7 +1,7 @@
 import type {
   DeviceInventoryHostFor,
   PlatformRequestScope,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   mapDevicectlAppleDevice,

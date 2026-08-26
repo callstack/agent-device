@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { RuntimeOwnerRef } from '@agent-device/contracts/platform';
+import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { DeviceClaimPolicy } from '../core/command-descriptor/types.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { deviceClaimConflictError } from './device-claim-conflict.ts';

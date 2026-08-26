@@ -1,4 +1,5 @@
-import type { AppLogRuntimeHost, PlatformRequestScope } from '@agent-device/contracts/platform';
+import type { AppLogRuntimeHost } from '@agent-device/contracts/app-log-runtime';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { vi } from 'vitest';
 

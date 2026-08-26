@@ -5,9 +5,11 @@ import type {
   AppLogProcessMarkerReadOutcome,
   AppLogProcessOwnership,
   AppLogProcessCommand,
+} from '@agent-device/contracts/app-log-runtime';
+import type {
   HostCommandRequest,
   HostCommandResult,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
 import { decodeAppLogProcessMarker } from '@agent-device/capture-kit';
 import type { DeviceIdentity } from '@agent-device/kernel/device';
 import fs from 'node:fs';

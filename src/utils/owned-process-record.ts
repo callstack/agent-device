@@ -4,7 +4,7 @@ import type {
   OwnedProcessRecord,
   OwnedProcessRecordScope,
   OwnedProcessRecordWriter,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
 import { withAtomicPublishTempPathSync } from './atomic-file.ts';
 
 const RECORD_FILE_NAME = 'owned-processes.json';

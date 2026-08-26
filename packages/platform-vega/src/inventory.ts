@@ -3,10 +3,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
   DeviceInventoryHostFor,
-  DeviceInventorySource,
   HostCommandResult,
   PlatformRequestScope,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
+import type { DeviceInventorySource } from '@agent-device/contracts/platform-module';
 
 const DISCOVERY_TIMEOUT_MS = 10_000;
 const VVD_SERIAL = 'VirtualDevice';

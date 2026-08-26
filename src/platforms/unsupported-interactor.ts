@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { Interactor } from '@agent-device/contracts/interaction';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
 
 export function createUnsupportedInteractor(platformLabel: string): Interactor {
   const unsupported = async (operation: string): Promise<never> => {

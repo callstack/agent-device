@@ -2,7 +2,7 @@ import { expect, test, vi } from 'vitest';
 import type {
   AndroidApplicationTools,
   AppleApplicationTools,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import { createApplicationResourceLifecycle } from './platform-runtime-application-resources.ts';
 
 function lifecycle(overrides: {

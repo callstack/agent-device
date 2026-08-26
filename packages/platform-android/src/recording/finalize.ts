@@ -1,7 +1,5 @@
-import type {
-  PlatformRuntimeHost,
-  ScreenRecordingLiveSnapshot,
-} from '@agent-device/contracts/platform';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import type { ScreenRecordingLiveSnapshot } from '@agent-device/contracts/screen-recording-runtime';
 import { cleanupChunks, pullChunks, stopOwnedChunks, waitForStableArtifacts } from './chunks.ts';
 import { completed } from './completion.ts';
 import { createCompletedNativeManifest, type NativeManifest } from './manifest.ts';
@@ -20,7 +18,7 @@ export async function finalizeAndroidRecording(params: {
 }): Promise<
   Readonly<{
     status: 'completed';
-    result: import('@agent-device/contracts/platform').ScreenRecordingCompletion;
+    result: import('@agent-device/contracts/screen-recording-runtime').ScreenRecordingCompletion;
   }>
 > {
   const reachedLimit =

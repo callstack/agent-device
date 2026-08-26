@@ -1,9 +1,6 @@
-import type {
-  NetworkDump,
-  NetworkDumpInput,
-  NetworkDumpResult,
-  PlatformRuntimeHost,
-} from '@agent-device/contracts/platform';
+import type { NetworkDump } from '@agent-device/contracts/network-traffic';
+import type { NetworkDumpInput, NetworkDumpResult } from '@agent-device/contracts/network-runtime';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { mergeNetworkDumps, readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { backendForAppleDevice } from '../logs/backend.ts';

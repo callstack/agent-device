@@ -2,8 +2,8 @@ import type {
   AppLogBackgroundProcess,
   AppLogOutputSink,
   AppLogRuntimeHost,
-  PlatformRequestScope,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/app-log-runtime';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { describe, expect, test } from 'vitest';
 import { androidAppLogDescriptorCodec, createAndroidAppLogEnvelope } from './descriptor.ts';

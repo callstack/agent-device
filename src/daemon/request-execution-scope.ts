@@ -7,8 +7,10 @@ import {
 } from '../utils/diagnostics.ts';
 import { applyCommandDefaults } from '../cli-schema/command-schema.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import type { DaemonCommandContext } from './context.ts';
-import { contextFromFlags as contextFromFlagsWithLog } from './context.ts';
+import {
+  type DaemonCommandContext,
+  contextFromFlags as contextFromFlagsWithLog,
+} from './context.ts';
 import { assertSessionSelectorMatches } from './session-selector.ts';
 import { resolveEffectiveSessionName } from './session-routing.ts';
 import { scopeRequestSession } from './request-admission.ts';
@@ -42,11 +44,9 @@ import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { teardownSessionResources } from './session-teardown.ts';
 import { finalizeBoundSessionApplicationLifecycle } from './application-lifecycle-recovery.ts';
 import { runtimeHintValues } from './handlers/session-runtime.ts';
-import type {
-  DeviceRuntimeGateway,
-  PlatformRuntimeOperations,
-  PlatformRequestScope,
-} from '@agent-device/contracts/platform';
+import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import {
   createRequestRuntimeBindings,
   type BindDeviceRuntime,

@@ -1,4 +1,4 @@
-import type { PlatformGatedProviderResolverKey } from '@agent-device/contracts/platform';
+import type { PlatformGatedProviderResolverKey } from '@agent-device/contracts/platform-providers';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {

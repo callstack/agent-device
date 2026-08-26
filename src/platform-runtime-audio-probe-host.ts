@@ -2,10 +2,12 @@ import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import type {
   AudioProbeRuntimeHost,
   HostAudioCaptureProcess,
+  WebAudioProbeTransport,
+} from '@agent-device/contracts/audio-probe-runtime-host';
+import type {
   ManagedProcessIdentity,
   OwnedProcessRecordWriter,
-  WebAudioProbeTransport,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
 import {
   inspectManagedProcess,
   resolveManagedProcessIdentity,

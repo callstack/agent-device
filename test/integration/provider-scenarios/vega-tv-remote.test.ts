@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { VegaTvRemoteKey } from '@agent-device/contracts/interaction';
+import type { VegaTvRemoteKey } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { VegaToolProvider } from '../../../src/platforms/vega/tool-provider.ts';
 import { assertRpcOk } from './assertions.ts';

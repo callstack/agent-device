@@ -3,7 +3,7 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { SessionState } from '../types.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
-import type { InstalledAppInfo } from '@agent-device/contracts/platform';
+import type { InstalledAppInfo } from '@agent-device/contracts/app-inventory-runtime';
 
 export type DoctorAppInventory = (
   filter: 'all' | 'user-installed',

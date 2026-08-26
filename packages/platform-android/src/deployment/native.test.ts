@@ -1,5 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { AndroidToolHost, PlatformRuntimeHost } from '@agent-device/contracts/platform';
+import type { AndroidToolHost } from '@agent-device/contracts/platform-runtime-host';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   installAndroidArtifact,

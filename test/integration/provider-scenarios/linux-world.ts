@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-import type { PlatformRequestScope } from '@agent-device/contracts/platform';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { inventoryModule as linuxInventoryModule } from '@agent-device/platform-linux';
 import { createDeviceInventoryHost } from '../../../src/platform-runtime-host.ts';
 import { createLocalLinuxToolProvider } from '../../../src/platforms/linux/tool-provider.ts';

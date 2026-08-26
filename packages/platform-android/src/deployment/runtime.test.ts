@@ -1,8 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import type {
-  AndroidAppDeploymentExecutor,
-  PlatformRuntimeHost,
-} from '@agent-device/contracts/platform';
+import type { AndroidAppDeploymentExecutor } from '@agent-device/contracts/app-deployment-runtime';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const native = vi.hoisted(() => ({

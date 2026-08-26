@@ -2,7 +2,7 @@ import type {
   PlatformDiagnosticEvent,
   PlatformProgressUpdate,
   PlatformRequestScope,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
 import { getRequestSignal } from '../request/cancel.ts';
 import { emitRequestProgress } from '../request/progress.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';

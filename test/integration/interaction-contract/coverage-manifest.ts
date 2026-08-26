@@ -1,4 +1,7 @@
-import type { InteractionGuarantee, InteractionPathId } from '@agent-device/contracts/interaction';
+import type {
+  InteractionGuarantee,
+  InteractionPathId,
+} from '@agent-device/contracts/interaction-guarantees';
 
 /**
  * ADR 0011 Layer 3: the machine-readable claim of which interaction guarantee

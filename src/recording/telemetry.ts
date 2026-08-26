@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { RecordingGestureEvent } from '@agent-device/contracts/platform';
+import type { RecordingGestureEvent } from '@agent-device/contracts/screen-recording-runtime';
 
 type RecordingTelemetryEnvelope = {
   version: 1;

@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform';
+import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { isHostSystemAudioProbeDevice } from '@agent-device/contracts/audio-probe-support';
 
 /**

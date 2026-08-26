@@ -171,13 +171,8 @@
       "exports": ["LimrunIosCommandExecution"]
     },
     {
-      "comment": "#1959 gave every contracts vocabulary module its own entry subpath and moved all ~230 value-importers onto them, so `./platform` and `./interaction` now carry zero value consumers — every re-export on them reads as unused. They stay as the compatibility surface for the ~490 type-only importers the granularization deliberately left alone (type imports are erased, so they cost nothing to load). Scoped to these two façades rather than listed symbol-by-symbol because the property is per-file: nothing on them is value-consumed any more. Retiring them entirely — moving the type-only importers too and deleting the files — is the follow-up that makes this entry unnecessary.",
-      "file": "packages/contracts/src/facades/{platform,interaction}.ts",
-      "exports": ["*"]
-    },
-    {
-      "comment": "Converting the contracts façades from `export *` to explicit named re-exports (the pin-table retirement) made these individually visible to --production analysis for the first time; a bare star previously hid them from this exact check. GESTURE_INITIAL_ANGLE_DEGREES/GESTURE_SAMPLE_INTERVAL_MS/INTERACTION_GUARANTEES/INTERACTION_PATH_IDS/parseAndroidInputMethodPackage/isRecordingExportQuality have same-package test-tree consumers (invisible to --production, mirroring the packages/{ad-script,maestro} entry above); the rest currently have none. Kept rather than narrowed here so the façade's re-export surface stays byte-identical to the symbol set the retired pin table asserted — narrowing the surface is a follow-up with its own review, not a side effect of this mechanical conversion. The last five (COORDINATE_GESTURE_KINDS, normalizePublicGesture, DEFAULT_DRAG_*) are #1567's drag vocabulary, surfaced the same way by the same conversion and kept for the same reason.",
-      "file": "packages/contracts/src/facades/{client,command,divergence,interaction,platform,recording}.ts",
+      "comment": "Converting the contracts façades from `export *` to explicit named re-exports (the pin-table retirement) made these individually visible to --production analysis for the first time; a bare star previously hid them from this exact check. isRecord/IOS_SAFARI_BUNDLE_ID/REPLAY_DIVERGENCE_* have no production consumer. Kept rather than narrowed here so the façade's re-export surface stays byte-identical to the symbol set the retired pin table asserted — narrowing the surface is a follow-up with its own review, not a side effect of this mechanical conversion.",
+      "file": "packages/contracts/src/facades/{client,command,divergence,recording}.ts",
       "exports": [
         "isRecord",
         "IOS_SAFARI_BUNDLE_ID",
@@ -188,21 +183,7 @@
         "measureReplayDivergenceBytes",
         "sanitizeReplayDivergenceField",
         "truncateUtf8Field",
-        "GESTURE_DURATION_MAX_MS",
-        "GESTURE_INITIAL_ANGLE_DEGREES",
-        "GESTURE_SAMPLE_INTERVAL_MS",
-        "INTERACTION_GUARANTEES",
-        "INTERACTION_PATH_IDS",
-        "buildSwipePresetGesturePlan",
-        "clampGestureCoordinate",
-        "gestureDirectionDelta",
-        "parseAndroidInputMethodPackage",
-        "isRecordingExportQuality",
-        "COORDINATE_GESTURE_KINDS",
-        "normalizePublicGesture",
-        "DEFAULT_DRAG_DESTINATION_HOLD_MS",
-        "DEFAULT_DRAG_MOVE_MS",
-        "DEFAULT_DRAG_SOURCE_HOLD_MS"
+        "isRecordingExportQuality"
       ]
     }
   ],

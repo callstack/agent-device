@@ -1,8 +1,6 @@
 import { expect, test, vi } from 'vitest';
-import type {
-  AppleAppDeploymentExecutor,
-  PlatformRuntimeHost,
-} from '@agent-device/contracts/platform';
+import type { AppleAppDeploymentExecutor } from '@agent-device/contracts/app-deployment-runtime';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { appleAppDeploymentFacts, createAppleAppDeploymentOperations } from './runtime.ts';
 

@@ -2,8 +2,8 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
   InteractionTarget,
   PreresolvedInteractionTarget,
-  resolveClickButton,
 } from '@agent-device/contracts/interaction';
+import type { resolveClickButton } from '@agent-device/contracts/click-button';
 import type { ReplayTargetGuardDenotation } from '@agent-device/contracts/replay';
 import type { DaemonResponse } from '../types.ts';
 import { assertAndroidPressStayedInApp } from './interaction-android-escape.ts';

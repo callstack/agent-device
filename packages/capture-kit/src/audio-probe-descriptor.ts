@@ -1,9 +1,7 @@
 import { AUDIO_PROBE_RESOURCE_KIND } from '@agent-device/contracts/audio-probe-runtime';
 import type { AudioProbeSource } from '@agent-device/contracts/audio-probe-result';
-import type {
-  DurableDescriptorCodec,
-  ManagedProcessIdentity,
-} from '@agent-device/contracts/platform';
+import type { DurableDescriptorCodec } from '@agent-device/contracts/durable-resource-envelope';
+import type { ManagedProcessIdentity } from '@agent-device/contracts/platform-runtime-host';
 
 /**
  * Stable reconstruction coordinates for one host audio capture. The helper transport cannot

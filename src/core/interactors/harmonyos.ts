@@ -1,6 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { closeHarmonyApp, openHarmonyApp } from '../../platforms/harmonyos/app-lifecycle.ts';
 import {

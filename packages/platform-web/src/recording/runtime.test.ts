@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { expect, test, vi } from 'vitest';
-import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/platform';
+import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { bindWebScreenRecordingRuntime } from './runtime.ts';
 

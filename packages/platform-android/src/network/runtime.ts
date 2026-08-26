@@ -1,10 +1,9 @@
 import type {
   HostCommandRequest,
   HostCommandResult,
-  NetworkDumpInput,
-  NetworkDumpResult,
-  PlatformRuntimeHost,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
+import type { NetworkDumpInput, NetworkDumpResult } from '@agent-device/contracts/network-runtime';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { mergeNetworkDumps, readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { assertAndroidLogPackageSafe } from '../logs/package-name.ts';

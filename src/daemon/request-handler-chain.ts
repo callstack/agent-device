@@ -18,7 +18,7 @@ import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
 import type { AudioProbeAdmissionLedger } from './audio-probe-admission-ledger.ts';
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
-import type { PlatformRequestScope } from '@agent-device/contracts/platform';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { RequestPlatformProviderScope } from './request-platform-providers.ts';
 
 type RequestHandlerChainParams = {

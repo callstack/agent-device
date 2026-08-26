@@ -20,7 +20,8 @@ import {
   type FinishOutcome,
   type ReattachOutcome,
 } from '@agent-device/contracts/durable-resource';
-import type { HostCommandResult, RuntimeOwnerRef } from '@agent-device/contracts/platform';
+import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
+import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import { hostAudioProbeDescriptorCodec } from './audio-probe-descriptor.ts';
 import { createHostAudioProbeRecoveryOperations } from './audio-probe-recovery.ts';

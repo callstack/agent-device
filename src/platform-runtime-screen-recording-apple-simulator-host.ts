@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import type {
   HostCommandResult,
   ManagedProcessIdentity,
-  ScreenRecordingBackgroundProcess,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
+import type { ScreenRecordingBackgroundProcess } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppleSimulatorScreenRecordingProcess } from './platform-runtime-screen-recording-apple-transport.ts';
 import {

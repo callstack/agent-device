@@ -2,7 +2,7 @@ import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import type {
   DeviceInventoryHostFor,
   PlatformRequestScope,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
 import { sortAppleDevicesForSelection, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {

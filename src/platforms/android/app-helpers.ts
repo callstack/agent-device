@@ -1,5 +1,5 @@
 import { resolveAppsFilter, type AppsFilter } from '@agent-device/contracts/device';
-import type { AppStateRuntimeResult } from '@agent-device/contracts/platform';
+import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import { androidAdbResultError, type AndroidAdbExecutor } from './adb-executor.ts';
 import {
   parseAndroidLaunchablePackages,

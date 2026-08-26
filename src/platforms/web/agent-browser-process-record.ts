@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import type { OwnedProcessRecord } from '@agent-device/contracts/platform';
+import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { withoutCommandExecutorOverride } from '../../utils/exec.ts';
 import {

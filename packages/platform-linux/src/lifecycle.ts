@@ -1,7 +1,7 @@
 import type {
   ApplicationLifecycleRuntimeOperations,
   LocalApplicationInteractorHost,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   bindDirectApplicationLifecycle,
   bindLocalApplicationLifecycleInteractor,

@@ -1,12 +1,11 @@
 import type { LogBackend } from '@agent-device/contracts/observability';
+import type { AppLogCompletion, AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
+import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import type {
-  AppLogCompletion,
-  AppLogLiveHandle,
-  DurableResourceEnvelope,
-  PendingTransferGuard,
   ResourceOwnershipFence,
   RuntimeOwnerRef,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
 import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';

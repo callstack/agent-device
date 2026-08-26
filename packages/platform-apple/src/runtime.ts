@@ -1,11 +1,15 @@
+import {
+  type DeviceBinding,
+  type RuntimeOperationFact,
+  localRuntimeOwner,
+  whenAdmitted,
+} from '@agent-device/contracts/platform-runtime';
+import type { NetworkDumpInput } from '@agent-device/contracts/network-runtime';
 import type {
-  DeviceBinding,
-  NetworkDumpInput,
-  RuntimeOperationFact,
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
@@ -20,7 +24,6 @@ import {
 } from '@agent-device/contracts/focus-runtime';
 import { bindLocalGestureInteractor } from '@agent-device/contracts/gesture-runtime';
 import { bindLocalScrollInteractor } from '@agent-device/contracts/scroll-runtime';
-import { localRuntimeOwner, whenAdmitted } from '@agent-device/contracts/platform-runtime';
 import {
   bindLocalScreenshotInteractor,
   screenshotRuntimeOperationFacts,

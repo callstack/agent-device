@@ -4,7 +4,7 @@ import type {
   DeviceInventoryHostFor,
   HostCommandRequest,
   PlatformRequestScope,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
 import { createHarmonyInventory, parseHarmonyTargetList } from './inventory.ts';
 
 const scope: PlatformRequestScope = {

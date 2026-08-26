@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import type { ElementSelectorKey } from '@agent-device/contracts/interaction';
+import type { ElementSelectorKey } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 import { bindAppleFindSelectorRuntime } from './runtime-snapshot.ts';

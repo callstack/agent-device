@@ -1,9 +1,9 @@
 import path from 'node:path';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type {
-  PlatformRuntimeHost,
   ScreenRecordingChunk,
   ScreenRecordingStartInput,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/screen-recording-runtime';
 import type { NativeChunk } from './manifest.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;

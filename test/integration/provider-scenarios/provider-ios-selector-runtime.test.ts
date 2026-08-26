@@ -7,8 +7,8 @@ import type {
   LeaseLifecycleProvider,
   ProviderDeviceRuntime,
 } from '@agent-device/contracts/device';
-import type { Interactor, SnapshotResult } from '@agent-device/contracts/interaction';
-import { providerRuntimeOwner } from '@agent-device/contracts/platform';
+import type { Interactor, SnapshotResult } from '@agent-device/contracts/interactor-types';
+import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { assertRpcOk } from './assertions.ts';

@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { ScreenRecordingStartInput } from '@agent-device/contracts/platform';
+import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 
 export async function validateAppleSimulatorRecording(
   device: DeviceInfo,

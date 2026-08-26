@@ -46,16 +46,6 @@
               {
                 "name": "node:child_process",
                 "message": "Use process helpers from src/utils/exec.ts instead of importing node:child_process directly."
-              },
-              {
-                "name": "@agent-device/contracts/platform",
-                "allowTypeImports": true,
-                "message": "Value-importing this facade evaluates all 32 vocabulary modules it re-exports. Import the symbol from the module that owns it (@agent-device/contracts/<module>). `import type` stays fine \u2014 it is erased."
-              },
-              {
-                "name": "@agent-device/contracts/interaction",
-                "allowTypeImports": true,
-                "message": "Value-importing this facade evaluates all 18 vocabulary modules it re-exports. Import the symbol from the module that owns it (@agent-device/contracts/<module>). `import type` stays fine \u2014 it is erased."
               }
             ]
           }
@@ -65,45 +55,7 @@
     {
       "files": ["src/utils/exec.ts", "src/**/*.test.ts", "src/**/__tests__/**/*.ts"],
       "rules": {
-        "eslint/no-restricted-imports": [
-          "error",
-          {
-            "paths": [
-              {
-                "name": "@agent-device/contracts/platform",
-                "allowTypeImports": true,
-                "message": "Value-importing this facade evaluates all 32 vocabulary modules it re-exports. Import the symbol from the module that owns it (@agent-device/contracts/<module>). `import type` stays fine \u2014 it is erased."
-              },
-              {
-                "name": "@agent-device/contracts/interaction",
-                "allowTypeImports": true,
-                "message": "Value-importing this facade evaluates all 18 vocabulary modules it re-exports. Import the symbol from the module that owns it (@agent-device/contracts/<module>). `import type` stays fine \u2014 it is erased."
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "files": ["packages/*/src/**/*.ts"],
-      "rules": {
-        "eslint/no-restricted-imports": [
-          "error",
-          {
-            "paths": [
-              {
-                "name": "@agent-device/contracts/platform",
-                "allowTypeImports": true,
-                "message": "Value-importing this facade evaluates all 32 vocabulary modules it re-exports. Import the symbol from the module that owns it (@agent-device/contracts/<module>). `import type` stays fine \u2014 it is erased."
-              },
-              {
-                "name": "@agent-device/contracts/interaction",
-                "allowTypeImports": true,
-                "message": "Value-importing this facade evaluates all 18 vocabulary modules it re-exports. Import the symbol from the module that owns it (@agent-device/contracts/<module>). `import type` stays fine \u2014 it is erased."
-              }
-            ]
-          }
-        ]
+        "eslint/no-restricted-imports": ["error", { "paths": [] }]
       }
     },
     {

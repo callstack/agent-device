@@ -1,4 +1,4 @@
-import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/platform';
+import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import {
   getRecordingOverlaySupportWarning,
   overlayRecordingTouches,

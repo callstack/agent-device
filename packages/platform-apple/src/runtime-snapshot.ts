@@ -1,16 +1,18 @@
+import {
+  type CaptureSnapshotInput,
+  bindLocalSnapshotInteractor,
+  captureSnapshotSignal,
+} from '@agent-device/contracts/snapshot-runtime';
 import type {
-  CaptureSnapshotInput,
   FindSelectorInput,
   FindSelectorResult,
   FindTextInput,
   FindTextResult,
+} from '@agent-device/contracts/selector-observation-runtime';
+import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
-} from '@agent-device/contracts/platform';
-import {
-  bindLocalSnapshotInteractor,
-  captureSnapshotSignal,
-} from '@agent-device/contracts/snapshot-runtime';
+} from '@agent-device/contracts/platform-runtime-operations';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 
 /** Apple-owned selection between app snapshots and explicit macOS surface snapshots. */

@@ -1,17 +1,21 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppsFilter, ProviderPortReverseOptions } from '@agent-device/contracts/device';
-import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { bindLimrunInteractionOperations } from './interaction-operations.ts';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { AppError } from '@agent-device/kernel/errors';
 import { isSupportedLimrunAppLogDevice, parseLimrunDeviceId } from './device.ts';
+import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
+import {
+  type DeviceBinding,
+  providerRuntimeOwner,
+  sameRuntimeOwner,
+} from '@agent-device/contracts/platform-runtime';
 import type {
-  AppStateRuntimeResult,
-  DeviceBinding,
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
 import {
   appLogSessionArtifactsMatch,
   assertAppLogSessionArtifacts,
@@ -20,7 +24,6 @@ import {
   readRecentNetworkTrafficFromText,
 } from '@agent-device/capture-kit';
 import { availableApplicationLifecycleOperations } from '@agent-device/contracts/application-lifecycle-runtime';
-import { providerRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import {
   createLimrunAppLogEnvelope,

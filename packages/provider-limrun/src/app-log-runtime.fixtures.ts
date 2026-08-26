@@ -1,4 +1,5 @@
-import type { PlatformRequestScope, PlatformRuntimeHost } from '@agent-device/contracts/platform';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { LimrunPlatformRuntimeOwnerOptions } from './app-log-runtime.ts';
 

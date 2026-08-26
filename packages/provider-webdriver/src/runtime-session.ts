@@ -21,7 +21,7 @@ import type {
   CloudWebDriverPreparedSession,
   CloudWebDriverRuntimeOptions,
 } from './runtime.ts';
-import type { Interactor } from '@agent-device/contracts/interaction';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
 
 export type WebDriverProviderSession = Readonly<{
   lease: DeviceLease;

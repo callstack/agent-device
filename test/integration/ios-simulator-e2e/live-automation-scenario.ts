@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { DEFAULT_ALERT_TIMEOUT_MS } from '@agent-device/contracts/interaction';
+import { DEFAULT_ALERT_TIMEOUT_MS } from '@agent-device/contracts/alert-contract';
 
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
 import {

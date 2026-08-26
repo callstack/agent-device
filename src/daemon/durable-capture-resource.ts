@@ -1,11 +1,11 @@
 import type { JsonObject } from '@agent-device/contracts/client';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
+import type { LiveResourceHandle } from '@agent-device/contracts/durable-resource';
+import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import type {
-  DurableResourceEnvelope,
-  LiveResourceHandle,
-  PendingTransferGuard,
   ResourceOwnershipFence,
   RuntimeOwnerRef,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DurableCaptureAdmissionLedger } from './durable-capture-admission-ledger.ts';
 import { adoptStartedDurableCapture } from './durable-capture-resource-adoption.ts';

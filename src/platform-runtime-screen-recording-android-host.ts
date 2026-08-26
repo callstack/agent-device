@@ -2,7 +2,7 @@ import path from 'node:path';
 import type {
   AndroidScreenRecordingProcessIdentity,
   AndroidScreenRecordingTransport,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { shellQuote } from './utils/shell-quote.ts';
 import { isPlayableVideo } from './utils/video.ts';

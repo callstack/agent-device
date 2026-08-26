@@ -2,7 +2,7 @@ import type {
   HostCommandResult,
   ManagedProcessIdentity,
   ManagedProcessOwnership,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
 import {
   expandProcessTree,
   isProcessAlive,

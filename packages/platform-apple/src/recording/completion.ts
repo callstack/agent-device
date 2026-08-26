@@ -1,5 +1,5 @@
 import { asAppError } from '@agent-device/kernel/errors';
-import type { ScreenRecordingLiveSnapshot } from '@agent-device/contracts/platform';
+import type { ScreenRecordingLiveSnapshot } from '@agent-device/contracts/screen-recording-runtime';
 import { createScreenRecordingCompletion } from '@agent-device/capture-kit';
 import type { AppleScreenRecordingOperationHost } from './recovery.ts';
 

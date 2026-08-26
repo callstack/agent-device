@@ -1,5 +1,6 @@
 import { expect, test, vi } from 'vitest';
-import type { NetworkDumpInput, PlatformRuntimeHost } from '@agent-device/contracts/platform';
+import type { NetworkDumpInput } from '@agent-device/contracts/network-runtime';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { dumpAppleNetworkTraffic } from './runtime.ts';
 

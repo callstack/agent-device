@@ -1,8 +1,8 @@
 import type {
   ScreenRecordingCompletion,
-  ScreenRecordingFinalizer,
   ScreenRecordingLiveSnapshot,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/screen-recording-runtime';
+import type { ScreenRecordingFinalizer } from '@agent-device/contracts/screen-recording-runtime-host';
 
 export function createScreenRecordingCompletion(
   snapshot: ScreenRecordingLiveSnapshot,

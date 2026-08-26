@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { AppleToolHost } from '@agent-device/contracts/platform';
+import type { AppleToolHost } from '@agent-device/contracts/platform-runtime-host';
 
 export async function getSimulatorState(
   appleTools: AppleToolHost,

@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import type { RunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
+import {
+  type RunnerCommand,
+  runAppleRunnerCommand,
+} from '../../platforms/apple/core/runner/runner-client.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { setActiveProviderDeviceRuntimes } from '../../provider-device-runtime.ts';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 
@@ -15,7 +18,6 @@ vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOrigi
 
 import { getInteractor, getLocalInteractor } from '../../core/interactors.ts';
 import { resolveAppleBackRunnerCommand } from '../../platforms/apple/interactions.ts';
-import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 
 const iosSimulator: DeviceInfo = {
   platform: 'apple',

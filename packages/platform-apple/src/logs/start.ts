@@ -7,9 +7,9 @@ import type {
   AppLogRuntimeHost,
   AppLogStartInput,
   AppLogStartResult,
-  FinishOutcome,
-  RuntimeOwnerRef,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/app-log-runtime';
+import type { FinishOutcome } from '@agent-device/contracts/durable-resource';
+import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { LogBackend } from '@agent-device/contracts/observability';
 import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import {

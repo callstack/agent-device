@@ -10,7 +10,7 @@ import type {
   ScreenRecordingLiveHandle,
   ScreenRecordingLiveSnapshot,
 } from '@agent-device/contracts/screen-recording-runtime';
-import type { GestureReferenceFrame } from '@agent-device/contracts/interaction';
+import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
 
 type ScreenRecordingLiveHandleImplementation = Readonly<{
   finish(snapshot: ScreenRecordingLiveSnapshot): Promise<FinishOutcome<ScreenRecordingCompletion>>;

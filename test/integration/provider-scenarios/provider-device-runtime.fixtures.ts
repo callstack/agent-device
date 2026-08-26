@@ -10,28 +10,38 @@ import type {
   Interactor,
   RunnerContext,
   SnapshotResult,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/interactor-types';
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
+  type ApplicationLifecycleRuntimeOperations,
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import {
   bindProviderApplicationLifecycleInteractor,
-  bindProviderSnapshotInteractor,
-  bindProviderTouchInteractor,
   invokeApplicationClose,
   invokeApplicationOpen,
+} from '@agent-device/contracts/application-lifecycle-interaction';
+import { bindProviderSnapshotInteractor } from '@agent-device/contracts/snapshot-runtime';
+import {
+  bindProviderTouchInteractor,
+  touchRuntimeOperationFacts,
+} from '@agent-device/contracts/touch-runtime';
+import {
   providerRuntimeOwner,
   sameRuntimeOwner,
-  type AppDeploymentInput,
-  type AppDeploymentResult,
-  type ApplicationLifecycleRuntimeOperations,
   type DeviceBinding,
   type DeviceBindingRequest,
-  type PlatformRuntimeOperations,
-  type PlatformRuntimeOwner,
-  type PlatformRuntimeProviderModule,
   type RuntimeFacts,
-  touchRuntimeOperationFacts,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
+import type {
+  AppDeploymentInput,
+  AppDeploymentResult,
+} from '@agent-device/contracts/app-deployment-runtime';
+import type {
+  PlatformRuntimeOperations,
+  PlatformRuntimeOwner,
+  PlatformRuntimeProviderModule,
+} from '@agent-device/contracts/platform-runtime-operations';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../src/__tests__/test-utils/runtime-operation-facts.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';

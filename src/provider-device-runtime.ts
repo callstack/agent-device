@@ -6,7 +6,7 @@ import type {
   ProviderDeviceRuntime,
   ProviderExpiredLeaseRecovery,
 } from '@agent-device/contracts/device';
-import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type {
   CloudArtifactProvider,
   CloudArtifactsQuery,

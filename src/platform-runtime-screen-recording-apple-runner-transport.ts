@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { ManagedProcessOwnership } from '@agent-device/contracts/platform';
+import type { ManagedProcessOwnership } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createScopedProvider } from './utils/scoped-provider.ts';
 import { isProcessAlive } from './utils/host-process.ts';

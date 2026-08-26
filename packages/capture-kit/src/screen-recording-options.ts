@@ -1,5 +1,5 @@
 import type { RecordingScope } from '@agent-device/contracts/recording';
-import type { ScreenRecordingStartInput } from '@agent-device/contracts/platform';
+import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import { AppError } from '@agent-device/kernel/errors';
 
 type ScreenRecordingOptionSupport = Readonly<{

@@ -1,4 +1,4 @@
-import type { PlatformRuntimeHost } from '@agent-device/contracts/platform';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { getSimulatorState, simctlArgs } from '../simulator-state.ts';

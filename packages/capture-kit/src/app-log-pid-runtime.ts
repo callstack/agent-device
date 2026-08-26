@@ -8,15 +8,20 @@ import type {
   AppLogSessionArtifacts,
   AppLogStartInput,
   AppLogStartResult,
-  DeviceBinding,
-  DeviceRuntimeOwner,
+} from '@agent-device/contracts/app-log-runtime';
+import {
+  type DeviceBinding,
+  type DeviceRuntimeOwner,
+  type RuntimeFacts,
+  type RuntimeOwnerRef,
+  localRuntimeOwner,
+  sameRuntimeOwner,
+} from '@agent-device/contracts/platform-runtime';
+import type {
   DurableDescriptorCodec,
   DurableResourceEnvelope,
-  HostCommandRequest,
-  RuntimeFacts,
-  RuntimeOwnerRef,
-} from '@agent-device/contracts/platform';
-import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+} from '@agent-device/contracts/durable-resource-envelope';
+import type { HostCommandRequest } from '@agent-device/contracts/platform-runtime-host';
 import type { LogBackend } from '@agent-device/contracts/observability';
 import { createAppLogRecoveryOperations, createAppLogStartResult } from './app-log-runtime.ts';
 import {

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { JsonObject } from '@agent-device/contracts/client';
-import { localRuntimeOwner } from '@agent-device/contracts/platform';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { deviceIdentity } from '@agent-device/kernel/device';
 import { screenRecordingResourceStore } from '../../../src/daemon/screen-recording-resource-store.ts';
 import type { AndroidRecordingManifestFixture } from './android-recording-manifest-fixtures.ts';

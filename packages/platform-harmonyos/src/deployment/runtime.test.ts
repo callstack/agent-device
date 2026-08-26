@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import type { HostCommandRunner } from '@agent-device/contracts/platform';
+import type { HostCommandRunner } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHarmonyAppDeploymentOperations, harmonyAppDeploymentFacts } from './runtime.ts';
 

@@ -1,4 +1,4 @@
-import type { NetworkTransport } from '@agent-device/contracts/platform';
+import type { NetworkTransport } from '@agent-device/contracts/network-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 export async function resolveWebNetworkTransport(device: DeviceInfo): Promise<NetworkTransport> {

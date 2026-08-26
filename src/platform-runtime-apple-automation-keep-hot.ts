@@ -1,4 +1,4 @@
-import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/platform';
+import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-readiness-runtime';
 
 export function createAppleAutomationKeepHotHost(): DeviceReadinessRuntimeHost['appleAutomation'] {
   return Object.freeze({

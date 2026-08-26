@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import type { AppLogBackgroundProcess } from '@agent-device/contracts/platform';
+import type { AppLogBackgroundProcess } from '@agent-device/contracts/app-log-runtime';
 
 export function deferred<T>() {
   let resolve!: (value: T) => void;

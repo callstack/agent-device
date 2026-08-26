@@ -12,17 +12,19 @@ import type {
 import type {
   AppSwitcherCommandResult,
   BackCommandResult,
-  ClipboardCommandResult,
+  HomeCommandResult,
+  OrientationCommandResult,
+  TvRemoteCommandResult,
+} from '@agent-device/contracts/navigation';
+import type { ClipboardCommandResult } from '@agent-device/contracts/clipboard';
+import type {
   FillCommandResponseData,
   FindCommandResponseData,
-  HomeCommandResult,
-  KeyboardCommandResult,
   LongPressCommandResponseData,
-  OrientationCommandResult,
   PressCommandResponseData,
-  TvRemoteCommandResult,
-  WaitCommandResult,
 } from '@agent-device/contracts/interaction';
+import type { KeyboardCommandResult } from '@agent-device/contracts/keyboard';
+import type { WaitCommandResult } from '@agent-device/contracts/wait';
 import type { DoctorCommandResult } from '@agent-device/contracts/observability';
 import type { RecordingCommandResult, TraceCommandResult } from '@agent-device/contracts/recording';
 import type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contracts/replay';

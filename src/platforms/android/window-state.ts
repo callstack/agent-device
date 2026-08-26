@@ -1,4 +1,4 @@
-import type { AppStateRuntimeResult } from '@agent-device/contracts/platform';
+import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { runAndroidAdb } from './adb.ts';
 import {

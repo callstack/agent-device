@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { InteractionGuarantee } from '@agent-device/contracts/interaction';
+import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
 import { makeSnapshotState } from '../../../src/__tests__/test-utils/snapshot-builders.ts';
 import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { scenarioName } from './coverage-manifest.ts';

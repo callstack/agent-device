@@ -1,11 +1,11 @@
 import type {
   FillCommandResult,
-  GestureReferenceFrame,
   InteractionTarget,
   LongPressCommandResult,
   PressCommandResult,
   ResolvedInteractionTarget,
 } from '@agent-device/contracts/interaction';
+import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
 import { asAppError, normalizeError } from '@agent-device/kernel/errors';
 import { readResolvedInteractionTarget } from '../../contracts/interaction-outcome.ts';
 import { isSessionRecording } from '../session-script-publication-capability.ts';

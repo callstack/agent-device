@@ -35,7 +35,7 @@ import {
   bindProviderTouchInteractor,
   touchRuntimeOperationFacts,
 } from '@agent-device/contracts/touch-runtime';
-import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { RuntimeOperationUnavailability } from '@agent-device/contracts/platform-runtime';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { setTimeout as sleep } from 'node:timers/promises';

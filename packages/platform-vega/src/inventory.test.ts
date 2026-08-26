@@ -4,7 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type {
   DeviceInventoryHostFor,
   PlatformRequestScope,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
 import { createVegaInventory, parseVegaDeviceList } from './inventory.ts';
 
 const scope: PlatformRequestScope = {

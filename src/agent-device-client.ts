@@ -29,7 +29,7 @@ import type {
   SwipeGestureOptions,
   TransformGestureOptions,
 } from '@agent-device/contracts/client';
-import type { OrientationCommandResult } from '@agent-device/contracts/interaction';
+import type { OrientationCommandResult } from '@agent-device/contracts/navigation';
 import type { AgentArtifactsResult } from '@agent-device/contracts/observability';
 import type { MetroPrepareOptions } from '@agent-device/contracts/remote';
 import {

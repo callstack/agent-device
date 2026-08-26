@@ -1,6 +1,9 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import type { SnapshotOptions, SnapshotResult } from '@agent-device/contracts/interaction';
-import type { CaptureSnapshotInput, SnapshotRuntimeHost } from '@agent-device/contracts/platform';
+import type { SnapshotOptions, SnapshotResult } from '@agent-device/contracts/interactor-types';
+import type {
+  CaptureSnapshotInput,
+  SnapshotRuntimeHost,
+} from '@agent-device/contracts/snapshot-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   findSnapshotScopeRange,

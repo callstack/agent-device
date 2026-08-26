@@ -52,11 +52,11 @@ import {
   classifyAndroidHelperContent,
   type AndroidHelperContentRecoveryDecision,
 } from './snapshot-content-recovery.ts';
-import type {
-  AndroidCaptureFailureReason,
-  AndroidContentRecoveryReason,
-} from '@agent-device/contracts/platform';
-import { readAndroidCaptureFailureReason } from '@agent-device/contracts/android-snapshot-quality';
+import {
+  type AndroidCaptureFailureReason,
+  type AndroidContentRecoveryReason,
+  readAndroidCaptureFailureReason,
+} from '@agent-device/contracts/android-snapshot-quality';
 import {
   resetAndroidSnapshotHelperRuntime,
   retireAndroidSnapshotHelperAfterContentFailure,

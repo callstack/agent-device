@@ -1,5 +1,5 @@
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
-import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { createUnsupportedInteractor } from '../unsupported-interactor.ts';

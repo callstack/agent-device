@@ -1,4 +1,4 @@
-import type { CloseApplicationFinalizationResult } from '@agent-device/contracts/platform';
+import type { CloseApplicationFinalizationResult } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';

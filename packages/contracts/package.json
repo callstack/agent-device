@@ -123,6 +123,10 @@
       "types": "./src/facades/client.ts",
       "default": "./src/facades/client.ts"
     },
+    "./clipboard": {
+      "types": "./src/clipboard.ts",
+      "default": "./src/clipboard.ts"
+    },
     "./clipboard-runtime": {
       "types": "./src/clipboard-runtime.ts",
       "default": "./src/clipboard-runtime.ts"
@@ -200,8 +204,8 @@
       "default": "./src/home-runtime.ts"
     },
     "./interaction": {
-      "types": "./src/facades/interaction.ts",
-      "default": "./src/facades/interaction.ts"
+      "types": "./src/interaction.ts",
+      "default": "./src/interaction.ts"
     },
     "./interaction-error": {
       "types": "./src/interaction-error.ts",
@@ -218,6 +222,10 @@
     "./interactor-types": {
       "types": "./src/interactor-types.ts",
       "default": "./src/interactor-types.ts"
+    },
+    "./keyboard": {
+      "types": "./src/keyboard.ts",
+      "default": "./src/keyboard.ts"
     },
     "./keyboard-runtime": {
       "types": "./src/keyboard-runtime.ts",
@@ -243,6 +251,10 @@
       "types": "./src/network-runtime-plan.ts",
       "default": "./src/network-runtime-plan.ts"
     },
+    "./network-traffic": {
+      "types": "./src/network-traffic.ts",
+      "default": "./src/network-traffic.ts"
+    },
     "./observability": {
       "types": "./src/facades/observability.ts",
       "default": "./src/facades/observability.ts"
@@ -251,13 +263,17 @@
       "types": "./src/orientation-runtime.ts",
       "default": "./src/orientation-runtime.ts"
     },
-    "./platform": {
-      "types": "./src/facades/platform.ts",
-      "default": "./src/facades/platform.ts"
-    },
     "./platform-module": {
       "types": "./src/platform-module.ts",
       "default": "./src/platform-module.ts"
+    },
+    "./platform-plugin": {
+      "types": "./src/platform-plugin.ts",
+      "default": "./src/platform-plugin.ts"
+    },
+    "./platform-providers": {
+      "types": "./src/platform-providers.ts",
+      "default": "./src/platform-providers.ts"
     },
     "./platform-runtime": {
       "types": "./src/platform-runtime.ts",
@@ -299,9 +315,17 @@
       "types": "./src/react-native-overlay.ts",
       "default": "./src/react-native-overlay.ts"
     },
+    "./runner-lease-context": {
+      "types": "./src/runner-lease-context.ts",
+      "default": "./src/runner-lease-context.ts"
+    },
     "./screen-recording-runtime": {
       "types": "./src/screen-recording-runtime.ts",
       "default": "./src/screen-recording-runtime.ts"
+    },
+    "./screen-recording-runtime-host": {
+      "types": "./src/screen-recording-runtime-host.ts",
+      "default": "./src/screen-recording-runtime-host.ts"
     },
     "./screen-recording-runtime-plan": {
       "types": "./src/screen-recording-runtime-plan.ts",

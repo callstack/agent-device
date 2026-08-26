@@ -4,10 +4,12 @@ import type {
   DeployMaterializedAppInput,
   MaterializeAppSourceInput,
   MaterializedAppSource,
+} from '@agent-device/contracts/app-deployment-runtime';
+import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
-  RuntimeOperationFact,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
+import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import type { ProviderDeviceInstallResult } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';

@@ -3,7 +3,7 @@ import path from 'node:path';
 import type {
   DurableEnvelopeDecodeOutcome,
   DurableResourceEnvelope,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/durable-resource-envelope';
 import { decodeDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { withAtomicPublishTempPathSync } from '../utils/atomic-file.ts';
 import { openVerifiedFileForRead } from '../utils/verified-file.ts';

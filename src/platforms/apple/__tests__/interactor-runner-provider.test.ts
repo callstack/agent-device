@@ -1,4 +1,5 @@
-import type { GesturePlan, Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';

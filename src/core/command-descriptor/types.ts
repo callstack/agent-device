@@ -4,7 +4,7 @@ import type { DaemonCommandDescriptor } from '../../daemon/daemon-command-regist
 // descriptors read `command`, `positionals` and `flags` and never touch `internal`.
 import type { DispatchedCommand } from '@agent-device/contracts/command';
 import type { PostActionObservationSupport } from './post-action-observation.ts';
-import type { CommandPlatformExecution } from '@agent-device/contracts/platform';
+import type { CommandPlatformExecution } from '@agent-device/contracts/command-platform-execution';
 
 export type ResponseDataFieldTransform = {
   defaultValue?: unknown;

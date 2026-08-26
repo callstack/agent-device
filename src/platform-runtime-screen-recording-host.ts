@@ -1,7 +1,5 @@
-import type {
-  OwnedProcessRecordWriter,
-  ScreenRecordingRuntimeHost,
-} from '@agent-device/contracts/platform';
+import type { OwnedProcessRecordWriter } from '@agent-device/contracts/platform-runtime-host';
+import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 
 /** Lazy host-only composition; platform semantics stay package-owned. */
 export function createScreenRecordingRuntimeHost(

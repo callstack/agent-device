@@ -1,19 +1,19 @@
-import type {
-  ApplicationLifecycleRuntimeOperations,
-  CloseApplicationFinalizationInput,
-  CloseApplicationInput,
-  OpenApplicationInput,
-  OpenApplicationOutcome,
-  PlatformRuntimeHost,
-  PrepareAppleRunnerInput,
-  PrepareAppleRunnerResult,
-} from '@agent-device/contracts/platform';
+import {
+  type ApplicationLifecycleRuntimeOperations,
+  type CloseApplicationFinalizationInput,
+  type CloseApplicationInput,
+  type OpenApplicationInput,
+  type OpenApplicationOutcome,
+  type PrepareAppleRunnerInput,
+  type PrepareAppleRunnerResult,
+  hasRuntimeTransportHintValues,
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import {
   bindLocalApplicationLifecycleInteractor,
   invokeApplicationClose,
   invokeApplicationOpen,
 } from '@agent-device/contracts/application-lifecycle-interaction';
-import { hasRuntimeTransportHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { ensureAppleReady } from './readiness/runtime.ts';
 import { isApplePlatform, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';

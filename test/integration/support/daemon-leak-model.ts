@@ -28,7 +28,7 @@
 //                      proved dead. The latter fails closed rather than allowing
 //                      pid reuse to turn unknown evidence into a green checkpoint.
 import { uniquePositivePids } from '../../../src/utils/host-process.ts';
-import type { OwnedProcessRecord } from '@agent-device/contracts/platform';
+import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
 
 export type DaemonLeakPhase = 'after-close' | 'after-shutdown';
 

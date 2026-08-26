@@ -9,7 +9,7 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import type { RuntimeOwnerRef } from '@agent-device/contracts/platform';
+import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import { publishFileSync } from '../utils/atomic-file.ts';
 import { acquireProcessLock } from '../utils/process-lock.ts';
 import { ownerIdentityMatches, readCurrentOwnerIdentity } from '../utils/owner-identity.ts';

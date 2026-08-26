@@ -1,4 +1,7 @@
-import type { AppInventoryRuntimeHost, InstalledAppInfo } from '@agent-device/contracts/platform';
+import type {
+  AppInventoryRuntimeHost,
+  InstalledAppInfo,
+} from '@agent-device/contracts/app-inventory-runtime';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 

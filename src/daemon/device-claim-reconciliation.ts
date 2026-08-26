@@ -1,9 +1,7 @@
 import path from 'node:path';
-import type {
-  DeviceRuntimeGateway,
-  PlatformRequestScope,
-  PlatformRuntimeOperations,
-} from '@agent-device/contracts/platform';
+import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { sameDeviceIdentity } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { resolveDaemonPaths } from './config.ts';

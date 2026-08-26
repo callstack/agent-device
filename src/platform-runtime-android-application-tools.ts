@@ -2,7 +2,7 @@ import type {
   AndroidApplicationTools,
   OpenTargetResolution,
   OpenTargetResolutionInput,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './utils/diagnostics.ts';

@@ -2,8 +2,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type {
   DurableDescriptorCodec,
   DurableResourceEnvelope,
-  RuntimeOwnerRef,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/durable-resource-envelope';
+import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import { APP_LOG_RESOURCE_KIND } from '@agent-device/contracts/app-log-runtime';
 import { createDurableResourceEnvelope, encodeDurableDescriptor } from '@agent-device/capture-kit';
 

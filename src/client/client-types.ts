@@ -42,7 +42,7 @@ export type { MetroBridgeScope } from '@agent-device/contracts/remote';
 // fallow-ignore-next-line unused-type
 export type { AppsFilter } from '@agent-device/contracts/device';
 // fallow-ignore-next-line unused-type
-export type { AlertAction } from '@agent-device/contracts/interaction';
+export type { AlertAction } from '@agent-device/contracts/alert-contract';
 // fallow-ignore-next-line unused-type
 export type { AppleOS } from '@agent-device/kernel/device';
 // fallow-ignore-next-line unused-type
@@ -133,7 +133,7 @@ import type {
   MetroReloadResult,
 } from '@agent-device/contracts/remote';
 
-import type { RotateCommandResult } from '@agent-device/contracts/interaction';
+import type { RotateCommandResult } from '@agent-device/contracts/navigation';
 
 import type {
   NavigationCommandOptions,
@@ -156,8 +156,8 @@ export type { TriggerAppEventCommandResult } from '@agent-device/contracts/devic
 export type {
   /** @deprecated Renamed to `OrientationCommandResult`. Retained until the next major. */
   RotateCommandResult,
-  WaitCommandResult,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/navigation';
+export type { WaitCommandResult } from '@agent-device/contracts/wait';
 export type {
   DebugSymbolsOptions,
   DebugSymbolsResult,

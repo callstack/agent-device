@@ -3,7 +3,7 @@ import type {
   AppLogBackgroundProcess,
   AppLogOutputSink,
   AppLogRuntimeHost,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/app-log-runtime';
 import { deferred, processFixture } from './app-log-pid-process.fixtures.ts';
 import { createPidScopedAppLogProcess } from './app-log-pid-process.ts';
 

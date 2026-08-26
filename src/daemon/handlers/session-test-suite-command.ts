@@ -12,7 +12,12 @@ import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../../replay/script-sourc
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
-import { runReplayTestSuite } from '@agent-device/replay-test';
+import {
+  runReplayTestSuite,
+  type ReplayTestBindAttemptCancellation,
+  type ReplayTestShardContext,
+  type ReplayTestSuiteRequest,
+} from '@agent-device/replay-test';
 import { handleCloseCommand } from './session-close.ts';
 import { runReplayScriptSource } from './session-replay-runtime.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
@@ -27,11 +32,6 @@ import {
   registerRequestAbort,
 } from '../../request/cancel.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import type {
-  ReplayTestBindAttemptCancellation,
-  ReplayTestShardContext,
-  ReplayTestSuiteRequest,
-} from '@agent-device/replay-test';
 import { buildReplayTestSourceDiscovery } from './session-test-source-discovery.ts';
 import {
   buildReplayTestShardFlags,
@@ -46,7 +46,7 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../request-runtime-binding.ts';
 import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
-import type { PlatformRequestScope } from '@agent-device/contracts/platform';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import {
   buildReplayTestVideoOpenLifecycle,
   finalizeReplayTestVideoRecording,

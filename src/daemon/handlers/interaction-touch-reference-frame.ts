@@ -1,5 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { GestureReferenceFrame } from '@agent-device/contracts/interaction';
+import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { getAndroidScreenSize } from '../../platforms/android/input-actions.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';

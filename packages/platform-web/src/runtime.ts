@@ -1,11 +1,16 @@
+import {
+  type DeviceBinding,
+  type RuntimeFacts,
+  type RuntimeOperationFact,
+  localRuntimeOwner,
+  sameRuntimeOwner,
+  whenAdmitted,
+} from '@agent-device/contracts/platform-runtime';
 import type {
-  DeviceBinding,
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
-  RuntimeFacts,
-  RuntimeOperationFact,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
@@ -21,11 +26,6 @@ import {
   bindLocalScrollInteractor,
   scrollRuntimeOperationFacts,
 } from '@agent-device/contracts/scroll-runtime';
-import {
-  localRuntimeOwner,
-  sameRuntimeOwner,
-  whenAdmitted,
-} from '@agent-device/contracts/platform-runtime';
 import {
   bindLocalScreenshotInteractor,
   screenshotRuntimeOperationFacts,
@@ -60,7 +60,7 @@ import {
 } from '@agent-device/contracts/audio-probe-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { Interactor } from '@agent-device/contracts/interaction';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { bindWebScreenRecordingRuntime } from './recording/runtime.ts';
 import { bindWebApplicationLifecycle } from './lifecycle.ts';
 

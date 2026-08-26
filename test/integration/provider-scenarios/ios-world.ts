@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DeviceInventoryRequest } from '../../../src/core/dispatch-resolve.ts';
-import { buildGesturePlan } from '@agent-device/contracts/interaction';
+import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import type { ProviderScenarioTranscript } from './transcript.ts';
+import { type ProviderScenarioTranscript, createProviderTranscript } from './transcript.ts';
 import {
   createDemoIosApp,
   PROVIDER_SCENARIO_IOS_REINSTALL_DEVICE,
@@ -16,7 +16,6 @@ import {
   simctlListDevicesResult,
   type FlatToolCall,
 } from './providers.ts';
-import { createProviderTranscript } from './transcript.ts';
 
 type IosSettingsWorld = {
   daemon: ProviderScenarioHarness;

@@ -3,10 +3,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type {
   DeviceInventoryHostFor,
-  DeviceInventorySource,
   HostCommandResult,
   PlatformRequestScope,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
+import type { DeviceInventorySource } from '@agent-device/contracts/platform-module';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import { androidDiscoveryCommandError, attachAndroidDiscoveryTimeout } from './adb-failure.ts';
 import type { AndroidInventoryConfig } from './inventory-config.ts';

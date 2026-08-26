@@ -1,11 +1,11 @@
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
-import type {
-  CleanupOutcome,
-  DurableDescriptorCodec,
-  RuntimeOwnerRef,
-  ScreenRecordingStartInput,
-} from '@agent-device/contracts/platform';
-import { SCREEN_RECORDING_RESOURCE_KIND } from '@agent-device/contracts/screen-recording-runtime';
+import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
+import type { DurableDescriptorCodec } from '@agent-device/contracts/durable-resource-envelope';
+import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
+import {
+  type ScreenRecordingStartInput,
+  SCREEN_RECORDING_RESOURCE_KIND,
+} from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope, encodeDurableDescriptor } from '@agent-device/capture-kit';
 
 export type HarmonyRecordingDescriptor = Readonly<{

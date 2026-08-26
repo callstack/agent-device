@@ -1,4 +1,4 @@
-import type { GestureReferenceFrame } from '@agent-device/contracts/interaction';
+import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import {

@@ -4,12 +4,11 @@ import {
   summarizeSnapshotDiagnostics,
   type SnapshotDiffSummary,
 } from '@agent-device/contracts/capture';
-import type { SnapshotResult } from '@agent-device/contracts/platform';
+import type { SnapshotResult } from '@agent-device/contracts/snapshot-runtime';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
-import type { CommandSessionRecord } from '../runtime.ts';
-import { createAgentDevice } from '../runtime.ts';
+import { type CommandSessionRecord, createAgentDevice } from '../runtime.ts';
 import { getRequestSignal } from '../request/cancel.ts';
 import type { RuntimeAdmissionBindings } from './request-runtime-binding.ts';
 import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';

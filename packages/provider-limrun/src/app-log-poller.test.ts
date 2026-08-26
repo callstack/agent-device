@@ -1,4 +1,4 @@
-import type { AppLogRuntimeHost } from '@agent-device/contracts/platform';
+import type { AppLogRuntimeHost } from '@agent-device/contracts/app-log-runtime';
 import { describe, expect, test, vi } from 'vitest';
 import { startLimrunAppLogPoller, type LimrunAppLogReader } from './app-log-poller.ts';
 

@@ -1,8 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type {
-  PlatformRuntimeHost,
-  ScreenRecordingStartInput,
-} from '@agent-device/contracts/platform';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import {
   cleanupChunks,
   AndroidScreenRecordingStartRollbackUnconfirmed,

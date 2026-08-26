@@ -1,11 +1,10 @@
+import type { DragGestureInput } from '@agent-device/contracts/gesture-plan-types';
 import type {
-  DragGestureInput,
   HoverCommandResult,
   LongPressCommandResult,
   ResolutionDisclosure,
-  ScrollDirection,
-  ScrollInputDirection,
 } from '@agent-device/contracts/interaction';
+import type { ScrollDirection, ScrollInputDirection } from '@agent-device/contracts/scroll-gesture';
 import {
   buildDragGesturePlan,
   singlePointerPlanEndpoints,

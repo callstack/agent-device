@@ -2,13 +2,11 @@ import { AppError, createRequestCanceledError } from '@agent-device/kernel/error
 import crypto from 'node:crypto';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
-import type {
-  ClickButton,
-  ElementSelectorKey,
-  GesturePlan,
-  ScrollDirection,
-  ScrollReleaseBehavior,
-} from '@agent-device/contracts/interaction';
+import type { ClickButton } from '@agent-device/contracts/click-button';
+import type { ElementSelectorKey } from '@agent-device/contracts/interactor-types';
+import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
+import type { ScrollReleaseBehavior } from '@agent-device/contracts/scroll-command';
 import { getRequestSignal, isRequestCanceled } from '../../../../request/cancel.ts';
 import {
   bootFailureHint,

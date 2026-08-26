@@ -1,11 +1,13 @@
 import type {
   AppStateRuntimeHost,
   AppStateRuntimeResult,
+} from '@agent-device/contracts/app-state-runtime';
+import type {
   InventoryPlatformModule,
-  PlatformRuntimeModule,
   PlatformModuleMetadata,
-  DeviceShutdownRuntimeDependencies,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-module';
+import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-runtime-operations';
+import type { DeviceShutdownRuntimeDependencies } from '@agent-device/contracts/device-shutdown-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidInventoryConfig } from './inventory-config.ts';
 import type { AndroidAppStateHost } from './app-state.ts';

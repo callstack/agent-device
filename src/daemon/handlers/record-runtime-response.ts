@@ -3,8 +3,8 @@ import type { RecordingCommandResult } from '@agent-device/contracts/recording';
 import type {
   ScreenRecordingCompletion,
   ScreenRecordingLiveSnapshot,
-  RuntimeOperationUnavailability,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/screen-recording-runtime';
+import type { RuntimeOperationUnavailability } from '@agent-device/contracts/platform-runtime';
 import type { DaemonArtifact, DaemonResponse } from '../types.ts';
 import { deriveRecordingTelemetryPath } from '../../recording/telemetry.ts';
 

@@ -1,14 +1,16 @@
-import type { TypeTextBackendResult } from '@agent-device/contracts/interaction';
+import type { TypeTextBackendResult } from '@agent-device/contracts/interactor-types';
 import type {
   ElementTextRuntimeOperations,
-  FocusPointInput,
-  TypeTextInput,
+  ReadTextAtPointInput,
+} from '@agent-device/contracts/element-text-runtime';
+import type { FocusPointInput } from '@agent-device/contracts/focus-runtime';
+import type { TypeTextInput } from '@agent-device/contracts/type-text-runtime';
+import type {
   FindSelectorInput,
   FindSelectorRuntimeOperations,
   FindTextInput,
   FindTextRuntimeOperations,
-  ReadTextAtPointInput,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/selector-observation-runtime';
 
 export type BoundElementRead = ElementTextRuntimeOperations['readTextAtPoint'];
 export type BoundNativeTextRead = FindTextRuntimeOperations['findText'];

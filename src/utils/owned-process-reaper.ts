@@ -1,4 +1,4 @@
-import type { OwnedProcessRecord } from '@agent-device/contracts/platform';
+import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
 import {
   isProcessAlive,
   isProcessZombie,

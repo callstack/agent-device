@@ -1,9 +1,9 @@
 import type {
   InventoryPlatformModule,
-  PlatformRuntimeModule,
   PlatformModuleMetadata,
-  DeviceShutdownRuntimeDependencies,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-module';
+import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-runtime-operations';
+import type { DeviceShutdownRuntimeDependencies } from '@agent-device/contracts/device-shutdown-runtime';
 
 const metadata = Object.freeze({
   family: 'apple',

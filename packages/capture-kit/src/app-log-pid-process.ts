@@ -6,7 +6,7 @@ import type {
   AppLogProcessStart,
   AppLogProcessCommand,
   AppLogRuntimeHost,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/app-log-runtime';
 import { createAppLogLiveHandleFromFinish } from './app-log-live-handle.ts';
 import { monitorPidScopedProcess } from './app-log-pid-monitor.ts';
 

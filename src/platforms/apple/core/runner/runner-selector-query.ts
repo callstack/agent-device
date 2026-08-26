@@ -1,4 +1,4 @@
-import type { ElementSelectorKey } from '@agent-device/contracts/interaction';
+import type { ElementSelectorKey } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { runAppleRunnerCommand } from './runner-client.ts';
 import type { AppleRunnerCommandOptions } from './runner-provider.ts';

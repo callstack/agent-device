@@ -6,8 +6,8 @@ import type {
   AppDeploymentInput,
   AppDeploymentResult,
   DeployMaterializedAppInput,
-  RuntimeOperationFact,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/app-deployment-runtime';
+import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { capabilitySupported, unsupportedCapabilityMessage } from './capabilities.ts';

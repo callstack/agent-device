@@ -1,4 +1,5 @@
-import type { EnsureReadyInput, PlatformRuntimeHost } from '@agent-device/contracts/platform';
+import type { EnsureReadyInput } from '@agent-device/contracts/device-readiness-runtime';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 
 /** Readiness reads exactly these host ports; the lifecycle binding composes the same subset. */
 export type AndroidReadinessHost = Pick<

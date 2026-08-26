@@ -1,20 +1,22 @@
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
-import type { Interactor } from '@agent-device/contracts/interaction';
-import type {
-  ApplicationLifecycleRuntimeOperations,
-  DeviceBinding,
-  PlatformRuntimeHost,
-  PlatformRuntimeOperations,
-  PlatformRuntimeOwner,
-  PlatformRequestScope,
-  RuntimeFacts,
-  RuntimeOwnerRef,
-} from '@agent-device/contracts/platform';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
 import {
+  type ApplicationLifecycleRuntimeOperations,
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
-import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import {
+  type DeviceBinding,
+  type RuntimeFacts,
+  type RuntimeOwnerRef,
+  providerRuntimeOwner,
+} from '@agent-device/contracts/platform-runtime';
+import type {
+  PlatformRuntimeHost,
+  PlatformRuntimeOperations,
+  PlatformRuntimeOwner,
+} from '@agent-device/contracts/platform-runtime-operations';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from './__tests__/test-utils/runtime-operation-facts.ts';

@@ -2,7 +2,7 @@ import type {
   RunnerContext,
   SnapshotOptions,
   SnapshotResult,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 /**

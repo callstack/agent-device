@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
-import type { SnapshotOptions } from '@agent-device/contracts/interaction';
+import type { SnapshotOptions } from '@agent-device/contracts/interactor-types';
 import { runHarmonyHdc } from './hdc.ts';
 
 const MAX_NODES = 5_000;

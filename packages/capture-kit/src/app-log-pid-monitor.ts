@@ -1,4 +1,7 @@
-import type { AppLogBackgroundProcess, AppLogLiveSnapshot } from '@agent-device/contracts/platform';
+import type {
+  AppLogBackgroundProcess,
+  AppLogLiveSnapshot,
+} from '@agent-device/contracts/app-log-runtime';
 
 export type PidScopedProcess = Readonly<{
   pid: string;

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import type { AndroidScreenRecordingTransport } from '@agent-device/contracts/platform';
+import type { AndroidScreenRecordingTransport } from '@agent-device/contracts/screen-recording-runtime-host';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import {
   androidRecordingDevice,

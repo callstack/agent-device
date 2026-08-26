@@ -2,12 +2,12 @@ import type {
   AudioProbeCompletion,
   AudioProbeLiveHandle,
 } from '@agent-device/contracts/audio-probe-runtime';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
+import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import type {
-  DurableResourceEnvelope,
-  PendingTransferGuard,
   ResourceOwnershipFence,
   RuntimeOwnerRef,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
 import type { AudioProbeAdmissionLedger } from './audio-probe-admission-ledger.ts';

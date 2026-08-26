@@ -4,7 +4,7 @@ import {
   createInstanceClient as createAndroidInstanceClient,
   type InstanceClient as LimrunAndroidClient,
 } from '@limrun/api/instance-client';
-import type { Interactor } from '@agent-device/contracts/interaction';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type {
   DeviceLease,
   ProviderDeviceInstallOptions,

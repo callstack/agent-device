@@ -4,7 +4,7 @@ import {
   ANDROID_CONTENT_RECOVERY_REASONS,
   isAndroidContentRecoveryReason,
   isUnreadableCaptureContentError,
-} from './facades/platform.ts';
+} from './android-snapshot-quality.ts';
 
 test('Android content-recovery reasons are a single guarded taxonomy', () => {
   assert.deepEqual(ANDROID_CONTENT_RECOVERY_REASONS, [

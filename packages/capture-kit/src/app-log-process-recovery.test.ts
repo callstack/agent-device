@@ -3,7 +3,7 @@ import { test, vi } from 'vitest';
 import type {
   AppLogProcessMarkerReadOutcome,
   AppLogProcessOwnership,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/app-log-runtime';
 import {
   cleanupManagedAppLogProcess,
   reattachCleanupOnlyAppLogProcess,

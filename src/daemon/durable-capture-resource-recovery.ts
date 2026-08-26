@@ -1,11 +1,11 @@
 import path from 'node:path';
-import type {
-  DurableResourceEnvelope,
-  LiveResourceHandle,
-  PlatformRequestScope,
-  ResourceUnreattachableReason,
-} from '@agent-device/contracts/platform';
-import { isConfirmedCleanup } from '@agent-device/contracts/durable-resource';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
+import {
+  type LiveResourceHandle,
+  type ResourceUnreattachableReason,
+  isConfirmedCleanup,
+} from '@agent-device/contracts/durable-resource';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import {
   acquireDurableCaptureRecoveryAuthorityBeforeDeadline,

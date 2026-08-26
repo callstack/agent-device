@@ -3,7 +3,7 @@ import type {
   ProviderDeviceRuntime,
 } from '@agent-device/contracts/device';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
-import type { OwnedProcessRecordWriter } from '@agent-device/contracts/platform';
+import type { OwnedProcessRecordWriter } from '@agent-device/contracts/platform-runtime-host';
 import type {
   AppStateRuntimeHost,
   AppStateRuntimeResult,
@@ -46,8 +46,10 @@ import {
   inventoryModule as webInventoryModule,
   runtimeModule as webRuntimeModule,
 } from '@agent-device/platform-web';
-import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
-import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gateway.ts';
+import {
+  createComposedPlatformRuntimeGateway,
+  type PlatformRuntimeProviderRegistration,
+} from './platform-runtime-gateway.ts';
 import { createComposedDeviceInventoryGateways } from './platform-runtime-device-inventory.ts';
 
 export async function readAndroidAppStateWithHost(

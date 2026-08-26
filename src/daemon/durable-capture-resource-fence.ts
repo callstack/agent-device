@@ -2,8 +2,8 @@ import { AppError } from '@agent-device/kernel/errors';
 import type {
   DurableResourceEnvelope,
   DurableResourceLifecycleState,
-  ResourceOwnershipFence,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/durable-resource-envelope';
+import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import type { DurableCaptureResourceStore } from './durable-capture-resource-store.ts';
 
 const resourceFenceTails = new Map<string, Promise<void>>();

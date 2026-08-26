@@ -1,4 +1,4 @@
-import type { AppLogRuntimeHost } from '@agent-device/contracts/platform';
+import type { AppLogRuntimeHost } from '@agent-device/contracts/app-log-runtime';
 
 export const IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED = {
   message: 'iOS physical-device app console capture is not supported by the installed devicectl.',

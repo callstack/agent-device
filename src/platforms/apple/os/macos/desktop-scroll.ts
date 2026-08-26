@@ -1,8 +1,5 @@
-import type {
-  RunnerCallOptions,
-  RunnerContext,
-  ScrollDirection,
-} from '@agent-device/contracts/interaction';
+import type { RunnerCallOptions, RunnerContext } from '@agent-device/contracts/interactor-types';
+import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerCommand } from '../../core/runner/runner-contract.ts';
 import {

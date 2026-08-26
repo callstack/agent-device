@@ -5,7 +5,7 @@ import {
   isViewportRootNode,
 } from '@agent-device/contracts/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
-import type { ScrollDirection } from '@agent-device/contracts/interaction';
+import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import type {
   HiddenContentHint,
   Point,

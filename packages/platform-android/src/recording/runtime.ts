@@ -1,13 +1,13 @@
 import path from 'node:path';
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
-import type {
-  PlatformRuntimeHost,
-  RuntimeOwnerRef,
-  ScreenRecordingRuntimeOperations,
-  ScreenRecordingStartInput,
-} from '@agent-device/contracts/platform';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
+import {
+  type ScreenRecordingRuntimeOperations,
+  type ScreenRecordingStartInput,
+  SCREEN_RECORDING_RESOURCE_KIND,
+} from '@agent-device/contracts/screen-recording-runtime';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
-import { SCREEN_RECORDING_RESOURCE_KIND } from '@agent-device/contracts/screen-recording-runtime';
 import {
   createDurableResourceEnvelope,
   createScreenRecordingLiveHandle,

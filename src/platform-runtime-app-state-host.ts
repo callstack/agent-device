@@ -1,4 +1,7 @@
-import type { AppStateRuntimeCommand, AppStateRuntimeHost } from '@agent-device/contracts/platform';
+import type {
+  AppStateRuntimeCommand,
+  AppStateRuntimeHost,
+} from '@agent-device/contracts/app-state-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 export function createAppStateRuntimeHost(): AppStateRuntimeHost {

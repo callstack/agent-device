@@ -1,9 +1,9 @@
 import { expect, test, vi } from 'vitest';
+import type { DeviceBinding } from '@agent-device/contracts/platform-runtime';
 import type {
-  DeviceBinding,
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHarmonyPlatformRuntime } from './runtime.ts';
 

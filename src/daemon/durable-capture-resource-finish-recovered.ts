@@ -1,8 +1,6 @@
-import type {
-  DurableResourceEnvelope,
-  LiveResourceHandle,
-  PlatformRequestScope,
-} from '@agent-device/contracts/platform';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
+import type { LiveResourceHandle } from '@agent-device/contracts/durable-resource';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   acquireDurableCaptureRecoveryAuthorityBeforeDeadline,

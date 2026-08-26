@@ -5,7 +5,7 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOwner,
   PlatformRuntimeProviderModule,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
 import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gateway.ts';
 import { providerWebDriver } from './provider-webdriver.ts';
 

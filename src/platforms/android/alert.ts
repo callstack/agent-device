@@ -1,5 +1,5 @@
-import type { AlertAction } from '@agent-device/contracts/interaction';
 import {
+  type AlertAction,
   ALERT_ACTION_RETRY_MS,
   ALERT_POLL_INTERVAL_MS,
   DEFAULT_ALERT_TIMEOUT_MS,

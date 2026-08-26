@@ -1,4 +1,5 @@
-import type { CleanupOutcome, PlatformRuntimeHost } from '@agent-device/contracts/platform';
+import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { cleanupChunks, stopOwnedChunks } from './chunks.ts';
 import { pending } from './completion.ts';
 import type { NativeManifest } from './manifest.ts';

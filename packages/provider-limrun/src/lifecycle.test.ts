@@ -1,9 +1,6 @@
-import type {
-  DeviceBinding,
-  PlatformRuntimeOperations,
-  RuntimeFacts,
-} from '@agent-device/contracts/platform';
-import type { Interactor } from '@agent-device/contracts/interaction';
+import type { DeviceBinding, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
 import {

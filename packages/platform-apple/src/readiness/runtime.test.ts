@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import type { PlatformRuntimeHost } from '@agent-device/contracts/platform';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { platformRuntimeHostFixture } from '../runtime.fixtures.ts';
 import { ensureAppleReady } from './runtime.ts';

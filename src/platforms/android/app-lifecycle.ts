@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { AppStateRuntimeResult } from '@agent-device/contracts/platform';
+import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import { sleep } from '../../utils/timeouts.ts';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';

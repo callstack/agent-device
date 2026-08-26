@@ -1,4 +1,4 @@
-import type { GestureReferenceFrame } from '@agent-device/contracts/interaction';
+import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
 import { successText } from '../../utils/success-text.ts';
 
 /**

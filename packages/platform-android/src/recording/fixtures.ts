@@ -1,4 +1,4 @@
-import type { PlatformRuntimeHost } from '@agent-device/contracts/platform';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 
 export const androidRecordingDevice = {
   platform: 'android' as const,

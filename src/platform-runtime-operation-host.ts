@@ -1,10 +1,10 @@
+import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
+import type { DeviceShutdownRuntimeLoaders } from '@agent-device/contracts/device-shutdown-runtime';
 import type {
-  AppLogSessionArtifacts,
-  DeviceShutdownRuntimeLoaders,
   HostCommandRequest,
   OwnedProcessRecordWriter,
-  PlatformRuntimeHost,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';

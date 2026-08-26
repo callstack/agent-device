@@ -1,4 +1,4 @@
-import type { ApplicationLifecycleExecution } from '@agent-device/contracts/platform';
+import type { ApplicationLifecycleExecution } from '@agent-device/contracts/application-lifecycle-runtime';
 import { resolveRunnerLogicalLeaseContext } from './lease-context.ts';
 import type { DaemonRequest } from './types.ts';
 

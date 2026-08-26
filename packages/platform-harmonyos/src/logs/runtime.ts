@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { AppLogRuntimeHost } from '@agent-device/contracts/platform';
+import type { AppLogRuntimeHost } from '@agent-device/contracts/app-log-runtime';
 import {
   createPidScopedAppLogRuntimeOwner,
   resolveFirstNumericAppLogPid,

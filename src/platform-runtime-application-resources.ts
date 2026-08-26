@@ -2,7 +2,7 @@ import type {
   AndroidApplicationTools,
   AppleApplicationTools,
   ApplicationLifecycleResourceLifecycle,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/application-lifecycle-runtime';
 
 /**
  * The durable lifecycle resources this host composes. Each phase names the platforms that own

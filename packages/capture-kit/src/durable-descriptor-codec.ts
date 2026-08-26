@@ -1,7 +1,7 @@
 import type {
   DurableDescriptorCodec,
   DurableResourceEnvelope,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/durable-resource-envelope';
 
 export type DurableDescriptorDecodeOutcome<Descriptor extends object> =
   | Readonly<{ status: 'decoded'; descriptor: Descriptor }>

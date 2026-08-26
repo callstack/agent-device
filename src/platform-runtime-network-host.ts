@@ -2,10 +2,12 @@ import fs from 'node:fs';
 import type {
   AppLogProcessMarkerReadOutcome,
   AppLogSessionArtifacts,
+} from '@agent-device/contracts/app-log-runtime';
+import type {
   NetworkAppLogRead,
   NetworkRuntimeHost,
   NetworkTransport,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/network-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { openVerifiedFileForRead } from './utils/verified-file.ts';
 

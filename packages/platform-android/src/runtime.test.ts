@@ -1,10 +1,10 @@
 import { expect, test, vi } from 'vitest';
 import type { AndroidClipboardShellSupport } from '@agent-device/contracts/android-clipboard-support';
+import type { DeviceBinding } from '@agent-device/contracts/platform-runtime';
 import type {
-  DeviceBinding,
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidPlatformRuntime } from './runtime.ts';
 

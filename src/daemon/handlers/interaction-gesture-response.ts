@@ -1,4 +1,4 @@
-import type { GestureIntent } from '@agent-device/contracts/interaction';
+import type { GestureIntent } from '@agent-device/contracts/gesture-plan-types';
 import type { Point } from '@agent-device/kernel/snapshot';
 
 type GestureResponseResult = {

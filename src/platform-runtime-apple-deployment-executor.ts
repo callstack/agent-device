@@ -1,7 +1,7 @@
 import type {
   AppleAppDeploymentExecutor,
   MaterializeAppSourceInput,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/app-deployment-runtime';
 
 /**
  * Native Apple executor port. The platform package owns deployment sequencing; this composition

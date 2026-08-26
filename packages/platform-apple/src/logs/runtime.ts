@@ -3,17 +3,20 @@ import { AppError } from '@agent-device/kernel/errors';
 import type {
   AppLogRuntimeHost,
   AppLogRuntimeOperations,
-  DeviceBinding,
-  DeviceRuntimeOwner,
-  RuntimeFacts,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/app-log-runtime';
+import {
+  type DeviceBinding,
+  type DeviceRuntimeOwner,
+  type RuntimeFacts,
+  localRuntimeOwner,
+  sameRuntimeOwner,
+} from '@agent-device/contracts/platform-runtime';
 import {
   appLogSessionArtifactsMatch,
   cleanupManagedAppLogProcess,
   createAppLogRecoveryOperations,
   reattachCleanupOnlyAppLogProcess,
 } from '@agent-device/capture-kit';
-import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { APPLE_XCTEST_LOGS_HINT, backendForAppleDevice } from './backend.ts';
 import { appleAppLogDescriptorCodec } from './descriptor.ts';
 import { doctorAppleAppLogs } from './doctor.ts';

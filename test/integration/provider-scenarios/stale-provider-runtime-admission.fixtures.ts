@@ -2,13 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { vi } from 'vitest';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
+import type { DeviceRuntimeGateway, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
 import type {
-  DeviceRuntimeGateway,
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
   PlatformRuntimeProviderModule,
-  RuntimeFacts,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { handleAppDeploymentCommand } from '../../../src/daemon/handlers/session-app-deployment.ts';
 import { createRequestRuntimeBindings } from '../../../src/daemon/request-runtime-binding.ts';

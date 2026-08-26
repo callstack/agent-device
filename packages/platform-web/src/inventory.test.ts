@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { PlatformRequestScope } from '@agent-device/contracts/platform';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { createWebInventory } from './inventory.ts';
 
 const scope: PlatformRequestScope = {

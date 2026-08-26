@@ -1,8 +1,8 @@
 import type {
   AppLogProcessCommand,
   AppLogProcessTransport,
-  HostCommandResult,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/app-log-runtime';
+import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidAdbProcess } from './platforms/android/adb-executor.ts';
 import {

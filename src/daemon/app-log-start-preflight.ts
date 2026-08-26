@@ -1,4 +1,4 @@
-import type { ResourceOwnershipFence } from '@agent-device/contracts/platform';
+import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
 import { appLogDurableResource } from './app-log-session-resource.ts';

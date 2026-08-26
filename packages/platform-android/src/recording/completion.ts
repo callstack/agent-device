@@ -1,11 +1,11 @@
+import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type {
-  CleanupOutcome,
-  PlatformRuntimeHost,
   ScreenRecordingChunk,
   ScreenRecordingCompletion,
   ScreenRecordingLiveSnapshot,
   ScreenRecordingStartInput,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/screen-recording-runtime';
 
 export function snapshot(
   input: ScreenRecordingStartInput,

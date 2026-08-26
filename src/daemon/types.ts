@@ -1,8 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type {
-  GestureExecutionProfile,
-  PreresolvedInteractionTarget,
-} from '@agent-device/contracts/interaction';
+import type { GestureExecutionProfile } from '@agent-device/contracts/gesture-plan-types';
+import type { PreresolvedInteractionTarget } from '@agent-device/contracts/interaction';
 import type { SessionAction, SessionSurface } from '@agent-device/contracts/session';
 import type {
   LeaseBackend,
@@ -21,13 +19,10 @@ import type { SnapshotFreshnessWindow } from '../snapshot/snapshot-freshness/ind
 // here, so this back-edge must stay type-only to avoid a runtime cycle.
 import type { SnapshotDiagnosticsState } from '@agent-device/contracts/capture';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import type {
-  AppLogFailure,
-  AppLogLiveHandle,
-  AudioProbeLiveHandle,
-  DurableResourceEnvelope,
-  ScreenRecordingLiveHandle,
-} from '@agent-device/contracts/platform';
+import type { AppLogFailure, AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
+import type { AudioProbeLiveHandle } from '@agent-device/contracts/audio-probe-runtime';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
+import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import type { AndroidNativePerfSession } from '../platforms/android/perf.ts';
 import type { SessionScriptPublicationState } from './session-script-publication-state.ts';
 import type {

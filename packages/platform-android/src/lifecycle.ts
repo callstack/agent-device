@@ -1,16 +1,16 @@
-import type {
-  ApplicationLifecycleRuntimeOperations,
-  OpenApplicationInput,
-  OpenApplicationOutcome,
-  PlatformRuntimeHost,
-} from '@agent-device/contracts/platform';
+import {
+  type ApplicationLifecycleRuntimeOperations,
+  type OpenApplicationInput,
+  type OpenApplicationOutcome,
+  hasRuntimeTransportHintValues,
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import {
   bindLocalApplicationLifecycleInteractor,
   followUpRuntimeLaunchUrl,
   invokeApplicationClose,
   invokeApplicationOpen,
 } from '@agent-device/contracts/application-lifecycle-interaction';
-import { hasRuntimeTransportHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { ensureAndroidReady } from './readiness/runtime.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';

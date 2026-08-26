@@ -1,10 +1,7 @@
 import { expect, test, vi } from 'vitest';
-import type {
-  DeviceBinding,
-  PlatformRuntimeOperations,
-  RuntimeFacts,
-  SnapshotRuntimeHost,
-} from '@agent-device/contracts/platform';
+import type { DeviceBinding, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import type { SnapshotRuntimeHost } from '@agent-device/contracts/snapshot-runtime';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
 import { createApplePlatformRuntime } from './runtime.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';

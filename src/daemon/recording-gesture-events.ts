@@ -1,4 +1,4 @@
-import type { RecordingGestureEvent } from '@agent-device/contracts/platform';
+import type { RecordingGestureEvent } from '@agent-device/contracts/screen-recording-runtime';
 import type { TouchReferenceFrame as ReferenceFrame } from './touch-reference-frame.ts';
 import { readRecordingNumber, resolveRecordingDurationMs } from './recording-values.ts';
 

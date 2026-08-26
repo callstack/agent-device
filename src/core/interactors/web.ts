@@ -1,4 +1,4 @@
-import type { Interactor } from '@agent-device/contracts/interaction';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
 import { stripAtPrefix } from '../interaction-positionals.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';

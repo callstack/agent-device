@@ -4,7 +4,7 @@ import {
   screenshotFlagsFromOptions,
   screenshotOptionsFromFlags,
 } from '@agent-device/contracts/capture';
-import type { ScreenshotRuntimeExecution } from '@agent-device/contracts/platform';
+import type { ScreenshotRuntimeExecution } from '@agent-device/contracts/screenshot-runtime';
 import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';

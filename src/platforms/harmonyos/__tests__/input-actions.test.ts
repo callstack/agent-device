@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
-import type { GesturePlan } from '@agent-device/contracts/interaction';
+import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const { runHarmonyHdc, sleep, readHarmonyGestureViewport } = vi.hoisted(() => ({

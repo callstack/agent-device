@@ -2,7 +2,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
   ElementTextRuntimeOperations,
   ElementTextUnreadableReason,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/element-text-runtime';
 import { isIosFamily } from '@agent-device/kernel/device';
 import { runtimeExecutionFromContext } from '../snapshot-runtime-capture-input.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';

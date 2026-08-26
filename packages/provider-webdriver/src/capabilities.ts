@@ -1,4 +1,4 @@
-import type { SnapshotResult } from '@agent-device/contracts/interaction';
+import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
 import type { CloudWebDriverPlatform } from './runtime.ts';
 
 export type CloudWebDriverOperation =

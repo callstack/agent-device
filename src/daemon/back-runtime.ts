@@ -1,5 +1,5 @@
 import type { BackInput } from '@agent-device/contracts/back-runtime';
-import type { BackMode } from '@agent-device/contracts/interaction';
+import type { BackMode } from '@agent-device/contracts/back-mode';
 import { backRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';

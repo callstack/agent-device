@@ -1,4 +1,4 @@
-import type { AppLogRuntimeHost } from '@agent-device/contracts/platform';
+import type { AppLogRuntimeHost } from '@agent-device/contracts/app-log-runtime';
 import {
   appLogCommandSucceeded,
   bestEffortAppLogCheck,

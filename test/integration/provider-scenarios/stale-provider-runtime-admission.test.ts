@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
-import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform';
+import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
 import {
   CLOUD_WEBDRIVER_PROVIDERS,
   createProviderWebDriver,

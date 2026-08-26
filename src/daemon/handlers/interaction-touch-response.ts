@@ -1,15 +1,15 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
   FillCommandResult,
-  GestureReferenceFrame,
   HoverCommandResult,
   LongPressCommandResult,
   PressCommandResult,
   RecordingTargetOverride,
   ResolutionDisclosure,
   SettleObservation,
-  InteractionPathId,
 } from '@agent-device/contracts/interaction';
+import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
+import type { InteractionPathId } from '@agent-device/contracts/interaction-guarantees';
 import {
   stripInternalInteractionDiagnostics,
   transformInteractionResponseData,

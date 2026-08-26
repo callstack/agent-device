@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import type { AppLogBackgroundProcess } from '@agent-device/contracts/platform';
+import type { AppLogBackgroundProcess } from '@agent-device/contracts/app-log-runtime';
 import { monitorPidScopedProcess } from './app-log-pid-monitor.ts';
 import { controlledSleeps, deferred, processFixture } from './app-log-pid-process.fixtures.ts';
 

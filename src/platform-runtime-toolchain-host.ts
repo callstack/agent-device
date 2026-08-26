@@ -1,4 +1,4 @@
-import type { HostToolchainPreparer } from '@agent-device/contracts/platform';
+import type { HostToolchainPreparer } from '@agent-device/contracts/platform-runtime-host';
 
 export function createHostToolchainPreparer(): HostToolchainPreparer {
   return Object.freeze({

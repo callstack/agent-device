@@ -1,8 +1,8 @@
 import type {
   AppLogBackgroundProcess,
   AppLogRuntimeHost,
-  PlatformRequestScope,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/app-log-runtime';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
 import { createHarmonyAppLogEnvelope, harmonyAppLogDescriptorCodec } from './descriptor.ts';

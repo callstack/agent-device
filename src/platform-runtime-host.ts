@@ -3,7 +3,7 @@ import type {
   HostOperatingSystem,
   HostCommandRequest,
   HostTemporaryTextFile,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { constants } from 'node:fs';
 import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';

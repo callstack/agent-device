@@ -1,7 +1,5 @@
-import type {
-  ScreenRecordingRuntimeHost,
-  ScreenRecordingStartInput,
-} from '@agent-device/contracts/platform';
+import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
+import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import type { createHarmonyScreenRecordingOperations } from './runtime.ts';
 
 export const harmonyDevice = Object.freeze({

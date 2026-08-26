@@ -1,4 +1,4 @@
-import type { FindSelectorRuntimeOperations } from '@agent-device/contracts/platform';
+import type { FindSelectorRuntimeOperations } from '@agent-device/contracts/selector-observation-runtime';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { readSimpleSelectorTarget } from '@agent-device/selectors';
 import { getRequestSignal } from '../request/cancel.ts';

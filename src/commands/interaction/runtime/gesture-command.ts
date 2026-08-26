@@ -3,7 +3,7 @@ import type {
   GestureCommandInput,
   GestureIntent,
   GestureSemanticInput,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/gesture-plan-types';
 import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import type { Point } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';

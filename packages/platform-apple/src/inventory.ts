@@ -1,9 +1,9 @@
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import type {
   DeviceInventoryHostFor,
-  DeviceInventorySource,
   PlatformRequestScope,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
+import type { DeviceInventorySource } from '@agent-device/contracts/platform-module';
 import { sortAppleDevicesForSelection, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { listPhysicalAppleDevices } from './physical-inventory.ts';

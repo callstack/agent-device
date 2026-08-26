@@ -2,13 +2,11 @@
 // boundary can be stated in terms of them; re-exported here because this is where consumers
 // already import them from.
 import type { ScreenshotDispatchFlags } from '@agent-device/contracts/capture';
-import type {
-  BackMode,
-  ClickButton,
-  ElementSelectorKey,
-  SwipePattern,
-} from '@agent-device/contracts/interaction';
-import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/platform';
+import type { BackMode } from '@agent-device/contracts/back-mode';
+import type { ClickButton } from '@agent-device/contracts/click-button';
+import type { ElementSelectorKey } from '@agent-device/contracts/interactor-types';
+import type { SwipePattern } from '@agent-device/contracts/scroll-gesture';
+import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { Point, SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
 

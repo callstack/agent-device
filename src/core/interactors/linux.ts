@@ -22,7 +22,7 @@ import {
 import { singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
 import { screenshotLinux } from '../../platforms/linux/screenshot.ts';
 import { captureLinuxSurfaceSnapshot } from '../../snapshot/snapshot-desktop-surface.ts';
-import type { Interactor } from '@agent-device/contracts/interaction';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
 
 function unsupportedLinuxAlert(): Promise<never> {
   throw new AppError('UNSUPPORTED_OPERATION', 'alert not supported on Linux');

@@ -1,4 +1,4 @@
-import type { AppleToolHost } from '@agent-device/contracts/platform';
+import type { AppleToolHost } from '@agent-device/contracts/platform-runtime-host';
 
 export function createAppleToolHost(): AppleToolHost {
   return Object.freeze({

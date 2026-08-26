@@ -6,7 +6,7 @@ import { sleep } from '../../utils/timeouts.ts';
 import { handleRecordCommand } from './record-runtime.ts';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
 import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
-import type { PlatformRequestScope } from '@agent-device/contracts/platform';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import {
   defaultRecordingPath,

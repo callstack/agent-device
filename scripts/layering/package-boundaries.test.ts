@@ -39,7 +39,7 @@ const contracts: WorkspacePackage = {
   dir: 'packages/contracts',
   name: '@agent-device/contracts',
   exportTargets: new Map([
-    ['@agent-device/contracts/interaction', 'packages/contracts/src/facades/interaction.ts'],
+    ['@agent-device/contracts/interaction', 'packages/contracts/src/interaction.ts'],
   ]),
   workspaceDependencies: new Set(['@agent-device/kernel']),
   externalDependencies: new Map(),
@@ -75,6 +75,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/capture',
   '@agent-device/contracts/click-button',
   '@agent-device/contracts/client',
+  '@agent-device/contracts/clipboard',
   '@agent-device/contracts/clipboard-runtime',
   '@agent-device/contracts/command',
   '@agent-device/contracts/command-platform-execution',
@@ -99,16 +100,19 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/interaction-guarantees',
   '@agent-device/contracts/interactor-operation-catalog',
   '@agent-device/contracts/interactor-types',
+  '@agent-device/contracts/keyboard',
   '@agent-device/contracts/keyboard-runtime',
   '@agent-device/contracts/local-interactor-operation-set',
   '@agent-device/contracts/logs-runtime-plan',
   '@agent-device/contracts/navigation',
   '@agent-device/contracts/network-runtime',
   '@agent-device/contracts/network-runtime-plan',
+  '@agent-device/contracts/network-traffic',
   '@agent-device/contracts/observability',
   '@agent-device/contracts/orientation-runtime',
-  '@agent-device/contracts/platform',
   '@agent-device/contracts/platform-module',
+  '@agent-device/contracts/platform-plugin',
+  '@agent-device/contracts/platform-providers',
   '@agent-device/contracts/platform-runtime',
   '@agent-device/contracts/platform-runtime-host',
   '@agent-device/contracts/platform-runtime-operations',
@@ -119,7 +123,9 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/remote',
   '@agent-device/contracts/replay',
   '@agent-device/contracts/react-native-overlay',
+  '@agent-device/contracts/runner-lease-context',
   '@agent-device/contracts/screen-recording-runtime',
+  '@agent-device/contracts/screen-recording-runtime-host',
   '@agent-device/contracts/screen-recording-runtime-plan',
   '@agent-device/contracts/screenshot-runtime',
   '@agent-device/contracts/scroll-command',
@@ -664,7 +670,7 @@ test('Node resolution enforces the exports map at runtime', () => {
     '@agent-device/kernel/src/errors.ts',
     '@agent-device/kernel/internal-not-exported',
     '@agent-device/kernel',
-    '@agent-device/contracts/clipboard',
+    '@agent-device/contracts/not-an-export',
     '@agent-device/contracts/src/gesture-plan.ts',
     '@agent-device/contracts',
     '@agent-device/contracts/src/snapshot-text.ts',
@@ -692,10 +698,7 @@ test('Node resolution enforces the exports map at runtime', () => {
   }
 
   const contractsResolved = import.meta.resolve('@agent-device/contracts/interaction');
-  assert.ok(
-    contractsResolved.endsWith('packages/contracts/src/facades/interaction.ts'),
-    contractsResolved,
-  );
+  assert.ok(contractsResolved.endsWith('packages/contracts/src/interaction.ts'), contractsResolved);
   const contractsSnapshotResolved = import.meta.resolve('@agent-device/contracts/snapshot');
   assert.ok(
     contractsSnapshotResolved.endsWith('packages/contracts/src/facades/snapshot.ts'),

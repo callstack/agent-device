@@ -5,17 +5,14 @@ import type {
 } from '@agent-device/contracts/capture';
 import type { JsonObject } from '@agent-device/contracts/client';
 import type { AppsFilter, DeviceRotation } from '@agent-device/contracts/device';
-import type {
-  AlertAction,
-  AlertInfo,
-  BackMode,
-  ClickButton,
-  GesturePlan,
-  RepeatedInput,
-  ScrollDirection,
-  ResolvedScrollExecutionOptions,
-  TvRemoteButton,
-} from '@agent-device/contracts/interaction';
+import type { AlertAction, AlertInfo } from '@agent-device/contracts/alert-contract';
+import type { BackMode } from '@agent-device/contracts/back-mode';
+import type { ClickButton } from '@agent-device/contracts/click-button';
+import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import type { RepeatedInput } from '@agent-device/contracts/interaction';
+import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
+import type { ResolvedScrollExecutionOptions } from '@agent-device/contracts/scroll-command';
+import type { TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { RecordingExportQuality } from '@agent-device/contracts/recording';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { NetworkIncludeMode } from '@agent-device/kernel/contracts';

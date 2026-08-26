@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import type { LiveResourceHandle, ResourceOwnershipFence } from '@agent-device/contracts/platform';
+import type { LiveResourceHandle } from '@agent-device/contracts/durable-resource';
+import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import { deviceIdentity, deviceIdentityKey, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DurableCaptureAdmissionLedger } from './durable-capture-admission-ledger.ts';

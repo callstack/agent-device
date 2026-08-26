@@ -2,9 +2,8 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
   CaptureSnapshotInput,
   SnapshotRuntimeExecution,
-} from '@agent-device/contracts/platform';
-import { contextFromFlags } from './context.ts';
-import type { DaemonCommandContext } from './context.ts';
+} from '@agent-device/contracts/snapshot-runtime';
+import { contextFromFlags, type DaemonCommandContext } from './context.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 
 /**

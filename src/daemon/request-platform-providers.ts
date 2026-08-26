@@ -1,4 +1,4 @@
-import type { PlatformGatedProviderResolverKey } from '@agent-device/contracts/platform';
+import type { PlatformGatedProviderResolverKey } from '@agent-device/contracts/platform-providers';
 import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
 import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
 import { tryGetPlugin } from '../core/platform-plugin-registry.ts';

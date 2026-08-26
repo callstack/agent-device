@@ -1,16 +1,13 @@
 import { expect, expectTypeOf, test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
-import type {
-  BoundDeviceRuntime,
-  PlatformRuntimeOperations,
-  RuntimeFacts,
-} from '@agent-device/contracts/platform';
-import type { DaemonCommandContext } from '../context.ts';
+import type { BoundDeviceRuntime, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
 import {
+  type PlatformRuntimeOperations,
   resolveScrollRuntimePlan,
   type ScrollRuntimePlan,
 } from '@agent-device/contracts/platform-runtime-operations';
+import type { DaemonCommandContext } from '../context.ts';
 import { resolveBoundScrollRuntime } from '../scroll-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';

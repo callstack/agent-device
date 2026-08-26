@@ -1,5 +1,5 @@
-import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
-import type { PlatformPlugin } from '@agent-device/contracts/platform';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
+import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 export const vegaPlugin = {

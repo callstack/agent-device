@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import type { Interactor } from '@agent-device/contracts/interaction';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
 import { appleSystemFacts, createAppleSystemOperations } from './runtime.ts';
 

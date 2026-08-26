@@ -7,7 +7,10 @@ import type {
   HostAudioCaptureProcess,
   HostSystemAudioCaptureHost,
 } from '@agent-device/contracts/audio-probe-runtime-host';
-import type { HostCommandResult, ManagedProcessIdentity } from '@agent-device/contracts/platform';
+import type {
+  HostCommandResult,
+  ManagedProcessIdentity,
+} from '@agent-device/contracts/platform-runtime-host';
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { hostAudioProbeDescriptorCodec } from './audio-probe-descriptor.ts';
 import { createHostAudioProbeRecoveryOperations } from './audio-probe-recovery.ts';

@@ -1,5 +1,5 @@
+import type { ClickButton } from '@agent-device/contracts/click-button';
 import type {
-  ClickButton,
   FillCommandResult,
   PreresolvedInteractionTarget,
   PressCommandResult,

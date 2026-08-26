@@ -5,7 +5,7 @@ import { isPostGestureStabilizationPending } from './deferred-interaction-outcom
 import type { SessionState } from './types.ts';
 import { readSimpleSelectorTarget } from '@agent-device/selectors';
 import { asAppError } from '@agent-device/kernel/errors';
-import type { ElementSelectorTapOptions } from '@agent-device/contracts/interaction';
+import type { ElementSelectorTapOptions } from '@agent-device/contracts/interactor-types';
 
 export type DirectIosSelectorTarget = ElementSelectorTapOptions & { raw: string };
 

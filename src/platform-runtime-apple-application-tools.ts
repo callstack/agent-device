@@ -4,7 +4,7 @@ import type {
   OpenTargetResolution,
   OpenTargetResolutionInput,
   PrepareAppleRunnerInput,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 

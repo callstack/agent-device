@@ -1,7 +1,7 @@
-import type { PlatformPlugin } from '@agent-device/contracts/platform';
+import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { RunnerContext } from '@agent-device/contracts/interaction';
+import type { RunnerContext } from '@agent-device/contracts/interactor-types';
 
 // ---------------------------------------------------------------------------
 // Apple family per-command capability closures for the commands still admitted by a capability

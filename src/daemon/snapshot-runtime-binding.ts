@@ -73,11 +73,11 @@ export type AdmittedSnapshotCapture =
       findSelector?: BoundNativeSelectorRead;
       /** find's directly-executed mutating legs, present for the find-focus / find-type plans. */
       focusPoint?: (
-        input: import('@agent-device/contracts/platform').FocusPointInput,
+        input: import('@agent-device/contracts/focus-runtime').FocusPointInput,
       ) => Promise<void>;
       typeText?: (
-        input: import('@agent-device/contracts/platform').TypeTextInput,
-      ) => Promise<import('@agent-device/contracts/interaction').TypeTextBackendResult | void>;
+        input: import('@agent-device/contracts/type-text-runtime').TypeTextInput,
+      ) => Promise<import('@agent-device/contracts/interactor-types').TypeTextBackendResult | void>;
     }>
   | Readonly<{ ok: false; response: DaemonResponse }>;
 
@@ -177,11 +177,11 @@ async function bindSnapshotCaptureRuntime(
     findText?: BoundNativeTextRead;
     findSelector?: BoundNativeSelectorRead;
     focusPoint?: (
-      input: import('@agent-device/contracts/platform').FocusPointInput,
+      input: import('@agent-device/contracts/focus-runtime').FocusPointInput,
     ) => Promise<void>;
     typeText?: (
-      input: import('@agent-device/contracts/platform').TypeTextInput,
-    ) => Promise<import('@agent-device/contracts/interaction').TypeTextBackendResult | void>;
+      input: import('@agent-device/contracts/type-text-runtime').TypeTextInput,
+    ) => Promise<import('@agent-device/contracts/interactor-types').TypeTextBackendResult | void>;
   }>
 > {
   const bind = requireRuntimeBinding(bindDevice);

@@ -1,6 +1,6 @@
 import type { Platform } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { PlatformPlugin } from '@agent-device/contracts/platform';
+import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
 
 const registry = new Map<Platform, PlatformPlugin>();
 

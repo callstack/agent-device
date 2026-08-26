@@ -1,8 +1,8 @@
 import { expect, test, vi } from 'vitest';
-import type { PlatformRuntimeHost } from '@agent-device/contracts/platform';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { Interactor } from '@agent-device/contracts/interaction';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { createWebDriverPlatformRuntimeOwner } from './platform-runtime.ts';
 import {
   createCloudWebDriverCapabilities,

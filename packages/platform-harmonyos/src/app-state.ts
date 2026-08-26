@@ -3,7 +3,7 @@ import type {
   AppStateRuntimeCommand,
   AppStateRuntimeCommandResult,
   AppStateRuntimeResult,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/app-state-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 export type HarmonyAppStateHost = Readonly<{

@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import type {
   DeviceInventoryHostFor,
   PlatformRequestScope,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
 import { createLinuxInventory } from './inventory.ts';
 
 const scope: PlatformRequestScope = {

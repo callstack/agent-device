@@ -1,13 +1,13 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { asAppError } from '@agent-device/kernel/errors';
+import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
+import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
+import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import type {
-  CleanupOutcome,
-  RuntimeOwnerRef,
-  ScreenRecordingRuntimeHost,
   ScreenRecordingLiveSnapshot,
   ScreenRecordingRuntimeOperations,
   ScreenRecordingStartInput,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/screen-recording-runtime';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import { createScreenRecordingLiveHandle } from '@agent-device/capture-kit';
 import { completeAppleRecording as completion } from './completion.ts';

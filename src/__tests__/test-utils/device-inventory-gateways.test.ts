@@ -1,5 +1,5 @@
 import type { ProviderDeviceInventorySource } from '@agent-device/contracts/device';
-import type { PlatformRequestScope } from '@agent-device/contracts/platform';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { expect, test } from 'vitest';
 import { createTestDeviceInventoryGateways } from './device-inventory-gateways.ts';
 

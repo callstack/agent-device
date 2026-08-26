@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { expect, test, vi } from 'vitest';
+import type { DeviceBinding } from '@agent-device/contracts/platform-runtime';
+import type { NetworkProviderDump } from '@agent-device/contracts/network-runtime';
 import type {
-  DeviceBinding,
-  NetworkProviderDump,
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
-} from '@agent-device/contracts/platform';
-import type { Interactor } from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/platform-runtime-operations';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createWebPlatformRuntime } from './runtime.ts';
 

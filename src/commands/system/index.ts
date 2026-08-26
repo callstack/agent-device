@@ -1,7 +1,6 @@
 import type { ClipboardCommandOptions } from '@agent-device/contracts/client';
 import { DEVICE_ROTATIONS, parseDeviceRotation } from '@agent-device/contracts/device';
-import type { BackMode } from '@agent-device/contracts/interaction';
-import { BACK_MODES } from '@agent-device/contracts/back-mode';
+import { type BackMode, BACK_MODES } from '@agent-device/contracts/back-mode';
 import {
   TV_REMOTE_BUTTONS,
   TV_REMOTE_BUTTON_USAGE,

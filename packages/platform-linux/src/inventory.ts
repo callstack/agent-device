@@ -1,8 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type {
-  DeviceInventoryHostFor,
-  DeviceInventorySource,
-} from '@agent-device/contracts/platform';
+import type { DeviceInventoryHostFor } from '@agent-device/contracts/platform-runtime-host';
+import type { DeviceInventorySource } from '@agent-device/contracts/platform-module';
 
 export function createLinuxInventory(host: DeviceInventoryHostFor<'linux'>): DeviceInventorySource {
   return {

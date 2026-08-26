@@ -1,7 +1,5 @@
-import type {
-  AppleScreenRecordingRunnerRequest,
-  ManagedProcessOwnership,
-} from '@agent-device/contracts/platform';
+import type { AppleScreenRecordingRunnerRequest } from '@agent-device/contracts/screen-recording-runtime-host';
+import type { ManagedProcessOwnership } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 export async function runAppleRecordingRunner(

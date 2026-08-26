@@ -1,6 +1,9 @@
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import type { CaptureSnapshotInput, SnapshotResult } from '@agent-device/contracts/platform';
+import type {
+  CaptureSnapshotInput,
+  SnapshotResult,
+} from '@agent-device/contracts/snapshot-runtime';
 import { createSelectorRuntimeForDevice } from './selector-runtime-backend.ts';
 import { SessionStore } from './session-store.ts';
 import type { SessionState } from './types.ts';

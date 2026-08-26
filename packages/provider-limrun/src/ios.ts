@@ -9,7 +9,7 @@ import type {
   Interactor,
   SnapshotOptions,
   SnapshotResult,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type Limrun from '@limrun/api';

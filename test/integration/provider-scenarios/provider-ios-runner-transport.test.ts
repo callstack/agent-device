@@ -7,7 +7,7 @@ import type {
   LeaseLifecycleProvider,
   ProviderDeviceRuntime,
 } from '@agent-device/contracts/device';
-import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAppleInteractor } from '../../../src/platforms/apple/interactor.ts';
@@ -16,7 +16,7 @@ import type {
   AppleRunnerCommandOptions,
   AppleRunnerProvider,
 } from '../../../src/platforms/apple/core/runner/runner-provider.ts';
-import { providerRuntimeOwner } from '@agent-device/contracts/platform';
+import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import { createProviderScenarioLifecycleModule } from './provider-device-runtime.fixtures.ts';

@@ -1,4 +1,7 @@
-import type { NetworkDump, NetworkDumpParserOptions } from '@agent-device/contracts/platform';
+import type {
+  NetworkDump,
+  NetworkDumpParserOptions,
+} from '@agent-device/contracts/network-traffic';
 import type { LogBackend, NetworkEntry } from '@agent-device/contracts/observability';
 import {
   enrichNetworkEntryFromAndroidLines,

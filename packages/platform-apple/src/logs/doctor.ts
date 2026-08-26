@@ -1,5 +1,5 @@
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import type { AppLogRuntimeHost } from '@agent-device/contracts/platform';
+import type { AppLogRuntimeHost } from '@agent-device/contracts/app-log-runtime';
 import { appLogCommandSucceeded, bestEffortAppLogCheck } from '@agent-device/capture-kit';
 import { APPLE_XCTEST_LOGS_HINT, backendForAppleDevice } from './backend.ts';
 import {

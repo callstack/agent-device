@@ -37,7 +37,7 @@ import { screenshotAndroid } from '../../platforms/android/screenshot.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { withMethodScope } from '../../utils/method-scope.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { androidSnapshotPublicationInput } from '../../platforms/android/snapshot-capture.ts';
 import { handleAndroidAlert } from '../../platforms/android/alert.ts';
 import { buildSnapshotState } from '../snapshot-state.ts';

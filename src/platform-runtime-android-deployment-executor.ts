@@ -1,7 +1,7 @@
 import type {
   AndroidAppDeploymentExecutor,
   MaterializeAppSourceInput,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/app-deployment-runtime';
 
 /**
  * Temporary Android migration port. The package owns native command construction; this adapter

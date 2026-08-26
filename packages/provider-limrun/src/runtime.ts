@@ -1,5 +1,5 @@
 import Limrun from '@limrun/api';
-import type { Interactor, RunnerContext } from '@agent-device/contracts/interaction';
+import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type {
   DeviceInventoryProvider,
   DeviceLease,
@@ -38,7 +38,7 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOwner,
   PlatformRuntimeProviderModule,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader } from './app-log-poller.ts';

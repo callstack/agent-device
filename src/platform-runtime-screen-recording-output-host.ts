@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/platform';
+import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 
 export function createScreenRecordingOutputHost(): ScreenRecordingRuntimeHost['outputs'] {
   return Object.freeze({

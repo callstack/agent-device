@@ -1,10 +1,10 @@
 import { expect, test, vi } from 'vitest';
+import type { DeviceBinding } from '@agent-device/contracts/platform-runtime';
 import type {
-  DeviceBinding,
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
-  SnapshotRuntimeHost,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-operations';
+import type { SnapshotRuntimeHost } from '@agent-device/contracts/snapshot-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLinuxPlatformRuntime } from './runtime.ts';
 

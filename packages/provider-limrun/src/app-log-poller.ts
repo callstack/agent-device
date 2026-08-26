@@ -3,8 +3,8 @@ import type {
   AppLogLiveSnapshot,
   AppLogOutputSink,
   AppLogRuntimeHost,
-  FinishOutcome,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/app-log-runtime';
+import type { FinishOutcome } from '@agent-device/contracts/durable-resource';
 import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import { createAppLogLiveHandleFromFinish } from '@agent-device/capture-kit';
 import type { LogBackend } from '@agent-device/contracts/observability';

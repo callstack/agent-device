@@ -1,8 +1,8 @@
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type {
-  PlatformRuntimeOperations,
   RuntimeOperationFact,
   RuntimeOperationKey,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';

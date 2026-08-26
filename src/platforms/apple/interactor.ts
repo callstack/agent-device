@@ -34,7 +34,7 @@ import type {
   RunnerContext,
   ScreenshotOptions,
   SnapshotOptions,
-} from '@agent-device/contracts/interaction';
+} from '@agent-device/contracts/interactor-types';
 import { readSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
 import { captureMacOsSurfaceSnapshot } from '../../snapshot/snapshot-desktop-surface.ts';
 

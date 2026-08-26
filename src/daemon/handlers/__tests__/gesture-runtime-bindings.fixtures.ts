@@ -1,9 +1,6 @@
 import { vi } from 'vitest';
-import type {
-  BoundDeviceRuntime,
-  PlatformRuntimeOperations,
-  RuntimeFacts,
-} from '@agent-device/contracts/platform';
+import type { BoundDeviceRuntime, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type {
   BindDeviceRuntime,

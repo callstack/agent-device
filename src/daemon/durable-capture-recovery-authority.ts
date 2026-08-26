@@ -1,10 +1,10 @@
 import type {
   CleanupOutcome,
-  DurableResourceEnvelope,
   LiveResourceHandle,
-  PlatformRequestScope,
   ReattachOutcome,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/durable-resource';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { capitalizeDurableCaptureLabel } from './durable-capture-resource-labels.ts';
 
 export type DurableCaptureRecoveryControl<

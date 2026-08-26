@@ -1,5 +1,5 @@
-import type { PlatformRuntimeHost } from '@agent-device/contracts/platform';
-import type { Interactor } from '@agent-device/contracts/interaction';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { hostFixture } from './logs/runtime.fixtures.ts';
 
 export function platformRuntimeHostFixture(): PlatformRuntimeHost {

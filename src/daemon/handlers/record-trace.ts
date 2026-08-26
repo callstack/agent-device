@@ -3,7 +3,7 @@ import { SessionStore } from '../session-store.ts';
 import { handleRecordCommand } from './record-runtime.ts';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
 import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
-import type { PlatformRequestScope } from '@agent-device/contracts/platform';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { handleTraceCommand } from './trace-runtime.ts';
 
 export async function handleRecordTraceCommands(params: {

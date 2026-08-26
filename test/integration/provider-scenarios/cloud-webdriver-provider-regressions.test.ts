@@ -7,7 +7,7 @@ import {
   createProviderWebDriver,
   type RunHostCommand,
 } from '@agent-device/provider-webdriver';
-import type { PlatformRuntimeHost } from '@agent-device/contracts/platform';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { withProviderScenarioResource, withProviderScenarioTempDir } from './harness.ts';
 import {
   AwsRemoteAccessHost,

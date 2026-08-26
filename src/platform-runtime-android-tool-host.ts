@@ -1,4 +1,4 @@
-import type { AndroidToolHost } from '@agent-device/contracts/platform';
+import type { AndroidToolHost } from '@agent-device/contracts/platform-runtime-host';
 
 /** Provider-aware Android transport. Command semantics and arguments stay package-owned. */
 export function createAndroidToolHost(): AndroidToolHost {

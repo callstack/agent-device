@@ -1,4 +1,5 @@
-import type { PlatformRuntimeHost, PushNotificationInput } from '@agent-device/contracts/platform';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import type { PushNotificationInput } from '@agent-device/contracts/app-deployment-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import path from 'node:path';

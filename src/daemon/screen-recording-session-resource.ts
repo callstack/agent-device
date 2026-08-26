@@ -1,12 +1,14 @@
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
+import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type {
-  DurableResourceEnvelope,
-  PendingTransferGuard,
-  PlatformRequestScope,
   ResourceOwnershipFence,
   RuntimeOwnerRef,
+} from '@agent-device/contracts/platform-runtime';
+import type {
   ScreenRecordingCompletion,
   ScreenRecordingLiveHandle,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/screen-recording-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DurableCaptureRecoveryControl } from './durable-capture-recovery-authority.ts';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';

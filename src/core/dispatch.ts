@@ -1,4 +1,4 @@
-import type { RunnerContext } from '@agent-device/contracts/interaction';
+import type { RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { DispatchContext } from './dispatch-context.ts';

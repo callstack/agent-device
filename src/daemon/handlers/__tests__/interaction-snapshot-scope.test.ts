@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import type { SnapshotOptions } from '@agent-device/contracts/interaction';
+import type { SnapshotOptions } from '@agent-device/contracts/interactor-types';
 import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { contextFromFlags } from '../../context.ts';

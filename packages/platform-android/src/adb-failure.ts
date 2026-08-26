@@ -132,7 +132,7 @@ export function classifyAndroidAdbFailure(
 }
 
 import { AppError } from '@agent-device/kernel/errors';
-import type { HostCommandResult } from '@agent-device/contracts/platform';
+import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
 
 export function androidDiscoveryCommandError(
   message: string,

@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import type { TypeTextBackendResult } from '@agent-device/contracts/interaction';
+import type { TypeTextBackendResult } from '@agent-device/contracts/interactor-types';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import type {
   ElementTextReadOutcome,
@@ -16,17 +16,17 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
 import type { TypeTextInput } from '@agent-device/contracts/type-text-runtime';
-import type {
-  FillPointInput,
-  FillRefInput,
-  HoverPointInput,
-  HoverRefInput,
-  LongPressPointInput,
-  TapElementSelectorInput,
-  TapPointInput,
-  TapRefInput,
+import {
+  type FillPointInput,
+  type FillRefInput,
+  type HoverPointInput,
+  type HoverRefInput,
+  type LongPressPointInput,
+  type TapElementSelectorInput,
+  type TapPointInput,
+  type TapRefInput,
+  HOVER_UNAVAILABLE_HINT,
 } from '@agent-device/contracts/touch-runtime';
-import { HOVER_UNAVAILABLE_HINT } from '@agent-device/contracts/touch-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type {
   BindDeviceRuntime,

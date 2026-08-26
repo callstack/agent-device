@@ -1,6 +1,6 @@
 import type { AppsFilter } from '@agent-device/contracts/device';
-import type { Interactor } from '@agent-device/contracts/interaction';
-import type { AndroidInputOwner } from '@agent-device/contracts/platform';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
+import type { AndroidInputOwner } from '@agent-device/contracts/android-input-ownership';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppError } from '@agent-device/kernel/errors';
 

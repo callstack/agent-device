@@ -1,9 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import type {
-  LocalApplicationInteractorHost,
-  PlatformRuntimeHost,
-} from '@agent-device/contracts/platform';
-import type { Interactor } from '@agent-device/contracts/interaction';
+import type { LocalApplicationInteractorHost } from '@agent-device/contracts/application-lifecycle-runtime';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { bindAndroidApplicationLifecycle } from './lifecycle.ts';
 

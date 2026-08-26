@@ -1,9 +1,9 @@
+import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type {
-  CleanupOutcome,
-  PlatformRuntimeHost,
   ScreenRecordingRuntimeOperations,
   ScreenRecordingStartInput,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/screen-recording-runtime';
 import { createScreenRecordingLiveHandle } from '@agent-device/capture-kit';
 import {
   androidScreenRecordingDescriptorCodec,

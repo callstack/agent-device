@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { SnapshotResult } from '@agent-device/contracts/platform';
+import type { SnapshotResult } from '@agent-device/contracts/snapshot-runtime';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import {
   makeAndroidSession,

@@ -1,15 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
+import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import type {
-  CleanupOutcome,
-  PlatformRuntimeHost,
-  RuntimeOwnerRef,
-  ScreenRecordingRuntimeHost,
   ScreenRecordingLiveSnapshot,
   ScreenRecordingRuntimeOperations,
   ScreenRecordingStartInput,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/screen-recording-runtime';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import {
   createScreenRecordingCompletion,

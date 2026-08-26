@@ -3,9 +3,8 @@ import type {
   AppLogLiveHandle,
   AppLogProcessMarkerReadOutcome,
   AppLogRuntimeHost,
-  CleanupOutcome,
-  ReattachOutcome,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/app-log-runtime';
+import type { CleanupOutcome, ReattachOutcome } from '@agent-device/contracts/durable-resource';
 
 type ManagedAppLogProcessHost = Readonly<{
   processes: Pick<

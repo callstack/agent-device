@@ -1,4 +1,4 @@
-import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/platform';
+import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-readiness-runtime';
 
 export function createApplePhysicalReadinessHost(): DeviceReadinessRuntimeHost['applePhysical'] {
   return Object.freeze({

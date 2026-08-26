@@ -11,7 +11,7 @@ import {
 } from '../../../src/utils/host-process.ts';
 import { readOwnedProcessRecordFile } from '../../../src/utils/owned-process-record.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import type { OwnedProcessRecord } from '@agent-device/contracts/platform';
+import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
 import {
   evaluateDaemonLeaks,
   formatDaemonLeakReport,

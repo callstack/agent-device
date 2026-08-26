@@ -3,7 +3,7 @@ import type {
   DeviceInventoryHostFor,
   HostCommandResult,
   PlatformRequestScope,
-} from '@agent-device/contracts/platform';
+} from '@agent-device/contracts/platform-runtime-host';
 
 export const inventoryScope: PlatformRequestScope = {
   signal: new AbortController().signal,

@@ -1,11 +1,9 @@
 import { withResolveTargetDeviceCacheScope } from '../core/dispatch-resolve.ts';
 import { withDeviceInventoryContext } from '../request/device-inventory-context.ts';
 import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
-import type {
-  ComposedDeviceInventoryGateways,
-  DeviceRuntimeGateway,
-  PlatformRuntimeOperations,
-} from '@agent-device/contracts/platform';
+import type { ComposedDeviceInventoryGateways } from '@agent-device/contracts/platform-module';
+import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import {
   AppError,
   normalizeError,
