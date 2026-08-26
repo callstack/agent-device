@@ -13,13 +13,11 @@ export function createAppleApplicationTools(): AppleApplicationTools {
   return Object.freeze({
     resolveOpenTarget: async (device, input) => await resolveAppleOpenTarget(device, input),
     prewarmRunnerCache: async (device, execution, signal) => {
-      const { prewarmAppleRunnerCache } =
-        await import('./platforms/apple/core/runner/runner-client.ts');
+      const { prewarmAppleRunnerCache } = await import('./platforms/apple/core/runner-client.ts');
       await prewarmAppleRunnerCache(device, appleRunnerOptions(execution, signal));
     },
     prewarmRunnerSession: async (device, execution, signal, propagateError) => {
-      const { prewarmIosRunnerSession } =
-        await import('./platforms/apple/core/runner/runner-client.ts');
+      const { prewarmIosRunnerSession } = await import('./platforms/apple/core/runner-client.ts');
       await prewarmIosRunnerSession(device, {
         ...appleRunnerOptions(execution, signal),
         propagateError,
@@ -27,22 +25,21 @@ export function createAppleApplicationTools(): AppleApplicationTools {
     },
     notifyRunnerAppRelaunched: async (device, execution, signal) => {
       const { notifyIosRunnerAppRelaunched } =
-        await import('./platforms/apple/core/runner/runner-client.ts');
+        await import('./platforms/apple/core/runner-client.ts');
       await notifyIosRunnerAppRelaunched(device, appleRunnerOptions(execution, signal));
     },
     stopRunnerSession: async (deviceId) => {
-      const { stopIosRunnerSession } =
-        await import('./platforms/apple/core/runner/runner-client.ts');
+      const { stopIosRunnerSession } = await import('./platforms/apple/core/runner-client.ts');
       await stopIosRunnerSession(deviceId);
     },
     scheduleRunnerIdleStop: (deviceId) => {
-      void import('./platforms/apple/core/runner/runner-client.ts').then(
-        ({ scheduleIosRunnerIdleStop }) => scheduleIosRunnerIdleStop(deviceId),
+      void import('./platforms/apple/core/runner-client.ts').then(({ scheduleIosRunnerIdleStop }) =>
+        scheduleIosRunnerIdleStop(deviceId),
       );
     },
     prepareRunner: async (device, input, signal) => {
       const { Deadline } = await import('./utils/retry.ts');
-      const { prepareIosRunner } = await import('./platforms/apple/core/runner/runner-client.ts');
+      const { prepareIosRunner } = await import('./platforms/apple/core/runner-client.ts');
       const startedAtMs = Date.now();
       return await prepareIosRunner(device, {
         ...appleRunnerOptions(input.execution, signal),
@@ -64,12 +61,11 @@ export function createAppleApplicationTools(): AppleApplicationTools {
     dismissCloseAlerts: async (device, input) => await dismissMacOsCloseAlerts(device, input),
     detachRunnerSessionsForShutdown: async () => {
       const { detachIosSimulatorRunnerSessionsForShutdown } =
-        await import('./platforms/apple/core/runner/runner-client.ts');
+        await import('./platforms/apple/core/runner-client.ts');
       await detachIosSimulatorRunnerSessionsForShutdown();
     },
     finalizeRunnerSessionsForShutdown: async () => {
-      const { stopAllIosRunnerSessions } =
-        await import('./platforms/apple/core/runner/runner-client.ts');
+      const { stopAllIosRunnerSessions } = await import('./platforms/apple/core/runner-client.ts');
       await stopAllIosRunnerSessions();
     },
   });

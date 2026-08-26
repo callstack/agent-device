@@ -12,7 +12,7 @@ import type {
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '../../utils/timeouts.ts';
-import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
+import { runAppleRunnerCommand } from './core/runner-client.ts';
 import { runMacOsAlertAction } from './os/macos/helper.ts';
 
 /**

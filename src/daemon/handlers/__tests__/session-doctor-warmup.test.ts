@@ -3,14 +3,14 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   hasCachedAppleRunnerArtifact,
   prewarmAppleRunnerCache,
-} from '../../../platforms/apple/core/runner/runner-client.ts';
+} from '../../../platforms/apple/core/runner-client.ts';
 import { isActiveProviderDevice } from '../../../provider-device-runtime.ts';
 import { handleDoctorCommand } from '../session-doctor.ts';
 import { createHostDiagnostics } from '../../../platform-runtime-host-diagnostics.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type { DaemonResponse } from '../../types.ts';
 
-vi.mock('../../../platforms/apple/core/runner/runner-client.ts', () => ({
+vi.mock('../../../platforms/apple/core/runner-client.ts', () => ({
   hasCachedAppleRunnerArtifact: vi.fn(async () => false),
   prewarmAppleRunnerCache: vi.fn(),
 }));

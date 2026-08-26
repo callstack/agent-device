@@ -84,7 +84,7 @@ test('Swift runner change selects both XCUITest platform builds', () => {
     'replay-ios-device',
     'replay-macos',
   ]);
-  assert.ok(ids(['src/platforms/apple/core/runner/Support.swift']).includes('swift-runner-ios'));
+  assert.ok(ids(['src/platforms/apple/core/Support.swift']).includes('swift-runner-ios'));
 });
 
 test('a runner XCTest source also selects the test-list and package-source check', () => {

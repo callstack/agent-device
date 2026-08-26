@@ -7,7 +7,7 @@ const SIMPLE_PUBLISHERS = [
   new URL('../../daemon/daemon-shutdown-report.ts', import.meta.url),
   new URL('../../daemon/provider-lease-expiry.ts', import.meta.url),
   new URL('../../daemon/session-script-writer.ts', import.meta.url),
-  new URL('../../platforms/apple/core/runner/runner-lease.ts', import.meta.url),
+  new URL('../../../packages/platform-apple/src/runner/runner-lease.ts', import.meta.url),
   new URL('../../remote/remote-connection-state.ts', import.meta.url),
   new URL('../process-lock.ts', import.meta.url),
 ] as const;

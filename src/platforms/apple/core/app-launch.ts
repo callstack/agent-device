@@ -16,8 +16,8 @@ import {
 } from '@agent-device/contracts/command';
 import { IOS_APP_LAUNCH_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from './config.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
-import { runAppleRunnerCommand } from './runner/runner-client.ts';
-import type { AppleRunnerCommandOptions } from './runner/runner-provider.ts';
+import { runAppleRunnerCommand } from './runner-client.ts';
+import type { AppleRunnerCommandOptions } from '@agent-device/platform-apple/runner';
 import {
   isSimulatorLaunchFBSError,
   probeSimulatorLaunchContext,

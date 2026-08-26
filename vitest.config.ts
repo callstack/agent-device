@@ -188,8 +188,19 @@ export default defineConfig({
             // The Maestro conformance oracle runs via `node --test` in its own CI
             // job (scripts/maestro-conformance), like the layering guard.
           ],
-          exclude: [...FUZZ_WORKER_TESTS],
+          exclude: [...FUZZ_WORKER_TESTS, 'packages/platform-apple/src/runner/**/*.test.ts'],
           setupFiles: SETUP_FILES,
+        },
+      },
+      {
+        test: {
+          // The apple-runner package's own suites: same lane semantics as
+          // unit-core, plus a setup that installs the real root host
+          // capabilities behind the package's test-host seam (R11 keeps the
+          // package from importing root utilities directly).
+          name: 'apple-runner',
+          include: ['packages/platform-apple/src/runner/**/*.test.ts'],
+          setupFiles: [...SETUP_FILES, 'scripts/vitest-apple-runner-host-setup.ts'],
         },
       },
       {

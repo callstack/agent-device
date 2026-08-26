@@ -6,7 +6,7 @@ import type { AndroidAdbExecutor, AndroidAdbProvider } from '../platforms/androi
 import type {
   AppleRunnerCommandExecutor,
   AppleRunnerProvider,
-} from '../platforms/apple/core/runner/runner-provider.ts';
+} from '@agent-device/platform-apple/runner';
 import type { AppleToolProvider } from '../platforms/apple/core/tool-provider.ts';
 import type { LinuxToolProvider } from '../platforms/linux/tool-provider.ts';
 import type { VegaToolProvider } from '../platforms/vega/tool-provider.ts';
@@ -196,8 +196,7 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     },
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.appleRunner?.provider) return;
-      const { withAppleRunnerProvider } =
-        await import('../platforms/apple/core/runner/runner-provider.ts');
+      const { withAppleRunnerProvider } = await import('@agent-device/platform-apple/runner');
       const resolved = scopedProviders.appleRunner;
       wrappers.push(
         async (task) =>

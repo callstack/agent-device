@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { iosRunnerOverrides, performGestureApple } from '../../interactions.ts';
-import { runAppleRunnerCommand } from '../runner/runner-client.ts';
+import { runAppleRunnerCommand } from '../runner-client.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   gestureRefusalMessage,
   PHYSICAL_IOS_MULTI_TOUCH_UNSUPPORTED_HINT,
 } from '@agent-device/contracts/gesture-admission';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
-import type { RunnerCommand } from '../runner/runner-contract.ts';
+import type { RunnerCommand } from '@agent-device/platform-apple/runner';
 import { TEXT_ENTRY_ROUTES } from '@agent-device/contracts/interactor-types';
 import {
   IOS_TEST_DEVICE,
@@ -19,14 +19,13 @@ import {
   TVOS_TEST_SIMULATOR,
 } from './apple-core-stub-helpers.ts';
 
-vi.mock('../runner/runner-client.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../runner/runner-client.ts')>();
+vi.mock('../runner-client.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../runner-client.ts')>();
   return { ...actual, runAppleRunnerCommand: vi.fn(actual.runAppleRunnerCommand) };
 });
 
-const runnerActual = await vi.importActual<typeof import('../runner/runner-client.ts')>(
-  '../runner/runner-client.ts',
-);
+const runnerActual =
+  await vi.importActual<typeof import('../runner-client.ts')>('../runner-client.ts');
 
 const mockRunAppleRunnerCommand = vi.mocked(runAppleRunnerCommand);
 

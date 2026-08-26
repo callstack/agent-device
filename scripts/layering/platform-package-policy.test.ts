@@ -22,7 +22,15 @@ function declarations(): PlatformPackageDeclaration[] {
     family,
     name: `@agent-device/platform-${family}`,
     private: true,
-    exportedSubpaths: [`@agent-device/platform-${family}`],
+    exportedSubpaths:
+      family === 'apple'
+        ? [
+            '@agent-device/platform-apple',
+            '@agent-device/platform-apple/runner',
+            '@agent-device/platform-apple/runner/client',
+            '@agent-device/platform-apple/runner/test-host',
+          ]
+        : [`@agent-device/platform-${family}`],
   }));
 }
 
@@ -99,7 +107,7 @@ test('family packages are exact, private, and expose only their root facade', ()
   const found = messages(validSources(), packages).join('\n');
   assert.match(found, /platform-apple must be private/);
   assert.match(found, /platform-android must be named '@agent-device\/platform-android'/);
-  assert.match(found, /platform-harmonyos must export only its root façade/);
+  assert.match(found, /platform-harmonyos must export exactly its root façade/);
   assert.match(found, /missing canonical platform package.*platform-web/);
 });
 
@@ -125,6 +133,100 @@ test('only src/platform-runtime.ts may import a concrete platform package', () =
   }
 });
 
+test('the apple runner transitional subpaths are the enumerated exception', () => {
+  // The façade subpath is the recorded #1983 seam: root code may import it.
+  const sources = validSources();
+  sources.set(
+    'src/daemon/selector-runtime.ts',
+    "import type { RunnerCommand } from '@agent-device/platform-apple/runner';",
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+
+  // The host-bound client factory has exactly one composition root.
+  const clientSources = validSources();
+  clientSources.set(
+    'src/platforms/apple/core/runner-client.ts',
+    "import { createAppleRunnerClient } from '@agent-device/platform-apple/runner/client';",
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(clientSources, declarations()), []);
+  clientSources.set(
+    'src/daemon/handlers/session.ts',
+    "import { createAppleRunnerClient } from '@agent-device/platform-apple/runner/client';",
+  );
+  assert.match(
+    messages(clientSources).join('\n'),
+    /only the composition root src\/platforms\/apple\/core\/runner-client\.ts may construct/,
+  );
+
+  // The test-host installer is a single vitest setup file, dynamic imports included.
+  const testHostSources = validSources();
+  testHostSources.set(
+    'scripts/vitest-apple-runner-host-setup.ts',
+    "import { installAppleRunnerTestHost } from '@agent-device/platform-apple/runner/test-host';",
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(testHostSources, declarations()), []);
+  testHostSources.set(
+    'src/platform-runtime.ts',
+    composition() + "\nvoid import('@agent-device/platform-apple/runner/test-host');",
+  );
+  assert.match(
+    messages(testHostSources).join('\n'),
+    /only scripts\/vitest-apple-runner-host-setup\.ts may import/,
+  );
+
+  // A NEW unenumerated subpath widens the export list and fails declarations.
+  const widened = declarations();
+  const apple = widened.find((pkg) => pkg.family === 'apple')!;
+  widened[widened.indexOf(apple)] = {
+    ...apple,
+    exportedSubpaths: [...apple.exportedSubpaths, '@agent-device/platform-apple/internal'],
+  };
+  assert.match(
+    messages(validSources(), widened).join('\n'),
+    /platform-apple must export exactly its root façade/,
+  );
+});
+
+test('the runner mechanics subtree is exempt from ambient-host and raw-process rules the right way around', () => {
+  // Production runner mechanics may own files/sockets (fs/net/os) directly...
+  const sources = validSources();
+  sources.set(
+    'packages/platform-apple/src/runner/runner-lease.ts',
+    ["import fs from 'node:fs';", "import os from 'node:os';", 'export const x = fs && os;'].join(
+      '\n',
+    ),
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+
+  // ...but spawning stays banned: process execution goes through the host port.
+  sources.set(
+    'packages/platform-apple/src/runner/runner-artifact.ts',
+    "import { spawn } from 'node:child_process';",
+  );
+  assert.match(messages(sources).join('\n'), /raw process primitives/);
+
+  // Type-only naming of ChildProcess (the host port) and test-file fakes stay allowed.
+  const allowed = validSources();
+  allowed.set(
+    'packages/platform-apple/src/runner/host.ts',
+    "import type { ChildProcess } from 'node:child_process';",
+  );
+  allowed.set(
+    'packages/platform-apple/src/runner/__tests__/runner-xctestrun.test.ts',
+    "import { execFileSync } from 'node:child_process';",
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations()), []);
+});
+
+test('platform packages may import the xml vocabulary package', () => {
+  const sources = validSources();
+  sources.set(
+    'packages/platform-apple/src/runner/runner-usbmux.ts',
+    "import { parseXml } from '@agent-device/xml';",
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+});
+
 test('contracts never depend on a concrete platform package in production or tests', () => {
   for (const statement of [
     "import { applePlatformMetadata } from '@agent-device/platform-apple';",
@@ -139,16 +241,19 @@ test('contracts never depend on a concrete platform package in production or tes
 });
 
 test('platform packages cannot escape to root, daemon, siblings, or raw process primitives', () => {
+  // Raw-process cases plant in a PRODUCTION file: the ban is about mechanics
+  // spawning at runtime, so test files (which fake process primitives) and
+  // type-only imports (the runner host port names ChildProcess) are exempt.
   const planted = [
-    "import type { DaemonRequest } from '../../../src/daemon/types.ts';",
-    "export { x } from '../../../src/core/x.ts';",
-    "void import('@agent-device/platform-android');",
-    "import { spawn } from 'node:child_process';",
-    "import type { ChildProcess } from 'child_process';",
-  ];
-  for (const statement of planted) {
+    ["import type { DaemonRequest } from '../../../src/daemon/types.ts';", 'probe.test.ts'],
+    ["export { x } from '../../../src/core/x.ts';", 'probe.test.ts'],
+    ["void import('@agent-device/platform-android');", 'probe.test.ts'],
+    ["import { spawn } from 'node:child_process';", 'probe.ts'],
+    ["import { execSync } from 'child_process';", 'probe.ts'],
+  ] as const;
+  for (const [statement, fileName] of planted) {
     const sources = validSources();
-    sources.set('packages/platform-apple/src/probe.test.ts', statement);
+    sources.set(`packages/platform-apple/src/${fileName}`, statement);
     assert.ok(
       messages(sources).some((message) =>
         /may not reach root|may not import sibling|raw process primitives/.test(message),
@@ -178,7 +283,7 @@ test('platform packages may use capture-kit but no unrelated workspace implement
     );
     assert.match(
       messages(sources).join('\n'),
-      /may import workspace code only from capture-kit, contracts, or kernel/,
+      /may import workspace code only from capture-kit, contracts, kernel, or xml/,
     );
   }
 });

@@ -31,9 +31,9 @@ vi.mock('../../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
   return { ...actual, runCmd: vi.fn() };
 });
-vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
+    await importOriginal<typeof import('../../../platforms/apple/core/runner-client.ts')>();
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
 vi.mock('../../../platforms/apple/core/perf-xctrace.ts', async (importOriginal) => {

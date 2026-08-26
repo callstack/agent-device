@@ -237,6 +237,9 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@agent-device/xml':
+        specifier: workspace:*
+        version: link:../xml
 
   packages/platform-harmonyos:
     dependencies:

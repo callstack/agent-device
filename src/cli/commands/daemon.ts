@@ -21,10 +21,8 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags }
   const result = mergeShutdownReport(stopped, report);
   const shouldClean = flags.clean === true && identity !== null && result.stopped;
   if (shouldClean) {
-    const [{ cleanupRunnerLeasesForOwner }, { runnerLeaseCleanupAdapter }] = await Promise.all([
-      import('../../platforms/apple/core/runner/runner-lease.ts'),
-      import('../../platforms/apple/core/runner/runner-disposal.ts'),
-    ]);
+    const { cleanupRunnerLeasesForOwner, runnerLeaseCleanupAdapter } =
+      await import('../../platforms/apple/core/runner-client.ts');
     await cleanupRunnerLeasesForOwner(
       { pid: identity.pid, startTime: identity.processStartTime },
       runnerLeaseCleanupAdapter,

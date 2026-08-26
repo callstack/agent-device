@@ -23,7 +23,7 @@ import {
 import type {
   AppleRunnerCommandExecutor,
   AppleRunnerCommandOptions,
-} from './runner/runner-provider.ts';
+} from '@agent-device/platform-apple/runner';
 import {
   captureCoreDeviceScreenshot,
   captureXctestDeviceScreenshot,

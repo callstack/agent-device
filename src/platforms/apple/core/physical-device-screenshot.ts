@@ -7,7 +7,7 @@ import { copyCoreDeviceRunnerFile } from './physical-device-files.ts';
 import type {
   AppleRunnerCommandExecutor,
   AppleRunnerCommandOptions,
-} from './runner/runner-provider.ts';
+} from '@agent-device/platform-apple/runner';
 import { appleToolFailureText, extractAppleToolErrorMeta } from './tool-diagnostics.ts';
 
 export type IosPhysicalDeviceScreenshotOptions = {

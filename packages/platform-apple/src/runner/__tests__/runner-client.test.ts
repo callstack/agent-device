@@ -1,0 +1,1577 @@
+import {
+  createRequestCanceledError,
+  isRequestCanceledError,
+  AppError,
+} from '@agent-device/kernel/errors';
+import type { RequestProgressEvent } from '@agent-device/contracts/progress';
+import { beforeEach, test, onTestFinished, vi } from 'vitest';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { mkdtempForTest, mkdtempForTestSync } from './tmp-dir.ts';
+import { appleRunnerTestHost } from '../test-host.ts';
+import type { DiagnosticEventInput } from '../host.ts';
+
+const mockRunCmdStreaming = vi.fn();
+const mockRunCmdSync = vi.fn();
+const { mockRepairMacOsRunnerProductsIfNeeded } = vi.hoisted(() => ({
+  mockRepairMacOsRunnerProductsIfNeeded: vi.fn(),
+}));
+
+vi.mock('../runner-macos-products.ts', async () => {
+  const actual = await vi.importActual<typeof import('../runner-macos-products.ts')>(
+    '../runner-macos-products.ts',
+  );
+  return {
+    ...actual,
+    repairMacOsRunnerProductsIfNeeded: mockRepairMacOsRunnerProductsIfNeeded,
+  };
+});
+
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
+import {
+  isRetryableRunnerError,
+  resolveRunnerBuildFailureHint,
+  resolveRunnerEarlyExitHint,
+  shouldRetryRunnerConnectError,
+  withRunnerCommandId,
+  type RunnerCommand,
+} from '../runner-contract.ts';
+import {
+  resolveRunnerBuildDestination,
+  resolveRunnerDestination,
+} from '../apple-runner-platform.ts';
+import {
+  resolveRunnerBundleBuildSettings,
+  resolveRunnerMaxConcurrentDestinationsFlag,
+  resolveRunnerSigningBuildSettings,
+  resolveRunnerPerformanceBuildSettings,
+  resolveRunnerSandboxBuildArgs,
+} from '../runner-cache-metadata.ts';
+import {
+  acquireRunnerXctestrunCacheLock,
+  assertSafeDerivedCleanup,
+  resolveRunnerCacheMetadataPath,
+  shouldDeleteRunnerDerivedRootEntry,
+  writeRunnerCacheMetadata,
+} from '../runner-cache.ts';
+import { ensureXctestrunArtifact, xctestrunReferencesProjectRoot } from '../runner-artifact.ts';
+import {
+  markRunnerXctestrunArtifactBadForRun,
+  resolveExpectedRunnerCacheMetadata,
+  resolveRunnerDerivedPath,
+} from '../runner-xctestrun.ts';
+import { parseRunnerResponse } from '../runner-session.ts';
+
+const iosSimulator: DeviceInfo = {
+  platform: 'apple',
+  id: 'sim-1',
+  name: 'iPhone Simulator',
+  kind: 'simulator',
+  booted: true,
+};
+
+const iosDevice: DeviceInfo = {
+  platform: 'apple',
+  id: '00008110-000E12341234002E',
+  name: 'iPhone',
+  kind: 'device',
+  booted: true,
+};
+
+const tvOsSimulator: DeviceInfo = {
+  platform: 'apple',
+  id: 'tv-sim-1',
+  name: 'Apple TV',
+  kind: 'simulator',
+  target: 'tv',
+  booted: true,
+};
+
+const tvOsDevice: DeviceInfo = {
+  platform: 'apple',
+  id: '00008120-000E12341234003F',
+  name: 'Apple TV',
+  kind: 'device',
+  target: 'tv',
+  booted: true,
+};
+
+const macOsDevice: DeviceInfo = {
+  platform: 'apple',
+  appleOs: 'macos',
+  id: 'host-macos-local',
+  name: 'Host Mac',
+  kind: 'device',
+  target: 'desktop',
+  booted: true,
+};
+
+const runnerProtocolCommandFixtures: Record<RunnerCommand['command'], RunnerCommand> = {
+  tap: { command: 'tap', x: 120, y: 240 },
+  mouseClick: { command: 'mouseClick', x: 120, y: 240, button: 'secondary' },
+  longPress: { command: 'longPress', x: 120, y: 240, durationMs: 750 },
+  drag: { command: 'drag', x: 120, y: 240, x2: 300, y2: 420, durationMs: 400 },
+  remotePress: { command: 'remotePress', remoteButton: 'down', durationMs: 250 },
+  type: { command: 'type', text: 'hello', delayMs: 20, textEntryMode: 'replace' },
+  swipe: { command: 'swipe', direction: 'down', durationMs: 250 },
+  scroll: { command: 'scroll', direction: 'down', amount: 0.6, pixels: 240 },
+  desktopScroll: {
+    command: 'desktopScroll',
+    direction: 'down',
+    amount: 0.6,
+    pixels: 240,
+    durationMs: 50,
+  },
+  findText: { command: 'findText', text: 'Settings' },
+  querySelector: { command: 'querySelector', selectorKey: 'id', selectorValue: 'submit' },
+  readText: { command: 'readText' },
+  snapshot: {
+    command: 'snapshot',
+    interactiveOnly: true,
+    depth: 2,
+    scope: 'app',
+    raw: false,
+  },
+  screenshot: { command: 'screenshot', outPath: '/tmp/runner-screenshot.png', fullscreen: true },
+  back: { command: 'back' },
+  backInApp: { command: 'backInApp' },
+  backSystem: { command: 'backSystem' },
+  home: { command: 'home' },
+  rotate: { command: 'rotate', orientation: 'landscape-left' },
+  appSwitcher: { command: 'appSwitcher' },
+  keyboardDismiss: { command: 'keyboardDismiss' },
+  keyboardReturn: { command: 'keyboardReturn' },
+  alert: { command: 'alert', action: 'accept' },
+  sequence: {
+    command: 'sequence',
+    steps: [
+      { kind: 'tap', x: 120, y: 240 },
+      { kind: 'longPress', x: 120, y: 240, durationMs: 300 },
+      { kind: 'doubleTap', x: 10, y: 600, pauseMs: 50 },
+    ],
+  },
+  gesture: { command: 'gesture' },
+  gestureViewport: { command: 'gestureViewport' },
+  recordStart: {
+    command: 'recordStart',
+    outPath: '/tmp/runner-recording.mp4',
+    fps: 30,
+  },
+  recordStop: { command: 'recordStop' },
+  status: { command: 'status', statusCommandId: 'runner-command-1' },
+  uptime: { command: 'uptime' },
+  activate: { command: 'activate', appBundleId: 'com.example.app' },
+  terminate: { command: 'terminate', appBundleId: 'com.example.app' },
+  targetReset: { command: 'targetReset' },
+  shutdown: { command: 'shutdown' },
+};
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
+
+async function makeTmpDir(): Promise<string> {
+  const tmpDir = await mkdtempForTest('agent-device-xctestrun-');
+  onTestFinished(async () => {
+    await fs.promises.rm(tmpDir, { recursive: true, force: true });
+  });
+  return tmpDir;
+}
+
+async function makeProjectTmpDir(): Promise<string> {
+  const tmpRoot = path.join(repoRoot, '.tmp');
+  await fs.promises.mkdir(tmpRoot, { recursive: true });
+  const tmpDir = await fs.promises.mkdtemp(path.join(tmpRoot, 'agent-device-xctestrun-'));
+  onTestFinished(async () => {
+    await fs.promises.rm(tmpDir, { recursive: true, force: true });
+  });
+  return tmpDir;
+}
+
+function writeXctestrunFixture(
+  xctestrunPath: string,
+  options: { projectRoot: string; productRelativePaths: string[] },
+): void {
+  const entries = options.productRelativePaths
+    .map((relativePath) => `        <string>__TESTROOT__/${relativePath}</string>`)
+    .join('\n');
+  fs.mkdirSync(path.dirname(xctestrunPath), { recursive: true });
+  fs.writeFileSync(
+    xctestrunPath,
+    `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>ProjectRootHint</key>
+  <string>${options.projectRoot}</string>
+  <key>ProductPaths</key>
+  <array>
+${entries}
+  </array>
+</dict>
+</plist>`,
+    'utf8',
+  );
+}
+
+function withRunnerDerivedPathEnv(derivedPath: string): void {
+  const previousDerivedPath = process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH;
+  process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH = derivedPath;
+  onTestFinished(() => {
+    restoreEnvVar('AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH', previousDerivedPath);
+  });
+}
+
+function withoutRunnerDerivedPathEnv(): void {
+  const previousDerivedPath = process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH;
+  delete process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH;
+  onTestFinished(() => {
+    restoreEnvVar('AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH', previousDerivedPath);
+  });
+}
+
+function restoreEnvVar(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+  process.env[name] = value;
+}
+
+function stripRunnerCacheArtifacts(metadata: Record<string, unknown>): Record<string, unknown> {
+  const { artifacts: _artifacts, ...rest } = metadata;
+  return rest;
+}
+
+function writeRunnerCacheMetadataWithArtifacts(params: {
+  derivedPath: string;
+  device: DeviceInfo;
+  xctestrunPath: string;
+  productPaths: string[];
+}): void {
+  fs.writeFileSync(
+    resolveRunnerCacheMetadataPath(params.derivedPath),
+    JSON.stringify(
+      {
+        ...resolveExpectedRunnerCacheMetadata(params.device, repoRoot),
+        artifacts: {
+          xctestrunPath: params.xctestrunPath,
+          xctestrunMtimeMs: Math.trunc(fs.statSync(params.xctestrunPath).mtimeMs),
+          xctestrunSize: fs.statSync(params.xctestrunPath).size,
+          productPaths: params.productPaths.map((productPath) => ({
+            path: productPath,
+            mtimeMs: Math.trunc(fs.statSync(productPath).mtimeMs),
+            size: fs.statSync(productPath).size,
+          })),
+        },
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+async function makeCachedRunnerXctestrun(): Promise<{
+  derivedPath: string;
+  existingXctestrunPath: string;
+}> {
+  const tmpDir = await makeProjectTmpDir();
+  const derivedPath = path.join(tmpDir, 'custom-derived');
+  const existingXctestrunPath = path.join(derivedPath, 'existing.xctestrun');
+  await fs.promises.mkdir(derivedPath, { recursive: true });
+  await fs.promises.mkdir(path.join(derivedPath, 'Runner.app'), { recursive: true });
+  writeXctestrunFixture(existingXctestrunPath, {
+    projectRoot: repoRoot,
+    productRelativePaths: ['Runner.app'],
+  });
+  writeRunnerCacheMetadata(derivedPath, resolveExpectedRunnerCacheMetadata(macOsDevice, repoRoot));
+  return { derivedPath, existingXctestrunPath };
+}
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  appleRunnerTestHost.update({
+    runCmdStreaming: mockRunCmdStreaming,
+    runCmdSync: mockRunCmdSync,
+    readProcessStartTime: () => 'test-process-start',
+  });
+  mockRunCmdStreaming.mockResolvedValue(undefined);
+  mockRunCmdSync.mockImplementation((command: string, args: string[]) => {
+    if (command === 'xcodebuild' && args[0] === '-version') {
+      return { exitCode: 0, stdout: 'Xcode 26.2\nBuild version 17C52\n', stderr: '' };
+    }
+    if (command === 'xcrun' && args.includes('--show-sdk-version')) {
+      return { exitCode: 0, stdout: '26.2\n', stderr: '' };
+    }
+    if (command === 'xcrun' && args.includes('--show-sdk-build-version')) {
+      return { exitCode: 0, stdout: '23C53\n', stderr: '' };
+    }
+    throw new Error(`Unexpected Apple fingerprint command: ${command} ${args.join(' ')}`);
+  });
+  mockRepairMacOsRunnerProductsIfNeeded.mockResolvedValue(undefined);
+});
+
+test('resolveRunnerDestination uses simulator destination for simulators', () => {
+  assert.equal(resolveRunnerDestination(iosSimulator), 'platform=iOS Simulator,id=sim-1');
+});
+
+test('runner protocol fixtures cover every runner command with JSON-safe samples', () => {
+  const commands = Object.keys(runnerProtocolCommandFixtures).sort();
+  assert.deepEqual(commands, [
+    'activate',
+    'alert',
+    'appSwitcher',
+    'back',
+    'backInApp',
+    'backSystem',
+    'desktopScroll',
+    'drag',
+    'findText',
+    'gesture',
+    'gestureViewport',
+    'home',
+    'keyboardDismiss',
+    'keyboardReturn',
+    'longPress',
+    'mouseClick',
+    'querySelector',
+    'readText',
+    'recordStart',
+    'recordStop',
+    'remotePress',
+    'rotate',
+    'screenshot',
+    'scroll',
+    'sequence',
+    'shutdown',
+    'snapshot',
+    'status',
+    'swipe',
+    'tap',
+    'targetReset',
+    'terminate',
+    'type',
+    'uptime',
+  ]);
+
+  const roundTrip = JSON.parse(JSON.stringify(runnerProtocolCommandFixtures)) as Record<
+    string,
+    Record<string, unknown>
+  >;
+  assert.equal(roundTrip.tap!.command, 'tap');
+  assert.equal(roundTrip.mouseClick!.button, 'secondary');
+  assert.equal(roundTrip.snapshot!.scope, 'app');
+  assert.equal(roundTrip.screenshot!.fullscreen, true);
+  assert.equal(roundTrip.rotate!.orientation, 'landscape-left');
+  assert.equal(roundTrip.recordStart!.fps, 30);
+});
+
+test('withRunnerCommandId replaces blank command ids', () => {
+  const command = withRunnerCommandId({ command: 'uptime', commandId: '   ' });
+
+  assert.match(command.commandId ?? '', /^runner-/);
+});
+
+test('withRunnerCommandId preserves existing command ids', () => {
+  const command = withRunnerCommandId({ command: 'uptime', commandId: 'runner-existing' });
+
+  assert.deepEqual(command, { command: 'uptime', commandId: 'runner-existing' });
+});
+
+test('scroll is a mutating, command-id-tracked runner command', () => {
+  // Runner command traits classify fused scroll as mutating, routing it through single-send
+  // (no transport retry), command-id tracking, and status recovery.
+  assert.equal(isReadOnlyRunnerCommand('scroll'), false);
+
+  const command = withRunnerCommandId({ command: 'scroll', direction: 'down', pixels: 120 });
+  assert.match(command.commandId ?? '', /^runner-/);
+});
+
+test('desktopScroll is a mutating, command-id-tracked runner command', () => {
+  assert.equal(isReadOnlyRunnerCommand('desktopScroll'), false);
+
+  const command = withRunnerCommandId({
+    command: 'desktopScroll',
+    direction: 'down',
+    pixels: 120,
+  });
+  assert.match(command.commandId ?? '', /^runner-/);
+});
+
+test('withRunnerCommandId does not add command ids to status probes', () => {
+  const command = withRunnerCommandId({
+    command: 'status',
+    statusCommandId: 'runner-command-1',
+  });
+
+  assert.deepEqual(command, { command: 'status', statusCommandId: 'runner-command-1' });
+});
+
+test('resolveRunnerDestination uses device destination for physical devices', () => {
+  assert.equal(resolveRunnerDestination(iosDevice), 'platform=iOS,id=00008110-000E12341234002E');
+});
+
+test('resolveRunnerBuildDestination uses generic iOS destination for physical devices', () => {
+  assert.equal(resolveRunnerBuildDestination(iosDevice), 'generic/platform=iOS');
+});
+
+test('resolveRunnerDestination uses tvOS simulator destination for tvOS simulators', () => {
+  assert.equal(resolveRunnerDestination(tvOsSimulator), 'platform=tvOS Simulator,id=tv-sim-1');
+});
+
+test('resolveRunnerDestination uses tvOS destination for tvOS devices', () => {
+  assert.equal(resolveRunnerDestination(tvOsDevice), 'platform=tvOS,id=00008120-000E12341234003F');
+});
+
+test('resolveRunnerBuildDestination uses tvOS destinations for tvOS devices and simulators', () => {
+  assert.equal(resolveRunnerBuildDestination(tvOsSimulator), 'platform=tvOS Simulator,id=tv-sim-1');
+  assert.equal(resolveRunnerBuildDestination(tvOsDevice), 'generic/platform=tvOS');
+});
+
+test('resolveRunnerMaxConcurrentDestinationsFlag uses simulator flag for simulators', () => {
+  assert.equal(
+    resolveRunnerMaxConcurrentDestinationsFlag(iosSimulator),
+    '-maximum-concurrent-test-simulator-destinations',
+  );
+});
+
+test('resolveRunnerMaxConcurrentDestinationsFlag uses device flag for physical devices', () => {
+  assert.equal(
+    resolveRunnerMaxConcurrentDestinationsFlag(iosDevice),
+    '-maximum-concurrent-test-device-destinations',
+  );
+});
+
+test('resolveRunnerMaxConcurrentDestinationsFlag uses device flag for macOS desktop', () => {
+  assert.equal(
+    resolveRunnerMaxConcurrentDestinationsFlag(macOsDevice),
+    '-maximum-concurrent-test-device-destinations',
+  );
+});
+
+test('resolveRunnerSigningBuildSettings returns empty args without env overrides', () => {
+  assert.deepEqual(resolveRunnerSigningBuildSettings({}), []);
+});
+
+test('resolveRunnerSigningBuildSettings disables signing for macOS desktop builds', () => {
+  assert.deepEqual(
+    resolveRunnerSigningBuildSettings({}, true, { platform: 'apple', appleOs: 'macos' }),
+    [
+      'CODE_SIGNING_ALLOWED=NO',
+      'CODE_SIGNING_REQUIRED=NO',
+      'CODE_SIGN_IDENTITY=',
+      'DEVELOPMENT_TEAM=',
+    ],
+  );
+});
+
+test('resolveRunnerSigningBuildSettings enables automatic signing for device builds without forcing identity', () => {
+  assert.deepEqual(resolveRunnerSigningBuildSettings({}, true), ['CODE_SIGN_STYLE=Automatic']);
+});
+
+test('resolveRunnerSigningBuildSettings ignores device signing overrides for simulator builds', () => {
+  assert.deepEqual(
+    resolveRunnerSigningBuildSettings(
+      {
+        AGENT_DEVICE_IOS_TEAM_ID: 'ABCDE12345',
+        AGENT_DEVICE_IOS_SIGNING_IDENTITY: 'Apple Development',
+        AGENT_DEVICE_IOS_PROVISIONING_PROFILE: 'My Profile',
+      },
+      false,
+    ),
+    [],
+  );
+});
+
+test('resolveRunnerSigningBuildSettings applies optional overrides when provided', () => {
+  const settings = resolveRunnerSigningBuildSettings(
+    {
+      AGENT_DEVICE_IOS_TEAM_ID: 'ABCDE12345',
+      AGENT_DEVICE_IOS_SIGNING_IDENTITY: 'Apple Development',
+      AGENT_DEVICE_IOS_PROVISIONING_PROFILE: 'My Profile',
+    },
+    true,
+  );
+  assert.deepEqual(settings, [
+    'CODE_SIGN_STYLE=Automatic',
+    'DEVELOPMENT_TEAM=ABCDE12345',
+    'CODE_SIGN_IDENTITY=Apple Development',
+    'PROVISIONING_PROFILE_SPECIFIER=My Profile',
+  ]);
+});
+
+test('resolveRunnerPerformanceBuildSettings disables indexing and code coverage', () => {
+  assert.deepEqual(resolveRunnerPerformanceBuildSettings(), [
+    'COMPILER_INDEX_STORE_ENABLE=NO',
+    'ENABLE_CODE_COVERAGE=NO',
+    'ONLY_ACTIVE_ARCH=YES',
+    'ENABLE_PREVIEWS=NO',
+    'ENABLE_DEBUG_DYLIB=NO',
+  ]);
+});
+
+test('resolveRunnerSandboxBuildArgs disables nested Xcode and Swift sandboxing', () => {
+  assert.deepEqual(resolveRunnerSandboxBuildArgs(), [
+    '-IDEPackageSupportDisableManifestSandbox=1',
+    '-IDEPackageSupportDisablePluginExecutionSandbox=1',
+    'ENABLE_USER_SCRIPT_SANDBOXING=NO',
+    'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox',
+  ]);
+});
+
+test('resolveRunnerSandboxBuildArgs includes Swift runner unit tests only when requested', () => {
+  const previous = process.env.AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS;
+  try {
+    process.env.AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS = '1';
+    assert.deepEqual(resolveRunnerSandboxBuildArgs(), [
+      '-IDEPackageSupportDisableManifestSandbox=1',
+      '-IDEPackageSupportDisablePluginExecutionSandbox=1',
+      'ENABLE_USER_SCRIPT_SANDBOXING=NO',
+      'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_UNIT_TESTS',
+    ]);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS;
+    } else {
+      process.env.AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS = previous;
+    }
+  }
+});
+
+test('resolveRunnerBundleBuildSettings returns default bundle identifiers', () => {
+  assert.deepEqual(resolveRunnerBundleBuildSettings({}), [
+    'AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID=com.callstack.agentdevice.runner',
+    'AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID=com.callstack.agentdevice.runner.uitests',
+  ]);
+});
+
+test('resolveRunnerBundleBuildSettings uses AGENT_DEVICE_IOS_BUNDLE_ID when provided', () => {
+  assert.deepEqual(
+    resolveRunnerBundleBuildSettings({
+      AGENT_DEVICE_IOS_BUNDLE_ID: 'com.example.agent-device.runner',
+    }),
+    [
+      'AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID=com.example.agent-device.runner',
+      'AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID=com.example.agent-device.runner.uitests',
+    ],
+  );
+});
+
+test('assertSafeDerivedCleanup allows cleaning when no override is set', () => {
+  assert.doesNotThrow(() => {
+    assertSafeDerivedCleanup('/tmp/derived', {});
+  });
+});
+
+test('assertSafeDerivedCleanup rejects cleaning override path by default', () => {
+  assert.throws(() => {
+    assertSafeDerivedCleanup('/tmp/custom', {
+      AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: '/tmp/custom',
+    });
+  }, /Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH automatically/);
+});
+
+test('assertSafeDerivedCleanup allows cleaning override path under project .tmp', () => {
+  const derivedPath = path.join(repoRoot, '.tmp', 'ios-runner-derived');
+  assert.doesNotThrow(() => {
+    assertSafeDerivedCleanup(derivedPath, {
+      AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: derivedPath,
+    });
+  });
+});
+
+test('resolveRunnerEarlyExitHint surfaces busy-connecting guidance', () => {
+  const hint = resolveRunnerEarlyExitHint(
+    'Runner did not accept connection (xcodebuild exited early)',
+    'Ineligible destinations for the "AgentDeviceRunner" scheme:\n{ error:Device is busy (Connecting to iPhone) }',
+    '',
+  );
+  assert.match(hint, /still connecting/i);
+});
+
+test('resolveRunnerEarlyExitHint falls back to runner connect timeout hint', () => {
+  const hint = resolveRunnerEarlyExitHint(
+    'Runner did not accept connection (xcodebuild exited early)',
+    '',
+    'xcodebuild failed unexpectedly',
+  );
+  assert.match(hint, /retry runner startup/i);
+  assert.match(hint, /pnpm clean:xcuitest/i);
+});
+
+test('resolveRunnerBuildFailureHint suggests cache cleanup for non-signing failures', () => {
+  const hint = resolveRunnerBuildFailureHint(
+    new AppError('COMMAND_FAILED', 'xcodebuild build-for-testing failed'),
+  );
+
+  assert.match(hint, /pnpm clean:xcuitest/i);
+  assert.match(hint, /~\/\.agent-device\/apple-runner\/derived/i);
+});
+
+test('shouldRetryRunnerConnectError does not retry xcodebuild early-exit errors', () => {
+  const err = new AppError(
+    'COMMAND_FAILED',
+    'Runner did not accept connection (xcodebuild exited early)',
+  );
+  assert.equal(shouldRetryRunnerConnectError(err), false);
+});
+
+test('shouldRetryRunnerConnectError retries transient connect errors', () => {
+  const err = new AppError('COMMAND_FAILED', 'Runner endpoint probe failed');
+  assert.equal(shouldRetryRunnerConnectError(err), true);
+});
+
+test('parseRunnerResponse preserves runner unsupported-operation codes', async () => {
+  const response = new Response(
+    JSON.stringify({
+      ok: false,
+      error: {
+        code: 'UNSUPPORTED_OPERATION',
+        message: 'Unable to dismiss the iOS keyboard without a safe native dismiss control',
+      },
+    }),
+  );
+  const session = { ready: false };
+
+  await assert.rejects(
+    () => parseRunnerResponse(response, session, '/tmp/runner.log'),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+      assert.match(error.message, /Unable to dismiss the iOS keyboard/i);
+      return true;
+    },
+  );
+});
+
+test('parseRunnerResponse surfaces the keyboard-dismiss hint to press the next target directly', async () => {
+  const hint =
+    'The on-screen keyboard usually does not block agent-device interactions: press the next target directly instead of retrying dismiss. If that press fails or reports no visible effect, scroll the target into view, or use keyboard enter to press the return key when submission is wanted.';
+  const response = new Response(
+    JSON.stringify({
+      ok: false,
+      error: {
+        code: 'UNSUPPORTED_OPERATION',
+        message: 'Unable to dismiss the iOS keyboard without a safe native dismiss control',
+        hint,
+      },
+    }),
+  );
+  const session = { ready: false };
+
+  await assert.rejects(
+    () => parseRunnerResponse(response, session, '/tmp/runner.log'),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+      assert.equal(error.details?.hint, hint);
+      assert.match(
+        String(error.details?.hint),
+        /usually does not block agent-device interactions/i,
+      );
+      assert.match(String(error.details?.hint), /press the next target directly/i);
+      assert.match(String(error.details?.hint), /scroll the target into view/i);
+      assert.match(String(error.details?.hint), /keyboard enter/i);
+      return true;
+    },
+  );
+});
+
+test('parseRunnerResponse preserves iOS AX snapshot failure code and hint', async () => {
+  const hint =
+    'Try a smaller read such as snapshot -s <visible label or id> -d 8, or use direct selector commands such as find id <value> click.';
+  const response = new Response(
+    JSON.stringify({
+      ok: false,
+      error: {
+        code: 'IOS_AX_SNAPSHOT_FAILED',
+        message: 'iOS XCTest snapshot failed with kAXErrorIllegalArgument.',
+        hint,
+      },
+    }),
+  );
+  const session = { ready: true };
+
+  await assert.rejects(
+    () => parseRunnerResponse(response, session, '/tmp/runner.log'),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'IOS_AX_SNAPSHOT_FAILED');
+      assert.match(error.message, /kAXErrorIllegalArgument/);
+      assert.equal(error.details?.hint, hint);
+      assert.equal(isRetryableRunnerError(error), false);
+      return true;
+    },
+  );
+});
+
+test('parseRunnerResponse preserves XCTest recorded failure code and hint', async () => {
+  const hint =
+    'The iOS runner session was invalidated. Re-observe with a fresh snapshot before retrying; if the accessibility tree is unavailable, use screenshot plus coordinate commands instead of retrying the tap blindly.';
+  const response = new Response(
+    JSON.stringify({
+      ok: false,
+      error: {
+        code: 'XCTEST_RECORDED_FAILURE',
+        message:
+          'XCTest recorded a failure while executing tap; the action may not have been performed.',
+        hint,
+      },
+    }),
+  );
+  const session = { ready: true };
+
+  await assert.rejects(
+    () => parseRunnerResponse(response, session, '/tmp/runner.log'),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'XCTEST_RECORDED_FAILURE');
+      assert.match(error.message, /may not have been performed/);
+      assert.equal(error.details?.hint, hint);
+      assert.equal(isRetryableRunnerError(error), false);
+      return true;
+    },
+  );
+});
+
+test('parseRunnerResponse maps RUNNER_BUSY to retriable command failure', async () => {
+  const hint = 'Wait a few seconds and retry.';
+  const response = new Response(
+    JSON.stringify({
+      ok: false,
+      error: {
+        code: 'RUNNER_BUSY',
+        message: 'The runner is still finishing abandoned work.',
+        hint,
+      },
+    }),
+  );
+  const session = { ready: true };
+
+  await assert.rejects(
+    () => parseRunnerResponse(response, session, '/tmp/runner.log'),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.runnerErrorCode, 'RUNNER_BUSY');
+      assert.equal(error.details?.retriable, true);
+      assert.equal(error.details?.hint, hint);
+      assert.equal(isRetryableRunnerError(error), true);
+      return true;
+    },
+  );
+});
+
+test('parseRunnerResponse preserves RUNNER_WEDGED as a fatal runner code', async () => {
+  const response = new Response(
+    JSON.stringify({
+      ok: false,
+      error: {
+        code: 'RUNNER_WEDGED',
+        message: 'The runner main thread is wedged.',
+        hint: 'The runner session will be restarted.',
+      },
+    }),
+  );
+  const session = { ready: true };
+
+  await assert.rejects(
+    () => parseRunnerResponse(response, session, '/tmp/runner.log'),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'RUNNER_WEDGED');
+      assert.equal(error.details?.runnerErrorCode, 'RUNNER_WEDGED');
+      assert.equal(isRetryableRunnerError(error), false);
+      return true;
+    },
+  );
+});
+
+test('parseRunnerResponse classifies target app AXRuntime CoreText font crashes from runner log tail', async () => {
+  const logPath = writeRunnerLogTail(`
+Thread 0 Crashed::  Dispatch queue: com.apple.main-thread
+0   libobjc.A.dylib                        objc_retain + 16
+1   CoreText                               CreateFontWithFontURL(__CFURL const*, __CFString const*, __CFString const*) + 512
+11  AXRuntime                              reconstitutedSmuggledCTFontFromDictionary + 192
+12  AXRuntime                              -[NSDictionary(AXPropertyListCoersion) _axRecursivelyReconstitutedRepresentationFromPropertyListWithError:] + 156
+`);
+  const response = new Response(
+    JSON.stringify({
+      ok: false,
+      error: {
+        code: 'XCTEST_RECORDED_FAILURE',
+        message:
+          'XCTest recorded a failure while executing type; the action may not have been performed.',
+      },
+    }),
+  );
+  const session = { ready: true };
+
+  await assert.rejects(
+    () => parseRunnerResponse(response, session, logPath),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'IOS_TARGET_APP_CRASH');
+      assert.equal(error.details?.runnerFailureReason, 'target_app_axruntime_coretext_crash');
+      assert.match(String(error.details?.hint), /AXRuntime read accessibility attributes/);
+      assert.match(String(error.details?.hint), /latest stable simulator runtime/);
+      assert.match(String(error.details?.hint), /exact command, selector\/ref/);
+      return true;
+    },
+  );
+});
+
+test('parseRunnerResponse classifies explicit target app crashes from runner log tail', async () => {
+  const logPath = writeRunnerLogTail(`
+AGENT_DEVICE_RUNNER_COMMAND_FAILED command=snapshot
+The application under test terminated unexpectedly.
+`);
+  const response = new Response(
+    JSON.stringify({
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'Runner error',
+      },
+    }),
+  );
+  const session = { ready: true };
+
+  await assert.rejects(
+    () => parseRunnerResponse(response, session, logPath),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'IOS_TARGET_APP_CRASH');
+      assert.equal(error.details?.runnerFailureReason, 'target_app_crash');
+      assert.match(String(error.details?.hint), /target iOS app appears to have crashed/);
+      assert.equal(isRetryableRunnerError(error), false);
+      return true;
+    },
+  );
+});
+
+test('parseRunnerResponse does not classify incidental XCTest crash text as target app crash', async () => {
+  const logPath = writeRunnerLogTail(`
+XCTest runner recovered from a previous test note: the word crashed appeared in debug output.
+AGENT_DEVICE_RUNNER_COMMAND_FAILED command=snapshot error=fetch failed
+`);
+  const response = new Response(
+    JSON.stringify({
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'fetch failed',
+      },
+    }),
+  );
+  const session = { ready: true };
+
+  await assert.rejects(
+    () => parseRunnerResponse(response, session, logPath),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.runnerFailureReason, undefined);
+      assert.equal(error.details?.hint, undefined);
+      assert.equal(isRetryableRunnerError(error), true);
+      return true;
+    },
+  );
+});
+
+test('parseRunnerResponse hints when XCTest main-thread execution times out', async () => {
+  const logPath = writeRunnerLogTail(
+    'AGENT_DEVICE_RUNNER_COMMAND_FAILED command=type error=main thread execution timed out',
+  );
+  const response = new Response(
+    JSON.stringify({
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'main thread execution timed out',
+      },
+    }),
+  );
+  const session = { ready: true };
+
+  await assert.rejects(
+    () => parseRunnerResponse(response, session, logPath),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.runnerFailureReason, 'runner_main_thread_execution_timeout');
+      assert.match(String(error.details?.hint), /XCTest timed out waiting for main-thread work/);
+      assert.match(String(error.details?.hint), /screenshot as visual truth/);
+      assert.match(String(error.details?.hint), /coordinate presses/);
+      return true;
+    },
+  );
+});
+
+test('parseRunnerResponse emits diagnostics for runner gesture fallbacks', async () => {
+  const response = new Response(
+    JSON.stringify({
+      ok: true,
+      data: {
+        message: 'dragged',
+        gestureFallback: 'xctest-coordinate-drag',
+        gestureFallbackMessage: 'Runner synthesized drag is unavailable',
+        gestureFallbackHint: 'Using XCTest coordinate drag fallback.',
+      },
+    }),
+  );
+  const session = { ready: false };
+  const diagnosticEvents: DiagnosticEventInput[] = [];
+  appleRunnerTestHost.update({ emitDiagnostic: (event) => diagnosticEvents.push(event) });
+
+  const data = await parseRunnerResponse(response, session, '/tmp/runner.log');
+  assert.equal(data.gestureFallback, 'xctest-coordinate-drag');
+
+  assert.equal(session.ready, true);
+  const diagnostics = JSON.stringify(diagnosticEvents);
+  assert.match(diagnostics, /ios_runner_gesture_fallback/);
+  assert.match(diagnostics, /xctest-coordinate-drag/);
+});
+
+function writeRunnerLogTail(contents: string): string {
+  const dir = mkdtempForTestSync('agent-device-runner-log-');
+  onTestFinished(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const logPath = path.join(dir, 'runner.log');
+  fs.writeFileSync(logPath, contents);
+  return logPath;
+}
+
+test('isRetryableRunnerError does not retry xcodebuild early-exit errors', () => {
+  const err = new AppError(
+    'COMMAND_FAILED',
+    'Runner did not accept connection (xcodebuild exited early)',
+  );
+  assert.equal(isRetryableRunnerError(err), false);
+});
+
+test('isRetryableRunnerError does not retry busy-connecting errors', () => {
+  const err = new AppError('COMMAND_FAILED', 'Device is busy (Connecting to iPhone)');
+  assert.equal(isRetryableRunnerError(err), false);
+});
+
+test('xctestrunReferencesProjectRoot rejects stale worktree artifacts', async () => {
+  const tmpDir = await makeTmpDir();
+  const xctestrunPath = path.join(tmpDir, 'AgentDeviceRunner.xctestrun');
+  fs.writeFileSync(
+    xctestrunPath,
+    '<plist><dict><key>SourceFilesCommonPathPrefix</key><string>/tmp/other-worktree/agent-device/apple/runner/AgentDeviceRunner</string></dict></plist>',
+    'utf8',
+  );
+
+  assert.equal(
+    xctestrunReferencesProjectRoot(xctestrunPath, '/tmp/current-worktree/agent-device'),
+    false,
+  );
+  assert.equal(
+    xctestrunReferencesProjectRoot(xctestrunPath, '/tmp/other-worktree/agent-device'),
+    true,
+  );
+});
+
+test('resolveRunnerDerivedPath keys default cache by runner metadata', () => {
+  withoutRunnerDerivedPathEnv();
+  const metadata = resolveExpectedRunnerCacheMetadata(iosSimulator, repoRoot);
+  const iosPath = resolveRunnerDerivedPath(iosSimulator, metadata);
+  const tvPath = resolveRunnerDerivedPath(tvOsSimulator, {
+    ...metadata,
+    platformName: 'tvOS',
+    target: 'tv',
+    buildDestinationFamily: 'appletvsimulator',
+  });
+  const macPath = resolveRunnerDerivedPath(macOsDevice, {
+    ...metadata,
+    platformName: 'macOS',
+    target: 'desktop',
+    buildDestinationFamily: 'macos',
+  });
+  const unitTestPath = resolveRunnerDerivedPath(iosSimulator, {
+    ...metadata,
+    runnerSandboxBuildArgs: metadata.runnerSandboxBuildArgs.map((arg) =>
+      arg.startsWith('OTHER_SWIFT_FLAGS=')
+        ? 'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_UNIT_TESTS'
+        : arg,
+    ),
+  });
+
+  assert.match(iosPath, /\/apple-runner\/derived\/ios-simulator\/cache-[a-f0-9]{16}$/);
+  assert.match(tvPath, /\/apple-runner\/derived\/tvos-simulator\/cache-[a-f0-9]{16}$/);
+  assert.match(macPath, /\/apple-runner\/derived\/macos\/cache-[a-f0-9]{16}$/);
+  assert.notEqual(iosPath, unitTestPath);
+});
+
+test('resolveRunnerDerivedPath reuses cache path for identical runner source fingerprints', async () => {
+  withoutRunnerDerivedPathEnv();
+  const tmpDir = await makeTmpDir();
+  const firstRoot = path.join(tmpDir, 'first');
+  const secondRoot = path.join(tmpDir, 'second');
+  const runnerRelativePath = path.join(
+    'apple',
+    'runner',
+    'AgentDeviceRunner',
+    'AgentDeviceRunnerUITests',
+    'RunnerTests.swift',
+  );
+  await fs.promises.mkdir(path.dirname(path.join(firstRoot, runnerRelativePath)), {
+    recursive: true,
+  });
+  await fs.promises.mkdir(path.dirname(path.join(secondRoot, runnerRelativePath)), {
+    recursive: true,
+  });
+  await fs.promises.writeFile(
+    path.join(firstRoot, runnerRelativePath),
+    'final class RunnerTests {}\n',
+  );
+  await fs.promises.writeFile(
+    path.join(secondRoot, runnerRelativePath),
+    'final class RunnerTests {}\n',
+  );
+
+  const firstPath = resolveRunnerDerivedPath(
+    iosSimulator,
+    resolveExpectedRunnerCacheMetadata(iosSimulator, firstRoot),
+  );
+  const secondPath = resolveRunnerDerivedPath(
+    iosSimulator,
+    resolveExpectedRunnerCacheMetadata(iosSimulator, secondRoot),
+  );
+  await fs.promises.writeFile(
+    path.join(secondRoot, runnerRelativePath),
+    'final class RunnerTests { let changed = true }\n',
+  );
+  const changedPath = resolveRunnerDerivedPath(
+    iosSimulator,
+    resolveExpectedRunnerCacheMetadata(iosSimulator, secondRoot),
+  );
+
+  assert.equal(firstPath, secondPath);
+  assert.notEqual(firstPath, changedPath);
+});
+
+test('acquireRunnerXctestrunCacheLock serializes cache access across acquirers', async () => {
+  vi.useFakeTimers();
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  const tmpDir = await makeTmpDir();
+  const derivedPath = path.join(tmpDir, 'derived');
+  const releaseFirst = await acquireRunnerXctestrunCacheLock(derivedPath);
+  let secondAcquired = false;
+  const second = acquireRunnerXctestrunCacheLock(derivedPath).then(async (releaseSecond) => {
+    secondAcquired = true;
+    await releaseSecond();
+  });
+
+  assert.equal(secondAcquired, false);
+  await releaseFirst();
+  await vi.advanceTimersByTimeAsync(100);
+  await second;
+  assert.equal(secondAcquired, true);
+});
+
+test('ensureXctestrunArtifact reuses matching manifest artifacts from another project root', async () => {
+  const tmpDir = await makeTmpDir();
+  const derivedPath = path.join(tmpDir, 'custom-derived');
+  const productPath = path.join(derivedPath, 'Runner.app');
+  const xctestrunPath = path.join(derivedPath, 'manifest.xctestrun');
+  await fs.promises.mkdir(productPath, { recursive: true });
+  writeXctestrunFixture(xctestrunPath, {
+    projectRoot: '/tmp/other-agent-device-worktree',
+    productRelativePaths: ['Runner.app'],
+  });
+  writeRunnerCacheMetadataWithArtifacts({
+    derivedPath,
+    device: macOsDevice,
+    xctestrunPath,
+    productPaths: [productPath],
+  });
+  withRunnerDerivedPathEnv(derivedPath);
+
+  const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
+
+  assert.equal(result, xctestrunPath);
+  assert.equal(mockRunCmdStreaming.mock.calls.length, 0);
+  assert.deepEqual(mockRepairMacOsRunnerProductsIfNeeded.mock.calls[0]?.[1], [productPath]);
+});
+
+test('ensureXctestrunArtifact rebuilds foreign artifacts when metadata does not match', async () => {
+  const projectRoot = repoRoot;
+  const tmpDir = await makeProjectTmpDir();
+  const derivedPath = path.join(tmpDir, 'custom-derived');
+  const productPath = path.join(derivedPath, 'Runner.app');
+  const foreignXctestrunPath = path.join(derivedPath, 'foreign.xctestrun');
+  const rebuiltXctestrunPath = path.join(derivedPath, 'rebuilt', 'rebuilt.xctestrun');
+  await fs.promises.mkdir(productPath, { recursive: true });
+  writeXctestrunFixture(foreignXctestrunPath, {
+    projectRoot: '/tmp/other-agent-device-worktree',
+    productRelativePaths: ['Runner.app'],
+  });
+  writeRunnerCacheMetadataWithArtifacts({
+    derivedPath,
+    device: macOsDevice,
+    xctestrunPath: foreignXctestrunPath,
+    productPaths: [productPath],
+  });
+  const metadataPath = resolveRunnerCacheMetadataPath(derivedPath);
+  const staleMetadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+  staleMetadata.runnerSandboxBuildArgs = staleMetadata.runnerSandboxBuildArgs.map((arg: string) =>
+    arg.startsWith('OTHER_SWIFT_FLAGS=')
+      ? 'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_UNIT_TESTS'
+      : arg,
+  );
+  fs.writeFileSync(metadataPath, JSON.stringify(staleMetadata, null, 2));
+  withRunnerDerivedPathEnv(derivedPath);
+
+  mockRunCmdStreaming.mockImplementation(async () => {
+    await fs.promises.mkdir(path.join(derivedPath, 'rebuilt', 'Runner.app'), { recursive: true });
+    writeXctestrunFixture(rebuiltXctestrunPath, {
+      projectRoot,
+      productRelativePaths: ['Runner.app'],
+    });
+  });
+
+  const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
+
+  assert.equal(result, rebuiltXctestrunPath);
+  assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
+  assert.equal(fs.existsSync(foreignXctestrunPath), false);
+});
+
+test('ensureXctestrunArtifact ignores manifest artifacts outside the cache root', async () => {
+  const projectRoot = repoRoot;
+  const tmpDir = await makeProjectTmpDir();
+  const derivedPath = path.join(tmpDir, 'custom-derived');
+  const externalDir = path.join(tmpDir, 'external');
+  const externalProductPath = path.join(externalDir, 'Runner.app');
+  const externalXctestrunPath = path.join(externalDir, 'external.xctestrun');
+  const rebuiltXctestrunPath = path.join(derivedPath, 'rebuilt', 'rebuilt.xctestrun');
+  await fs.promises.mkdir(externalProductPath, { recursive: true });
+  writeXctestrunFixture(externalXctestrunPath, {
+    projectRoot,
+    productRelativePaths: ['Runner.app'],
+  });
+  await fs.promises.mkdir(derivedPath, { recursive: true });
+  writeRunnerCacheMetadataWithArtifacts({
+    derivedPath,
+    device: macOsDevice,
+    xctestrunPath: externalXctestrunPath,
+    productPaths: [externalProductPath],
+  });
+  withRunnerDerivedPathEnv(derivedPath);
+
+  mockRunCmdStreaming.mockImplementation(async () => {
+    await fs.promises.mkdir(path.join(derivedPath, 'rebuilt', 'Runner.app'), { recursive: true });
+    writeXctestrunFixture(rebuiltXctestrunPath, {
+      projectRoot,
+      productRelativePaths: ['Runner.app'],
+    });
+  });
+
+  const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
+
+  assert.equal(result, rebuiltXctestrunPath);
+  assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
+});
+
+test('ensureXctestrunArtifact aborts only the disconnected request build and preserves concurrent unrelated builds', async () => {
+  // The request AbortSignal must reach the xctestrun build (killProcessTree via
+  // runCmdStreaming); removing global abort must not orphan a disconnected prep.
+  // Request-scoped: aborting one request's build leaves an unrelated concurrent
+  // build (different device -> different derived, different signal) untouched.
+  withoutRunnerDerivedPathEnv();
+  const canceledDevice = iosSimulator;
+  const survivorDevice = macOsDevice;
+  for (const device of [canceledDevice, survivorDevice]) {
+    const derived = resolveRunnerDerivedPath(
+      device,
+      resolveExpectedRunnerCacheMetadata(device, repoRoot),
+    );
+    onTestFinished(async () => {
+      await fs.promises.rm(derived, { recursive: true, force: true });
+    });
+  }
+
+  const canceledController = new AbortController();
+  const survivorController = new AbortController();
+  const deferred = <T>(): { promise: Promise<T>; resolve: (value: T) => void } => {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const waitForAbort = (signal: AbortSignal): Promise<void> =>
+    signal.aborted
+      ? Promise.resolve()
+      : new Promise<void>((resolve) =>
+          signal.addEventListener('abort', () => resolve(), {
+            once: true,
+          }),
+        );
+  const canceledBuildStarted = deferred<void>();
+  const survivorBuildStarted = deferred<void>();
+  const releaseSurvivor = deferred<void>();
+  const cancellationError = createRequestCanceledError();
+
+  mockRunCmdStreaming.mockImplementation(async (_cmd, args, options) => {
+    const derived = args[args.indexOf('-derivedDataPath') + 1];
+    if (options?.signal === canceledController.signal) {
+      canceledBuildStarted.resolve();
+      await waitForAbort(options.signal);
+      throw cancellationError;
+    }
+    survivorBuildStarted.resolve();
+    await releaseSurvivor.promise;
+    await fs.promises.mkdir(path.join(derived, 'rebuilt', 'Runner.app'), { recursive: true });
+    writeXctestrunFixture(path.join(derived, 'rebuilt', 'rebuilt.xctestrun'), {
+      projectRoot: repoRoot,
+      productRelativePaths: ['Runner.app'],
+    });
+  });
+
+  const canceledPromise = ensureXctestrunArtifact(canceledDevice, {
+    signal: canceledController.signal,
+  });
+  const survivorPromise = ensureXctestrunArtifact(survivorDevice, {
+    signal: survivorController.signal,
+  });
+
+  await Promise.all([canceledBuildStarted.promise, survivorBuildStarted.promise]);
+
+  canceledController.abort();
+  await assert.rejects(canceledPromise, (error: unknown) => {
+    assert.equal(error, cancellationError);
+    assert.ok(isRequestCanceledError(error));
+    return true;
+  });
+  // The unrelated concurrent build's signal was never aborted.
+  assert.equal(survivorController.signal.aborted, false);
+
+  releaseSurvivor.resolve();
+  const survivorResult = await survivorPromise;
+  assert.ok(survivorResult.xctestrunPath.endsWith('rebuilt.xctestrun'));
+
+  const canceledCall = mockRunCmdStreaming.mock.calls.find(
+    (call) => call[2]?.signal === canceledController.signal,
+  );
+  const survivorCall = mockRunCmdStreaming.mock.calls.find(
+    (call) => call[2]?.signal === survivorController.signal,
+  );
+  assert.ok(canceledCall, 'canceled build received its request signal');
+  assert.ok(survivorCall, 'survivor build received its request signal');
+});
+
+test('ensureXctestrunArtifact rebuilds after cached macOS runner repair failure', async () => {
+  // Cached runner artifacts can look reusable until ad-hoc repair fails; ensure we clean once,
+  // rebuild, and return the repaired rebuilt xctestrun instead of looping on stale cache state.
+  const projectRoot = repoRoot;
+  const { derivedPath, existingXctestrunPath } = await makeCachedRunnerXctestrun();
+  const projectPath = path.join(
+    projectRoot,
+    'apple',
+    'runner',
+    'AgentDeviceRunner',
+    'AgentDeviceRunner.xcodeproj',
+  );
+
+  const rebuiltXctestrunPath = path.join(derivedPath, 'rebuilt', 'rebuilt.xctestrun');
+
+  withRunnerDerivedPathEnv(derivedPath);
+
+  const repairedPaths: string[] = [];
+
+  mockRepairMacOsRunnerProductsIfNeeded.mockImplementation(
+    async (_device, _productPaths, xctestrunPath) => {
+      repairedPaths.push(xctestrunPath);
+      if (xctestrunPath === existingXctestrunPath) {
+        throw new AppError('COMMAND_FAILED', 'cached runner is damaged', {
+          reason: 'RUNNER_PRODUCT_REPAIR_FAILED',
+        });
+      }
+    },
+  );
+  mockRunCmdStreaming.mockImplementation(async (command, args) => {
+    assert.equal(command, 'xcodebuild');
+    assert.ok(Array.isArray(args));
+    assert.equal(args[args.indexOf('-project') + 1], projectPath);
+    assert.equal(args[args.indexOf('-derivedDataPath') + 1], derivedPath);
+    await fs.promises.mkdir(path.join(derivedPath, 'rebuilt', 'Runner.app'), { recursive: true });
+    writeXctestrunFixture(rebuiltXctestrunPath, {
+      projectRoot,
+      productRelativePaths: ['Runner.app'],
+    });
+  });
+
+  const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
+
+  assert.equal(result, rebuiltXctestrunPath);
+  assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
+  assert.equal(fs.existsSync(existingXctestrunPath), false);
+  assert.deepEqual(repairedPaths, [existingXctestrunPath, rebuiltXctestrunPath]);
+});
+
+test('ensureXctestrunArtifact prefers validated cache manifest over recursive scan', async () => {
+  const tmpDir = await makeTmpDir();
+  const derivedPath = path.join(tmpDir, 'custom-derived');
+  const manifestProductPath = path.join(derivedPath, 'ManifestRunner.app');
+  const manifestXctestrunPath = path.join(derivedPath, 'manifest.xctestrun');
+  const newerProductPath = path.join(derivedPath, 'NewerRunner.app');
+  const newerXctestrunPath = path.join(derivedPath, 'newer.xctestrun');
+  await fs.promises.mkdir(manifestProductPath, { recursive: true });
+  await fs.promises.mkdir(newerProductPath, { recursive: true });
+  writeXctestrunFixture(manifestXctestrunPath, {
+    projectRoot: repoRoot,
+    productRelativePaths: ['ManifestRunner.app'],
+  });
+  writeXctestrunFixture(newerXctestrunPath, {
+    projectRoot: repoRoot,
+    productRelativePaths: ['NewerRunner.app'],
+  });
+  const now = new Date();
+  fs.utimesSync(manifestXctestrunPath, now, now);
+  fs.utimesSync(
+    newerXctestrunPath,
+    new Date(now.getTime() + 5_000),
+    new Date(now.getTime() + 5_000),
+  );
+  writeRunnerCacheMetadataWithArtifacts({
+    derivedPath,
+    device: macOsDevice,
+    xctestrunPath: manifestXctestrunPath,
+    productPaths: [manifestProductPath],
+  });
+  withRunnerDerivedPathEnv(derivedPath);
+
+  const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
+
+  assert.equal(result, manifestXctestrunPath);
+  assert.equal(mockRunCmdStreaming.mock.calls.length, 0);
+  assert.deepEqual(mockRepairMacOsRunnerProductsIfNeeded.mock.calls[0]?.[1], [manifestProductPath]);
+});
+
+test('ensureXctestrunArtifact falls back to scan when cache manifest is stale', async () => {
+  const tmpDir = await makeTmpDir();
+  const derivedPath = path.join(tmpDir, 'custom-derived');
+  const manifestProductPath = path.join(derivedPath, 'ManifestRunner.app');
+  const manifestXctestrunPath = path.join(derivedPath, 'manifest.xctestrun');
+  const newerProductPath = path.join(derivedPath, 'NewerRunner.app');
+  const newerXctestrunPath = path.join(derivedPath, 'newer.xctestrun');
+  await fs.promises.mkdir(manifestProductPath, { recursive: true });
+  await fs.promises.mkdir(newerProductPath, { recursive: true });
+  writeXctestrunFixture(manifestXctestrunPath, {
+    projectRoot: repoRoot,
+    productRelativePaths: ['ManifestRunner.app'],
+  });
+  writeXctestrunFixture(newerXctestrunPath, {
+    projectRoot: repoRoot,
+    productRelativePaths: ['NewerRunner.app'],
+  });
+  const now = new Date();
+  fs.utimesSync(manifestXctestrunPath, now, now);
+  fs.utimesSync(
+    newerXctestrunPath,
+    new Date(now.getTime() + 5_000),
+    new Date(now.getTime() + 5_000),
+  );
+  writeRunnerCacheMetadataWithArtifacts({
+    derivedPath,
+    device: macOsDevice,
+    xctestrunPath: manifestXctestrunPath,
+    productPaths: [manifestProductPath],
+  });
+  fs.utimesSync(
+    manifestProductPath,
+    new Date(now.getTime() + 10_000),
+    new Date(now.getTime() + 10_000),
+  );
+  withRunnerDerivedPathEnv(derivedPath);
+
+  const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
+
+  assert.equal(result, newerXctestrunPath);
+  assert.equal(mockRunCmdStreaming.mock.calls.length, 0);
+  assert.deepEqual(mockRepairMacOsRunnerProductsIfNeeded.mock.calls[0]?.[1], [newerProductPath]);
+});
+
+test('ensureXctestrunArtifact rebuilds cached runner when Swift build flags mismatch', async () => {
+  const projectRoot = repoRoot;
+  const { derivedPath, existingXctestrunPath } = await makeCachedRunnerXctestrun();
+  const metadataPath = resolveRunnerCacheMetadataPath(derivedPath);
+  const expectedMetadata = resolveExpectedRunnerCacheMetadata(macOsDevice, repoRoot);
+  const staleMetadata = {
+    ...expectedMetadata,
+    runnerSandboxBuildArgs: expectedMetadata.runnerSandboxBuildArgs.map((arg) =>
+      arg.startsWith('OTHER_SWIFT_FLAGS=')
+        ? 'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_UNIT_TESTS'
+        : arg,
+    ),
+  };
+  fs.writeFileSync(metadataPath, JSON.stringify(staleMetadata, null, 2));
+
+  const rebuiltXctestrunPath = path.join(derivedPath, 'rebuilt', 'rebuilt.xctestrun');
+
+  withRunnerDerivedPathEnv(derivedPath);
+
+  mockRunCmdStreaming.mockImplementation(async () => {
+    await fs.promises.mkdir(path.join(derivedPath, 'rebuilt', 'Runner.app'), { recursive: true });
+    writeXctestrunFixture(rebuiltXctestrunPath, {
+      projectRoot,
+      productRelativePaths: ['Runner.app'],
+    });
+  });
+
+  const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
+
+  assert.equal(result, rebuiltXctestrunPath);
+  assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
+  assert.equal(fs.existsSync(existingXctestrunPath), false);
+  const rebuiltMetadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+  assert.deepEqual(
+    stripRunnerCacheArtifacts(rebuiltMetadata),
+    resolveExpectedRunnerCacheMetadata(macOsDevice, repoRoot),
+  );
+  assert.equal(rebuiltMetadata.artifacts?.xctestrunPath, rebuiltXctestrunPath);
+});
+
+test('ensureXctestrunArtifact passes sandbox-disabling settings to xcodebuild', async () => {
+  const projectRoot = repoRoot;
+  const tmpDir = await makeProjectTmpDir();
+  const derivedPath = path.join(tmpDir, 'custom-derived');
+  const rebuiltXctestrunPath = path.join(derivedPath, 'Build', 'Products', 'rebuilt.xctestrun');
+
+  withRunnerDerivedPathEnv(derivedPath);
+
+  mockRunCmdStreaming.mockImplementationOnce(async () => {
+    await fs.promises.mkdir(path.join(derivedPath, 'Build', 'Products', 'Runner.app'), {
+      recursive: true,
+    });
+    writeXctestrunFixture(rebuiltXctestrunPath, {
+      projectRoot,
+      productRelativePaths: ['Runner.app'],
+    });
+  });
+
+  const result = await ensureXctestrunArtifact(iosSimulator, {
+    forceRunnerXctestrunRebuild: true,
+  });
+
+  assert.equal(result.xctestrunPath, rebuiltXctestrunPath);
+  assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
+  const args = mockRunCmdStreaming.mock.calls[0]?.[1] ?? [];
+  assert.equal(args.includes('-IDEPackageSupportDisableManifestSandbox=1'), true);
+  assert.equal(args.includes('-IDEPackageSupportDisablePluginExecutionSandbox=1'), true);
+  assert.equal(args.includes('ENABLE_USER_SCRIPT_SANDBOXING=NO'), true);
+  assert.equal(args.includes('OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox'), true);
+});
+
+test('ensureXctestrunArtifact emits build progress on cache miss', async () => {
+  const projectRoot = repoRoot;
+  const tmpDir = await makeProjectTmpDir();
+  const derivedPath = path.join(tmpDir, 'custom-derived');
+  const rebuiltXctestrunPath = path.join(derivedPath, 'Build', 'Products', 'rebuilt.xctestrun');
+  const events: RequestProgressEvent[] = [];
+
+  withRunnerDerivedPathEnv(derivedPath);
+
+  mockRunCmdStreaming.mockImplementationOnce(async () => {
+    await fs.promises.mkdir(path.join(derivedPath, 'Build', 'Products', 'Runner.app'), {
+      recursive: true,
+    });
+    writeXctestrunFixture(rebuiltXctestrunPath, {
+      projectRoot,
+      productRelativePaths: ['Runner.app'],
+    });
+  });
+
+  appleRunnerTestHost.update({ emitRequestProgress: (event) => events.push(event) });
+
+  const result = await ensureXctestrunArtifact(iosSimulator, {
+    forceRunnerXctestrunRebuild: true,
+  });
+
+  assert.equal(result.xctestrunPath, rebuiltXctestrunPath);
+  assert.deepEqual(events, [
+    {
+      type: 'command',
+      status: 'progress',
+      message: 'Building Apple runner...',
+    },
+  ]);
+});
+
+test('ensureXctestrunArtifact stress-recovers after a bad restored artifact', async () => {
+  const projectRoot = repoRoot;
+  const tmpDir = await makeProjectTmpDir();
+  const derivedPath = path.join(tmpDir, 'custom-derived');
+  const productPath = path.join(derivedPath, 'Runner.app');
+  const cachedXctestrunPath = path.join(derivedPath, 'cached.xctestrun');
+  await fs.promises.mkdir(productPath, { recursive: true });
+  writeXctestrunFixture(cachedXctestrunPath, {
+    projectRoot,
+    productRelativePaths: ['Runner.app'],
+  });
+  writeRunnerCacheMetadataWithArtifacts({
+    derivedPath,
+    device: macOsDevice,
+    xctestrunPath: cachedXctestrunPath,
+    productPaths: [productPath],
+  });
+  withRunnerDerivedPathEnv(derivedPath);
+
+  const hit = await ensureXctestrunArtifact(macOsDevice, {});
+
+  assert.equal(hit.xctestrunPath, cachedXctestrunPath);
+  assert.equal(hit.cache, 'exact');
+  assert.equal(hit.artifact, 'valid');
+  assert.equal(hit.buildMs, 0);
+  assert.equal(mockRunCmdStreaming.mock.calls.length, 0);
+
+  await markRunnerXctestrunArtifactBadForRun(hit, 'stress health failed');
+  assert.equal(fs.existsSync(cachedXctestrunPath), false);
+
+  const rebuiltXctestrunPath = path.join(derivedPath, 'rebuilt', 'rebuilt.xctestrun');
+  mockRunCmdStreaming.mockImplementationOnce(async () => {
+    await fs.promises.mkdir(path.join(derivedPath, 'rebuilt', 'Runner.app'), { recursive: true });
+    writeXctestrunFixture(rebuiltXctestrunPath, {
+      projectRoot,
+      productRelativePaths: ['Runner.app'],
+    });
+  });
+
+  const rebuilt = await ensureXctestrunArtifact(macOsDevice, {
+    buildTimeoutMs: 300_000,
+  });
+
+  assert.equal(rebuilt.xctestrunPath, rebuiltXctestrunPath);
+  assert.equal(rebuilt.cache, 'miss');
+  assert.equal(rebuilt.artifact, 'rebuilt');
+  assert.equal(rebuilt.reason, 'missing_xctestrun');
+  assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
+  assert.equal(mockRunCmdStreaming.mock.calls[0]?.[2]?.timeoutMs, 300_000);
+});
+
+test('ensureXctestrunArtifact rethrows unexpected cached macOS runner repair errors', async () => {
+  const { derivedPath, existingXctestrunPath } = await makeCachedRunnerXctestrun();
+
+  withRunnerDerivedPathEnv(derivedPath);
+
+  mockRepairMacOsRunnerProductsIfNeeded.mockRejectedValue(new Error('permission denied'));
+
+  await assert.rejects(ensureXctestrunArtifact(macOsDevice, {}), /permission denied/);
+  assert.equal(mockRunCmdStreaming.mock.calls.length, 0);
+  assert.equal(fs.existsSync(existingXctestrunPath), true);
+});
+
+test('shouldDeleteRunnerDerivedRootEntry only removes known xcode transient entries', () => {
+  assert.equal(shouldDeleteRunnerDerivedRootEntry('Build'), true);
+  assert.equal(shouldDeleteRunnerDerivedRootEntry('Logs'), true);
+  assert.equal(shouldDeleteRunnerDerivedRootEntry('Index.noindex'), true);
+  assert.equal(shouldDeleteRunnerDerivedRootEntry('device'), false);
+  assert.equal(shouldDeleteRunnerDerivedRootEntry('macos'), false);
+  assert.equal(shouldDeleteRunnerDerivedRootEntry('visionos'), false);
+});

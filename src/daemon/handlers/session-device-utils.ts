@@ -2,7 +2,7 @@ import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
-import { getRunnerSessionSnapshot } from '../../platforms/apple/core/runner/runner-client.ts';
+import { getRunnerSessionSnapshot } from '../../platforms/apple/core/runner-client.ts';
 import { resolveTargetDevice } from '../../core/dispatch.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { hasDeviceSelectionInput, hasExplicitDeviceSelector } from '../device-selector-intent.ts';

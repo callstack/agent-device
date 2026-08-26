@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import type { AppleRunnerProvider } from '../../../src/platforms/apple/core/runner/runner-provider.ts';
+import type { AppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import type { AppleRunnerScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-runner-transport.ts';
 import { PROVIDER_SCENARIO_MACOS } from './fixtures.ts';
 import { createProviderScenarioHarness, type ProviderScenarioHarness } from './harness.ts';

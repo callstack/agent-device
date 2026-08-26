@@ -34,9 +34,9 @@ vi.mock('../snapshot-interactor-capture.ts', async () => {
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
-vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
+    await importOriginal<typeof import('../../../platforms/apple/core/runner-client.ts')>();
   return {
     ...actual,
     runAppleRunnerCommand: vi.fn(async () => ({})),
@@ -63,7 +63,7 @@ vi.mock('../../ios-app-session-hint.ts', () => ({
 import {
   runAppleRunnerCommand,
   stopIosRunnerSession,
-} from '../../../platforms/apple/core/runner/runner-client.ts';
+} from '../../../platforms/apple/core/runner-client.ts';
 import { closeIosApp } from '../../../platforms/apple/core/apps.ts';
 import { buildIosOpenCommandHint } from '../../ios-app-session-hint.ts';
 

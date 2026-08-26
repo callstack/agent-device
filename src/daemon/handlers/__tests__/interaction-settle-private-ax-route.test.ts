@@ -6,16 +6,16 @@ import { contextFromFlags as buildDaemonContext } from '../../context.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import { getRuntimeBindings } from './interaction-get-runtime-fixture.ts';
 
-vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
+    await importOriginal<typeof import('../../../platforms/apple/core/runner-client.ts')>();
   return {
     ...actual,
     runAppleRunnerCommand: vi.fn(async () => ({})),
   };
 });
 
-import { runAppleRunnerCommand } from '../../../platforms/apple/core/runner/runner-client.ts';
+import { runAppleRunnerCommand } from '../../../platforms/apple/core/runner-client.ts';
 
 const mockRunnerCommand = vi.mocked(runAppleRunnerCommand);
 const nodes = [

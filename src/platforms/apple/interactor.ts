@@ -12,13 +12,13 @@ import { iosRunnerOverrides, resolveAppleBackRunnerCommand } from './interaction
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
 import { runMacOsScreenshotAction } from './os/macos/helper.ts';
 import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from './alert.ts';
-import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
-import { queryAppleRunnerSelector } from './core/runner/runner-selector-query.ts';
+import { runAppleRunnerCommand } from './core/runner-client.ts';
+import { queryAppleRunnerSelector } from './core/runner-selector-query.ts';
 import {
   withAppleRunnerProvider,
   type AppleRunnerCommandExecutor,
   type AppleRunnerProvider,
-} from './core/runner/runner-provider.ts';
+} from '@agent-device/platform-apple/runner';
 import { toAppleTvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';

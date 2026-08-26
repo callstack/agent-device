@@ -374,11 +374,6 @@
         "count": 1
       }
     },
-    "src/platforms/apple/core/runner/runner-startup-transport.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
     "src/platforms/apple/core/screenshot-status-bar.ts": {
       "complexity_moderate": {
         "count": 1
@@ -555,6 +550,11 @@
     },
     "test/integration/test-helpers.ts": {
       "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/platform-apple/src/runner/runner-startup-transport.ts": {
+      "crap_high": {
         "count": 1
       }
     }

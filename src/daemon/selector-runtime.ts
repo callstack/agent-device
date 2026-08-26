@@ -3,7 +3,7 @@ import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import type { WaitParsed } from '../core/wait-positionals.ts';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { queryAppleRunnerSelector } from '../platforms/apple/core/runner/runner-selector-query.ts';
+import { queryAppleRunnerSelector } from '../platforms/apple/core/runner-selector-query.ts';
 import type { AppleRunnerRequestOptions } from './apple-runner-options.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { errorResponse } from './handlers/response.ts';

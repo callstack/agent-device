@@ -3,7 +3,7 @@ import { resolveTargetDevice } from '../../core/dispatch.ts';
 import {
   resolveRunnerAppBundleId,
   stopIosRunnerSession,
-} from '../../platforms/apple/core/runner/runner-client.ts';
+} from '../../platforms/apple/core/runner-client.ts';
 import { closeIosApp } from '../../platforms/apple/core/apps.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';

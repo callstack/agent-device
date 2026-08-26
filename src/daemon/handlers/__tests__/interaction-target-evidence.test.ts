@@ -31,9 +31,9 @@ vi.mock('../snapshot-interactor-capture.ts', async () => {
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
-vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
+    await importOriginal<typeof import('../../../platforms/apple/core/runner-client.ts')>();
   return {
     ...actual,
     runAppleRunnerCommand: mockRunAppleRunnerCommand,

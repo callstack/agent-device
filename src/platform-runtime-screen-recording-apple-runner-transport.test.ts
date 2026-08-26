@@ -9,7 +9,7 @@ const runner = vi.hoisted(() => ({
   snapshot: vi.fn(),
 }));
 
-vi.mock('./platforms/apple/core/runner/runner-client.ts', () => ({
+vi.mock('./platforms/apple/core/runner-client.ts', () => ({
   runAppleRunnerCommand: runner.run,
   getRunnerSessionSnapshot: runner.snapshot,
 }));

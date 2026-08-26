@@ -446,6 +446,23 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/contracts',
     '@agent-device/kernel',
   ]);
+  const platformApplePackage = packages.find((pkg) => pkg.name === '@agent-device/platform-apple');
+  assert.ok(platformApplePackage, 'platform-apple package must exist');
+  // The root façade plus the enumerated transitional runner subpaths (#2040,
+  // folded when #1983 completes); any further subpath widens this key list and
+  // fails the assertion. R13 pins the same list from the manifest side.
+  assert.deepEqual([...platformApplePackage.exportTargets.keys()].sort(), [
+    '@agent-device/platform-apple',
+    '@agent-device/platform-apple/runner',
+    '@agent-device/platform-apple/runner/client',
+    '@agent-device/platform-apple/runner/test-host',
+  ]);
+  assert.deepEqual([...platformApplePackage.workspaceDependencies].sort(), [
+    '@agent-device/capture-kit',
+    '@agent-device/contracts',
+    '@agent-device/kernel',
+    '@agent-device/xml',
+  ]);
   const maestroPackage = packages.find((pkg) => pkg.name === '@agent-device/maestro');
   assert.ok(maestroPackage, 'maestro package must exist');
   assert.deepEqual([...maestroPackage.exportTargets.keys()], ['@agent-device/maestro']);

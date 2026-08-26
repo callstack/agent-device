@@ -17,8 +17,11 @@ import {
   IOS_SIMULATOR_SCREENSHOT_SCALE_TIMEOUT_MS,
   IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS,
 } from './config.ts';
-import { runAppleRunnerCommand, IOS_RUNNER_CONTAINER_BUNDLE_IDS } from './runner/runner-client.ts';
-import type { AppleRunnerCommandOptions } from './runner/runner-provider.ts';
+import { runAppleRunnerCommand } from './runner-client.ts';
+import {
+  IOS_RUNNER_CONTAINER_BUNDLE_IDS,
+  type AppleRunnerCommandOptions,
+} from '@agent-device/platform-apple/runner';
 import { prepareSimulatorStatusBarForScreenshot } from './screenshot-status-bar.ts';
 import { ensureBootedSimulator } from './simulator.ts';
 import { runSimctlForDevice } from './simctl.ts';

@@ -5,9 +5,9 @@ const { runAppleRunnerCommand } = vi.hoisted(() => ({
   runAppleRunnerCommand: vi.fn(async () => ({ found: true })),
 }));
 
-vi.mock('../runner/runner-client.ts', () => ({ runAppleRunnerCommand }));
+vi.mock('../runner-client.ts', () => ({ runAppleRunnerCommand }));
 
-import { queryAppleRunnerSelector } from '../runner/runner-selector-query.ts';
+import { queryAppleRunnerSelector } from '../runner-selector-query.ts';
 
 test('builds the one querySelector runner command for every caller', async () => {
   const options = { requestId: 'request-1' };

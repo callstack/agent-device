@@ -112,7 +112,7 @@ cross-language rules change through golden tables under `contracts/fixtures/`.
 
 ## Runtime and diagnostics seams
 
-The OS-neutral Apple runner lives under `src/platforms/apple/core/runner/`. For connection errors,
+The OS-neutral Apple runner lives under `packages/platform-apple/src/runner/`. For connection errors,
 retry policy, or command typing, start at `runner-contract.ts`; transport stays below session/client
 behavior, and xctestrun build/cache logic stays outside request execution.
 

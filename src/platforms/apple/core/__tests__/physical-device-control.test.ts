@@ -10,7 +10,7 @@ import { installIosInstallablePath } from '../app-install.ts';
 import { closeIosApp, openIosApp } from '../app-launch.ts';
 import { listIosApps } from '../app-resolution.ts';
 import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
-import { withAppleRunnerProvider } from '../runner/runner-provider.ts';
+import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 

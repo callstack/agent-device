@@ -34,9 +34,9 @@ vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => 
     clearRuntimeHintValues: vi.fn(async () => {}),
   };
 });
-vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
+    await importOriginal<typeof import('../../../platforms/apple/core/runner-client.ts')>();
   return {
     ...actual,
     prepareIosRunner: vi.fn(async () => ({
@@ -108,7 +108,7 @@ import {
   notifyIosRunnerAppRelaunched,
   scheduleIosRunnerIdleStop,
   stopIosRunnerSession,
-} from '../../../platforms/apple/core/runner/runner-client.ts';
+} from '../../../platforms/apple/core/runner-client.ts';
 import { runMacOsAlertAction } from '../../../platforms/apple/os/macos/helper.ts';
 import { resolveAndroidPackageForOpen } from '../../../platform-runtime-open-target.ts';
 import { runCmd } from '../../../utils/exec.ts';

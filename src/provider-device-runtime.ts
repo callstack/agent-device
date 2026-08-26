@@ -23,7 +23,7 @@ import type { AppleRunnerScreenRecordingTransport } from './platform-runtime-scr
 import type {
   AppleRunnerCommandExecutor,
   AppleRunnerProvider,
-} from './platforms/apple/core/runner/runner-provider.ts';
+} from '@agent-device/platform-apple/runner';
 
 type AppleRunnerRuntimeExtension = ProviderDeviceRuntime & {
   getAppleRunnerProvider(

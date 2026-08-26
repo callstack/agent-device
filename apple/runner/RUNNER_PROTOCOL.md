@@ -64,7 +64,7 @@ than silently applied:
 
 The current command names are defined in:
 
-- [`../../src/platforms/apple/core/runner/runner-client.ts`](../../src/platforms/apple/core/runner/runner-client.ts)
+- [`../../packages/platform-apple/src/runner/runner-client.ts`](../../packages/platform-apple/src/runner/runner-client.ts)
 - [`AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift)
 
 ## Response Shape

@@ -53,7 +53,7 @@ import {
 } from './transport.ts';
 import { prewarmPngWorker, terminatePngWorker } from '../../utils/png-worker-client.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import { setRunnerLeaseOwnerStateDir } from '../../platforms/apple/core/runner/runner-lease.ts';
+import { setRunnerLeaseOwnerStateDir } from '../../platforms/apple/core/runner-owner-state.ts';
 import { cleanupManagedAgentBrowserOrphans } from '../../platforms/web/agent-browser-lifecycle.ts';
 import { getManagedAgentBrowserStatus } from '../../platforms/web/agent-browser-tool.ts';
 import { openWebSessionNames } from '../web-session-names.ts';

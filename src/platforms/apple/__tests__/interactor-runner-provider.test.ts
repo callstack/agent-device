@@ -4,11 +4,11 @@ import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
-import type { RunnerCommand } from '../core/runner/runner-contract.ts';
 import type {
   AppleRunnerCommandOptions,
   AppleRunnerProvider,
-} from '../core/runner/runner-provider.ts';
+  RunnerCommand,
+} from '@agent-device/platform-apple/runner';
 import { createAppleInteractor } from '../interactor.ts';
 
 type RecordedRunnerCall = { command: RunnerCommand; options: AppleRunnerCommandOptions };

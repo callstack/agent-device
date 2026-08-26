@@ -123,7 +123,7 @@ jobs:
       # `RunnerTests/testCommand` is not a test. It is the runner's server entry point: it
       # opens an NWListener and blocks in `XCTWaiter.wait(timeout: 24 * 60 * 60)` until a
       # client closes the session, which is exactly how production drives it
-      # (src/platforms/apple/core/runner/runner-session.ts always passes it as the sole
+      # (packages/platform-apple/src/runner/runner-session.ts always passes it as the sole
       # `-only-testing:`). It compiles unconditionally — the `#if AGENT_DEVICE_RUNNER_UNIT_TESTS`
       # block ends well above it — so an unfiltered run reaches it in alphabetical order and
       # hangs the job until `timeout-minutes`. Its one escape hatch,

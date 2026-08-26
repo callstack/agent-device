@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 
-vi.mock('../core/runner/runner-client.ts', () => ({ runAppleRunnerCommand: vi.fn() }));
+vi.mock('../core/runner-client.ts', () => ({ runAppleRunnerCommand: vi.fn() }));
 vi.mock('../os/macos/helper.ts', () => ({ runMacOsAlertAction: vi.fn() }));
 
 import {
@@ -10,7 +10,7 @@ import {
 } from '@agent-device/contracts/alert-contract';
 import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR, MACOS_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
-import { runAppleRunnerCommand } from '../core/runner/runner-client.ts';
+import { runAppleRunnerCommand } from '../core/runner-client.ts';
 import { runMacOsAlertAction } from '../os/macos/helper.ts';
 import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from '../alert.ts';
 

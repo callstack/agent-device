@@ -42,8 +42,7 @@ const localTransport: AppleRunnerScreenRecordingTransport = Object.freeze({
   start: startLocalAppleRunnerRecording,
   inspect: async (device, runnerSessionId) => await inspectLocalRunner(device, runnerSessionId),
   stop: async ({ device, runnerSessionId, appBundleId, signal }) => {
-    const { runAppleRunnerCommand } =
-      await import('./platforms/apple/core/runner/runner-client.ts');
+    const { runAppleRunnerCommand } = await import('./platforms/apple/core/runner-client.ts');
     await runAppleRunnerCommand(
       device,
       { command: 'recordStop', appBundleId },
@@ -60,7 +59,7 @@ async function startLocalAppleRunnerRecording({
   signal,
 }: AppleRunnerScreenRecordingStartRequest): Promise<AppleRunnerScreenRecordingStartResult> {
   const { getRunnerSessionSnapshot, runAppleRunnerCommand } =
-    await import('./platforms/apple/core/runner/runner-client.ts');
+    await import('./platforms/apple/core/runner-client.ts');
   const recordingFileName = `agent-device-recording-${Date.now()}.mp4`;
   const remotePath =
     device.appleOs === 'macos' || device.kind !== 'device' ? undefined : `tmp/${recordingFileName}`;
@@ -147,11 +146,8 @@ async function inspectLocalRunner(
   device: DeviceInfo,
   runnerSessionId: string,
 ): Promise<ManagedProcessOwnership> {
-  const [{ getRunnerSessionSnapshot }, { readStaleRunnerLease, verifyLeaseRunnerPidIdentity }] =
-    await Promise.all([
-      import('./platforms/apple/core/runner/runner-client.ts'),
-      import('./platforms/apple/core/runner/runner-lease.ts'),
-    ]);
+  const { getRunnerSessionSnapshot, readStaleRunnerLease, verifyLeaseRunnerPidIdentity } =
+    await import('./platforms/apple/core/runner-client.ts');
   const active = getRunnerSessionSnapshot(device.id);
   if (active) {
     if (!active.alive) return 'missing';

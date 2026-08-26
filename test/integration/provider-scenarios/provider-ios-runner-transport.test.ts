@@ -11,11 +11,11 @@ import type { Interactor, RunnerContext } from '@agent-device/contracts/interact
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAppleInteractor } from '../../../src/platforms/apple/interactor.ts';
-import type { RunnerCommand } from '../../../src/platforms/apple/core/runner/runner-contract.ts';
 import type {
   AppleRunnerCommandOptions,
   AppleRunnerProvider,
-} from '../../../src/platforms/apple/core/runner/runner-provider.ts';
+  RunnerCommand,
+} from '@agent-device/platform-apple/runner';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';

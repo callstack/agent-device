@@ -129,6 +129,21 @@ platform-common package, and it preserves the package façades' implementation-l
 Its introduction carries the normal workspace-package compliance surface: `check:affected`
 selection, R11/R13 package enumeration, and the composite typecheck project list.
 
+The Apple XCUITest runner client is colocated inside `packages/platform-apple` as the
+`src/runner/` mechanics subtree (#2040) — Apple mechanics belong to the Apple package — while its
+daemon and root consumers have not yet migrated behind the composition gateway (#1983). R13 admits
+that transitional state deliberately rather than by exception sprawl: the family exports its root
+façade plus exactly the enumerated `./runner`, `./runner/client`, and `./runner/test-host`
+subpaths; the `./runner` façade subpath is the recorded seam for unmigrated root consumers; the
+host-bound `./runner/client` factory has one composition root and `./runner/test-host` one vitest
+installer; the subtree may own its cache files and usbmux sockets (the ambient-host rule exempts
+exactly that subtree), while raw process primitives stay banned — host authority still enters
+through one focused injected port (`AppleRunnerHost`: process execution, diagnostics, retry,
+probes, locks, foreground Apple tooling, physical-device control) constructed by exactly one
+composition root. When #1983 completes and the daemon reaches Apple only through runtime
+operations, the transitional subpaths and every exemption keyed on the subtree are deleted and the
+family returns to a single implementation-lazy façade export.
+
 Canonical family, `AppleOS`, public-leaf, and selector identity remain declared in
 `@agent-device/kernel/device`. Platform-module metadata references one canonical family; during
 coexistence the legacy plugin registry derives its family identity from the same declaration rather

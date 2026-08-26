@@ -144,7 +144,7 @@ export const BOUNDARY_FAULT_MATRIX = {
   'lost-response-after-mutation': {
     mutation: {
       kind: 'covered',
-      evidence: ['src/platforms/apple/core/__tests__/runner-recovery-wiring.test.ts'],
+      evidence: ['packages/platform-apple/src/runner/__tests__/runner-recovery-wiring.test.ts'],
       invariants: ['no-mutation-replay', 'typed-error-identity'],
     },
     read: {
@@ -177,7 +177,7 @@ export const BOUNDARY_FAULT_MATRIX = {
       kind: 'covered',
       evidence: [
         'src/daemon/__tests__/filesystem-boundary-faults.test.ts',
-        'src/platforms/apple/core/__tests__/runner-lease-filesystem-boundary-faults.test.ts',
+        'packages/platform-apple/src/runner/__tests__/runner-lease-filesystem-boundary-faults.test.ts',
       ],
       invariants: ['atomic-publication', 'publication-residue-free'],
     },
@@ -185,7 +185,7 @@ export const BOUNDARY_FAULT_MATRIX = {
       kind: 'covered',
       evidence: [
         'src/daemon/__tests__/filesystem-boundary-faults.test.ts',
-        'src/platforms/apple/core/__tests__/runner-lease-filesystem-boundary-faults.test.ts',
+        'packages/platform-apple/src/runner/__tests__/runner-lease-filesystem-boundary-faults.test.ts',
       ],
       invariants: ['atomic-publication', 'publication-residue-free', 'claim-or-lease-state'],
     },

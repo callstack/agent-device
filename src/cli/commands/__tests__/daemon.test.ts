@@ -19,10 +19,8 @@ vi.mock('../../../daemon/daemon-stop.ts', () => ({
 vi.mock('../../../daemon/daemon-shutdown-report.ts', () => ({
   readDaemonShutdownReport: mocks.readDaemonShutdownReport,
 }));
-vi.mock('../../../platforms/apple/core/runner/runner-lease.ts', () => ({
+vi.mock('../../../platforms/apple/core/runner-client.ts', () => ({
   cleanupRunnerLeasesForOwner: mocks.cleanupRunnerLeasesForOwner,
-}));
-vi.mock('../../../platforms/apple/core/runner/runner-disposal.ts', () => ({
   runnerLeaseCleanupAdapter: {},
 }));
 vi.mock('../shared.ts', () => ({ writeCommandOutput: mocks.writeCommandOutput }));

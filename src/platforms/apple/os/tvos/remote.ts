@@ -1,4 +1,4 @@
-import type { RunnerCommand } from '../../core/runner/runner-contract.ts';
+import type { RunnerCommand } from '@agent-device/platform-apple/runner';
 
 // The tvOS Apple-OS leaf (ADR-0009). tvOS has no touch input: it is driven by the
 // Siri Remote's focus engine, so back/home/scroll navigate focus via XCUIRemote

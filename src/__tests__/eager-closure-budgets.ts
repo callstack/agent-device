@@ -64,7 +64,9 @@ export type EagerClosureBudget = {
    * excluding just the entry turns the assertion into "this façade evaluates none of its own
    * mechanics", which is the actual ADR-0019 property.
    *
-   * Every package entry surface sets this true (verified: none reaches an implementation today).
+   * Every package entry surface sets this true except the transitional runner
+   * mechanics entries (see PLATFORM_MECHANICS_ENTRY_PREFIX below), whose closure
+   * IS the implementation.
    * Hub rows set it false -- a hub is a CONSUMER of façades, not neutral vocabulary, and three of
    * them legitimately hold the R3-permitted static platform seam that has not migrated yet.
    */
@@ -108,6 +110,14 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
 
   // --- @agent-device/ad-script ---
   'packages/ad-script/src/index.ts': 37,
+
+  // --- @agent-device/platform-apple/runner ---
+  // #2040 extraction: the façade stays types/pure-helpers/bundle-ids; the whole
+  // client implementation loads only through the './client' subpath, which the
+  // root composition module reaches behind its consumers' dynamic imports.
+  'packages/platform-apple/src/runner/index.ts': 13,
+  'packages/platform-apple/src/runner/client.ts': 46,
+  'packages/platform-apple/src/runner/test-host.ts': 2,
 
   // --- @agent-device/capture-kit ---
   // R60 review: audio-probe split into descriptor/status/recovery/live-process modules (+3 files).
@@ -304,8 +314,23 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'src/core/command-descriptor/registry.ts': 67,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,
   'src/core/interactors/register-builtins.ts': 72,
-  'src/daemon/session-teardown.ts': 95,
+  // #2040: perf-xctrace's physical-device-files edge now reaches the apple-runner façade for the
+  // runner bundle ids instead of the old in-tree runner-cache-metadata module, trading that module
+  // for the façade's seam modules (index/provider/sequence/host). The client implementation stays
+  // lazy: the same edge measured 131 when the façade eagerly exported the factory, and the
+  // './client' subpath split is what holds this at 99.
+  'src/daemon/session-teardown.ts': 99,
 });
+
+/**
+ * The transitional runner mechanics subtree inside platform-apple (#2040). Its
+ * entry surfaces ARE platform implementation, so the deny-platform assertion is
+ * meaningless for them the same way it would be vacuous for a platform façade
+ * without the entry-self-exclusion: the whole closure is the mechanics being
+ * exported. Their weight stays pinned by the exact budgets; the deny question
+ * returns with the #1983 fold-in, when these entries disappear.
+ */
+const PLATFORM_MECHANICS_ENTRY_PREFIX = 'packages/platform-apple/src/runner/';
 
 function toRows(
   budgets: Readonly<Record<string, number>>,
@@ -316,7 +341,8 @@ function toRows(
     entryFile,
     budget,
     kind,
-    denyPlatformImplementations: kind === 'facade',
+    denyPlatformImplementations:
+      kind === 'facade' && !entryFile.startsWith(PLATFORM_MECHANICS_ENTRY_PREFIX),
   }));
 }
 

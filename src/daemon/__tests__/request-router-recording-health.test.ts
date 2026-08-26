@@ -4,11 +4,11 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 
-vi.mock('../../platforms/apple/core/runner/runner-client.ts', () => ({
+vi.mock('../../platforms/apple/core/runner-client.ts', () => ({
   getRunnerSessionSnapshot: vi.fn(),
 }));
 
-import { getRunnerSessionSnapshot } from '../../platforms/apple/core/runner/runner-client.ts';
+import { getRunnerSessionSnapshot } from '../../platforms/apple/core/runner-client.ts';
 import {
   createRequestHandler,
   gestureDeviceRuntimeGateway,

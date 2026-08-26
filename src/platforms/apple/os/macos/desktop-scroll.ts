@@ -1,7 +1,7 @@
 import type { RunnerCallOptions, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { RunnerCommand } from '../../core/runner/runner-contract.ts';
+import type { RunnerCommand } from '@agent-device/platform-apple/runner';
 import {
   normalizeAppleScrollResultWithResolvedFrame,
   scrollRunnerFields,

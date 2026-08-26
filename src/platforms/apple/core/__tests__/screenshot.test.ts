@@ -12,8 +12,8 @@ vi.mock('../../../../utils/retry.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../utils/retry.ts')>();
   return { ...actual, retryWithPolicy: vi.fn(actual.retryWithPolicy) };
 });
-vi.mock('../runner/runner-client.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../runner/runner-client.ts')>();
+vi.mock('../runner-client.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../runner-client.ts')>();
   return { ...actual, runAppleRunnerCommand: vi.fn(actual.runAppleRunnerCommand) };
 });
 vi.mock('../simulator.ts', async (importOriginal) => {
@@ -38,9 +38,8 @@ const execActual = await vi.importActual<typeof import('../../../../utils/exec.t
 const retryActual = await vi.importActual<typeof import('../../../../utils/retry.ts')>(
   '../../../../utils/retry.ts',
 );
-const runnerActual = await vi.importActual<typeof import('../runner/runner-client.ts')>(
-  '../runner/runner-client.ts',
-);
+const runnerActual =
+  await vi.importActual<typeof import('../runner-client.ts')>('../runner-client.ts');
 const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>('../simulator.ts');
 const screenshotStatusBarActual = await vi.importActual<
   typeof import('../screenshot-status-bar.ts')
@@ -55,7 +54,7 @@ import {
 } from '../screenshot.ts';
 import { ensureBootedSimulator, openIosSimulatorApp } from '../simulator.ts';
 import { prepareSimulatorStatusBarForScreenshot } from '../screenshot-status-bar.ts';
-import { runAppleRunnerCommand } from '../runner/runner-client.ts';
+import { runAppleRunnerCommand } from '../runner-client.ts';
 import { withDiagnosticsScope } from '../../../../utils/diagnostics.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '../../../../utils/exec.ts';

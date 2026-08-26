@@ -7,12 +7,25 @@
   "dependencies": {
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
-    "@agent-device/kernel": "workspace:*"
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/xml": "workspace:*"
   },
   "exports": {
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./runner": {
+      "types": "./src/runner/index.ts",
+      "default": "./src/runner/index.ts"
+    },
+    "./runner/client": {
+      "types": "./src/runner/client.ts",
+      "default": "./src/runner/client.ts"
+    },
+    "./runner/test-host": {
+      "types": "./src/runner/test-host.ts",
+      "default": "./src/runner/test-host.ts"
     }
   }
 }

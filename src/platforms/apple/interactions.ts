@@ -21,13 +21,12 @@ import {
 import { assertAppleMultiTouchSupported } from '@agent-device/contracts/apple-multitouch-support';
 import { isIosFamily, isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
-import type { RunnerCommand } from './core/runner/runner-contract.ts';
+import { runAppleRunnerCommand, runApplePressSeries } from './core/runner-client.ts';
 import {
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
-  runApplePressSeries,
-} from './core/runner/runner-sequence.ts';
+  type RunnerCommand,
+} from '@agent-device/platform-apple/runner';
 import {
   materializeIosScrollOptions,
   normalizeAppleScrollResult,

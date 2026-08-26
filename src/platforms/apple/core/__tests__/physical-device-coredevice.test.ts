@@ -20,6 +20,39 @@ test('parseIosDeviceDetailsPayload reads direct and nested tunnel state', () => 
   );
 });
 
+test('parseIosDeviceDetailsPayload reads direct and nested tunnel ip plus the info outcome', () => {
+  // The runner's usbmux-unattached fallback resolves the tunnel ip through this
+  // parser; the moved runner transport tests fake the control seam, so the real
+  // devicectl payload shapes are pinned here instead.
+  assert.deepEqual(
+    parseIosDeviceDetailsPayload({
+      info: { outcome: 'success' },
+      result: { connectionProperties: { tunnelIPAddress: 'fdda::2', tunnelState: 'connected' } },
+    }),
+    { outcome: 'success', tunnelState: 'connected', tunnelIp: 'fdda::2' },
+  );
+  assert.equal(
+    parseIosDeviceDetailsPayload({
+      result: { device: { connectionProperties: { tunnelIPAddress: 'fdda::3' } } },
+    }).tunnelIp,
+    'fdda::3',
+  );
+  // The direct shape wins over the nested fallback when both are present.
+  assert.equal(
+    parseIosDeviceDetailsPayload({
+      result: {
+        connectionProperties: { tunnelIPAddress: 'fdda::2' },
+        device: { connectionProperties: { tunnelIPAddress: 'fdda::9' } },
+      },
+    }).tunnelIp,
+    'fdda::2',
+  );
+  assert.equal(
+    parseIosDeviceDetailsPayload({ info: { outcome: 'failure' }, result: {} }).outcome,
+    'failure',
+  );
+});
+
 test('parseIosDeviceDetailsPayload ignores malformed values', () => {
   assert.deepEqual(parseIosDeviceDetailsPayload(null), {});
   assert.deepEqual(parseIosDeviceDetailsPayload({}), {});

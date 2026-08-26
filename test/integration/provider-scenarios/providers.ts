@@ -1,6 +1,5 @@
-import type { AppleRunnerProvider } from '../../../src/platforms/apple/core/runner/runner-provider.ts';
 import type { AppleRunnerScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-runner-transport.ts';
-import type { RunnerCommand } from '../../../src/platforms/apple/core/runner/runner-contract.ts';
+import type { AppleRunnerProvider, RunnerCommand } from '@agent-device/platform-apple/runner';
 import type {
   AppleMacOsHostProvider,
   ApplePlistProvider,

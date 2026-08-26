@@ -88,8 +88,7 @@ export async function captureAppleClockAnchor(
     ) {
       return undefined;
     }
-    const { runAppleRunnerCommand } =
-      await import('./platforms/apple/core/runner/runner-client.ts');
+    const { runAppleRunnerCommand } = await import('./platforms/apple/core/runner-client.ts');
     const result = await runAppleRunnerCommand(
       device,
       { command: 'snapshot', appBundleId, interactiveOnly: true, depth: 1 },
@@ -108,7 +107,6 @@ export async function captureAppleClockAnchor(
 }
 
 export async function isAppleRunnerBundleId(bundleId: string): Promise<boolean> {
-  const { IOS_RUNNER_CONTAINER_BUNDLE_IDS } =
-    await import('./platforms/apple/core/runner/runner-client.ts');
+  const { IOS_RUNNER_CONTAINER_BUNDLE_IDS } = await import('@agent-device/platform-apple/runner');
   return IOS_RUNNER_CONTAINER_BUNDLE_IDS.includes(bundleId);
 }

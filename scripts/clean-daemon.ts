@@ -6,8 +6,6 @@ import {
   isAgentDeviceDaemonProcess,
   stopProcessForTakeover,
 } from '../src/daemon/daemon-process.ts';
-import { cleanupRunnerLeasesForOwner } from '../src/platforms/apple/core/runner/runner-lease.ts';
-import { runnerLeaseCleanupAdapter } from '../src/platforms/apple/core/runner/runner-disposal.ts';
 
 const DAEMON_TERM_TIMEOUT_MS = 15_000;
 const DAEMON_KILL_TIMEOUT_MS = 2_000;
@@ -29,6 +27,8 @@ if (daemonPid !== null) {
     killTimeoutMs: DAEMON_KILL_TIMEOUT_MS,
     expectedStartTime: info?.processStartTime,
   });
+  const { cleanupRunnerLeasesForOwner, runnerLeaseCleanupAdapter } =
+    await import('../src/platforms/apple/core/runner-client.ts');
   await cleanupRunnerLeasesForOwner(
     { pid: daemonPid, startTime: info?.processStartTime },
     runnerLeaseCleanupAdapter,

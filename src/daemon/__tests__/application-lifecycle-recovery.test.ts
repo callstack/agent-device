@@ -31,10 +31,10 @@ vi.mock('../../platforms/apple/core/simctl.ts', async (importOriginal) => {
   localMechanics.simctlEvaluated = true;
   return await importOriginal<typeof import('../../platforms/apple/core/simctl.ts')>();
 });
-vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+vi.mock('../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
   localMechanics.runnerEvaluated = true;
   const actual =
-    await importOriginal<typeof import('../../platforms/apple/core/runner/runner-client.ts')>();
+    await importOriginal<typeof import('../../platforms/apple/core/runner-client.ts')>();
   return { ...actual, stopIosRunnerSession: localMechanics.runnerStop };
 });
 

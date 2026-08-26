@@ -11,7 +11,7 @@ import { createProviderTranscript } from './transcript.ts';
 import type {
   AppleRunnerPrepareResult,
   AppleRunnerProvider,
-} from '../../../src/platforms/apple/core/runner/runner-provider.ts';
+} from '@agent-device/platform-apple/runner';
 
 test('Provider-backed integration prepare uses the Apple runner lifecycle provider', async () => {
   const lifecycleCalls: string[] = [];
