@@ -112,9 +112,25 @@ function createHostAudioProbeLiveHandle(
   let finish: Promise<FinishOutcome<AudioProbeCompletion>> | undefined;
   let cleanup: Promise<CleanupOutcome> | undefined;
   let disposal: Promise<void> | undefined;
+  // The terminal result must stay observed: without it, a helper that dies after publishing a
+  // `running` checkpoint would read as running forever and stop would fabricate a normal
+  // completion. Only a terminal `stopped` publication outranks an observed exit — the helper
+  // writes it before exiting, so an exit with a non-terminal file means the capture died.
+  let helperExit: { message: string } | undefined;
+  void process.wait.then(
+    (result) => {
+      helperExit = { message: describeHelperExit(result) };
+    },
+    (error: unknown) => {
+      helperExit = {
+        message: error instanceof Error ? error.message : 'audio probe helper wait failed',
+      };
+    },
+  );
   const finishProbe = () =>
     (finish ??= (async () => {
       const beforeStop = await readStatusFile(snapshot);
+      if (beforeStop?.state !== 'stopped' && helperExit) throw helperExitedError(helperExit);
       await process.terminate().catch(() => {});
       await process.wait.catch(() => {});
       return {
@@ -133,6 +149,8 @@ function createHostAudioProbeLiveHandle(
     inspect: () => snapshot,
     status: async () => {
       const status = await readStatusFile(snapshot);
+      if (status?.state === 'stopped') return status;
+      if (helperExit) throw helperExitedError(helperExit);
       return status ?? finalizeStatus(snapshot, undefined, 'not-started');
     },
     finish: finishProbe,
@@ -142,6 +160,24 @@ function createHostAudioProbeLiveHandle(
       await disposal;
     },
   });
+}
+
+function describeHelperExit(result: HostCommandResult): string {
+  return (
+    result.stderr?.trim() ||
+    result.stdout?.trim() ||
+    `audio probe helper exited with code ${result.exitCode ?? 1}`
+  );
+}
+
+function helperExitedError(exit: { message: string }): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `host audio probe helper exited before completing the capture: ${exit.message}`,
+    {
+      hint: 'Keep audio-probe.resource.json; stop resolves the record through descriptor cleanup.',
+    },
+  );
 }
 
 async function terminateForCleanup(process: HostAudioCaptureProcess): Promise<CleanupOutcome> {

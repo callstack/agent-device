@@ -39,7 +39,10 @@ export function createHostAudioProbeRecoveryOperations(params: {
         return { status: 'unreattachable', reason: 'ownership-fence-lost' };
       }
       const status = await readStatusFile(descriptor);
-      if (status === undefined) return { status: 'missing' };
+      // Only a terminal publication proves the run finished: a `running` checkpoint with the
+      // child gone means the sampler died mid-capture, and its result is lost — never finalize
+      // that checkpoint as a completion.
+      if (status === undefined || status.state !== 'stopped') return { status: 'missing' };
       return {
         status: 'completed',
         result: finalizeStatus(descriptor, status, 'daemon-recovery'),

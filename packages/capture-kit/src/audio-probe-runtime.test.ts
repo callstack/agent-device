@@ -170,6 +170,47 @@ test('start terminates a sampler whose exact process identity cannot be resolved
   });
 });
 
+// A helper that dies after its first running checkpoint must surface as a failure: without the
+// exit observation, status reads the stale checkpoint as running forever and stop fabricates a
+// normal completion for a capture that was lost.
+test('a helper that dies after a running checkpoint is surfaced, never completed', async () => {
+  await withStatusDir(async (dir) => {
+    const statusPath = path.join(dir, 'audio-probe.json');
+    let exitHelper: (result: HostCommandResult) => void = () => {};
+    const host = fakeHost({
+      start: async (input) => {
+        await fs.writeFile(
+          input.statusPath,
+          JSON.stringify({ state: 'running', rmsDbfs: [-10], peakDbfs: [-5], sampleCount: 1 }),
+        );
+        return {
+          marker,
+          wait: new Promise<HostCommandResult>((resolve) => {
+            exitHelper = resolve;
+          }),
+          terminate: async () => {},
+        } satisfies HostAudioCaptureProcess;
+      },
+    });
+
+    const started = await startHostAudioProbe({
+      host,
+      device,
+      owner,
+      input: { sessionId: 's1', statusPath, durationMs: 1000, bucketMs: 500, fence },
+    });
+    const handle = started.pendingHandle.transfer();
+    assert.equal((await handle.status()).state, 'running');
+
+    exitHelper({ stdout: '', stderr: 'sampler crashed', exitCode: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await assert.rejects(handle.status(), /sampler crashed/);
+    await assert.rejects(handle.finish(), /sampler crashed/);
+    assert.deepEqual(await handle.forceCleanup(), { status: 'cleaned' });
+  });
+});
+
 // A markerless record (foreign or corrupted — start never publishes one) must never be treated as
 // finished or absent: recovery can neither prove the child exited nor terminate it by identity.
 test('a markerless record with a live status file is never read as completed or missing', async () => {
@@ -310,6 +351,15 @@ test('reattach is cleanup-only: live sampler unreattachable, finished run comple
     });
 
     const gone = createHostAudioProbeRecoveryOperations({ host: fakeHost() });
+    assert.deepEqual(await gone.audioProbeReattach({ envelope: envelopeWith(body) }), {
+      status: 'missing',
+    });
+
+    // A running checkpoint with the child gone is a mid-capture death, not a completion.
+    await fs.writeFile(
+      statusPath,
+      JSON.stringify({ state: 'running', rmsDbfs: [-10], peakDbfs: [-5], sampleCount: 1 }),
+    );
     assert.deepEqual(await gone.audioProbeReattach({ envelope: envelopeWith(body) }), {
       status: 'missing',
     });
