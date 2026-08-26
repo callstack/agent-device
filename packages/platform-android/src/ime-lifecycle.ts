@@ -445,8 +445,11 @@ function normalizeSettingsValue(raw: string): string {
 
 // Serials only, with no full-inventory name, boot-state, or target probes.
 export async function listAndroidAdbSerialsQuick(): Promise<string[]> {
+  // Resolved outside the try: an unbound host port is a wiring bug and must stay loud, while a
+  // failed adb execution legitimately reads as "no devices".
+  const host = requireAndroidAdbHost();
   try {
-    const result = await requireAndroidAdbHost().execHostAdb(['devices'], { timeoutMs: 5_000 });
+    const result = await host.execHostAdb(['devices'], { timeoutMs: 5_000 });
     return result.stdout
       .split('\n')
       .map((line) => line.trim())
