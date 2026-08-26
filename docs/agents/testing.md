@@ -115,8 +115,11 @@ another example. Keep examples for a real past bug or a named decision. Reuse `P
 budgets so property files stay inside the unit slow-test gate.
 
 Parser fuzz targets live in `scripts/fuzz/targets.ts`. Validation generators carry the invalid
-outcome they planted, so silent acceptance and wrong error codes are failures. Promote a discovered
-case with the command the harness prints — never hand-copy an unshrunk input.
+outcome they planted, so silent acceptance and wrong error codes are failures. Cases run in a
+worker process, so the two faults a case cannot report about itself — never returning, and killing
+the process it runs in — are reported as `hang` and `crash` against the exact input rather than
+taking the caller down with them. Promote a discovered case with the command the harness prints —
+never hand-copy an unshrunk input.
 
 Mutation is report-only and limited to the registry in `scripts/mutation/modules.ts`. It measures
 whether tests distinguish changed decision logic. Do not infer redundancy from line coverage alone.

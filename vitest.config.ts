@@ -32,8 +32,8 @@ const SUBPROCESS_STUB_TESTS: readonly string[] = [
 //
 // So the coverage run skips this project and a second, uninstrumented Vitest invocation owns
 // it — see `test:coverage:ci`. That costs no coverage at all, which is measured rather than
-// assumed: the cases execute inside worker threads, a separate isolate the fork's inspector
-// session never instruments, so this file reports the same lines with or without it.
+// assumed: the cases execute out of process, which the fork's inspector session never
+// instruments, so this file reports the same lines with or without it.
 //
 // The second leg goes through `test:fuzz-worker`, which blanks AGENT_DEVICE_COVERAGE_SHARD and
 // AGENT_DEVICE_COVERAGE_MERGE — the sharding switches read just below. ci.yml sets them as
@@ -49,6 +49,16 @@ const SUBPROCESS_STUB_TESTS: readonly string[] = [
 // never reproduced — what these entries share is an observed record of vanishing from the
 // Coverage lane, and that record is the only thing that admits a file here. A new entry needs
 // its own run URLs; a theory about workers is not enough.
+//
+// #2053: the split did not stop it — the uninstrumented second leg lost the same file six more
+// times in three days. Calibrating each mechanism against this project (see the issue) showed
+// that every death Node can report is reported, leaving an uncatchable signal; and the only
+// thing this file did that no other file does was run adversarial parser cases inside the fork,
+// on worker threads it created and terminated. They now run in a worker process
+// (`scripts/fuzz/execute.ts`), where such a fault is a `crash` failure named against its input.
+// This entry and the second leg it forces are the mitigation: remove both — file back to
+// `unit-core`, `test:coverage:ci` back to one invocation — after 30 consecutive Coverage runs
+// with no `Worker exited unexpectedly`, and reopen #2053 with the run URL if one appears first.
 const FUZZ_WORKER_TESTS: readonly string[] = [
   // Replays the fuzz corpus through the worker watchdog, waiting its per-case budget (#1414).
   'scripts/fuzz/corpus-replay.test.ts',

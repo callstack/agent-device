@@ -38,7 +38,10 @@ jobs:
   # 38,000 cases/target holds the job's wall-clock at the pre-B2 five-target/50k budget now that
   # seven targets share it: measured on a quiet host, 7x38k = 16.5s against 5x50k = 16.6-16.9s.
   # Chosen by measurement rather than rounding — 33k would have been 2s cheaper but cost the
-  # five untouched targets a third of their depth for no wall-clock reason.
+  # five untouched targets a third of their depth for no wall-clock reason. The count is
+  # unchanged by #2053; moving case execution out of process cost that run about 3s (17.8s ->
+  # 20.9s, best of three on one host), which buys a case that faults its process a named
+  # `crash` failure instead of a dead caller.
   nightly-parser-fuzz:
     name: Parser Fuzz Lane
     runs-on: ubuntu-latest

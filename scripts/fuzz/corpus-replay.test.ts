@@ -2,8 +2,10 @@
 //
 // The nightly lane finds cases; this replays every case it ever found so a regression fails in
 // seconds on a PR instead of a night later. Cases go through the same worker-backed watchdog the
-// nightly lane uses: a promoted hang case must fail this test against its per-case budget, not
-// wedge the unit job until the CI timeout.
+// nightly lane uses, and for the same reason they run in a worker *process* (#2053): a promoted
+// hang case must fail this test against its per-case budget rather than wedge the unit job, and
+// a case that faults the process it runs in must fail this test rather than kill the Vitest
+// worker running it — which reports no test, no file, and no case.
 
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
