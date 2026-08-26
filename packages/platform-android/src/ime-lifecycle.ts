@@ -4,7 +4,7 @@
 // `ime-activation.ts` (the activation transaction), and `ime-restore.ts` (restore + startup
 // orphan recovery).
 
-import { requireAndroidAdbHost } from './adb-host.ts';
+import { runAndroidHostAdb } from './adb-executor.ts';
 
 export { activateAndroidTestIme } from './ime-activation.ts';
 export {
@@ -23,11 +23,8 @@ export {
 
 // Serials only, with no full-inventory name, boot-state, or target probes.
 export async function listAndroidAdbSerialsQuick(): Promise<string[]> {
-  // Resolved outside the try: an unbound host port is a wiring bug and must stay loud, while a
-  // failed adb execution legitimately reads as "no devices".
-  const host = requireAndroidAdbHost();
   try {
-    const result = await host.execHostAdb(['devices'], { timeoutMs: 5_000 });
+    const result = await runAndroidHostAdb(['devices'], { timeoutMs: 5_000 });
     return result.stdout
       .split('\n')
       .map((line) => line.trim())

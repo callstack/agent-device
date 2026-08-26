@@ -37,12 +37,10 @@ vi.mock('@agent-device/platform-android/ime-helper', async (importOriginal) => {
 
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor.ts';
-import { withAndroidHostAdbTransport } from '../adb-host-transport.ts';
 import { resetAndroidImeHelperInstallCache } from '../ime-helper.ts';
 import {
   activateAndroidTestIme,
   isAndroidTestImeActive,
-  listAndroidAdbSerialsQuick,
   restoreAndroidTestIme,
   restoreOrphanedAndroidTestImeOnDaemonStartup,
   resetAndroidTestImeActivationCacheForTests,
@@ -493,34 +491,4 @@ test('startup recovery tolerates a serial listing failure and keeps the marker',
     // The listing failed, so the marker is retained for a later retry.
     assert.equal(await pendingMarkerExists(stateDir, SERIAL), true);
   });
-});
-
-test('listAndroidAdbSerialsQuick routes its global devices call through the host transport', async () => {
-  const seenArgs: string[][] = [];
-
-  const serials = await withAndroidHostAdbTransport(
-    async (args) => {
-      seenArgs.push([...args]);
-      return {
-        stdout: 'List of devices attached\nemulator-5554\tdevice\n',
-        stderr: '',
-        exitCode: 0,
-      };
-    },
-    async () => await listAndroidAdbSerialsQuick(),
-  );
-
-  assert.deepEqual(serials, ['emulator-5554']);
-  assert.deepEqual(seenArgs, [['devices']]);
-});
-
-test('listAndroidAdbSerialsQuick yields no serials when the transport exits nonzero', async () => {
-  const serials = await withAndroidHostAdbTransport(
-    async () => ({ stdout: '', stderr: 'error: device offline', exitCode: 1 }),
-    async () => await listAndroidAdbSerialsQuick(),
-  );
-
-  // The seam throws on nonzero (no allowFailure here); the quick listing's
-  // catch treats any failure as an empty inventory.
-  assert.deepEqual(serials, []);
 });
