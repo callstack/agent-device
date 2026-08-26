@@ -125,9 +125,10 @@ Transitional exception (#2041): the Android adb/IME transport cluster (`adb-exec
 subpaths, with its raw host primitives injected through the package's `adb-host` port by root
 composition wiring. While the in-flight perf/trace handler migration still imports the old root
 paths, R13 names an explicit shim table: each subpath is importable only by its root re-export
-shim (plus the host-binding and the helper-install module the binding reaches). The shims, the
-subpaths, and this exception are deleted together once that migration lands; the table growing is
-drift, not precedent.
+shim (plus the host-binding, the helper-install module the binding reaches, and the cluster's own
+tests under `src/platforms/android/__tests__/`, which must name the package module to mock its
+internal edges). The shims, the subpaths, and this exception are deleted together once that
+migration lands; the table growing is drift, not precedent.
 
 Durable-capture mechanics shared by more than one implementation live in the private
 `@agent-device/capture-kit` workspace package, with the enforced direction

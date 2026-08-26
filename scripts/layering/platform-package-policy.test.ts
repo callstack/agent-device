@@ -243,6 +243,22 @@ test('transitional #2041 android adb subpaths are importable only by their named
     /only src\/platform-runtime\.ts may import '@agent-device\/platform-android\/adb-executor'/,
   );
 
+  // The cluster's own root tests may name the package module (to mock its internal edges) …
+  const clusterTest = validSources();
+  clusterTest.set('src/platforms/android/__tests__/ime-lifecycle.test.ts', shimImport);
+  assert.deepEqual(
+    messages(clusterTest).filter((message) => message.includes('may import')),
+    [],
+  );
+
+  // … but an unrelated test file elsewhere stays under the composition-only rule.
+  const foreignTest = validSources();
+  foreignTest.set('src/daemon/handlers/session.test.ts', shimImport);
+  assert.match(
+    messages(foreignTest).join('\n'),
+    /only src\/platform-runtime\.ts may import '@agent-device\/platform-android\/adb-executor'/,
+  );
+
   // Android may export exactly the transitional subpaths; any other subpath is still a violation.
   const androidTransitional = declarations().map((declaration) =>
     declaration.family === 'android'

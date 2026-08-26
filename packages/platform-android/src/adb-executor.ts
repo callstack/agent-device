@@ -40,6 +40,8 @@ export type AndroidAdbSpawnOptions = AndroidAdbExecutorOptions & {
   cwd?: string;
   env?: Record<string, string | undefined>;
   detached?: boolean;
+  /** Max stdout/stderr bytes for synchronous runs (default Node ~1MB). */
+  maxBuffer?: number;
   stdio?:
     | AndroidAdbStdioOption
     | Array<AndroidAdbStdioOption | 'ipc' | Stream | number | null | undefined>;

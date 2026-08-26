@@ -71,9 +71,12 @@ const TRANSITIONAL_ANDROID_ADB_SUBPATHS = new Map<string, ReadonlySet<string>>([
 function isTransitionalAndroidAdbShimImport(file: string, specifier: string): boolean {
   const importers = TRANSITIONAL_ANDROID_ADB_SUBPATHS.get(specifier);
   if (!importers) return false;
-  // Tests must name the package module to mock or type the cluster — the shim re-exports would
-  // leave package-internal edges un-intercepted.
-  if (!isProductionSource(file)) return true;
+  // The cluster's own root tests must name the package module to mock or type it — the shim
+  // re-exports would leave package-internal edges un-intercepted. Scoped to that one test
+  // directory; every other test file stays under the composition-only rule.
+  if (file.startsWith('src/platforms/android/__tests__/') && !isProductionSource(file)) {
+    return true;
+  }
   return importers.has(file);
 }
 
