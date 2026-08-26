@@ -1,4 +1,5 @@
-// Thin re-export shim over the extracted cluster in @agent-device/platform-android.
+// Thin re-export shim over the extracted cluster in @agent-device/platform-android, trimmed to
+// the names root code still consumes; anything else imports the package subpath directly.
 // TODO(#2041): the in-flight perf/trace handler migration (session-perf.ts,
 // session-perf-legacy.ts, session-native-perf.ts) still imports this path; delete this shim
 // (repointing remaining root consumers) once that migration lands.
@@ -19,29 +20,11 @@ export {
   resolveAndroidTouchProvider,
   resolveScopedAndroidAdbBackgroundTransport,
   withAndroidAdbProvider,
-  type AdbFailureClassification,
   type AndroidAdbExecutor,
   type AndroidAdbExecutorOptions,
   type AndroidAdbExecutorResult,
-  type AndroidAdbInstaller,
-  type AndroidAdbInstallOptions,
   type AndroidAdbProcess,
   type AndroidAdbProvider,
-  type AndroidAdbProviderScopeOptions,
-  type AndroidAdbPuller,
-  type AndroidAdbSpawner,
-  type AndroidAdbSpawnOptions,
-  type AndroidAdbTransferOptions,
-  type AndroidBundleInstaller,
-  type AndroidGestureViewportProvider,
   type AndroidPortReverseEndpoint,
-  type AndroidPortReverseMapping,
-  type AndroidPortReverseOptions,
-  type AndroidPortReverseProvider,
-  type AndroidTextInjectionRequest,
-  type AndroidTextInjector,
   type AndroidTextInputAction,
-  type AndroidTouchInjector,
-  type AndroidTouchProvider,
-  type ScopedAndroidAdbBackgroundTransport,
 } from '@agent-device/platform-android/adb-executor';

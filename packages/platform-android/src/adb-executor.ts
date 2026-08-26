@@ -16,8 +16,6 @@ import {
 import { requireAndroidAdbHost, type AndroidAdbCommandExecutorOverride } from './adb-host.ts';
 
 /** Legacy name kept for the root shim's consumers; one matcher table lives in adb-failure.ts. */
-export type AdbFailureClassification = AndroidAdbFailureClassification;
-
 export const classifyAdbFailure = classifyAndroidAdbFailure;
 
 export type AndroidAdbExecutorOptions = {

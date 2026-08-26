@@ -11,7 +11,8 @@ import {
 } from '../input-actions.ts';
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { withFakeAdb } from '../../../__tests__/test-utils/fake-adb.ts';
-import { withAndroidAdbProvider, type AndroidTouchInjector } from '../adb-executor.ts';
+import { withAndroidAdbProvider } from '../adb-executor.ts';
+import type { AndroidTouchInjector } from '@agent-device/platform-android/adb-executor';
 
 // The fake adb provider installs through the production withAndroidAdbProvider
 // scope, so `calls` records device-scoped args without a leading `-s <serial>`.

@@ -234,7 +234,7 @@ export function applicationLifecycleDurableResourceViolations(
         'durable startup recovery must gate lazy Android test-IME recovery behind its marker evidence',
     });
   }
-  const ime = sources.get('src/platforms/android/ime-lifecycle.ts');
+  const ime = sources.get('packages/platform-android/src/ime-lifecycle.ts');
   if (
     ime === undefined ||
     ime.indexOf('await waitForStartupRecoveryFence') < 0 ||
@@ -242,7 +242,7 @@ export function applicationLifecycleDurableResourceViolations(
       ime.indexOf('const adb = resolveAndroidAdbExecutor')
   ) {
     violations.push({
-      file: 'src/platforms/android/ime-lifecycle.ts',
+      file: 'packages/platform-android/src/ime-lifecycle.ts',
       line: 1,
       message:
         'Android test-IME mutation must wait for startup recovery before loading ADB mechanics',

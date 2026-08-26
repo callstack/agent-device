@@ -120,6 +120,15 @@ process primitives outside the shared host-command port. R13 applies these rules
 dynamic, and re-export edges; package-owned tests may import their own public façade. Contracts may
 depend on kernel vocabulary but never on concrete platform packages or daemon implementation types.
 
+Transitional exception (#2041): the Android adb/IME transport cluster (`adb-executor`,
+`ime-lifecycle`, `ime-helper`) lives in `@agent-device/platform-android` behind four registered
+subpaths, with its raw host primitives injected through the package's `adb-host` port by root
+composition wiring. While the in-flight perf/trace handler migration still imports the old root
+paths, R13 names an explicit shim table: each subpath is importable only by its root re-export
+shim (plus the host-binding and the helper-install module the binding reaches). The shims, the
+subpaths, and this exception are deleted together once that migration lands; the table growing is
+drift, not precedent.
+
 Durable-capture mechanics shared by more than one implementation live in the private
 `@agent-device/capture-kit` workspace package, with the enforced direction
 `kernel < contracts < capture-kit < platform/provider/daemon`. Contracts retains pure vocabulary and

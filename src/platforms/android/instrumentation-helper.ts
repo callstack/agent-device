@@ -1,4 +1,3 @@
-
 // Shared primitives for the Android instrumentation helpers (snapshot + multi-touch).
 // Both helpers drive `am instrument -w` and parse the resulting
 // INSTRUMENTATION_STATUS / INSTRUMENTATION_RESULT key/value records, and both
@@ -106,6 +105,4 @@ export function readInstrumentationResultBoolean(value: string | undefined): boo
 export {
   readAndroidHelperManifestInteger,
   readAndroidHelperManifestLiteral,
-  readAndroidHelperManifestSha256,
-  readAndroidHelperManifestString,
 } from '@agent-device/contracts/android-helper-artifacts';

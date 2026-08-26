@@ -50,7 +50,12 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
 const TRANSITIONAL_ANDROID_ADB_SUBPATHS = new Map<string, ReadonlySet<string>>([
   [
     '@agent-device/platform-android/adb-executor',
-    new Set(['src/platforms/android/adb-executor.ts']),
+    new Set([
+      'src/platforms/android/adb-executor.ts',
+      // Imports the package directly (not the shim) to avoid a module cycle through the
+      // adb-host binding, which reaches this file for the helper port facets.
+      'src/platforms/android/helper-package-install.ts',
+    ]),
   ],
   [
     '@agent-device/platform-android/adb-host',
@@ -64,7 +69,12 @@ const TRANSITIONAL_ANDROID_ADB_SUBPATHS = new Map<string, ReadonlySet<string>>([
 ]);
 
 function isTransitionalAndroidAdbShimImport(file: string, specifier: string): boolean {
-  return TRANSITIONAL_ANDROID_ADB_SUBPATHS.get(specifier)?.has(file) ?? false;
+  const importers = TRANSITIONAL_ANDROID_ADB_SUBPATHS.get(specifier);
+  if (!importers) return false;
+  // Tests must name the package module to mock or type the cluster — the shim re-exports would
+  // leave package-internal edges un-intercepted.
+  if (!isProductionSource(file)) return true;
+  return importers.has(file);
 }
 
 function violation(file: string, line: number, message: string): LayeringViolation {

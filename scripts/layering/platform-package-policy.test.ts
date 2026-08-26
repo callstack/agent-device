@@ -225,6 +225,50 @@ test('platform packages may import the xml vocabulary package', () => {
     "import { parseXml } from '@agent-device/xml';",
   );
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+test('transitional #2041 android adb subpaths are importable only by their named shims', () => {
+  const shimImport =
+    "export { resolveAndroidAdbExecutor } from '@agent-device/platform-android/adb-executor';";
+
+  const allowed = validSources();
+  allowed.set('src/platforms/android/adb-executor.ts', shimImport);
+  assert.deepEqual(
+    messages(allowed).filter((message) => message.includes('may import')),
+    [],
+  );
+
+  const denied = validSources();
+  denied.set('src/daemon/handlers/session.ts', shimImport);
+  assert.match(
+    messages(denied).join('\n'),
+    /only src\/platform-runtime\.ts may import '@agent-device\/platform-android\/adb-executor'/,
+  );
+
+  // Android may export exactly the transitional subpaths; any other subpath is still a violation.
+  const androidTransitional = declarations().map((declaration) =>
+    declaration.family === 'android'
+      ? {
+          ...declaration,
+          exportedSubpaths: [
+            declaration.name,
+            `${declaration.name}/adb-executor`,
+            `${declaration.name}/adb-host`,
+            `${declaration.name}/ime-helper`,
+            `${declaration.name}/ime-lifecycle`,
+          ],
+        }
+      : declaration,
+  );
+  assert.deepEqual(messages(validSources(), androidTransitional), []);
+
+  const androidWidened = androidTransitional.map((declaration) =>
+    declaration.family === 'android'
+      ? { ...declaration, exportedSubpaths: [...declaration.exportedSubpaths, `${declaration.name}/internal`] }
+      : declaration,
+  );
+  assert.match(
+    messages(validSources(), androidWidened).join('\n'),
+    /platform-android must export exactly its root façade/,
+  );
 });
 
 test('contracts never depend on a concrete platform package in production or tests', () => {

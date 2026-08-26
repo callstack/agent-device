@@ -4,29 +4,24 @@ import os from 'node:os';
 import path from 'node:path';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { findProjectRoot, readVersion } from '../../utils/version.ts';
+// The package subpath (not the root shim) breaks the module cycle the shim route would create:
+// the adb-host binding reaches this file for the helper port facets, and the shim imports that
+// binding. Allowed by the transitional #2041 R13 table.
 import {
   androidAdbResultError,
   installAndroidAdbPackage,
   pullAndroidAdbFile,
   type AndroidAdbExecutor,
   type AndroidAdbProvider,
-} from './adb-executor.ts';
+} from '@agent-device/platform-android/adb-executor';
+import type {
+  AndroidHelperInstallDecision,
+  InstalledAndroidHelperState,
+} from '@agent-device/contracts/android-helper-artifacts';
 
 // Shared install/version-check/checksum lifecycle for the three Android helper APKs.
 
-export type AndroidHelperInstallDecision = {
-  packageName: string;
-  versionCode: number;
-  installedVersionCode?: number;
-  installedSha256?: string;
-  installed: boolean;
-  reason: 'missing' | 'outdated' | 'mismatched' | 'unverifiable' | 'current';
-};
-
-export type InstalledAndroidHelperState = Pick<
-  AndroidHelperInstallDecision,
-  'installedVersionCode' | 'installedSha256' | 'reason'
->;
+export type { AndroidHelperInstallDecision, InstalledAndroidHelperState };
 
 const ANDROID_HELPER_IDENTITY_TIMEOUT_MS = 10_000;
 

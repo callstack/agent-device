@@ -39,8 +39,8 @@ vi.mock('../ime-recovery-marker.ts', async (importOriginal) => {
   };
 });
 
-vi.mock('../ime-helper.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../ime-helper.ts')>();
+vi.mock('@agent-device/platform-android/ime-helper', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/ime-helper')>();
   // Lazy: the factory is hoisted above this file's top-level constants.
   const artifact = () => ({
     apkPath: '/fixture/ime-helper.apk',

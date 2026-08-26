@@ -5,8 +5,8 @@ const PACKAGE = 'com.callstack.agentdevice.imehelper';
 
 // Inject a fixture artifact so the tests never read android/ime-helper/dist from disk (which a
 // fresh checkout that hasn't packaged the helper won't have — CI's Coverage job included).
-vi.mock('../ime-helper.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../ime-helper.ts')>();
+vi.mock('@agent-device/platform-android/ime-helper', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/ime-helper')>();
   // Lazy: the factory is hoisted above this file's top-level constants.
   const artifact = () => ({
     apkPath: '/fixture/helper.apk',
