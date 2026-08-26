@@ -27,6 +27,7 @@ import {
   createTestDeviceInventoryGatewaysFromProvider,
 } from '../../../src/__tests__/test-utils/device-inventory-gateways.ts';
 import { createPlatformRuntimeGateway } from '../../../src/platform-runtime.ts';
+import { createHostDiagnostics } from '../../../src/platform-runtime-host-diagnostics.ts';
 import type { PlatformRuntimeProviderRegistration } from '../../../src/platform-runtime-gateway.ts';
 import { createProviderPlatformRuntimeRegistrations } from '../../../src/provider-device-runtimes.ts';
 import { unavailableDeviceRuntimeGateway } from '../../../src/daemon/__tests__/test-device-runtime-gateway.ts';
@@ -137,6 +138,9 @@ export async function createProviderScenarioHarness(
       : createTestDeviceInventoryGatewaysFromProvider(deviceInventoryProvider),
     deviceRuntimeGateway,
     trackDownloadableArtifact,
+    // Match daemon composition (src/daemon/server/daemon-runtime.ts): doctor's host-scoped
+    // diagnostics are injected at the root, so the harness composes them the same way.
+    hostDiagnostics: createHostDiagnostics(),
     ...routerDeps,
   });
   const handleRequest: typeof requestHandler = async (request) => {

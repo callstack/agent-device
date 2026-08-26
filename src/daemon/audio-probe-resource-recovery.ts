@@ -43,7 +43,9 @@ async function acquireAudioProbeRecoveryControl(
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>,
   envelope: DurableResourceEnvelope<'audio-probe'>,
   scope: PlatformRequestScope,
-): Promise<DurableCaptureRecoveryControl<'audio-probe', AudioProbeLiveHandle, AudioProbeCompletion>> {
+): Promise<
+  DurableCaptureRecoveryControl<'audio-probe', AudioProbeLiveHandle, AudioProbeCompletion>
+> {
   return await acquireExactDurableCaptureRecoveryControl({
     gateway,
     envelope,

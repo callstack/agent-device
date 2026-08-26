@@ -21,8 +21,10 @@ import {
   makeSession,
 } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
-import { unavailableApplicationLifecycleOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
+import {
+  unavailableApplicationLifecycleOperationFacts,
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+} from '../../../__tests__/test-utils/runtime-operation-facts.ts';
 import { createAudioProbeAdmissionLedger } from '../../audio-probe-admission-ledger.ts';
 import { audioProbeDurableResource } from '../../audio-probe-session-resource.ts';
 import type { SessionStore } from '../../session-store.ts';
@@ -360,8 +362,9 @@ test('audio probe status without an active probe reports not-started', async () 
 test('audio probe forwards daemon millisecond timing to the web query operation', async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
   sessionStore.set('web', makeSession('web', { device: WEB_DESKTOP_DEVICE }));
-  const audioProbeQuery = vi.fn(async (_input: { action: string; durationMs: number; bucketMs: number }) =>
-    runningStatus({ source: 'media-elements', backend: 'agent-browser' }),
+  const audioProbeQuery = vi.fn(
+    async (_input: { action: string; durationMs: number; bucketMs: number }) =>
+      runningStatus({ source: 'media-elements', backend: 'agent-browser' }),
   );
   const { params, bindDevice } = audioParams('web', sessionStore, WEB_DESKTOP_DEVICE, {
     positionals: ['probe', 'start', '7500', '500'],

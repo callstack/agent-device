@@ -14,7 +14,10 @@ import {
   hostAudioProbeDescriptorCodec,
   startHostAudioProbe,
 } from './audio-probe-runtime.ts';
-import { createDurableResourceEnvelope, encodeDurableDescriptor } from './durable-resource-envelope.ts';
+import {
+  createDurableResourceEnvelope,
+  encodeDurableDescriptor,
+} from './durable-resource-envelope.ts';
 
 const device: DeviceInfo = {
   id: 'macos-host',

@@ -301,8 +301,6 @@ test('web supports only the initial browser interaction slice', () => {
   );
 });
 
-
-
 test('apple selector does not match web platform', () => {
   assert.equal(matchesPlatformSelector(webDevice, 'apple'), false);
   assert.equal(matchesPlatformSelector(webDevice, 'web'), true);

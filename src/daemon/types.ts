@@ -231,7 +231,6 @@ export type PendingInteractionOutcome = {
   preSignature: InteractionSurfaceEntry[];
 };
 
-
 export type SessionState = {
   name: string;
   sessionScope?: {

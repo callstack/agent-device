@@ -16,7 +16,6 @@ import { openWebSessionNames } from './web-session-names.ts';
 // next to the existing guard, matching register-builtins' interactor lazy pattern; the seam is
 // pinned by src/daemon/__tests__/session-teardown-import-closure.test.ts.
 
-
 export async function stopSessionAppLog(params: {
   session: SessionState;
   sessionName: string;

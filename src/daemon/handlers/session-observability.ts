@@ -37,10 +37,7 @@ import {
   recordSessionAppLogFailure,
 } from '../app-log-session-resource.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
-import type {
-  BindDeviceRuntime,
-  InspectDeviceRuntimeFacts,
-} from '../request-runtime-binding.ts';
+import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from '../types.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';

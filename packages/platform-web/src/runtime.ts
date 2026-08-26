@@ -315,7 +315,10 @@ function bindWebRuntime(
       audioProbeQuery: async (input: AudioProbeQueryInput) => {
         const transport = await host.audioProbe.web.resolve(device);
         if (transport === undefined) {
-          throw new AppError('UNSUPPORTED_OPERATION', 'audio is not supported by this web provider');
+          throw new AppError(
+            'UNSUPPORTED_OPERATION',
+            'audio is not supported by this web provider',
+          );
         }
         return await transport.probe(input);
       },

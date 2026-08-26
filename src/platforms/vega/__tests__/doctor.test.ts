@@ -9,9 +9,7 @@ import type { VegaToolProvider } from '../tool-provider.ts';
 import { withVegaToolProvider } from '../tool-provider.ts';
 import { vegaToolchainCheck } from '../doctor.ts';
 
-function contextWith(
-  local: () => Promise<readonly DeviceInfo[]>,
-): HostDiagnosticsContext {
+function contextWith(local: () => Promise<readonly DeviceInfo[]>): HostDiagnosticsContext {
   return Object.freeze({
     stateDir: '/tmp/state',
     metroPort: 8081,

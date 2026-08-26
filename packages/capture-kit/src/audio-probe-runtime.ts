@@ -33,7 +33,10 @@ import type {
   RuntimeOwnerRef,
 } from '@agent-device/contracts/platform';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
-import { createDurableResourceEnvelope, encodeDurableDescriptor } from './durable-resource-envelope.ts';
+import {
+  createDurableResourceEnvelope,
+  encodeDurableDescriptor,
+} from './durable-resource-envelope.ts';
 import { decodeDurableDescriptor } from './durable-descriptor-codec.ts';
 
 const STATUS_APPEARANCE_TIMEOUT_MS = 5_000;
@@ -333,7 +336,14 @@ async function descriptorProcessLiveness(
 
 type StatusIdentity = Pick<
   AudioProbeLiveSnapshot,
-  'source' | 'backend' | 'sourceCount' | 'notes' | 'statusPath' | 'startedAt' | 'durationMs' | 'bucketMs'
+  | 'source'
+  | 'backend'
+  | 'sourceCount'
+  | 'notes'
+  | 'statusPath'
+  | 'startedAt'
+  | 'durationMs'
+  | 'bucketMs'
 >;
 
 async function waitForFirstStatus(
@@ -388,10 +398,7 @@ function finalizeStatus(
   status: AudioProbeResult | undefined,
   reason: string,
 ): AudioProbeCompletion {
-  const elapsedMs = Math.min(
-    snapshot.durationMs,
-    Math.max(0, Date.now() - snapshot.startedAt),
-  );
+  const elapsedMs = Math.min(snapshot.durationMs, Math.max(0, Date.now() - snapshot.startedAt));
   const base =
     status ??
     emptyAudioProbeResult({

@@ -146,7 +146,6 @@ function resolveWarmupSimulator(
   return simulators.find((device) => device.booted === true) ?? simulators[0];
 }
 
-
 function resolveDoctorStateDir(sessionStore: SessionStore, sessionName: string): string {
   const sessionsDir = path.dirname(sessionStore.resolveSessionDir(sessionName));
   return path.basename(sessionsDir) === 'sessions' ? path.dirname(sessionsDir) : sessionsDir;
@@ -163,8 +162,17 @@ async function appendLocalDoctorChecks(params: {
   bindDevice?: BindDeviceRuntime;
   req: DaemonRequest;
 }): Promise<DeviceInfo | undefined> {
-  const { checks, context, hostDiagnostics, inventory, options, session, inspectFacts, bindDevice, req } =
-    params;
+  const {
+    checks,
+    context,
+    hostDiagnostics,
+    inventory,
+    options,
+    session,
+    inspectFacts,
+    bindDevice,
+    req,
+  } = params;
   const appCheckDevice =
     session?.device ?? resolveDoctorDeviceForAppCheck(checks, inventory, options.targetApp);
   if (appCheckDevice) {
@@ -199,7 +207,8 @@ async function appendDeviceScopedDoctorChecks(
     req: DaemonRequest;
   },
 ): Promise<void> {
-  const { context, hostDiagnostics, device, options, session, inspectFacts, bindDevice, req } = params;
+  const { context, hostDiagnostics, device, options, session, inspectFacts, bindDevice, req } =
+    params;
   let listInstalledApps: DoctorAppInventory | undefined;
   try {
     listInstalledApps = await resolveDoctorAppInventoryForDoctor({

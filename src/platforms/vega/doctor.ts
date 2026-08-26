@@ -50,7 +50,9 @@ export async function vegaToolchainCheck(context: HostDiagnosticsContext): Promi
   };
 }
 
-async function readLocalVegaInventory(context: HostDiagnosticsContext): Promise<VegaInventoryProbe> {
+async function readLocalVegaInventory(
+  context: HostDiagnosticsContext,
+): Promise<VegaInventoryProbe> {
   try {
     return {
       devices: await context.listLocalDeviceInventory({ platform: 'vega', target: 'tv' }),
