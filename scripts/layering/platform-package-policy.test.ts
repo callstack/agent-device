@@ -278,7 +278,10 @@ test('transitional #2041 android adb subpaths are importable only by their named
 
   const androidWidened = androidTransitional.map((declaration) =>
     declaration.family === 'android'
-      ? { ...declaration, exportedSubpaths: [...declaration.exportedSubpaths, `${declaration.name}/internal`] }
+      ? {
+          ...declaration,
+          exportedSubpaths: [...declaration.exportedSubpaths, `${declaration.name}/internal`],
+        }
       : declaration,
   );
   assert.match(
