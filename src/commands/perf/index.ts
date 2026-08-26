@@ -155,12 +155,42 @@ function readPerfPositionals(
       out: flags.out,
     };
   }
+  const action = readPerfAction(positionals[1]);
+  const kind = readPerfKind(flags.kind);
+  validateObservationPerfFlags(area, action, kind, flags.out);
   return {
     area,
-    action: readPerfAction(positionals[1]),
-    kind: readPerfKind(flags.kind),
+    action,
+    kind,
     out: flags.out,
   };
+}
+
+function validateObservationPerfFlags(
+  area: 'frames' | 'memory',
+  action: PerfAction | undefined,
+  kind: PerfKind | undefined,
+  out: string | undefined,
+): void {
+  if (area === 'frames') {
+    if (kind !== undefined) {
+      throw new AppError('INVALID_ARGS', '--kind is only supported with perf memory snapshot');
+    }
+    if (out !== undefined) {
+      throw new AppError(
+        'INVALID_ARGS',
+        '--out is only supported with perf memory snapshot, perf cpu profile, or perf trace',
+      );
+    }
+  }
+  if (area === 'memory') {
+    if (action !== 'snapshot' && kind !== undefined) {
+      throw new AppError('INVALID_ARGS', '--kind is only supported with perf memory snapshot');
+    }
+    if (action !== 'snapshot' && out !== undefined) {
+      throw new AppError('INVALID_ARGS', '--out is only supported with perf memory snapshot');
+    }
+  }
 }
 
 function readPerfArea(value: string | undefined): PerfArea {

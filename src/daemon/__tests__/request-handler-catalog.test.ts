@@ -26,6 +26,7 @@ import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
+import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
 
 const SPECIALIZED_ROUTES = [
   'lease',
@@ -487,6 +488,7 @@ async function runCatalogCommandThroughHandlerChain(
           }),
           screenRecordingAdmissionLedger: createScreenRecordingAdmissionLedger(),
           audioProbeAdmissionLedger: createAudioProbeAdmissionLedger(),
+          perfCaptureAdmissionLedger: createPerfCaptureAdmissionLedger(),
           requestScope: {
             signal: new AbortController().signal,
             diagnostics: { emit: () => {} },

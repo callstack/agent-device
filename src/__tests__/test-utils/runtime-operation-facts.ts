@@ -7,6 +7,7 @@ import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screens
 import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
 import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
+import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 
 const unavailable: RuntimeOperationFact = Object.freeze({
   available: false,
@@ -73,6 +74,13 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   acceptAlert: unavailable,
   dismissAlert: unavailable,
   ...audioProbeRuntimeOperationFacts({ capture: unavailable, query: unavailable }),
+  ...perfRuntimeOperationFacts({
+    frames: unavailable,
+    memorySample: unavailable,
+    memorySnapshot: unavailable,
+    nativeCapture: unavailable,
+    profileReport: unavailable,
+  }),
 });
 
 /** Default facts for tests that are unrelated to application lifecycle commands. */

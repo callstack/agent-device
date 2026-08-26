@@ -70,8 +70,6 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   pendingRecordAndHeal: ['src/daemon/session-replay-coordinator.ts'],
 
   trace: ['src/daemon/handlers/trace-runtime.ts'],
-  applePerf: ['src/daemon/handlers/session-perf-xctrace.ts', 'src/daemon/session-teardown.ts'],
-  nativePerf: ['src/daemon/session-teardown.ts'],
   pendingInteractionOutcome: ['src/daemon/interaction-outcome-policy.ts'],
   postGestureStabilization: ['src/daemon/deferred-interaction-outcome.ts'],
 
@@ -110,8 +108,10 @@ export const STORE_OWNED_SESSION_STATE_FIELDS: ReadonlySet<string> = new Set([
   'audioProbe',
   'createdAt',
   'device',
+  'lastPerfProfile',
   'name',
   'recordOnlySession',
+  'perfCapture',
   'screenRecording',
   'sessionScope',
   'snapshotDiagnostics',

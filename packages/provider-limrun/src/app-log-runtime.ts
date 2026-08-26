@@ -121,6 +121,7 @@ export function createLimrunPlatformRuntimeOwner(
             dismissAlert: liveSessionUnavailable,
             audioProbeCapture: liveSessionUnavailable,
             audioProbeQuery: liveSessionUnavailable,
+            perf: liveSessionUnavailable,
             readiness: liveSessionUnavailable,
             shutdown: liveSessionUnavailable,
             lifecycle: limrunLifecycleFacts(device, false),

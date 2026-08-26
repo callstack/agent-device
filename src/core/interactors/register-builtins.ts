@@ -20,8 +20,6 @@ const androidPlugin = {
   id: 'android',
   platforms: ['android'],
   capability: { bucket: 'android' },
-  // Android exposes explicit frame-health and memory observations.
-  perf: { supportsObservations: () => true },
   // Declares the platform-gated request provider resolver the Android family owns (the
   // adb provider, formerly gated by `device.platform === 'android'`).
   providers: { platformGatedResolvers: ['androidAdbProvider'] },
@@ -35,7 +33,6 @@ const harmonyosPlugin = {
   id: 'harmonyos',
   platforms: ['harmonyos'],
   capability: { bucket: 'harmonyos' },
-  perf: { supportsObservations: () => true },
   createInteractor: async (device: DeviceInfo, runner: RunnerContext) => {
     const { createHarmonyInteractor } = await import('./harmonyos.ts');
     return createHarmonyInteractor(device, runner);

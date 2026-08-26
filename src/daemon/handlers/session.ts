@@ -28,6 +28,7 @@ import type {
 import type { DeviceClaimReconciler } from '../device-claims.ts';
 import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import type { AudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
+import type { PerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
 import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
@@ -52,6 +53,7 @@ export type SessionCommandInput = {
   bindExactDevice?: BindExactDeviceRuntime;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
   audioProbeAdmissionLedger?: AudioProbeAdmissionLedger;
+  perfCaptureAdmissionLedger?: PerfCaptureAdmissionLedger;
   screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
   requestScope?: PlatformRequestScope;
@@ -100,22 +102,22 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
   req,
   sessionName,
   sessionStore,
-  androidAdbExecutor,
   bindDevice,
   inspectFacts,
   appLogAdmissionLedger,
   audioProbeAdmissionLedger,
+  perfCaptureAdmissionLedger,
   throwIfCanceled,
 }) =>
   await handleSessionObservabilityCommands({
     req,
     sessionName,
     sessionStore,
-    androidAdbExecutor,
     bindDevice,
     inspectFacts,
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
+    perfCaptureAdmissionLedger,
     throwIfCanceled,
   });
 
@@ -300,6 +302,7 @@ export async function handleSessionCommands(
     bindExactDevice,
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
+    perfCaptureAdmissionLedger,
     screenRecordingAdmissionLedger,
     hostDiagnostics,
     requestScope,
@@ -327,6 +330,7 @@ export async function handleSessionCommands(
     bindExactDevice,
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
+    perfCaptureAdmissionLedger,
     screenRecordingAdmissionLedger,
     hostDiagnostics,
     requestScope,

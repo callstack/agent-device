@@ -39,6 +39,10 @@ const AUDIO_PROBE_SESSION_STATE_OWNERS = new Set([
   'src/daemon/audio-probe-session-resource.ts',
   'src/daemon/types.ts',
 ]);
+const PERF_CAPTURE_SESSION_STATE_OWNERS = new Set([
+  'src/daemon/perf-capture-session-resource.ts',
+  'src/daemon/types.ts',
+]);
 const APP_STATE_HANDLER_FILE = 'src/daemon/handlers/session-state.ts';
 const APP_STATE_LEGACY_IMPORT_SOURCES = new Set([
   '../../platforms/android/app-lifecycle.ts',
@@ -139,21 +143,46 @@ export function appLogSessionStateOwnershipViolations(
 export function audioProbeSessionStateOwnershipViolations(
   sources: ReadonlyMap<string, string>,
 ): UnruledViolation[] {
+  return sessionResourceOwnershipViolations(
+    sources,
+    'audioProbe',
+    AUDIO_PROBE_SESSION_STATE_OWNERS,
+  );
+}
+
+/** The perf capture record has the same single durable coordinator as the other live resources. */
+export function perfCaptureSessionStateOwnershipViolations(
+  sources: ReadonlyMap<string, string>,
+): UnruledViolation[] {
+  return sessionResourceOwnershipViolations(
+    sources,
+    'perfCapture',
+    PERF_CAPTURE_SESSION_STATE_OWNERS,
+  );
+}
+
+function sessionResourceOwnershipViolations(
+  sources: ReadonlyMap<string, string>,
+  field: string,
+  owners: ReadonlySet<string>,
+): UnruledViolation[] {
   const violations: UnruledViolation[] = [];
   for (const file of productionSources(sources)) {
-    if (!file.path.startsWith('src/daemon/') || AUDIO_PROBE_SESSION_STATE_OWNERS.has(file.path)) {
+    if (!file.path.startsWith('src/daemon/') || owners.has(file.path)) {
       continue;
     }
     const program = parseSync(file.path, file.source).program as AstNode;
     visitAst(program, (node) => {
-      if (node['type'] !== 'Property' || node['kind'] !== 'init' || node['computed'] === true) {
-        return;
-      }
-      if (propertyName(node['key']) === 'audioProbe') {
+      if (
+        node['type'] === 'Property' &&
+        node['kind'] === 'init' &&
+        node['computed'] !== true &&
+        propertyName(node['key']) === field
+      ) {
         violations.push({
           file: file.path,
           line: lineOf(file.source, node),
-          message: 'session audioProbe record constructed outside its owner',
+          message: `session ${field} record constructed outside its owner`,
         });
       }
     });

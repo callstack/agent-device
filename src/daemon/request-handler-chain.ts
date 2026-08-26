@@ -16,6 +16,7 @@ import type {
 import type { DeviceClaimReconciler } from './device-claims.ts';
 import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
 import type { AudioProbeAdmissionLedger } from './audio-probe-admission-ledger.ts';
+import type { PerfCaptureAdmissionLedger } from './perf-capture-admission-ledger.ts';
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
@@ -46,6 +47,7 @@ type RequestHandlerChainParams = {
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
   audioProbeAdmissionLedger: AudioProbeAdmissionLedger;
+  perfCaptureAdmissionLedger: PerfCaptureAdmissionLedger;
   screenRecordingAdmissionLedger: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
   requestScope: PlatformRequestScope;
@@ -151,6 +153,7 @@ async function runSessionHandler(
       reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
       appLogAdmissionLedger: params.appLogAdmissionLedger,
       audioProbeAdmissionLedger: params.audioProbeAdmissionLedger,
+      perfCaptureAdmissionLedger: params.perfCaptureAdmissionLedger,
       screenRecordingAdmissionLedger: params.screenRecordingAdmissionLedger,
       hostDiagnostics: params.hostDiagnostics,
       requestScope: params.requestScope,

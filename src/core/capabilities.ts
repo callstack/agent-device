@@ -4,6 +4,11 @@ import { tryGetPlugin } from './platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
+// Retained as the empty tombstone named by the Wave 5 cutover rows: every former member is now
+// admitted from owner facts, so no HarmonyOS command gets a capability overlay.
+const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>();
+void HARMONYOS_SUPPORTED_COMMANDS;
+
 // Populate the PlatformPlugin registry once at module load (idempotent; registers
 // only lazy closures, so no leaf code is imported and CLI cold-start is unaffected
 // — mirrors the same call in `core/interactors.ts`). `isCommandSupportedOnDevice`
@@ -28,8 +33,6 @@ export type CommandCapability = {
   web?: KindMatrix;
 };
 
-const HARMONYOS_ALL: KindMatrix = { emulator: true, device: true };
-const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>(['perf']);
 // Built from the additive command-descriptor registry (ADR-0008, Phase 1 step 3).
 // The hand-authored literal was deleted after #906 proved deriveCapabilityMatrix is
 // byte-equal to it (platform/kind buckets). The per-command `supports()` /
@@ -41,22 +44,8 @@ const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>(['perf']);
 export const BASE_COMMAND_CAPABILITY_MATRIX: Record<string, CommandCapability> =
   deriveCapabilityMatrix(commandDescriptors);
 
-const COMMAND_CAPABILITY_MATRIX = addHarmonyCommandCapabilities(BASE_COMMAND_CAPABILITY_MATRIX);
-
-function addHarmonyCommandCapabilities(
-  matrix: Record<string, CommandCapability>,
-): Record<string, CommandCapability> {
-  const withHarmony: Record<string, CommandCapability> = {};
-  for (const [command, capability] of Object.entries(matrix)) {
-    withHarmony[command] = HARMONYOS_SUPPORTED_COMMANDS.has(command)
-      ? { ...capability, harmonyos: HARMONYOS_ALL }
-      : capability;
-  }
-  return withHarmony;
-}
-
 export function isCommandSupportedOnDevice(command: string, device: DeviceInfo): boolean {
-  const capability = COMMAND_CAPABILITY_MATRIX[command];
+  const capability = BASE_COMMAND_CAPABILITY_MATRIX[command];
   if (!capability) return true;
   // Platform -> capability-bucket selection flows through the single
   // PlatformPlugin registry (ADR-0009, Phase 3 step b.1): the bucket a leaf
@@ -132,7 +121,7 @@ export function listCapabilityCommands(): string[] {
  * everywhere) so callers can omit the signal.
  */
 export function supportedPlatformsForCommand(command: string): string[] {
-  const capability = COMMAND_CAPABILITY_MATRIX[command];
+  const capability = BASE_COMMAND_CAPABILITY_MATRIX[command];
   if (!capability) return [];
   const families: Array<keyof CommandCapability> = [
     'apple',

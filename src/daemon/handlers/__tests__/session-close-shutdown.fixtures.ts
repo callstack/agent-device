@@ -26,8 +26,8 @@ vi.mock('../../../platforms/apple/core/perf-xctrace.ts', async (importOriginal) 
     await importOriginal<typeof import('../../../platforms/apple/core/perf-xctrace.ts')>();
   return { ...actual, cleanupAppleXctracePerfCapture: vi.fn(async () => ({})) };
 });
-vi.mock('../../../platforms/android/perf.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/android/perf.ts')>();
+vi.mock('../../../platforms/android/perf-native.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../platforms/android/perf-native.ts')>();
   return { ...actual, cleanupAndroidNativePerfSession: vi.fn(async () => {}) };
 });
 vi.mock('../../../platforms/android/snapshot-helper.ts', async (importOriginal) => {
@@ -55,7 +55,7 @@ import { LeaseRegistry } from '../../lease-registry.ts';
 import { shutdownSimulator } from '../../../platforms/apple/core/simulator.ts';
 import { runCmd } from '../../../utils/exec.ts';
 import { cleanupAppleXctracePerfCapture } from '../../../platforms/apple/core/perf-xctrace.ts';
-import { cleanupAndroidNativePerfSession } from '../../../platforms/android/perf.ts';
+import { cleanupAndroidNativePerfSession } from '../../../platforms/android/perf-native.ts';
 import { stopAndroidSnapshotHelperSessionForDevice } from '../../../platforms/android/snapshot-helper.ts';
 import { stopIosRunnerSession } from '../../../platforms/apple/core/runner-client.ts';
 import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';

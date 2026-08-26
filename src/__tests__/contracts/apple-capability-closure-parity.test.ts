@@ -26,7 +26,7 @@ import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-
 // The equivalence gate for whatever Apple capability closures still exist. It began as the
 // ADR-0009 step d.5 table-equivalence test, pinning closures that had been rewritten to read a
 // per-`AppleOS` data table; R59 retired that table with its last reader (`alert`), so what
-// remains are the two closures that were never table-driven. The shape of the check is unchanged:
+// R64 retired the final perf closures. The shape of the check is unchanged:
 // each closure on the Apple plugin must return an identical boolean / identical hint STRING to an
 // INDEPENDENT verbatim copy of its contract, across the full {command x sample-device} matrix —
 // real discovery shapes for iOS/iPadOS/tvOS/macOS/visionOS plus the exhaustive synthetic
@@ -38,27 +38,13 @@ registerBuiltinPlatformPlugins();
 // Independent copies of the command capability contracts. This oracle stays independent of the
 // closures it pins (mirrors capability-plugin-routing-parity.test.ts).
 // ---------------------------------------------------------------------------
-const supportsCoreDevicePhysicalOperation = (device: DeviceInfo): boolean =>
-  device.platform !== 'apple' ||
-  device.kind !== 'device' ||
-  device.iosPhysicalDeviceBackend !== 'xctest';
-const coreDeviceOnlyPhysicalOperationHint = (device: DeviceInfo): string | undefined =>
-  supportsCoreDevicePhysicalOperation(device)
-    ? undefined
-    : 'This command requires a CoreDevice-backed physical iOS device. The selected XCTest backend supports open, close, interactions, snapshots, and screenshots.';
 // `home`/`keyboard`/`orientation`/`tv-remote` left with R42-R46, `clipboard` with R55,
 // `app-switcher` with R56, `settings` with R58 and `alert` with R59 — each cutover retiring its
 // AppleOS-table-reading closure along with its descriptor capability bucket. `alert` was the
 // table's last reader, so the table went with it; per-AppleOS admission now lives as owner facts
 // in `packages/platform-apple/src/runtime.ts` and its `system/`, `navigation/` siblings.
-const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
-  perf: supportsCoreDevicePhysicalOperation,
-  // `audio`'s standalone predicate left with R60: the owner packages state the capture cells as
-  // facts, so the plugin closure is gone and the key-set assertion pins `perf` alone.
-};
-const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
-  perf: coreDeviceOnlyPhysicalOperationHint,
-};
+const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {};
+const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {};
 
 // ---------------------------------------------------------------------------
 // The sample-device matrix: the real discovery fixtures (incl. the appleOs-bearing
@@ -125,8 +111,7 @@ test('resolveDeviceAppleOs prefers the stored discriminant, else infers from tar
 });
 
 test('Apple supports() closures match the independent command contracts', () => {
-  const appleSupports = getPlugin('apple').capability.supportsByDefault;
-  assert.ok(appleSupports, 'the Apple plugin carries supportsByDefault');
+  const appleSupports = getPlugin('apple').capability.supportsByDefault ?? {};
   // Every command that had an original predicate must still carry one, keyed the same.
   assert.deepEqual(Object.keys(appleSupports).sort(), Object.keys(SUPPORTS_REF).sort());
   for (const [command, reference] of Object.entries(SUPPORTS_REF)) {
@@ -143,8 +128,7 @@ test('Apple supports() closures match the independent command contracts', () => 
 });
 
 test('Apple unsupportedHint() closures match the independent contracts', () => {
-  const appleHints = getPlugin('apple').capability.unsupportedHintByDefault;
-  assert.ok(appleHints, 'the Apple plugin carries unsupportedHintByDefault');
+  const appleHints = getPlugin('apple').capability.unsupportedHintByDefault ?? {};
   assert.deepEqual(Object.keys(appleHints).sort(), Object.keys(HINT_REF).sort());
   for (const [command, reference] of Object.entries(HINT_REF)) {
     const relocated: ((device: DeviceInfo) => string | undefined) | undefined = appleHints[command];

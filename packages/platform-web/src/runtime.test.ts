@@ -42,6 +42,8 @@ test('preserves a narrow web provider dump including empty successful entries', 
     available: false,
     reason: 'unsupported-platform-leaf',
   });
+  expect(binding.facts.operations.perfMemorySample).toMatchObject({ available: false });
+  expect(binding.operations.perfMemorySample).toBeUndefined();
   expect(binding.facts.operations.networkDump).toEqual({ available: true });
   expect(binding.facts.operations.ensureReady).toMatchObject({ available: false });
   expect(binding.facts.operations.bootTarget).toMatchObject({ available: false });

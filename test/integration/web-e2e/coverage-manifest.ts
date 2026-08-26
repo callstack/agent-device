@@ -42,10 +42,6 @@ const contract = (path: string, test: string, assertion: string): WebPlatformCov
   level: 'command-contract',
   owner: { path, test },
 });
-const denial = (assertion: string): WebPlatformCoverageEntry => ({
-  assertion,
-  level: 'capability-denial',
-});
 const gap = (assertion: string): WebPlatformCoverageEntry => ({
   assertion,
   level: 'known-gap',
@@ -55,8 +51,8 @@ const gap = (assertion: string): WebPlatformCoverageEntry => ({
 /**
  * One primary, observable owner for every public command on the managed web target.
  *
- * Live rows are limited to the existing web-smoke scenario; they do not widen its scope. Capability
- * denials are derived from the web bucket in the command capability matrix. Contract rows do not
+ * Live rows are limited to the existing web-smoke scenario; they do not widen its scope. Contract
+ * rows do not
  * turn fixture-backed tests into live E2E claims, and cite one of two evidence shapes: a
  * web-specific unit/provider test exercising the command's own operation (e.g. `click`, `hover`);
  * or, for a command whose handler has no platform branch at all, a test proving its existing
@@ -113,7 +109,11 @@ export const WEB_PLATFORM_COVERAGE = {
     'preserves a narrow web provider dump including empty successful entries',
     'web runtime facts keep app state unavailable',
   ),
-  [C.perf]: denial('Web capability model rejects native performance inspection'),
+  [C.perf]: contract(
+    'packages/platform-web/src/runtime.test.ts',
+    'preserves a narrow web provider dump including empty successful entries',
+    'web runtime facts explicitly report native performance operations unavailable',
+  ),
   [C.logs]: contract(
     'packages/platform-web/src/runtime.test.ts',
     'logs reports the runtime-owned unavailable app-log facts',

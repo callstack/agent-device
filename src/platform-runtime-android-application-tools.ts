@@ -16,7 +16,7 @@ export function createAndroidApplicationTools(): AndroidApplicationTools {
       return await inferAndroidPackageAfterOpen(device, target, currentAppBundleId);
     },
     resetFramePerfStats: async (device, appBundleId) => {
-      const { resetAndroidFramePerfStats } = await import('./platforms/android/perf.ts');
+      const { resetAndroidFramePerfStats } = await import('./platforms/android/perf-frame.ts');
       await resetAndroidFramePerfStats(device, appBundleId);
     },
     applyRuntimeHints: async (device, input) => {

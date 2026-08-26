@@ -1,6 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { cleanupAppleXctracePerfCapture } from '../platforms/apple/core/perf-xctrace.ts';
 import { cleanupRetainedMaterializedPathsForSession } from './materialized-path-registry.ts';
 import type { SessionState } from './types.ts';
 import type { SessionStore } from './session-store.ts';
@@ -8,6 +7,7 @@ import { forceCleanupSessionAppLog } from './app-log-session-resource.ts';
 import { appLogResourceStore } from './app-log-resource-store.ts';
 import { finishLiveScreenRecording } from './screen-recording-session-resource.ts';
 import { finishLiveAudioProbe } from './audio-probe-session-resource.ts';
+import { finishLivePerfCapture } from './perf-capture-session-resource.ts';
 import { openWebSessionNames } from './web-session-names.ts';
 
 // Android cleanup helpers and the web managed-browser provider stay behind dynamic imports: every
@@ -31,18 +31,14 @@ export async function stopSessionAppLog(params: {
   });
 }
 
-export async function stopSessionApplePerfCapture(session: SessionState): Promise<void> {
-  if (!session.applePerf?.active) return;
-  await cleanupAppleXctracePerfCapture(session.applePerf.active);
-  session.applePerf = { ...(session.applePerf ?? {}), active: undefined };
-}
-
-export async function stopSessionAndroidNativePerfCapture(session: SessionState): Promise<void> {
-  const active = session.nativePerf?.android;
-  if (!active) return;
-  const { cleanupAndroidNativePerfSession } = await import('../platforms/android/perf.ts');
-  await cleanupAndroidNativePerfSession(session.device, active);
-  session.nativePerf = { ...(session.nativePerf ?? {}), android: undefined };
+export async function stopSessionPerfCapture(params: {
+  session: SessionState;
+  sessionName: string;
+  sessionStore: SessionStore;
+}): Promise<void> {
+  const currentSession = params.sessionStore.get(params.sessionName) ?? params.session;
+  if (!currentSession.perfCapture) return;
+  await finishLivePerfCapture({ ...params, session: currentSession });
 }
 
 export async function stopSessionAndroidSnapshotHelper(session: SessionState): Promise<void> {
@@ -176,8 +172,10 @@ export async function teardownSessionResources(
       step: 'audio_probe',
       run: () => finishSessionAudioProbe({ session, sessionName, sessionStore }),
     },
-    { step: 'apple_perf', run: () => stopSessionApplePerfCapture(session) },
-    { step: 'android_native_perf', run: () => stopSessionAndroidNativePerfCapture(session) },
+    {
+      step: 'perf_capture',
+      run: () => stopSessionPerfCapture({ session, sessionName, sessionStore }),
+    },
     { step: 'android_snapshot_helper', run: () => stopSessionAndroidSnapshotHelper(session) },
     // Runs after the resource steps above (recording, app-log, audio, perf) so nothing is still
     // reading through the browser when it closes, mirroring the ordering `runSessionCloseTeardown`

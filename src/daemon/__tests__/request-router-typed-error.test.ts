@@ -29,7 +29,6 @@ import {
 } from '../../__tests__/test-utils/session-factories.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, retriableForErrorCode } from '@agent-device/kernel/errors';
-import { supportedPlatformsForCommand } from '../../core/capabilities.ts';
 
 const mockLifecycleEffect = vi.mocked(dispatchApplicationLifecycleEffect);
 
@@ -95,12 +94,10 @@ test('retriableForErrorCode is a conservative policy: transient => true, others 
   expect(retriableForErrorCode('COMMAND_FAILED')).toBeUndefined();
 });
 
-test('UNSUPPORTED_OPERATION errors carry supportedOn derived from the capability matrix', async () => {
+test('fact-owned UNSUPPORTED_OPERATION errors do not fabricate legacy supportedOn metadata', async () => {
   const { sessionStore, handler } = makeHandler();
-  // `perf` is the subject because the graft reads the CAPABILITY MATRIX, and perf is the command
-  // that still has a row there: its migration is Wave 2, sequenced behind the next major. Its
-  // xctrace collector refuses a non-Apple session in production, so no mocking is needed to reach
-  // a real UNSUPPORTED_OPERATION.
+  // Linux refuses native perf from exact runtime facts. The retired capability matrix has no
+  // trustworthy platform summary to graft onto that operation-level refusal.
   sessionStore.set(
     'typed-error',
     makeSession('typed-error', {
@@ -121,9 +118,7 @@ test('UNSUPPORTED_OPERATION errors carry supportedOn derived from the capability
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
-  const expected = supportedPlatformsForCommand('perf');
-  expect(expected.length).toBeGreaterThan(0); // perf is a platform-restricted command
-  expect(response.error.supportedOn).toBe(expected.join(', '));
+  expect(response.error.supportedOn).toBeUndefined();
 });
 
 test('DEVICE_IN_USE errors are flagged retriable; supportedOn stays absent', async () => {

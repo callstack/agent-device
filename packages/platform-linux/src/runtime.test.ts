@@ -100,6 +100,8 @@ test.each([
     expect(binding.facts.operations.bootTarget).toMatchObject({ available: false });
     expect(binding.facts.operations.bootTargetHeadless).toMatchObject({ available: false });
     expect(binding.facts.operations.appState).toMatchObject({ available: false });
+    expect(binding.facts.operations.perfMemorySample).toMatchObject({ available: false });
+    expect(binding.operations.perfMemorySample).toBeUndefined();
     expect(binding.facts.operations.listApps).toMatchObject({ available: false });
     expect(binding.facts.operations.captureSnapshot.available).toBe(device.kind === 'device');
     // The Linux read is value-first where the captured tree is label-first, so the desktop row

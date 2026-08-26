@@ -2,6 +2,7 @@ import type { MigratedCommandCutover } from './runtime-command-cutover-model.ts'
 import {
   audioProbeSessionStateOwnershipViolations,
   doctorHostDiagnosticsViolations,
+  perfCaptureSessionStateOwnershipViolations,
   retiredDispatchProjectionProof,
 } from './runtime-command-cutover-extensions.ts';
 
@@ -251,6 +252,65 @@ export const WAVE_6_COMMAND_CUTOVERS: readonly MigratedCommandCutover[] = [
       },
     },
     lifecycleProof: audioProbeSessionStateOwnershipViolations,
+  },
+  {
+    rule: 'R64 perf-runtime-cutover',
+    command: 'perf',
+    subject: 'performance capture and observations',
+    tier: 'durable-resource',
+    execution: 'device-runtime',
+    legacyRetirement: {
+      modulePaths: [
+        'src/daemon/handlers/session-perf.ts',
+        'src/daemon/handlers/session-native-perf.ts',
+        'src/daemon/handlers/session-perf-xctrace.ts',
+      ],
+      routeNames: [
+        'stopSessionApplePerfCapture',
+        'stopSessionAndroidNativePerfCapture',
+        'addHarmonyCommandCapabilities',
+      ],
+      pluginFacetKeys: ['perf'],
+    },
+    admissionMember: {
+      forms: ['computed-property'],
+      files: ['src/platforms/apple/plugin.ts', 'src/core/interactors/register-builtins.ts'],
+      message: 'A plugin retains a legacy perf support or hint closure',
+    },
+    runtimeTypeNames: ['PerfRuntimeOperations', 'PerfNativeCaptureLiveHandle'],
+    operations: {
+      names: [
+        'perfFrames',
+        'perfMemorySample',
+        'perfMemorySnapshot',
+        'perfNativeCaptureStart',
+        'perfNativeCaptureReattach',
+        'perfNativeCaptureCleanup',
+        'perfProfileReport',
+      ],
+    },
+    singularExecution: {
+      routes: ['handlePerfRuntimeCommand', 'recoverPerfCaptureResourceAfterDaemonLock'],
+      operations: [
+        'perfFrames',
+        'perfMemorySample',
+        'perfMemorySnapshot',
+        'perfNativeCaptureStart',
+        'perfNativeCaptureReattach',
+        'perfNativeCaptureCleanup',
+        'perfProfileReport',
+      ],
+      operationOwners: {
+        perfFrames: ['executeAdmittedPerfPlan'],
+        perfMemorySample: ['executeAdmittedPerfPlan'],
+        perfMemorySnapshot: ['executeAdmittedPerfPlan'],
+        perfNativeCaptureStart: ['startPerfCapture'],
+        perfNativeCaptureReattach: ['createPerfCaptureRecoveryControl'],
+        perfNativeCaptureCleanup: ['createPerfCaptureRecoveryControl'],
+        perfProfileReport: ['executeAdmittedPerfPlan'],
+      },
+    },
+    lifecycleProof: perfCaptureSessionStateOwnershipViolations,
   },
   {
     rule: 'R62 doctor-host-cutover',

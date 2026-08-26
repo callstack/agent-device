@@ -33,6 +33,7 @@ import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboar
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
+import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 import { localRuntimeOwner, whenAdmitted } from '@agent-device/contracts/platform-runtime';
 import {
   bindLocalScreenshotInteractor,
@@ -55,6 +56,7 @@ import {
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHarmonyAppLogRuntime } from './logs/runtime.ts';
+import { createHarmonyPerfOperations } from './perf/runtime.ts';
 import {
   createHarmonyScreenRecordingOperations,
   harmonyScreenRecordingFacts,
@@ -316,6 +318,13 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
           capture: audioProbeUnavailable,
           query: audioProbeUnavailable,
         }),
+        ...perfRuntimeOperationFacts({
+          frames: harmonyFocusFact(device),
+          memorySample: harmonyFocusFact(device),
+          memorySnapshot: harmonyFocusFact(device),
+          nativeCapture: harmonyPlatformLeafUnavailable,
+          profileReport: harmonyPlatformLeafUnavailable,
+        }),
         ensureReady: available,
         bootTarget: unavailable,
         bootTargetHeadless: unavailable,
@@ -410,6 +419,12 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
             resolveInteractor: host.localInteractors.resolve,
             facts: facts.operations,
           }),
+          ...whenAdmitted(facts.operations.perfFrames, () =>
+            createHarmonyPerfOperations({
+              resolveHost: () => host.perf.harmony,
+              device: request.device,
+            }),
+          ),
           ...whenAdmitted(facts.operations.tapPoint, () =>
             bindLocalTouchInteractor({
               device: request.device,

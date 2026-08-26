@@ -35,6 +35,8 @@ import type { SettingsRuntimeOperations } from './settings-runtime.ts';
 import type { AlertRuntimeOperations } from './alert-runtime.ts';
 import type { AudioProbeRuntimeOperations } from './audio-probe-runtime.ts';
 import type { AudioProbeRuntimeHost } from './audio-probe-runtime-host.ts';
+import type { PerfRuntimeOperations } from './perf-runtime.ts';
+import type { PerfRuntimeHost } from './perf-runtime-host.ts';
 import type { TouchRuntimeOperations } from './touch-runtime.ts';
 import type {
   DeviceReadinessRuntimeHost,
@@ -85,6 +87,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   SettingsRuntimeOperations &
   AlertRuntimeOperations &
   AudioProbeRuntimeOperations &
+  PerfRuntimeOperations &
   TouchRuntimeOperations &
   DeviceReadinessRuntimeOperations &
   DeviceShutdownRuntimeOperations &
@@ -123,6 +126,22 @@ export const alertAcceptUse = defineUse({ required: ['acceptAlert'] });
 export const alertDismissUse = defineUse({ required: ['dismissAlert'] });
 export const clipboardReadUse = defineUse({ required: ['readClipboard'] });
 export const clipboardWriteUse = defineUse({ required: ['writeClipboard'] });
+export const perfFramesUse = defineUse({ required: ['perfFrames'] });
+export const perfMemorySampleUse = defineUse({ required: ['perfMemorySample'] });
+export const perfMemorySnapshotUse = defineUse({ required: ['perfMemorySnapshot'] });
+export const perfNativeCaptureStartUse = defineUse({ required: ['perfNativeCaptureStart'] });
+export const perfNativeCaptureRecoveryUse = defineUse({
+  required: ['perfNativeCaptureReattach', 'perfNativeCaptureCleanup'],
+});
+export const perfProfileReportUse = defineUse({ required: ['perfProfileReport'] });
+export const perfRuntimePlanUses = Object.freeze([
+  perfFramesUse,
+  perfMemorySampleUse,
+  perfMemorySnapshotUse,
+  perfNativeCaptureStartUse,
+  perfNativeCaptureRecoveryUse,
+  perfProfileReportUse,
+] as const);
 export const tapPointUse = defineUse({ required: ['tapPoint'] });
 export const capturedTapUse = defineUse({
   required: ['captureSnapshot', 'tapPoint'],
@@ -696,6 +715,7 @@ export type PlatformRuntimeHost = AppLogRuntimeHost &
     }>;
     screenRecording: ScreenRecordingRuntimeHost;
     audioProbe: AudioProbeRuntimeHost;
+    perf: PerfRuntimeHost;
     snapshot: SnapshotRuntimeHost;
     deviceReadiness: DeviceReadinessRuntimeHost;
     deviceShutdown: DeviceShutdownRuntimeHost;

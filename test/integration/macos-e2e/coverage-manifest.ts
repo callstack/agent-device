@@ -87,9 +87,9 @@ export const MACOS_PLATFORM_COVERAGE = {
   [C.shutdown]: gap('No command-specific macOS shutdown evidence exists yet'),
   [C.appState]: live('replay:system-settings', 'the System Settings replay reads macOS app state'),
   [C.perf]: contract(
-    'src/daemon/handlers/__tests__/session-appstate-input-perf.test.ts',
-    'perf memory samples macOS app sessions',
-    'macOS app memory sampling returns typed performance data',
+    'packages/platform-apple/src/runtime.test.ts',
+    'classifies the %s leaf explicitly',
+    'macOS performance operations are admitted from runtime facts and expose lazy closures',
   ),
   [C.logs]: live('provider:macos-desktop', 'the provider scenario returns the macOS app log path'),
   [C.events]: gap('No command-specific macOS event timeline evidence exists yet'),

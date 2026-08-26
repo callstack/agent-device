@@ -1,19 +1,4 @@
-import {
-  isPerfAction,
-  isPerfArea,
-  isPerfKind,
-  isPerfMemoryKind,
-  isRemovedAggregatePerfToken,
-  PERF_ACTION_ERROR_MESSAGE,
-  PERF_AGGREGATE_REMOVED_ERROR_MESSAGE,
-  PERF_AREA_ERROR_MESSAGE,
-  PERF_KIND_ERROR_MESSAGE,
-  PERF_MEMORY_KIND_ERROR_MESSAGE,
-  type LogBackend,
-  type PerfAction,
-  type PerfArea,
-  type PerfKind,
-} from '@agent-device/contracts/observability';
+import type { LogBackend } from '@agent-device/contracts/observability';
 import type {
   AppLogFailure,
   AppLogRuntimeOperations,
@@ -29,6 +14,7 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../app-log.ts';
 import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import type { AudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
+import type { PerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
 import { appLogResourceStore } from '../app-log-resource-store.ts';
 import {
   adoptStartedSessionAppLog,
@@ -40,28 +26,21 @@ import {
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { SessionStore } from '../session-store.ts';
-import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from '../types.ts';
+import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';
 import { handleAudioCommand } from './session-audio.ts';
-import { handleNativePerfCommand as handleAndroidNativePerfCommand } from './session-native-perf.ts';
-import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
-import { buildPerfFramesResponseData, buildPerfMemoryResponseData } from './session-perf.ts';
+import { handlePerfRuntimeCommand } from './session-perf-runtime.ts';
 import { handleNetworkCommand } from './session-network.ts';
 
 type ObservabilityParams = {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
-  /**
-   * Request-scoped Android adb transport override, opaque to the daemon (the
-   * `transportOverrides` pattern from `@agent-device/contracts/host-diagnostics`); narrowed
-   * only at the perf-handler boundary below.
-   */
-  androidAdbExecutor?: unknown;
   bindDevice?: BindDeviceRuntime;
   inspectFacts?: InspectDeviceRuntimeFacts;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
   audioProbeAdmissionLedger?: AudioProbeAdmissionLedger;
+  perfCaptureAdmissionLedger?: PerfCaptureAdmissionLedger;
   throwIfCanceled?: () => void;
 };
 type LogsHandlerParams = Omit<ObservabilityParams, 'bindDevice' | 'appLogAdmissionLedger'> & {
@@ -129,7 +108,10 @@ export async function handleSessionObservabilityCommands(
   const { req } = params;
 
   if (req.command === 'perf') {
-    return handlePerfCommand(params);
+    return await handlePerfRuntimeCommand({
+      ...params,
+      throwIfCanceled: params.throwIfCanceled ?? (() => {}),
+    });
   }
   if (req.command === 'logs') {
     return handleLogsCommand(params);
@@ -161,198 +143,6 @@ async function handleEventsCommand(params: ObservabilityParams): Promise<DaemonR
   } catch (error) {
     return { ok: false, error: normalizeError(error) };
   }
-}
-
-// ---------------------------------------------------------------------------
-// perf
-// ---------------------------------------------------------------------------
-
-// The perf handlers are being rewritten in the in-flight perf/trace migration and still name
-// the concrete Android transport type; the opaque request-scoped override narrows to their own
-// declared parameter type at this boundary only (see #2041).
-type PerfAndroidAdbTransport = NonNullable<
-  Parameters<typeof buildPerfFramesResponseData>[1]
->['androidAdb'];
-
-async function handlePerfCommand(params: ObservabilityParams): Promise<DaemonResponse> {
-  const { req, sessionName, sessionStore, androidAdbExecutor } = params;
-  const session = sessionStore.get(sessionName);
-  if (!session) {
-    return errorResponse('SESSION_NOT_FOUND', 'perf requires an active session. Run open first.');
-  }
-
-  const request = resolvePerfCommandRequest(req);
-  if (!request.ok) return request;
-  if (request.native) {
-    if (session.device.platform === 'android') {
-      return await handleAndroidNativePerfCommand({
-        req,
-        sessionName,
-        sessionStore,
-        session,
-        androidAdbExecutor: androidAdbExecutor as PerfAndroidAdbTransport,
-        area: request.area,
-      });
-    }
-    return await handleAppleNativePerfCommand(params, session);
-  }
-
-  try {
-    return {
-      ok: true,
-      data: await buildPerfCommandData(params, session, request),
-    };
-  } catch (error) {
-    return { ok: false, error: normalizeError(error) };
-  }
-}
-
-type PerfCommandRequest =
-  | {
-      ok: true;
-      native: true;
-      area: 'cpu' | 'trace';
-    }
-  | {
-      ok: true;
-      native: false;
-      area: 'frames';
-    }
-  | {
-      ok: true;
-      native: false;
-      area: 'memory';
-      action: 'sample' | 'snapshot';
-      kind?: PerfKind;
-      out?: string;
-    };
-
-function resolvePerfCommandRequest(req: DaemonRequest): PerfCommandRequest | DaemonFailureResponse {
-  const area = readPerfArea(req.positionals?.[0]);
-  if (area instanceof AppError) {
-    return { ok: false, error: normalizeError(area) };
-  }
-  if (area === 'cpu' || area === 'trace') {
-    return { ok: true, native: true, area };
-  }
-
-  const action = readPerfAction(req.positionals?.[1]);
-  if (!action) {
-    return errorResponse('INVALID_ARGS', PERF_ACTION_ERROR_MESSAGE);
-  }
-
-  const kind = readPerfKind(req.flags?.kind);
-  if (kind instanceof AppError) return { ok: false, error: normalizeError(kind) };
-  return validatePerfAreaAction(req, area, action, kind);
-}
-
-async function buildPerfCommandData(
-  params: ObservabilityParams,
-  session: SessionState,
-  request: Extract<PerfCommandRequest, { native: false }>,
-): Promise<DaemonResponseData> {
-  const { sessionName, sessionStore, androidAdbExecutor } = params;
-  if (request.area === 'memory') {
-    return await buildPerfMemoryResponseData(session, {
-      action: request.action,
-      kind: request.kind,
-      out: request.out,
-      cwd: params.req.meta?.cwd,
-      sessionName,
-      sessionStore,
-      androidAdb: androidAdbExecutor as PerfAndroidAdbTransport,
-    });
-  }
-  return await buildPerfFramesResponseData(session, {
-    androidAdb: androidAdbExecutor as PerfAndroidAdbTransport,
-  });
-}
-
-function readPerfArea(value: unknown): PerfArea | AppError {
-  if (isRemovedAggregatePerfToken(value)) {
-    return new AppError('INVALID_ARGS', PERF_AGGREGATE_REMOVED_ERROR_MESSAGE);
-  }
-  const area = typeof value === 'string' ? value.toLowerCase() : '';
-  return isPerfArea(area) ? area : new AppError('INVALID_ARGS', PERF_AREA_ERROR_MESSAGE);
-}
-
-function readPerfAction(value: unknown): PerfAction | undefined {
-  const action = (value ?? 'sample').toString().toLowerCase();
-  return isPerfAction(action) ? action : undefined;
-}
-
-function readPerfKind(value: unknown): PerfKind | undefined | AppError {
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string' || !isPerfKind(value)) {
-    return new AppError('INVALID_ARGS', PERF_KIND_ERROR_MESSAGE);
-  }
-  return value;
-}
-
-function validatePerfAreaAction(
-  req: DaemonRequest,
-  area: Exclude<PerfArea, 'cpu' | 'trace'>,
-  action: PerfAction,
-  kind: PerfKind | undefined,
-): Exclude<PerfCommandRequest, { native: true }> | DaemonFailureResponse {
-  if (area === 'frames') {
-    if (action !== 'sample') {
-      return errorResponse('INVALID_ARGS', 'perf frames only supports sample');
-    }
-    const flagError = validatePerfFlags(req, area, action, kind);
-    return flagError ?? { ok: true, native: false, area };
-  }
-  if (action !== 'sample' && action !== 'snapshot') {
-    return errorResponse('INVALID_ARGS', 'perf memory requires sample or snapshot');
-  }
-  const flagError = validatePerfFlags(req, area, action, kind);
-  return (
-    flagError ?? {
-      ok: true,
-      native: false,
-      area,
-      action,
-      kind,
-      out: readOptionalStringFlag(req.flags?.out),
-    }
-  );
-}
-
-function validatePerfFlags(
-  req: DaemonRequest,
-  area: Exclude<PerfArea, 'cpu' | 'trace'>,
-  action: PerfAction,
-  kind: PerfKind | undefined,
-): DaemonFailureResponse | undefined {
-  return (
-    validatePerfOutFlag(req.flags?.out, area, action) ?? validatePerfKindFlag(kind, area, action)
-  );
-}
-
-function validatePerfOutFlag(
-  out: unknown,
-  area: Exclude<PerfArea, 'cpu' | 'trace'>,
-  action: PerfAction,
-): DaemonFailureResponse | undefined {
-  if (!out || (area === 'memory' && action === 'snapshot')) return undefined;
-  return errorResponse('INVALID_ARGS', '--out is only supported with perf memory snapshot');
-}
-
-function validatePerfKindFlag(
-  kind: PerfKind | undefined,
-  area: Exclude<PerfArea, 'cpu' | 'trace'>,
-  action: PerfAction,
-): DaemonFailureResponse | undefined {
-  if (!kind) return undefined;
-  if (area !== 'memory' || action !== 'snapshot') {
-    return errorResponse('INVALID_ARGS', '--kind is only supported with perf memory snapshot');
-  }
-  if (isPerfMemoryKind(kind)) return undefined;
-  return errorResponse('INVALID_ARGS', PERF_MEMORY_KIND_ERROR_MESSAGE);
-}
-
-function readOptionalStringFlag(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 // ---------------------------------------------------------------------------

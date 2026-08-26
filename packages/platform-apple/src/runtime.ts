@@ -46,8 +46,10 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
+import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit';
 import { appleAudioProbeCaptureFact } from './audio/runtime.ts';
+import { createApplePerfOperations } from './perf/runtime.ts';
 import { appleGestureAndScrollFacts } from './gesture-facts.ts';
 import { createAppleAppLogRuntime } from './logs/runtime.ts';
 import { dumpAppleNetworkTraffic } from './network/runtime.ts';
@@ -84,6 +86,11 @@ const audioQueryUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
   hint: 'the stateless audio page probe is a web-session operation; Apple targets use the host capture.',
+} as const);
+const perfUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-backend',
+  hint: 'perf requires an Apple simulator, macOS device, or CoreDevice-backed physical Apple device.',
 } as const);
 /**
  * Focus drives touch through the Apple interactor, which exists for the simulator and physical
@@ -318,6 +325,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           capture: appleAudioProbeCaptureFact(device),
           query: audioQueryUnavailable,
         }),
+        ...perfRuntimeOperationFacts(applePerfFacts(device)),
         ensureReady: readiness,
         bootTarget: boot,
         bootTargetHeadless: headlessUnavailable,
@@ -355,6 +363,13 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ...whenAdmitted(facts.operations.audioProbeStart, () =>
           createHostAudioProbeCaptureOperations({
             host: host.audioProbe.hostCapture,
+            device: request.device,
+            owner,
+          }),
+        ),
+        ...whenAdmitted(facts.operations.perfFrames, () =>
+          createApplePerfOperations({
+            resolveHost: () => host.perf.apple,
             device: request.device,
             owner,
           }),
@@ -477,6 +492,25 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
     },
     shutdown: async () => await appLogs.shutdown(),
   });
+}
+
+function applePerfFacts(device: DeviceInfo): Readonly<{
+  frames: RuntimeOperationFact;
+  memorySample: RuntimeOperationFact;
+  memorySnapshot: RuntimeOperationFact;
+  nativeCapture: RuntimeOperationFact;
+  profileReport: RuntimeOperationFact;
+}> {
+  const supported =
+    device.iosPhysicalDeviceBackend !== 'xctest' && resolveDeviceAppleOs(device) !== 'watchos';
+  const fact = supported ? available : perfUnavailable;
+  return {
+    frames: fact,
+    memorySample: fact,
+    memorySnapshot: fact,
+    nativeCapture: fact,
+    profileReport: fact,
+  };
 }
 
 /**

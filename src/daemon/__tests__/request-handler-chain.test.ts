@@ -25,6 +25,7 @@ import {
 } from './test-device-runtime-gateway.ts';
 import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
+import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
 
 function makeRequest(command: string, positionals: string[] = []): DaemonRequest {
   return {
@@ -57,6 +58,7 @@ function makeChainParams(req: DaemonRequest) {
     }),
     screenRecordingAdmissionLedger: createScreenRecordingAdmissionLedger(),
     audioProbeAdmissionLedger: createAudioProbeAdmissionLedger(),
+    perfCaptureAdmissionLedger: createPerfCaptureAdmissionLedger(),
     requestScope: {
       signal: new AbortController().signal,
       diagnostics: { emit: () => {} },

@@ -205,6 +205,7 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     keyboardEnter: keyboardUnavailable,
     audioProbeCapture: audioProbeUnavailable,
     audioProbeQuery: audioProbeUnavailable,
+    perf: unsupportedPlatformLeaf,
     readiness: unsupportedPlatformLeaf,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: openTarget,

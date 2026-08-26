@@ -532,6 +532,7 @@ function webDriverFacts(
       dismissAlert: inactiveSession,
       audioProbeCapture: inactiveSession,
       audioProbeQuery: inactiveSession,
+      perf: inactiveSession,
       lifecycle: applicationLifecycleOperationFacts({
         resolveOpenTarget: inactiveSession,
         prepareApplicationOpen: inactiveSession,
@@ -577,6 +578,7 @@ function webDriverFacts(
     dismissAlert: alertUnavailable,
     audioProbeCapture: audioProbeUnavailable,
     audioProbeQuery: audioProbeUnavailable,
+    perf: audioProbeUnavailable,
     lifecycle: webDriverLifecycleFacts(device),
   });
   // Both capture cells need the same reachability: an interactor this provider can drive, on a

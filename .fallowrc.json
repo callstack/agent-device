@@ -61,6 +61,11 @@
   ],
   "ignoreExports": [
     {
+      "comment": "Android perf mechanics are selected through the lazy platform host so importing agent-device does not eagerly load adb mechanics. Fallow cannot follow the dynamic property read in src/platform-runtime-perf-host.ts.",
+      "file": "src/platforms/android/perf.ts",
+      "exports": ["sampleAndroidMemoryPerf"]
+    },
+    {
       "comment": "Daemon route handlers are reached only through the dynamic `import()` table in request-handler-chain.ts, which --production analysis cannot follow to a consumer.",
       "file": "src/daemon/handlers/{lease,session,snapshot,react-native,record-trace,find,interaction}.ts",
       "exports": [

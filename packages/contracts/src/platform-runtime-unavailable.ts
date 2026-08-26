@@ -30,6 +30,7 @@ import { appEventRuntimeOperationFacts } from './app-event-runtime.ts';
 import { settingsRuntimeOperationFacts } from './settings-runtime.ts';
 import { alertRuntimeOperationFacts } from './alert-runtime.ts';
 import { audioProbeRuntimeOperationFacts } from './audio-probe-runtime.ts';
+import { perfRuntimeOperationFacts } from './perf-runtime.ts';
 import { touchRuntimeOperationFacts } from './touch-runtime.ts';
 
 /**
@@ -70,6 +71,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   dismissAlert: RuntimeOperationUnavailability;
   audioProbeCapture: RuntimeOperationUnavailability;
   audioProbeQuery: RuntimeOperationUnavailability;
+  perf?: RuntimeOperationUnavailability;
   readiness?: RuntimeOperationUnavailability;
   shutdown?: RuntimeOperationUnavailability;
   lifecycle: ApplicationLifecycleOperationFacts;
@@ -137,6 +139,7 @@ export function createUnavailablePlatformRuntimeFacts(
     dismissAlert,
     audioProbeCapture,
     audioProbeQuery,
+    perf,
     readiness,
     shutdown,
     lifecycle,
@@ -220,6 +223,13 @@ export function createUnavailablePlatformRuntimeFacts(
         capture: audioProbeCapture,
         query: audioProbeQuery,
       }),
+      ...perfRuntimeOperationFacts({
+        frames: perf,
+        memorySample: perf,
+        memorySnapshot: perf,
+        nativeCapture: perf,
+        profileReport: perf,
+      }),
       ensureReady: readiness,
       bootTarget: readiness,
       bootTargetHeadless: readiness,
@@ -289,6 +299,9 @@ function freezeUnavailableFacts(
     // different families entirely, so neither may inherit a transport gap.
     audioProbeCapture: Object.freeze({ ...unavailable.audioProbeCapture }),
     audioProbeQuery: Object.freeze({ ...unavailable.audioProbeQuery }),
+    // Perf starts native tools and may create a durable capture. Every exact owner states the
+    // gap rather than inheriting a transport failure that could imply local-tool fallthrough.
+    perf: orNetwork(unavailable.perf),
     lifecycle: applicationLifecycleOperationFacts(unavailable.lifecycle),
   });
 }

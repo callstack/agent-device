@@ -51,9 +51,6 @@ const LINUX_RUNTIME_EVIDENCE: RepositoryEvidence = {
   test: 'classifies the Linux $name lifecycle denominator against the legacy dispatch cell',
 };
 
-const LINUX_CAPABILITY_DECLARATION_PATH = 'src/core/command-descriptor/registry.ts';
-const LINUX_CAPABILITY_DECLARATION = 'linux: LINUX_NONE';
-
 const C = PUBLIC_COMMANDS;
 const live = (
   assertion: string,
@@ -69,15 +66,6 @@ const contract = (path: string, test: string, assertion: string): LinuxPlatformC
   assertion,
   level: 'command-contract',
   owner: { path, test },
-});
-const denial = (command: string, assertion: string): LinuxPlatformCoverageEntry => ({
-  assertion,
-  level: 'capability-denial',
-  owner: {
-    path: LINUX_CAPABILITY_DECLARATION_PATH,
-    test: `name: '${command}'`,
-    declaration: LINUX_CAPABILITY_DECLARATION,
-  },
 });
 const gap = (assertion: string): LinuxPlatformCoverageEntry => ({
   assertion,
@@ -124,7 +112,11 @@ export const LINUX_PLATFORM_COVERAGE = {
     LINUX_RUNTIME_EVIDENCE.test,
     'Linux runtime facts explicitly report app state unavailable',
   ),
-  [C.perf]: denial('perf', 'Linux capability declaration rejects native performance inspection'),
+  [C.perf]: contract(
+    LINUX_RUNTIME_EVIDENCE.path,
+    LINUX_RUNTIME_EVIDENCE.test,
+    'Linux runtime facts explicitly report native performance operations unavailable',
+  ),
   [C.logs]: gap('No Linux-specific app-log command evidence exists yet'),
   [C.events]: commandEvidenceLive(
     'the command-evidence lane reads the event timeline produced by its Linux session',

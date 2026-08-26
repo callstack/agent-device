@@ -1,4 +1,4 @@
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import {
   sessionCloseShutdownFixture,
   type SessionState,
@@ -15,7 +15,6 @@ const {
   makeSession,
   makeSessionStore,
   mkdtempForTestSync,
-  mockCleanupAndroidNativePerfSession,
   mockDispatchCommand,
   mockStopIosRunnerSession,
   noopInvoke,
@@ -213,29 +212,26 @@ test('a failing best-effort cleanup also retains the device claim and reports it
     const session = {
       ...makeSession(sessionName, device),
       appBundleId: 'com.example.app',
-      nativePerf: {
-        android: {
-          type: 'trace',
-          kind: 'perfetto',
-          packageName: 'com.example.app',
-          appPid: '1234',
-          profilerPid: '5678',
-          remotePath: '/data/misc/perfetto-traces/app.perfetto-trace',
-          outPath: '/tmp/app.perfetto-trace',
-          startedAt: Date.now(),
-          state: 'running',
-        },
-      },
       deviceClaim: acquired.ownership,
-    } as unknown as SessionState;
+    } as SessionState;
+    session.perfCapture = {
+      handle: {
+        inspect: () => ({ kind: 'perfetto', mode: 'trace' }),
+        setOutputPath: () => {},
+        finish: vi.fn(async () => {
+          throw new AppError('COMMAND_FAILED', 'perfetto stop failed');
+        }),
+        forceCleanup: async () => ({ status: 'cleaned' }),
+        [Symbol.asyncDispose]: async () => {},
+      },
+      envelope: {} as SessionState['perfCapture'] extends { envelope: infer Envelope }
+        ? Envelope
+        : never,
+    };
     sessionStore.set(sessionName, session);
 
     // The platform close itself succeeds; only the best-effort cleanup step fails, so the
     // blocking error arrives as the cleanup aggregate rather than as platformCloseError.
-    mockCleanupAndroidNativePerfSession.mockRejectedValueOnce(
-      new AppError('COMMAND_FAILED', 'perfetto stop failed'),
-    );
-
     const diagnosticsLogPath = path.join(claimsRoot, 'diagnostics.ndjson');
     const thrown = await withDiagnosticsScope(
       { session: sessionName, command: 'close', logPath: diagnosticsLogPath },
@@ -266,7 +262,7 @@ test('a failing best-effort cleanup also retains the device claim and reports it
     expect(thrown).toMatchObject({
       details: expect.objectContaining({
         reason: 'session_cleanup_incomplete',
-        failedSteps: ['android_native_perf'],
+        failedSteps: ['perf_capture'],
       }),
     });
     expect(sessionStore.get(sessionName)).toBeUndefined();

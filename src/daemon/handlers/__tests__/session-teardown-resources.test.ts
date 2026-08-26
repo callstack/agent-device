@@ -11,8 +11,6 @@ const {
   makeIosSimulatorRecordingSession,
   makeSession,
   makeSessionStore,
-  mockCleanupAndroidNativePerfSession,
-  mockCleanupAppleXctracePerfCapture,
   mockRunCmd,
   mockStopAndroidSnapshotHelperSessionForDevice,
   mockStopIosRunnerSession,
@@ -33,43 +31,6 @@ beforeEach(resetSessionCloseShutdownMocks);
 function agentBrowserJsonResult(value: unknown, exitCode = 0) {
   return { stdout: JSON.stringify(value), stderr: '', exitCode };
 }
-
-test('daemon session teardown stops active Apple xctrace perf capture', async () => {
-  const sessionName = 'ios-active-xctrace-teardown-session';
-  const activeCapture = {
-    kind: 'xctrace',
-    mode: 'cpu-profile',
-    template: 'Time Profiler',
-    outPath: '/tmp/app.trace',
-    appBundleId: 'com.example.app',
-    deviceId: 'sim-udid-5',
-    platform: 'ios',
-    targetPids: [111],
-    targetProcesses: ['Example'],
-    startedAt: '2026-04-01T10:00:00.000Z',
-    child: { kill: vi.fn(() => true), pid: 1234 },
-    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-  };
-  const session = {
-    ...makeSession(sessionName, {
-      platform: 'apple',
-      id: 'sim-udid-5',
-      name: 'iPhone 15',
-      kind: 'simulator',
-      booted: true,
-    }),
-    appBundleId: 'com.example.app',
-    applePerf: {
-      active: activeCapture,
-    },
-  } as unknown as SessionState;
-
-  const sessionStore = makeSessionStore();
-  await teardownSessionResources({ appLog: 'already-settled', session, sessionName, sessionStore });
-
-  expect(mockCleanupAppleXctracePerfCapture).toHaveBeenCalledWith(activeCapture);
-  expect(session.applePerf?.active).toBeUndefined();
-});
 
 test('close finalizes an active iOS simulator recording before deleting the session', async () => {
   const sessionStore = makeSessionStore();
@@ -230,40 +191,6 @@ test('daemon session teardown retains recording evidence when finish and forced 
   });
 });
 
-test('daemon session teardown stops active Android native perf capture', async () => {
-  const sessionName = 'android-active-native-perf-teardown-session';
-  const activeCapture = {
-    type: 'cpu-profile',
-    kind: 'simpleperf',
-    packageName: 'com.example.app',
-    appPid: '1234',
-    profilerPid: '5678',
-    remotePath: '/data/local/tmp/cpu.perf.data',
-    outPath: '/tmp/cpu.perf.data',
-    startedAt: Date.now(),
-    state: 'running',
-  };
-  const session = {
-    ...makeSession(sessionName, {
-      platform: 'android',
-      id: 'emulator-5554',
-      name: 'Pixel',
-      kind: 'emulator',
-      booted: true,
-    }),
-    appBundleId: 'com.example.app',
-    nativePerf: {
-      android: activeCapture,
-    },
-  } as unknown as SessionState;
-
-  const sessionStore = makeSessionStore();
-  await teardownSessionResources({ appLog: 'already-settled', session, sessionName, sessionStore });
-
-  expect(mockCleanupAndroidNativePerfSession).toHaveBeenCalledWith(session.device, activeCapture);
-  expect(session.nativePerf?.android).toBeUndefined();
-});
-
 test('daemon session teardown stops Android snapshot helper session', async () => {
   const sessionName = 'android-snapshot-helper-teardown-session';
   const session = {
@@ -285,17 +212,6 @@ test('daemon session teardown stops Android snapshot helper session', async () =
 
 test('daemon session teardown attempts every resource after an earlier cleanup rejects', async () => {
   const sessionName = 'android-teardown-isolation-session';
-  const activeCapture = {
-    type: 'trace',
-    kind: 'perfetto',
-    packageName: 'com.example.app',
-    appPid: '1234',
-    profilerPid: '5678',
-    remotePath: '/data/misc/perfetto-traces/app.perfetto-trace',
-    outPath: '/tmp/app.perfetto-trace',
-    startedAt: Date.now(),
-    state: 'running',
-  };
   const session = {
     ...makeSession(sessionName, {
       platform: 'android',
@@ -305,34 +221,58 @@ test('daemon session teardown attempts every resource after an earlier cleanup r
       booted: true,
     }),
     appBundleId: 'com.example.app',
-    nativePerf: {
-      android: activeCapture,
-    },
-  } as unknown as SessionState;
-
-  // The native-perf cleanup runs before the snapshot-helper cleanup.
-  mockCleanupAndroidNativePerfSession.mockRejectedValueOnce(
-    new AppError('COMMAND_FAILED', 'perfetto stop failed'),
+  } as SessionState;
+  attachPerfCapture(
+    session,
+    vi.fn(async () => {
+      throw new AppError('COMMAND_FAILED', 'perfetto stop failed');
+    }),
   );
+
+  // Perf cleanup runs before the snapshot-helper cleanup.
+  const sessionStore = makeSessionStore();
+  sessionStore.set(sessionName, session);
 
   await expect(
     teardownSessionResources({
       appLog: 'already-settled',
       session,
       sessionName,
-      sessionStore: makeSessionStore(),
+      sessionStore,
     }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: expect.objectContaining({
       reason: 'session_cleanup_incomplete',
-      failedSteps: ['android_native_perf'],
+      failedSteps: ['perf_capture'],
     }),
   });
 
   // The later resource still runs despite the earlier rejection.
   expect(mockStopAndroidSnapshotHelperSessionForDevice).toHaveBeenCalledWith(session.device);
 });
+
+function attachPerfCapture(
+  session: SessionState,
+  finish = vi.fn(async () => ({
+    status: 'completed' as const,
+    result: { kind: 'xctrace', mode: 'cpu-profile', outPath: '/tmp/app.trace' } as const,
+  })),
+) {
+  session.perfCapture = {
+    handle: {
+      inspect: () => ({ kind: 'xctrace', mode: 'cpu-profile', outPath: '/tmp/app.trace' }),
+      setOutputPath: () => {},
+      finish,
+      forceCleanup: async () => ({ status: 'cleaned' }),
+      [Symbol.asyncDispose]: async () => {},
+    },
+    envelope: {} as SessionState['perfCapture'] extends { envelope: infer Envelope }
+      ? Envelope
+      : never,
+  };
+  return finish;
+}
 
 test('daemon session teardown closes an open web session immediately, not on agent-browser idle timeout', async () => {
   const sessionName = 'web-active-session-teardown-session';

@@ -215,6 +215,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     keyboardEnter: linuxPlatformLeafUnavailable,
     audioProbeCapture: linuxAudioProbeUnavailable,
     audioProbeQuery: linuxAudioProbeUnavailable,
+    perf: linuxPlatformLeafUnavailable,
     readiness: unsupportedPlatformLeaf,
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: openTarget,

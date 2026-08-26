@@ -22,14 +22,9 @@ type CapabilityBucket = 'apple' | 'android' | 'harmonyos' | 'vega' | 'linux' | '
  * populated by wrapping the existing daemon branch AND pinned by a table-equivalence
  * parity test before a real call-site routes through it. A facet's type stays
  * PLATFORM-NEUTRAL and daemon-owned (never the iOS-simulator-shaped provider seam):
- * {@link PlatformPlugin.perf} carries the neutral perf-observation support predicate,
- * pinned by the daemon perf routing parity test;
  * {@link PlatformPlugin.providers} carries the per-family platform-gated request
  * provider resolver list (replaces the hand `device.platform === …` gate in
  * `request-platform-providers.ts`, pinned by the providers routing parity test). The
- * remaining perf work (the `perf memory`/`perf frames` bodies and the Android-only
- * native-collector gate) stays on its daemon branch as the source of truth until it
- * clears the same gate. See
  * docs/adr/0009-apple-platform-consolidation.md (tracked in issue #974).
  */
 export type PlatformPlugin = {
@@ -62,14 +57,6 @@ export type PlatformPlugin = {
     readonly unsupportedHintByDefault?: Readonly<
       Record<string, (device: DeviceInfo) => string | undefined>
     >;
-  };
-  /**
-   * The daemon perf facet (issue #974). `supportsObservations` reports whether a device family
-   * can produce the explicit `perf frames` or `perf memory` observations. Present only on
-   * Apple, Android, and HarmonyOS; factless families omit the facet.
-   */
-  readonly perf?: {
-    supportsObservations(device: DeviceInfo): boolean;
   };
   /**
    * The daemon request-scope provider facet (issue #974). `platformGatedResolvers`

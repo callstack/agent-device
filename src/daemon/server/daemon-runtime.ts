@@ -28,6 +28,7 @@ import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts'
 import { reconcileOrphanedDeviceClaims, type DeviceClaimReconciler } from '../device-claims.ts';
 import { createDeviceClaimReconciler } from '../device-claim-reconciliation.ts';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
+import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
@@ -255,6 +256,7 @@ export async function startDaemonRuntime(
   });
   const appLogAdmissionLedger = createAppLogAdmissionLedger();
   const audioProbeAdmissionLedger = createAudioProbeAdmissionLedger();
+  const perfCaptureAdmissionLedger = createPerfCaptureAdmissionLedger();
   const hostDiagnostics = createHostDiagnostics();
   const screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger();
   const version = readVersion();
@@ -318,6 +320,7 @@ export async function startDaemonRuntime(
     deviceRuntimeGateway,
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
+    perfCaptureAdmissionLedger,
     hostDiagnostics,
     screenRecordingAdmissionLedger,
     appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,

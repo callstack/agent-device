@@ -192,8 +192,12 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/platform-providers.ts': 1,
   'packages/contracts/src/platform-runtime-host.ts': 1,
   'packages/contracts/src/platform-runtime-operations.ts': 2,
-  'packages/contracts/src/platform-runtime-unavailable.ts': 29,
+  'packages/contracts/src/platform-runtime-unavailable.ts': 30,
   'packages/contracts/src/platform-runtime.ts': 6,
+  'packages/contracts/src/perf-runtime-host.ts': 1,
+  'packages/contracts/src/perf-runtime-operation-builder.ts': 3,
+  'packages/contracts/src/perf-runtime-plan.ts': 7,
+  'packages/contracts/src/perf-runtime.ts': 1,
   'packages/contracts/src/record-runtime-cutover.ts': 7,
   'packages/contracts/src/react-native-overlay.ts': 1,
   'packages/contracts/src/runner-lease-context.ts': 1,
@@ -321,18 +325,16 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // the same PR added and only a source checkout reaches, and which therefore loads on demand
   // (`resolveLocalDaemonCodeSignature`) rather than appearing here.
   'src/cli.ts': 364,
-  'src/platform-runtime.ts': 45,
-  'src/core/dispatch.ts': 79,
-  'src/core/capabilities.ts': 74,
+  'src/platform-runtime.ts': 46,
+  'src/core/dispatch.ts': 15,
+  'src/core/capabilities.ts': 73,
   'src/core/command-descriptor/registry.ts': 67,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,
-  'src/core/interactors/register-builtins.ts': 72,
-  // #2040: perf-xctrace's physical-device-files edge now reaches the apple-runner façade for the
-  // runner bundle ids instead of the old in-tree runner-cache-metadata module, trading that module
-  // for the façade's seam modules (index/provider/sequence/host). The client implementation stays
-  // lazy: the same edge measured 131 when the façade eagerly exported the factory, and the
-  // './client' subpath split is what holds this at 99.
-  'src/daemon/session-teardown.ts': 99,
+  'src/core/interactors/register-builtins.ts': 6,
+  // R64 removes the perf plugin facet and keeps collector binding behind the selected runtime
+  // operation. Teardown now owns only neutral durable-resource cleanup; platform collectors load
+  // through the perf host when an admitted operation actually runs.
+  'src/daemon/session-teardown.ts': 60,
 });
 
 /**

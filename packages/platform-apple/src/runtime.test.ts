@@ -88,6 +88,7 @@ test.each([
   ] as const) {
     expect(facts.operations[operation].available).toBe(available);
   }
+  expectApplePerfAvailability(binding, available);
   if (device.iosPhysicalDeviceBackend === 'xctest') {
     expect(facts.operations.screenRecordingStart).toMatchObject({
       hint: expect.stringContaining('CoreDevice-backed physical iOS device'),
@@ -112,6 +113,24 @@ test.each([
   expectAppleCaptureAvailability(binding, device);
   expectAppleSnapshotAvailability(binding, device);
 });
+
+function expectApplePerfAvailability(
+  binding: DeviceBinding<PlatformRuntimeOperations>,
+  available: boolean,
+): void {
+  for (const operation of [
+    'perfFrames',
+    'perfMemorySample',
+    'perfMemorySnapshot',
+    'perfNativeCaptureStart',
+    'perfNativeCaptureReattach',
+    'perfNativeCaptureCleanup',
+    'perfProfileReport',
+  ] as const) {
+    expect(binding.facts.operations[operation].available).toBe(available);
+    expect(binding.operations[operation]).toBeTypeOf(available ? 'function' : 'undefined');
+  }
+}
 
 /**
  * watchOS is admitted by no capture cell: the Apple interactor cannot even be constructed for it,

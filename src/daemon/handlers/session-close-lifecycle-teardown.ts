@@ -7,10 +7,9 @@ import {
   reportSessionCleanupFailures,
   finishSessionAudioProbe,
   finishSessionScreenRecording,
-  stopSessionAndroidNativePerfCapture,
   stopSessionAndroidSnapshotHelper,
   stopSessionAppLog,
-  stopSessionApplePerfCapture,
+  stopSessionPerfCapture,
   type SessionCleanupFailure,
 } from '../session-teardown.ts';
 import { hasRuntimeTransportHints, runtimeHintValues } from './session-runtime.ts';
@@ -149,8 +148,9 @@ async function stopBestEffortSessionResources(
   await attemptCleanup('audio_probe', () =>
     finishSessionAudioProbe({ session, sessionName: session.name, sessionStore }),
   );
-  await attemptCleanup('apple_perf', () => stopSessionApplePerfCapture(session));
-  await attemptCleanup('android_native_perf', () => stopSessionAndroidNativePerfCapture(session));
+  await attemptCleanup('perf_capture', () =>
+    stopSessionPerfCapture({ session, sessionName: session.name, sessionStore }),
+  );
   await attemptCleanup('android_snapshot_helper', () => stopSessionAndroidSnapshotHelper(session));
 }
 

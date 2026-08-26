@@ -8,6 +8,7 @@ import { selectorObservationRuntimeOperationFacts } from '@agent-device/contract
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
+import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 import type { LimrunPlatformRuntimeOwnerOptions } from './app-log-runtime.ts';
 import { isSupportedLimrunAppLogDevice } from './device.ts';
 import {
@@ -205,6 +206,13 @@ export function limrunAppLogFacts(
       ...audioProbeRuntimeOperationFacts({
         capture: audioProbeUnavailable,
         query: audioProbeUnavailable,
+      }),
+      ...perfRuntimeOperationFacts({
+        frames: elementTextUnavailable,
+        memorySample: elementTextUnavailable,
+        memorySnapshot: elementTextUnavailable,
+        nativeCapture: elementTextUnavailable,
+        profileReport: elementTextUnavailable,
       }),
       ensureReady: available,
       bootTarget: available,

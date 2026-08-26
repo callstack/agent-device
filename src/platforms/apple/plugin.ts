@@ -1,5 +1,4 @@
 import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerContext } from '@agent-device/contracts/interactor-types';
 
@@ -15,29 +14,6 @@ import type { RunnerContext } from '@agent-device/contracts/interactor-types';
 // `capability-plugin-routing-parity` across the full {command x sample-device} matrix.
 // ---------------------------------------------------------------------------
 
-const supportsCoreDevicePhysicalOperation = (device: DeviceInfo): boolean =>
-  device.platform !== 'apple' ||
-  device.kind !== 'device' ||
-  device.iosPhysicalDeviceBackend !== 'xctest';
-
-// Per-command support gates the Apple family applies by default, keyed exactly as in
-// the command-descriptor registry (a command absent here has no Apple gate).
-const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean> = {
-  [PUBLIC_COMMANDS.perf]: supportsCoreDevicePhysicalOperation,
-};
-
-const APPLE_UNSUPPORTED_HINT_BY_DEFAULT: Record<
-  string,
-  (device: DeviceInfo) => string | undefined
-> = {
-  [PUBLIC_COMMANDS.perf]: coreDeviceOnlyPhysicalOperationHint,
-};
-
-function coreDeviceOnlyPhysicalOperationHint(device: DeviceInfo): string | undefined {
-  if (supportsCoreDevicePhysicalOperation(device)) return undefined;
-  return 'This command requires a CoreDevice-backed physical iOS device. The selected XCTest backend supports open, close, interactions, snapshots, and screenshots.';
-}
-
 // The Apple plugin wraps today's existing interactor factory lazily.
 // `as const satisfies PlatformPlugin` preserves
 // the plugin's literal `platforms` tuple so the registry totality assertion (in
@@ -51,11 +27,7 @@ export const applePlugin = {
   familySelector: 'apple',
   capability: {
     bucket: 'apple',
-    supportsByDefault: APPLE_SUPPORTS_BY_DEFAULT,
-    unsupportedHintByDefault: APPLE_UNSUPPORTED_HINT_BY_DEFAULT,
   },
-  // Apple exposes explicit frame-health and memory observations.
-  perf: { supportsObservations: () => true },
   // Declares the platform-gated request provider resolvers the Apple family owns: the
   // runner + tool providers (formerly gated by `isApplePlatform(device.platform)`).
   providers: { platformGatedResolvers: ['appleRunnerProvider', 'appleToolProvider'] },

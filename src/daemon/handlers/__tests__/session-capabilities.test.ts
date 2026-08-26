@@ -22,6 +22,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
+import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
@@ -50,6 +51,7 @@ async function projectAndroidCapabilities(sessionName: string) {
     ensureReadyAvailable: true,
     networkAvailable: true,
     appsAvailable: true,
+    perfAvailable: true,
     interactionAvailable: true,
     providerMode: 'local',
   });
@@ -543,6 +545,8 @@ type AdmissionRuntimeOptions = Readonly<{
   ensureReadyAvailable?: boolean;
   networkAvailable: boolean;
   appsAvailable?: boolean;
+  /** `perf` is admitted only when the selected runtime owner declares its operation facts. */
+  perfAvailable?: boolean;
   /** `screenshot` is fact-owned since R39; the projection reads this cell, not a bucket. */
   screenshotAvailable?: boolean;
   /**
@@ -613,6 +617,7 @@ function createAdmissionOperationFacts(
   lifecycleAvailable: boolean,
 ) {
   const interaction = options.interactionAvailable ? ({ available: true } as const) : unavailable;
+  const perf = optionalOperationFact(options.perfAvailable, unavailable);
   return {
     ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
     ...screenshotRuntimeOperationFacts({
@@ -622,6 +627,13 @@ function createAdmissionOperationFacts(
     tapPoint: interaction,
     fillPoint: interaction,
     performGesturePlan: interaction,
+    ...perfRuntimeOperationFacts({
+      frames: perf,
+      memorySample: perf,
+      memorySnapshot: perf,
+      nativeCapture: perf,
+      profileReport: perf,
+    }),
     appLogInspect: options.appLogAvailable ? { available: true as const } : unavailable,
     appLogDoctor: unavailable,
     appLogStart: unavailable,
@@ -646,6 +658,13 @@ function createAdmissionOperationFacts(
     listApps: appsFact,
     ...admissionLifecycleFacts(lifecycleAvailable, unavailable),
   };
+}
+
+function optionalOperationFact(
+  admitted: boolean | undefined,
+  unavailable: RuntimeOperationFact,
+): RuntimeOperationFact {
+  return admitted ? { available: true } : unavailable;
 }
 
 function createAdmissionOperations(options: AdmissionRuntimeOptions, lifecycleAvailable: boolean) {

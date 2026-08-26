@@ -5,26 +5,26 @@ import { SESSION_STATE_FIELD_OWNERS } from './session-state.ts';
 const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
   '(root)': 2,
   // R58 retired the legacy command dispatcher, taking `core/dispatch.ts` and the
-  // `core/interactors.ts` registry it pulled in out of the cycle with it.
-  core: 6,
+  // `core/interactors.ts` registry it pulled in out of the cycle with it. R64 removes the
+  // legacy perf projection and lowers the remaining core component by one more file.
+  core: 5,
   // Same move, daemon side: with no dispatcher to re-fire a tap through, the pending-outcome
   // retry declares its own callback seam instead of importing runtime admission, so
   // `interaction-outcome-policy.ts` and `deferred-interaction-outcome.ts` both left the cycle.
   // R63 then deleted `session-install-capability-projection.ts` outright — the general
   // fact-owned projection subsumes it — taking a third member with it.
   'daemon-server': 11,
-  // R42/R43/R45 deleted `vega/plugin.ts`'s `PUBLIC_COMMANDS` import (the retired
-  // back/home/tv-remote closures were its only consumer), dropping it out of the cycle and
-  // leaving `apple/plugin.ts` as the platforms zone's sole remaining member.
-  platforms: 1,
+  // R64 deletes the last perf support closure from `apple/plugin.ts`, taking the final
+  // platform-owned member out of the type cycle.
+  platforms: 0,
 };
 
 export const DAEMON_MODULARITY_BASELINE = {
   sessionState: {
-    // R60: `audioProbe` moved from writer-owned (src/daemon/audio-probe.ts, retired) to
-    // store-owned — the durable coordinator's session slot is its only construction site.
-    writerOwnedFields: 21,
-    ownerFileClaims: 25,
+    // R60 moved `audioProbe` to store-owned. R64 does the same for the neutral `perfCapture`
+    // and `lastPerfProfile` records after retiring the two platform-specific perf fields.
+    writerOwnedFields: 19,
+    ownerFileClaims: 22,
   },
   largestTypeCycle: {
     zoneMembers: LARGEST_TYPE_CYCLE_ZONE_CEILINGS,

@@ -8,6 +8,7 @@ import type {
   AndroidAdbExecutor,
   AndroidAdbProvider,
 } from '../../platforms/android/adb-executor.ts';
+import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
 
 function makeAndroidSessionStore(name: string): SessionStore {
   const sessionStore = new SessionStore(`/tmp/${name}`);
@@ -28,6 +29,13 @@ function makeAndroidSessionStore(name: string): SessionStore {
 }
 
 function makeHandler(sessionStore: SessionStore, androidAdbProvider: () => AndroidAdbProvider) {
+  const deviceRuntimeGateway = createPlatformRuntimeGateway({
+    sessionsDir: '/tmp/agent-device-perf-runtime',
+    resolveSessionArtifacts: (sessionId) => ({
+      outputPath: `/tmp/agent-device-perf-runtime/${sessionId}/app.log`,
+      pidPath: `/tmp/agent-device-perf-runtime/${sessionId}/app-log.pid`,
+    }),
+  });
   return createRequestHandler({
     logPath: '/tmp/daemon.log',
     token: 'token',
@@ -35,6 +43,7 @@ function makeHandler(sessionStore: SessionStore, androidAdbProvider: () => Andro
     leaseRegistry: new LeaseRegistry(),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     androidAdbProvider,
+    deviceRuntimeGateway,
     trackDownloadableArtifact: () => 'artifact-id',
   });
 }

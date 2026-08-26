@@ -5,4 +5,4 @@ export {
   stopAndroidSimpleperfProfile,
   writeAndroidSimpleperfReport,
 } from './perf-native-simpleperf.ts';
-export type { AndroidNativePerfKind, AndroidNativePerfSession } from './perf-native-types.ts';
+export type { AndroidNativePerfSession } from './perf-native-types.ts';

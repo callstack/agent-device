@@ -66,6 +66,10 @@ import {
   createAudioProbeAdmissionLedger,
   type AudioProbeAdmissionLedger,
 } from './audio-probe-admission-ledger.ts';
+import {
+  createPerfCaptureAdmissionLedger,
+  type PerfCaptureAdmissionLedger,
+} from './perf-capture-admission-ledger.ts';
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import {
   createScreenRecordingAdmissionLedger,
@@ -97,6 +101,7 @@ export type RequestRouterDeps = {
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
   audioProbeAdmissionLedger?: AudioProbeAdmissionLedger;
+  perfCaptureAdmissionLedger?: PerfCaptureAdmissionLedger;
   screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
   providerRuntimeIds?: readonly string[];
@@ -130,6 +135,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     deviceRuntimeGateway,
     appLogAdmissionLedger = createAppLogAdmissionLedger(),
     audioProbeAdmissionLedger = createAudioProbeAdmissionLedger(),
+    perfCaptureAdmissionLedger = createPerfCaptureAdmissionLedger(),
     screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger(),
     hostDiagnostics,
     providerRuntimeIds,
@@ -297,6 +303,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       }),
       appLogAdmissionLedger,
       audioProbeAdmissionLedger,
+      perfCaptureAdmissionLedger,
       screenRecordingAdmissionLedger,
       hostDiagnostics,
       requestScope,

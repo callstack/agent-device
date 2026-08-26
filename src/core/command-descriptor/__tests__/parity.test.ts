@@ -41,60 +41,6 @@ const DAEMON_FUNCTION_TRAITS = [
 // device mutation could be classified, so it is no longer unrouted.)
 const UNROUTED_PUBLIC_COMMANDS = new Set<string>([PUBLIC_COMMANDS.installFromSource]);
 
-// Public commands that intentionally carry no legacy capability entry. Most are
-// pure control-plane or always-admitted commands; migrated runtime commands are admitted from
-// exact runtime facts and therefore belong to the capability catalog without matrix rows.
-const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
-  PUBLIC_COMMANDS.alert,
-  PUBLIC_COMMANDS.appState,
-  PUBLIC_COMMANDS.apps,
-  PUBLIC_COMMANDS.appSwitcher,
-  PUBLIC_COMMANDS.artifacts,
-  PUBLIC_COMMANDS.audio,
-  PUBLIC_COMMANDS.back,
-  PUBLIC_COMMANDS.batch,
-  PUBLIC_COMMANDS.boot,
-  PUBLIC_COMMANDS.capabilities,
-  PUBLIC_COMMANDS.clipboard,
-  PUBLIC_COMMANDS.close,
-  PUBLIC_COMMANDS.devices,
-  PUBLIC_COMMANDS.diff,
-  PUBLIC_COMMANDS.doctor,
-  PUBLIC_COMMANDS.events,
-  PUBLIC_COMMANDS.find,
-  PUBLIC_COMMANDS.focus,
-  PUBLIC_COMMANDS.gesture,
-  PUBLIC_COMMANDS.get,
-  PUBLIC_COMMANDS.home,
-  PUBLIC_COMMANDS.install,
-  PUBLIC_COMMANDS.installFromSource,
-  PUBLIC_COMMANDS.is,
-  PUBLIC_COMMANDS.keyboard,
-  PUBLIC_COMMANDS.logs,
-  PUBLIC_COMMANDS.network,
-  PUBLIC_COMMANDS.open,
-  PUBLIC_COMMANDS.orientation,
-  PUBLIC_COMMANDS.prepare,
-  PUBLIC_COMMANDS.push,
-  PUBLIC_COMMANDS.reactNative,
-  PUBLIC_COMMANDS.record,
-  PUBLIC_COMMANDS.reinstall,
-  PUBLIC_COMMANDS.replay,
-  PUBLIC_COMMANDS.scroll,
-  PUBLIC_COMMANDS.settings,
-  PUBLIC_COMMANDS.shutdown,
-  PUBLIC_COMMANDS.screenshot,
-  PUBLIC_COMMANDS.snapshot,
-  PUBLIC_COMMANDS.swipe,
-  PUBLIC_COMMANDS.test,
-  PUBLIC_COMMANDS.trace,
-  PUBLIC_COMMANDS.triggerAppEvent,
-  PUBLIC_COMMANDS.tvRemote,
-  PUBLIC_COMMANDS.type,
-  PUBLIC_COMMANDS.viewport,
-  PUBLIC_COMMANDS.wait,
-]);
-
 type TestCommandDescriptor = (typeof commandDescriptors)[number];
 
 function makeRequest(command: string, positionals: string[] = []): DaemonRequest {
@@ -201,37 +147,8 @@ test('descriptor-only commands explicitly declare a non-public catalog group', (
   }
 });
 
-test('capability matrix holds its admission invariants', () => {
-  // BASE_COMMAND_CAPABILITY_MATRIX is now BUILT from these derived descriptors
-  // (the hand-authored literal was deleted after #906 proved byte-equality,
-  // including the supports/unsupportedHint closures across the sample-device
-  // matrix), so a derived-vs-BASE comparison would be a tautology. Instead assert
-  // the invariants the admission path depends on: every entry is selectable (has a
-  // platform bucket or a supports predicate) and the public-command coverage floor
-  // is unchanged.
-  const entries = Object.entries(BASE_COMMAND_CAPABILITY_MATRIX);
-  assert.ok(entries.length > 0, 'capability matrix present');
-
-  for (const [command, capability] of entries) {
-    const hasPlatformBucket = Boolean(
-      capability.apple ||
-      capability.android ||
-      capability.vega ||
-      capability.linux ||
-      capability.web,
-    );
-    // Every capability entry is now selectable purely by its platform buckets: the
-    // per-command `supports()` gate was relocated onto the owning PlatformPlugin
-    // (`capability.supportsByDefault`) in Phase 3 step b.2, so it no longer lives here.
-    assert.ok(hasPlatformBucket, `${command} has a platform bucket`);
-  }
-
-  const covered = new Set(Object.keys(BASE_COMMAND_CAPABILITY_MATRIX));
-  const runtimeAdmitted = new Set(['click', 'fill', 'hover', 'longpress', 'press']);
-  for (const command of Object.values(PUBLIC_COMMANDS)) {
-    if (NO_CAPABILITY_PUBLIC_COMMANDS.has(command) || runtimeAdmitted.has(command)) continue;
-    assert.ok(covered.has(command), `capability matrix covers public command ${command}`);
-  }
+test('legacy capability matrix is empty after the final fact-owned migration', () => {
+  assert.deepEqual(BASE_COMMAND_CAPABILITY_MATRIX, {});
 });
 
 // Control-plane / non-batchable commands that must never enter the allowlist.

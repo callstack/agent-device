@@ -21,6 +21,7 @@ import {
   narrowDeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
+import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
@@ -141,6 +142,13 @@ function readinessFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperati
         capture: unavailable,
         customActions: unavailable,
         withoutActiveApp: unavailable,
+      }),
+      ...perfRuntimeOperationFacts({
+        frames: unavailable,
+        memorySample: unavailable,
+        memorySnapshot: unavailable,
+        nativeCapture: unavailable,
+        profileReport: unavailable,
       }),
       // Mirrors the real owners: every kind this harness models except an Apple `simulator`-shaped
       // Android placeholder can capture pixels, and `capabilities` now reads this cell.

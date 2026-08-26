@@ -4,17 +4,16 @@ import path from 'node:path';
 import { test, vi } from 'vitest';
 import type { AndroidAdbExecutor } from '../adb-executor.ts';
 import { parseAndroidFramePerfSample } from '../perf-frame-parser.ts';
+import { captureAndroidHeapSnapshot, parseAndroidMemInfoSample } from '../perf.ts';
 import {
-  captureAndroidHeapSnapshot,
   cleanupAndroidNativePerfSession,
-  parseAndroidMemInfoSample,
   startAndroidPerfettoTrace,
   startAndroidSimpleperfProfile,
   stopAndroidPerfettoTrace,
   stopAndroidSimpleperfProfile,
   writeAndroidSimpleperfReport,
   type AndroidNativePerfSession,
-} from '../perf.ts';
+} from '../perf-native.ts';
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { mkdtempForTest, mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 

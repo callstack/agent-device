@@ -3,8 +3,7 @@ import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '../../utils/timeouts.ts';
-import type { AndroidAdbExecutor } from './adb-executor.ts';
-import { resolveAndroidAdbExecutor } from './adb-executor.ts';
+import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
 import { annotateAndroidNativePerfError } from './perf-native-errors.ts';
 import { buildAndroidNativePerfStopSummary } from './perf-native-summary.ts';
 import {

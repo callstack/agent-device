@@ -53,9 +53,9 @@ test('Linux coverage report has the expected classification counts', () => {
     // R57 moves trigger-app-event from capability-denial to command-contract: it is fact-owned now.
     // R58 moves settings from capability-denial to command-contract: it is fact-owned now.
     // R59/R61 moves alert and react-native from capability-denial to command-contract: it is fact-owned now.
-    // R60 moves audio the same way: only perf remains catalog-denied.
-    capabilityDenial: 1,
-    contract: 27,
+    // R60 moves audio the same way; R64 moves perf from catalog denial to runtime-owned facts.
+    capabilityDenial: 0,
+    contract: 28,
     gap: 9,
     live: 17,
     total: 54,

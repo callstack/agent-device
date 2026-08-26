@@ -58,6 +58,7 @@ import {
   audioProbeRuntimeOperationFacts,
   type AudioProbeQueryInput,
 } from '@agent-device/contracts/audio-probe-runtime';
+import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
@@ -430,6 +431,13 @@ function webRuntimeFacts(
       // Parity with the retired `WEB_QUERY_COMMANDS` graft, which admitted `audio` on every web
       // device; the provider that carries no probe transport still refuses at execution.
       ...audioProbeRuntimeOperationFacts({ capture: audioCaptureUnavailable, query: available }),
+      ...perfRuntimeOperationFacts({
+        frames: navigationUnavailable,
+        memorySample: navigationUnavailable,
+        memorySnapshot: navigationUnavailable,
+        nativeCapture: navigationUnavailable,
+        profileReport: navigationUnavailable,
+      }),
       ...appSwitcherRuntimeOperationFacts({ appSwitcher: navigationUnavailable }),
       ...appEventRuntimeOperationFacts({ triggerAppEvent: navigationUnavailable }),
       ...settingsRuntimeOperationFacts({ setSetting: navigationUnavailable }),

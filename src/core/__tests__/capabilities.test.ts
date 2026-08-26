@@ -152,17 +152,15 @@ test('hover bypasses legacy capability admission on every platform', () => {
   );
 });
 
-test('capabilities reject CoreDevice-only commands for XCTest-backed devices', () => {
-  // Runtime-backed logs and record admission are proven from exact device facts in
-  // their handler/runtime tests, never through this legacy matrix projection.
-  const coreDeviceOnlyCommands = ['perf'];
-  assertCommandSupport(coreDeviceOnlyCommands, [
-    { device: iosDevice, expected: true, label: 'on CoreDevice' },
-    { device: xctestIosDevice, expected: false, label: 'on XCTest backend' },
-  ]);
-  for (const command of coreDeviceOnlyCommands) {
-    assert.match(unsupportedHintForDevice(command, xctestIosDevice) ?? '', /CoreDevice-backed/);
-  }
+test('perf bypasses legacy capability admission for exact Apple runtime facts', () => {
+  assertCommandSupport(
+    ['perf'],
+    [
+      { device: iosDevice, expected: true, label: 'on CoreDevice' },
+      { device: xctestIosDevice, expected: true, label: 'on XCTest backend' },
+    ],
+  );
+  assert.equal(unsupportedHintForDevice('perf', xctestIosDevice), undefined);
   assertCommandSupport(
     ['screenshot', 'snapshot'],
     [{ device: xctestIosDevice, expected: true, label: 'on XCTest backend' }],
@@ -256,7 +254,7 @@ test('the residual capability matrix leaves Linux desktop interaction admitted',
     ],
     [{ device: linuxDevice, expected: true, label: 'on Linux' }],
   );
-  assertCommandSupport(['perf'], [{ device: linuxDevice, expected: false, label: 'on Linux' }]);
+  assertCommandSupport(['perf'], [{ device: linuxDevice, expected: true, label: 'on Linux' }]);
 });
 
 test('web supports only the initial browser interaction slice', () => {
@@ -294,7 +292,7 @@ test('web supports only the initial browser interaction slice', () => {
     ],
     [{ device: webDevice, expected: true, label: 'on web' }],
   );
-  assertCommandSupport(['perf'], [{ device: webDevice, expected: false, label: 'on web' }]);
+  assertCommandSupport(['perf'], [{ device: webDevice, expected: true, label: 'on web' }]);
   assertCommandSupport(
     ['longpress'],
     [{ device: webDevice, expected: true, label: 'through runtime admission on web' }],

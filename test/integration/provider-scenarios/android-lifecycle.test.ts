@@ -929,10 +929,7 @@ async function runAndroidAppControlAndObservabilityWorkflow(
   assert.deepEqual(Object.keys(memoryMetrics), ['memory']);
   assert.equal(memoryMetrics.memory?.available, true, JSON.stringify(memorySample));
   assert.equal(memoryMetrics.memory?.totalPssKb, 216524);
-  assert.deepEqual(Object.keys(memorySample.sampling as Record<string, unknown>).sort(), [
-    'memory',
-    'snapshot',
-  ]);
+  assert.deepEqual(Object.keys(memorySample.sampling as Record<string, unknown>), ['memory']);
 
   const heapPath = path.join(world.tempRoot, 'demo.hprof');
   const memorySnapshot = await client.observability.perf({

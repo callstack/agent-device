@@ -21,14 +21,13 @@ import type { SnapshotDiagnosticsState } from '@agent-device/contracts/capture';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { AppLogFailure, AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
 import type { AudioProbeLiveHandle } from '@agent-device/contracts/audio-probe-runtime';
+import type {
+  PerfNativeCaptureLiveHandle,
+  PerfProfileHandoff,
+} from '@agent-device/contracts/perf-runtime';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
-import type { AndroidNativePerfSession } from '../platforms/android/perf.ts';
 import type { SessionScriptPublicationState } from './session-script-publication-state.ts';
-import type {
-  AppleXctracePerfCapture,
-  AppleXctracePerfMode,
-} from '../platforms/apple/core/perf-xctrace.ts';
 import type {
   ReplayTargetGuardDenotation,
   TargetAnnotationV1,
@@ -332,16 +331,13 @@ export type SessionState = {
     outPath: string;
     startedAt: number;
   };
-  applePerf?: {
-    active?: AppleXctracePerfCapture;
-    lastProfileTracePath?: string;
-    lastProfileTemplate?: string;
-    lastTracePath?: string;
-    lastMode?: AppleXctracePerfMode;
+  /** Native profiling mechanics stay behind one exact-owner durable handle. */
+  perfCapture?: {
+    handle: PerfNativeCaptureLiveHandle;
+    envelope: DurableResourceEnvelope<'perf-capture'>;
   };
-  nativePerf?: {
-    android?: AndroidNativePerfSession;
-  };
+  /** Last stopped CPU-profile coordinates retained for report in the same live session. */
+  lastPerfProfile?: PerfProfileHandoff;
   /** Native sampler mechanics stay behind the adopted runtime handle. */
   audioProbe?: {
     handle: AudioProbeLiveHandle;

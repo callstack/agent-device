@@ -97,25 +97,11 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
 // (b.2) Independent copies of the per-command supports()/unsupportedHint()
 // contracts. Kept in sync by hand so this oracle stays independent of production.
 // ---------------------------------------------------------------------------
-const supportsCoreDevicePhysicalOperation = (device: DeviceInfo): boolean =>
-  device.platform !== 'apple' ||
-  device.kind !== 'device' ||
-  device.iosPhysicalDeviceBackend !== 'xctest';
-const coreDeviceOnlyPhysicalOperationHint = (device: DeviceInfo): string | undefined =>
-  supportsCoreDevicePhysicalOperation(device)
-    ? undefined
-    : 'This command requires a CoreDevice-backed physical iOS device. The selected XCTest backend supports open, close, interactions, snapshots, and screenshots.';
 // Which commands carry which supports()/unsupportedHint() closure today. The
 // end-to-end assertions cross-check this map against production: a command that
 // gains/loses a closure (or whose closure body changes) breaks parity.
-const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
-  perf: supportsCoreDevicePhysicalOperation,
-  // `alert`'s closure left with R59 and `audio`'s with R60; each cutover made the owner's own
-  // facts the whole admission, with the per-leaf verdicts pinned in the owner packages.
-};
-const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
-  perf: coreDeviceOnlyPhysicalOperationHint,
-};
+const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {};
+const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {};
 
 // Independent hardcoded oracle for the platform -> capability-bucket selection
 // (b.1) that `isCommandSupportedOnDevice` reads off the PlatformPlugin registry.
@@ -130,7 +116,6 @@ const CAPABILITY_BUCKET_BY_PLATFORM: Record<Platform, keyof CommandCapability> =
 // R42/R43/R45 deleted the plugin's only `VEGA_VVD_ONLY_COMMANDS` closures (back/home/tv-remote);
 // nothing takes their place here since Vega now carries no `supportsByDefault` at all.
 const HARMONYOS_SUPPORTED_COMMANDS_REF = new Set([
-  'perf',
   'app-switcher',
   'click',
   'fill',
@@ -214,7 +199,7 @@ test('HarmonyOS static capabilities omit runtime-backed command admissions', () 
   // Runtime-backed navigation, keyboard, and touch commands dropped out of the matrix entirely:
   // capability buckets), so they are absent here — not because HarmonyOS admission changed, but
   // because there is no bucket left for `isCommandSupportedOnDevice` to consult at all.
-  assert.deepEqual(availableCommands, ['perf']);
+  assert.deepEqual(availableCommands, []);
 });
 
 test('(b.2) unsupportedHint closures are verbatim across the full device matrix', () => {

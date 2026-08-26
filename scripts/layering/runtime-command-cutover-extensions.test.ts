@@ -7,6 +7,7 @@ import {
   closeLifecycleRouteBindingViolations,
   devicesGatewayBindingViolations,
   openLifecycleRouteBindingViolations,
+  perfCaptureSessionStateOwnershipViolations,
   prepareLifecycleRouteBindingViolations,
   runtimeLifecycleRouteBindingViolations,
   sourceExecutedUsingDeclarationViolations,
@@ -117,6 +118,26 @@ test('session state scan catches planted app-log record construction outside its
       'src/daemon/request-platform-providers.ts: session appLog record constructed outside its owner',
       'src/daemon/handlers/invalid-teardown.ts: session appLog record constructed outside its owner',
     ],
+  );
+});
+
+test('session state scan catches planted perf capture construction outside its owner', () => {
+  assert.deepEqual(
+    summaries(
+      perfCaptureSessionStateOwnershipViolations(
+        sources([
+          [
+            'src/daemon/handlers/planted.ts',
+            `sessionStore.set(name, { ...session, perfCapture: resource });`,
+          ],
+          [
+            'src/daemon/perf-capture-session-resource.ts',
+            `sessionStore.set(name, { ...session, perfCapture: resource });`,
+          ],
+        ]),
+      ),
+    ),
+    ['src/daemon/handlers/planted.ts: session perfCapture record constructed outside its owner'],
   );
 });
 

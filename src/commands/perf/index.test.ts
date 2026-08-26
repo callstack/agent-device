@@ -51,4 +51,15 @@ describe('perf command interface', () => {
   test('rejects invalid perf positionals', () => {
     expectInvalidArgs(() => perfCliReader(['memory', 'explode'], NO_FLAGS), 'perf action');
   });
+
+  test('rejects area flags that would otherwise be silently dropped', () => {
+    expectInvalidArgs(
+      () => perfCliReader(['frames'], { kind: 'perfetto' } as CliFlags),
+      '--kind is only supported',
+    );
+    expectInvalidArgs(
+      () => perfCliReader(['memory', 'sample'], { out: './heap.hprof' } as CliFlags),
+      '--out is only supported',
+    );
+  });
 });

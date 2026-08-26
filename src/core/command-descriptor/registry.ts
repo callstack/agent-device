@@ -48,6 +48,7 @@ import {
   keyboardRuntimePlanUses,
   longPressRuntimeUses,
   orientationRuntimeUse,
+  perfRuntimePlanUses,
   pressRuntimeUses,
   screenshotRuntimePlanUses,
   scrollRuntimePlanUses,
@@ -244,10 +245,6 @@ function readOnlySubactionRecordingEffect(
 // capability facet now carries platform/kind buckets only; admission reads the closure
 // off the plugin.
 // ---------------------------------------------------------------------------
-
-const APPLE_SIM_AND_DEVICE = { simulator: true, device: true };
-const ANDROID_ALL = { emulator: true, device: true, unknown: true };
-const LINUX_NONE = {};
 
 // ---------------------------------------------------------------------------
 // ADR 0019 §6 platform-execution modes. Every descriptor declares one; there is
@@ -638,10 +635,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'session', refFrameEffect: 'preserve', sessionKind: 'observability' },
-    capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: LEGACY_PLATFORM_EXECUTION,
+    platformExecution: { kind: 'device-runtime', uses: perfRuntimePlanUses },
   },
   {
     name: 'logs',

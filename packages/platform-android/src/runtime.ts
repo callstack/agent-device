@@ -24,6 +24,7 @@ import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-ru
 import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
 import { localRuntimeOwner, whenAdmitted } from '@agent-device/contracts/platform-runtime';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
+import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
 import {
@@ -47,6 +48,7 @@ import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit';
 import { androidAudioProbeCaptureFact } from './audio-runtime.ts';
+import { createAndroidPerfOperations } from './perf/runtime.ts';
 import { createAndroidAppLogRuntime } from './logs/runtime.ts';
 import { dumpAndroidNetworkTraffic } from './network/runtime.ts';
 import { bindAndroidScreenRecordingRuntime } from './recording/runtime.ts';
@@ -375,6 +377,13 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           capture: androidAudioProbeCaptureFact(device),
           query: audioQueryUnavailable,
         }),
+        ...perfRuntimeOperationFacts({
+          frames: androidTouchFact(device),
+          memorySample: androidTouchFact(device),
+          memorySnapshot: androidTouchFact(device),
+          nativeCapture: androidTouchFact(device),
+          profileReport: androidTouchFact(device),
+        }),
         ensureReady: available,
         bootTarget: available,
         bootTargetHeadless: device.kind === 'emulator' ? available : headlessUnavailable,
@@ -424,6 +433,13 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           ...whenAdmitted(facts.operations.audioProbeStart, () =>
             createHostAudioProbeCaptureOperations({
               host: host.audioProbe.hostCapture,
+              device: request.device,
+              owner,
+            }),
+          ),
+          ...whenAdmitted(facts.operations.perfFrames, () =>
+            createAndroidPerfOperations({
+              resolveHost: () => host.perf.android,
               device: request.device,
               owner,
             }),

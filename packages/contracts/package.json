@@ -291,6 +291,22 @@
       "types": "./src/platform-runtime-unavailable.ts",
       "default": "./src/platform-runtime-unavailable.ts"
     },
+    "./perf-runtime": {
+      "types": "./src/perf-runtime.ts",
+      "default": "./src/perf-runtime.ts"
+    },
+    "./perf-runtime-host": {
+      "types": "./src/perf-runtime-host.ts",
+      "default": "./src/perf-runtime-host.ts"
+    },
+    "./perf-runtime-operation-builder": {
+      "types": "./src/perf-runtime-operation-builder.ts",
+      "default": "./src/perf-runtime-operation-builder.ts"
+    },
+    "./perf-runtime-plan": {
+      "types": "./src/perf-runtime-plan.ts",
+      "default": "./src/perf-runtime-plan.ts"
+    },
     "./progress": {
       "types": "./src/facades/progress.ts",
       "default": "./src/facades/progress.ts"

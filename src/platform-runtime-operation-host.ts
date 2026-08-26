@@ -15,6 +15,7 @@ import { createManagedAppLogProcesses } from './platform-runtime-app-log-process
 import { createNetworkRuntimeHost } from './platform-runtime-network-host.ts';
 import { createScreenRecordingRuntimeHost } from './platform-runtime-screen-recording-host.ts';
 import { createAudioProbeRuntimeHost } from './platform-runtime-audio-probe-host.ts';
+import { createPerfRuntimeHost } from './platform-runtime-perf-host.ts';
 import { createApplePhysicalReadinessHost } from './platform-runtime-apple-physical-readiness.ts';
 import { createAppleAutomationKeepHotHost } from './platform-runtime-apple-automation-keep-hot.ts';
 import { createAndroidEmulatorHost } from './platform-runtime-android-emulator-host.ts';
@@ -109,6 +110,7 @@ export function createPlatformRuntimeHost(options: {
     ),
     screenRecording: createScreenRecordingRuntimeHost({ ownedProcesses: options.ownedProcesses }),
     audioProbe: createAudioProbeRuntimeHost({ ownedProcesses: options.ownedProcesses }),
+    perf: createPerfRuntimeHost(),
     snapshot: createSnapshotRuntimeHost(),
     localInteractors: createLocalApplicationInteractorHost(),
     appleApplications,
