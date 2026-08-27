@@ -20,7 +20,7 @@ export type DaemonProviderDeviceResolutionIntent =
 // The hand-authored literal that previously lived here was proven byte-equal to
 // this derived value by `src/core/command-descriptor/__tests__/parity.test.ts` (#906)
 // and has been deleted; the daemon now derives its routes/traits from the single
-// source. The descriptor shape lives in core so that zone does not import daemon.
+// source.
 export const DAEMON_COMMAND_DESCRIPTORS: readonly DaemonCommandDescriptor[] =
   deriveDaemonCommandDescriptors(commandDescriptors);
 

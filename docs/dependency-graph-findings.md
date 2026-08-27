@@ -78,7 +78,7 @@ type-only inversions, R7 pins SessionState field ownership, and the shared selec
 
 ## 0. Where the inversions ended up (and why 5 is the floor for now)
 
-61 → 7, then 5. The last pass moved four keystones, each of which was pinning a much larger set:
+The last pass moved four keystones, each of which was pinning a much larger set:
 
 | Keystone moved to `contracts/` | Unblocked |
 |---|---|
@@ -124,10 +124,6 @@ narrow name replaced both.
   `satisfies Record<DaemonCommandRoute, …>`. `command-explain.ts` still type-imports the re-export
   from `daemon-command-registry.ts` to key an exhaustive owner-file map; that remaining inversion
   is the commands-zone consumer, not a second source of truth for the union.
-
-The two `DaemonCommandDescriptor` inversions (`core/command-descriptor/derive.ts`, `.../types.ts`)
-are gone: the shape is declared in core, generic over `DispatchedCommand`, so those files no longer
-import the daemon. `daemon/types.ts` `DaemonRequest` stays server-private.
 
 All remaining inversions are argued at `TYPE_INVERSION_BASELINE` in `scripts/layering/check.ts`, next
 to the numbers they explain.

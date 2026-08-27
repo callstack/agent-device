@@ -4,7 +4,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
-import { shouldPropagateDeviceInventoryProbeError } from '@agent-device/capture-kit/device-inventory-context';
+import { shouldPropagateDeviceInventoryProbeError } from '../../../request/device-inventory-context.ts';
 import type { VegaToolProvider } from '../tool-provider.ts';
 import { withVegaToolProvider } from '../tool-provider.ts';
 import { vegaToolchainCheck } from '../doctor.ts';

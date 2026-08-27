@@ -3,8 +3,6 @@ import { targetDagZone, type LayeringViolation, type ResolvedImportEdge } from '
 import { SESSION_STATE_FIELD_OWNERS } from './session-state.ts';
 
 const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
-  // After cutting the two core→daemon DaemonCommandDescriptor type edges, the previous
-  // 15-file mixed-zone component collapsed; the largest remaining cycle is this
   // co-defined-contract pair (`capabilities.ts` ↔ `runtime.ts` and the four files they
   // pull in). The standard shrink is a third module holding the shared type.
   'provider-webdriver': 6,

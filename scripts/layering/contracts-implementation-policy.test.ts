@@ -74,3 +74,20 @@ test('network traffic vocabulary cannot grow parser implementation inside contra
     [],
   );
 });
+
+test('contracts rejects mutable interaction-outcome lifecycle', () => {
+  assert.match(
+    messages('const targets = new WeakMap();', 'packages/contracts/src/interaction-outcome.ts')[0]!,
+    /src\/core/,
+  );
+});
+
+test('contracts rejects snapshot quality warning rendering', () => {
+  assert.match(
+    messages(
+      'export function renderSnapshotQualityWarnings() { return []; }',
+      'packages/contracts/src/snapshot-quality-warnings.ts',
+    )[0]!,
+    /src\/snapshot\/snapshot-presentation/,
+  );
+});

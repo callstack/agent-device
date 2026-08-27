@@ -27,6 +27,24 @@ export function contractsImplementationAuthorityViolations(
       file.source,
       parsed.program.body,
     );
+    if (file.path === 'packages/contracts/src/interaction-outcome.ts') {
+      violations.push(
+        violation(
+          file.path,
+          1,
+          'contracts may not own mutable interaction-outcome lifecycle; that WeakMap identity map belongs in src/core',
+        ),
+      );
+    }
+    if (file.path === 'packages/contracts/src/snapshot-quality-warnings.ts') {
+      violations.push(
+        violation(
+          file.path,
+          1,
+          'contracts may not own snapshot quality warning rendering; that presentation policy belongs in src/snapshot/snapshot-presentation',
+        ),
+      );
+    }
     if (networkTrafficViolation) violations.push(networkTrafficViolation);
     for (const site of moduleSpecifiers(parsed.module, file.source)) {
       if (!FORBIDDEN_HOST_MODULES.test(site.spec)) continue;

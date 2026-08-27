@@ -22,7 +22,7 @@ export async function resolveSoleForegroundIosApp(
   options: Readonly<{ simulatorSetPath?: string }> = {},
 ): Promise<ResolvedForegroundIosApp | undefined> {
   const { listLocalDeviceInventory, shouldPropagateDeviceInventoryProbeError } =
-    await import('@agent-device/capture-kit/device-inventory-context');
+    await import('./request/device-inventory-context.ts');
   try {
     const booted = await listLocalDeviceInventory({
       platform: 'ios',
