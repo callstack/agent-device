@@ -40,6 +40,8 @@ export type DeviceClaim = {
   ownerToken: string;
   createdAtMs: number;
   updatedAtMs: number;
+  /** Set by {@link abandonDeviceClaim}; absent while a session owns the claim. */
+  abandonedAtMs?: number;
 };
 
 export type DeviceClaimReconciliationResult =
@@ -189,6 +191,19 @@ function isClaimOwnedByThisDaemon(
   );
 }
 
+/**
+ * An abandoned claim binds no session, so the daemon that abandoned it takes the device back
+ * instead of colliding with a record only it can account for. Every other owner still reads a
+ * live claim.
+ */
+function isAbandonedClaimOfThisDaemon(
+  claim: DeviceClaim,
+  stateDir: string,
+  owner: ReturnType<typeof readCurrentOwnerIdentity>,
+): boolean {
+  return claim.abandonedAtMs !== undefined && isClaimOwnedByThisDaemon(claim, stateDir, owner);
+}
+
 function deviceClaimIdentity(device: DeviceInfo): DeviceIdentity {
   return deviceIdentity({
     ...device,
@@ -206,6 +221,13 @@ async function resolveExistingClaim(params: {
 }): Promise<DeviceClaimAcquireResult | { status: 'available' }> {
   const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(params.deviceKey));
   if (!existing) return { status: 'available' };
+  if (
+    existing.claim &&
+    isAbandonedClaimOfThisDaemon(existing.claim, params.stateDir, params.owner)
+  ) {
+    emitClaimSupersede(params.deviceKey, existing.claim);
+    return { status: 'available' };
+  }
   if (existing.claim && isCurrentClaimOwner(existing.claim, params, params.owner)) {
     return { status: 'acquired', ownership: ownershipFromClaim(existing.claim) };
   }
@@ -258,16 +280,7 @@ export async function clearDeviceClaim(
     const inspected = inspectDeviceClaimFile(claimPath);
     if (!inspected) return 'absent';
     const claim = inspected.claim;
-    if (
-      !claim ||
-      claim.ownerToken !== ownership.ownerToken ||
-      !ownerIdentityMatches(
-        { pid: claim.ownerPid, startTime: claim.ownerStartTime },
-        { pid: ownership.ownerPid, startTime: ownership.ownerStartTime },
-      )
-    ) {
-      return 'ownership-changed';
-    }
+    if (!claim || !claimMatchesOwnership(claim, ownership)) return 'ownership-changed';
     try {
       fs.unlinkSync(claimPath);
     } catch (error) {
@@ -276,6 +289,49 @@ export async function clearDeviceClaim(
     }
     return 'deleted';
   });
+}
+
+/**
+ * What abandoning a claim did, in the same terms {@link DeviceClaimClearOutcome} reports:
+ *
+ *  - `abandoned`        — the claim we acquired now binds no session.
+ *  - `absent`           — no claim remains for the device; nothing to mark.
+ *  - `ownership-changed`— a claim remains, but it is not the one we acquired.
+ */
+export type DeviceClaimAbandonOutcome = 'abandoned' | 'absent' | 'ownership-changed';
+
+/**
+ * Keeps a device fenced while recording that no session can release the claim any more, for an
+ * owner whose command ended without establishing one. Releasing instead would hand a device whose
+ * effects are unproven to any process on the host; the claim stays live to everyone except this
+ * daemon, which supersedes it on its next acquire.
+ */
+export async function abandonDeviceClaim(
+  ownership: DeviceClaimSessionOwnership | undefined,
+): Promise<DeviceClaimAbandonOutcome> {
+  if (!ownership) return 'absent';
+  return await withDeviceClaimLock(ownership.deviceKey, async () => {
+    const inspected = inspectDeviceClaimFile(resolveDeviceClaimPath(ownership.deviceKey));
+    if (!inspected) return 'absent';
+    const claim = inspected.claim;
+    if (!claim || !claimMatchesOwnership(claim, ownership)) return 'ownership-changed';
+    const now = Date.now();
+    writeClaim({ ...claim, abandonedAtMs: now, updatedAtMs: now });
+    return 'abandoned';
+  });
+}
+
+function claimMatchesOwnership(
+  claim: DeviceClaim,
+  ownership: DeviceClaimSessionOwnership,
+): boolean {
+  return (
+    claim.ownerToken === ownership.ownerToken &&
+    ownerIdentityMatches(
+      { pid: claim.ownerPid, startTime: claim.ownerStartTime },
+      { pid: ownership.ownerPid, startTime: ownership.ownerStartTime },
+    )
+  );
 }
 
 /**
@@ -383,6 +439,18 @@ function emitClaimConflict(
       ownerSession: existing.claim?.session,
       ownerStateDir: existing.claim?.stateDir,
       ...(reconciliationReason ? { reconciliationReason } : {}),
+    },
+  });
+}
+
+function emitClaimSupersede(deviceKey: string, abandoned: DeviceClaim): void {
+  emitDiagnostic({
+    level: 'info',
+    phase: 'device_claim_abandoned_superseded',
+    data: {
+      deviceKey,
+      abandonedSession: abandoned.session,
+      abandonedAtMs: abandoned.abandonedAtMs,
     },
   });
 }

@@ -278,10 +278,15 @@ function decodeClaimOwner(
 
 function decodeClaimTimestamps(
   raw: Record<string, unknown>,
-): Pick<DeviceClaim, 'createdAtMs' | 'updatedAtMs'> | null {
-  const { createdAtMs, updatedAtMs } = raw;
+): Pick<DeviceClaim, 'createdAtMs' | 'updatedAtMs' | 'abandonedAtMs'> | null {
+  const { createdAtMs, updatedAtMs, abandonedAtMs } = raw;
   if (!isFiniteNumber(createdAtMs) || !isFiniteNumber(updatedAtMs)) return null;
-  return { createdAtMs, updatedAtMs };
+  if (abandonedAtMs !== undefined && !isFiniteNumber(abandonedAtMs)) return null;
+  return {
+    createdAtMs,
+    updatedAtMs,
+    ...(isFiniteNumber(abandonedAtMs) ? { abandonedAtMs } : {}),
+  };
 }
 
 function isNonEmptyString(value: unknown): value is string {

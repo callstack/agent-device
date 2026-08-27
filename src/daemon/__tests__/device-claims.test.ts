@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import {
+  abandonDeviceClaim,
   acquireDeviceClaim as acquireProductionDeviceClaim,
   clearDeviceClaim,
 } from '../device-claims.ts';
@@ -527,4 +528,109 @@ test('never treats a claim owned by the inspecting process as superseded', async
   if (second.status !== 'conflict') return;
   assert.equal(second.conflict.classification, 'live');
   assert.equal(reconcile.mock.calls.length, 0);
+});
+
+test('an abandoned claim yields to the next acquire of the daemon that abandoned it', async () => {
+  const root = useClaimsRoot();
+  const aborted = await acquireDeviceClaim({
+    device,
+    session: 'attempt-1',
+    workspace: '/worktrees/suite',
+    stateDir: root,
+  });
+  assert.equal(aborted.status, 'acquired');
+  if (aborted.status !== 'acquired') return;
+  assert.equal(await abandonDeviceClaim(aborted.ownership), 'abandoned');
+  assert.equal(
+    typeof inspectDeviceClaims({ serial: device.id })[0]?.claim?.abandonedAtMs,
+    'number',
+  );
+  const reconcile = vi.fn(async () => ({ status: 'reconciled' as const }));
+
+  const retry = await acquireDeviceClaim({
+    device,
+    session: 'attempt-2',
+    workspace: '/worktrees/suite',
+    stateDir: root,
+    reconcileOrphanedDeviceClaim: reconcile,
+  });
+
+  assert.equal(retry.status, 'acquired');
+  const claim = inspectDeviceClaims({ serial: device.id })[0]?.claim;
+  assert.equal(claim?.session, 'attempt-2');
+  assert.equal(claim?.abandonedAtMs, undefined);
+  // Abandonment is an owner's own record, not a proof about a dead owner: it never
+  // routes through orphan reconciliation.
+  assert.equal(reconcile.mock.calls.length, 0);
+  assert.equal(await clearDeviceClaim(aborted.ownership), 'ownership-changed');
+});
+
+test('an abandoned claim keeps fencing a daemon that does not own it', async () => {
+  const root = useClaimsRoot();
+  const stateDir = path.join(root, 'foreign-state');
+  await seedForeignLiveClaim(root, stateDir);
+  const stored = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
+  fs.writeFileSync(claimPath(root), JSON.stringify({ ...stored, abandonedAtMs: 1 }));
+  const reconcile = vi.fn(async () => ({ status: 'reconciled' as const }));
+
+  const second = await acquireDeviceClaim({
+    device,
+    session: 'other',
+    workspace: '/w',
+    stateDir,
+    reconcileOrphanedDeviceClaim: reconcile,
+  });
+
+  assert.equal(second.status, 'conflict');
+  if (second.status !== 'conflict') return;
+  assert.equal(second.conflict.classification, 'live');
+  assert.equal(second.conflict.claim?.session, 'cwd:/w:default');
+  assert.equal(reconcile.mock.calls.length, 0);
+});
+
+test("an abandoned claim keeps fencing this process on another daemon's state dir", async () => {
+  const root = useClaimsRoot();
+  const acquired = await acquireDeviceClaim({
+    device,
+    session: 'attempt-1',
+    workspace: '/worktrees/suite',
+    stateDir: path.join(root, 'owner-state'),
+  });
+  assert.equal(acquired.status, 'acquired');
+  if (acquired.status !== 'acquired') return;
+  assert.equal(await abandonDeviceClaim(acquired.ownership), 'abandoned');
+
+  const second = await acquireDeviceClaim({
+    device,
+    session: 'attempt-2',
+    workspace: '/worktrees/suite',
+    stateDir: path.join(root, 'other-state'),
+  });
+
+  assert.equal(second.status, 'conflict');
+  if (second.status !== 'conflict') return;
+  assert.equal(second.conflict.claim?.session, 'attempt-1');
+});
+
+test('reports the exact outcome of abandoning an owned, missing, and unowned claim', async () => {
+  const root = useClaimsRoot();
+  const acquired = await acquireDeviceClaim({
+    device,
+    session: 'owner',
+    workspace: '/worktrees/owner',
+    stateDir: root,
+  });
+  assert.equal(acquired.status, 'acquired');
+  if (acquired.status !== 'acquired') return;
+
+  assert.equal(await abandonDeviceClaim(acquired.ownership), 'abandoned');
+  const stored = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
+  fs.writeFileSync(
+    claimPath(root),
+    JSON.stringify({ ...stored, ownerToken: 'successor-token', session: 'successor' }),
+  );
+  assert.equal(await abandonDeviceClaim(acquired.ownership), 'ownership-changed');
+  fs.rmSync(claimPath(root));
+  assert.equal(await abandonDeviceClaim(acquired.ownership), 'absent');
+  assert.equal(await abandonDeviceClaim(undefined), 'absent');
 });

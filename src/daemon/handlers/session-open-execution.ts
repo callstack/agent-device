@@ -46,6 +46,7 @@ import {
 import { resolveSessionLeaseForRequest } from '../lease-lifecycle.ts';
 import { applicationLifecycleExecutionFromRequest } from '../application-lifecycle-execution.ts';
 import {
+  abandonDeviceClaim,
   acquireDeviceClaim,
   clearDeviceClaim,
   isLocalDeviceClaimTarget,
@@ -438,6 +439,13 @@ export async function openNewSessionWithDeviceClaim(params: {
   }
   const deviceClaim = localClaim.status === 'acquired' ? localClaim.ownership : undefined;
   const effects: NewSessionOpenEffects = { mayHaveStarted: false };
+  const rollbackClaim = async () =>
+    await rollbackNewSessionClaim({
+      ownership: deviceClaim,
+      effects,
+      sessionName,
+      sessionStore,
+    });
   try {
     const details = await prepareOpenCommandDetails({
       req,
@@ -450,7 +458,7 @@ export async function openNewSessionWithDeviceClaim(params: {
       foreground: req.flags?.foreground === true && openTarget === undefined,
     });
     if (details.type === 'response') {
-      await rollbackNewSessionClaim(deviceClaim, effects);
+      await rollbackClaim();
       return details.response;
     }
     // Preparation can boot the device or warm caches, but it cannot establish session ownership.
@@ -484,26 +492,37 @@ export async function openNewSessionWithDeviceClaim(params: {
       deviceClaim,
       selection,
     });
-    if (!response.ok) await rollbackNewSessionClaim(deviceClaim, effects);
+    if (!response.ok) await rollbackClaim();
     return response;
   } catch (error) {
-    await rollbackNewSessionClaim(deviceClaim, effects);
+    await rollbackClaim();
     throw error;
   }
 }
 
-async function rollbackNewSessionClaim(
-  ownership: DeviceClaimSessionOwnership | undefined,
-  effects: NewSessionOpenEffects,
-): Promise<void> {
+/**
+ * A claim outlives its request only while a session owns it. An open that proved no device effect
+ * releases the device outright; one that may have started effects keeps the fence, but a claim no
+ * session holds is abandoned so this daemon's next open supersedes it instead of inheriting a
+ * device nothing left alive can release.
+ */
+async function rollbackNewSessionClaim(params: {
+  ownership: DeviceClaimSessionOwnership | undefined;
+  effects: NewSessionOpenEffects;
+  sessionName: string;
+  sessionStore: SessionStore;
+}): Promise<void> {
+  const { ownership, effects, sessionName, sessionStore } = params;
   if (!ownership) return;
-  if (effects.mayHaveStarted) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'device_claim_open_effects_unconfirmed',
-      data: { deviceKey: ownership.deviceKey },
-    });
+  if (!effects.mayHaveStarted) {
+    await clearDeviceClaim(ownership);
     return;
   }
-  await clearDeviceClaim(ownership);
+  if (sessionStore.get(sessionName)?.deviceClaim?.ownerToken === ownership.ownerToken) return;
+  const outcome = await abandonDeviceClaim(ownership);
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'device_claim_open_effects_unconfirmed',
+    data: { deviceKey: ownership.deviceKey, outcome },
+  });
 }
