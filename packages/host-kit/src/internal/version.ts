@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { resolveAgentDeviceProjectRoot } from './project-root.ts';
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
-// Immutable for a process's lifetime, so resolved once; the process-memo reset clears them between tests.
 const versionMemo = createTtlMemo<string, string>();
 const projectRootMemo = createTtlMemo<'self', string>();
 
@@ -18,9 +17,7 @@ export function readVersion(root: string = findProjectRoot()): string {
       version?: unknown;
     };
   } catch {
-    // An absent or unreadable package.json is not memoized: the caller may be
-    // asking about a root that is still being materialized (a runner or helper
-    // package), and '0.0.0' must not stick to it for the rest of the process.
+    // Not memoized: the root may still be materializing.
     return '0.0.0';
   }
   const version = typeof pkg.version === 'string' ? pkg.version : '0.0.0';

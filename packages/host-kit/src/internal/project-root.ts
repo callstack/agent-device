@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-/** Walks up from `startDirectory` to the manifest named `agent-device`; the first manifest found is the fallback for renamed or vendored installs. */
 export function resolveAgentDeviceProjectRoot(startDirectory: string): string {
   let current = startDirectory;
   let nearest: string | null = null;
@@ -13,7 +12,7 @@ export function resolveAgentDeviceProjectRoot(startDirectory: string): string {
         const name = (JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { name?: unknown }).name;
         if (name === 'agent-device') return current;
       } catch {
-        // an unreadable manifest is not the root; keep walking
+        // Unreadable manifests are not the root.
       }
     }
     current = path.dirname(current);
