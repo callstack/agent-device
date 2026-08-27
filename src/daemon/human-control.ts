@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { deviceIdentityAliases } from '../core/lease-scope.ts';
 import type {
   HumanControlHold,
   HumanControlHoldInput,
@@ -32,24 +33,39 @@ export class HumanControlRegistry {
     );
   }
 
-  upsert(id: string, input: HumanControlHoldInput): HumanControlHold {
+  async upsert(id: string, input: HumanControlHoldInput): Promise<HumanControlHold> {
     const normalizedId = normalizeHoldId(id);
     const scope = normalizeScope(input.scope);
     const reason = normalizeReason(input.reason);
     const ttlMs = normalizeTtlMs(input.ttlMs);
     const now = this.now();
     const existing = this.holds.get(normalizedId);
-    const hold: HumanControlHold = {
+    const pendingHold: HumanControlHold = {
       id: normalizedId,
       scope,
       ...(reason ? { reason } : {}),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-      ...(ttlMs === undefined ? {} : { expiresAt: now + ttlMs }),
     };
-    this.holds.set(normalizedId, hold);
+    this.holds.set(normalizedId, pendingHold);
     this.persist();
-    return cloneHold(hold);
+    await this.waitForDeviceIdle([scope.deviceKey]);
+    if (this.holds.get(normalizedId) !== pendingHold) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Human-control hold changed before activation completed.',
+        { holdId: normalizedId },
+      );
+    }
+    const activatedAt = this.now();
+    const activeHold: HumanControlHold = {
+      ...pendingHold,
+      updatedAt: activatedAt,
+      ...(ttlMs === undefined ? {} : { expiresAt: activatedAt + ttlMs }),
+    };
+    this.holds.set(normalizedId, activeHold);
+    this.persist();
+    return cloneHold(activeHold);
   }
 
   remove(id: string): HumanControlHold | undefined {
@@ -71,7 +87,8 @@ export class HumanControlRegistry {
     const keys = normalizeDeviceAliases(deviceKeys);
     if (keys.length === 0) return undefined;
     for (const hold of this.holds.values()) {
-      if (keys.includes(normalizeDeviceAlias(hold.scope.deviceKey))) return cloneHold(hold);
+      const holdKeys = normalizeDeviceAliases([hold.scope.deviceKey]);
+      if (holdKeys.some((key) => keys.includes(key))) return cloneHold(hold);
     }
     return undefined;
   }
@@ -92,8 +109,13 @@ export class HumanControlRegistry {
     }
   }
 
-  async waitForDeviceIdle(deviceKey: string): Promise<void> {
-    const key = normalizeDeviceAlias(normalizeDeviceKey(deviceKey));
+  private async waitForDeviceIdle(deviceKeys: readonly string[]): Promise<void> {
+    await Promise.all(
+      normalizeDeviceAliases(deviceKeys).map(async (key) => this.waitForKeyIdle(key)),
+    );
+  }
+
+  private async waitForKeyIdle(key: string): Promise<void> {
     if ((this.activeMutations.get(key) ?? 0) === 0) return;
     await new Promise<void>((resolve) => {
       const waiters = this.idleWaiters.get(key) ?? new Set<() => void>();
@@ -247,7 +269,7 @@ function normalizeDeviceKey(deviceKey: string): string {
 function normalizeDeviceAliases(deviceKeys: readonly string[]): string[] {
   return Array.from(
     new Set(
-      deviceKeys
+      deviceIdentityAliases(deviceKeys)
         .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
         .map((value) => normalizeDeviceAlias(value)),
     ),

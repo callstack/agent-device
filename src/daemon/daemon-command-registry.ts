@@ -77,8 +77,6 @@ export function shouldGuardAndroidBlockingDialog(command: string): boolean {
 
 export function humanControlEffectForRequest(req: DaemonRequest): HumanControlEffect {
   const effect = getDaemonCommandDescriptor(req.command)?.humanControlEffect;
-  // Unknown wire commands still fail closed even though every known descriptor
-  // must declare an effect at compile time.
   return typeof effect === 'function' ? effect(req) : (effect ?? 'mutate');
 }
 

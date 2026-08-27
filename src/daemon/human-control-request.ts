@@ -38,8 +38,6 @@ async function resolveRequestDeviceAliases(
     const device = await resolveTargetDevice(resolveDeviceFlags(req));
     return uniqueDefinedStrings([device.id, device.name, ...directHoldAliases]);
   } catch {
-    // Preserve the command's normal device-resolution error. Requests carrying a
-    // remote deviceKey or explicit UDID/serial are still gated by those aliases.
     return directHoldAliases;
   }
 }

@@ -27,8 +27,7 @@ async function putHold(
   if (!holdId || rawInput === undefined) {
     throw new AppError('INVALID_ARGS', 'human_control put requires a hold id and payload.');
   }
-  const hold = registry.upsert(holdId, parseHumanControlHoldInput(parsePayload(rawInput)));
-  await registry.waitForDeviceIdle(hold.scope.deviceKey);
+  const hold = await registry.upsert(holdId, parseHumanControlHoldInput(parsePayload(rawInput)));
   return { ok: true, data: { hold, state: 'active' } };
 }
 

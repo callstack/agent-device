@@ -20,15 +20,18 @@ type HumanControlHttpRoute =
   | { kind: 'list' }
   | { kind: 'upsert'; holdId: string }
   | { kind: 'remove'; holdId: string }
+  | { kind: 'invalid' }
   | { kind: 'unsupported' };
 
-export function tryHandleHumanControlHttpRoute(params: {
+type HumanControlHttpParams = {
   req: http.IncomingMessage;
   res: http.ServerResponse;
   expectedToken: string;
   registry: HumanControlRegistry;
   onHoldReleased?: (hold: HumanControlHold) => void;
-}): boolean {
+};
+
+export function tryHandleHumanControlHttpRoute(params: HumanControlHttpParams): boolean {
   const route = resolveHumanControlRoute(params.req);
   if (!route) return false;
   void handleHumanControlRoute(route, params);
@@ -37,56 +40,87 @@ export function tryHandleHumanControlHttpRoute(params: {
 
 async function handleHumanControlRoute(
   route: HumanControlHttpRoute,
-  params: {
-    req: http.IncomingMessage;
-    res: http.ServerResponse;
-    expectedToken: string;
-    registry: HumanControlRegistry;
-    onHoldReleased?: (hold: HumanControlHold) => void;
-  },
+  params: HumanControlHttpParams,
 ): Promise<void> {
-  const { req, res, expectedToken, registry, onHoldReleased } = params;
+  const { req, res, expectedToken } = params;
   try {
     assertAuthorized(req, expectedToken);
-    switch (route.kind) {
-      case 'list':
-        sendJson(res, { ok: true, holds: registry.list() });
-        return;
-      case 'upsert': {
-        const input = await readHoldInput(req);
-        const hold = registry.upsert(route.holdId, input);
-        await registry.waitForDeviceIdle(hold.scope.deviceKey);
-        sendJson(res, { ok: true, hold, state: 'active' });
-        return;
-      }
-      case 'remove': {
-        const hold = releaseHumanControlHold(registry, route.holdId);
-        if (hold) onHoldReleased?.(hold);
-        sendJson(res, { ok: true, released: Boolean(hold), ...(hold ? { hold } : {}) });
-        return;
-      }
-      case 'unsupported':
-        res.statusCode = 405;
-        res.setHeader('allow', 'GET, PUT, DELETE');
-        sendJson(res, { ok: false, error: 'Method not allowed', code: 'INVALID_ARGS' });
-        return;
-    }
+    await executeHumanControlRoute(route, params);
   } catch (error) {
     sendRestJsonError(res, normalizeError(error));
   }
 }
 
+async function executeHumanControlRoute(
+  route: HumanControlHttpRoute,
+  params: HumanControlHttpParams,
+): Promise<void> {
+  switch (route.kind) {
+    case 'list':
+      sendJson(params.res, { ok: true, holds: params.registry.list() });
+      return;
+    case 'upsert':
+      await upsertHumanControlHold(route.holdId, params);
+      return;
+    case 'remove':
+      removeHumanControlHold(route.holdId, params);
+      return;
+    case 'unsupported':
+      sendMethodNotAllowed(params.res);
+      return;
+    case 'invalid':
+      throw new AppError('INVALID_ARGS', 'Invalid request URL.');
+  }
+}
+
+async function upsertHumanControlHold(
+  holdId: string,
+  params: HumanControlHttpParams,
+): Promise<void> {
+  const input = await readHoldInput(params.req);
+  const hold = await params.registry.upsert(holdId, input);
+  sendJson(params.res, { ok: true, hold, state: 'active' });
+}
+
+function removeHumanControlHold(holdId: string, params: HumanControlHttpParams): void {
+  const hold = releaseHumanControlHold(params.registry, holdId);
+  if (hold) params.onHoldReleased?.(hold);
+  sendJson(params.res, { ok: true, released: Boolean(hold), ...(hold ? { hold } : {}) });
+}
+
+function sendMethodNotAllowed(res: http.ServerResponse): void {
+  res.statusCode = 405;
+  res.setHeader('allow', 'GET, PUT, DELETE');
+  sendJson(res, { ok: false, error: 'Method not allowed', code: 'INVALID_ARGS' });
+}
+
 function resolveHumanControlRoute(req: http.IncomingMessage): HumanControlHttpRoute | null {
-  const pathname = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
+  const pathname = parseRequestPathname(req.url);
+  if (pathname === null) return { kind: 'invalid' };
+  return resolveHumanControlPathRoute(pathname, req.method);
+}
+
+function resolveHumanControlPathRoute(
+  pathname: string,
+  method: string | undefined,
+): HumanControlHttpRoute | null {
   if (pathname === HUMAN_CONTROL_HTTP_PREFIX) {
-    return req.method === 'GET' ? { kind: 'list' } : { kind: 'unsupported' };
+    return method === 'GET' ? { kind: 'list' } : { kind: 'unsupported' };
   }
   if (!pathname.startsWith(`${HUMAN_CONTROL_HTTP_PREFIX}/`)) return null;
   const holdId = pathname.slice(HUMAN_CONTROL_HTTP_PREFIX.length + 1);
   if (!holdId || holdId.includes('/')) return { kind: 'unsupported' };
-  if (req.method === 'PUT') return { kind: 'upsert', holdId };
-  if (req.method === 'DELETE') return { kind: 'remove', holdId };
+  if (method === 'PUT') return { kind: 'upsert', holdId };
+  if (method === 'DELETE') return { kind: 'remove', holdId };
   return { kind: 'unsupported' };
+}
+
+function parseRequestPathname(url: string | undefined): string | null {
+  try {
+    return new URL(url ?? '/', 'http://127.0.0.1').pathname;
+  } catch {
+    return null;
+  }
 }
 
 async function readHoldInput(req: http.IncomingMessage): Promise<HumanControlHoldInput> {

@@ -79,6 +79,44 @@ test('takeover rejects malformed actions before contacting the daemon', async ()
   assert.equal(mocks.sendRequest.mock.calls.length, 0);
 });
 
+test('foreground takeover resolves the device through the public client inventory', async () => {
+  const list = vi.fn().mockResolvedValue([
+    {
+      platform: 'ios',
+      target: 'mobile',
+      kind: 'simulator',
+      id: 'sim-1',
+      name: 'iPhone 17 Pro',
+      booted: true,
+      identifiers: { udid: 'sim-1' },
+    },
+  ]);
+  mocks.sendRequest.mockImplementation(async (_daemon, request) => {
+    if (request.positionals[0] === 'put') {
+      setTimeout(() => process.emit('SIGINT'), 0);
+      return { ok: true, data: { hold: HOLD } };
+    }
+    return { ok: true, data: { released: true } };
+  });
+
+  await takeoverCommand({
+    positionals: [],
+    flags: { json: true, help: false, version: false, platform: 'ios', udid: 'sim-1' },
+    client: { devices: { list } } as unknown as AgentDeviceClient,
+  });
+
+  assert.equal(list.mock.calls[0]?.[0].platform, 'ios');
+  assert.equal(list.mock.calls[0]?.[0].udid, 'sim-1');
+  const putRequest = mocks.sendRequest.mock.calls.find(
+    (call) => call[1].positionals[0] === 'put',
+  )?.[1];
+  assert.equal(JSON.parse(putRequest.positionals[2]).scope.deviceKey, 'sim-1');
+  assert.equal(
+    mocks.sendRequest.mock.calls.some((call) => call[1].positionals[0] === 'remove'),
+    true,
+  );
+});
+
 async function runTakeover(positionals: string[]): Promise<boolean> {
   return await takeoverCommand({
     positionals,

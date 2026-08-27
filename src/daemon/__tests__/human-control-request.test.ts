@@ -16,7 +16,7 @@ test('request execution blocks mutations but permits read-only commands during h
   const sessionStore = makeSessionStore('agent-device-human-control-request-');
   sessionStore.set(sessionName, makeIosSession(sessionName));
   const registry = new HumanControlRegistry();
-  registry.upsert('operator-1', { scope: { deviceKey: 'sim-1' } });
+  await registry.upsert('operator-1', { scope: { deviceKey: 'sim-1' } });
 
   let mutationRan = false;
   const mutationScope = await createRequestExecutionScope({

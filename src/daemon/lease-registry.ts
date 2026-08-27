@@ -2,6 +2,7 @@ import type { DeviceLease } from '@agent-device/contracts/device';
 import crypto from 'node:crypto';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
+import { deviceIdentityAliases } from '../core/lease-scope.ts';
 import { normalizeTenantId } from './config.ts';
 import {
   ProviderSessionOwnershipRegistry,
@@ -377,10 +378,12 @@ export class LeaseRegistry {
   refreshLeasesForDeviceKey(deviceKey: string): DeviceLease[] {
     const normalizedDeviceKey = normalizeDeviceKey(deviceKey);
     if (!normalizedDeviceKey) return [];
-    const comparisonKey = normalizedDeviceKey.toLocaleLowerCase('en-US');
+    const comparisonKeys = normalizedDeviceAliases([normalizedDeviceKey]);
     const refreshed: DeviceLease[] = [];
     for (const lease of this.leases.values()) {
-      if (lease.deviceKey?.toLocaleLowerCase('en-US') !== comparisonKey) continue;
+      if (!lease.deviceKey) continue;
+      const leaseKeys = normalizedDeviceAliases([lease.deviceKey]);
+      if (!leaseKeys.some((key) => comparisonKeys.includes(key))) continue;
       refreshed.push(this.refreshLease(lease, this.defaultLeaseTtlMs));
     }
     return refreshed;
@@ -655,4 +658,8 @@ export class LeaseRegistry {
       reason: 'LEASE_SCOPE_REQUIRED',
     });
   }
+}
+
+function normalizedDeviceAliases(deviceKeys: readonly string[]): string[] {
+  return deviceIdentityAliases(deviceKeys).map((key) => key.toLocaleLowerCase('en-US'));
 }

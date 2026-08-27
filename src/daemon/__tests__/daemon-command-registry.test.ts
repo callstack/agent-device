@@ -260,6 +260,7 @@ test('daemon command registry owns human-control effects and fails closed', () =
     PUBLIC_COMMANDS.is,
     PUBLIC_COMMANDS.logs,
     PUBLIC_COMMANDS.devices,
+    PUBLIC_COMMANDS.trace,
   ]) {
     assert.equal(humanControlEffectForRequest(makeRequest(command)), 'read', `${command} effect`);
   }
@@ -283,6 +284,7 @@ test('daemon command registry owns human-control effects and fails closed', () =
     'mutate',
   );
   assert.equal(humanControlEffectForRequest(makeRequest(PUBLIC_COMMANDS.click)), 'mutate');
+  assert.equal(humanControlEffectForRequest(makeRequest(PUBLIC_COMMANDS.viewport)), 'mutate');
   assert.equal(humanControlEffectForRequest(makeRequest('future-command')), 'mutate');
   assert.equal(
     humanControlEffectForRequest(makeRequest(INTERNAL_COMMANDS.leaseHeartbeat)),

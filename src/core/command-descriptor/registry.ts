@@ -421,8 +421,20 @@ function postActionObservation(command: string): PostActionObservationSupport {
 
 const ownerFilesEnabled = typeof __OWNER_FILES__ === 'undefined' || __OWNER_FILES__;
 
+const DEPLOY_APP_COMMAND_DESCRIPTOR = {
+  deviceClaimPolicy: 'transient-exclusive',
+  ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/install.ts'] as const } : {}),
+  catalog: { group: 'public' },
+  frameworkTier: 'extended',
+  recordsSessionAction: true,
+  recordingEffect: 'mutates-app',
+  daemon: { route: 'session', refFrameEffect: 'may-invalidate', ...HUMAN_CONTROL_MUTATE },
+  platformExecution: { kind: 'device-runtime', use: deployAppUse },
+  timeoutPolicy: INSTALL_TIMEOUT_POLICY,
+  batchable: true,
+} as const;
+
 export const RAW_COMMAND_DESCRIPTORS = [
-  // -- host-local human control (route: humanControl) --
   {
     name: 'human_control',
     deviceClaimPolicy: 'none',
@@ -878,29 +890,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'install',
-    deviceClaimPolicy: 'transient-exclusive',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/install.ts'] as const } : {}),
-    catalog: { group: 'public' },
-    frameworkTier: 'extended',
-    recordsSessionAction: true,
-    recordingEffect: 'mutates-app',
-    daemon: { route: 'session', refFrameEffect: 'may-invalidate', ...HUMAN_CONTROL_MUTATE },
-    platformExecution: { kind: 'device-runtime', use: deployAppUse },
-    timeoutPolicy: INSTALL_TIMEOUT_POLICY,
-    batchable: true,
+    ...DEPLOY_APP_COMMAND_DESCRIPTOR,
   },
   {
     name: 'reinstall',
-    deviceClaimPolicy: 'transient-exclusive',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/install.ts'] as const } : {}),
-    catalog: { group: 'public' },
-    frameworkTier: 'extended',
-    recordsSessionAction: true,
-    recordingEffect: 'mutates-app',
-    daemon: { route: 'session', refFrameEffect: 'may-invalidate', ...HUMAN_CONTROL_MUTATE },
-    platformExecution: { kind: 'device-runtime', use: deployAppUse },
-    timeoutPolicy: INSTALL_TIMEOUT_POLICY,
-    batchable: true,
+    ...DEPLOY_APP_COMMAND_DESCRIPTOR,
   },
   {
     name: 'install_source',
@@ -1182,7 +1176,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
-    daemon: { route: 'recordTrace', refFrameEffect: 'preserve', ...HUMAN_CONTROL_MUTATE },
+    daemon: { route: 'recordTrace', refFrameEffect: 'preserve', ...HUMAN_CONTROL_READ },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
     platformExecution: NO_PLATFORM_EXECUTION,
@@ -1475,7 +1469,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'extended',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
-    daemon: { route: 'generic', refFrameEffect: 'may-invalidate', ...HUMAN_CONTROL_READ },
+    daemon: { route: 'generic', refFrameEffect: 'may-invalidate', ...HUMAN_CONTROL_MUTATE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     platformExecution: { kind: 'device-runtime', uses: [viewportRuntimeUse] },

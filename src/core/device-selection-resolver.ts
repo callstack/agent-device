@@ -1,9 +1,12 @@
 import type {
+  AgentDeviceDevice,
+  AgentDeviceSelectionOptions,
   DeviceSelectionMetadata,
   DeviceSelectionReason,
   DeviceSelectionSource,
 } from '@agent-device/contracts/client';
 import {
+  deviceFieldsFromPublicPlatform,
   hasExplicitDeviceIdentitySelector,
   isIosFamily,
   isSerialAddressablePlatform,
@@ -30,6 +33,40 @@ export type InventoryDeviceSelectionParams = {
    */
   appleSimulatorAppTarget?: string;
 };
+
+export async function resolvePublicInventoryDevice(
+  source: {
+    list(options?: AgentDeviceSelectionOptions): Promise<AgentDeviceDevice[]>;
+  },
+  options: AgentDeviceSelectionOptions,
+): Promise<DeviceInfo> {
+  const devices = await source.list({
+    platform: options.platform,
+    target: options.target,
+    device: options.device,
+    udid: options.udid,
+    serial: options.serial,
+    iosSimulatorDeviceSet: options.iosSimulatorDeviceSet,
+    androidDeviceAllowlist: options.androidDeviceAllowlist,
+  });
+  return await resolveDevice(
+    devices.map((device) => ({
+      ...deviceFieldsFromPublicPlatform(device.platform),
+      id: device.id,
+      name: device.name,
+      kind: device.kind,
+      target: device.target,
+      booted: device.booted,
+    })),
+    {
+      platform: options.platform,
+      target: options.target,
+      deviceName: options.device,
+      udid: options.udid,
+      serial: options.serial,
+    },
+  );
+}
 
 export async function resolveInventoryDeviceSelection(
   params: InventoryDeviceSelectionParams,

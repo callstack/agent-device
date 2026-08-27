@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import type http from 'node:http';
 import { test } from 'vitest';
 import {
   closeLoopbackServer,
@@ -6,7 +7,42 @@ import {
   skipWhenLoopbackUnavailable,
 } from '../../__tests__/test-utils/loopback.ts';
 import { HUMAN_CONTROL_HTTP_PREFIX, HumanControlRegistry } from '../human-control.ts';
+import { tryHandleHumanControlHttpRoute } from '../human-control-http.ts';
 import { createDaemonHttpServer } from '../server/http-server.ts';
+
+test('malformed request URLs return a normalized error', async () => {
+  let responseBody = '';
+  let finishResponse: (() => void) | undefined;
+  const responseFinished = new Promise<void>((resolve) => {
+    finishResponse = resolve;
+  });
+  const req = {
+    url: 'http://[',
+    method: 'PUT',
+    headers: { authorization: 'Bearer daemon-secret' },
+  } as http.IncomingMessage;
+  const res = {
+    statusCode: 0,
+    setHeader: () => undefined,
+    end: (body: string) => {
+      responseBody = body;
+      finishResponse?.();
+    },
+  } as unknown as http.ServerResponse;
+
+  assert.equal(
+    tryHandleHumanControlHttpRoute({
+      req,
+      res,
+      expectedToken: 'daemon-secret',
+      registry: new HumanControlRegistry(),
+    }),
+    true,
+  );
+  await responseFinished;
+  assert.equal(res.statusCode, 400);
+  assert.equal((JSON.parse(responseBody) as { code?: string }).code, 'INVALID_ARGS');
+});
 
 test('daemon human-control API authenticates and manages persistent holds', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;

@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, throwDaemonError, toAppErrorCode } from '@agent-device/kernel/errors';
+import type { AgentDeviceClient } from '../../agent-device-client.ts';
 import { INTERNAL_COMMANDS } from '../../command-catalog.ts';
-import { resolveTargetDevice } from '../../core/dispatch-resolve.ts';
+import { resolvePublicInventoryDevice } from '../../core/device-selection-resolver.ts';
 import {
   ensureDaemon,
   resolveClientSettings,
@@ -43,7 +44,7 @@ type LocalHumanControlClient = {
   remove(holdId: string): Promise<boolean>;
 };
 
-export const takeoverCommand: ClientCommandHandler = async ({ positionals, flags }) => {
+export const takeoverCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
   const action = positionals[0]?.toLowerCase();
   if (action === 'status') {
     if (positionals.length !== 1) {
@@ -63,12 +64,15 @@ export const takeoverCommand: ClientCommandHandler = async ({ positionals, flags
     throw new AppError('INVALID_ARGS', 'takeover accepts only: status or release <hold-id>.');
   }
 
-  await runForegroundTakeover(flags);
+  await runForegroundTakeover(flags, client);
   return true;
 };
 
-async function runForegroundTakeover(flags: CliFlags): Promise<void> {
-  const device = await resolveTargetDevice(flags);
+async function runForegroundTakeover(
+  flags: CliFlags,
+  agentDeviceClient: AgentDeviceClient,
+): Promise<void> {
+  const device = await resolveTakeoverDevice(agentDeviceClient, flags);
   const holdId = `takeover-${randomUUID()}`;
   const input = buildForegroundHoldInput(device);
   const client = await createLocalHumanControlClient(flags);
@@ -116,6 +120,13 @@ async function runForegroundTakeover(flags: CliFlags): Promise<void> {
         : 'Release could not be confirmed. The safety TTL will re-enable agent interactions automatically.\n',
     );
   }
+}
+
+async function resolveTakeoverDevice(
+  client: AgentDeviceClient,
+  flags: CliFlags,
+): Promise<DeviceInfo> {
+  return await resolvePublicInventoryDevice(client.devices, flags);
 }
 
 async function showTakeoverStatus(flags: CliFlags): Promise<void> {

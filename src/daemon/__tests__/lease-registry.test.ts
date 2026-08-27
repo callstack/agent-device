@@ -1,5 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { HumanControlRegistry } from '../human-control.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 
 test('allocateLease creates lease and enforces tenant/run validation', () => {
@@ -116,6 +117,33 @@ test('human-controlled device leases survive expiry and refresh when control is 
   assert.equal(registry.listActiveLeases()[0]?.leaseId, lease.leaseId);
   now = 14_000;
   assert.deepEqual(registry.listActiveLeases(), []);
+});
+
+test('bare takeover identity protects and refreshes a composite proxy lease key', async () => {
+  let now = 1_000;
+  const humanControl = new HumanControlRegistry({ now: () => now });
+  const registry = new LeaseRegistry({
+    now: () => now,
+    defaultLeaseTtlMs: 5_000,
+    isDeviceLeaseProtected: (lease) => humanControl.isDeviceControlled(lease.deviceKey),
+  });
+  const lease = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseBackend: 'ios-instance',
+    leaseProvider: 'proxy',
+    deviceKey: 'ios:mobile:SIM-1',
+  });
+  const hold = await humanControl.upsert('operator-1', {
+    scope: { deviceKey: 'SIM-1' },
+  });
+
+  now = 7_000;
+  assert.deepEqual(registry.consumeExpiredLeases(), []);
+  humanControl.remove(hold.id);
+  const [refreshed] = registry.refreshLeasesForDeviceKey(hold.scope.deviceKey);
+  assert.equal(refreshed?.leaseId, lease.leaseId);
+  assert.equal(refreshed?.expiresAt, 12_000);
 });
 
 test('capacity limits reject additional simulator leases', () => {

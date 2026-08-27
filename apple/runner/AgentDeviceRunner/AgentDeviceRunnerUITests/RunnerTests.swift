@@ -194,7 +194,48 @@ final class RunnerTests: XCTestCase {
 
   override func setUp() {
     continueAfterFailure = true
+    #if os(macOS)
+      addUIInterruptionMonitor(withDescription: "Host local-network permission") { alert in
+        let text = alert.staticTexts.allElementsBoundByIndex.map(\.label)
+        guard let button = alert.buttons.allElementsBoundByIndex.first(where: { button in
+          Self.shouldDismissHostLocalNetworkPermission(text: text, buttonLabel: button.label)
+        }) else {
+          return false
+        }
+        button.tap()
+        return true
+      }
+    #endif
   }
+
+  static func shouldDismissHostLocalNetworkPermission(
+    text: [String],
+    buttonLabel: String
+  ) -> Bool {
+    let isLocalNetworkPrompt = text.contains { value in
+      value.localizedCaseInsensitiveContains("local network")
+    }
+    let normalizedButton = buttonLabel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return isLocalNetworkPrompt && ["don't allow", "don’t allow"].contains(normalizedButton)
+  }
+
+  #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+    func testHostLocalNetworkPermissionMonitorSelectsOnlyTheDenialAction() {
+      let prompt = ["Allow hosted compute to find devices on local networks?"]
+      XCTAssertTrue(
+        Self.shouldDismissHostLocalNetworkPermission(text: prompt, buttonLabel: "Don’t Allow")
+      )
+      XCTAssertFalse(
+        Self.shouldDismissHostLocalNetworkPermission(text: prompt, buttonLabel: "Allow")
+      )
+      XCTAssertFalse(
+        Self.shouldDismissHostLocalNetworkPermission(
+          text: ["System Settings wants to make changes"],
+          buttonLabel: "Don’t Allow"
+        )
+      )
+    }
+  #endif
 
   /// True for the one recorded-issue class the runner deliberately mutes: an AX-server error
   /// (`kAXError*`) inside a "Failed to get matching snapshot" fetch. The kAXError token
