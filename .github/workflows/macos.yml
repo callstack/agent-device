@@ -130,6 +130,54 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: macos-helper }
 
+      # The hosted runner can present macOS's Local Network permission sheet the first time
+      # the XCTest transport connects over loopback. Warm the runner and resolve that sheet
+      # before replay timing begins; the daemon and runner stay warm in this job's state dir.
+      - name: Resolve runner Local Network permission
+        shell: bash
+        run: |
+          set -euo pipefail
+          session='macos-local-network-warmup'
+          screenshot_path="$RUNNER_TEMP/macos-local-network-warmup.png"
+          helper='apple/macos-helper/.build/release/agent-device-macos-helper'
+
+          close_session() {
+            node --experimental-strip-types src/bin.ts close \
+              --platform macos \
+              --session "$session" \
+              --state-dir "$AGENT_DEVICE_STATE_DIR" >/dev/null 2>&1 || true
+          }
+          trap close_session EXIT
+
+          node --experimental-strip-types src/bin.ts open 'System Settings' \
+            --relaunch \
+            --platform macos \
+            --session "$session" \
+            --state-dir "$AGENT_DEVICE_STATE_DIR"
+          node --experimental-strip-types src/bin.ts screenshot "$screenshot_path" \
+            --platform macos \
+            --session "$session" \
+            --state-dir "$AGENT_DEVICE_STATE_DIR" &
+          screenshot_pid=$!
+
+          attempts_after_capture=5
+          for attempt in {1..60}; do
+            if "$helper" alert dismiss --surface frontmost-app; then
+              break
+            fi
+            if [ -f "$screenshot_path" ]; then
+              attempts_after_capture=$((attempts_after_capture - 1))
+              if [ "$attempts_after_capture" -eq 0 ]; then
+                break
+              fi
+            fi
+            sleep 1
+          done
+          wait "$screenshot_pid"
+
+          close_session
+          trap - EXIT
+
       - name: Run macOS integration test
         uses: ./.github/actions/run-gate
         with:
