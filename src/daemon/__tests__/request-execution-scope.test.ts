@@ -613,13 +613,13 @@ test('prepareLockedRequestScope preserves existing-session selector validation',
     leaseRegistry: new LeaseRegistry(),
   });
 
-  expect(() =>
+  await expect(
     prepareLockedRequestScope({
       scope,
       sessionStore,
       trackDownloadableArtifact: () => 'artifact-id',
     }),
-  ).toThrow(/already bound to android device "Pixel" \(emulator-5554\).*--platform=ios/i);
+  ).rejects.toThrow(/already bound to android device "Pixel" \(emulator-5554\).*--platform=ios/i);
 });
 
 test('prepareLockedRequestScope blocks commands for invalidated recordings before handlers run', async () => {
@@ -639,12 +639,14 @@ test('prepareLockedRequestScope blocks commands for invalidated recordings befor
     leaseRegistry: new LeaseRegistry(),
   });
 
-  const result = await withDiagnosticsScope({ command: 'snapshot', logPath: LOG_PATH }, async () =>
-    prepareLockedRequestScope({
-      scope,
-      sessionStore,
-      trackDownloadableArtifact: () => 'artifact-id',
-    }),
+  const result = await withDiagnosticsScope(
+    { command: 'snapshot', logPath: LOG_PATH },
+    async () =>
+      await prepareLockedRequestScope({
+        scope,
+        sessionStore,
+        trackDownloadableArtifact: () => 'artifact-id',
+      }),
   );
 
   expect(result.type).toBe('response');
@@ -665,7 +667,7 @@ test('prepareLockedRequestScope passes the session runner log path into handler 
     leaseRegistry: new LeaseRegistry(),
   });
 
-  const result = prepareLockedRequestScope({
+  const result = await prepareLockedRequestScope({
     scope,
     sessionStore,
     trackDownloadableArtifact: () => 'artifact-id',
@@ -694,7 +696,7 @@ test('prepareLockedRequestScope streams ordinary diagnostics into the active tra
   });
 
   await withDiagnosticsScope({ command: 'snapshot', logPath: LOG_PATH }, async () => {
-    const result = prepareLockedRequestScope({
+    const result = await prepareLockedRequestScope({
       scope,
       sessionStore,
       trackDownloadableArtifact: () => 'artifact-id',

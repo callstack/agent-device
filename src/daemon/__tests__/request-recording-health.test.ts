@@ -40,7 +40,7 @@ function makeIosSimulatorSession(showTouches: boolean): SessionState {
   return session;
 }
 
-test('runner-backed iOS recordings still invalidate on runner restarts', () => {
+test('runner-backed iOS recordings still invalidate on runner restarts', async () => {
   const session = makeIosSimulatorSession(true);
   session.device.kind = 'device';
   session.screenRecording = makeTestScreenRecordingResource(session, {
@@ -53,7 +53,7 @@ test('runner-backed iOS recordings still invalidate on runner restarts', () => {
     sessionId: 'runner-after',
   });
 
-  refreshRecordingHealth(session);
+  await refreshRecordingHealth(session);
 
   expect(mockGetRunnerSessionSnapshot).toHaveBeenCalledWith('sim-1');
   expect(session.screenRecording?.handle.inspect().invalidatedReason).toBe(

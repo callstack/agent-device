@@ -1,15 +1,15 @@
 import { isIosFamily } from '@agent-device/kernel/device';
-import { getRunnerSessionSnapshot } from '../platforms/apple/core/runner-client.ts';
+import { inspectAppleRunnerSession } from '../platform-runtime-apple-resources.ts';
 import type { SessionState } from './types.ts';
 
-export function refreshRecordingHealth(session: SessionState): void {
+export async function refreshRecordingHealth(session: SessionState): Promise<void> {
   if (!recordingRequiresRunnerHealth(session)) {
     return;
   }
   const recording = session.screenRecording!.handle;
   const state = recording.inspect();
 
-  const snapshot = getRunnerSessionSnapshot(session.device.id);
+  const snapshot = await inspectAppleRunnerSession(session.device.id);
   if (!state.runnerSessionId) {
     if (snapshot?.alive) {
       recording.setRunnerSessionId(snapshot.sessionId);

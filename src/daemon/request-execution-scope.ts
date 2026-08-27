@@ -381,7 +381,7 @@ function applyRequestCommandDefaults(req: DaemonRequest): DaemonRequest {
   };
 }
 
-export function prepareLockedRequestScope(params: {
+export async function prepareLockedRequestScope(params: {
   scope: RequestExecutionScope;
   sessionStore: SessionStore;
   trackDownloadableArtifact: (opts: {
@@ -390,14 +390,14 @@ export function prepareLockedRequestScope(params: {
     artifactType: DaemonArtifactType | undefined;
     fileName?: string;
   }) => string;
-}): LockedRequestScopeResult {
+}): Promise<LockedRequestScopeResult> {
   const { scope, sessionStore, trackDownloadableArtifact } = params;
   const logPath = scope.runnerLogPath;
   scope.throwIfCanceled();
   const seededSession = sessionStore.get(scope.sessionName);
   if (seededSession) {
     // Called under runLocked: refreshRecordingHealth may mutate session recording state.
-    refreshRecordingHealth(seededSession);
+    await refreshRecordingHealth(seededSession);
     sessionStore.set(scope.sessionName, seededSession);
   }
   const binding = prepareLockedRequestBinding({

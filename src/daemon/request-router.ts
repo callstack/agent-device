@@ -211,7 +211,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     inheritedProviderScope?: RequestPlatformProviderScope,
   ): Promise<DaemonResponse> {
     const run = async (): Promise<DaemonResponse> => {
-      const locked = prepareLockedRequestScope({
+      const locked = await prepareLockedRequestScope({
         scope,
         sessionStore,
         trackDownloadableArtifact,

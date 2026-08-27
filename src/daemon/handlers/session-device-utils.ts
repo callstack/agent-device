@@ -2,7 +2,7 @@ import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
-import { getRunnerSessionSnapshot } from '../../platforms/apple/core/runner-client.ts';
+import { inspectAppleRunnerSession } from '../../platform-runtime-apple-resources.ts';
 import { resolveTargetDevice } from '../../core/dispatch-resolve.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { hasDeviceSelectionInput, hasExplicitDeviceSelector } from '../device-selector-intent.ts';
@@ -62,7 +62,7 @@ export async function refreshSessionDeviceIfNeeded(device: DeviceInfo): Promise<
   // A live XCUITest runner session is attached to this exact UDID, which
   // proves the simulator still exists and is booted — the two facts the
   // ~0.7s re-resolve inventory listing exists to establish.
-  if (getRunnerSessionSnapshot(device.id)?.alive) {
+  if ((await inspectAppleRunnerSession(device.id))?.alive) {
     return { ...device, booted: true };
   }
 
