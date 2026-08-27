@@ -1,5 +1,18 @@
 name: 1874 Diagnose
 
+# Under the lane rule in #1781:
+#
+#   - Catches: iOS text-entry commit episodes on CI hardware — the dispatched test looped on both
+#     arches, with and without the neighbour test that shares the simulator. An absorbed episode
+#     surfaces as a slow pass, so the cadence is kept for passes too.
+#   - Evidence: the 2026-08-21 dispatch passed 50/50 and still caught an episode (`type-all`
+#     2487 ms across 5 polls) that no PR lane would report; it does not reproduce locally.
+#   - Cost: manual dispatch and the `diagnose/1874-commit-stall` branch only — never a PR or `main`.
+#     One dispatch is four macOS slots, each a runner build plus `iterations` iterations of
+#     simulator time.
+#   - Kill criterion: delete when #2080 closes. It is the last open text-entry question this loop
+#     is the CI reproduction path for, and nothing else reads these artifacts.
+
 on:
   workflow_dispatch:
     inputs:
@@ -7,6 +20,10 @@ on:
         description: 'Loop iterations per job'
         required: false
         default: '25'
+      test:
+        description: 'RunnerTests method to loop'
+        required: false
+        default: testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden
   push:
     branches:
       - diagnose/1874-commit-stall
@@ -57,12 +74,17 @@ jobs:
           preferred-device-name: iPhone 17 Pro
 
       - name: Stall loop
+        env:
+          ITERATIONS_INPUT: ${{ github.event.inputs.iterations }}
+          TEST_INPUT: ${{ github.event.inputs.test }}
         run: |
           set -euo pipefail
           XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"
           test -n "$XCTESTRUN_PATH"
           UDID="${{ steps.ios-simulator.outputs.simulator-udid }}"
-          ITER="${{ github.event.inputs.iterations || '25' }}"
+          ITER="${ITERATIONS_INPUT:-25}"
+          TEST_NAME="${TEST_INPUT:-testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden}"
+          mkdir -p .tmp
 
           if [ "${{ matrix.mode }}" = "pair" ]; then
             EXTRA_ONLY_TESTING=(-only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareDelayedTypeFailsWhenTappedInputDisappearsMidCommand)
@@ -73,33 +95,30 @@ jobs:
           sys_prof="$(system_profiler SPHardwareDataType 2>/dev/null | grep -E 'Chip|Cores|Memory' || true)"
           echo "HOST: $sys_prof" | tee stall-summary.txt
 
-          pass=0; fail=0
+          pass=0; skipped=0; failed=0; noresult=0; runfailed=0
           for i in $(seq 1 "$ITER"); do
             LOG=".tmp/stall-run-$i.log"
             set +e
             xcodebuild test-without-building \
               -xctestrun "$XCTESTRUN_PATH" \
               -destination "platform=iOS Simulator,id=$UDID" \
-              -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden \
+              -only-testing:"AgentDeviceRunnerUITests/RunnerTests/$TEST_NAME" \
               ${EXTRA_ONLY_TESTING[@]+"${EXTRA_ONLY_TESTING[@]}"} \
               > "$LOG" 2>&1
             rc=$?
             set -e
-            if grep -q "testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden]' passed" "$LOG"; then
-              pass=$((pass+1)); verdict=pass
-            else
-              fail=$((fail+1)); verdict=STALL
-            fi
-            phase="$(grep -o 'phase=type-all durationMs=[0-9.]*' "$LOG" | tail -1)"
-            polls="$(grep -c 'DEBUG-1874] poll' "$LOG" || true)"
-            echo "iter=$i verdict=$verdict rc=$rc $phase polls=$polls" | tee -a stall-summary.txt
-            if [ "$verdict" = "STALL" ]; then
-              grep 'DEBUG-1874' "$LOG" | head -40 | tee -a stall-summary.txt
-              cp "$LOG" ".tmp/stall-failure-$i.log"
-            fi
+            verdict="$(node --experimental-strip-types scripts/diagnose-1874-iteration.ts \
+              "$LOG" "$TEST_NAME" "$i" "$rc")"
+            case "$verdict" in
+              passed) pass=$((pass+1)) ;;
+              skipped) skipped=$((skipped+1)) ;;
+              no-result) noresult=$((noresult+1)) ;;
+              run-failed) runfailed=$((runfailed+1)) ;;
+              *) failed=$((failed+1)) ;;
+            esac
           done
 
-          echo "RESULT arch=${{ matrix.arch }} mode=${{ matrix.mode }}: $pass passed, $fail stalled of $ITER" | tee -a stall-summary.txt
+          echo "RESULT arch=${{ matrix.arch }} mode=${{ matrix.mode }}: $pass passed, $skipped skipped, $failed failed, $noresult no-result, $runfailed run-failed of $ITER" | tee -a stall-summary.txt
 
       - name: Upload stall evidence
         if: always()
@@ -109,5 +128,5 @@ jobs:
           include-hidden-files: true
           path: |
             stall-summary.txt
-            .tmp/stall-failure-*.log
+            .tmp/stall-evidence-*.log
           if-no-files-found: ignore
