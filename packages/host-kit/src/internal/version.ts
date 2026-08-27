@@ -17,7 +17,6 @@ export function readVersion(root: string = findProjectRoot()): string {
       version?: unknown;
     };
   } catch {
-    // Not memoized: the root may still be materializing.
     return '0.0.0';
   }
   const version = typeof pkg.version === 'string' ? pkg.version : '0.0.0';

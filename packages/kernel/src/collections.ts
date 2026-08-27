@@ -17,11 +17,7 @@ function sortKeysDeep(value: unknown): unknown {
   );
 }
 
-/**
- * Linear-time edge trim. The regex form (`/^-+|-+$/g`) backtracks polynomially
- * on long dash runs (CodeQL js/polynomial-redos), and callers build their
- * inputs from caller-supplied strings such as file paths and cache names.
- */
+// Linear-time trim; the regex form trips CodeQL js/polynomial-redos.
 export function trimEdgeDashes(value: string): string {
   let start = 0;
   let end = value.length;

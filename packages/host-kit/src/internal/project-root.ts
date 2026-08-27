@@ -11,9 +11,7 @@ export function resolveAgentDeviceProjectRoot(startDirectory: string): string {
       try {
         const name = (JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { name?: unknown }).name;
         if (name === 'agent-device') return current;
-      } catch {
-        // Unreadable manifests are not the root.
-      }
+      } catch {}
     }
     current = path.dirname(current);
   }

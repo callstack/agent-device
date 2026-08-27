@@ -27,7 +27,6 @@ test('Stryker aliases every exported workspace subpath exactly', () => {
 });
 
 test('disk manifests alias an untracked sandbox copy the tracked reader cannot see', () => {
-  // Must sit inside the repository tree: `git ls-files` has to run and list nothing.
   fs.mkdirSync(path.join(repoRoot, '.tmp'), { recursive: true });
   const sandboxRoot = fs.mkdtempSync(path.join(repoRoot, '.tmp', 'stryker-sandbox-fixture-'));
   try {
