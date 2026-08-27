@@ -63,7 +63,7 @@ import {
   viewportRuntimeUse,
   waitSelectorCaptureRuntimePlanUses,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { assertRecordRuntimeExecution } from '@agent-device/contracts/record-runtime-cutover';
+import { assertRecordRuntimeExecution } from '@agent-device/contracts/record-runtime-execution';
 import { screenRecordingRuntimePlanUses } from '@agent-device/contracts/screen-recording-runtime-plan';
 import { readDeclaredPlatformExecution } from './platform-execution-entry.ts';
 import type {

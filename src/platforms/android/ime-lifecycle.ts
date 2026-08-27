@@ -1,6 +1,6 @@
 // Thin re-export shim over the extracted cluster in @agent-device/platform-android, trimmed to
-// the names root code still consumes. TODO(#2041): delete together with the adb-executor shim
-// once the in-flight perf/trace handler migration lands.
+// the names live root and test-support code still consumes. TODO(#2041): delete together with the
+// adb-executor shim after those callers import the package-owned seams directly.
 import './adb-host-binding.ts';
 
 export {

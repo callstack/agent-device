@@ -74,10 +74,7 @@ const elementTextUnavailable = Object.freeze({
   reason: 'unsupported-platform-leaf',
   hint: 'HarmonyOS reads element text from the captured tree only.',
 } as const);
-/**
- * Parity with the retired `focus` capability bucket, which the HarmonyOS overlay in
- * `core/capabilities.ts` filled as `{ emulator, device }` — the two kinds hdc can drive.
- */
+/** Focus is available on the two HarmonyOS target kinds HDC can drive. */
 const focusKindUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-device-kind',
@@ -193,11 +190,7 @@ function harmonyFocusFact(device: DeviceInfo): RuntimeOperationFact {
   return device.kind === 'emulator' || device.kind === 'device' ? available : focusKindUnavailable;
 }
 
-/**
- * `orientation` and `tv-remote` never carried a HarmonyOS capability bucket: the family is absent
- * from `HARMONYOS_SUPPORTED_COMMANDS` for both, so both are unavailable unconditionally — even
- * though the interactor's own `setOrientation` is technically callable, admission never reached it.
- */
+/** Public orientation and TV-remote operations are not supported by the HarmonyOS owner. */
 const harmonyPlatformLeafUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
@@ -257,8 +250,8 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: harmonyFocusFact(device) }),
-        // Gestures share focus's kind cell (the overlay admitted `{emulator, device}`); only the
-        // two tiers hdc cannot synthesize are refused.
+        // Gestures share focus's HDC-driven kind cell; only the two tiers HDC cannot synthesize
+        // are refused.
         ...gestureRuntimeOperationFacts({
           plan: harmonyGestureFact(device),
           directionalFling: harmonyGestureFact(device),
@@ -284,17 +277,13 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
         ...backRuntimeOperationFacts({ back: harmonyFocusFact(device) }),
         ...homeRuntimeOperationFacts({ home: harmonyFocusFact(device) }),
-        // Parity with the retired `HARMONYOS_SUPPORTED_COMMANDS` overlay, which listed
-        // `app-switcher` for both HarmonyOS kinds: it rides the same hdc-driven key input `home`
-        // does, so it shares that cell.
+        // App switcher rides the same HDC-driven key input as home, so it shares that cell.
         ...appSwitcherRuntimeOperationFacts({ appSwitcher: harmonyFocusFact(device) }),
-        // HarmonyOS never carried a `trigger-app-event` bucket and is absent from the overlay.
+        // HarmonyOS has no trigger-app-event implementation.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: harmonyPlatformLeafUnavailable }),
-        // Parity with the retired `HARMONYOS_SUPPORTED_COMMANDS` overlay, which listed `settings`
-        // for both HarmonyOS kinds; the hdc-driven settings surface shares the interaction gate.
+        // The HDC-driven settings surface shares the interaction kind gate.
         ...settingsRuntimeOperationFacts({ setSetting: harmonyFocusFact(device) }),
-        // R59: the retired `alert` descriptor declared no HarmonyOS leaf and the overlay set
-        // never listed it, so no HarmonyOS cell was ever admitted.
+        // HarmonyOS exposes no alert automation operation.
         ...alertRuntimeOperationFacts({
           read: harmonyPlatformLeafUnavailable,
           wait: harmonyPlatformLeafUnavailable,
@@ -308,8 +297,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
           dismiss: harmonyFocusFact(device),
           enter: harmonyFocusFact(device),
         }),
-        // HarmonyOS never carried a `clipboard` capability bucket and is absent from the
-        // HarmonyOS overlay set, so no clipboard cell was ever admitted here.
+        // HarmonyOS exposes no clipboard automation operation.
         ...clipboardRuntimeOperationFacts({
           read: harmonyPlatformLeafUnavailable,
           write: harmonyPlatformLeafUnavailable,

@@ -2,33 +2,22 @@
 
 ## Status
 
-Accepted for staged adoption (2026-08-09). Checkpoint outcome: **continue** (2026-08-10), under the
-revised cumulative package budget accepted in issue 1704. The clean checkpoint is measured from the
-original baseline `44c298d7f3a0ef84bc47f34c54d88b6c9eeb0df2`, through merged `devices`
-`c06bed9f773a27ae0a02cb012570def2f2d0b90e`, to `logs`
-`188795386466cfdba5d5748db5c9d3477e70eb4e` and `network`
-`457fafe6399a95a4ddbfac57f02b3a7fe4157a54`. The earlier checkpoints at `99f5af1b7` and `d73bdb4ae`
-are superseded and were not behavior-passing: later review found correctness failures and the first
-budget decision still used the unrevised +3% limit. The required cleanup package, explicit budget
-decision, and clean rerun are now complete. The recordings command unit has since completed on the
-durable-capture substrate under its separately reviewed cumulative bound below (section 7). No
-further command unit is authorized by this Status: subsequent units are planned, budgeted, and
-authorized individually through the successor tracking issue under the amendment's governance.
-
-Amended 2026-08-11 with broader-migration governance (sections 8–10). The amendment changes no
-checkpoint outcome and re-authorizes nothing by itself: command units still migrate one at a time
-under sections 2–6, but subsequent units follow the move-dominated size discipline, the evidence
-tiers, the binding ergonomics, and the process-lifetime rules added below.
+Completed (2026-08-27). Accepted for staged adoption on 2026-08-09, with a successful checkpoint on
+2026-08-10 and broader-migration governance added on 2026-08-11. The historical checkpoint and
+per-unit evidence in sections 7–10 explain how the transition was kept shippable; they no longer
+authorize or schedule migration work.
 
 Amended 2026-08-26 while closing the Wave 6 residue: `host` covers host-scoped platform work through
 a narrow neutral typed service, not diagnostics alone. Host diagnostics, daemon-owner resource
 cleanup, and managed host tooling share the execution category because none binds a request-scoped
 device runtime; their domain services remain separate rather than forming a generic host grab bag.
 
-During the `devices` unit, doctor discovery, replay-test sharding, Apple simulator hints, and Android
-emulator lifecycle keep their existing command execution owners while consuming the same injected,
-neutral inventory capability. That coexistence moves discovery mechanics once; it does not migrate
-those descriptors or authorize a second local/provider chooser.
+Completed 2026-08-27 through #2070–#2072. Every descriptor now declares `none`, `host`,
+`inventory`, or `device-runtime`; capability buckets and the legacy execution shape are gone.
+Production `src/daemon/**` has zero dependencies on concrete platform implementations, enforced by
+R65. The per-command cutover table was retired after completion as required by section 6; R66 now
+enforces the permanent facts-only admission and runtime-proof invariants without naming historical
+routes or handler functions.
 
 ## Rules at a glance
 
@@ -60,19 +49,14 @@ those descriptors or authorize a second local/provider chooser.
   descriptor through which the same runtime owner can recover. Live session state may own a neutral
   facet handle under R7; only the descriptor and neutral metadata enter persisted recovery state.
   Concrete platform process objects never cross the seam.
-- The migration unit is one command descriptor across its full existing denominator: every inventory
-  source or every supported device-runtime cell. A descriptor has exactly one explicitly declared
-  platform-execution shape at every committed state — `none`, legacy, host-diagnostic, inventory-backed,
-  or device-runtime-backed — and a migrated command has no legacy execution fallback. `none` declares
-  the absence of platform execution and is never a migration target or source. `host` declares
+- A descriptor has exactly one explicitly declared platform-execution shape: `none`, `host`,
+  `inventory`, or `device-runtime`. `none` declares the absence of platform execution. `host` declares
   host-scoped platform work through a neutral typed domain service: diagnostics, owner cleanup, or
   managed tooling. The command binds no device runtime as its own execution shape, and any
-  device-runtime leg rides an already migrated command's declared use.
-- Broader adoption pauses after the first real slices. Evidence records one decision: continue,
-  revise the seam and rerun the checkpoint, or stop with every landed command still coherent.
-- Post-checkpoint units are move-dominated: platform mechanics leave root `src/` for platform
-  packages, net shipped-size growth is exceptional and individually justified, and surfaces already
-  scheduled for removal at the next major are deleted on legacy, never migrated.
+  device-runtime leg rides another command's declared use.
+- During adoption, the first real slices paused for an explicit continue/revise/stop checkpoint.
+  Later units were move-dominated: platform mechanics left root `src/` for platform packages and
+  exceptional shipped-size growth required an individual justification.
 - Evidence is tiered by what a unit imports: request-scoped device units prove facts, operations,
   and parity cells; only durable-resource units carry the section 4–5 lifecycle evidence.
 - A handler binds once with its execution use. Admission, `capabilities`, and doctor questions use
@@ -133,12 +117,11 @@ depend on kernel vocabulary but never on concrete platform packages or daemon im
 Transitional exception (#2041): the Android adb/IME transport cluster (`adb-executor`,
 `ime-lifecycle`, `ime-helper`) lives in `@agent-device/platform-android` behind four registered
 subpaths, with its raw host primitives injected through the package's `adb-host` port by root
-composition wiring. While the in-flight perf/trace handler migration still imports the old root
-paths, R13 names an explicit shim table: each subpath is importable only by its root re-export
-shim (plus the host-binding, the helper-install module the binding reaches, and the cluster's own
-tests under `src/platforms/android/__tests__/`, which must name the package module to mock its
-internal edges). The shims, the subpaths, and this exception are deleted together once that
-migration lands; the table growing is drift, not precedent.
+composition wiring. Live root runtime, core interactor, SDK, and test-support consumers still import
+the old root paths, so R13 names an explicit shim table: each subpath is importable only by its root
+re-export shim (plus the host-binding, the helper-install module the binding reaches, and the
+cluster's own tests under `src/platforms/android/__tests__/`). Delete the shims and narrow this table
+only after those consumers move; the table growing is drift, not precedent.
 
 Durable-capture mechanics shared by more than one implementation live in the private
 `@agent-device/capture-kit` workspace package, with the enforced direction
@@ -450,50 +433,21 @@ adopted, request-binding disposal cannot stop the resource. Normal session teard
 facet-specific ordering; adopted durable handles are not placed in the request binding's generic
 disposable transaction.
 
-### 6. Command cutover is the abandonment-safe migration unit
+### 6. Command execution has one closed shape
 
-The command descriptor is the sole migration discriminant, but it does not own a daemon handler
-value. It declares command identity and an internal-only execution mode excluded from public
-projections. The mode selects one neutral declaration shape: `none`, legacy platform admission,
-device `runtimeUse`, or `inventoryUse`. The `none` mode (amendment, 2026-08-11) is the explicit
-declaration that a command executes no platform behavior: a `none` descriptor never binds a device,
-carries no capability bucket, owns no platform adapter, and declares no runtime or inventory use;
-lease, session-management, and daemon-management commands are `none`. The mode is declared
-explicitly on every descriptor — a registry-entry default that silently assigns a mode cannot
-distinguish a command with no platform execution from an unmigrated one and is prohibited. ADR
-0003's daemon-owned total route table continues to own specialized
-handler implementations and request-policy traits; that route/policy projection remains present and
-unchanged in every mode. A derived coherence gate joins the declarations without importing daemon
-handlers into the descriptor registry.
+The command descriptor declares command identity and one internal-only execution mode excluded from
+public projections: `none`, `host`, device `runtimeUse`, or `inventoryUse`. A `none` descriptor
+never binds a device, carries capability admission, owns a platform adapter, or declares a runtime
+or inventory use. The mode is explicit on every descriptor; there is no registry default. ADR
+0003's daemon-owned route table continues to own handler and request-policy traits independently.
 
-The descriptor-derived **runtime-command-cutover gate** applies to platform-executing descriptors
-only; `none` descriptors are outside its denominator, and the gate separately rejects a `none`
-declaration on any descriptor that binds devices, keeps a capability bucket, or reaches platform
-behavior. For a platform-executing descriptor it covers the command's whole platform-execution
-projection: either legacy admission/hints plus its complete legacy platform adapter; device runtime
-use plus fact-derived admission and its complete runtime-backed adapter; or inventory use plus the
-composed inventory gateway. Never more than one and never none. A migrated device unit deletes its old
-capability closures/hints and legacy platform adapter. A migrated inventory unit deletes its old
-inventory branches/adapter. Neither cutover deletes, duplicates, or changes the ADR 0003 daemon route.
-No handler selects old versus new platform behavior by family, provider, failure, environment
-variable, or feature flag. Each cutover row is scaffolding for one in-flight migration and is
-deleted in the change where this ADR declares that command's migration closed and its retired
-symbols unreachable; the table must never outlive the migration it guards.
-
-One device-command migration unit is one command across every runtime cell where it is currently
-supported: all applicable platform leaves, device kinds/backends, transport-composed providers, and
-direct provider runtimes. Unsupported cells are classified through new runtime facts; they do not
-remain on the old adapter. An inventory-command unit covers every local family and provider inventory
-source plus selector/public projection parity. The unit also deletes that command's superseded daemon
-platform branches, backend tags and tag-to-implementation maps, capability closures/hints, legacy
-imports, parity scaffolding, and old platform adapter. The independent pre-cutover parity artifact
-proves available-command and unsupported-hint equivalence before those legacy sources are deleted; a
-deliberate behavior change is a separate decision rather than a migration gap.
-
-Facets organize contracts and implementation locality; a whole facet is not a required PR boundary.
-A repository may indefinitely contain migrated and unmigrated commands, but no command has two
-platform-execution paths and no merged state depends on a later PR for correctness. Rollback is a
-revert of the complete command unit, not a retained execution fallback.
+During adoption, one command descriptor across its complete platform/provider denominator was the
+abandonment-safe migration unit. A parametrized cutover table proved that each unit deleted its old
+adapter, admission and dispatch projection before merge. Those rows were explicitly temporary and
+were deleted after the final unit completed. The permanent state is smaller: the execution union
+cannot express `legacy`, descriptors cannot carry capability admission, R66 rejects manufactured
+runtime proof or restored legacy admission, and R65 rejects every daemon dependency on a concrete
+platform implementation.
 
 A behavior-neutral package/registry substrate may land before the first command only when it routes
 no production descriptor, is dead-code clean, independently revertible, and preserves lazy loading.
@@ -519,10 +473,10 @@ forced disposal, and error precedence. Equality-pinned R10 writer/owner counts a
 and R10 cycle-zone pressure may not grow, and R9 is equality-pinned since #1781 A6: a unit that
 shrinks the cycle lowers the zone ceilings in the same change rather than leaving the slack open.
 
-### 7. Adoption checkpoint
+### 7. Adoption checkpoint (historical)
 
 No command migration beyond the metadata/package substrate and complete `devices`, `logs`, and
-`network` command cutovers begins until this ADR's Status records **continue**. `network` is included
+`network` command cutovers began until this ADR's Status recorded **continue**. `network` was included
 because it consumes the app-log resource. Daemon-owned generic session teardown may invoke the
 neutral app-log handle's forced-disposal contract without changing `close`'s legacy platform adapter;
 the `logs` unit proves that path through `close`. If `close`, `open`, or another command instead must
@@ -675,7 +629,7 @@ benchmark commands and thresholds, raw evidence, and reviewers. Temporary fixtur
 a production bridge, duplicate route, or recorded package back-import. After the checkpoint, this
 ADR's status records its outcome; it does not retain a migration diary.
 
-### 8. Broader migration is move-dominated and evidence-tiered
+### 8. Broader migration was move-dominated and evidence-tiered
 
 The checkpoint and recordings budgets paid for machinery that later units reuse; they are not a
 precedent for growth. Every post-checkpoint unit still defines its original-baseline cumulative
@@ -690,27 +644,18 @@ Raw per-unit parity, planted-red, and size evidence belongs in #1739 and its PRs
 the decision, the evidence tiers, and the rule that each unit must justify exceptional growth
 without treating checkpoint budget as an allowance.
 
-A command surface that is deprecated and scheduled for removal at the next major is never
-migrated. It stays on its legacy execution shape until the major deletes it, and the deletion — not
-a migration — retires its platform coupling. Where a command's public surface is being narrowed,
-the narrowing merges first so the migration denominator is the surviving surface only.
+A command surface deprecated for the next major was deleted rather than migrated. Where a public
+surface was narrowed, the narrowing merged first so the migration denominator was the surviving
+surface only.
 
-Evidence requirements follow what a unit imports, in two tiers. A **request-scoped device unit**
-uses facts and operations only: its evidence is the typed use declaration, fact coverage for every
-denominator cell, the enumerated legacy-parity cell table recorded in the unit review, and the
-cutover gate. It must not import admission ledgers, fences, durable descriptors, or recovery
-adapters, and their evidence items do not apply to it. A **durable-resource unit** additionally
-carries the full section 4–5 lifecycle evidence. The tier is declared in the unit review; importing
-durable machinery promotes the unit to the durable tier.
+Evidence requirements followed what a unit imported, in two tiers. A **request-scoped device unit**
+used facts and operations only and proved its typed declaration and every fact cell. A
+**durable-resource unit** additionally carried the full section 4–5 lifecycle evidence. These tiers
+remain useful review vocabulary for future runtime changes, without reviving the migration ledger.
 
-The per-command cutover gates consolidate into one parametrized runtime-command-cutover gate driven
-by a table of migrated commands. Adding a unit adds a row; the parametrized gate carries one
-planted-red violation for the mechanism, not one per row. The four existing per-command policy
-files fold into it in the first post-amendment unit that would otherwise add a fifth.
-
-Facts are the only support authority for a migrated command. The unit deletes the command's
-descriptor capability bucket and its `requireCommandSupported` wiring together with the legacy
-adapter; retaining both is a dual admission path and fails the cutover gate.
+The migration-time cutover table was retired at terminal completion. Facts are now the only support
+authority for device commands, and the permanent R66 policy rejects descriptor capability buckets,
+`requireCommandSupported` calls, and attempts to manufacture or repair narrowed runtime proof.
 
 ### 9. Binding ergonomics: one bind per handler
 
@@ -752,24 +697,19 @@ Daemon shutdown is two-phase through the gateway. The detach phase runs before d
 teardown and offers each process-lived helper manager its handoff policy — a healthy kept-hot
 helper may transfer to a successor daemon rather than stop. The stop phase runs after session
 resources are finalized and terminates each still-owned generation at most once, per section 4.
-Platform-specific shutdown calls in the daemon runtime are deleted as their owners migrate onto the
-phases.
+Platform-specific shutdown calls have been deleted from the daemon runtime; owners participate
+through those phases.
 
-Session teardown keeps its isolated-step skeleton and gains no generic hook API. Each remaining
-platform-specific step belongs to a domain and is deleted by that domain's unit: perf steps by the
-perf unit, test-IME restoration by the input domain as durable device state with marker-based
-recovery, helper stops by the owning platform module's device-lifecycle policy, close-time alert
-dismissal by the close unit. A teardown step that survives its domain's cutover is a migration gap.
+Session teardown keeps its isolated-step skeleton and has no generic hook API. Each cleanup step
+belongs to its domain: test-IME restoration is durable device state with marker-based recovery,
+helper stops follow the owning platform module's lifecycle policy, and close-time cleanup consumes
+neutral owner services.
 
-As a daemon area loses its last platform import, the same unit narrows the R3 platforms-seam
-allowlist to match; the seam list may never grow. Seam removal alone is not the end-state
-enforcement: R3 tolerates dynamic and type-only platform imports, and legacy daemon behavior
-reaches platforms through exactly those edges. The end state is a dedicated planted-red rule
-rejecting every dependency edge — static, dynamic, re-export, and type-only — from production
-`src/daemon/**` modules (test files excluded, matching the layering scanner's scope) to
-`src/platforms/**` and to concrete `@agent-device/platform-*` packages; daemon types come from
-contracts only. Once that rule is green with `src/daemon/` removed from the seam, daemon
-platform-freedom is structurally enforced rather than measured.
+R65 is the end-state enforcement: its planted-red AST tests reject every dependency edge — static,
+dynamic, re-export, and type-only — from production `src/daemon/**` modules (test files excluded,
+matching the layering scanner's scope) to `src/platforms/**` and concrete
+`@agent-device/platform-*` packages. The daemon has been removed from the R3 seam, so platform
+freedom is structurally enforced rather than periodically measured.
 
 ## Relationship to prior decisions
 
@@ -808,9 +748,10 @@ locality for native mechanics, provider transport composition, persistent helper
 recovery. Adding a platform implements existing runtime contracts and facts instead of adding daemon
 tags, maps, callbacks, and branches.
 
-The cost is a staged cross-repository migration with temporarily coexisting legacy,
-inventory-backed, and device-runtime-backed commands. Command-atomic cutover, explicit deletion
-boundaries, and the early adoption checkpoint keep that coexistence shippable and abandonment-safe.
+The cost was a staged cross-repository migration with temporarily coexisting execution systems.
+Command-atomic cutover, explicit deletion boundaries, and the early adoption checkpoint kept that
+coexistence shippable and abandonment-safe; the terminal repository retains only the closed
+execution shapes and permanent structural policies.
 
 ## Alternatives considered
 

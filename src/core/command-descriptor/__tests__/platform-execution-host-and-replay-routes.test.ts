@@ -1,16 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { commandDescriptors } from '../registry.ts';
 
-describe('residue platform execution ownership', () => {
-  test('no descriptor remains on legacy platform execution', () => {
-    expect(
-      commandDescriptors
-        .filter(({ platformExecution }) => platformExecution.kind === 'legacy')
-        .map(({ name }) => name)
-        .sort(),
-    ).toEqual([]);
-  });
-
+describe('host and command-only platform execution ownership', () => {
   test('daemon and web declare host execution', () => {
     expect(commandDescriptors.find(({ name }) => name === 'daemon')?.platformExecution.kind).toBe(
       'host',

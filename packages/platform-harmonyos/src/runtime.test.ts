@@ -85,8 +85,7 @@ test.each([
   for (const operation of [
     'back',
     'home',
-    // R56 parity: the retired `HARMONYOS_SUPPORTED_COMMANDS` overlay listed `app-switcher` for
-    // both HarmonyOS kinds, and it rides the same hdc key input `home` does.
+    // App switcher rides the same HDC key input as home on both HarmonyOS target kinds.
     'appSwitcher',
     'keyboardDismiss',
     'keyboardEnter',
@@ -94,8 +93,7 @@ test.each([
     expect(facts.operations[operation]).toEqual({ available: true });
     expect(binding.operations[operation]).toBeTypeOf('function');
   }
-  // orientation and tv-remote never carried a HarmonyOS capability bucket, so both stay
-  // unavailable unconditionally even though the interactor is technically callable.
+  // Public orientation and TV-remote operations remain unavailable unconditionally.
   expect(facts.operations.setOrientation).toEqual({
     available: false,
     reason: 'unsupported-platform-leaf',
@@ -113,13 +111,11 @@ test.each([
     hint: 'keyboard status/get is not available through the public HarmonyOS HDC API; use keyboard dismiss or enter',
   });
   expect(binding.operations.keyboardStatus).toBeUndefined();
-  // R55: HarmonyOS never carried a `clipboard` bucket and is absent from the HarmonyOS overlay
-  // set, so neither half was ever admitted here.
+  // HarmonyOS exposes no clipboard, trigger-event, or alert automation operation.
   for (const operation of [
     'readClipboard',
     'writeClipboard',
     'triggerAppEvent',
-    // R59: `alert` never had a HarmonyOS leaf either — hdc exposes no dialog surface.
     'readAlert',
     'awaitAlert',
     'acceptAlert',
@@ -131,8 +127,7 @@ test.each([
     });
     expect(binding.operations[operation]).toBeUndefined();
   }
-  // R58: `settings` is the other way round — the retired overlay set listed it for both HarmonyOS
-  // kinds, so a real kind admits it off the same hdc gate the interaction leaves use.
+  // Settings is available through the same HDC kind gate as the interaction operations.
   expect(facts.operations.setSetting).toEqual({ available: true });
   expect(binding.operations.setSetting).toBeTypeOf('function');
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({ booted: true });
@@ -306,8 +301,8 @@ function expectLegacyLifecycleCell(
   }
 }
 
-// R52/R53: hdc synthesizes one contact, so HarmonyOS admits the one-contact tiers on the same
-// kind cell its focus/type overlay admitted, and refuses the two tiers it cannot reproduce.
+// HDC synthesizes one contact, so HarmonyOS admits the one-contact tiers on the same kind cell as
+// focus/type and refuses the two tiers it cannot reproduce.
 test.each([
   ['device', device],
   ['emulator', { ...device, kind: 'emulator' as const }],

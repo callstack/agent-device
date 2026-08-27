@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { assertRecordRuntimeExecution } from './record-runtime-cutover.ts';
+import { assertRecordRuntimeExecution } from './record-runtime-execution.ts';
 import {
   screenRecordingRuntimePlanUses,
   resolveScreenRecordingRuntimePlan,

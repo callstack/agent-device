@@ -44,10 +44,9 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
 
 /**
  * Transitional (#2041): the extracted Android adb/IME cluster lives in
- * `@agent-device/platform-android` behind these subpaths, while the in-flight perf/trace
- * handler migration still imports the root shims that re-export them. Each subpath is
- * importable ONLY by its named root shims; delete this table (and the subpaths) together with
- * the shims once that migration lands.
+ * `@agent-device/platform-android` behind these subpaths, while live root runtime, core interactor,
+ * SDK, and test-support consumers still import the root shims that re-export them. Each subpath is
+ * importable ONLY by its named root shims; narrow this table when those callers move.
  */
 const TRANSITIONAL_ANDROID_ADB_SUBPATHS = new Map<string, ReadonlySet<string>>([
   [

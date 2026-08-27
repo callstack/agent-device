@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { assertRecordRuntimeExecution } from '@agent-device/contracts/record-runtime-cutover';
+import { assertRecordRuntimeExecution } from '@agent-device/contracts/record-runtime-execution';
 import { screenRecordingRuntimePlanUses } from '@agent-device/contracts/screen-recording-runtime-plan';
 import { commandDescriptors } from '../registry.ts';
 

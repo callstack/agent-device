@@ -335,9 +335,9 @@
       "types": "./src/facades/progress.ts",
       "default": "./src/facades/progress.ts"
     },
-    "./record-runtime-cutover": {
-      "types": "./src/record-runtime-cutover.ts",
-      "default": "./src/record-runtime-cutover.ts"
+    "./record-runtime-execution": {
+      "types": "./src/record-runtime-execution.ts",
+      "default": "./src/record-runtime-execution.ts"
     },
     "./recording": {
       "types": "./src/facades/recording.ts",

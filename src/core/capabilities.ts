@@ -4,11 +4,6 @@ import { tryGetPlugin } from './platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-// Retained as the empty tombstone named by the Wave 5 cutover rows: every former member is now
-// admitted from owner facts, so no HarmonyOS command gets a capability overlay.
-const HARMONYOS_SUPPORTED_COMMANDS = new Set<string>();
-void HARMONYOS_SUPPORTED_COMMANDS;
-
 // Populate the PlatformPlugin registry once at module load (idempotent; registers
 // only lazy closures, so no leaf code is imported and CLI cold-start is unaffected
 // — mirrors the same call in `core/interactors.ts`). `isCommandSupportedOnDevice`

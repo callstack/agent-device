@@ -204,7 +204,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/perf-runtime-operation-builder.ts': 3,
   'packages/contracts/src/perf-runtime-plan.ts': 7,
   'packages/contracts/src/perf-runtime.ts': 1,
-  'packages/contracts/src/record-runtime-cutover.ts': 7,
+  'packages/contracts/src/record-runtime-execution.ts': 7,
   'packages/contracts/src/react-native-overlay.ts': 1,
   'packages/contracts/src/runner-lease-context.ts': 1,
   'packages/contracts/src/screen-recording-runtime-plan.ts': 5,

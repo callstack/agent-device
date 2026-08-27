@@ -130,7 +130,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/platform-runtime-operations',
   '@agent-device/contracts/platform-runtime-unavailable',
   '@agent-device/contracts/progress',
-  '@agent-device/contracts/record-runtime-cutover',
+  '@agent-device/contracts/record-runtime-execution',
   '@agent-device/contracts/recording',
   '@agent-device/contracts/remote',
   '@agent-device/contracts/replay',

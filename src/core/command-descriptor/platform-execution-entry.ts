@@ -16,9 +16,8 @@ type PlatformExecutionDeclarationSite = {
 
 /**
  * ADR 0019 §6: every descriptor declares its platform-execution mode explicitly.
- * A default cannot distinguish a command with *no* platform execution (`none`)
- * from an unmigrated one (`legacy`), so an undeclared discriminator is a
- * registry-load error and the migration denominator stays machine-readable.
+ * An undeclared discriminator is a registry-load error, so a command cannot
+ * acquire platform execution by omission.
  *
  * `none` with a capability bucket is also rejected: a capability bucket is
  * platform admission, so the command executes platform behavior. `host` is held
@@ -34,7 +33,7 @@ export function readDeclaredPlatformExecution(
   const declared = descriptor.platformExecution;
   if (declared === undefined) {
     throw new TypeError(
-      `Command descriptor "${descriptor.name}" must declare platformExecution (none, legacy, host, inventory, or device-runtime); there is no registry-entry default`,
+      `Command descriptor "${descriptor.name}" must declare platformExecution (none, host, inventory, or device-runtime); there is no registry-entry default`,
     );
   }
   assertCommandPlatformExecution(declared);

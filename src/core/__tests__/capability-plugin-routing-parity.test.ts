@@ -113,24 +113,6 @@ const CAPABILITY_BUCKET_BY_PLATFORM: Record<Platform, keyof CommandCapability> =
   linux: 'linux',
   web: 'web',
 };
-// R42/R43/R45 deleted the plugin's only `VEGA_VVD_ONLY_COMMANDS` closures (back/home/tv-remote);
-// nothing takes their place here since Vega now carries no `supportsByDefault` at all.
-const HARMONYOS_SUPPORTED_COMMANDS_REF = new Set([
-  'app-switcher',
-  'click',
-  'fill',
-  'find',
-  'focus',
-  'gesture',
-  'longpress',
-  'press',
-  'screenshot',
-  'scroll',
-  'settings',
-  'swipe',
-  'type',
-  'wait',
-]);
 const HARMONYOS_EMULATOR: DeviceInfo = {
   platform: 'harmonyos',
   id: 'harmony-emulator',
@@ -145,7 +127,6 @@ const HARMONYOS_EMULATOR: DeviceInfo = {
 // platform the augmented matrix equals BASE (the web augmentation only adds a
 // `web` key), so BASE is the faithful capability source here.
 function isSupportedReference(command: string, device: DeviceInfo): boolean {
-  if (device.platform === 'harmonyos') return isHarmonySupportedReference(command, device);
   const capability: CommandCapability | undefined = BASE_COMMAND_CAPABILITY_MATRIX[command];
   if (!capability) return true;
   const byPlatform = capability[CAPABILITY_BUCKET_BY_PLATFORM[device.platform]];
@@ -154,14 +135,6 @@ function isSupportedReference(command: string, device: DeviceInfo): boolean {
   if (supports && !supports(device)) return false;
   const kind = (device.kind ?? 'unknown') as keyof NonNullable<CommandCapability['apple']>;
   return byPlatform[kind] === true;
-}
-
-function isHarmonySupportedReference(command: string, device: DeviceInfo): boolean {
-  if (command === 'record') return device.kind === 'device';
-  return (
-    HARMONYOS_SUPPORTED_COMMANDS_REF.has(command) &&
-    (device.kind === 'emulator' || device.kind === 'device')
-  );
 }
 
 test('(b.1) plugin-bucket selection matches the platform -> bucket table', () => {

@@ -4,7 +4,6 @@ import { runtimeUseIdentity } from './platform-runtime-use.ts';
 
 export type CommandPlatformExecution =
   | Readonly<{ kind: 'none' }>
-  | Readonly<{ kind: 'legacy' }>
   /**
    * Host-scoped platform work (ADR 0019): diagnostics, owner cleanup, or managed tooling runs
    * through a neutral typed host service. The command binds no device runtime as its own
@@ -27,7 +26,6 @@ export function assertCommandPlatformExecution(
   const declaration = value as Record<string, unknown>;
   const keys = Object.keys(declaration).sort();
   if (declaration['kind'] === 'none' && sameKeys(keys, ['kind'])) return;
-  if (declaration['kind'] === 'legacy' && sameKeys(keys, ['kind'])) return;
   if (declaration['kind'] === 'host' && sameKeys(keys, ['kind'])) return;
   if (
     declaration['kind'] === 'inventory' &&
@@ -110,6 +108,6 @@ function sameKeys(actual: readonly string[], expected: readonly string[]): boole
 
 function invalidPlatformExecution(): TypeError {
   return new TypeError(
-    'Command platform execution must declare exactly one of none, legacy, host, inventory, or device-runtime',
+    'Command platform execution must declare exactly one of none, host, inventory, or device-runtime',
   );
 }

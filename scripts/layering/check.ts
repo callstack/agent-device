@@ -36,12 +36,9 @@
 //     owner" shape as R7's SessionState ownership, applied to bin.ts's `--help` fast path.
 //   - Over PLATFORM PACKAGE COMPOSITION: six private metadata façades meet at the exact root
 //     composition file; premature implementation loading and forbidden cross-boundary edges fail (R13).
-//   - Over COMMAND-ATOMIC RUNTIME CUTOVERS: one parametrized gate reads the migrated-command
-//     table (appstate R22, shutdown R23, boot R20, apps R21, install/deploy R24-R27,
-//     lifecycle R28-R31, devices R17, logs R14, network R15, record R16, snapshot R32, diff R33,
-//     viewport R34, get R36, is R37 — R35 reserved for find) and proves each command keeps
-//     exactly one platform-execution path — retired routes, admission, modules, and widened
-//     runtime access cannot coexist with its operation-fact-derived descriptor and handler.
+//   - Over REQUEST-BOUND RUNTIME EXECUTION: facts remain the only admission authority and daemon
+//     code cannot manufacture or repair a narrowed runtime proof (R66). The historical per-command
+//     cutover table was deleted after the last legacy execution shape disappeared.
 //   - Over CONTRACTS PRODUCTION SOURCE: contracts owns vocabulary only — host, process, and timer
 //     mechanics belong in capture-kit or an adapter (R18).
 // Only `(root)` is unranked among src/ zones (see `UNRANKED_ZONES` in model.ts):
@@ -89,10 +86,6 @@ import {
   platformPackagePolicySummary,
 } from './platform-package-policy.ts';
 import {
-  checkRuntimeCommandCutover,
-  runtimeCommandCutoverSummary,
-} from './runtime-command-cutover-policy.ts';
-import {
   listUntrackedProductionTypeScriptFiles,
   readTrackedPlatformPackageDeclarations,
 } from './platform-package-repository.ts';
@@ -100,8 +93,13 @@ import { policyLead, policyViolation, ZONE_POLICIES } from './zone-policy.ts';
 import { contractsImplementationAuthorityViolations } from './contracts-implementation-policy.ts';
 import { selectorPipelineOwnershipViolations } from './selector-pipeline-ownership.ts';
 import { recordRuntimeRegistryJoinViolations } from './record-runtime-registry-policy.ts';
+import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechanics-policy.ts';
 import { checkDaemonPlatformBoundary } from './daemon-platform-boundary.ts';
 import { listTrackedProductionSources, listTrackedTypeScriptFiles } from './tracked-sources.ts';
+import { runtimeExecutionIntegrityViolations } from './runtime-execution-policy.ts';
+import { sourceExecutionCompatibilityViolations } from './source-execution-policy.ts';
+import { sessionResourceOwnershipViolations } from './session-resource-ownership.ts';
+import { applicationLifecycleOwnershipViolations } from './application-lifecycle-policy.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -159,17 +157,16 @@ function checkContractsImplementationAuthority(
   );
 }
 
-/**
- * The record registry-join scan is a descriptor-shape check, not a cutover claim, so it
- * stays its own module. Record's daemon-mechanics scan is the row's lifecycle proof and
- * runs from the cutover table. Both report under R16.
- */
-function checkRecordRuntimeRegistryJoin(sources: ReadonlyMap<string, string>): LayeringViolation[] {
+/** Record's descriptor join and mechanics boundary are one permanent ownership rule. */
+function checkRecordRuntimeOwnership(sources: ReadonlyMap<string, string>): LayeringViolation[] {
   const production = [...sources].map(([file, source]) => ({ path: file, source }));
-  return recordRuntimeRegistryJoinViolations(production).map((violation) => {
+  return [
+    ...recordRuntimeRegistryJoinViolations(production),
+    ...recordRuntimeDaemonMechanicsViolations(production),
+  ].map((violation) => {
     const separator = violation.indexOf(': ');
     return {
-      rule: 'R16 record-runtime-cutover',
+      rule: 'R16 record-runtime-ownership',
       file: separator < 0 ? '(record runtime)' : violation.slice(0, separator),
       line: 1,
       message: separator < 0 ? violation : violation.slice(separator + 2),
@@ -488,7 +485,8 @@ function report(
         `inside its declared owner (R7); the largest type-level cycle is ${typeCycle} files ` +
         `(R9); ${daemonModularitySummary()}; ` +
         `${packageBoundariesSummary(repoRoot)}; ${platformPackagePolicySummary()}; ` +
-        `${runtimeCommandCutoverSummary()}; R65 keeps production src/daemon free of concrete ` +
+        `runtime facts remain the only device-command admission authority and daemon code cannot ` +
+        `manufacture narrowed runtime proof (R66); R65 keeps production src/daemon free of concrete ` +
         `platform imports in every executable and type-only form; and bin.ts imports ` +
         `normalizeCliCommandAlias, ` +
         `actually passes it into buildCommandUsageText, and holds no local alias literals ` +
@@ -540,8 +538,11 @@ export type LayeringRule = (context: LayeringContext) => LayeringViolation[];
 export const LAYERING_RULE_IDS = [
   'zone-policies',
   'value-import-cycles',
-  'runtime-command-cutover',
-  'record-runtime-registry-join',
+  'runtime-execution-integrity',
+  'source-execution-compatibility',
+  'record-runtime-ownership',
+  'session-resource-ownership',
+  'application-lifecycle-ownership',
   'contracts-implementation-authority',
   'selector-pipeline-ownership',
   'back-edges',
@@ -559,8 +560,13 @@ export type LayeringRuleId = (typeof LAYERING_RULE_IDS)[number];
 export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
   'zone-policies': (context) => checkLayeringRules(context.edges),
   'value-import-cycles': (context) => checkCycles(context.edges),
-  'runtime-command-cutover': (context) => checkRuntimeCommandCutover(context.sources),
-  'record-runtime-registry-join': (context) => checkRecordRuntimeRegistryJoin(context.sources),
+  'runtime-execution-integrity': (context) => runtimeExecutionIntegrityViolations(context.sources),
+  'source-execution-compatibility': (context) =>
+    sourceExecutionCompatibilityViolations(context.sources),
+  'record-runtime-ownership': (context) => checkRecordRuntimeOwnership(context.sources),
+  'session-resource-ownership': (context) => sessionResourceOwnershipViolations(context.sources),
+  'application-lifecycle-ownership': (context) =>
+    applicationLifecycleOwnershipViolations(context.sources),
   'contracts-implementation-authority': (context) =>
     checkContractsImplementationAuthority(context.sources),
   'selector-pipeline-ownership': (context) =>

@@ -1,8 +1,7 @@
 // Thin re-export shim over the extracted cluster in @agent-device/platform-android, trimmed to
-// the names root code still consumes; anything else imports the package subpath directly.
-// TODO(#2041): the in-flight perf/trace handler migration (session-perf.ts,
-// session-perf-legacy.ts, session-native-perf.ts) still imports this path; delete this shim
-// (repointing remaining root consumers) once that migration lands.
+// the names live root runtime, core interactor, SDK, and test-support code still consumes; anything
+// else imports the package subpath directly. TODO(#2041): delete this shim after those callers move
+// to package-owned seams.
 import './adb-host-binding.ts';
 
 export {

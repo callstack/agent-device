@@ -14,7 +14,6 @@ task procedures only when needed:
 | Selector capture, polling, or interaction fast paths | `docs/agents/selector-capture.md` |
 | Adding or changing a CLI flag | `docs/agents/cli-flags.md` |
 | Opening or reviewing a PR | `docs/agents/pull-requests.md` |
-| Migrating an ADR 0019 command | `docs/agents/adr-0019-unit.md` |
 | Running against a real device | `docs/agents/device-verification.md` |
 | Issues, PRDs, and triage labels | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
 | Web backend setup or diagnostics | `docs/agents/web-backend.md` |
