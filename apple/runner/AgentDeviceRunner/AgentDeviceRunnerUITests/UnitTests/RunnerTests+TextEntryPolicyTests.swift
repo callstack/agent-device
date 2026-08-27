@@ -417,14 +417,17 @@ extension RunnerTests {
       synthesizer: synthesizer
     )
 
-    XCTAssertEqual(
-      synthesizer.steps,
-      [
-        SynthesizedReplacementStep(text: "a", replacesExistingText: true),
-        SynthesizedReplacementStep(text: "b", replacesExistingText: false),
-        SynthesizedReplacementStep(text: "c", replacesExistingText: false),
-      ]
-    )
+    // Posted twice: the fake synthesizer never writes into Springboard, so the wait cannot observe
+    // the value and the route re-posts once (#2080). That retry is safe on this route and nowhere
+    // else — it opens with select-all, so a second post replaces the field rather than appending to
+    // whatever committed, which is the double-commit hazard #1676 refused a retry for on bare
+    // `type`. Each attempt selects once and paces the rest, which is the pacing this pins.
+    let attempt = [
+      SynthesizedReplacementStep(text: "a", replacesExistingText: true),
+      SynthesizedReplacementStep(text: "b", replacesExistingText: false),
+      SynthesizedReplacementStep(text: "c", replacesExistingText: false),
+    ]
+    XCTAssertEqual(synthesizer.steps, attempt + attempt)
     XCTAssertNil(result.verified)
     XCTAssertFalse(result.repaired)
     XCTAssertEqual(result.textEntryRoute, "synthesized-first-responder-replacement")
@@ -441,7 +444,7 @@ extension RunnerTests {
     // `runner-xctest-local-run-gotchas` memory / ios.yml's `-only-testing:` allowlist), where a
     // few extra seconds is a non-issue, and the alternative — asserting `nil` on a wiring path
     // that can never actually observe the expected text — would silently reintroduce the exact
-    // bug this fix closes.
+    // bug this fix closes. Two deadlines now rather than one, since the retry waits again.
     XCTAssertEqual(result.failure, .commitNotObserved)
   }
 

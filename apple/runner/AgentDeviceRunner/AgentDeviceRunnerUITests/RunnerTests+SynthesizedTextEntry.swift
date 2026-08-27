@@ -103,41 +103,63 @@ extension RunnerTests {
       text: request.text,
       delaySeconds: request.delaySeconds
     )
-    for (index, step) in steps.enumerated() {
-      switch request.synthesizer.enterText(
-        app: request.app,
-        text: step.text,
-        replacingExistingText: step.replacesExistingText
-      ) {
-      case .fallback:
-        NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=verified-fallback reason=synthesis-unavailable")
-        guard let point = request.target.refreshPoint else { return .notApplicable }
-        return .fallback(
-          focusTextInputForTextEntry(app: request.app, x: point.x, y: point.y)
-        )
-      case .raise(let message):
-        NSException(
-          name: NSExceptionName.internalInconsistencyException,
-          reason: message ?? "private XCTest text synthesis failed"
-        ).raise()
-      case .continueTyping:
-        break
+
+    /// Posts the whole replacement once. Returns the route outcome when it could not post at all;
+    /// nil means the events went out and the caller should wait for them.
+    func post() -> SynthesizedReplacementRouteOutcome? {
+      for (index, step) in steps.enumerated() {
+        switch request.synthesizer.enterText(
+          app: request.app,
+          text: step.text,
+          replacingExistingText: step.replacesExistingText
+        ) {
+        case .fallback:
+          NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=verified-fallback reason=synthesis-unavailable")
+          guard let point = request.target.refreshPoint else { return .notApplicable }
+          return .fallback(
+            focusTextInputForTextEntry(app: request.app, x: point.x, y: point.y)
+          )
+        case .raise(let message):
+          NSException(
+            name: NSExceptionName.internalInconsistencyException,
+            reason: message ?? "private XCTest text synthesis failed"
+          ).raise()
+        case .continueTyping:
+          break
+        }
+        if index + 1 < steps.count {
+          sleepFor(request.delaySeconds)
+        }
       }
-      if index + 1 < steps.count {
-        sleepFor(request.delaySeconds)
-      }
+      return nil
     }
+
+    if let blocked = post() { return blocked }
     // The private synthesize call returns at post time, not commit time (same as bare `type`,
     // see awaitSynthesizedFirstResponderCommit) — but this route never resolves an XCUIElement,
     // so without this wait it had no way to notice a dropped or still-in-flight character at all
     // and reported ok purely because the event posted. Wait here, on the same request.target
     // (element nil, refreshPoint set) that gated this route, so each poll re-resolves via the
     // refresh point rather than trusting a stale element handle.
-    let commit = awaitSynthesizedReplacementCommit(
+    var commit = awaitSynthesizedReplacementCommit(
       app: request.app,
       target: request.target,
       expectedText: request.text
     )
+    // Re-post once when the value never arrived. Safe here and nowhere else: this route opens with
+    // select-all, so posting it again replaces the whole field rather than appending to whatever
+    // committed — the double-commit hazard that made #1676 refuse a retry for bare `type` does not
+    // exist. #2080 is the case it exists for: 11 characters posted, 7 observed, frozen for four
+    // polls, which is loss rather than lateness, and the wait has no other move.
+    if commit == .notObserved {
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder-replacement-retry")
+      if let blocked = post() { return blocked }
+      commit = awaitSynthesizedReplacementCommit(
+        app: request.app,
+        target: request.target,
+        expectedText: request.text
+      )
+    }
     logTextEntryPhase(
       commandId: request.commandId,
       phase: "total",
