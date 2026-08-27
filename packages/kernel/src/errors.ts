@@ -69,7 +69,7 @@ export type ErrorCause = {
  *   lifted onto the normalized error, stripped from details.
  * - `processExitError` + `stdout`/`stderr`/`exitCode` — marks a wrap of a real
  *   process exit so normalizeError can surface the first meaningful stderr line;
- *   build these via `execFailureDetails`/`requireExecSuccess` in src/utils/exec.ts
+ *   build these via `execFailureDetails`/`requireExecSuccess` in @agent-device/host-kit/command
  *   rather than by hand.
  * - `retriable` — typed retry signal hoisted to the wire error shape.
  * - `reason` — machine-dispatchable sub-classification within a code.

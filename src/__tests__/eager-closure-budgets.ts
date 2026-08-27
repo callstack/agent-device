@@ -353,7 +353,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
  */
 export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // 363 -> 365 in #2004, which cuts per-invocation work and pays two modules for it:
-  // `src/utils/ttl-memo.ts` (version.ts now resolves the package version and the project root
+  // `@agent-device/kernel/ttl-memo` (version.ts now resolves the package version and the project root
   // once per process instead of re-reading package.json several times an invocation) and
   // `src/daemon/client/daemon-launch-spec.ts` (the launch-entry probe, split out of the 726-line
   // daemon-client-lifecycle.ts). Both run on the path every local command already takes, so

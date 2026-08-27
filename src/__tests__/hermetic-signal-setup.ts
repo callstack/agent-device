@@ -20,7 +20,7 @@ import { afterAll, afterEach, expect } from 'vitest';
 // Signal 0 is a liveness probe (`isProcessAlive`), not a signal; it stays free.
 // Tests that drive a real kill path against a fabricated pid mock the seam —
 // `signalPidsBestEffort` / `signalProcessGroupBestEffort` in
-// `src/utils/host-process.ts` for the direct writes, the exec/tool-provider
+// `@agent-device/host-kit/process` for the direct writes, the exec/tool-provider
 // seam for a spawned `pkill` — the same way they already mock the liveness
 // reads.
 
@@ -151,7 +151,7 @@ function failOnRefusedSignals(scope: string): void {
     `${scope} tried to signal ${count} process(es) this vitest worker did not spawn. ` +
       'A unit test may signal only itself and its own direct children (and their process ' +
       'groups); mock the seam instead — signalPidsBestEffort / signalProcessGroupBestEffort in ' +
-      'src/utils/host-process.ts, the exec or tool-provider seam for a spawned pkill, or ' +
+      '@agent-device/host-kit/process, the exec or tool-provider seam for a spawned pkill, or ' +
       `vi.spyOn(process, 'kill'). If the pid is a descendant this test really owns, signal the ` +
       `direct child (or its group via the negative pid) rather than the grandchild.\n${report}`,
   );

@@ -532,7 +532,7 @@ export function isActiveReplaySessionResponse(
  * emitted when a name is available, explicit state dir or not. Attached to
  * both a structured `hint` field (for `--json` consumers) and appended to
  * `message` — the only field the default text renderer surfaces
- * (`src/utils/success-text.ts`) — so the hint reaches a caller in either mode.
+ * (`@agent-device/kernel/success-text`) — so the hint reaches a caller in either mode.
  *
  * `data.session` is used verbatim, never reconstructed as `default`: an
  * EXPLICIT `--session <value>` is used as-is by `resolveEffectiveSessionName`,

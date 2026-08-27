@@ -4,7 +4,7 @@
 // as a pure formatter, but a pure-formatter test cannot catch a bug in
 // CLEANUP ELIGIBILITY: whether `cleanupTimedOutIosRunnerBuilds` (the Apple
 // xcodebuild pkill sweep) actually runs. This file spies on the real
-// process-execution seam (`runCmdSync`, src/utils/exec.ts) and drives an
+// process-execution seam (`runCmdSync`, @agent-device/host-kit/command) and drives an
 // actual socket/HTTP timeout through `sendRequest` so the assertions exercise
 // the same code path a real client does.
 //

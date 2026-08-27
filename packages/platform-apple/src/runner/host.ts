@@ -136,7 +136,7 @@ export type IosPhysicalDeviceRunnerControl = {
 };
 
 export type AppleRunnerHost = {
-  // Process execution (src/utils/exec.ts)
+  // Process execution (@agent-device/host-kit/command)
   runCmdStreaming(cmd: string, args: string[], options?: ExecStreamOptions): Promise<ExecResult>;
   runCmdSync(cmd: string, args: string[], options?: ExecOptions): ExecResult;
   runCmdBackground(
@@ -149,14 +149,14 @@ export type AppleRunnerHost = {
     message: string,
     extra?: Record<string, unknown> | ((result: ExecResult) => Record<string, unknown>),
   ): ExecResult;
-  // Diagnostics (src/utils/diagnostics.ts)
+  // Diagnostics (@agent-device/host-kit/diagnostics)
   emitDiagnostic(event: DiagnosticEventInput): void;
   withDiagnosticTimer<T>(
     phase: string,
     fn: () => Promise<T> | T,
     data?: Record<string, unknown>,
   ): Promise<T>;
-  // Retry (src/utils/retry.ts)
+  // Retry (@agent-device/host-kit/retry)
   retryWithPolicy<T>(
     fn: (context: RetryAttemptContext) => Promise<T>,
     policy?: RetryPolicy,
@@ -164,17 +164,17 @@ export type AppleRunnerHost = {
   ): Promise<T>;
   isEnvTruthy(value: string | undefined): boolean;
   deadlineFromTimeoutMs(timeoutMs: number, nowMs?: number): Deadline;
-  // Host process probes and signals (src/utils/host-process.ts)
+  // Host process probes and signals (@agent-device/host-kit/process)
   isProcessAlive(pid: number): boolean;
   isProcessGroupAlive(pid: number): boolean;
   readProcessStartTime(pid: number): string | null;
   readProcessCommand(pid: number): string | null;
   signalPidsBestEffort(pidsToSignal: readonly number[], signal: NodeJS.Signals): number;
   signalProcessGroupBestEffort(pid: number, signal: NodeJS.Signals): boolean;
-  // Project identity (src/utils/version.ts)
+  // Project identity (@agent-device/host-kit/version)
   findProjectRoot(): string;
   readVersion(root?: string): string;
-  // Locks (src/utils/process-lock.ts, src/utils/keyed-lock.ts)
+  // Locks (@agent-device/host-kit/file, @agent-device/kernel/keyed-lock)
   acquireProcessLock(params: {
     lockDirPath: string;
     owner: ProcessLockOwner;
@@ -188,26 +188,26 @@ export type AppleRunnerHost = {
     key: string,
     task: () => Promise<T>,
   ): Promise<T>;
-  // Atomic publish (src/utils/atomic-file.ts)
+  // Atomic publish (@agent-device/host-kit/file)
   publishFileSync(options: {
     destination: string;
     contents: string;
     mode?: number;
     publish?: 'replace' | 'link-exclusive';
   }): void;
-  // Owner liveness (src/utils/owner-identity.ts)
+  // Owner liveness (@agent-device/host-kit/process)
   classifyOwnerLiveness(params: {
     owner: { pid: number; startTime: string | null };
     stateDir?: string;
   }): OwnerLiveness;
-  // Memoization (src/utils/ttl-memo.ts)
+  // Memoization (@agent-device/kernel/ttl-memo)
   createTtlMemo<Key, Value>(options?: TtlMemoOptions): TtlMemo<Key, Value>;
-  // Parsing helpers (src/utils/source-value.ts, src/utils/parsing.ts)
+  // Parsing helpers (@agent-device/kernel/source-value, @agent-device/kernel/record)
   parseBooleanLiteral(value: string): boolean | undefined;
   isRecord(value: unknown): value is Record<string, unknown>;
-  // Simulator device-set isolation (src/utils/device-isolation.ts)
+  // Simulator device-set isolation (@agent-device/kernel/device-isolation)
   resolveIosSimulatorDeviceSetPath(flagValue: string | undefined): string | undefined;
-  // Request progress and cancellation (src/request/progress.ts, src/request/cancel.ts)
+  // Request progress and cancellation (@agent-device/host-kit/request)
   emitRequestProgress(event: RequestProgressEvent): void;
   getRequestSignal(requestId: string | undefined): AbortSignal | undefined;
   isRequestCanceled(requestId: string | undefined): boolean;
