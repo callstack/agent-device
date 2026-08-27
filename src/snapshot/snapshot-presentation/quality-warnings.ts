@@ -1,6 +1,5 @@
 import type { SnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 
-/** Canonical warning lines for a verdict; the single place degradation is worded. */
 export function renderSnapshotQualityWarnings(
   verdict: SnapshotQualityVerdict,
   nodes: Pick<SnapshotNode, 'index' | 'ref' | 'type' | 'identifier' | 'label'>[],
@@ -13,24 +12,11 @@ export function renderSnapshotQualityWarnings(
   ];
 }
 
-/**
- * Disclosed at response level, once, and only when the pass was incomplete: a
- * merged element the bounded pass never reached renders exactly like one with
- * no custom actions, so staying silent would teach the reader that the rest of
- * the list has no affordances — the mis-inference `--actions` exists to stop.
- *
- * The remedy is scrolling, not `--scope`: the runner reads on-screen elements
- * first, and scope is applied after the read pass, so it cannot redirect the
- * budget.
- */
 function customActionCoverageWarning(verdict: SnapshotQualityVerdict): string[] {
   const coverage = verdict.customActions;
   if (!coverage) return [];
   const lines: string[] = [];
   if (coverage.blocked) {
-    // Not a budget stop, so it must not borrow the budget stop's remedy:
-    // scrolling cannot clear a hung read, and telling the reader to try would
-    // send them in circles.
     lines.push(
       'Custom actions were not read: an earlier accessibility read is still hung, so this capture skipped the read pass instead of queueing behind it. No element’s actions list is authoritative here. Reads resume once that call returns.',
     );
@@ -40,8 +26,6 @@ function customActionCoverageWarning(verdict: SnapshotQualityVerdict): string[] 
     );
   }
   if (coverage.truncated > 0) {
-    // A clipped list looks complete, which is the same failure mode as an
-    // unread element, so it gets its own line rather than a silent cap.
     lines.push(
       `${coverage.truncated} element(s) published more custom actions than are shown; those lists are clipped to the first 8 names, and long names are shortened.`,
     );
@@ -49,11 +33,6 @@ function customActionCoverageWarning(verdict: SnapshotQualityVerdict): string[] 
   return lines;
 }
 
-/**
- * The full recovered-state warning line. Shared with the daemon's one-shot deferred
- * latch (`src/daemon/snapshot-quality-latch.ts`), which re-renders it exactly once when
- * the penalty was armed by an internal capture that never reached the user.
- */
 export function recoveredSnapshotQualityWarning(
   backend: SnapshotQualityVerdict['backend'],
 ): string {
@@ -62,10 +41,6 @@ export function recoveredSnapshotQualityWarning(
 
 function stateWarning(verdict: SnapshotQualityVerdict): string[] {
   if (verdict.state === 'recovered') {
-    // Penalty-deferred captures repeat on every capture of a hostile screen, so the full
-    // warning is suppressed here. When the capture that ARMED the penalty was internal
-    // (selector resolution, settle observation loops, system-modal probes) and never rendered it,
-    // the daemon's session latch re-renders the warning once at the response seam.
     if (verdict.reasonCode === 'deferred' || verdict.reasonCode === 'requested-backend') return [];
     if (verdict.reasonCode === 'presentation-failed') {
       return [
@@ -85,11 +60,6 @@ function stateWarning(verdict: SnapshotQualityVerdict): string[] {
   return [];
 }
 
-/**
- * Only `sparse-tree` is evidence about the app: every backend reached the screen and it
- * published no semantic content. Other sparse reasons describe capture limits and must
- * not be presented as an application accessibility defect.
- */
 function appAccessibilityDefectWarning(verdict: SnapshotQualityVerdict): string[] {
   if (verdict.reasonCode !== 'sparse-tree') return [];
   return [
