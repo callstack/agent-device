@@ -48,11 +48,14 @@ export class ProviderSessionOwnershipRegistry {
     this.records.set(this.key(provider, providerSessionId), ownership);
   }
 
-  markLeaseReleased(lease: Pick<DeviceLease, 'leaseId' | 'leaseProvider'>): void {
+  markLeaseReleased(
+    lease: Pick<DeviceLease, 'leaseId' | 'leaseProvider'>,
+    releasedAt = this.now(),
+  ): void {
     const provider = lease.leaseProvider?.trim();
     if (!provider) return;
     this.prune();
-    const retainedUntil = this.now() + this.retentionMs;
+    const retainedUntil = releasedAt + this.retentionMs;
     for (const [key, record] of this.records) {
       if (record.provider !== provider || record.leaseId !== lease.leaseId) continue;
       this.records.set(key, { ...record, retainedUntil });

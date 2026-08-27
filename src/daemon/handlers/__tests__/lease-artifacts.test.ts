@@ -97,7 +97,7 @@ test('artifacts refuses a released provider session after the retention window',
   assert.deepEqual(world.providerCalls, []);
 });
 
-test('artifacts retains an expired provider session only through the release window', async () => {
+test('artifacts refuses an expired provider session after retention before lazy cleanup', async () => {
   let now = 1_000;
   const world = createWorld({
     now: () => now,
@@ -108,15 +108,6 @@ test('artifacts retains an expired provider session only through the release win
   });
   const lease = await allocateLease(world, 'tenant-a', 'run-a');
 
-  now = lease.expiresAt + 1;
-  const retained = await listArtifacts(world, {
-    tenantId: 'tenant-a',
-    runId: 'run-a',
-    providerSessionId: 'session-tenant-a',
-  });
-  assert.equal(retained.ok, true);
-
-  world.providerCalls.length = 0;
   now = lease.expiresAt + 51;
   await assertProviderSessionNotOwned(world, {
     tenantId: 'tenant-a',

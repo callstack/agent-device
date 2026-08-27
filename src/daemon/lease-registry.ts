@@ -376,7 +376,7 @@ export class LeaseRegistry {
     for (const lease of this.leases.values()) {
       if (lease.expiresAt > now) continue;
       this.leases.delete(lease.leaseId);
-      this.unbindLease(lease);
+      this.unbindLease(lease, lease.expiresAt);
       const expiredLease = { ...lease };
       expired.push(expiredLease);
       this.onLeaseExpired?.(expiredLease);
@@ -390,7 +390,7 @@ export class LeaseRegistry {
     const lease = this.leases.get(normalizedLeaseId);
     if (!lease || lease.expiresAt > this.now()) return undefined;
     this.leases.delete(lease.leaseId);
-    this.unbindLease(lease);
+    this.unbindLease(lease, lease.expiresAt);
     const expiredLease = { ...lease };
     this.onLeaseExpired?.(expiredLease);
     return expiredLease;
@@ -473,7 +473,7 @@ export class LeaseRegistry {
     }
   }
 
-  private unbindLease(lease: DeviceLease): void {
+  private unbindLease(lease: DeviceLease, releasedAt = this.now()): void {
     this.runBindings.delete(
       this.bindingKey({
         tenantId: lease.tenantId,
@@ -487,7 +487,7 @@ export class LeaseRegistry {
     if (deviceBindingKey) {
       this.deviceBindings.delete(deviceBindingKey);
     }
-    this.providerSessionOwnership.markLeaseReleased(lease);
+    this.providerSessionOwnership.markLeaseReleased(lease, releasedAt);
   }
 
   private bindingKey(params: {
