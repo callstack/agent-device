@@ -83,6 +83,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mutation-shard-${{ matrix.name }}
+          include-hidden-files: true
           path: |
             .tmp/mutation/mutation.json
             .tmp/mutation/lane-envelope.json
@@ -160,6 +161,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mutation-decision-kernels
+          include-hidden-files: true
           path: |
             .tmp/mutation/shards
             .tmp/mutation/lane-envelope.json
