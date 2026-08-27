@@ -220,21 +220,21 @@ final class RunnerTests: XCTestCase {
   }
 
   #if AGENT_DEVICE_RUNNER_UNIT_TESTS
-    func testHostLocalNetworkPermissionMonitorSelectsOnlyTheDenialAction() {
-      let prompt = ["Allow hosted compute to find devices on local networks?"]
-      XCTAssertTrue(
-        Self.shouldDismissHostLocalNetworkPermission(text: prompt, buttonLabel: "Don’t Allow")
+  func testHostLocalNetworkPermissionMonitorSelectsOnlyTheDenialAction() {
+    let prompt = ["Allow hosted compute to find devices on local networks?"]
+    XCTAssertTrue(
+      Self.shouldDismissHostLocalNetworkPermission(text: prompt, buttonLabel: "Don’t Allow")
+    )
+    XCTAssertFalse(
+      Self.shouldDismissHostLocalNetworkPermission(text: prompt, buttonLabel: "Allow")
+    )
+    XCTAssertFalse(
+      Self.shouldDismissHostLocalNetworkPermission(
+        text: ["System Settings wants to make changes"],
+        buttonLabel: "Don’t Allow"
       )
-      XCTAssertFalse(
-        Self.shouldDismissHostLocalNetworkPermission(text: prompt, buttonLabel: "Allow")
-      )
-      XCTAssertFalse(
-        Self.shouldDismissHostLocalNetworkPermission(
-          text: ["System Settings wants to make changes"],
-          buttonLabel: "Don’t Allow"
-        )
-      )
-    }
+    )
+  }
   #endif
 
   /// True for the one recorded-issue class the runner deliberately mutes: an AX-server error
