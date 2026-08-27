@@ -48,22 +48,11 @@ export function appleGestureAndScrollFacts(device: DeviceInfo) {
   };
 }
 
-/**
- * One-contact gesture execution. The retired admission refused watchOS with every other
- * `platform === 'web'` case and refused visionOS just after the multi-touch branch, both by
- * reading `device.appleOs` RAW — an Apple device that declares no OS was admitted, so this reads
- * it raw too rather than resolving a default that would newly refuse.
- */
 function appleGesturePlanFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.appleOs === 'watchos' || device.appleOs === 'visionos') return gestureLeafUnavailable;
   return appleTouchKind(device) ? available : gestureKindUnavailable;
 }
 
-/**
- * Two-contact synthesis, which on Apple is the iOS-simulator-only XCTest two-finger model. watchOS
- * is refused with no hint because the retired admission caught it in its first branch, before the
- * multi-touch policy that carries the per-OS hints ever ran.
- */
 function appleMultiTouchGestureFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.appleOs === 'watchos') return gestureLeafUnavailable;
   if (!appleTouchKind(device)) return gestureKindUnavailable;
@@ -79,7 +68,6 @@ function appleMultiTouchGestureFact(device: DeviceInfo): RuntimeOperationFact {
   return device.kind === 'simulator' ? available : physicalIosMultiTouchUnavailable;
 }
 
-/** Target-authored drag needs source hold, timed movement, and destination hold preserved. */
 function appleTargetAuthoredDragFact(device: DeviceInfo): RuntimeOperationFact {
   if (!appleTouchKind(device)) return gestureKindUnavailable;
   const supported =
@@ -89,22 +77,15 @@ function appleTargetAuthoredDragFact(device: DeviceInfo): RuntimeOperationFact {
   return supported ? available : targetAuthoredDragUnavailable;
 }
 
-/** The runner reads the frame for every Apple leaf that has one; watchOS has no runner at all. */
 function appleGestureViewportFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.appleOs === 'watchos') return gestureLeafUnavailable;
   return appleTouchKind(device) ? available : gestureKindUnavailable;
 }
 
-/**
- * `scroll` had no admission beyond its capability bucket — no plugin closure, no gesture policy —
- * so its cell is the bucket verbatim, watchOS included. A watchOS scroll still fails where it
- * fails today: when the Apple interactor refuses to construct, not at admission.
- */
 function appleScrollFact(device: DeviceInfo): RuntimeOperationFact {
   return appleTouchKind(device) ? available : scrollKindUnavailable;
 }
 
-/** The two kinds the Apple capability bucket ever admitted. */
 function appleTouchKind(device: DeviceInfo): boolean {
   return device.kind === 'simulator' || device.kind === 'device';
 }
