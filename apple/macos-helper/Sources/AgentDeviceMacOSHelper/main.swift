@@ -291,6 +291,7 @@ struct AgentDeviceMacOSHelper {
       normalizedSurface == "frontmost-app"
       ? findFocusedAlertElement()
         ?? findAlertElement(appElement: AXUIElementCreateApplication(app.processIdentifier))
+        ?? findBlockingLocalNetworkPermissionAlert()
       : findAlertElement(appElement: AXUIElementCreateApplication(app.processIdentifier))
     guard let alertElement else {
       // `reason` is the typed channel the host retries on; the message is for humans only.
@@ -668,6 +669,62 @@ private func findFocusedAlertElement() -> AXUIElement? {
     element = parent
   }
   return nil
+}
+
+private func findBlockingLocalNetworkPermissionAlert() -> AXUIElement? {
+  guard let windowInfoList = CGWindowListCopyWindowInfo(
+    [.optionOnScreenOnly, .excludeDesktopElements],
+    kCGNullWindowID
+  ) as? [[String: Any]] else {
+    return nil
+  }
+
+  var inspectedProcessIdentifiers: Set<pid_t> = []
+  for windowInfo in windowInfoList {
+    guard let processIdentifier = (windowInfo[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
+          inspectedProcessIdentifiers.insert(processIdentifier).inserted
+    else {
+      continue
+    }
+    let appElement = AXUIElementCreateApplication(processIdentifier)
+    for window in windows(of: appElement) {
+      var remainingNodes = 200
+      guard elementTreeContainsLocalNetworkText(window, remainingNodes: &remainingNodes) else {
+        continue
+      }
+      let hasDenialAction = collectButtons(root: window).contains { button in
+        let label = resolveElementLabel(button)
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+          .lowercased()
+        return label == "don't allow" || label == "don’t allow"
+      }
+      if hasDenialAction {
+        return window
+      }
+    }
+  }
+  return nil
+}
+
+private func elementTreeContainsLocalNetworkText(
+  _ element: AXUIElement,
+  remainingNodes: inout Int
+) -> Bool {
+  guard remainingNodes > 0 else {
+    return false
+  }
+  remainingNodes -= 1
+  if let text = readableText(for: element),
+     text.localizedCaseInsensitiveContains("local network")
+  {
+    return true
+  }
+  for child in children(of: element) {
+    if elementTreeContainsLocalNetworkText(child, remainingNodes: &remainingNodes) {
+      return true
+    }
+  }
+  return false
 }
 
 private func findAlertElementRecursively(root: AXUIElement, depth: Int) -> AXUIElement? {
