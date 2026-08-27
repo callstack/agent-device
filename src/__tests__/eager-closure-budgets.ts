@@ -145,6 +145,15 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/host-kit/src/retry.ts': 6,
   'packages/host-kit/src/version.ts': 4,
 
+  // --- @agent-device/provision-kit ---
+  'packages/provision-kit/src/app-resolution-cache.ts': 1,
+  'packages/provision-kit/src/boot-diagnostics.ts': 4,
+  'packages/provision-kit/src/install-artifact-archive-context.ts': 10,
+  'packages/provision-kit/src/install-source.ts': 25,
+  'packages/provision-kit/src/install-source-network.ts': 3,
+  'packages/provision-kit/src/install-source-network-transport.ts': 1,
+  'packages/provision-kit/src/toolchain-probe.ts': 8,
+
   // --- @agent-device/contracts ---
   'packages/contracts/src/alert-contract.ts': 1,
   'packages/contracts/src/android-clipboard-support.ts': 1,
@@ -259,6 +268,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/kernel/src/errors.ts': 2,
   // Added by #2041: keyed async lock moved from src/utils for the extracted IME lifecycle.
   'packages/kernel/src/keyed-lock.ts': 1,
+  'packages/kernel/src/numeric.ts': 1,
   'packages/kernel/src/rect-center.ts': 2,
   'packages/kernel/src/rect.ts': 1,
   'packages/kernel/src/device-isolation.ts': 1,

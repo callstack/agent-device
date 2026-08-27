@@ -2,7 +2,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
-import { firstOutputLine, TOOLCHAIN_TIMEOUT_MS } from '../toolchain-probe.ts';
+import { firstOutputLine, TOOLCHAIN_TIMEOUT_MS } from '@agent-device/provision-kit/toolchain-probe';
 import { resolveVegaToolProvider } from './tool-provider.ts';
 
 type VegaInventoryProbe = Readonly<{

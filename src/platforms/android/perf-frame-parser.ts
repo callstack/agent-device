@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { roundPercent } from '../perf-utils.ts';
+import { roundPercent } from '@agent-device/kernel/numeric';
 import { parseNumericToken } from './perf-parsing.ts';
 import {
   buildWorstFrameDropWindows,
@@ -12,9 +12,7 @@ import {
 
 export type { AndroidFrameDropWindow } from './perf-frame-analysis.ts';
 
-export const ANDROID_FRAME_SAMPLE_METHOD = 'adb-shell-dumpsys-gfxinfo-framestats';
-export const ANDROID_FRAME_SAMPLE_DESCRIPTION =
-  'Rendered-frame health from the current adb shell dumpsys gfxinfo <package> framestats window. Dropped frames use Android gfxinfo janky-frame/frame-deadline data when available; this is not video recording FPS.';
+const ANDROID_FRAME_SAMPLE_METHOD = 'adb-shell-dumpsys-gfxinfo-framestats';
 
 type AndroidFrameSummary = {
   droppedFramePercent: number;

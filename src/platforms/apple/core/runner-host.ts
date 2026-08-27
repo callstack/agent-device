@@ -33,7 +33,7 @@ import {
   emitRequestProgress,
 } from '@agent-device/host-kit/request';
 
-import { bootFailureHint, classifyBootFailure } from '../../boot-diagnostics.ts';
+import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { visitXmlPlistEntries } from './plist-xml.ts';
 import { getRunnerLeaseOwnerStateDir } from './runner-owner-state.ts';

@@ -153,8 +153,12 @@ selection, R11/R13 package enumeration, and the composite typecheck project list
 >   screenshot density and pixel diffing, snapshot occlusion, mobile snapshot semantics,
 >   quality verdicts and backend capability tables. Snapshot *behavior* is capture domain, not
 >   contracts vocabulary, and host mechanics are host-kit's, not capture-kit's.
-> - `@agent-device/provision-kit` owns provisioning mechanics — install-artifact acquisition
->   (local paths, archives, guarded network downloads) and host toolchain probing.
+> - `@agent-device/provision-kit` owns the provisioning domain — everything that gets a device
+>   and app ready to run: install-artifact acquisition (local paths, archives, guarded network
+>   downloads), host toolchain readiness probing, device boot-failure classification, and
+>   app-resolution caching. Platform packages may import provision-kit; provision-kit may not
+>   import a platform package or be imported by capture-kit (both directions planted red in the
+>   layering suite).
 > - The enforced direction is `kernel < contracts < host-kit < capture-kit < provision-kit <
 >   platform/provider/daemon`.
 > - Contracts stays vocabulary, plan models, and pure classification with no process,

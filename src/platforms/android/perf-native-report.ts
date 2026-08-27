@@ -1,5 +1,5 @@
 import { splitNonEmptyTrimmedLines } from '@agent-device/kernel/record';
-import { roundPercent } from '../perf-utils.ts';
+import { roundPercent } from '@agent-device/kernel/numeric';
 
 const SIMPLEPERF_REPORT_ARTIFACT_ENTRY_LIMIT = 50;
 

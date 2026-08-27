@@ -4,7 +4,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
-import { commandFirstLine } from '../toolchain-probe.ts';
+import { commandFirstLine } from '@agent-device/provision-kit/toolchain-probe';
 import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
 import {
   isAndroidTestImeActive,

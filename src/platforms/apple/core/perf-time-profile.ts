@@ -1,5 +1,5 @@
 import { parseXmlDocumentSync, type XmlNode } from '@agent-device/xml';
-import { roundPercent } from '../../perf-utils.ts';
+import { roundPercent } from '@agent-device/kernel/numeric';
 import { findAllXmlNodes, indexXmlNodesById, resolveXmlReference } from './perf-xml.ts';
 
 const APPLE_TIME_PROFILE_FUNCTION_LIMIT = 10;

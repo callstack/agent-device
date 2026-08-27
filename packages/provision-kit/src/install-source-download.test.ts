@@ -3,9 +3,9 @@ import dns from 'node:dns/promises';
 import fs from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { test, vi } from 'vitest';
-import { mkdtempForTest } from '../../__tests__/test-utils/tmp-dir.ts';
-import { downloadInstallSource } from '../install-source-download.ts';
-import * as networkTransport from '../install-source-network-transport.ts';
+import { mkdtempForTest } from './tmp-dir.fixtures.ts';
+import { downloadInstallSource } from './install-source-download.ts';
+import * as networkTransport from './install-source-network-transport.ts';
 
 test('download redirects revalidate destinations and strip sensitive cross-origin headers', async () => {
   const tempRoot = await mkdtempForTest('agent-device-download-redirect-');

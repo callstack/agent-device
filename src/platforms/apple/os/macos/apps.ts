@@ -3,11 +3,11 @@ import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { parseAppearanceAction } from '../../../appearance.ts';
+import { parseAppearanceAction } from '../../core/settings-parsing.ts';
 import {
   createAppResolutionCache,
   type AppResolutionCacheScope,
-} from '../../../app-resolution-cache.ts';
+} from '@agent-device/provision-kit/app-resolution-cache';
 import { quitMacOsApp } from './helper.ts';
 import { resolveAppleToolProvider, type AppleMacOsHostProvider } from '../../core/tool-provider.ts';
 import type { IosAppInfo } from '../../core/app-info.ts';

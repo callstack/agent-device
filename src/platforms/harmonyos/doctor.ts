@@ -1,5 +1,5 @@
 import type { DoctorCheck } from '@agent-device/contracts/observability';
-import { commandFirstLine } from '../toolchain-probe.ts';
+import { commandFirstLine } from '@agent-device/provision-kit/toolchain-probe';
 
 export async function harmonyToolchainCheck(): Promise<DoctorCheck> {
   const versionLine = await commandFirstLine('hdc', ['-v']);

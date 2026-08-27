@@ -14,6 +14,7 @@ type BootDiagnosticContext = {
   phase?: 'boot' | 'connect' | 'transport';
 };
 
+// fallow-ignore-next-line complexity
 export function classifyBootFailure(input: {
   error?: unknown;
   message?: string;

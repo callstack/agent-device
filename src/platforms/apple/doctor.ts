@@ -1,7 +1,7 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
-import { commandFirstLine } from '../toolchain-probe.ts';
+import { commandFirstLine } from '@agent-device/provision-kit/toolchain-probe';
 import { hasCachedAppleRunnerArtifact, prewarmAppleRunnerCache } from './core/runner-client.ts';
 
 type AppleToolchainProbe = {

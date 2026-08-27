@@ -7,7 +7,7 @@ import type { AppsFilter } from '@agent-device/contracts/device';
 import {
   createAppResolutionCache,
   type AppResolutionCacheScope,
-} from '../../app-resolution-cache.ts';
+} from '@agent-device/provision-kit/app-resolution-cache';
 import type { IosAppInfo } from './app-info.ts';
 import { filterAppleAppsByBundlePrefix } from './app-filter.ts';
 import { listMacApps, resolveMacOsApp } from '../os/macos/apps.ts';

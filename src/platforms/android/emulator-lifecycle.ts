@@ -5,8 +5,7 @@ import { type ExecResult, runCmdDetached, whichCmd } from '@agent-device/host-ki
 import { Deadline, retryWithPolicy, sleep } from '@agent-device/host-kit/retry';
 
 import { runAndroidHostAdb } from './adb-executor.ts';
-
-import { bootFailureHint, classifyBootFailure } from '../boot-diagnostics.ts';
+import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
 import { ensureAndroidSdkPathConfigured } from './sdk.ts';
 
 const ANDROID_BOOT_POLL_MS = 1_000;

@@ -3,7 +3,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { stripAtPrefix } from '../interaction-positionals.ts';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
-import { createUnsupportedInteractor } from '../../platforms/unsupported-interactor.ts';
+import { createUnsupportedInteractor } from './unsupported-interactor.ts';
 
 export function createWebInteractor(provider: WebProvider = resolveWebProvider()): Interactor {
   const clickRef = provider.clickRef;

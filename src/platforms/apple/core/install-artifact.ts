@@ -11,8 +11,11 @@ import {
   installArtifactArchiveDepth,
   noteInstallArtifactArchiveDepth,
   withInstallArtifactArchiveScope,
-} from '../../install-artifact-archive-context.ts';
-import { isTrustedInstallSourceUrl, materializeInstallablePath } from '../../install-source.ts';
+} from '@agent-device/provision-kit/install-artifact-archive-context';
+import {
+  isTrustedInstallSourceUrl,
+  materializeInstallablePath,
+} from '@agent-device/provision-kit/install-source';
 
 type InstallIosArtifactOptions = {
   appIdentifierHint?: string;

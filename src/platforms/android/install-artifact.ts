@@ -1,6 +1,9 @@
 import path from 'node:path';
 import type { LocalInstallSource } from '@agent-device/kernel/contracts';
-import { isTrustedInstallSourceUrl, materializeInstallablePath } from '../install-source.ts';
+import {
+  isTrustedInstallSourceUrl,
+  materializeInstallablePath,
+} from '@agent-device/provision-kit/install-source';
 import * as manifest from './manifest.ts';
 
 export type PreparedAndroidInstallArtifact = {

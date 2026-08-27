@@ -4,7 +4,7 @@ import {
   bootFailureHint,
   classifyBootFailure,
   isInfrastructureBootFailureReason,
-} from '../boot-diagnostics.ts';
+} from './boot-diagnostics.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
 test('classifyBootFailure maps timeout errors', () => {

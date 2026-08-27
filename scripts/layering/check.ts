@@ -82,6 +82,7 @@ import {
 } from './package-boundaries.ts';
 import {
   checkPlatformPackagePolicy,
+  checkPlatformsRootShape,
   platformPackagePolicySummary,
 } from './platform-package-policy.ts';
 import {
@@ -552,6 +553,7 @@ export const LAYERING_RULE_IDS = [
   'bin-alias-fast-path',
   'package-boundaries',
   'platform-package-policy',
+  'platforms-root-shape',
 ] as const;
 
 export type LayeringRuleId = (typeof LAYERING_RULE_IDS)[number];
@@ -585,6 +587,8 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
       readTrackedPlatformPackageDeclarations(repoRoot),
       { untrackedProductionFiles: listUntrackedProductionTypeScriptFiles(repoRoot) },
     ),
+  'platforms-root-shape': (context) =>
+    checkPlatformsRootShape([...context.allTypeScriptSources.keys()]),
 };
 
 export function main(): number {

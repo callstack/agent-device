@@ -1,0 +1,44 @@
+{
+  "name": "@agent-device/provision-kit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private provisioning mechanics shared by platform runtimes and daemon orchestration: install-artifact acquisition (local paths, archives, guarded network downloads) and host toolchain probing. Internal workspace package bundled into the published agent-device artifact.",
+  "dependencies": {
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "ipaddr.js": "^2.5.0",
+    "undici": "7.29.0"
+  },
+  "exports": {
+    "./app-resolution-cache": {
+      "types": "./src/app-resolution-cache.ts",
+      "default": "./src/app-resolution-cache.ts"
+    },
+    "./boot-diagnostics": {
+      "types": "./src/boot-diagnostics.ts",
+      "default": "./src/boot-diagnostics.ts"
+    },
+    "./install-artifact-archive-context": {
+      "types": "./src/install-artifact-archive-context.ts",
+      "default": "./src/install-artifact-archive-context.ts"
+    },
+    "./install-source": {
+      "types": "./src/install-source.ts",
+      "default": "./src/install-source.ts"
+    },
+    "./install-source-network": {
+      "types": "./src/install-source-network.ts",
+      "default": "./src/install-source-network.ts"
+    },
+    "./install-source-network-transport": {
+      "types": "./src/install-source-network-transport.ts",
+      "default": "./src/install-source-network-transport.ts"
+    },
+    "./toolchain-probe": {
+      "types": "./src/toolchain-probe.ts",
+      "default": "./src/toolchain-probe.ts"
+    }
+  }
+}

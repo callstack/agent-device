@@ -91,6 +91,7 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   'kernel',
   'host-kit',
   'capture-kit',
+  'provision-kit',
   'platform-apple',
   'platform-android',
   'platform-harmonyos',

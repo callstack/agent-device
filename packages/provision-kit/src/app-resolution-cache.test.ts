@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { createAppResolutionCache } from '../app-resolution-cache.ts';
+import { createAppResolutionCache } from './app-resolution-cache.ts';
 
 test('app resolution cache returns values until the expiry boundary', () => {
   let nowMs = 1_000;

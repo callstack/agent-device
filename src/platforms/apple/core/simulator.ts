@@ -4,7 +4,7 @@ import { execFailureDetails, requireExecSuccess } from '@agent-device/host-kit/c
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
-import { bootFailureHint, classifyBootFailure } from '../../boot-diagnostics.ts';
+import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
 
 import {
   IOS_BOOT_TIMEOUT_MS,

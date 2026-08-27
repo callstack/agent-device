@@ -3,11 +3,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
 import { parseAndroidFramePerfSample, type AndroidFramePerfSample } from './perf-frame-parser.ts';
 
-export {
-  ANDROID_FRAME_SAMPLE_DESCRIPTION,
-  ANDROID_FRAME_SAMPLE_METHOD,
-  type AndroidFramePerfSample,
-} from './perf-frame-parser.ts';
+export type { AndroidFramePerfSample } from './perf-frame-parser.ts';
 
 const ANDROID_FRAME_PERF_TIMEOUT_MS = 15_000;
 const ANDROID_FRAME_RESET_TIMEOUT_MS = 3_000;

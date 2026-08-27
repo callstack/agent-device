@@ -81,6 +81,9 @@ importers:
       '@agent-device/provider-webdriver':
         specifier: workspace:*
         version: link:packages/provider-webdriver
+      '@agent-device/provision-kit':
+        specifier: workspace:*
+        version: link:packages/provision-kit
       '@agent-device/replay-test':
         specifier: workspace:*
         version: link:packages/replay-test
@@ -347,6 +350,24 @@ importers:
       '@agent-device/xml':
         specifier: workspace:*
         version: link:../xml
+
+  packages/provision-kit:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      ipaddr.js:
+        specifier: ^2.5.0
+        version: 2.5.0
+      undici:
+        specifier: ^7.29.0
+        version: 7.29.0
 
   packages/replay-test:
     dependencies:

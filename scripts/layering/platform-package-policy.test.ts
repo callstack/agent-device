@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   CANONICAL_PLATFORM_FAMILIES,
   checkPlatformPackagePolicy,
+  checkPlatformsRootShape,
   type PlatformPackageDeclaration,
 } from './platform-package-policy.ts';
 import { classifyZone } from './model.ts';
@@ -385,7 +386,7 @@ test('platform packages may use capture-kit but no unrelated workspace implement
     );
     assert.match(
       messages(sources).join('\n'),
-      /may import workspace code only from capture-kit, host-kit, contracts, kernel, or xml/,
+      /may import workspace code only from capture-kit, host-kit, provision-kit, contracts, kernel, or xml/,
     );
   }
 });
@@ -489,4 +490,52 @@ test('Node resolves only each platform package root facade', () => {
       /ERR_PACKAGE_PATH_NOT_EXPORTED|Package subpath/,
     );
   }
+});
+
+test('the src/platforms root holds only family directories and __tests__', () => {
+  const clean = CANONICAL_PLATFORM_FAMILIES.map((family) => `src/platforms/${family}/doctor.ts`);
+  assert.deepEqual(
+    checkPlatformsRootShape([...clean, 'src/platforms/__tests__/install-source.test.ts']),
+    [],
+  );
+});
+
+test('a new direct production file or sibling directory under src/platforms fails closed', () => {
+  const planted = [
+    'src/platforms/shared-helper.ts',
+    'src/platforms/common/util.ts',
+    'src/platforms/perf-utils.ts',
+  ];
+  const found = checkPlatformsRootShape(planted);
+  assert.deepEqual(
+    found.map(({ file }) => file),
+    planted,
+  );
+  for (const violation of found) {
+    assert.equal(violation.rule, 'platforms-root-shape');
+    assert.match(violation.message, /substrate package/);
+  }
+});
+
+test('platform packages may import the provision-kit substrate', () => {
+  const sources = validSources();
+  sources.set(
+    'packages/platform-apple/src/install.ts',
+    "import { resolveInstallSource } from '@agent-device/provision-kit/install-source';",
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+});
+
+test('a provision-kit import of a concrete platform package fails closed', () => {
+  const sources = validSources();
+  sources.set(
+    'packages/provision-kit/src/backdoor.ts',
+    "import { runtimeModule } from '@agent-device/platform-android';",
+  );
+  assert.match(
+    checkPlatformPackagePolicy(sources, declarations())
+      .map(({ message }) => message)
+      .join('\n'),
+    /may import '@agent-device\/platform-android'/,
+  );
 });

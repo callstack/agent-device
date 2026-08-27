@@ -33,6 +33,25 @@ const RAW_PROCESS_SPECIFIERS = new Set(['child_process', 'node:child_process']);
 // narrows with it — the facet itself is durable Apple ownership, not a
 // temporary exception).
 export const APPLE_RUNNER_SUBTREE = 'packages/platform-apple/src/runner/';
+
+/**
+ * The `src/platforms` root holds ONLY the six family directories plus the
+ * shared `__tests__` directory; shared code belongs in a substrate package.
+ */
+export function checkPlatformsRootShape(files: readonly string[]): LayeringViolation[] {
+  const allowedChild = new RegExp(
+    `^src/platforms/(?:${[...CANONICAL_PLATFORM_FAMILIES, '__tests__'].join('|')})/`,
+  );
+  return files
+    .filter((file) => file.startsWith('src/platforms/') && !allowedChild.test(file))
+    .map((file) => ({
+      rule: 'platforms-root-shape',
+      file,
+      line: 1,
+      message:
+        'src/platforms may hold only the family directories and __tests__; shared code belongs in a substrate package',
+    }));
+}
 const APPLE_RUNNER_FACADE = '@agent-device/platform-apple/runner';
 const APPLE_RUNNER_CLIENT = '@agent-device/platform-apple/runner/client';
 const APPLE_RUNNER_TEST_HOST = '@agent-device/platform-apple/runner/test-host';
@@ -264,6 +283,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
       site.spec !== '@agent-device/capture-kit' &&
       !site.spec.startsWith('@agent-device/capture-kit/') &&
       !site.spec.startsWith('@agent-device/host-kit/') &&
+      !site.spec.startsWith('@agent-device/provision-kit/') &&
       !site.spec.startsWith('@agent-device/kernel/') &&
       site.spec !== '@agent-device/xml' &&
       !isPackageOwnedFacadeTest(file, ownerFamily, site.spec)
@@ -272,7 +292,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
         violation(
           file,
           site.line,
-          `platform-${ownerFamily} may import workspace code only from capture-kit, host-kit, contracts, kernel, or xml; found '${site.spec}'`,
+          `platform-${ownerFamily} may import workspace code only from capture-kit, host-kit, provision-kit, contracts, kernel, or xml; found '${site.spec}'`,
         ),
       );
     }

@@ -1,5 +1,5 @@
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import { roundOneDecimal, roundPercent } from '../../perf-utils.ts';
+import { roundOneDecimal, roundPercent } from '@agent-device/kernel/numeric';
 import { parseXmlDocumentSync, type XmlNode } from '@agent-device/xml';
 import {
   findAllXmlNodes,

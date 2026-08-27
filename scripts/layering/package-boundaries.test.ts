@@ -470,6 +470,31 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/snapshot-quality-backend-capabilities',
     '@agent-device/capture-kit/snapshot-quality-verdict',
   ]);
+
+  const provisionKitPackage = packages.find((pkg) => pkg.name === '@agent-device/provision-kit');
+  assert.ok(provisionKitPackage, 'provision-kit package must exist');
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(repoRoot, 'packages/provision-kit/package.json'), 'utf8'))
+      .private,
+    true,
+    'provision-kit stays a private implementation package',
+  );
+  // Provisioning subpaths; any further subpath widens this key list and fails
+  // the assertion, same as the capture-kit pin above.
+  assert.deepEqual([...provisionKitPackage.exportTargets.keys()].sort(), [
+    '@agent-device/provision-kit/app-resolution-cache',
+    '@agent-device/provision-kit/boot-diagnostics',
+    '@agent-device/provision-kit/install-artifact-archive-context',
+    '@agent-device/provision-kit/install-source',
+    '@agent-device/provision-kit/install-source-network',
+    '@agent-device/provision-kit/install-source-network-transport',
+    '@agent-device/provision-kit/toolchain-probe',
+  ]);
+  assert.deepEqual([...provisionKitPackage.workspaceDependencies].sort(), [
+    '@agent-device/contracts',
+    '@agent-device/host-kit',
+    '@agent-device/kernel',
+  ]);
   assert.deepEqual([...captureKitPackage.workspaceDependencies].sort(), [
     '@agent-device/contracts',
     '@agent-device/host-kit',

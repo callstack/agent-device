@@ -12,8 +12,11 @@ import {
   isTrustedInstallSourceUrl,
   materializeInstallablePath,
   validateDownloadSourceUrl,
-} from '../install-source.ts';
-import { isBlockedIpAddress, isBlockedSourceHostname } from '../install-source-network.ts';
+} from '@agent-device/provision-kit/install-source';
+import {
+  isBlockedIpAddress,
+  isBlockedSourceHostname,
+} from '@agent-device/provision-kit/install-source-network';
 import * as androidManifest from '../android/manifest.ts';
 import { prepareAndroidInstallArtifact } from '../android/install-artifact.ts';
 import { prepareIosInstallArtifact } from '../apple/core/install-artifact.ts';
@@ -23,7 +26,7 @@ import {
 } from '../apple/core/tool-provider.ts';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from './install-source.coverage.ts';
 import { mkdtempForTest } from '../../__tests__/test-utils/tmp-dir.ts';
-import * as networkTransport from '../install-source-network-transport.ts';
+import * as networkTransport from '@agent-device/provision-kit/install-source-network-transport';
 
 test('validateDownloadSourceUrl rejects localhost and private literal addresses by default', async () => {
   await assert.rejects(

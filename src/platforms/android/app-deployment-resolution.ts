@@ -1,6 +1,9 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createAppResolutionCache, type AppResolutionCacheScope } from '../app-resolution-cache.ts';
+import {
+  createAppResolutionCache,
+  type AppResolutionCacheScope,
+} from '@agent-device/provision-kit/app-resolution-cache';
 import { runAndroidAdb } from './adb.ts';
 import { classifyAndroidAppTarget } from './open-target.ts';
 

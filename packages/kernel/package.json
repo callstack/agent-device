@@ -37,6 +37,10 @@
       "types": "./src/location-coordinates.ts",
       "default": "./src/location-coordinates.ts"
     },
+    "./numeric": {
+      "types": "./src/numeric.ts",
+      "default": "./src/numeric.ts"
+    },
     "./record": {
       "types": "./src/record.ts",
       "default": "./src/record.ts"

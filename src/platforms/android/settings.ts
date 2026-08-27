@@ -1,13 +1,13 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
+import type { SettingOptions } from '@agent-device/contracts/settings';
 import {
+  parseAppearanceAction,
+  parseSettingState,
   summarizeCommandAttemptFailures,
   type CommandAttemptFailure,
-} from '../command-attempts.ts';
-import type { SettingOptions } from '@agent-device/contracts/settings';
-import { parseAppearanceAction } from '../appearance.ts';
-import { parseSettingState } from '../setting-state.ts';
+} from './settings-parsing.ts';
 import { runAndroidAdb } from './adb.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-deployment-resolution.ts';

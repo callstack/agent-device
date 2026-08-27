@@ -11,12 +11,12 @@ import path from 'node:path';
 import { resolveIosSimulatorDeviceSetPath } from '@agent-device/kernel/device-isolation';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
-import { parseAppearanceAction } from '../../appearance.ts';
 import {
+  parseAppearanceAction,
+  parseSettingState,
   summarizeCommandAttemptFailures,
   type CommandAttemptFailure,
-} from '../../command-attempts.ts';
-import { parseSettingState } from '../../setting-state.ts';
+} from './settings-parsing.ts';
 import { setMacOsAppearance } from '../os/macos/apps.ts';
 import { runMacOsPermissionAction, type MacOsPermissionTarget } from '../os/macos/helper.ts';
 import { closeIosApp } from './app-launch.ts';
