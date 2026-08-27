@@ -10,7 +10,6 @@ export { listAndroidAppsWithAdb } from '../platforms/android/app-helpers.ts';
 import type { AndroidAdbExecutor } from '../platforms/android/adb-executor.ts';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 
-// R13: the adb read/parse behavior is platform-android's, reached through the composition root.
 export async function getAndroidAppStateWithAdb(
   adb: AndroidAdbExecutor,
 ): Promise<AppStateRuntimeResult> {

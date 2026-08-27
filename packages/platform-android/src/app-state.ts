@@ -33,7 +33,6 @@ export type AndroidCommandExecutor = (
   options: { allowFailure: boolean },
 ) => Promise<{ exitCode: number; stdout?: string; stderr?: string }>;
 
-/** The complete adb-executor read/parse loop, owned beside its host-based twin. */
 export async function readAndroidAppStateWithExecutor(
   run: AndroidCommandExecutor,
 ): Promise<AppStateRuntimeResult> {
