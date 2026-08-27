@@ -36,6 +36,10 @@ Versioned CLI help is the source of truth for command behavior. Start workflow p
 - Repair recurring failures at their owning interface with types, a registry, or one construction
   path. A custom guard that reconstructs another source of truth needs redesign, not another
   exception.
+- Treat explanatory implementation comments as a failed design review. Do not narrate control flow,
+  preserve review history, or justify a workaround in code. Express the invariant through names,
+  types, module boundaries, and tests; put history in the PR or an ADR. Allow only public API docs,
+  tool directives, and a brief citation to an external constraint that cannot be encoded.
 - Key behavior on typed reasons and details, never error text. Existing message sniffs are owned debt
   and must not be copied.
 - Snapshot output is the token budget: do not add per-node metadata when response-level metadata can
