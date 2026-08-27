@@ -117,6 +117,53 @@ test('artifacts refuses an expired provider session after retention before lazy 
   assert.deepEqual(world.providerCalls, []);
 });
 
+test('artifacts refuses a provider session returned after allocation expiry retention', async () => {
+  let now = 1_000;
+  const world = createWorld({
+    now: () => now,
+    defaultLeaseTtlMs: 100,
+    minLeaseTtlMs: 1,
+    maxLeaseTtlMs: 100,
+    providerSessionRetentionMs: 50,
+  });
+  world.lifecycle.allocate = async (lease) => {
+    now = lease.expiresAt + 51;
+    return { providerSessionId: 'late-allocation-session' };
+  };
+
+  await allocateLease(world, 'tenant-a', 'run-a');
+  await assertProviderSessionNotOwned(world, {
+    tenantId: 'tenant-a',
+    runId: 'run-a',
+    providerSessionId: 'late-allocation-session',
+  });
+  assert.deepEqual(world.providerCalls, []);
+});
+
+test('artifacts refuses a provider session returned after release expiry retention', async () => {
+  let now = 1_000;
+  const world = createWorld({
+    now: () => now,
+    defaultLeaseTtlMs: 100,
+    minLeaseTtlMs: 1,
+    maxLeaseTtlMs: 100,
+    providerSessionRetentionMs: 50,
+  });
+  const lease = await allocateLease(world, 'tenant-a', 'run-a');
+  world.lifecycle.release = async (releasedLease) => {
+    now = releasedLease.expiresAt + 51;
+    return { providerSessionId: 'late-release-session' };
+  };
+
+  await releaseLease(world, lease);
+  await assertProviderSessionNotOwned(world, {
+    tenantId: 'tenant-a',
+    runId: 'run-a',
+    providerSessionId: 'late-release-session',
+  });
+  assert.deepEqual(world.providerCalls, []);
+});
+
 type World = {
   leaseRegistry: LeaseRegistry;
   sessionStore: ReturnType<typeof makeSessionStore>;

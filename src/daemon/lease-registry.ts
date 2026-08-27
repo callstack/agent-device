@@ -351,13 +351,14 @@ export class LeaseRegistry {
   }
 
   recordProviderSession(
-    lease: Pick<DeviceLease, 'leaseId' | 'tenantId' | 'leaseProvider'>,
+    lease: Pick<DeviceLease, 'leaseId' | 'tenantId' | 'leaseProvider' | 'expiresAt'>,
     providerSessionId: string,
   ): void {
+    const releasedAt = lease.expiresAt <= this.now() ? lease.expiresAt : undefined;
     this.cleanupExpiredLeases();
     this.providerSessionOwnership.record(lease, providerSessionId);
     if (!this.leases.has(lease.leaseId)) {
-      this.providerSessionOwnership.markLeaseReleased(lease);
+      this.providerSessionOwnership.markLeaseReleased(lease, releasedAt);
     }
   }
 
