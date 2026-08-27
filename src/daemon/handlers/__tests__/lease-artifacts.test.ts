@@ -121,7 +121,7 @@ test('artifacts refuses a provider session returned after allocation expiry rete
   const clockValues = [1_000, 1_000, 1_099, 1_151] as const;
   let clockIndex = 0;
   const world = createWorld({
-    now: () => clockValues[Math.min(clockIndex++, clockValues.length - 1)],
+    now: () => clockValues[Math.min(clockIndex++, clockValues.length - 1)] ?? 1_151,
     defaultLeaseTtlMs: 100,
     minLeaseTtlMs: 1,
     maxLeaseTtlMs: 100,
