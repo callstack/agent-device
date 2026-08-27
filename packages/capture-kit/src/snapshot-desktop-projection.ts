@@ -16,7 +16,6 @@ const INTERACTIVE_ROLE_TOKENS = [
   'switch',
 ] as const;
 
-/** Applies the legacy desktop-surface projection once for both runtime hosts and legacy capture. */
 export function shapeDesktopSurfaceSnapshot(
   data: SnapshotResult,
   options: Pick<SnapshotOptions, 'depth' | 'interactiveOnly' | 'scope'>,
@@ -34,7 +33,6 @@ export function shapeDesktopSurfaceSnapshot(
   return { ...data, nodes };
 }
 
-/** The shared scope specification applied post-wire (contracts' `snapshot-scope`). */
 export function scopeSnapshotNodes(
   nodes: RawSnapshotNode[],
   scope: string,
