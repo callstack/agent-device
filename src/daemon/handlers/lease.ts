@@ -25,6 +25,7 @@ import { AppError, createRequestCanceledError, errorMessage } from '@agent-devic
 import { LEASE_ALLOCATION_BUDGET_MS } from '../../core/command-descriptor/timeout-policy.ts';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { listDownloadableArtifacts } from '../artifact-tracking.ts';
+import { providerSessionIdFromData } from '../provider-session-ownership.ts';
 
 type LeaseHandlerArgs = {
   req: DaemonRequest;
@@ -54,10 +55,12 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       const artifactScope = resolveRequestOrSessionLeaseScope(req, sessionStore.get(sessionName));
       return {
         ok: true,
-        data: (await listArtifactsForRequest(req, artifactScope, cloudArtifactProvider)) as Record<
-          string,
-          unknown
-        >,
+        data: (await listArtifactsForRequest(
+          req,
+          artifactScope,
+          leaseRegistry,
+          cloudArtifactProvider,
+        )) as Record<string, unknown>,
       };
     }
     case 'lease_allocate': {
@@ -74,6 +77,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
           signal: getRequestSignal(req.meta?.requestId),
           deadline: Date.now() + LEASE_ALLOCATION_BUDGET_MS,
         });
+        recordProviderSession(leaseRegistry, lease, providerData);
       } catch (error) {
         leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
         throw error;
@@ -150,6 +154,7 @@ async function releaseLease(
   context?: LeaseLifecycleContext,
 ): Promise<LeaseReleaseOutcome> {
   const provider = lease ? await leaseLifecycleProvider?.release?.(lease, context) : undefined;
+  if (lease) recordProviderSession(leaseRegistry, lease, provider);
   return { registryReleased: leaseRegistry.releaseLease(request).released, provider };
 }
 
@@ -244,6 +249,7 @@ function assertProviderRuntimeAvailable(
 async function listArtifactsForRequest(
   req: DaemonRequest,
   leaseScope: ReturnType<typeof resolveLeaseScope>,
+  leaseRegistry: LeaseRegistry,
   cloudArtifactProvider: CloudArtifactProvider | undefined,
 ): Promise<AgentArtifactsResult> {
   const providerSessionId = readFlagString(req.flags, 'providerSessionId');
@@ -251,7 +257,12 @@ async function listArtifactsForRequest(
     return await listDaemonArtifacts(leaseScope.tenantId);
   }
 
-  return await listCloudArtifactsForRequest(leaseScope, providerSessionId, cloudArtifactProvider);
+  return await listCloudArtifactsForRequest(
+    leaseScope,
+    providerSessionId,
+    leaseRegistry,
+    cloudArtifactProvider,
+  );
 }
 
 function shouldListDaemonArtifacts(
@@ -274,6 +285,7 @@ async function listDaemonArtifacts(tenantId: string | undefined): Promise<AgentA
 async function listCloudArtifactsForRequest(
   leaseScope: ReturnType<typeof resolveLeaseScope>,
   providerSessionId: string | undefined,
+  leaseRegistry: LeaseRegistry,
   cloudArtifactProvider: CloudArtifactProvider | undefined,
 ): Promise<AgentArtifactsResult> {
   if (!leaseScope.leaseProvider) {
@@ -288,9 +300,10 @@ async function listCloudArtifactsForRequest(
       'artifacts requires an active cloud lease or --provider-session <id>.',
     );
   }
+  const providerSession = resolveProviderSession(leaseRegistry, leaseScope, providerSessionId);
   const result = await cloudArtifactProvider?.listCloudArtifacts?.({
     provider: leaseScope.leaseProvider,
-    leaseId: leaseScope.leaseId,
+    leaseId: providerSession?.leaseId ?? leaseScope.leaseId,
     providerSessionId,
   });
   if (!result) {
@@ -302,10 +315,37 @@ async function listCloudArtifactsForRequest(
   return result;
 }
 
+function resolveProviderSession(
+  leaseRegistry: LeaseRegistry,
+  leaseScope: ReturnType<typeof resolveLeaseScope>,
+  providerSessionId: string | undefined,
+): ReturnType<LeaseRegistry['resolveProviderSession']> {
+  if (!providerSessionId) return undefined;
+  const providerSession = leaseRegistry.resolveProviderSession({
+    provider: leaseScope.leaseProvider,
+    providerSessionId,
+    tenantId: leaseScope.tenantId,
+  });
+  if (providerSession) return providerSession;
+  throw new AppError('UNAUTHORIZED', 'Provider session is not owned by the request tenant', {
+    reason: 'PROVIDER_SESSION_NOT_OWNED',
+  });
+}
+
 function readFlagString(
   flags: Record<string, unknown> | undefined,
   key: string,
 ): string | undefined {
   const value = flags?.[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function recordProviderSession(
+  leaseRegistry: LeaseRegistry,
+  lease: DeviceLease,
+  providerData: Record<string, unknown> | undefined,
+): void {
+  const providerSessionId = providerSessionIdFromData(providerData);
+  if (!providerSessionId) return;
+  leaseRegistry.recordProviderSession(lease, providerSessionId);
 }

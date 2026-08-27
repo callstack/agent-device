@@ -10,6 +10,7 @@ import {
 } from './request-admission.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
+import { providerSessionIdFromData } from './provider-session-ownership.ts';
 
 export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>;
 
@@ -159,6 +160,10 @@ export async function releaseSessionLease(params: {
   const providerData = activeLease
     ? await params.leaseLifecycleProvider?.release?.(activeLease)
     : undefined;
+  const providerSessionId = providerSessionIdFromData(providerData);
+  if (activeLease && providerSessionId) {
+    params.leaseRegistry.recordProviderSession(activeLease, providerSessionId);
+  }
   const result = params.leaseRegistry.releaseLease(releaseRequest);
   emitDiagnostic({
     level: 'info',

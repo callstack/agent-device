@@ -3,6 +3,10 @@ import crypto from 'node:crypto';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { normalizeTenantId } from './config.ts';
+import {
+  ProviderSessionOwnershipRegistry,
+  type ProviderSessionOwnership,
+} from './provider-session-ownership.ts';
 
 export type SimulatorLease = DeviceLease;
 
@@ -11,6 +15,7 @@ export type LeaseRegistryOptions = {
   defaultLeaseTtlMs?: number;
   minLeaseTtlMs?: number;
   maxLeaseTtlMs?: number;
+  providerSessionRetentionMs?: number;
   now?: () => number;
   onLeaseExpired?: (lease: DeviceLease) => void;
 };
@@ -204,6 +209,7 @@ export class LeaseRegistry {
   private readonly maxLeaseTtlMs: number;
   private readonly now: () => number;
   private readonly onLeaseExpired?: (lease: DeviceLease) => void;
+  private readonly providerSessionOwnership: ProviderSessionOwnershipRegistry;
 
   constructor(options: LeaseRegistryOptions = {}) {
     this.maxActiveSimulatorLeases = Number.isInteger(options.maxActiveSimulatorLeases)
@@ -220,6 +226,10 @@ export class LeaseRegistry {
       : MAX_LEASE_TTL_MS;
     this.now = options.now ?? (() => Date.now());
     this.onLeaseExpired = options.onLeaseExpired;
+    this.providerSessionOwnership = new ProviderSessionOwnershipRegistry({
+      now: this.now,
+      retentionMs: options.providerSessionRetentionMs,
+    });
   }
 
   allocateLease(request: AllocateLeaseRequest): DeviceLease {
@@ -340,6 +350,26 @@ export class LeaseRegistry {
     return Array.from(this.leases.values()).map((entry) => ({ ...entry }));
   }
 
+  recordProviderSession(
+    lease: Pick<DeviceLease, 'leaseId' | 'tenantId' | 'leaseProvider'>,
+    providerSessionId: string,
+  ): void {
+    this.cleanupExpiredLeases();
+    this.providerSessionOwnership.record(lease, providerSessionId);
+    if (!this.leases.has(lease.leaseId)) {
+      this.providerSessionOwnership.markLeaseReleased(lease);
+    }
+  }
+
+  resolveProviderSession(params: {
+    provider?: string;
+    providerSessionId?: string;
+    tenantId?: string;
+  }): ProviderSessionOwnership | undefined {
+    this.cleanupExpiredLeases();
+    return this.providerSessionOwnership.resolve(params);
+  }
+
   consumeExpiredLeases(): DeviceLease[] {
     const now = this.now();
     const expired: DeviceLease[] = [];
@@ -457,6 +487,7 @@ export class LeaseRegistry {
     if (deviceBindingKey) {
       this.deviceBindings.delete(deviceBindingKey);
     }
+    this.providerSessionOwnership.markLeaseReleased(lease);
   }
 
   private bindingKey(params: {

@@ -171,11 +171,10 @@ test('daemon runtime publishes dual transport metadata', async () => {
   }
 });
 
-test('daemon default provider composition serves cloud artifacts over RPC', async () => {
+test('daemon rejects unowned cloud artifacts over RPC', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-provider-');
   const providerRequests: string[] = [];
-  const providerServer = http.createServer((req, res) => {
-    providerRequests.push(req.url ?? '');
+  const providerServer = http.createServer((_req, res) => {
     res.setHeader('content-type', 'application/json');
     res.end(
       JSON.stringify({
@@ -220,27 +219,14 @@ test('daemon default provider composition serves cloud artifacts over RPC', asyn
       }),
     });
     const body = (await response.json()) as {
-      result?: { ok?: boolean; data?: Record<string, unknown> };
+      error?: { code?: number; message?: string; data?: { code?: string; details?: unknown } };
     };
 
-    assert.equal(response.status, 200);
-    assert.equal(body.result?.ok, true);
-    assert.deepEqual(body.result?.data, {
-      provider: 'browserstack',
-      providerSessionId: 'wd-1',
-      status: 'ready',
-      cloudArtifacts: [
-        {
-          provider: 'browserstack',
-          providerSessionId: 'wd-1',
-          kind: 'video',
-          name: 'Session video',
-          url: 'https://browserstack.example/video.mp4',
-          availability: 'ready',
-        },
-      ],
-    });
-    assert.deepEqual(providerRequests, ['/sessions/wd-1.json']);
+    assert.equal(response.status, 401);
+    assert.equal(body.error?.code, -32000);
+    assert.equal(body.error?.data?.code, 'UNAUTHORIZED');
+    assert.deepEqual(body.error?.data?.details, { reason: 'PROVIDER_SESSION_NOT_OWNED' });
+    assert.deepEqual(providerRequests, []);
   } finally {
     await runtime?.shutdown();
     await closeLoopbackServer(providerServer);

@@ -72,6 +72,33 @@ test('a create-timeout surfaces provider evidence for the maybe-leaked session',
   }
 });
 
+test('cloud artifact lookup does not accept a provider session id without its lease', async () => {
+  let listCalls = 0;
+  const runtime = makeRuntime({
+    listArtifacts: async () => {
+      listCalls += 1;
+      return {
+        provider: 'webdriver-test',
+        status: 'ready',
+        cloudArtifacts: [],
+      };
+    },
+  });
+
+  try {
+    const cloudArtifacts = runtime.cloudArtifacts;
+    assert.ok(cloudArtifacts);
+    const result = await cloudArtifacts.listCloudArtifacts?.({
+      provider: 'webdriver-test',
+      providerSessionId: 'never-authorized',
+    });
+    assert.equal(result, undefined);
+    assert.equal(listCalls, 0);
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
 function makeRuntime(overrides: Partial<CloudWebDriverRuntimeOptions> = {}) {
   return createCloudWebDriverRuntime({
     clientVersion: 'test',
