@@ -17,6 +17,7 @@ import type { DaemonCommandRoute } from './request-handler-chain.ts';
  * each path still points at the module that route's loader imports.
  */
 const DAEMON_ROUTE_OWNER_FILES = {
+  humanControl: 'src/daemon/handlers/human-control.ts',
   lease: 'src/daemon/handlers/lease.ts',
   session: 'src/daemon/handlers/session.ts',
   snapshot: 'src/daemon/handlers/snapshot.ts',

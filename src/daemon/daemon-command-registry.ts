@@ -2,6 +2,7 @@ import {
   type DaemonCommandDescriptor,
   type DaemonCommandRoute,
   type SessionCommandKind,
+  type HumanControlEffect,
 } from '../core/command-descriptor/daemon-command-descriptor.ts';
 import { deriveDaemonCommandDescriptors } from '../core/command-descriptor/derive.ts';
 import { commandDescriptors } from '../core/command-descriptor/registry.ts';
@@ -72,6 +73,13 @@ export function canOverrideLockPolicySelector(command: string): boolean {
 
 export function shouldGuardAndroidBlockingDialog(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.androidBlockingDialogGuard === true;
+}
+
+export function humanControlEffectForRequest(req: DaemonRequest): HumanControlEffect {
+  const effect = getDaemonCommandDescriptor(req.command)?.humanControlEffect;
+  // Unknown wire commands still fail closed even though every known descriptor
+  // must declare an effect at compile time.
+  return typeof effect === 'function' ? effect(req) : (effect ?? 'mutate');
 }
 
 export function shouldPreferExplicitDeviceOverExistingSession(req: DaemonRequest): boolean {

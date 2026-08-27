@@ -2,12 +2,14 @@ import type { DispatchedCommand } from '@agent-device/contracts/command';
 import type { RefFrameEffect } from '@agent-device/contracts/replay';
 
 export type SessionCommandKind = 'inventory' | 'state' | 'observability' | 'publication' | 'replay';
+export type HumanControlEffect = 'read' | 'mutate' | 'control';
 
 /**
  * Routes a daemon command to its handler family. The handler table in
  * `request-handler-chain.ts` must cover every member (`satisfies Record<…>`).
  */
 export type DaemonCommandRoute =
+  | 'humanControl'
   | 'lease'
   | 'session'
   | 'snapshot'
@@ -28,6 +30,7 @@ export type DaemonRefFrameEffect<TRequest = DispatchedCommand> =
  */
 export type DaemonCommandDescriptor<TRequest = DispatchedCommand> = {
   command: string;
+  humanControlEffect: HumanControlEffect | ((req: TRequest) => HumanControlEffect);
   route: DaemonCommandRoute;
   sessionKind?: SessionCommandKind;
   refFrameEffect?: DaemonRefFrameEffect<TRequest>;

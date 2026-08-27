@@ -443,6 +443,7 @@ const REPLAY_SCRIPT_LINE_PLANS = {
   'trigger-app-event': GENERIC_REPLAY_LINE,
   'tv-remote': GENERIC_REPLAY_LINE,
   viewport: GENERIC_REPLAY_LINE,
+  human_control: { waived: 'host-local control commands are never recorded in replay scripts' },
   install_source: GENERIC_REPLAY_LINE,
   lease_allocate: GENERIC_REPLAY_LINE,
   lease_heartbeat: GENERIC_REPLAY_LINE,

@@ -142,6 +142,27 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     listUsageOverride: 'proxy',
     allowedFlags: ['proxyHost', 'proxyPort', 'daemonAuthToken', 'stateDir'],
   },
+  takeover: {
+    text: {
+      summary: 'Pause agent interactions while a person controls a device',
+      description:
+        'Temporarily hand control of a locally attached simulator or device to a person. Run this on the host that owns the target. The foreground command pauses state-changing agent commands, renews the hold until Ctrl+C, and then releases it. Read-only diagnostics remain available. status and release inspect or recover local holds. HTTP-mode daemons also expose an authenticated loopback API under /admin/human-control/holds for host-side automation; the external proxy does not forward this route. This command always targets the local daemon, even when a remote connection is active.',
+    },
+    usageOverride:
+      'takeover [status | release <hold-id>] [--platform <platform>] [--device <name>] [--udid <udid>] [--serial <serial>]',
+    listUsageOverride: 'takeover [status|release]',
+    positionalArgs: ['status|release?', 'hold-id?'],
+    supportedFlags: [
+      'stateDir',
+      'platform',
+      'target',
+      'device',
+      'udid',
+      'serial',
+      'iosSimulatorDeviceSet',
+      'androidDeviceAllowlist',
+    ],
+  },
   'react-devtools': {
     text: {
       summary: 'Inspect components, hooks, and render profiles',

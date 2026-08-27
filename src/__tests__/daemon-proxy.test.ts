@@ -210,6 +210,34 @@ test('daemon proxy rejects unauthenticated rpc requests', async (t) => {
   }
 });
 
+test('daemon proxy does not expose local human-control administration', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  let upstreamCalled = false;
+  const upstream = http.createServer((_req, res) => {
+    upstreamCalled = true;
+    res.end('{}');
+  });
+  const proxy = createDaemonProxyServer({
+    upstreamBaseUrl: `http://127.0.0.1:${await listenOnLoopback(upstream)}`,
+    upstreamToken: 'daemon-secret',
+    clientToken: 'proxy-secret',
+  });
+
+  try {
+    const proxyPort = await listenOnLoopback(proxy);
+    const response = await fetch(
+      `http://127.0.0.1:${String(proxyPort)}/agent-device/admin/human-control/holds`,
+      { headers: { authorization: 'Bearer proxy-secret' } },
+    );
+    assert.equal(response.status, 404);
+    assert.equal(upstreamCalled, false);
+  } finally {
+    await closeLoopbackServer(proxy);
+    await closeLoopbackServer(upstream);
+  }
+});
+
 test('daemon proxy leaves health endpoint unauthenticated', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 

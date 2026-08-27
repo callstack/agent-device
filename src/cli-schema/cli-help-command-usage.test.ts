@@ -174,6 +174,16 @@ test('proxy command help describes tunnel usage', async () => {
   assert.doesNotMatch(help, /agent-device-proxy/);
 });
 
+test('takeover command help documents local foreground and VM API flows', async () => {
+  const help = await usageForCommand('takeover');
+  if (help === null) throw new Error('Expected command help text');
+  assert.match(help, /Usage:\s+agent-device takeover/);
+  assert.match(help, /foreground command pauses state-changing agent commands/);
+  assert.match(help, /until Ctrl\+C/);
+  assert.match(help, /\/admin\/human-control\/holds/);
+  assert.match(help, /always targets the local daemon/);
+});
+
 test('connect command help lists lease id in usage and flags', async () => {
   const help = await usageForCommand('connect');
   if (help === null) throw new Error('Expected command help text');

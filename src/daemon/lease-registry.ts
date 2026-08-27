@@ -18,6 +18,7 @@ export type LeaseRegistryOptions = {
   providerSessionRetentionMs?: number;
   now?: () => number;
   onLeaseExpired?: (lease: DeviceLease) => void;
+  isDeviceLeaseProtected?: (lease: DeviceLease) => boolean;
 };
 
 export type AllocateLeaseRequest = {
@@ -210,6 +211,7 @@ export class LeaseRegistry {
   private readonly now: () => number;
   private readonly onLeaseExpired?: (lease: DeviceLease) => void;
   private readonly providerSessionOwnership: ProviderSessionOwnershipRegistry;
+  private readonly isDeviceLeaseProtected: (lease: DeviceLease) => boolean;
 
   constructor(options: LeaseRegistryOptions = {}) {
     this.maxActiveSimulatorLeases = Number.isInteger(options.maxActiveSimulatorLeases)
@@ -230,6 +232,7 @@ export class LeaseRegistry {
       now: this.now,
       retentionMs: options.providerSessionRetentionMs,
     });
+    this.isDeviceLeaseProtected = options.isDeviceLeaseProtected ?? (() => false);
   }
 
   allocateLease(request: AllocateLeaseRequest): DeviceLease {
@@ -371,11 +374,23 @@ export class LeaseRegistry {
     return this.providerSessionOwnership.resolve(params);
   }
 
+  refreshLeasesForDeviceKey(deviceKey: string): DeviceLease[] {
+    const normalizedDeviceKey = normalizeDeviceKey(deviceKey);
+    if (!normalizedDeviceKey) return [];
+    const comparisonKey = normalizedDeviceKey.toLocaleLowerCase('en-US');
+    const refreshed: DeviceLease[] = [];
+    for (const lease of this.leases.values()) {
+      if (lease.deviceKey?.toLocaleLowerCase('en-US') !== comparisonKey) continue;
+      refreshed.push(this.refreshLease(lease, this.defaultLeaseTtlMs));
+    }
+    return refreshed;
+  }
+
   consumeExpiredLeases(): DeviceLease[] {
     const now = this.now();
     const expired: DeviceLease[] = [];
     for (const lease of this.leases.values()) {
-      if (lease.expiresAt > now) continue;
+      if (lease.expiresAt > now || this.isDeviceLeaseProtected(lease)) continue;
       this.leases.delete(lease.leaseId);
       this.unbindLease(lease, lease.expiresAt);
       const expiredLease = { ...lease };
@@ -389,7 +404,9 @@ export class LeaseRegistry {
     const normalizedLeaseId = normalizeLeaseId(leaseId);
     if (!normalizedLeaseId) return undefined;
     const lease = this.leases.get(normalizedLeaseId);
-    if (!lease || lease.expiresAt > this.now()) return undefined;
+    if (!lease || lease.expiresAt > this.now() || this.isDeviceLeaseProtected(lease)) {
+      return undefined;
+    }
     this.leases.delete(lease.leaseId);
     this.unbindLease(lease, lease.expiresAt);
     const expiredLease = { ...lease };

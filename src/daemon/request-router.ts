@@ -68,6 +68,8 @@ import {
 import { resolveGenericRuntimeExecution } from './generic-runtime-execution.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
+import type { HumanControlHold } from './human-control-contract.ts';
+import type { HumanControlRegistry } from './human-control.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -92,6 +94,8 @@ export type RequestRouterDeps = {
   cloudArtifactProvider?: CloudArtifactProvider;
   androidObservation?: AndroidObservationAdapter;
   platformResourceCleanup?: PlatformResourceCleanup;
+  humanControlRegistry?: HumanControlRegistry;
+  onHumanControlHoldReleased?: (hold: HumanControlHold) => void;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
   trackDownloadableArtifact: (opts: {
     artifactPath: string;
@@ -152,6 +156,8 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     cloudArtifactProvider,
     androidObservation = unavailableAndroidObservation,
     platformResourceCleanup = unavailablePlatformResourceCleanup,
+    humanControlRegistry,
+    onHumanControlHoldReleased,
     providerDeviceRuntimeScope,
     trackDownloadableArtifact,
   } = deps;
@@ -216,6 +222,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               deviceRuntimeGateway,
               platformRequestScope,
               platformResourceCleanup,
+              humanControlRegistry,
             });
             return await executeRequestScope(scope);
           }),
@@ -285,6 +292,8 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       providerRuntimeIds,
       providerRuntimeRequiredIds,
       cloudArtifactProvider,
+      humanControlRegistry,
+      onHumanControlHoldReleased,
       invoke: handleRequest,
       invokeReplayAction: allowReplayActions
         ? createReplayScopedActionInvoker(lockedScope, providerScope)
@@ -341,6 +350,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           deviceRuntimeGateway,
           platformRequestScope: createPlatformRequestScope(scopedReq),
           platformResourceCleanup,
+          humanControlRegistry,
         });
         // The outer replay keeps its stable session lock plus the device lock
         // from the first device binding through response projection and ref

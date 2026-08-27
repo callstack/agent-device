@@ -16,6 +16,7 @@ const dedicatedCliCommandHandlerLoaders = {
   daemon: async () => (await import('./daemon.ts')).daemonCommand,
   device: async () => (await import('./device.ts')).deviceCommand,
   proxy: async () => (await import('./proxy.ts')).proxyCommand,
+  takeover: async () => (await import('./takeover.ts')).takeoverCommand,
   replay: async () => (await import('./replay.ts')).replayCommand,
   screenshot: async () => (await import('./screenshot.ts')).screenshotCommand,
   diff: async () => (await import('./screenshot.ts')).diffCommand,

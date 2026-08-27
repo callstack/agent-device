@@ -758,6 +758,13 @@ Direct proxy flow for a remote Mac/simulator:
     agent-device close
     agent-device disconnect
 
+Human takeover on the device host:
+  Run agent-device takeover with the same device selector on the machine or VM that owns the target. It pauses state-changing agent commands until Ctrl+C while snapshots and other read-only diagnostics remain available. takeover always controls the local daemon, even when that CLI has a saved remote connection.
+    agent-device takeover --platform ios --device "iPhone 17 Pro"
+    agent-device takeover status
+    agent-device takeover release <hold-id>
+  An HTTP-mode daemon also accepts authenticated GET/PUT/DELETE requests at /admin/human-control/holds on its loopback listener. Use the daemon token from the same host. This host-admin route is intentionally not forwarded by agent-device proxy.
+
 Cloud profile flow:
   agent-device connect
   agent-device open com.example.app

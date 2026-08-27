@@ -108,6 +108,28 @@ agent-device open com.example.myapp --platform android --serial emulator-5554 --
 agent-device metro reload
 ```
 
+## Human Takeover
+
+Use `takeover` on the machine or VM that owns the simulator/device when a person needs to interact
+with it without racing the agent:
+
+```bash
+agent-device takeover --platform ios
+agent-device takeover --platform android --serial emulator-5554
+```
+
+The command resolves the local target, installs a short-lived device-scoped hold, keeps it alive in
+the foreground, and releases it on Ctrl+C. While held, state-changing commands fail with
+`DEVICE_IN_USE` and `details.reason: "human_control_active"`, explaining that agent interactions are
+temporarily disabled. Snapshots, screenshots, selector reads, logs, and other read-only diagnostics
+remain available. The hold also
+protects an existing remote device lease from inactivity expiry so the human does not accidentally
+hand the simulator to a different agent.
+
+Use `agent-device takeover status` to list holds. A foreground hold expires automatically if its
+process disappears; `agent-device takeover release <hold-id>` is available for explicit recovery.
+`takeover` always controls the local daemon, even when the CLI has an active remote connection.
+
 ## Web Automation
 
 Minimal `--platform web` support reuses [agent-browser](https://github.com/vercel-labs/agent-browser). `agent-device` owns command/session/replay integration, refs/selectors, and artifact routing; `agent-browser` owns browser launch, page control, screenshots, and browser-specific mechanics.

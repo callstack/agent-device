@@ -6,6 +6,7 @@ import {
   canRunReplayScopedAction,
   getDaemonCommandRoute,
   getSessionCommandKind,
+  humanControlEffectForRequest,
   isLeaseAdmissionExempt,
   shouldBlockForInvalidRecording,
   shouldGuardAndroidBlockingDialog,
@@ -18,6 +19,7 @@ import {
 import type { DaemonRequest } from '../types.ts';
 
 test('daemon command registry owns specialized handler routes', () => {
+  assert.equal(getDaemonCommandRoute(INTERNAL_COMMANDS.humanControl), 'humanControl');
   for (const command of [
     INTERNAL_COMMANDS.leaseAllocate,
     INTERNAL_COMMANDS.leaseHeartbeat,
@@ -248,6 +250,44 @@ test('every lease-route command skips sessionless provider-device resolution', (
       `${command} must not resolve a provider device sessionless`,
     );
   }
+});
+
+test('daemon command registry owns human-control effects and fails closed', () => {
+  for (const command of [
+    PUBLIC_COMMANDS.snapshot,
+    PUBLIC_COMMANDS.screenshot,
+    PUBLIC_COMMANDS.get,
+    PUBLIC_COMMANDS.is,
+    PUBLIC_COMMANDS.logs,
+    PUBLIC_COMMANDS.devices,
+  ]) {
+    assert.equal(humanControlEffectForRequest(makeRequest(command)), 'read', `${command} effect`);
+  }
+
+  assert.equal(
+    humanControlEffectForRequest(makeRequest(PUBLIC_COMMANDS.clipboard, ['read'])),
+    'read',
+  );
+  assert.equal(
+    humanControlEffectForRequest(makeRequest(PUBLIC_COMMANDS.clipboard, ['write', 'value'])),
+    'mutate',
+  );
+  assert.equal(
+    humanControlEffectForRequest(
+      makeRequest(PUBLIC_COMMANDS.find, ['text', 'Save', 'get', 'text']),
+    ),
+    'read',
+  );
+  assert.equal(
+    humanControlEffectForRequest(makeRequest(PUBLIC_COMMANDS.find, ['text', 'Save', 'click'])),
+    'mutate',
+  );
+  assert.equal(humanControlEffectForRequest(makeRequest(PUBLIC_COMMANDS.click)), 'mutate');
+  assert.equal(humanControlEffectForRequest(makeRequest('future-command')), 'mutate');
+  assert.equal(
+    humanControlEffectForRequest(makeRequest(INTERNAL_COMMANDS.leaseHeartbeat)),
+    'control',
+  );
 });
 
 function makeRequest(command: string, positionals: string[] = []): DaemonRequest {

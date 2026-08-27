@@ -88,6 +88,36 @@ test('expired leases are cleaned before admission checks', () => {
   );
 });
 
+test('human-controlled device leases survive expiry and refresh when control is released', () => {
+  let now = 1_000;
+  let protectedByHumanControl = true;
+  const registry = new LeaseRegistry({
+    now: () => now,
+    defaultLeaseTtlMs: 5_000,
+    isDeviceLeaseProtected: (lease) => protectedByHumanControl && lease.deviceKey === 'device-1',
+  });
+  const lease = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseBackend: 'ios-instance',
+    leaseProvider: 'proxy',
+    deviceKey: 'device-1',
+  });
+
+  now = 7_000;
+  assert.deepEqual(registry.consumeExpiredLeases(), []);
+  assert.equal(registry.listActiveLeases()[0]?.leaseId, lease.leaseId);
+
+  now = 8_000;
+  const [refreshed] = registry.refreshLeasesForDeviceKey('DEVICE-1');
+  assert.equal(refreshed?.expiresAt, 13_000);
+  protectedByHumanControl = false;
+  now = 12_000;
+  assert.equal(registry.listActiveLeases()[0]?.leaseId, lease.leaseId);
+  now = 14_000;
+  assert.deepEqual(registry.listActiveLeases(), []);
+});
+
 test('capacity limits reject additional simulator leases', () => {
   const registry = new LeaseRegistry({
     maxActiveSimulatorLeases: 1,

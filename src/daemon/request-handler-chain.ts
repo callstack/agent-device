@@ -24,6 +24,8 @@ import type { PlatformRequestScope } from '@agent-device/contracts/platform-runt
 import type { RequestPlatformProviderScope } from '@agent-device/contracts/platform-providers';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
+import type { HumanControlHold } from './human-control-contract.ts';
+import type { HumanControlRegistry } from './human-control.ts';
 
 type RequestHandlerChainParams = {
   req: DaemonRequest;
@@ -35,6 +37,8 @@ type RequestHandlerChainParams = {
   providerRuntimeRequiredIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  humanControlRegistry?: HumanControlRegistry;
+  onHumanControlHoldReleased?: (hold: HumanControlHold) => void;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
   /**
@@ -66,6 +70,10 @@ type RequestHandlerChainParams = {
 };
 
 const DAEMON_ROUTE_HANDLERS = {
+  humanControl: defineDaemonRoute({
+    load: () => import('./handlers/human-control.ts'),
+    run: runHumanControlHandler,
+  }),
   lease: defineDaemonRoute({
     load: () => import('./handlers/lease.ts'),
     run: runLeaseHandler,
@@ -119,6 +127,17 @@ export async function loadGenericRequestHandlerModule(): Promise<
   typeof import('./request-generic-dispatch.ts')
 > {
   return await DAEMON_ROUTE_HANDLERS.generic.loadModule();
+}
+
+async function runHumanControlHandler(
+  { handleHumanControlCommand }: typeof import('./handlers/human-control.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
+  return await handleHumanControlCommand({
+    req: params.req,
+    registry: params.humanControlRegistry,
+    onHoldReleased: params.onHumanControlHoldReleased,
+  });
 }
 
 async function runLeaseHandler(

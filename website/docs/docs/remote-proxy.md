@@ -53,11 +53,55 @@ Do not put proxy endpoint, token, tenant, or provider fields in `./agent-device.
 configuration is intentionally limited to project-safe automation defaults. Use `connect proxy`, user
 config, an explicit `--config` file, or protected CI environment variables for the endpoint and token.
 
+## Human Takeover on the Host
+
+If a person needs the simulator or device, run this on the host—not on the remote agent client:
+
+```bash
+agent-device takeover --platform ios
+```
+
+The local daemon pauses state-changing agent commands for the selected device until Ctrl+C. Read-only
+diagnostics remain available, and an existing remote lease is preserved during the hold.
+
+VM-side automation can use the same feature without a foreground CLI process. Read the local
+daemon's `httpPort` and `token` from `daemon.json` in the effective state directory, then call the
+loopback-only API with either `Authorization: Bearer <daemon-token>` or
+`X-Agent-Device-Token: <daemon-token>`:
+
+The API is available when the daemon runs with an HTTP listener, including remote-mode daemons. A
+default socket-only local daemon should use the `takeover` CLI command instead.
+
+```text
+PUT    /admin/human-control/holds/<hold-id>
+GET    /admin/human-control/holds
+DELETE /admin/human-control/holds/<hold-id>
+```
+
+A PUT body has the shape below. Omitting `ttlMs` creates a persistent hold that must be deleted;
+including it creates an expiring hold.
+
+```json
+{
+  "scope": {
+    "deviceKey": "<simulator-udid>",
+    "deviceName": "iPhone 17 Pro",
+    "platform": "ios",
+    "kind": "simulator"
+  },
+  "reason": "Human is using the VM console.",
+  "ttlMs": 15000
+}
+```
+
 ## What Is Exposed
 
 The proxy allows only the daemon HTTP contract: `/health`, `/rpc`, `/upload` plus resumable `/upload/*` routes, and `/artifacts/*`, with the same routes also available under `/agent-device/*`. Health checks are unauthenticated; command, upload, and artifact routes require the bearer token.
 
 The proxy validates the client token and rewrites authorized upstream requests to the local daemon token. The local daemon still validates its own token, so the daemon token is not exposed to remote clients.
+
+The proxy deliberately does not forward `/admin/*`, including human-control holds. A caller inside
+the device-host VM must use the daemon's loopback port and local daemon token.
 
 ## Compatibility
 

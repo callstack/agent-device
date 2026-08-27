@@ -91,6 +91,7 @@ const REMOTE_MATERIALIZATION_DEFERRED_COMMANDS = new Set([
   'metro',
   'proxy',
   'session',
+  'takeover',
 ]);
 
 export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): Promise<void> {
@@ -702,7 +703,8 @@ function resolveActiveConnectionDefaults(options: {
     options.command === 'connect' ||
     options.command === 'connection' ||
     options.command === 'daemon' ||
-    options.command === 'proxy'
+    options.command === 'proxy' ||
+    options.command === 'takeover'
   ) {
     return null;
   }
@@ -730,7 +732,8 @@ function shouldResolveRemoteAuth(command: string): boolean {
     command !== 'connection' &&
     command !== 'daemon' &&
     command !== 'device' &&
-    command !== 'proxy'
+    command !== 'proxy' &&
+    command !== 'takeover'
   );
 }
 

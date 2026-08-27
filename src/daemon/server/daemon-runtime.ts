@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import path from 'node:path';
 import { asAppError, AppError } from '@agent-device/kernel/errors';
 import { resolveSessionRequestLogPath, SessionStore } from '../session-store.ts';
 import { resolveDaemonPaths, resolveDaemonServerMode } from '../config.ts';
@@ -76,6 +77,8 @@ import { createDaemonRecoveryPlatformScope } from '../platform-request-scope.ts'
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
 import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
+import type { HumanControlHold } from '../human-control-contract.ts';
+import { HumanControlRegistry } from '../human-control.ts';
 
 const DAEMON_SESSION_TEARDOWN_TIMEOUT_MS = 5_000;
 export const SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS = 11_000;
@@ -255,6 +258,9 @@ export async function startDaemonRuntime(
   await configureAppleRunnerLeaseOwnerStateDir(baseDir);
 
   const sessionStore = new SessionStore(sessionsDir);
+  const humanControlRegistry = new HumanControlRegistry({
+    statePath: path.join(baseDir, 'human-control.json'),
+  });
   const ownedProcessRecords = createOwnedProcessRecordStore({
     stateDir: baseDir,
     sessionsDir,
@@ -319,7 +325,23 @@ export async function startDaemonRuntime(
     onLeaseExpired: (lease) => {
       void expiredProviderLeaseReleaser.release(lease);
     },
+    isDeviceLeaseProtected: (lease) => humanControlRegistry.isDeviceControlled(lease.deviceKey),
   });
+  const refreshReleasedHumanControlLeases = (hold: HumanControlHold): void => {
+    const refreshedLeases = leaseRegistry.refreshLeasesForDeviceKey(hold.scope.deviceKey);
+    const expiresAtByLeaseId = new Map(
+      refreshedLeases.map((lease) => [lease.leaseId, lease.expiresAt]),
+    );
+    for (const session of sessionStore.values()) {
+      const leaseId = session.lease?.leaseId;
+      const expiresAt = leaseId ? expiresAtByLeaseId.get(leaseId) : undefined;
+      if (!session.lease || expiresAt === undefined) continue;
+      sessionStore.set(session.name, {
+        ...session,
+        lease: { ...session.lease, expiresAt },
+      });
+    }
+  };
   const cloudArtifactProvider = providerRuntimeProviders.cloudArtifactProvider;
   const deviceInventoryGateways = createPlatformDeviceInventoryGateways(
     providerRuntimeProviders.deviceInventorySource,
@@ -342,6 +364,8 @@ export async function startDaemonRuntime(
     requestPlatformProviders,
     androidObservation,
     platformResourceCleanup,
+    humanControlRegistry,
+    onHumanControlHoldReleased: refreshReleasedHumanControlLeases,
     providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
     providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
     providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,
@@ -447,6 +471,8 @@ export async function startDaemonRuntime(
         token,
         retainArtifacts,
         env,
+        humanControlRegistry,
+        onHumanControlHoldReleased: refreshReleasedHumanControlLeases,
         // #1801: the same record `DaemonError.logPath` names, addressed by its
         // locator so a remote caller can fetch what it cannot read by path.
         resolveRequestDiagnosticsPath: (ref) =>

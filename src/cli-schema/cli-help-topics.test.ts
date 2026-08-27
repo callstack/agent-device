@@ -167,6 +167,14 @@ test('usageForCommand resolves Maestro compatibility help topic', async () => {
   assert.doesNotMatch(help, /issues\/558/);
 });
 
+test('remote help documents host-local takeover controls', async () => {
+  const help = await usageForCommand('remote');
+  if (help === null) throw new Error('Expected remote help text');
+  assert.match(help, /agent-device takeover --platform ios/);
+  assert.match(help, /authenticated GET\/PUT\/DELETE requests/);
+  assert.match(help, /not forwarded by agent-device proxy/);
+});
+
 test('usageForCommand resolves workflow help topic', async () => {
   const help = await usageForCommand('workflow');
   if (help === null) throw new Error('Expected workflow help text');

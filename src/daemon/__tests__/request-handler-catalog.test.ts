@@ -10,6 +10,7 @@ import { getDaemonCommandRoute, type DaemonCommandRoute } from '../daemon-comman
 import { cleanupDownloadableArtifact, trackDownloadableArtifact } from '../artifact-tracking.ts';
 import { contextFromFlags } from '../context.ts';
 import { handleLeaseCommands } from '../handlers/lease.ts';
+import { HumanControlRegistry } from '../human-control.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { runRequestHandlerChain } from '../request-handler-chain.ts';
 import {
@@ -29,6 +30,7 @@ import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger
 import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
 
 const SPECIALIZED_ROUTES = [
+  'humanControl',
   'lease',
   'session',
   'snapshot',
@@ -475,6 +477,7 @@ async function runCatalogCommandThroughHandlerChain(
           logPath: '/tmp/agent-device-catalog-route.log',
           sessionStore,
           leaseRegistry,
+          humanControlRegistry: new HumanControlRegistry(),
           invoke: async () => ({ ok: true, data: {} }),
           providerScope: {
             androidAdbExecutor: async () => ({ stdout: '', stderr: '', exitCode: 0 }),

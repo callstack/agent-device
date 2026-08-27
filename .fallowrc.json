@@ -294,8 +294,9 @@
     },
     {
       "comment": "Daemon route handlers are reached only through the dynamic `import()` table in request-handler-chain.ts, which --production analysis cannot follow to a consumer.",
-      "file": "src/daemon/handlers/{lease,session,snapshot,react-native,record-trace,find,interaction}.ts",
+      "file": "src/daemon/handlers/{human-control,lease,session,snapshot,react-native,record-trace,find,interaction}.ts",
       "exports": [
+        "handleHumanControlCommand",
         "handleLeaseCommands",
         "handleSessionCommands",
         "handleSnapshotCommands",
@@ -307,7 +308,7 @@
     },
     {
       "comment": "Dedicated CLI command handlers are reached only through the dynamic `import()` table `dedicatedCliCommandHandlerLoaders` in src/cli/commands/router.ts, which --production analysis cannot follow to a consumer. Same shape as the daemon route-handler entry above; that table is what enumerates this list, so add/remove here whenever a loader is added/removed.",
-      "file": "src/cli/commands/{auth,connection,daemon,device,proxy,replay,screenshot}.ts",
+      "file": "src/cli/commands/{auth,connection,daemon,device,proxy,replay,screenshot,takeover}.ts",
       "exports": [
         "authCommand",
         "connectCommand",
@@ -318,7 +319,8 @@
         "proxyCommand",
         "replayCommand",
         "screenshotCommand",
-        "diffCommand"
+        "diffCommand",
+        "takeoverCommand"
       ]
     },
     {

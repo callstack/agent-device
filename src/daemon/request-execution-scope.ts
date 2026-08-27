@@ -58,6 +58,8 @@ import { createDeviceClaimAdmission, type DeviceClaimAdmission } from './device-
 import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
 import { resolveCommandDeviceClaimPolicy } from '../core/command-descriptor/registry.ts';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
+import { runRequestWithHumanControl } from './human-control-request.ts';
+import type { HumanControlRegistry } from './human-control.ts';
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
 // test and embedded routers isolated without changing process-level serialization there.
@@ -116,6 +118,7 @@ export async function createRequestExecutionScope(params: {
   deviceRuntimeGateway?: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   platformRequestScope?: PlatformRequestScope;
   platformResourceCleanup?: PlatformResourceCleanup;
+  humanControlRegistry?: HumanControlRegistry;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
   let scopedReq = applyRequestCommandDefaults(scopeRequestSession(params.req));
@@ -215,29 +218,37 @@ export async function createRequestExecutionScope(params: {
         }),
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
       runAdmitted: async (task) => {
-        throwIfRequestCanceled(scopedReq.meta?.requestId);
-        await cleanupExpiredLeasedSession({
-          sessionName,
-          sessionStore,
-          leaseRegistry,
-          teardownSession: async (session, expiredSessionName) =>
-            await teardownExpiredSession({
-              session,
-              sessionName: expiredSessionName,
-              sessionStore,
-              inspectFacts: scope.inspectFacts,
-              bindDevice: scope.bindDevice,
-              platformCleanup: requirePlatformCleanup(params.platformResourceCleanup),
-            }),
-        });
-        scopedReq = admitRequestLeaseForLockedScope({
+        return await runRequestWithHumanControl({
           req: scopedReq,
           sessionName,
           sessionStore,
-          leaseRegistry,
+          registry: params.humanControlRegistry,
+          task: async () => {
+            throwIfRequestCanceled(scopedReq.meta?.requestId);
+            await cleanupExpiredLeasedSession({
+              sessionName,
+              sessionStore,
+              leaseRegistry,
+              teardownSession: async (session, expiredSessionName) =>
+                await teardownExpiredSession({
+                  session,
+                  sessionName: expiredSessionName,
+                  sessionStore,
+                  inspectFacts: scope.inspectFacts,
+                  bindDevice: scope.bindDevice,
+                  platformCleanup: requirePlatformCleanup(params.platformResourceCleanup),
+                }),
+            });
+            scopedReq = admitRequestLeaseForLockedScope({
+              req: scopedReq,
+              sessionName,
+              sessionStore,
+              leaseRegistry,
+            });
+            scope.req = scopedReq;
+            return await task();
+          },
         });
-        scope.req = scopedReq;
-        return await task();
       },
       runLocked: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);

@@ -43,6 +43,10 @@ import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
 import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-http.ts';
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
+import { tryHandleHumanControlHttpRoute } from '../human-control-http.ts';
+import type { HumanControlHold } from '../human-control-contract.ts';
+import type { HumanControlRegistry } from '../human-control.ts';
+import { INTERNAL_COMMANDS } from '../../command-catalog.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
 
@@ -555,6 +559,8 @@ export async function createDaemonHttpServer(options: {
   token?: string;
   retainArtifacts?: boolean;
   env?: NodeJS.ProcessEnv;
+  humanControlRegistry?: HumanControlRegistry;
+  onHumanControlHoldReleased?: (hold: HumanControlHold) => void;
   /**
    * Resolves a request diagnostics record path for the `/sessions/.../requests/...`
    * route (#1801). Omitted by embedded servers with no session store; the route
@@ -571,6 +577,20 @@ export async function createDaemonHttpServer(options: {
       res.statusCode = 200;
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify(buildDaemonHealthPayload('agent-device-daemon')));
+      return;
+    }
+
+    if (
+      token &&
+      options.humanControlRegistry &&
+      tryHandleHumanControlHttpRoute({
+        req,
+        res,
+        expectedToken: token,
+        registry: options.humanControlRegistry,
+        onHoldReleased: options.onHumanControlHoldReleased,
+      })
+    ) {
       return;
     }
 
@@ -745,6 +765,14 @@ export async function createDaemonHttpServer(options: {
           authHook !== null,
           req.headers[DAEMON_HTTP_NETWORK_ACCESS_HEADER],
         );
+        if (daemonRequest.command === INTERNAL_COMMANDS.humanControl) {
+          sendJson(
+            res,
+            createRpcError(rpcRequest.id ?? null, -32601, 'Human-control RPC is socket-only'),
+            404,
+          );
+          return;
+        }
 
         let canceledInFlight = false;
         // Request-scoped cancellation: mark this request canceled whenever its client
@@ -813,7 +841,7 @@ export async function createDaemonHttpServer(options: {
             daemonResponse.error.message,
             daemonResponse.error,
           ),
-          statusCodeForNormalizedError(daemonResponse.error.code),
+          statusCodeForDaemonError(daemonResponse.error),
         );
       } catch (error) {
         handlerCompleted = true;
@@ -836,6 +864,16 @@ export async function createDaemonHttpServer(options: {
       }
     });
   });
+}
+
+function statusCodeForDaemonError(error: {
+  code: string;
+  details?: Record<string, unknown>;
+}): number {
+  if (error.code === 'DEVICE_IN_USE' && error.details?.reason === 'human_control_active') {
+    return 423;
+  }
+  return statusCodeForNormalizedError(error.code);
 }
 
 async function authorizeAuxiliaryHttpRequest(params: {
