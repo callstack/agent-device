@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { trimEdgeDashes } from './session-test-artifacts.ts';
+import { trimEdgeDashes } from '@agent-device/kernel/collections';
 import { AppError } from '@agent-device/kernel/errors';
 import { isApplePlatform, type PlatformSelector } from '@agent-device/kernel/device';
 import type {

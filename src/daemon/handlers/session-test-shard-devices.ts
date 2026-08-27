@@ -4,7 +4,7 @@ import { listDeviceInventory } from '../../request/device-inventory-context.ts';
 import {
   resolveAndroidSerialAllowlist,
   resolveIosSimulatorDeviceSetPath,
-} from '../../utils/device-isolation.ts';
+} from '@agent-device/host-kit/fs';
 import {
   isMobilePlatform,
   matchesPlatformSelector,

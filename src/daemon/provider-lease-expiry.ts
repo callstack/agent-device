@@ -5,10 +5,9 @@ import type {
   LeaseLifecycleProvider,
   ProviderExpiredLeaseRecovery,
 } from '@agent-device/contracts/device';
-import { publishFileSync } from '../utils/atomic-file.ts';
+import { publishFileSync } from '@agent-device/host-kit/fs';
 import { releaseExpiredProviderLease } from './lease-lifecycle.ts';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { sleep } from '../utils/timeouts.ts';
+import { emitDiagnostic, sleep } from '@agent-device/host-kit/exec';
 
 const DEFAULT_RETRY_DELAY_MS = 1_000;
 const PENDING_RELEASES_FILE = 'expired-provider-leases.json';

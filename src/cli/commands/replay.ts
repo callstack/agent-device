@@ -4,7 +4,7 @@ import { exportReplayActionsToMaestro, MAESTRO_SELECTOR_PROJECTION } from '@agen
 import { AppError } from '@agent-device/kernel/errors';
 import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
 import { projectSelectorExpression } from '@agent-device/selectors';
-import { resolveUserPath } from '../../utils/path-resolution.ts';
+import { resolveUserPath } from '@agent-device/host-kit/fs';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 

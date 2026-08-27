@@ -1,10 +1,10 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
-import { sleep } from '../../utils/timeouts.ts';
+import { sleep, shellQuoteIfNeeded } from '@agent-device/host-kit/exec';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
-import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
+
 import { waitForAndroidBoot } from './emulator-lifecycle.ts';
 import { runAndroidAdb } from './adb.ts';
 import {

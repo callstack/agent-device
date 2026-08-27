@@ -15,7 +15,7 @@ import { createDaemonRuntimePolicy } from '../runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from '../runtime-session.ts';
 import { NO_ACTIVE_SESSION_MESSAGE } from './response.ts';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
-import { getRequestSignal } from '../../request/cancel.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 import { buildAppleRunnerRequestOptions } from '../apple-runner-options.ts';
 import { isLocalIosRunnerSession } from '../direct-ios-selector.ts';
 import { confirmIosOffscreenTargetVisible } from '../offscreen-target-probe.ts';

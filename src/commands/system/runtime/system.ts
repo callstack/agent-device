@@ -10,7 +10,7 @@ import type { CommandContext } from '../../../runtime-contract.ts';
 import type { BackMode } from '@agent-device/contracts/back-mode';
 import { parseTvRemoteButton } from '@agent-device/contracts/tv-remote';
 import { AppError } from '@agent-device/kernel/errors';
-import { successText } from '../../../utils/success-text.ts';
+import { successText } from '@agent-device/host-kit/values';
 import { requireIntInRange } from '../../../utils/validation.ts';
 import { isKeyboardAction } from '../../../utils/keyboard-actions.ts';
 import {

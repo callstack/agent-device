@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { findProjectRoot, readVersion } from '../../utils/version.ts';
+import { findProjectRoot, readVersion } from '@agent-device/host-kit/values';
 // The package subpath (not the root shim) breaks the module cycle the shim route would create:
 // the adb-host binding reaches this file for the helper port facets, and the shim imports that
 // binding. Allowed by the transitional #2041 R13 table.

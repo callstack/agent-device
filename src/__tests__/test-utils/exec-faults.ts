@@ -1,4 +1,4 @@
-import type { CommandExecutorOverride, ExecOptions, ExecResult } from '../../utils/exec.ts';
+import type { CommandExecutorOverride, ExecOptions, ExecResult } from '@agent-device/host-kit/exec';
 
 export type RecordedCommand = Readonly<{
   command: string;

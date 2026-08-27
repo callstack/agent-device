@@ -51,7 +51,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
-import { PNG } from '../../../utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../types.ts';
 import { SessionStore } from '../../session-store.ts';
 import { runReplayScriptSource } from '../session-replay-runtime.ts';

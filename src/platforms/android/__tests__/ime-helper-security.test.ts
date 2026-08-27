@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { findProjectRoot } from '../../../utils/version.ts';
+import { findProjectRoot } from '@agent-device/host-kit/values';
 
 // Security guard for #1201: the text-injection broadcast receiver must require a sender permission
 // that only adb shell / privileged callers hold, so a co-installed third-party app cannot inject

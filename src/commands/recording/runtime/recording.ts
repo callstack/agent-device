@@ -7,7 +7,7 @@ import type {
 import type { ArtifactDescriptor, FileOutputRef } from '../../../io.ts';
 import type { CommandContext } from '../../../runtime-contract.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { successText } from '../../../utils/success-text.ts';
+import { successText } from '@agent-device/host-kit/values';
 import { requireIntInRange } from '../../../utils/validation.ts';
 import {
   recordingQualityInputToExportQuality,

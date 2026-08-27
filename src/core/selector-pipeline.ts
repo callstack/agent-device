@@ -4,7 +4,7 @@ import {
   listSelectorChainMatches,
   resolveSelectorChainWithPolicy,
 } from '@agent-device/selectors/engine';
-import { isSnapshotNodeInteractionBlocked } from '../snapshot/snapshot-occlusion.ts';
+import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
 import {
   isRootInteractionContainer,
   resolveActionableTouchResolution,

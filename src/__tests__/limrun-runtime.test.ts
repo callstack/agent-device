@@ -6,8 +6,8 @@ import { LimrunRuntime } from '../sdk/limrun.ts';
 import { createExpiredProviderLeaseReleaser } from '../daemon/provider-lease-expiry.ts';
 import type { SimulatorLease } from '../daemon/lease-registry.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { runCmd } from '../utils/exec.ts';
-import { readVersion } from '../utils/version.ts';
+import { runCmd } from '@agent-device/host-kit/exec';
+import { readVersion } from '@agent-device/host-kit/values';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 type LimrunInstancePage = {
@@ -114,8 +114,8 @@ vi.mock('@limrun/api/instance-client', () => ({
   })),
 }));
 
-vi.mock('../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../utils/exec.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return {
     ...actual,
     runCmd: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })),

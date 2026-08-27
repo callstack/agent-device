@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PNG } from '../../utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import { annotateScreenshotWithRefs, buildScreenshotOverlayRefs } from '../screenshot-overlay.ts';
 import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';

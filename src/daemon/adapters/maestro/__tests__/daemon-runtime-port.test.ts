@@ -4,12 +4,12 @@ import { expect, test } from 'vitest';
 import { noMaestroIncludeSources } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { executeMaestroFlow, inspectMaestroFlow } from '@agent-device/maestro';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../types.ts';
-import { PNG } from '../../../../utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
-} from '../../../../utils/diagnostics.ts';
+} from '@agent-device/host-kit/exec';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
 import { makeBaseRequest, makeDependencies, makeSnapshot } from './daemon-runtime-port-fixtures.ts';

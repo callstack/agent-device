@@ -23,8 +23,8 @@ vi.mock('../snapshot-interactor-capture.ts', () => ({
 // no-op so the retry tests below exercise the retry BRANCH (still runs each
 // mocked capture attempt) without a real wall-clock wait (repo guidance: unit
 // tests must not wait real time).
-vi.mock('../../../utils/timeouts.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../utils/timeouts.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return { ...actual, sleep: vi.fn(async () => {}) };
 });
 

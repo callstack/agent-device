@@ -4,8 +4,8 @@ import { verifyLimrunConnection } from '@agent-device/provider-limrun';
 import { AppError } from '@agent-device/kernel/errors';
 import { providerWebDriver } from '../../provider-webdriver.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
-import type { EnvMap } from '../../utils/env-map.ts';
-import { readVersion } from '../../utils/version.ts';
+import { type EnvMap, readVersion } from '@agent-device/host-kit/values';
+
 import { resolveCloudConnectProfile } from './cloud-profile.ts';
 import { resolveCloudWebDriverConnectProfile } from './cloud-webdriver-profile.ts';
 import { resolveLimrunConnectProfile } from './limrun-profile.ts';

@@ -1,4 +1,4 @@
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
 import { leaseScopeToReleaseRequest } from '../core/lease-scope.ts';
 import { clearDeviceClaim } from './device-claims.ts';
 import type { LeaseRegistry } from './lease-registry.ts';

@@ -29,7 +29,7 @@ vi.mock('../../../platforms/android/ime-lifecycle.ts', () => ({
   activateAndroidTestIme: vi.fn(async () => ({ activated: false })),
   restoreAndroidTestIme: vi.fn(async () => ({ restored: false, reason: 'no-record' })),
 }));
-vi.mock('../../../utils/host-process.ts', async (importOriginal) =>
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) =>
   (await import('../../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
     importOriginal,
   ),
@@ -44,7 +44,7 @@ import {
   discoverReadyAndroidEmulators,
   dispatchApplicationLifecycleEffect,
 } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
-import { clearRequestCanceled, markRequestCanceled } from '../../../request/cancel.ts';
+import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import { acquireDeviceClaim as acquireProductionDeviceClaim } from '../../device-claims.ts';
 import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';

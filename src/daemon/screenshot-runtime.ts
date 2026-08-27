@@ -17,7 +17,7 @@ import { createAgentDevice, localCommandPolicy } from '../runtime.ts';
 import {
   assertSupportedScreenshotPixelDensity,
   readScreenshotResultMetadata,
-} from '../utils/screenshot-density.ts';
+} from '@agent-device/capture-kit/screenshot-density';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
 import type { DaemonCommandContext } from './context.ts';
 import { captureSnapshotData } from './handlers/snapshot-capture.ts';

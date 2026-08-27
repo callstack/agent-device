@@ -14,7 +14,7 @@ import {
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
   androidSnapshotHelperOutput,
 } from '../../../src/__tests__/test-utils/android-snapshot-helper.ts';
-import { runCmd, runCmdBackground } from '../../../src/utils/exec.ts';
+import { runCmd, runCmdBackground } from '@agent-device/host-kit/exec';
 import { validPng } from './assertions.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import {

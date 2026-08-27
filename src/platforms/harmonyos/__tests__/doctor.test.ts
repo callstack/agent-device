@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 
-vi.mock('../../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return { ...actual, runCmd: vi.fn() };
 });
 
-import { runCmd } from '../../../utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/exec';
 import { harmonyToolchainCheck } from '../doctor.ts';
 
 const mockRunCmd = vi.mocked(runCmd);

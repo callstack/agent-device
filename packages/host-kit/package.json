@@ -1,0 +1,35 @@
+{
+  "name": "@agent-device/host-kit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private generic host mechanics behind four deep seams: process execution and supervision (exec), filesystem and archive guards (fs), pure value helpers (values), and request-scoped plumbing (request). Internal workspace package bundled into the published agent-device artifact.",
+  "dependencies": {
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "tar-stream": "^3.2.0",
+    "yauzl": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/tar-stream": "^3.1.4",
+    "@types/yauzl": "^3.4.0"
+  },
+  "exports": {
+    "./exec": {
+      "types": "./src/exec.ts",
+      "default": "./src/exec.ts"
+    },
+    "./fs": {
+      "types": "./src/fs.ts",
+      "default": "./src/fs.ts"
+    },
+    "./request": {
+      "types": "./src/request.ts",
+      "default": "./src/request.ts"
+    },
+    "./values": {
+      "types": "./src/values.ts",
+      "default": "./src/values.ts"
+    }
+  }
+}

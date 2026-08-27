@@ -32,7 +32,7 @@ import {
   stopReactDevtoolsCleanup,
 } from './connection-runtime.ts';
 import { writeCommandOutput } from './shared.ts';
-import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
+import { shellQuoteIfNeeded } from '@agent-device/host-kit/exec';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { ClientCommandHandler } from './router-types.ts';

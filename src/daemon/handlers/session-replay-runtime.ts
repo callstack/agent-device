@@ -7,7 +7,7 @@ import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
 import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture';
 import type { ReplayCommandResult } from '@agent-device/contracts/replay';
 import { isMaestroYamlPath, maestroBackendRequiredMessage } from '../../replay/format.ts';
-import { getRequestSignal } from '../../request/cancel.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 import { createReplayCoordinator, type ReplayCoordinator } from '../session-replay-coordinator.ts';
 import {
   createAdReplayStepRuntime,

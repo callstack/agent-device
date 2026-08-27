@@ -13,8 +13,12 @@ import {
 } from '../../../src/daemon/artifact-tracking.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '../../../src/daemon/http-health.ts';
 import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
-import { emitRequestProgress } from '../../../src/request/progress.ts';
-import { getRequestSignal, isRequestCanceled } from '../../../src/request/cancel.ts';
+import {
+  emitRequestProgress,
+  getRequestSignal,
+  isRequestCanceled,
+} from '@agent-device/host-kit/request';
+
 import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/types.ts';
 import {
   closeLoopbackServer,

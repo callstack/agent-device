@@ -7,12 +7,12 @@ import {
   normalizeType,
   isViewportRootNode,
 } from '@agent-device/contracts/snapshot';
-import { isSnapshotNodeInteractionBlocked } from '../snapshot/snapshot-occlusion.ts';
+import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
 import {
   areRectsApproximatelyEqual,
   normalizeRect,
   resolveRectCenter,
-} from '../utils/rect-center.ts';
+} from '@agent-device/kernel/rect-center';
 import { intersectArea } from '../utils/screenshot-geometry.ts';
 import { isSemanticTouchTarget } from './touch-semantics.ts';
 

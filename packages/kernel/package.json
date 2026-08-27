@@ -5,41 +5,49 @@
   "type": "module",
   "description": "Foundational vocabulary for agent-device: errors, device identity, snapshot model, shared contracts. Internal workspace package bundled into the published agent-device artifact.",
   "exports": {
-    "./errors": {
-      "types": "./src/errors.ts",
-      "default": "./src/errors.ts"
-    },
-    "./device": {
-      "types": "./src/device.ts",
-      "default": "./src/device.ts"
-    },
-    "./snapshot": {
-      "types": "./src/snapshot.ts",
-      "default": "./src/snapshot.ts"
-    },
-    "./contracts": {
-      "types": "./src/contracts.ts",
-      "default": "./src/contracts.ts"
+    "./bounds": {
+      "types": "./src/bounds.ts",
+      "default": "./src/bounds.ts"
     },
     "./collections": {
       "types": "./src/collections.ts",
       "default": "./src/collections.ts"
     },
+    "./contracts": {
+      "types": "./src/contracts.ts",
+      "default": "./src/contracts.ts"
+    },
+    "./device": {
+      "types": "./src/device.ts",
+      "default": "./src/device.ts"
+    },
+    "./errors": {
+      "types": "./src/errors.ts",
+      "default": "./src/errors.ts"
+    },
+    "./keyed-lock": {
+      "types": "./src/keyed-lock.ts",
+      "default": "./src/keyed-lock.ts"
+    },
     "./rect": {
       "types": "./src/rect.ts",
       "default": "./src/rect.ts"
+    },
+    "./rect-center": {
+      "types": "./src/rect-center.ts",
+      "default": "./src/rect-center.ts"
     },
     "./redaction": {
       "types": "./src/redaction.ts",
       "default": "./src/redaction.ts"
     },
-    "./bounds": {
-      "types": "./src/bounds.ts",
-      "default": "./src/bounds.ts"
+    "./scroll-indicator": {
+      "types": "./src/scroll-indicator.ts",
+      "default": "./src/scroll-indicator.ts"
     },
-    "./keyed-lock": {
-      "types": "./src/keyed-lock.ts",
-      "default": "./src/keyed-lock.ts"
+    "./snapshot": {
+      "types": "./src/snapshot.ts",
+      "default": "./src/snapshot.ts"
     }
   }
 }

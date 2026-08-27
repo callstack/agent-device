@@ -5,7 +5,7 @@ import type {
 } from '@agent-device/contracts/type-text-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { successText } from '../utils/success-text.ts';
+import { successText } from '@agent-device/host-kit/values';
 import { findMistargetedTypeRefToken } from '../utils/type-target-warning.ts';
 import { requireIntInRange } from '../utils/validation.ts';
 import type { DaemonCommandContext } from './context.ts';

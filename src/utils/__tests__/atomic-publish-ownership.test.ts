@@ -9,7 +9,7 @@ const SIMPLE_PUBLISHERS = [
   new URL('../../daemon/session-script-writer.ts', import.meta.url),
   new URL('../../../packages/platform-apple/src/runner/runner-lease.ts', import.meta.url),
   new URL('../../remote/remote-connection-state.ts', import.meta.url),
-  new URL('../process-lock.ts', import.meta.url),
+  new URL('../../../packages/host-kit/src/internal/process-lock.ts', import.meta.url),
 ] as const;
 
 test('simple same-directory publishers use the shared atomic publish owner', () => {

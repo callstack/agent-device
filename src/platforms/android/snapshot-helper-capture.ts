@@ -4,7 +4,7 @@ import {
   androidCaptureFailureReasonFromExitCode,
   androidCaptureFailureReasonFromHelperResult,
 } from './snapshot-capture-failure-reason.ts';
-import { execFailureDetails } from '../../utils/exec.ts';
+import { execFailureDetails } from '@agent-device/host-kit/exec';
 import {
   parseInstrumentationRecords,
   readInstrumentationResultBoolean,

@@ -1,7 +1,7 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { captureAccessibilityTree, type SnapshotSurface } from './atspi-bridge.ts';
 import type { SessionSurface } from '@agent-device/contracts/session';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
 
 /**
  * Map the session-level surface to an AT-SPI2 surface.

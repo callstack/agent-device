@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { PNG } from '../../../../utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import { screenshotIos } from '../screenshot.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';

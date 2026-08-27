@@ -5,7 +5,7 @@ import type {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from './utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
 
 /** Lazy Android tools; the Android package owns lifecycle sequencing and durable IME policy. */
 export function createAndroidApplicationTools(): AndroidApplicationTools {

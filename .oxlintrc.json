@@ -37,7 +37,7 @@
   },
   "overrides": [
     {
-      "files": ["src/**/*.ts"],
+      "files": ["src/**/*.ts", "packages/capture-kit/src/**/*.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
@@ -45,7 +45,7 @@
             "paths": [
               {
                 "name": "node:child_process",
-                "message": "Use process helpers from src/utils/exec.ts instead of importing node:child_process directly."
+                "message": "Use process helpers from @agent-device/capture-kit/exec instead of importing node:child_process directly."
               }
             ]
           }
@@ -53,7 +53,12 @@
       }
     },
     {
-      "files": ["src/utils/exec.ts", "src/**/*.test.ts", "src/**/__tests__/**/*.ts"],
+      "files": [
+        "packages/capture-kit/src/exec.ts",
+        "packages/capture-kit/src/*.test.ts",
+        "src/**/*.test.ts",
+        "src/**/__tests__/**/*.ts"
+      ],
       "rules": {
         "eslint/no-restricted-imports": ["error", { "paths": [] }]
       }

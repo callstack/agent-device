@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { isRecord } from '../../../../utils/parsing.ts';
+import { isRecord } from '@agent-device/host-kit/values';
 import type {
   AppleImage,
   CrashArtifact,

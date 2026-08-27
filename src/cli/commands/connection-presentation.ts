@@ -1,7 +1,7 @@
 import { fingerprint, type RemoteConnectionState } from '../../remote/remote-connection-state.ts';
 import type { ConnectVerification } from '../connection/connect-provider-adapters.ts';
 import { connectionProviderLeaseKind } from '../connection/provider-policy.ts';
-import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
+import { shellQuoteIfNeeded } from '@agent-device/host-kit/exec';
 
 export type ConnectReadiness = ConnectVerification & {
   preparationMessage: string;

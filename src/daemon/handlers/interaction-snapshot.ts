@@ -5,7 +5,7 @@ import type { SnapshotPreferredBackend, SnapshotState } from '@agent-device/kern
 import type { ContextFromFlags } from './interaction-common.ts';
 import { captureSnapshot } from './snapshot-capture.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
-import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
+import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { snapshotOptionsToFlags } from '../../backend-snapshot-options.ts';
 import type {
   CaptureSnapshotInput,

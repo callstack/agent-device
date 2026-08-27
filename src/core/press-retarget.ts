@@ -14,7 +14,7 @@
  */
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { containsPoint } from '@agent-device/kernel/rect';
-import { resolveRectCenter } from '../utils/rect-center.ts';
+import { resolveRectCenter } from '@agent-device/kernel/rect-center';
 import { demoteNonUniqueLocalIdentity, readNodeLocalIdentity } from '@agent-device/ad-script';
 import { buildIndexMap } from '../replay/target-evidence-tree.ts';
 import { normalizeSelectorText } from '@agent-device/selectors';

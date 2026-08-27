@@ -10,7 +10,7 @@ import {
 import { resolveRemoteRequestDiagnosticsPath } from './daemon/session-store.ts';
 import { printHumanError, printJson } from './utils/output.ts';
 import { exitAfterFlush } from './utils/process-exit.ts';
-import { readVersion } from './utils/version.ts';
+import { readVersion } from '@agent-device/host-kit/values';
 import { pathToFileURL } from 'node:url';
 import { sendToDaemon } from './daemon/client/daemon-client.ts';
 import fs from 'node:fs';
@@ -34,7 +34,7 @@ import {
   getDiagnosticsMeta,
   registerDiagnosticSensitiveValue,
   withDiagnosticsScope,
-} from './utils/diagnostics.ts';
+} from '@agent-device/host-kit/exec';
 import { resolveDaemonPaths } from './daemon/config.ts';
 import { applyDefaultPlatformBinding, resolveBindingSettings } from './utils/session-binding.ts';
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';

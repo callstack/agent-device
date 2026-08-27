@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-vi.mock('../../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return {
     ...actual,
     runCmd: vi.fn(),
@@ -13,7 +13,7 @@ vi.mock('../../../utils/exec.ts', async (importOriginal) => {
 });
 vi.mock('../sdk.ts', () => ({ ensureAndroidSdkPathConfigured: vi.fn(async () => {}) }));
 
-import { runCmd, runCmdDetached, whichCmd } from '../../../utils/exec.ts';
+import { runCmd, runCmdDetached, whichCmd } from '@agent-device/host-kit/exec';
 import { ensureAndroidEmulatorBooted } from '../emulator-lifecycle.ts';
 
 const stopped: DeviceInfo = {

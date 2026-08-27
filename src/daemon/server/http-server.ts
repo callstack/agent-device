@@ -6,7 +6,7 @@ import {
   toAppErrorCode,
   type DiagnosticsRecordRef,
 } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
 import { timingSafeStringEqual } from '../../utils/timing-safe-equal.ts';
 import type {
   CommandRpcParams,
@@ -22,10 +22,11 @@ import {
   markRequestCanceled,
   registerRequestAbort,
   resolveRequestTrackingId,
-} from '../../request/cancel.ts';
+  withRequestProgressSink,
+} from '@agent-device/host-kit/request';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { withRequestProgressSink } from '../../request/progress.ts';
+
 import {
   serializeDaemonProgressEnvelope,
   serializeDaemonRpcResponseEnvelope,

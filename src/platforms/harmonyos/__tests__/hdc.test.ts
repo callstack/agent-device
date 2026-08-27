@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 
-vi.mock('../../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return { ...actual, runCmd: vi.fn() };
 });
 
-import { runCmd } from '../../../utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/exec';
 import { DEFAULT_HARMONY_HDC_TIMEOUT_MS, runHarmonyHdc } from '../hdc.ts';
 
 const mockRunCmd = vi.mocked(runCmd);

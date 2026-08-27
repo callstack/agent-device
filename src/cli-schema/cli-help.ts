@@ -16,7 +16,7 @@ import {
   type FlagKey,
 } from './command-schema.ts';
 import { buildCommandUsage } from './usage.ts';
-import { readVersion } from '../utils/version.ts';
+import { readVersion } from '@agent-device/host-kit/values';
 import { renderCliHelpOverview } from './cli-help-overview.ts';
 
 const CONFIGURATION_LINES = [

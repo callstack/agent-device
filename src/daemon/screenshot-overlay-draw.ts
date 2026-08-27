@@ -1,5 +1,5 @@
 import type { Rect, ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
-import type { PNG } from '../utils/png.ts';
+import type { PNG } from '@agent-device/capture-kit/png';
 import { clamp } from '../snapshot/screenshot-overlay/rects.ts';
 
 /**

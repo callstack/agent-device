@@ -3,8 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { LocalInstallSource } from '@agent-device/kernel/contracts';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import { expandUserHomePath } from '../utils/path-resolution.ts';
-import { ArchiveBudget } from '../utils/archive-safety.ts';
+import { expandUserHomePath, ArchiveBudget } from '@agent-device/host-kit/fs';
+
 import { resolveInstallableCandidate } from './install-source-archive.ts';
 import {
   installArtifactArchiveBudget,

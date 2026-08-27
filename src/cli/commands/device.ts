@@ -5,7 +5,7 @@ import {
   inspectDeviceClaims,
   type InspectedDeviceClaim,
 } from '../../daemon/device-claim-inspection.ts';
-import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
+import { shellQuoteIfNeeded } from '@agent-device/host-kit/exec';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 

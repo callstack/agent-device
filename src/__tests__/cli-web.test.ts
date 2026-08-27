@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { test } from 'vitest';
 import { runCliCapture } from './cli-capture.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
-import { withCommandExecutorOverride } from '../utils/exec.ts';
+import { withCommandExecutorOverride } from '@agent-device/host-kit/exec';
 import {
   installFakeManagedAgentBrowser,
   withNodeRuntime,

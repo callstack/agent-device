@@ -7,7 +7,7 @@ import {
   type DeferredOutcomeSnapshotAttempt,
 } from '../deferred-interaction-outcome.ts';
 import type { InteractionRetryTap } from '../interaction-outcome-policy.ts';
-import { countDiagnosticEventsByPhase, withDiagnosticsScope } from '../../utils/diagnostics.ts';
+import { countDiagnosticEventsByPhase, withDiagnosticsScope } from '@agent-device/host-kit/exec';
 import type { SessionState } from '../types.ts';
 import {
   deliverySnapshot,

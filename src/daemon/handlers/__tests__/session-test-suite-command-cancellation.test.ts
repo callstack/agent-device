@@ -5,7 +5,7 @@ import {
   isRequestCanceled,
   markRequestCanceled,
   registerRequestAbort,
-} from '../../../request/cancel.ts';
+} from '@agent-device/host-kit/request';
 import { bindReplayTestAttemptCancellation } from '../session-test-suite-command.ts';
 
 // The daemon half of the replay-test cancellation seam (#1478 P3b). The scheduler only says

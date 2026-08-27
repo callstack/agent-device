@@ -4,7 +4,7 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { createFailNthCommandExecutor } from '../../../__tests__/test-utils/exec-faults.ts';
-import { withCommandExecutorOverride } from '../../../utils/exec.ts';
+import { withCommandExecutorOverride } from '@agent-device/host-kit/exec';
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
 import { installFakeManagedAgentBrowser } from './test-utils.ts';
 

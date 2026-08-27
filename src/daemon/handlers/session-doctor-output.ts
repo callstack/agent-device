@@ -1,4 +1,4 @@
-import { emitRequestProgress } from '../../request/progress.ts';
+import { emitRequestProgress } from '@agent-device/host-kit/request';
 import {
   formatDoctorCheckDetailLines,
   formatDoctorCheckSummaryLine,

@@ -1,6 +1,6 @@
 import { type TvRemoteButton, toVegaTvRemoteKey } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { requireExecSuccess } from '../../utils/exec.ts';
+import { requireExecSuccess } from '@agent-device/host-kit/exec';
 import { resolveVegaToolProvider } from './tool-provider.ts';
 
 const VEGA_INPUT_TRANSPORT_OVERHEAD_MS = 10_000;

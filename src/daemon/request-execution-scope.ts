@@ -4,7 +4,7 @@ import {
   emitDiagnostic,
   getDiagnosticsMeta,
   updateDiagnosticsScope,
-} from '../utils/diagnostics.ts';
+} from '@agent-device/host-kit/exec';
 import { applyCommandDefaults } from '../cli-schema/command-schema.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
@@ -21,7 +21,7 @@ import {
 } from './lease-lifecycle.ts';
 import { prepareLockedRequestBinding, resolveRequestExecutionLockKeys } from './request-binding.ts';
 import { createRequestExecutionLocks } from './request-execution-locks.ts';
-import { throwIfRequestCanceled } from '../request/cancel.ts';
+import { throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import { finalizeDaemonResponse } from './request-finalization.ts';
 import { refreshRecordingHealth } from './request-recording-health.ts';
 import {

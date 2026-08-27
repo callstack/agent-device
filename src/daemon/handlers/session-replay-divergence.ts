@@ -1,8 +1,8 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { sleep } from '../../utils/timeouts.ts';
+import { sleep } from '@agent-device/host-kit/exec';
 import { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
-import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
+import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';

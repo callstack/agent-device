@@ -15,7 +15,7 @@ import {
 } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
-import { resolveAndroidSerialAllowlist } from '../../utils/device-isolation.ts';
+import { resolveAndroidSerialAllowlist } from '@agent-device/host-kit/fs';
 import {
   hasExplicitSessionFlag,
   requireSessionOrExplicitSelector,

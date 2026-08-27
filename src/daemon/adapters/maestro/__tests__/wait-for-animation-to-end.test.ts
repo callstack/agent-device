@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { PNG } from '../../../../utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import { waitForMaestroAnimationToEnd } from '../wait-for-animation-to-end.ts';
 
 test('captures an explicit zero-timeout pair and accepts exactly 0.005% RGB difference', async () => {

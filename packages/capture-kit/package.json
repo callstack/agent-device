@@ -3,15 +3,64 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Private durable-capture mechanics shared by platform runtimes, providers, and daemon orchestration.",
+  "description": "Private host and durable-capture mechanics shared by platform runtimes, providers, and daemon orchestration: process execution, diagnostics, archives, PNG tooling, and request-scoped plumbing.",
   "dependencies": {
     "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*"
   },
   "exports": {
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./mobile-snapshot-semantics": {
+      "types": "./src/mobile-snapshot-semantics.ts",
+      "default": "./src/mobile-snapshot-semantics.ts"
+    },
+    "./png": {
+      "types": "./src/png.ts",
+      "default": "./src/png.ts"
+    },
+    "./png-resize": {
+      "types": "./src/png-resize.ts",
+      "default": "./src/png-resize.ts"
+    },
+    "./png-rgb-difference": {
+      "types": "./src/png-rgb-difference.ts",
+      "default": "./src/png-rgb-difference.ts"
+    },
+    "./png-size": {
+      "types": "./src/png-size.ts",
+      "default": "./src/png-size.ts"
+    },
+    "./png-worker-client": {
+      "types": "./src/png-worker-client.ts",
+      "default": "./src/png-worker-client.ts"
+    },
+    "./screenshot-density": {
+      "types": "./src/screenshot-density.ts",
+      "default": "./src/screenshot-density.ts"
+    },
+    "./screenshot-diff-pixels": {
+      "types": "./src/screenshot-diff-pixels.ts",
+      "default": "./src/screenshot-diff-pixels.ts"
+    },
+    "./snapshot-occlusion": {
+      "types": "./src/snapshot-occlusion.ts",
+      "default": "./src/snapshot-occlusion.ts"
+    },
+    "./snapshot-quality-backend-capabilities": {
+      "types": "./src/snapshot-quality-backend-capabilities.ts",
+      "default": "./src/snapshot-quality-backend-capabilities.ts"
+    },
+    "./snapshot-quality-verdict": {
+      "types": "./src/snapshot-quality-verdict.ts",
+      "default": "./src/snapshot-quality-verdict.ts"
     }
+  },
+  "devDependencies": {
+    "@types/pngjs": "^6.0.5",
+    "pngjs": "^7.0.0"
   }
 }

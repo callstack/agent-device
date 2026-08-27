@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-vi.mock('../../utils/exec.ts', () => ({
+vi.mock('@agent-device/host-kit/exec', () => ({
   runCmd: vi.fn(),
   runCmdSync: vi.fn(),
   whichCmd: vi.fn(async () => true),
@@ -14,7 +14,7 @@ vi.mock('../../platforms/android/emulator-lifecycle.ts', () => ({
   waitForAndroidBoot: vi.fn(async () => {}),
 }));
 
-import { runCmd } from '../../utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/exec';
 import { waitForAndroidBoot } from '../../platforms/android/emulator-lifecycle.ts';
 import { ensureBootedSimulator } from '../../platforms/apple/core/simulator.ts';
 import {

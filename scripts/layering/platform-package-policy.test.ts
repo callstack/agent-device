@@ -385,7 +385,7 @@ test('platform packages may use capture-kit but no unrelated workspace implement
     );
     assert.match(
       messages(sources).join('\n'),
-      /may import workspace code only from capture-kit, contracts, kernel, or xml/,
+      /may import workspace code only from capture-kit, host-kit, contracts, kernel, or xml/,
     );
   }
 });

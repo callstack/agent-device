@@ -2,7 +2,7 @@ import type { FocusPointInput } from '@agent-device/contracts/focus-runtime';
 import { focusRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Point } from '@agent-device/kernel/snapshot';
-import { successText } from '../utils/success-text.ts';
+import { successText } from '@agent-device/host-kit/values';
 import { readPointPositionals } from '../utils/validation.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';

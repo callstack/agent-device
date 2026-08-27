@@ -6,7 +6,7 @@ import {
   commandDescriptors,
   commandSupportsSettleObservation,
 } from '../core/command-descriptor/registry.ts';
-import { asOptionalRecord } from '../utils/parsing.ts';
+import { asOptionalRecord } from '@agent-device/host-kit/values';
 import { readElementMatchCandidateRefs } from '../utils/error-candidates.ts';
 
 export type ToolRefPinStore = {

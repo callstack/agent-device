@@ -132,6 +132,34 @@ platform-common package, and it preserves the package façades' implementation-l
 Its introduction carries the normal workspace-package compliance surface: `check:affected`
 selection, R11/R13 package enumeration, and the composite typecheck project list.
 
+> **Amendment (#2082): the substrate below the platform families.** Retiring the shared
+> `src/utils` and `src/platforms` root surfaces (so the family trees can move behind their
+> exports maps) forces every shared file onto a declared domain owner, and the paragraph above
+> is amended to name that layout rather than let capture-kit absorb it:
+>
+> - `@agent-device/host-kit` owns generic host mechanics — process execution, supervision, and
+>   diagnostics; archives, streams, atomic files, locks, and path/device isolation; small host
+>   value helpers; request-scoped plumbing — behind a small deep surface of exactly four seams:
+>   `exec`, `fs`, `values`, `request`. Modules under `src/internal/` are reachable only through
+>   those seams; consumers import a seam, never an internal module.
+> - `@agent-device/capture-kit` owns capture, snapshot, and recording behavior — PNG tooling,
+>   screenshot density and pixel diffing, snapshot occlusion, mobile snapshot semantics,
+>   quality verdicts and backend capability tables. Snapshot *behavior* is capture domain, not
+>   contracts vocabulary, and host mechanics are host-kit's, not capture-kit's.
+> - `@agent-device/provision-kit` owns provisioning mechanics — install-artifact acquisition
+>   (local paths, archives, guarded network downloads) and host toolchain probing.
+> - The enforced direction is `kernel < contracts < host-kit < capture-kit < provision-kit <
+>   platform/provider/daemon`.
+> - Contracts stays vocabulary, plan models, and pure classification with no process,
+>   filesystem, or timer mechanics (the existing planted-red gate); platform-specific parsing
+>   stays with its family package and reaches legacy callers through composition, never by a
+>   family importing another owner's internals.
+>
+> Enforcement: each substrate package's exported subpaths are pinned in
+> `package-boundaries.test.ts` (widening fails the gate), the contracts mechanics gate stays
+> planted red, and the `platforms-root-shape` rule rejects any new shared file or directory
+> appearing directly under `src/platforms`.
+
 The Apple XCUITest runner client is a durable platform-owned implementation facet colocated
 inside `packages/platform-apple` as the `src/runner/` subtree (#2040) — Apple mechanics belong to
 the Apple package. R13 models the facet by enumeration rather than by exception sprawl: the family

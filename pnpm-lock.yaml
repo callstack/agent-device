@@ -48,6 +48,9 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:packages/contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:packages/host-kit
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:packages/kernel
@@ -183,9 +186,19 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+    devDependencies:
+      '@types/pngjs':
+        specifier: ^6.0.5
+        version: 6.0.5
+      pngjs:
+        specifier: ^7.0.0
+        version: 7.0.0
 
   packages/contracts:
     dependencies:
@@ -196,6 +209,28 @@ importers:
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
+
+  packages/host-kit:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      tar-stream:
+        specifier: ^3.2.0
+        version: 3.2.0
+      yauzl:
+        specifier: ^3.4.0
+        version: 3.4.0
+    devDependencies:
+      '@types/tar-stream':
+        specifier: ^3.1.4
+        version: 3.1.4
+      '@types/yauzl':
+        specifier: ^3.4.0
+        version: 3.4.0
 
   packages/kernel: {}
 

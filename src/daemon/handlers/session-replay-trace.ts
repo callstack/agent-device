@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
 
 export function appendReplayTraceEvent(
   tracePath: string | undefined,

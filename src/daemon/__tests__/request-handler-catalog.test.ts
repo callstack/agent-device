@@ -16,7 +16,7 @@ import {
   clearRequestAbortRegistration,
   markRequestCanceled,
   registerRequestAbort,
-} from '../../request/cancel.ts';
+} from '@agent-device/host-kit/request';
 import {
   unavailableBindDevice,
   unavailableBindExactDevice,

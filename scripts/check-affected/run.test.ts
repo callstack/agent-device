@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/exec';
 import { STALE_NODE_MODULES_MESSAGE } from './lockfile-install-sync.ts';
 import { CHECK_CATALOG } from './checks.ts';
 import { DEFAULT_VITEST_MAX_WORKERS } from '../lib/vitest-concurrency.ts';

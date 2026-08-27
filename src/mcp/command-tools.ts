@@ -30,7 +30,7 @@ import {
   mcpToolConfigProperties,
 } from './tool-control-fields.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { isRecord } from '../utils/parsing.ts';
+import { isRecord } from '@agent-device/host-kit/values';
 import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
 import { resolveMcpConfigDefaults } from './tool-input-config.ts';
 import { projectStructuredContent } from './tool-result.ts';

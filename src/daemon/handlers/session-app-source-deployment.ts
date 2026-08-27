@@ -17,7 +17,7 @@ import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-ru
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { resolveInstallFromSourceResultTarget } from '../../utils/result-serialization.ts';
-import { withSuccessText } from '../../utils/success-text.ts';
+import { withSuccessText } from '@agent-device/host-kit/values';
 import { recordSessionAction } from './handler-utils.ts';
 import { resolveCommandDevice } from './session-device-utils.ts';
 import {

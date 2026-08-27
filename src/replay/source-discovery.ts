@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveUserPath } from '../utils/path-resolution.ts';
+import { resolveUserPath } from '@agent-device/host-kit/fs';
 import { isMaestroYamlPath, maestroBackendRequiredMessage } from './format.ts';
 
 const GLOB_PATTERN_CHARS = /[*?[\]{}]/;

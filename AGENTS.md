@@ -61,9 +61,10 @@ Read the declaration rather than maintaining a prose copy:
 - common command input fields, and which surface may write an input key (model, operator, retired):
   `src/commands/common-input-fields.ts` and `src/commands/input-audience.ts`
 
-Shared selector parsing and matching belongs in `@agent-device/selectors`; request cancellation and
-progress in `src/request`; cross-layer contracts in `src/contracts`; CLI flags in
-`src/commands/cli-grammar`; cross-surface schema composition in `src/cli-schema`.
+Shared selector parsing and matching belongs in `@agent-device/selectors`; request cancellation
+and progress in `@agent-device/capture-kit` (`request-cancel`, `request-progress`); cross-layer
+contracts in `src/contracts`; CLI flags in `src/commands/cli-grammar`; cross-surface schema
+composition in `src/cli-schema`.
 
 The enforced registries are self-declaring. A failing completeness, parity, coverage, timeout,
 layering, or construction gate means the new cell or path is unclassified; do not suppress or
@@ -123,7 +124,7 @@ The OS-neutral Apple runner lives under `packages/platform-apple/src/runner/`. F
 retry policy, or command typing, start at `runner-contract.ts`; transport stays below session/client
 behavior, and xctestrun build/cache logic stays outside request execution.
 
-Diagnostics use `src/utils/diagnostics.ts`. Request diagnostics belong in the session request log;
+Diagnostics use `@agent-device/capture-kit/diagnostics`. Request diagnostics belong in the session request log;
 session artifact paths come from `src/daemon/session-store.ts`. App/device logs remain in `app.log`;
 Apple runner and xcodebuild output remains in `runner.log`.
 

@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { SNAPSHOT_BACKEND_CAPABILITIES } from '../../snapshot-quality/backend-capabilities.ts';
+import { SNAPSHOT_BACKEND_CAPABILITIES } from '@agent-device/capture-kit/snapshot-quality-backend-capabilities';
 import { SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { booleanField, integerField, stringField } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';

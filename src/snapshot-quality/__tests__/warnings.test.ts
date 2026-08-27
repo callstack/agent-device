@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { readSnapshotQualityVerdict } from '../verdict.ts';
+import { readSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { renderSnapshotQualityWarnings } from '../warnings.ts';
 
 const sharedRecoveryReason =

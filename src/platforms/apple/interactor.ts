@@ -23,10 +23,10 @@ import { toAppleTvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';
 import { normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
-import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
+import { withDiagnosticTimer } from '@agent-device/host-kit/exec';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { withMethodScope } from '../../utils/method-scope.ts';
+import { withMethodScope } from '@agent-device/host-kit/values';
 import type { Point, RawSnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import type {
   Interactor,
@@ -35,7 +35,7 @@ import type {
   ScreenshotOptions,
   SnapshotOptions,
 } from '@agent-device/contracts/interactor-types';
-import { readSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
+import { readSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { captureMacOsSurfaceSnapshot } from '../../snapshot/snapshot-desktop-surface.ts';
 
 export function createAppleInteractor(

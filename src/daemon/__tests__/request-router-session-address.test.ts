@@ -7,8 +7,8 @@ import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
-vi.mock('../../utils/host-process.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../utils/host-process.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
 });
 // Opening a session runs owned-lease cleanup, which pattern-kills stale xcodebuild runners with a

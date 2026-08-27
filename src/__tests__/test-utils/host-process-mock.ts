@@ -1,9 +1,9 @@
-type HostProcessModule = typeof import('../../utils/host-process.ts');
+type HostProcessModule = typeof import('@agent-device/host-kit/exec');
 type HostProcessIdentityObservation =
-  import('../../utils/host-process.ts').HostProcessIdentityObservation;
+  import('@agent-device/host-kit/exec').HostProcessIdentityObservation;
 
 /**
- * `vi.mock` factory for `utils/host-process.ts` in tests that seed a "live"
+ * `vi.mock` factory for the host-kit `exec` seam in tests that seed a "live"
  * owner from the test process's own identity (readCurrentOwnerIdentity and
  * friends) and later have production code re-read it during classification.
  *
@@ -16,13 +16,12 @@ type HostProcessIdentityObservation =
  * syscall, not a subprocess), so fabricated dead-pid fixtures still classify
  * as dead through that non-flaky check.
  *
- * Usage: `vi.mock('<path>/utils/host-process.ts', async (importOriginal) =>
+ * Usage: `vi.mock('@agent-device/host-kit/exec', async (importOriginal) =>
  * (await import('<path>/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(importOriginal))`
  */
 // Consumed by three suites, but only through `(await import(...)).pinOwnProcessStartTime`
 // inside `vi.mock` factories — vitest hoists those above static imports, so the dynamic
 // form is required and fallow cannot trace the consumers statically.
-// fallow-ignore-next-line unused-export
 export async function pinOwnProcessStartTime(
   importOriginal: () => Promise<HostProcessModule>,
 ): Promise<HostProcessModule> {
@@ -30,6 +29,9 @@ export async function pinOwnProcessStartTime(
   const ownStartTime = 'test-process-start-time';
   return {
     ...actual,
+    // The seam mock cannot reach readCurrentOwnerIdentity's internal
+    // readProcessStartTime call, so the recorded identity is pinned here too.
+    readCurrentOwnerIdentity: () => ({ pid: process.pid, startTime: ownStartTime }),
     readProcessStartTime: (pid: number) => {
       if (pid !== process.pid) return null;
       return ownStartTime;

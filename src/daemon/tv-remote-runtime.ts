@@ -4,7 +4,7 @@ import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtim
 import { parseTvRemoteButton, type TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { successText } from '../utils/success-text.ts';
+import { successText } from '@agent-device/host-kit/values';
 import { requireIntInRange } from '../utils/validation.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';

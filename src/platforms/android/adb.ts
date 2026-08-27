@@ -5,7 +5,7 @@ import {
   type AndroidAdbExecutorResult,
 } from './adb-executor.ts';
 
-export { sleep } from '../../utils/timeouts.ts';
+export { sleep } from '@agent-device/host-kit/exec';
 
 export async function runAndroidAdb(
   device: DeviceInfo,

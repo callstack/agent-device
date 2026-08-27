@@ -7,19 +7,15 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../exec.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return {
     ...actual,
     runCmdDetached: vi.fn(),
     runCmdDetachedMonitored: vi.fn(),
     runCmdSync: vi.fn(() => ({ exitCode: 1, stdout: '', stderr: '' })),
+    sleep: vi.fn(async () => {}),
   };
-});
-
-vi.mock('../timeouts.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../timeouts.ts')>();
-  return { ...actual, sleep: vi.fn(async () => {}) };
 });
 
 import { resolveDaemonPaths, type DaemonPaths } from '../../daemon/config.ts';
@@ -37,11 +33,15 @@ import {
   supportsLoopbackBind,
 } from '../../__tests__/test-utils/loopback.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmdDetachedMonitored, runCmdSync } from '../exec.ts';
-import { readProcessStartTime } from '../host-process.ts';
-import { shellQuoteIfNeeded } from '../shell-quote.ts';
-import { sleep } from '../timeouts.ts';
-import { findProjectRoot, readVersion } from '../version.ts';
+import {
+  runCmdDetachedMonitored,
+  runCmdSync,
+  readProcessStartTime,
+  shellQuoteIfNeeded,
+  sleep,
+} from '@agent-device/host-kit/exec';
+
+import { findProjectRoot, readVersion } from '@agent-device/host-kit/values';
 
 type DaemonInfoFixture = {
   port?: number;

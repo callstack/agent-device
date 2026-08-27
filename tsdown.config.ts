@@ -71,7 +71,7 @@ export default defineConfig({
     'internal/bin': 'src/bin.ts',
     'internal/companion-tunnel': 'src/client/companion-tunnel.ts',
     'internal/daemon': 'src/daemon.ts',
-    'internal/png-worker': 'src/utils/png-worker.ts',
+    'internal/png-worker': 'packages/capture-kit/src/png-worker.ts',
     'internal/update-check-entry': 'src/utils/update-check-entry.ts',
   },
   deps: {

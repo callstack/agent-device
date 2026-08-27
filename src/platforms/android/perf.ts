@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { requireExecSuccess } from '../../utils/exec.ts';
+import { requireExecSuccess } from '@agent-device/host-kit/exec';
 import {
   androidAdbResultError,
   resolveAndroidAdbExecutor,

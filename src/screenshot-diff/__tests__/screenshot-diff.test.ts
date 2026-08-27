@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../../utils/png-worker-client.ts', async () => {
+vi.mock('@agent-device/capture-kit/png-worker-client', async () => {
   const [{ PNG }, { decodePng }, { computeScreenshotDiffPixels }] = await Promise.all([
-    import('../../utils/png.ts'),
-    import('../../utils/png.ts'),
-    import('../../utils/screenshot-diff-pixels.ts'),
+    import('@agent-device/capture-kit/png'),
+    import('@agent-device/capture-kit/png'),
+    import('@agent-device/capture-kit/screenshot-diff-pixels'),
   ]);
   return {
     decodePngAsync: async (buffer: Buffer, label: string) => decodePng(buffer, label),
@@ -19,7 +19,7 @@ vi.mock('../../utils/png-worker-client.ts', async () => {
   };
 });
 
-import { PNG } from '../../utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import { compareScreenshots } from '../screenshot-diff.ts';
 
 function tmpDir(): string {

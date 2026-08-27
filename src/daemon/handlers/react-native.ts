@@ -9,10 +9,10 @@ import {
   type ReactNativeOverlayDismissTarget,
 } from '../../core/react-native-overlay.ts';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { stripUndefined } from '../../utils/parsing.ts';
-import { successText } from '../../utils/success-text.ts';
+import { stripUndefined, successText } from '@agent-device/host-kit/values';
+
 import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel/snapshot';
-import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
+import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { errorResponse, noActiveSessionError } from './response.ts';
 import { captureSnapshotForSession } from './interaction-snapshot.ts';

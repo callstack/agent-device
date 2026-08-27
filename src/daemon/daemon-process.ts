@@ -3,8 +3,8 @@ import {
   readHostProcessIdentityObservations,
   readProcessCommand,
   readProcessStartTime,
-} from '../utils/host-process.ts';
-import { sleep } from '../utils/timeouts.ts';
+  sleep,
+} from '@agent-device/host-kit/exec';
 
 const DAEMON_COMMAND_PATTERNS = [
   /\/dist\/src\/daemon\.js($|[\s"'])/,

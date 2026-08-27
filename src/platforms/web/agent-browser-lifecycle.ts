@@ -1,9 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import type { OwnedProcessRecordStore } from '../../utils/owned-process-record.ts';
-import { reapOwnedProcessRecordsAtStartup } from '../../utils/owned-process-reaper.ts';
+import {
+  emitDiagnostic,
+  type OwnedProcessRecordStore,
+  reapOwnedProcessRecordsAtStartup,
+} from '@agent-device/host-kit/exec';
+
 import type { AgentBrowserToolStatus } from './agent-browser-tool.ts';
 import type { AgentBrowserProcessSummary } from './agent-browser-process-record.ts';
 export {

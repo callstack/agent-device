@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
 
 // Device-scoped pending-recovery markers, one file per switched device, in the daemon state dir.
 // The marker is separate from IME mechanics so startup can establish evidence before it loads the

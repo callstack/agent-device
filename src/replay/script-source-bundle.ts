@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
-import { resolveUserPath } from '../utils/path-resolution.ts';
+import { resolveUserPath } from '@agent-device/host-kit/fs';
 import { resolveReplayFormat } from './format.ts';
 
 /**

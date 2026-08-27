@@ -4,8 +4,7 @@ import path from 'node:path';
 import { once } from 'node:events';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import { MAX_ARTIFACT_COMPRESSED_BYTES } from '../utils/artifact-limits.ts';
-import { createByteLimitStream } from '../utils/byte-limit-stream.ts';
+import { MAX_ARTIFACT_COMPRESSED_BYTES, createByteLimitStream } from '@agent-device/host-kit/fs';
 
 const TEMP_PREFIX = 'agent-device-artifact-';
 const REQUEST_IDLE_TIMEOUT_MS = 60_000;

@@ -1,7 +1,11 @@
-import { execFailureDetails } from '../../utils/exec.ts';
+import {
+  execFailureDetails,
+  emitDiagnostic,
+  sleep,
+  type OwnedProcessRecordStore,
+} from '@agent-device/host-kit/exec';
 import { AppError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { sleep } from '../../utils/timeouts.ts';
+
 import type { Rect } from '@agent-device/kernel/snapshot';
 import {
   buildAudioProbeEvalScript,
@@ -25,7 +29,6 @@ import {
   cleanupManagedAgentBrowserOrphansForProviderStartup,
   recordManagedAgentBrowserProcesses,
 } from './agent-browser-lifecycle.ts';
-import type { OwnedProcessRecordStore } from '../../utils/owned-process-record.ts';
 
 const AGENT_BROWSER = 'agent-browser';
 // Exported so daemon shutdown can pin its web-close budget to the ceiling enforced for one

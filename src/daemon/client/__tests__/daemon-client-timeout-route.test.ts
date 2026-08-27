@@ -31,9 +31,10 @@ import { beforeEach, test, vi } from 'vitest';
 
 const { mockRunCmdSync } = vi.hoisted(() => ({ mockRunCmdSync: vi.fn() }));
 
-vi.mock('../../../utils/exec.ts', async () => {
-  const actual =
-    await vi.importActual<typeof import('../../../utils/exec.ts')>('../../../utils/exec.ts');
+vi.mock('@agent-device/host-kit/exec', async () => {
+  const actual = await vi.importActual<typeof import('@agent-device/host-kit/exec')>(
+    '@agent-device/host-kit/exec',
+  );
   return { ...actual, runCmdSync: mockRunCmdSync };
 });
 

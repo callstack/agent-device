@@ -1,9 +1,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { expandUserHomePath, resolveUserPath } from '../utils/path-resolution.ts';
-import { findProjectRoot } from '../utils/version.ts';
-import type { EnvMap } from '../utils/env-map.ts';
+import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/fs';
+import { findProjectRoot, type EnvMap } from '@agent-device/host-kit/values';
 
 import type {
   DaemonServerMode,

@@ -9,7 +9,7 @@ import type {
   DebugSymbolsCrashFrame,
   DebugSymbolsCrashSummary,
 } from '@agent-device/contracts/observability';
-import { isRecord } from '../../../../utils/parsing.ts';
+import { isRecord } from '@agent-device/host-kit/values';
 import {
   addressKey,
   compactJoin,

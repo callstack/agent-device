@@ -8,9 +8,9 @@ import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/devi
 import { AppError } from '@agent-device/kernel/errors';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { resolveIosSimulatorDeviceSetPath } from '../../../utils/device-isolation.ts';
-import { requireExecSuccess } from '../../../utils/exec.ts';
-import { requireLocationCoordinates } from '../../../utils/location-coordinates.ts';
+import { resolveIosSimulatorDeviceSetPath } from '@agent-device/host-kit/fs';
+import { requireExecSuccess } from '@agent-device/host-kit/exec';
+import { requireLocationCoordinates } from '@agent-device/host-kit/values';
 import { parseAppearanceAction } from '../../appearance.ts';
 import {
   summarizeCommandAttemptFailures,

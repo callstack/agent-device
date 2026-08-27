@@ -2,7 +2,7 @@ import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   inferVerticalScrollIndicatorDirections,
   isSystemScrollIndicatorLabel,
-} from '../../../utils/scroll-indicator.ts';
+} from '@agent-device/kernel/scroll-indicator';
 import {
   findNearestScrollableContainer,
   isScrollableSnapshotType,

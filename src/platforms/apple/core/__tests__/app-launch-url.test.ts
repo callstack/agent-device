@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
 import { IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
 
-vi.mock('../../../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../utils/exec.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return { ...actual, runCmd: vi.fn(actual.runCmd) };
 });
 vi.mock('../simulator.ts', async (importOriginal) => {
@@ -12,7 +12,7 @@ vi.mock('../simulator.ts', async (importOriginal) => {
   return { ...actual, ensureBootedSimulator: vi.fn(actual.ensureBootedSimulator) };
 });
 
-import { runCmd } from '../../../../utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/exec';
 import { ensureBootedSimulator } from '../simulator.ts';
 import { openIosApp } from '../app-launch.ts';
 

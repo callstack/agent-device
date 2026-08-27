@@ -5,7 +5,7 @@ import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
-} from '../../utils/diagnostics.ts';
+} from '@agent-device/host-kit/exec';
 import {
   makeAndroidSession,
   makeIosSession,
@@ -14,7 +14,7 @@ import {
 import { LINUX_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { clearRequestCanceled, markRequestCanceled } from '../../request/cancel.ts';
+import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import {
   createRequestExecutionScope,
   prepareLockedRequestScope,

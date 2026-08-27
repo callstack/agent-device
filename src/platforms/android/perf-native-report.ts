@@ -1,4 +1,4 @@
-import { splitNonEmptyTrimmedLines } from '../../utils/parsing.ts';
+import { splitNonEmptyTrimmedLines } from '@agent-device/host-kit/values';
 import { roundPercent } from '../perf-utils.ts';
 
 const SIMPLEPERF_REPORT_ARTIFACT_ENTRY_LIMIT = 50;

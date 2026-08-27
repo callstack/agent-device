@@ -13,7 +13,7 @@ import {
   type PlatformSelector,
 } from '@agent-device/kernel/device';
 import { buildSessionRecoveryHint, describeSessionDevice } from './session-recovery-hints.ts';
-import { shellQuoteIfNeeded } from '../utils/shell-quote.ts';
+import { shellQuoteIfNeeded } from '@agent-device/host-kit/exec';
 import { hasLockableDeviceSelector, hasSelectorValue } from './device-selector-intent.ts';
 import { canOverrideLockPolicySelector } from './daemon-command-registry.ts';
 

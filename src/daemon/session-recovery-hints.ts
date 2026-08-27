@@ -1,5 +1,5 @@
 import type { SessionRef, SessionState } from './types.ts';
-import { shellQuoteIfNeeded } from '../utils/shell-quote.ts';
+import { shellQuoteIfNeeded } from '@agent-device/host-kit/exec';
 
 export type SessionRecoveryContext = 'device-in-use' | 'selector-conflict';
 

@@ -1,4 +1,4 @@
-import { buildPrimaryEnvVarName, parseSourceValue } from '../utils/source-value.ts';
+import { buildPrimaryEnvVarName, parseSourceValue } from '@agent-device/host-kit/values';
 import { listCliCommandNames } from '../command-catalog.ts';
 import {
   getCliCommandSchema,

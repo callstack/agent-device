@@ -26,7 +26,7 @@ import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import { handleSessionCommands } from './session-command-harness.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
-import { withRequestProgressSink } from '../../../request/progress.ts';
+import { withRequestProgressSink } from '@agent-device/host-kit/request';
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {

@@ -218,7 +218,7 @@ test('text output bounds every list and says what it hid', () => {
 });
 
 test('blast radius over the real tree agrees with check:affected and stays under 10s', async () => {
-  const file = 'src/utils/exec.ts';
+  const file = 'packages/host-kit/src/internal/exec.ts';
   const started = Date.now();
   const radius = await computeBlastRadius(repoRoot, file);
   const elapsed = Date.now() - started;

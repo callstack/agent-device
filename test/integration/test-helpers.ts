@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { PNG } from '../../src/utils/png.ts';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { PNG } from '@agent-device/capture-kit/png';
+import { runCmdSync } from '@agent-device/host-kit/exec';
 import { type CliJsonResult, formatResultDebug, runSourceCliJsonSync } from './cli-json.ts';
 
 const RECORDING_INSPECT_TIMEOUT_MS = 60_000;

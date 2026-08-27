@@ -24,7 +24,7 @@ vi.mock('../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
 
 import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
 import { withFakeAdb, type FakeAdbScript } from '../../__tests__/test-utils/fake-adb.ts';
-import { countDiagnosticEventsByPhase, withDiagnosticsScope } from '../../utils/diagnostics.ts';
+import { countDiagnosticEventsByPhase, withDiagnosticsScope } from '@agent-device/host-kit/exec';
 import { ensureAndroidBlockingSystemDialogReady as ensureOwnedAndroidBlockingSystemDialogReady } from '../android-system-dialog.ts';
 import { androidObservation } from '../../platform-runtime.ts';
 

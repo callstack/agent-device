@@ -8,20 +8,20 @@ const { runCmdMock } = vi.hoisted(() => ({
   runCmdMock: vi.fn(),
 }));
 
-vi.mock('../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../utils/exec.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return {
     ...actual,
     runCmd: runCmdMock,
+    // The seam mock cannot reach listHostProcesses' internal runCmd call, so
+    // the ps read is routed through its runCommand injection point instead.
+    listHostProcesses: async (options: Parameters<typeof actual.listHostProcesses>[0]) =>
+      await actual.listHostProcesses({ ...options, runCommand: runCmdMock }),
     withoutCommandExecutorOverride: async <T>(fn: () => Promise<T>) => await fn(),
+    readProcessStartTime: (pid: number) => `start-${pid}`,
+    readProcessCommand: (pid: number) => `command-${pid}`,
   };
 });
-
-vi.mock('../../utils/host-process.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../utils/host-process.ts')>()),
-  readProcessStartTime: (pid: number) => `start-${pid}`,
-  readProcessCommand: (pid: number) => `command-${pid}`,
-}));
 
 import {
   DEFAULT_AGENT_BROWSER_IDLE_TIMEOUT_MS,

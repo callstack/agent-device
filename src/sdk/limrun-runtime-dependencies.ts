@@ -4,8 +4,8 @@ import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 // deliberate static edge; making it lazy would require a proxy interactor rather than this seam.
 import { createAndroidInteractor } from '../core/interactors/android.ts';
 import { runAndroidHostAdb } from '../platforms/android/adb-executor.ts';
-import { execFailureDetails, runCmd } from '../utils/exec.ts';
-import { readVersion } from '../utils/version.ts';
+import { execFailureDetails, runCmd } from '@agent-device/host-kit/exec';
+import { readVersion } from '@agent-device/host-kit/values';
 
 export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
   return {

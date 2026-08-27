@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { isRecord } from '../../../../utils/parsing.ts';
+import { isRecord } from '@agent-device/host-kit/values';
 
 const UUID_RE = /^[0-9a-fA-F-]{32,36}$/;
 

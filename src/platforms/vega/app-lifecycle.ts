@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { requireExecSuccess, type ExecOptions } from '../../utils/exec.ts';
+import { requireExecSuccess, type ExecOptions } from '@agent-device/host-kit/exec';
 import { resolveVegaToolProvider } from './tool-provider.ts';
 
 const VEGA_APP_COMMAND_TIMEOUT_MS = 30_000;

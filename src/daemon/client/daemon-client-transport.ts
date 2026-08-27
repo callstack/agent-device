@@ -3,7 +3,7 @@ import net from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
 import { loadNodeHttpRequester, readNodeHttpResponseBody } from '../../utils/node-http.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
 import type { DaemonPaths, DaemonTransportPreference } from '../config.ts';
 import {
   readDaemonHttpProgressResponse,
@@ -15,7 +15,7 @@ import { buildHttpRpcPayload, handleDaemonHttpResponseBody } from './daemon-clie
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '../http-health.ts';
-import { readVersion } from '../../utils/version.ts';
+import { readVersion } from '@agent-device/host-kit/values';
 
 type ResolvedDaemonTransport = 'socket' | 'http';
 type SendRequestOptions = {

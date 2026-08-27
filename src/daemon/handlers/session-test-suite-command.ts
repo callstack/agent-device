@@ -23,15 +23,16 @@ import { runReplayScriptSource } from './session-replay-runtime.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { errorResponse } from './response.ts';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
-import { emitRequestProgress } from '../../request/progress.ts';
 import {
+  emitRequestProgress,
   clearRequestCanceled,
   getRequestSignal,
   isRequestCanceled,
   markRequestCanceled,
   registerRequestAbort,
-} from '../../request/cancel.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+} from '@agent-device/host-kit/request';
+
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
 import { buildReplayTestSourceDiscovery } from './session-test-source-discovery.ts';
 import {
   buildReplayTestShardFlags,

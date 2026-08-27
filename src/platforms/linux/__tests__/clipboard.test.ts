@@ -1,12 +1,12 @@
 import { afterAll, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 
-vi.mock('../../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return { ...actual, runCmd: vi.fn(), whichCmd: vi.fn() };
 });
 
-import { runCmd, whichCmd } from '../../../utils/exec.ts';
+import { runCmd, whichCmd } from '@agent-device/host-kit/exec';
 import { readLinuxClipboard, writeLinuxClipboard } from '../clipboard.ts';
 import { AppError } from '@agent-device/kernel/errors';
 

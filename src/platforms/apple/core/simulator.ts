@@ -1,8 +1,13 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { execFailureDetails, requireExecSuccess } from '../../../utils/exec.ts';
-import { Deadline, retryWithPolicy } from '../../../utils/retry.ts';
-import { createTtlMemo } from '../../../utils/ttl-memo.ts';
+import {
+  execFailureDetails,
+  requireExecSuccess,
+  Deadline,
+  retryWithPolicy,
+} from '@agent-device/host-kit/exec';
+
+import { createTtlMemo } from '@agent-device/host-kit/values';
 import { bootFailureHint, classifyBootFailure } from '../../boot-diagnostics.ts';
 
 import {
@@ -10,7 +15,7 @@ import {
   IOS_SIMCTL_LIST_TIMEOUT_MS,
   IOS_SIMULATOR_FOCUS_TIMEOUT_MS,
 } from './config.ts';
-import { buildSimctlArgs, buildSimctlArgsForDevice } from './simctl.ts';
+import { buildSimctlArgsForDevice } from './simctl.ts';
 import { runAppleToolCommand, runXcrun } from './tool-provider.ts';
 
 const IOS_SIMULATOR_HOST_APPS = ['Simulator'] as const;
@@ -235,15 +240,8 @@ export async function shutdownSimulator(
   };
 }
 
-export async function getSimulatorState(
-  deviceOrUdid: DeviceInfo | string,
-  signal?: AbortSignal,
-): Promise<string | null> {
-  const udid = typeof deviceOrUdid === 'string' ? deviceOrUdid : deviceOrUdid.id;
-  const simctlArgs =
-    typeof deviceOrUdid === 'string'
-      ? buildSimctlArgs(['list', 'devices', '-j'])
-      : buildSimctlArgsForDevice(deviceOrUdid, ['list', 'devices', '-j']);
+async function getSimulatorState(device: DeviceInfo, signal?: AbortSignal): Promise<string | null> {
+  const simctlArgs = buildSimctlArgsForDevice(device, ['list', 'devices', '-j']);
   const result = await runXcrun(simctlArgs, {
     allowFailure: true,
     signal,
@@ -257,7 +255,7 @@ export async function getSimulatorState(
     };
 
     for (const runtime of Object.values(payload.devices ?? {})) {
-      const match = runtime.find((entry) => entry.udid === udid);
+      const match = runtime.find((entry) => entry.udid === device.id);
       if (match) return match.state;
     }
     return null;

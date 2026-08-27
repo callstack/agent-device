@@ -21,7 +21,7 @@ test('the thread-hostile exclusion is derived from imports, not listed', () => {
   // Both reasons are represented: process.chdir (CLI capture harness) and a
   // worker inside a worker (the node:worker_threads PNG pipeline).
   assert.ok(files.includes('src/__tests__/cli-help.test.ts'));
-  assert.ok(files.includes('src/utils/__tests__/png-worker.test.ts'));
+  assert.ok(files.includes('packages/capture-kit/src/png-worker.test.ts'));
   // A pure decision-kernel test is never excluded — that would hide survivors.
   assert.ok(!files.includes('src/daemon/__tests__/ref-frame.test.ts'));
   assert.ok(files.every((file) => file.endsWith('.test.ts')));

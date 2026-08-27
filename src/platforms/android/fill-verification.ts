@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
 import { containsPoint } from '@agent-device/kernel/rect';
 import {
   buildFillFailureDetails,

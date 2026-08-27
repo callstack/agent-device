@@ -18,7 +18,7 @@ import {
 import type { ScreenshotDiffResult } from '../screenshot-diff/screenshot-diff.ts';
 import type { ScreenshotDiffRegion } from '../screenshot-diff/screenshot-diff-regions.ts';
 import { styleText } from 'node:util';
-import { buildMobileSnapshotPresentation } from '../snapshot/mobile-snapshot-semantics.ts';
+import { buildMobileSnapshotPresentation } from '@agent-device/capture-kit/mobile-snapshot-semantics';
 
 type JsonResult =
   | { success: true; data?: unknown }

@@ -24,7 +24,7 @@ function runVersionFastPath(argv: string[]): boolean {
     process.stdout.write(`${__AGENT_DEVICE_VERSION__}\n`);
     return true;
   }
-  import('./utils/version.ts')
+  import('@agent-device/host-kit/values')
     .then(({ readVersion }) => {
       process.stdout.write(`${readVersion()}\n`);
     })

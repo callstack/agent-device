@@ -1,7 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { Point, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { findNodeByRef, normalizeRef } from '@agent-device/kernel/snapshot';
-import { resolveRectCenter } from '../../../utils/rect-center.ts';
+import { resolveRectCenter } from '@agent-device/kernel/rect-center';
 import type {
   AgentDeviceRuntime,
   CommandContext,
@@ -37,7 +37,7 @@ import {
 import {
   classifyOffscreenScrollDirection,
   type OffscreenScrollDirection,
-} from '../../../snapshot/mobile-snapshot-semantics.ts';
+} from '@agent-device/capture-kit/mobile-snapshot-semantics';
 import { truncateUtf8 } from '../../../utils/truncate-utf8.ts';
 import type {
   InteractionTarget,

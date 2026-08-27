@@ -2,7 +2,7 @@ import { test, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { clearRequestCanceled, markRequestCanceled } from '../../../request/cancel.ts';
+import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import {
   mockResolveTargetDevice,
   makeSessionStore,

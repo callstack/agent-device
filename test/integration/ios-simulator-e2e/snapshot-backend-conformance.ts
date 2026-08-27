@@ -11,7 +11,7 @@ import {
   type SnapshotCaptureBackend,
   type SnapshotPreferredBackend,
 } from '@agent-device/kernel/snapshot';
-import { SNAPSHOT_BACKEND_CAPABILITIES } from '../../../src/snapshot-quality/backend-capabilities.ts';
+import { SNAPSHOT_BACKEND_CAPABILITIES } from '@agent-device/capture-kit/snapshot-quality-backend-capabilities';
 import { isSemanticTouchTarget } from '../../../src/core/touch-semantics.ts';
 
 export type SnapshotBackendConformanceFixture = {

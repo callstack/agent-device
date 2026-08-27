@@ -1,10 +1,17 @@
 import type { ClickButton } from '@agent-device/contracts/click-button';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import { AppError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { runCmd, whichCmd, type ExecOptions, type ExecResult } from '../../utils/exec.ts';
-import { createScopedProvider } from '../../utils/scoped-provider.ts';
-import { sleep } from '../../utils/timeouts.ts';
+import {
+  emitDiagnostic,
+  runCmd,
+  whichCmd,
+  type ExecOptions,
+  type ExecResult,
+  sleep,
+} from '@agent-device/host-kit/exec';
+
+import { createScopedProvider } from '@agent-device/host-kit/values';
+
 import type {
   LinuxAccessibilityTree,
   LinuxSnapshotSurface,

@@ -11,8 +11,12 @@ import {
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseXmlDocumentSync, type XmlNode } from '@agent-device/xml';
-import { execFailureDetails, requireExecSuccess, type ExecResult } from '../../../utils/exec.ts';
-import { splitNonEmptyTrimmedLines } from '../../../utils/parsing.ts';
+import {
+  execFailureDetails,
+  requireExecSuccess,
+  type ExecResult,
+} from '@agent-device/host-kit/exec';
+import { splitNonEmptyTrimmedLines } from '@agent-device/host-kit/values';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { IOS_DEVICECTL_DEFAULT_HINT, resolveIosDevicectlHint } from './devicectl.ts';
 import type { IosDeviceProcessInfo } from './app-info.ts';
@@ -36,9 +40,7 @@ import {
 
 const APPLE_MEMORY_SAMPLE_METHOD = 'ps-process-snapshot';
 const IOS_DEVICE_MEMORY_SAMPLE_METHOD = 'xctrace-activity-monitor';
-export const APPLE_MEMGRAPH_SNAPSHOT_METHOD = 'leaks-output-graph';
-export const APPLE_MEMGRAPH_SNAPSHOT_DESCRIPTION =
-  'Memory graph captured with leaks --outputGraph for host-visible Apple app processes.';
+const APPLE_MEMGRAPH_SNAPSHOT_METHOD = 'leaks-output-graph';
 
 const APPLE_PERF_TIMEOUT_MS = 15_000;
 const APPLE_MEMORY_SNAPSHOT_TIMEOUT_MS = 120_000;

@@ -5,11 +5,11 @@ import { asAppError } from '@agent-device/kernel/errors';
 import {
   isSparseSnapshotQualityVerdict,
   preferredSnapshotBackendForVerdict,
-} from '../../snapshot-quality/verdict.ts';
+} from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { summarizeAxEvidence } from '../../utils/ax-digest.ts';
-import { getRequestSignal } from '../../request/cancel.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 import { isLocalIosRunnerSession } from '../direct-ios-selector.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
 import type { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
 import type { ContextFromFlags } from './interaction-common.ts';

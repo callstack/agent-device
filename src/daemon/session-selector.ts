@@ -6,7 +6,7 @@ import {
   isSerialAddressablePlatform,
   matchesPlatformSelector,
 } from '@agent-device/kernel/device';
-import { parseSerialAllowlist } from '../utils/device-isolation.ts';
+import { parseSerialAllowlist } from '@agent-device/host-kit/fs';
 import { buildSessionRecoveryHint, describeSessionDevice } from './session-recovery-hints.ts';
 
 export type SessionSelectorConflictKey =

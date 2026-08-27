@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { symbolicateCrashArtifact } from '../debug-symbols.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { withCommandExecutorOverride } from '../../../../utils/exec.ts';
+import { withCommandExecutorOverride } from '@agent-device/host-kit/exec';
 import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const UUID = 'ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB';

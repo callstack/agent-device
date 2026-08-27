@@ -16,7 +16,7 @@ import {
   armAuthoringOnOpen,
   isAuthoringArmedSession,
 } from '../session-script-publication-capability.ts';
-import { isRequestCanceled } from '../../request/cancel.ts';
+import { isRequestCanceled } from '@agent-device/host-kit/request';
 import { createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   resolveSessionRequestLogPath,
@@ -31,7 +31,7 @@ import {
 import { STARTUP_SAMPLE_METHOD, type StartupPerfSample } from './session-startup-metrics.ts';
 import { buildNextOpenSession, buildOpenResult } from './session-open-surface.ts';
 import { markDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
-import { emitDiagnostic, getDiagnosticsMeta } from '../../utils/diagnostics.ts';
+import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/exec';
 import {
   prepareOpenCommandDetails,
   type ResolvedOpenRuntimeHintPlan,

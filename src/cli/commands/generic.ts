@@ -4,7 +4,7 @@ import type { CommandName } from '../../commands/command-metadata.ts';
 import type { CliOutput } from '../../commands/command-contract.ts';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { readCommandMessage } from '../../utils/success-text.ts';
+import { readCommandMessage } from '@agent-device/host-kit/values';
 import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientBackedCliCommandName } from './client-backed.ts';

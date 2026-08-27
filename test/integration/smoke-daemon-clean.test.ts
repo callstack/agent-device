@@ -4,9 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync, isProcessAlive } from '@agent-device/host-kit/exec';
 import { stopProcessForTakeover } from '../../src/daemon/daemon-process.ts';
-import { isProcessAlive } from '../../src/utils/host-process.ts';
+
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';
 

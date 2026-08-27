@@ -5,8 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return { ...actual, runCmd: vi.fn() };
 });
 vi.mock('../adb.ts', async (importOriginal) => {
@@ -19,9 +19,9 @@ import { snapshotAndroid } from '../snapshot.ts';
 import { readAndroidGestureViewport } from '../touch-executor.ts';
 import { buildUiHierarchySnapshot, parseUiHierarchyTree } from '../ui-hierarchy.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
+import * as diagnosticsModule from '@agent-device/host-kit/exec';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '../../../utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/exec';
 import { sleep } from '../adb.ts';
 import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-install.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
@@ -282,13 +282,13 @@ function isAndroidSdkVersionCommand(args: string[]): boolean {
 }
 
 async function captureDiagnostics(
-  scope: Parameters<typeof withDiagnosticsScope>[0],
+  scope: Parameters<typeof diagnosticsModule.withDiagnosticsScope>[0],
   callback: () => Promise<string | null>,
 ): Promise<string> {
   const previousHome = process.env.HOME;
   process.env.HOME = await mkdtempForTest('agent-device-android-diag-');
   try {
-    const diagnosticsPath = await withDiagnosticsScope(scope, callback);
+    const diagnosticsPath = await diagnosticsModule.withDiagnosticsScope(scope, callback);
     assert.ok(diagnosticsPath);
     return await fs.readFile(diagnosticsPath, 'utf8');
   } finally {
@@ -412,7 +412,7 @@ test('snapshotAndroid emits helper phase diagnostics', async () => {
         helperAdb,
         helperArtifact,
       });
-      return flushDiagnosticsToSessionFile({ force: true })?.path ?? null;
+      return diagnosticsModule.flushDiagnosticsToSessionFile({ force: true })?.path ?? null;
     },
   );
 
@@ -938,7 +938,7 @@ test('snapshotAndroid emits helper failure diagnostics', async () => {
           return true;
         },
       );
-      return flushDiagnosticsToSessionFile({ force: true })?.path ?? null;
+      return diagnosticsModule.flushDiagnosticsToSessionFile({ force: true })?.path ?? null;
     },
   );
 
@@ -962,7 +962,7 @@ test('snapshotAndroid emits unavailable diagnostics when helper artifact is miss
           () => snapshotAndroid(device),
           /Android snapshot helper is unavailable/,
         );
-        return flushDiagnosticsToSessionFile({ force: true })?.path ?? null;
+        return diagnosticsModule.flushDiagnosticsToSessionFile({ force: true })?.path ?? null;
       },
     );
 
@@ -1066,7 +1066,7 @@ test('snapshotAndroid emits timeout diagnostics when helper capture times out', 
         () => snapshotAndroidWithHelper(helperAdb),
         /Android snapshot helper failed: helper capture timed out/,
       );
-      return flushDiagnosticsToSessionFile({ force: true })?.path ?? null;
+      return diagnosticsModule.flushDiagnosticsToSessionFile({ force: true })?.path ?? null;
     },
   );
 

@@ -6,7 +6,7 @@ import type {
 } from '@agent-device/maestro';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
-import { stripUndefined } from '../../utils/parsing.ts';
+import { stripUndefined } from '@agent-device/host-kit/values';
 import { appendReplayTraceEvent } from './session-replay-trace.ts';
 
 export function createMaestroReplayObserver(params: {

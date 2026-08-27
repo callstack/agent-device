@@ -5,7 +5,7 @@ import type {
   DurableResourceEnvelope,
 } from '@agent-device/contracts/durable-resource-envelope';
 import { decodeDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { withAtomicPublishTempPathSync } from '../utils/atomic-file.ts';
+import { withAtomicPublishTempPathSync } from '@agent-device/host-kit/fs';
 import { openVerifiedFileForRead } from '../utils/verified-file.ts';
 
 export type DurableCaptureResourceRecord<K extends string> =

@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { execFailureDetails } from '../../../utils/exec.ts';
+import { execFailureDetails } from '@agent-device/host-kit/exec';
 
 import { IOS_DEVICECTL_TIMEOUT_MS } from './config.ts';
 import { runXcrun } from './tool-provider.ts';

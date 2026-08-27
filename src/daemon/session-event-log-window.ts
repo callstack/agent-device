@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
-import { isRecord } from '../utils/parsing.ts';
+import { isRecord } from '@agent-device/host-kit/values';
 import {
   measureEventLogFile,
   readFirstLineDigest,

@@ -28,7 +28,7 @@ import {
   listHostProcesses,
   readProcessStartTime,
   stopPidsWithEscalation,
-} from '../../src/utils/host-process.ts';
+} from '@agent-device/host-kit/exec';
 
 const TEST_NAME = 'live web platform e2e smoke';
 const SHUTDOWN_TEST_NAME = 'live web platform e2e daemon-shutdown browser cleanup';

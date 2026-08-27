@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { createTtlMemo } from '../../utils/ttl-memo.ts';
-import { findProjectRoot } from '../../utils/version.ts';
+import { createTtlMemo, findProjectRoot } from '@agent-device/host-kit/values';
+
 import { computeDaemonCodeSignature } from '../code-signature.ts';
 
 export type DaemonLaunchSpec = {

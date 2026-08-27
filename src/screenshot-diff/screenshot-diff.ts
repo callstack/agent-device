@@ -2,12 +2,12 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
-import { PNG } from '../utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import {
   computeScreenshotDiffPixelsAsync,
   decodePngAsync,
   encodePngAsync,
-} from '../utils/png-worker-client.ts';
+} from '@agent-device/capture-kit/png-worker-client';
 import { annotateDiffRegions } from './screenshot-diff-region-overlay.ts';
 import { summarizeDiffRegions, type ScreenshotDiffRegion } from './screenshot-diff-regions.ts';
 import type { ImageDimensions } from '../utils/screenshot-geometry.ts';

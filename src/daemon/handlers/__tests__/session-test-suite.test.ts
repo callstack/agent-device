@@ -20,13 +20,14 @@ import path from 'node:path';
 import { handleSessionCommands, mockInspectDeviceRuntimeFacts } from './session-command-harness.ts';
 import type { DaemonRequest } from '../../types.ts';
 import { expectOkData, makeSessionStore } from './session-test-suite.fixtures.ts';
-import { withRequestProgressSink } from '../../../request/progress.ts';
 import {
+  withRequestProgressSink,
   clearRequestCanceled,
   getRequestSignal,
   markRequestCanceled,
   registerRequestAbort,
-} from '../../../request/cancel.ts';
+} from '@agent-device/host-kit/request';
+
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {

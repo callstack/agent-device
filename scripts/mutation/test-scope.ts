@@ -27,7 +27,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/exec';
 import { readWorkspacePackages } from '../layering/package-boundaries.ts';
 import { walkFiles } from '../lib/walk-files.ts';
 import { isKernelTestFile, normalizePath } from './modules.ts';

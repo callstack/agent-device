@@ -2,15 +2,16 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import { withoutCommandExecutorOverride } from '../../utils/exec.ts';
 import {
+  withoutCommandExecutorOverride,
   expandProcessTree,
   listHostProcesses,
   readProcessCommand,
   readProcessStartTime,
   type HostProcessInfo,
-} from '../../utils/host-process.ts';
-import type { OwnedProcessRecordStore } from '../../utils/owned-process-record.ts';
+  type OwnedProcessRecordStore,
+} from '@agent-device/host-kit/exec';
+
 import type { AgentBrowserToolStatus } from './agent-browser-tool.ts';
 
 const HOST_PROCESS_LIST_TIMEOUT_MS = 1_500;

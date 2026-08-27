@@ -1,7 +1,6 @@
 import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-readiness-runtime';
 import { listLocalDeviceInventory } from './request/device-inventory-context.ts';
-import { runCmdDetached } from './utils/exec.ts';
-import { stopPidsWithEscalation } from './utils/host-process.ts';
+import { runCmdDetached, stopPidsWithEscalation } from '@agent-device/host-kit/exec';
 
 export function createAndroidEmulatorHost(): DeviceReadinessRuntimeHost['androidEmulator'] {
   return Object.freeze({

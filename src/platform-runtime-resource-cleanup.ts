@@ -1,8 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isIosFamily } from '@agent-device/kernel/device';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
-import { emitDiagnostic } from './utils/diagnostics.ts';
-import type { OwnedProcessRecordStore } from './utils/owned-process-record.ts';
+import { emitDiagnostic, type OwnedProcessRecordStore } from '@agent-device/host-kit/exec';
 
 /** Focused durable-resource cleanup composed above daemon policy and concrete platforms. */
 export async function resetAndroidSnapshotHelperRuntime(): Promise<void> {

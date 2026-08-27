@@ -1,6 +1,6 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { normalizeType } from '@agent-device/contracts/snapshot';
-import { isSystemScrollIndicatorLabel } from '../../../utils/scroll-indicator.ts';
+import { isSystemScrollIndicatorLabel } from '@agent-device/kernel/scroll-indicator';
 import {
   areRectsApproximatelyEqual,
   collectDescendants,

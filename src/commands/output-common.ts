@@ -1,4 +1,4 @@
-import { readCommandMessage } from '../utils/success-text.ts';
+import { readCommandMessage } from '@agent-device/host-kit/values';
 import type { CliOutput } from './command-contract.ts';
 
 export type CliOutputFormatter = (params: {

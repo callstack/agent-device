@@ -13,7 +13,7 @@ import {
   buildReplayDivergenceFailureResponse,
   hoistReplayFailureCauseDiagnosticMeta,
 } from './session-replay-runtime-failure-response.ts';
-import { getRequestSignal } from '../../request/cancel.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 
 export async function withReplayFailureDiagnostics(params: {
   response: DaemonResponse;

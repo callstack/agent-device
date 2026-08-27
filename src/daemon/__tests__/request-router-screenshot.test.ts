@@ -26,7 +26,7 @@ import {
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { PNG } from '../../utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { makeSession as makeBaseSession } from '../../__tests__/test-utils/session-factories.ts';

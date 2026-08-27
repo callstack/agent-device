@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { AppError, type DiagnosticsRecordRef } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
 import type { SessionRef, SessionRuntimeHints, SessionState } from './types.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
 import { expandSessionPath, isSafeSessionSegment, safeSessionName } from './session-paths.ts';
@@ -16,7 +16,7 @@ import {
   type SessionScriptWriteOptions,
   type SessionScriptWriteResult,
 } from './session-script-writer.ts';
-import { successText } from '../utils/success-text.ts';
+import { successText } from '@agent-device/host-kit/values';
 import {
   appendActionEvent,
   appendSessionEvent,

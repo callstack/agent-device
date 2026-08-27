@@ -8,8 +8,8 @@ import {
 } from '@agent-device/maestro';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveTargetDevice } from '../../core/dispatch-resolve.ts';
-import { getRequestSignal } from '../../request/cancel.ts';
-import { stripUndefined } from '../../utils/parsing.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
+import { stripUndefined } from '@agent-device/host-kit/values';
 import {
   collectReplayShellEnv,
   parseReplayCliEnvEntries,

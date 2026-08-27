@@ -16,10 +16,11 @@ vi.mock('../daemon-process.ts', () => ({
   trySignalProcess: mocks.trySignalProcess,
   waitForDaemonExit: mocks.waitForDaemonExit,
 }));
-vi.mock('../../utils/host-process.ts', () => ({
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/exec')>()),
   isProcessAlive: mocks.isProcessAlive,
+  sleep: mocks.sleep,
 }));
-vi.mock('../../utils/timeouts.ts', () => ({ sleep: mocks.sleep }));
 
 import { resolveDaemonPaths } from '../config.ts';
 import { stopDaemon } from '../daemon-stop.ts';

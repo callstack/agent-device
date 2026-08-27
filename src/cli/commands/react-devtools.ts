@@ -1,4 +1,4 @@
-import { runCmdStreaming } from '../../utils/exec.ts';
+import { runCmdStreaming } from '@agent-device/host-kit/exec';
 import {
   ensureReactDevtoolsCompanion,
   stopReactDevtoolsCompanion,

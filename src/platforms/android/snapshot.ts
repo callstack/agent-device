@@ -6,16 +6,16 @@ import {
   toAppErrorCode,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
-import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
+import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/exec';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { findProjectRoot, readVersion } from '../../utils/version.ts';
+import { findProjectRoot, readVersion } from '@agent-device/host-kit/values';
 import {
   attachRefs,
   type HiddenContentHint,
   type RawSnapshotNode,
   type SnapshotOptions,
 } from '@agent-device/kernel/snapshot';
-import { deriveMobileSnapshotHiddenContentHints } from '../../snapshot/mobile-snapshot-semantics.ts';
+import { deriveMobileSnapshotHiddenContentHints } from '@agent-device/capture-kit/mobile-snapshot-semantics';
 import {
   buildUiHierarchySnapshot,
   parseUiHierarchyTree,

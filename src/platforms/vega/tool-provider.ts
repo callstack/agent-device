@@ -3,8 +3,8 @@ import { access } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { VegaTvRemoteKey } from '@agent-device/contracts/tv-remote';
-import { runCmd, whichCmd, type ExecOptions, type ExecResult } from '../../utils/exec.ts';
-import { createScopedProvider } from '../../utils/scoped-provider.ts';
+import { runCmd, whichCmd, type ExecOptions, type ExecResult } from '@agent-device/host-kit/exec';
+import { createScopedProvider } from '@agent-device/host-kit/values';
 
 export type VegaToolProvider = {
   isAvailable(): Promise<boolean>;

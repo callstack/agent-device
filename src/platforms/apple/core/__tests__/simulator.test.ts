@@ -3,16 +3,16 @@ import assert from 'node:assert/strict';
 import { ensureBootedSimulator, openIosSimulatorApp } from '../simulator.ts';
 import { IOS_SIMULATOR_FOCUS_TIMEOUT_MS } from '../config.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '../../../../utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/exec';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
 
-vi.mock('../../../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../utils/exec.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return { ...actual, runCmd: vi.fn(actual.runCmd) };
 });
 
-const execActual = await vi.importActual<typeof import('../../../../utils/exec.ts')>(
-  '../../../../utils/exec.ts',
+const execActual = await vi.importActual<typeof import('@agent-device/host-kit/exec')>(
+  '@agent-device/host-kit/exec',
 );
 
 const mockRunCmd = vi.mocked(runCmd);

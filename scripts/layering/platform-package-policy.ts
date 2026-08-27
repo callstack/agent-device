@@ -263,6 +263,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
       !site.spec.startsWith('@agent-device/contracts/') &&
       site.spec !== '@agent-device/capture-kit' &&
       !site.spec.startsWith('@agent-device/capture-kit/') &&
+      !site.spec.startsWith('@agent-device/host-kit/') &&
       !site.spec.startsWith('@agent-device/kernel/') &&
       site.spec !== '@agent-device/xml' &&
       !isPackageOwnedFacadeTest(file, ownerFamily, site.spec)
@@ -271,7 +272,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
         violation(
           file,
           site.line,
-          `platform-${ownerFamily} may import workspace code only from capture-kit, contracts, kernel, or xml; found '${site.spec}'`,
+          `platform-${ownerFamily} may import workspace code only from capture-kit, host-kit, contracts, kernel, or xml; found '${site.spec}'`,
         ),
       );
     }

@@ -6,8 +6,9 @@ import {
   runCmdBackground,
   withCommandExecutorOverride,
   withoutCommandExecutorOverride,
-} from '../../utils/exec.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+  emitDiagnostic,
+} from '@agent-device/host-kit/exec';
+
 import {
   clearAndroidTestImeRecoveryMarker,
   readAndroidTestImeRecoveryMarkers,

@@ -2,15 +2,15 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { runCmd, type ExecResult } from '../../utils/exec.ts';
+import { runCmd, type ExecResult, readProcessStartTime } from '@agent-device/host-kit/exec';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { ManagedWebBackendStatus } from '@agent-device/contracts/managed-web-backend';
 import {
   installManagedAgentBrowserPackage,
   writeManagedAgentBrowserManifest,
 } from './agent-browser-install.ts';
-import { acquireProcessLock } from '../../utils/process-lock.ts';
-import { readProcessStartTime } from '../../utils/host-process.ts';
+import { acquireProcessLock } from '@agent-device/host-kit/fs';
+
 import {
   appendAgentDeviceChromeArgs,
   resolveAgentBrowserIdleTimeoutMs,

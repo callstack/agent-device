@@ -23,7 +23,7 @@ import {
 } from '../../core/lease-scope.ts';
 import { AppError, createRequestCanceledError, errorMessage } from '@agent-device/kernel/errors';
 import { LEASE_ALLOCATION_BUDGET_MS } from '../../core/command-descriptor/timeout-policy.ts';
-import { getRequestSignal, isRequestCanceled } from '../../request/cancel.ts';
+import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { listDownloadableArtifacts } from '../artifact-tracking.ts';
 
 type LeaseHandlerArgs = {

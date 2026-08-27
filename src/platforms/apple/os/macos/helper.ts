@@ -8,7 +8,7 @@ import {
   resolveExecutableOverridePath,
   runCmdBackground,
   type ExecBackgroundResult,
-} from '../../../../utils/exec.ts';
+} from '@agent-device/host-kit/exec';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import {
   hasScopedAppleToolProvider,

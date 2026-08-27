@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { resolveFileOverridePath, runCmd, whichCmd } from '../../utils/exec.ts';
+import { resolveFileOverridePath, runCmd, whichCmd } from '@agent-device/host-kit/exec';
 import { waitForAndroidBoot } from './emulator-lifecycle.ts';
 import { installAndroidAdbPackage, resolveAndroidAdbProvider } from './adb-executor.ts';
 import { withAndroidAppResolutionCacheInvalidated } from './app-deployment-resolution.ts';

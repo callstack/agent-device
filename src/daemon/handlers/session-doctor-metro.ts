@@ -1,5 +1,5 @@
 import type { DoctorCheck, DoctorKind } from '@agent-device/contracts/observability';
-import { runCmd } from '../../utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/exec';
 
 const METRO_PROBE_TIMEOUT_MS = 1500;
 const METRO_PROCESS_LOOKUP_TIMEOUT_MS = 1500;

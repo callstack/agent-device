@@ -24,8 +24,8 @@ import { isAndroidSnapshotTimeoutError } from '../../../snapshot/snapshot-timeou
  * value it publishes. Split out of `snapshot.test.ts`, which is over the file-size tripwire.
  */
 
-vi.mock('../../../utils/exec.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../utils/exec.ts')>()),
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/exec')>()),
   runCmd: vi.fn(),
 }));
 

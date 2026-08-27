@@ -1,8 +1,8 @@
 import path from 'node:path';
 import type { DaemonOpenLifecycle, DaemonRequest, DaemonResponse } from '../types.ts';
 import type { SessionStore } from '../session-store.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { sleep } from '../../utils/timeouts.ts';
+import { emitDiagnostic, sleep } from '@agent-device/host-kit/exec';
+
 import { handleRecordCommand } from './record-runtime.ts';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
 import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';

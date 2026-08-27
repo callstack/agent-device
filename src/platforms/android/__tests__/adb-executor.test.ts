@@ -8,8 +8,8 @@ const { runCmdBackgroundMock } = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock('../../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return {
     ...actual,
     runCmd: vi.fn(async () => ({ stdout: 'ok', stderr: '', exitCode: 0 })),
@@ -32,7 +32,7 @@ import {
   withAndroidAdbProvider,
   type AndroidAdbProvider,
 } from '../adb-executor.ts';
-import { runCmd, runCmdBackground } from '../../../utils/exec.ts';
+import { runCmd, runCmdBackground } from '@agent-device/host-kit/exec';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 
 const mockRunCmd = vi.mocked(runCmd);

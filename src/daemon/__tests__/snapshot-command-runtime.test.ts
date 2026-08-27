@@ -5,7 +5,7 @@ import {
   clearRequestAbortRegistration,
   markRequestCanceled,
   registerRequestAbort,
-} from '../../request/cancel.ts';
+} from '@agent-device/host-kit/request';
 import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';
 import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';

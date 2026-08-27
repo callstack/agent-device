@@ -3,7 +3,7 @@ import { mergeDefinedFlags } from '../utils/merge-flags.ts';
 import { finalizeParsedArgs, parseRawArgs } from './parser/args.ts';
 import { resolveConfigBackedFlagDefaults } from '../cli-schema/cli-config.ts';
 import { resolveRemoteConfigDefaults } from './remote-config-flags.ts';
-import type { EnvMap } from '../utils/env-map.ts';
+import type { EnvMap } from '@agent-device/host-kit/values';
 
 export function resolveCliOptions(
   argv: string[],

@@ -12,8 +12,8 @@ vi.mock('../../../platforms/apple/core/simulator.ts', async (importOriginal) => 
     await importOriginal<typeof import('../../../platforms/apple/core/simulator.ts')>();
   return { ...actual, shutdownSimulator: vi.fn() };
 });
-vi.mock('../../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return { ...actual, runCmd: vi.fn() };
 });
 vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
@@ -54,7 +54,11 @@ import { teardownSessionResources as teardownProductionSessionResources } from '
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { shutdownSimulator } from '../../../platforms/apple/core/simulator.ts';
-import { runCmd } from '../../../utils/exec.ts';
+import {
+  runCmd,
+  flushDiagnosticsToSessionFile,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/exec';
 import { cleanupAppleXctracePerfCapture } from '../../../platforms/apple/core/perf-xctrace.ts';
 import { cleanupAndroidNativePerfSession } from '../../../platforms/android/perf-native.ts';
 import { stopAndroidSnapshotHelperSessionForDevice } from '../../../platforms/android/snapshot-helper.ts';
@@ -62,7 +66,7 @@ import { stopIosRunnerSession } from '../../../platforms/apple/core/runner-clien
 import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { acquireDeviceClaim } from '../../device-claims.ts';
 import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
-import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
+
 import {
   type DeviceBinding,
   localRuntimeOwner,

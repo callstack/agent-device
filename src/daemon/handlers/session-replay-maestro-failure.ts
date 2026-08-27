@@ -9,7 +9,7 @@ import {
   type ReplayVarScrubEntry,
 } from '@agent-device/contracts/divergence';
 import { formatScriptArg } from '@agent-device/ad-script';
-import { getRequestSignal } from '../../request/cancel.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import type { ReplayReportAction } from './session-replay-report-action.ts';

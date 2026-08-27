@@ -25,8 +25,8 @@ vi.mock('../../../platforms/apple/core/simulator.ts', async (importOriginal) => 
     await importOriginal<typeof import('../../../platforms/apple/core/simulator.ts')>();
   return { ...actual, shutdownSimulator: vi.fn() };
 });
-vi.mock('../../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return { ...actual, runCmd: vi.fn() };
 });
 vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal) => {

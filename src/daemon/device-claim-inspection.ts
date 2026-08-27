@@ -11,8 +11,9 @@ import { decodeDeviceIdentity } from '@agent-device/capture-kit';
 import {
   classifyOwnerLivenessFromObservation,
   type OwnerLiveness,
-} from '../utils/owner-identity.ts';
-import { readHostProcessIdentityObservations } from '../utils/host-process.ts';
+  readHostProcessIdentityObservations,
+} from '@agent-device/host-kit/exec';
+
 import { isSupersededDaemonOwner } from './daemon-registration.ts';
 import { canonicalLocalDeviceKey, resolveDeviceClaimRoot } from './device-claim-paths.ts';
 import type { DeviceClaim } from './device-claims.ts';

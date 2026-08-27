@@ -10,8 +10,8 @@ import {
   type MaestroTargetMatch,
   type MaestroTargetQuery,
 } from '@agent-device/maestro';
-import { emitDiagnostic } from '../../../utils/diagnostics.ts';
-import { pointInsideRect } from '../../../utils/rect-center.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { pointInsideRect } from '@agent-device/kernel/rect-center';
 import {
   withMaestroScreenshotBaseline,
   type MaestroScreenshotBaseline,

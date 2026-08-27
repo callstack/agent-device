@@ -1,6 +1,6 @@
 import { centerOfRect, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { AlertInfo, AlertSource } from '@agent-device/contracts/alert-contract';
-import { isSnapshotNodeInteractionBlocked } from '../../snapshot/snapshot-occlusion.ts';
+import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
 
 type AndroidAlertButtonRole = 'accept' | 'dismiss' | 'neutral';
 

@@ -69,13 +69,8 @@ vi.mock('../../../platforms/android/ime-lifecycle.ts', async (importOriginal) =>
     restoreAndroidTestIme: vi.fn(async () => ({ restored: false, reason: 'no-record' })),
   };
 });
-vi.mock('../../../platforms/apple/core/simulator.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/simulator.ts')>();
-  return { ...actual, getSimulatorState: vi.fn(async () => null) };
-});
-vi.mock('../../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
   return { ...actual, runCmd: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })) };
 });
 vi.mock('../../materialized-path-registry.ts', async (importOriginal) => {
@@ -111,7 +106,7 @@ import {
 } from '../../../platforms/apple/core/runner-client.ts';
 import { runMacOsAlertAction } from '../../../platforms/apple/os/macos/helper.ts';
 import { resolveAndroidPackageForOpen } from '../../../platform-runtime-open-target.ts';
-import { runCmd } from '../../../utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/exec';
 import {
   resolveIosApp,
   resolveIosSimulatorDeepLinkBundleId,

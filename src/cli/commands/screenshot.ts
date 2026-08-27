@@ -2,7 +2,7 @@ import { formatScreenshotDiffText, formatSnapshotDiffText } from '../../utils/ou
 import type { ScreenshotDiffResult } from '../../screenshot-diff/screenshot-diff.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
-import { resolveUserPath } from '../../utils/path-resolution.ts';
+import { resolveUserPath } from '@agent-device/host-kit/fs';
 import type { AgentDeviceBackend } from '../../backend.ts';
 import type { AgentDeviceClient, CaptureScreenshotResult } from '../../agent-device-client.ts';
 import { runCliCommand } from '../../commands/cli-runner.ts';

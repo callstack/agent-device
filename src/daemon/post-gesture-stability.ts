@@ -1,5 +1,4 @@
-import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { sleep } from '../utils/timeouts.ts';
+import { emitDiagnostic, sleep } from '@agent-device/host-kit/exec';
 
 /**
  * Pure post-gesture stability mechanics: the quiet-window polling loop and the

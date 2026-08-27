@@ -8,11 +8,14 @@ import {
   type DeviceIdentity,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import {
+  emitDiagnostic,
+  ownerIdentityMatches,
+  readCurrentOwnerIdentity,
+} from '@agent-device/host-kit/exec';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
-import { publishFileSync } from '../utils/atomic-file.ts';
-import { acquireProcessLock } from '../utils/process-lock.ts';
-import { ownerIdentityMatches, readCurrentOwnerIdentity } from '../utils/owner-identity.ts';
+import { publishFileSync, acquireProcessLock } from '@agent-device/host-kit/fs';
+
 import {
   deviceClaimOwnerCannotRelease,
   inspectDeviceClaimFile,

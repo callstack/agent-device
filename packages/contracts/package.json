@@ -23,6 +23,10 @@
       "types": "./src/android-clipboard-support.ts",
       "default": "./src/android-clipboard-support.ts"
     },
+    "./android-helper-artifacts": {
+      "types": "./src/android-helper-artifacts.ts",
+      "default": "./src/android-helper-artifacts.ts"
+    },
     "./android-input-ownership": {
       "types": "./src/android-input-ownership.ts",
       "default": "./src/android-input-ownership.ts"
@@ -38,6 +42,10 @@
     "./android-system-chrome": {
       "types": "./src/android-system-chrome.ts",
       "default": "./src/android-system-chrome.ts"
+    },
+    "./android-touch-plan": {
+      "types": "./src/android-touch-plan.ts",
+      "default": "./src/android-touch-plan.ts"
     },
     "./app-deployment-runtime": {
       "types": "./src/app-deployment-runtime.ts",
@@ -151,6 +159,10 @@
       "types": "./src/command-platform-execution.ts",
       "default": "./src/command-platform-execution.ts"
     },
+    "./daemon-owner-cleanup": {
+      "types": "./src/daemon-owner-cleanup.ts",
+      "default": "./src/daemon-owner-cleanup.ts"
+    },
     "./device": {
       "types": "./src/facades/device.ts",
       "default": "./src/facades/device.ts"
@@ -199,18 +211,6 @@
       "types": "./src/gesture-plan.ts",
       "default": "./src/gesture-plan.ts"
     },
-    "./host-diagnostics": {
-      "types": "./src/host-diagnostics.ts",
-      "default": "./src/host-diagnostics.ts"
-    },
-    "./daemon-owner-cleanup": {
-      "types": "./src/daemon-owner-cleanup.ts",
-      "default": "./src/daemon-owner-cleanup.ts"
-    },
-    "./managed-web-backend": {
-      "types": "./src/managed-web-backend.ts",
-      "default": "./src/managed-web-backend.ts"
-    },
     "./gesture-plan-types": {
       "types": "./src/gesture-plan-types.ts",
       "default": "./src/gesture-plan-types.ts"
@@ -222,6 +222,10 @@
     "./home-runtime": {
       "types": "./src/home-runtime.ts",
       "default": "./src/home-runtime.ts"
+    },
+    "./host-diagnostics": {
+      "types": "./src/host-diagnostics.ts",
+      "default": "./src/host-diagnostics.ts"
     },
     "./interaction": {
       "types": "./src/interaction.ts",
@@ -259,6 +263,10 @@
       "types": "./src/logs-runtime-plan.ts",
       "default": "./src/logs-runtime-plan.ts"
     },
+    "./managed-web-backend": {
+      "types": "./src/managed-web-backend.ts",
+      "default": "./src/managed-web-backend.ts"
+    },
     "./navigation": {
       "types": "./src/navigation.ts",
       "default": "./src/navigation.ts"
@@ -283,38 +291,6 @@
       "types": "./src/orientation-runtime.ts",
       "default": "./src/orientation-runtime.ts"
     },
-    "./platform-module": {
-      "types": "./src/platform-module.ts",
-      "default": "./src/platform-module.ts"
-    },
-    "./platform-plugin": {
-      "types": "./src/platform-plugin.ts",
-      "default": "./src/platform-plugin.ts"
-    },
-    "./platform-providers": {
-      "types": "./src/platform-providers.ts",
-      "default": "./src/platform-providers.ts"
-    },
-    "./platform-runtime": {
-      "types": "./src/platform-runtime.ts",
-      "default": "./src/platform-runtime.ts"
-    },
-    "./platform-runtime-host": {
-      "types": "./src/platform-runtime-host.ts",
-      "default": "./src/platform-runtime-host.ts"
-    },
-    "./platform-runtime-operations": {
-      "types": "./src/platform-runtime-operations.ts",
-      "default": "./src/platform-runtime-operations.ts"
-    },
-    "./platform-resource-cleanup": {
-      "types": "./src/platform-resource-cleanup.ts",
-      "default": "./src/platform-resource-cleanup.ts"
-    },
-    "./platform-runtime-unavailable": {
-      "types": "./src/platform-runtime-unavailable.ts",
-      "default": "./src/platform-runtime-unavailable.ts"
-    },
     "./perf-runtime": {
       "types": "./src/perf-runtime.ts",
       "default": "./src/perf-runtime.ts"
@@ -331,9 +307,45 @@
       "types": "./src/perf-runtime-plan.ts",
       "default": "./src/perf-runtime-plan.ts"
     },
+    "./platform-module": {
+      "types": "./src/platform-module.ts",
+      "default": "./src/platform-module.ts"
+    },
+    "./platform-plugin": {
+      "types": "./src/platform-plugin.ts",
+      "default": "./src/platform-plugin.ts"
+    },
+    "./platform-providers": {
+      "types": "./src/platform-providers.ts",
+      "default": "./src/platform-providers.ts"
+    },
+    "./platform-resource-cleanup": {
+      "types": "./src/platform-resource-cleanup.ts",
+      "default": "./src/platform-resource-cleanup.ts"
+    },
+    "./platform-runtime": {
+      "types": "./src/platform-runtime.ts",
+      "default": "./src/platform-runtime.ts"
+    },
+    "./platform-runtime-host": {
+      "types": "./src/platform-runtime-host.ts",
+      "default": "./src/platform-runtime-host.ts"
+    },
+    "./platform-runtime-operations": {
+      "types": "./src/platform-runtime-operations.ts",
+      "default": "./src/platform-runtime-operations.ts"
+    },
+    "./platform-runtime-unavailable": {
+      "types": "./src/platform-runtime-unavailable.ts",
+      "default": "./src/platform-runtime-unavailable.ts"
+    },
     "./progress": {
       "types": "./src/facades/progress.ts",
       "default": "./src/facades/progress.ts"
+    },
+    "./react-native-overlay": {
+      "types": "./src/react-native-overlay.ts",
+      "default": "./src/react-native-overlay.ts"
     },
     "./record-runtime-execution": {
       "types": "./src/record-runtime-execution.ts",
@@ -350,10 +362,6 @@
     "./replay": {
       "types": "./src/facades/replay.ts",
       "default": "./src/facades/replay.ts"
-    },
-    "./react-native-overlay": {
-      "types": "./src/react-native-overlay.ts",
-      "default": "./src/react-native-overlay.ts"
     },
     "./runner-lease-context": {
       "types": "./src/runner-lease-context.ts",
@@ -423,6 +431,10 @@
       "types": "./src/startup-recovery-fence.ts",
       "default": "./src/startup-recovery-fence.ts"
     },
+    "./touch-runtime": {
+      "types": "./src/touch-runtime.ts",
+      "default": "./src/touch-runtime.ts"
+    },
     "./tv-remote": {
       "types": "./src/tv-remote.ts",
       "default": "./src/tv-remote.ts"
@@ -435,10 +447,6 @@
       "types": "./src/type-text-runtime.ts",
       "default": "./src/type-text-runtime.ts"
     },
-    "./touch-runtime": {
-      "types": "./src/touch-runtime.ts",
-      "default": "./src/touch-runtime.ts"
-    },
     "./viewport-runtime": {
       "types": "./src/viewport-runtime.ts",
       "default": "./src/viewport-runtime.ts"
@@ -450,14 +458,6 @@
     "./wait-runtime-plan": {
       "types": "./src/wait-runtime-plan.ts",
       "default": "./src/wait-runtime-plan.ts"
-    },
-    "./android-helper-artifacts": {
-      "types": "./src/android-helper-artifacts.ts",
-      "default": "./src/android-helper-artifacts.ts"
-    },
-    "./android-touch-plan": {
-      "types": "./src/android-touch-plan.ts",
-      "default": "./src/android-touch-plan.ts"
     }
   }
 }

@@ -1,6 +1,6 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { normalizeType } from '@agent-device/contracts/snapshot';
-export { areRectsApproximatelyEqual } from '../../utils/rect-center.ts';
+export { areRectsApproximatelyEqual } from '@agent-device/kernel/rect-center';
 
 export type SnapshotTreeRuleContext = {
   replacements: Map<number, RawSnapshotNode>;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { PNG } from '../utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import type { DaemonResponse } from '../daemon/client/daemon-client.ts';
 import {
   runCliCapture as captureCli,

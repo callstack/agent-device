@@ -3,7 +3,7 @@ import type {
   BackendDumpNetworkResult,
   BackendNetworkEntry,
 } from '../../backend.ts';
-import { stripUndefined } from '../../utils/parsing.ts';
+import { stripUndefined } from '@agent-device/host-kit/values';
 import { isJsonObject, readNumberProperty, readStringProperty } from './json-utils.ts';
 
 type AgentBrowserNetworkRequest = {

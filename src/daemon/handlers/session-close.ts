@@ -1,9 +1,9 @@
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { LeaseLifecycleProvider, TargetShutdownResult } from '@agent-device/contracts/device';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
-import { successText, withSuccessText } from '../../utils/success-text.ts';
+import { successText, withSuccessText } from '@agent-device/host-kit/values';
 import { resolveCommandDevice } from './session-device-utils.ts';
 import { errorResponse } from './response.ts';
 import { expireRefFrame } from '../ref-frame.ts';

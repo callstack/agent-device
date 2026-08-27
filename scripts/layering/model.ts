@@ -89,6 +89,7 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   // importer and concrete-platform authority; giving them a spine rank would duplicate that seam.
   'platform-runtime',
   'kernel',
+  'host-kit',
   'capture-kit',
   'platform-apple',
   'platform-android',

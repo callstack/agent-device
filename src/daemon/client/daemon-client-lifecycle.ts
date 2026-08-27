@@ -5,9 +5,15 @@ import path from 'node:path';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { readReplayDivergenceResume } from '@agent-device/contracts/divergence';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
-import { runCmdDetachedMonitored, type ExecDetachedExit } from '../../utils/exec.ts';
-import { readVersion } from '../../utils/version.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import {
+  runCmdDetachedMonitored,
+  type ExecDetachedExit,
+  emitDiagnostic,
+  shellQuoteIfNeeded,
+  sleep,
+} from '@agent-device/host-kit/exec';
+import { readVersion } from '@agent-device/host-kit/values';
+
 import { findUnrecoveredRepairCommitFailure } from '../session-store.ts';
 import {
   resolveDaemonPaths,
@@ -19,8 +25,7 @@ import {
 } from '../config.ts';
 import { resolveDaemonLaunchSpec, resolveLocalDaemonCodeSignature } from './daemon-launch-spec.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
-import { sleep } from '../../utils/timeouts.ts';
+
 import {
   cleanupFailedDaemonStartupMetadata,
   cleanupStaleDaemonLockIfSafe,

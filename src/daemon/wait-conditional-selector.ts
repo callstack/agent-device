@@ -1,7 +1,7 @@
 import type { FindSelectorRuntimeOperations } from '@agent-device/contracts/selector-observation-runtime';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { readSimpleSelectorTarget } from '@agent-device/selectors';
-import { getRequestSignal } from '../request/cancel.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 import { recordIfSession, stripSelectorChain } from './selector-recording.ts';
 import { isSessionRecording } from './session-script-publication-capability.ts';

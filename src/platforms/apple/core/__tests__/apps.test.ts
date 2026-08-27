@@ -4,24 +4,24 @@ import { promises as fs, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../../../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../utils/exec.ts')>();
-  return { ...actual, runCmd: vi.fn(actual.runCmd) };
-});
-vi.mock('../../../../utils/retry.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../utils/retry.ts')>();
-  return { ...actual, retryWithPolicy: vi.fn(actual.retryWithPolicy) };
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
+  return {
+    ...actual,
+    runCmd: vi.fn(actual.runCmd),
+    retryWithPolicy: vi.fn(actual.retryWithPolicy),
+  };
 });
 vi.mock('../simulator.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../simulator.ts')>();
   return { ...actual, ensureBootedSimulator: vi.fn(actual.ensureBootedSimulator) };
 });
 
-const execActual = await vi.importActual<typeof import('../../../../utils/exec.ts')>(
-  '../../../../utils/exec.ts',
+const execActual = await vi.importActual<typeof import('@agent-device/host-kit/exec')>(
+  '@agent-device/host-kit/exec',
 );
-const retryActual = await vi.importActual<typeof import('../../../../utils/retry.ts')>(
-  '../../../../utils/retry.ts',
+const retryActual = await vi.importActual<typeof import('@agent-device/host-kit/exec')>(
+  '@agent-device/host-kit/exec',
 );
 const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>('../simulator.ts');
 
@@ -42,9 +42,9 @@ import { ensureBootedSimulator } from '../simulator.ts';
 import { IOS_DEVICE_INSTALL_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '../../../../utils/exec.ts';
-import { retryWithPolicy } from '../../../../utils/retry.ts';
-import { PNG } from '../../../../utils/png.ts';
+import { runCmd, retryWithPolicy } from '@agent-device/host-kit/exec';
+
+import { PNG } from '@agent-device/capture-kit/png';
 import { assertRejectsAppError } from '../../../../__tests__/test-utils/app-error.ts';
 import {
   withFakeAppleTool,

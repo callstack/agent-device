@@ -66,6 +66,11 @@
       "exports": ["sampleAndroidMemoryPerf"]
     },
     {
+      "comment": "Apple perf sampling metadata is selected through the same lazy platform host; Fallow cannot follow the dynamic property read in src/platform-runtime-perf-host.ts.",
+      "file": "src/platforms/apple/core/perf.ts",
+      "exports": ["buildAppleFrameSamplingMetadata", "buildAppleMemorySamplingMetadata"]
+    },
+    {
       "comment": "Daemon route handlers are reached only through the dynamic `import()` table in request-handler-chain.ts, which --production analysis cannot follow to a consumer.",
       "file": "src/daemon/handlers/{lease,session,snapshot,react-native,record-trace,find,interaction}.ts",
       "exports": [
@@ -209,6 +214,13 @@
     {
       "comment": "unused-types counts importers, not signature reachability. A façade names every type its re-exported functions/values put in a public signature, and callers use those types structurally without ever importing the name — the same false-positive shape already fixed for other workspace-package façades. unused-exports (a VALUE check) stays on for this glob; that is what would catch a real leak.",
       "files": ["packages/contracts/src/facades/*.ts"],
+      "rules": {
+        "unused-types": "off"
+      }
+    },
+    {
+      "comment": "Host-kit seam façades: same false-positive shape as the contracts façades above — each seam names every type its re-exported functions put in a public signature, and callers use those types structurally without importing the name. unused-exports (the VALUE check) stays on.",
+      "files": ["packages/host-kit/src/*.ts"],
       "rules": {
         "unused-types": "off"
       }

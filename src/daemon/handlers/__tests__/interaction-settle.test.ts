@@ -11,7 +11,10 @@ import { activateCompleteRefFrame } from '../../ref-frame.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { createInteractionRuntime } from '../interaction-runtime.ts';
-import { clearRequestAbortRegistration, registerRequestAbort } from '../../../request/cancel.ts';
+import {
+  clearRequestAbortRegistration,
+  registerRequestAbort,
+} from '@agent-device/host-kit/request';
 import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import {
   getRuntimeBindings,

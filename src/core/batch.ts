@@ -8,7 +8,7 @@ import {
   isNonDefaultResponseLevel,
 } from '@agent-device/kernel/contracts';
 import { AppError, asAppError, type DaemonError } from '@agent-device/kernel/errors';
-import { isRecord } from '../utils/parsing.ts';
+import { isRecord } from '@agent-device/host-kit/values';
 import {
   DEFAULT_BATCH_MAX_STEPS,
   assertBatchStepCount,

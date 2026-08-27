@@ -4,24 +4,23 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
-vi.mock('../utils/exec.ts', () => ({
+vi.mock('@agent-device/host-kit/exec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/exec')>()),
   runCmdDetached: vi.fn(),
-}));
-
-vi.mock('../utils/host-process.ts', () => ({
   isProcessAlive: vi.fn(),
   readProcessCommand: vi.fn(),
   readProcessStartTime: vi.fn(),
   waitForProcessExit: vi.fn(),
 }));
 
-import { runCmdDetached } from '../utils/exec.ts';
 import {
+  runCmdDetached,
   isProcessAlive,
   readProcessCommand,
   readProcessStartTime,
   waitForProcessExit,
-} from '../utils/host-process.ts';
+} from '@agent-device/host-kit/exec';
+
 import { ensureMetroCompanion, stopMetroCompanion } from '../metro/client-metro-companion.ts';
 import { ensureReactDevtoolsCompanion } from '../client/client-react-devtools-companion.ts';
 

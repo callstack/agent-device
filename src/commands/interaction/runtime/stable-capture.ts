@@ -18,7 +18,7 @@ import {
   stableCaptureSignalsEqual,
   type StableCaptureSignal,
 } from './stable-capture-signal.ts';
-import { preferredSnapshotBackendForVerdict } from '../../../snapshot-quality/verdict.ts';
+import { preferredSnapshotBackendForVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 
 /**
  * The quiet-window stable-capture loop shared by `wait stable` and the

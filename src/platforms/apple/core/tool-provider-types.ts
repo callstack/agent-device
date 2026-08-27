@@ -1,5 +1,5 @@
 import type { AppsFilter } from '@agent-device/contracts/device';
-import type { ExecOptions, ExecResult } from '../../../utils/exec.ts';
+import type { ExecOptions, ExecResult } from '@agent-device/host-kit/exec';
 import type { IosAppInfo } from './app-info.ts';
 
 export type AppleToolCommandExecutor = (

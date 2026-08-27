@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { AppleImage, DsymMatch, DsymSlice } from './types.ts';
 import { normalizeUuid, unique } from './utils.ts';
-import { requireExecSuccess, runCmd } from '../../../../utils/exec.ts';
+import { requireExecSuccess, runCmd } from '@agent-device/host-kit/exec';
 import { AppError } from '@agent-device/kernel/errors';
 
 const MAX_SEARCH_ENTRIES = 10_000;

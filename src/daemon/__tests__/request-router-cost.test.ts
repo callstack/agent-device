@@ -16,7 +16,7 @@ import {
   gestureDeviceRuntimeGateway,
   gestureRuntimeSpies,
 } from './test-device-runtime-gateway.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';

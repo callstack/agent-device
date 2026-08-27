@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resolveRemoteConfigPath, resolveRemoteConfigProfile } from './remote-config-core.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { publishFileSync } from '../utils/atomic-file.ts';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { publishFileSync } from '@agent-device/host-kit/fs';
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { LeaseBackend, SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import {

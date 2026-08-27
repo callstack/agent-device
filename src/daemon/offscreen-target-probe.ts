@@ -1,5 +1,5 @@
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
-import { isConfirmedOnScreenProbe } from '../snapshot/mobile-snapshot-semantics.ts';
+import { isConfirmedOnScreenProbe } from '@agent-device/capture-kit/mobile-snapshot-semantics';
 import { deriveDirectIosNodeSelector } from './direct-ios-selector.ts';
 import { queryDirectIosSelector } from './selector-runtime.ts';
 import type { AppleRunnerRequestOptions } from './apple-runner-options.ts';

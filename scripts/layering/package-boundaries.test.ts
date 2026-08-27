@@ -453,8 +453,44 @@ test('the real tree parses, declares, and passes R11', () => {
     true,
     'capture-kit stays a private implementation package',
   );
-  assert.deepEqual([...captureKitPackage.exportTargets.keys()], ['@agent-device/capture-kit']);
+  // #2082 W1 host-mechanics subpaths; any further subpath widens this key list
+  // and fails the assertion, same as the platform-apple pin below.
+  assert.deepEqual([...captureKitPackage.exportTargets.keys()].sort(), [
+    '@agent-device/capture-kit',
+    '@agent-device/capture-kit/mobile-snapshot-semantics',
+    '@agent-device/capture-kit/png',
+    '@agent-device/capture-kit/png-resize',
+    '@agent-device/capture-kit/png-rgb-difference',
+    '@agent-device/capture-kit/png-size',
+    '@agent-device/capture-kit/png-worker-client',
+    '@agent-device/capture-kit/screenshot-density',
+    '@agent-device/capture-kit/screenshot-diff-pixels',
+    '@agent-device/capture-kit/snapshot-occlusion',
+    '@agent-device/capture-kit/snapshot-quality-backend-capabilities',
+    '@agent-device/capture-kit/snapshot-quality-verdict',
+  ]);
   assert.deepEqual([...captureKitPackage.workspaceDependencies].sort(), [
+    '@agent-device/contracts',
+    '@agent-device/host-kit',
+    '@agent-device/kernel',
+  ]);
+  const hostKitPackage = packages.find((pkg) => pkg.name === '@agent-device/host-kit');
+  assert.ok(hostKitPackage, 'host-kit package must exist');
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(repoRoot, 'packages/host-kit/package.json'), 'utf8'))
+      .private,
+    true,
+    'host-kit stays a private implementation package',
+  );
+  // The four deep host-mechanics seams; any further subpath widens this key
+  // list and fails the assertion, same as the capture-kit pin above.
+  assert.deepEqual([...hostKitPackage.exportTargets.keys()].sort(), [
+    '@agent-device/host-kit/exec',
+    '@agent-device/host-kit/fs',
+    '@agent-device/host-kit/request',
+    '@agent-device/host-kit/values',
+  ]);
+  assert.deepEqual([...hostKitPackage.workspaceDependencies].sort(), [
     '@agent-device/contracts',
     '@agent-device/kernel',
   ]);

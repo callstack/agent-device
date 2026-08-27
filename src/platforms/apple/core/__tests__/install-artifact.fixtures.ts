@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { runCmdSync } from '../../../../utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/exec';
 
 export async function createZipFixture(
   archivePath: string,

@@ -33,10 +33,10 @@ import {
   readRequiredPlatform,
   readRequiredString,
   stripUndefined,
-} from '../utils/parsing.ts';
+} from '@agent-device/host-kit/values';
 import { buildAppIdentifiers, buildDeviceIdentifiers } from '../utils/result-serialization.ts';
 
-export { readOptionalString, readRequiredString } from '../utils/parsing.ts';
+export { readOptionalString, readRequiredString } from '@agent-device/host-kit/values';
 
 const DEFAULT_SESSION_NAME = 'default';
 

@@ -10,7 +10,7 @@ import {
   readAndroidClipboardWithAdb,
   writeAndroidClipboardWithAdb,
 } from '../device-input-state.ts';
-import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
+import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '@agent-device/host-kit/exec';
 import { assertRejectsAppError } from '../../../__tests__/test-utils/app-error.ts';
 import { withFakeAdb } from '../../../__tests__/test-utils/fake-adb.ts';
 import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';

@@ -14,13 +14,14 @@ import { decodeAppLogProcessMarker } from '@agent-device/capture-kit';
 import type { DeviceIdentity } from '@agent-device/kernel/device';
 import fs from 'node:fs';
 import path from 'node:path';
-import { runCmdBackground } from './utils/exec.ts';
 import {
+  runCmdBackground,
   isProcessAlive,
   readProcessCommand,
   readProcessStartTime,
   waitForProcessExit,
-} from './utils/host-process.ts';
+} from '@agent-device/host-kit/exec';
+
 import { requireManagedSessionArtifactPath } from './utils/managed-session-artifact-path.ts';
 import { openVerifiedFileForRead } from './utils/verified-file.ts';
 

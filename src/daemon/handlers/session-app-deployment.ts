@@ -13,7 +13,7 @@ import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { resolvePayloadInput } from '../../utils/payload-input.ts';
 import { resolveDeployResultTarget } from '../../utils/result-serialization.ts';
-import { withSuccessText } from '../../utils/success-text.ts';
+import { withSuccessText } from '@agent-device/host-kit/values';
 import { recordSessionAction } from './handler-utils.ts';
 import { errorResponse } from './response.ts';
 import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';

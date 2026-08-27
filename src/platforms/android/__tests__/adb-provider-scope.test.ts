@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { runCmd } from '../../../utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/exec';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 

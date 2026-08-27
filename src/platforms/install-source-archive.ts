@@ -2,8 +2,11 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { extractArchiveSafely, archiveTypeFromPath } from '../utils/archive-extraction.ts';
-import { ArchiveBudget } from '../utils/archive-safety.ts';
+import {
+  extractArchiveSafely,
+  archiveTypeFromPath,
+  ArchiveBudget,
+} from '@agent-device/host-kit/fs';
 
 const MAX_INSTALL_SOURCE_SEARCH_DEPTH = 5;
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { createFailNthCommandExecutor } from '../../__tests__/test-utils/exec-faults.ts';
-import { runCmd, withCommandExecutorOverride } from '../exec.ts';
+import { runCmd, withCommandExecutorOverride } from '@agent-device/host-kit/exec';
 
 test('fail-Nth executor drives one deterministic command failure without hiding later calls', async () => {
   const failure = new AppError('COMMAND_FAILED', 'injected command failure', {

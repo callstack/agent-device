@@ -2,8 +2,8 @@ import { createWriteStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import { MAX_ARTIFACT_COMPRESSED_BYTES } from '../utils/artifact-limits.ts';
-import { createByteLimitStream } from '../utils/byte-limit-stream.ts';
+import { MAX_ARTIFACT_COMPRESSED_BYTES, createByteLimitStream } from '@agent-device/host-kit/fs';
+
 import { approveDownloadSourceUrl } from './install-source-network.ts';
 import * as networkTransport from './install-source-network-transport.ts';
 

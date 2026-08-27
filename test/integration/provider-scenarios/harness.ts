@@ -22,7 +22,7 @@ import { trackDownloadableArtifact } from '../../../src/daemon/artifact-tracking
 import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
 import { SessionStore } from '../../../src/daemon/session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../../src/daemon/types.ts';
-import { runCmdBackground } from '../../../src/utils/exec.ts';
+import { runCmdBackground, createOwnedProcessRecordStore } from '@agent-device/host-kit/exec';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.ts';
 import type {
   DeviceInventoryProvider,
@@ -37,7 +37,7 @@ import { createHostDiagnostics } from '../../../src/platform-runtime-host-diagno
 import type { PlatformRuntimeProviderRegistration } from '../../../src/platform-runtime-gateway.ts';
 import { createProviderPlatformRuntimeRegistrations } from '../../../src/provider-device-runtimes.ts';
 import { unavailableDeviceRuntimeGateway } from '../../../src/daemon/__tests__/test-device-runtime-gateway.ts';
-import { createOwnedProcessRecordStore } from '../../../src/utils/owned-process-record.ts';
+
 import { openWebSessionNames } from '../../../src/daemon/web-session-names.ts';
 
 const PROVIDER_SCENARIO_TOKEN = 'provider-scenario-token';

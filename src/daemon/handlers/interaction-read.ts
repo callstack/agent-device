@@ -5,7 +5,7 @@ import type {
 } from '@agent-device/contracts/element-text-runtime';
 import { isIosFamily } from '@agent-device/kernel/device';
 import { runtimeExecutionFromContext } from '../snapshot-runtime-capture-input.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/exec';
 import type { SessionState } from '../types.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { extractReadableText, prefersValueForReadableText } from '../../utils/text-surface.ts';
