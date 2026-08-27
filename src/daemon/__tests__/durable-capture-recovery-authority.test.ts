@@ -18,8 +18,34 @@ const envelope = createDurableResourceEnvelope({
   descriptor: { version: 1, body: {} },
 });
 
+test('acquisition winner leaves authority disposal to the caller', async () => {
+  const disposeControl = vi.fn(async () => {});
+  const authority = await acquireDurableCaptureRecoveryAuthorityBeforeDeadline({
+    displayName: 'app-log',
+    envelope,
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+    deadlineMs: 10_000,
+    acquireControl: async () => ({
+      reattach: async () => ({ status: 'missing' as const }),
+      cleanup: async () => ({ status: 'already-missing' as const }),
+      [Symbol.asyncDispose]: disposeControl,
+    }),
+    onLateCleanupFailure: () => {},
+  });
+
+  expect(authority.reattached).toEqual({ status: 'missing' });
+  expect(disposeControl).not.toHaveBeenCalled();
+  await authority.control[Symbol.asyncDispose]();
+  expect(disposeControl).toHaveBeenCalledOnce();
+});
+
 test('deadline abort disposes authority that becomes active after the caller has timed out', async () => {
   vi.useFakeTimers();
+  const combinedSignal = vi.spyOn(AbortSignal, 'any').mockReturnValue(new AbortController().signal);
   try {
     let resolveReattach!: (outcome: { status: 'active'; handle: AppLogLiveHandle }) => void;
     const forceCleanup = vi.fn(async () => ({ status: 'cleaned' }) as const);
@@ -69,7 +95,101 @@ test('deadline abort disposes authority that becomes active after the caller has
     expect(disposeControl).toHaveBeenCalledOnce();
     expect(cleanupFailures).not.toHaveBeenCalled();
   } finally {
+    combinedSignal.mockRestore();
     vi.useRealTimers();
+  }
+});
+
+test('deadline abort disposes control when late reattach reports a non-active outcome', async () => {
+  vi.useFakeTimers();
+  const combinedSignal = vi.spyOn(AbortSignal, 'any').mockReturnValue(new AbortController().signal);
+  try {
+    let resolveReattach!: (outcome: { status: 'missing' }) => void;
+    const disposeControl = vi.fn(async () => {});
+    const acquisition = acquireDurableCaptureRecoveryAuthorityBeforeDeadline({
+      displayName: 'app-log',
+      envelope,
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+      deadlineMs: 25,
+      acquireControl: async () => ({
+        reattach: async () =>
+          await new Promise<{ status: 'missing' }>((resolve) => {
+            resolveReattach = resolve;
+          }),
+        cleanup: async () => ({ status: 'already-missing' }),
+        [Symbol.asyncDispose]: disposeControl,
+      }),
+      onLateCleanupFailure: () => {},
+    });
+
+    const timedOut = expect(acquisition).rejects.toBeInstanceOf(
+      DurableCaptureRecoveryDeadlineError,
+    );
+    await vi.advanceTimersByTimeAsync(25);
+    await timedOut;
+
+    resolveReattach({ status: 'missing' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(disposeControl).toHaveBeenCalledOnce();
+  } finally {
+    combinedSignal.mockRestore();
+    vi.useRealTimers();
+  }
+});
+
+test('cancellation keeps its primary error when late control cleanup fails', async () => {
+  const controller = new AbortController();
+  const cancellation = new Error('request canceled');
+  const cleanupError = new Error('late cleanup failed');
+  const combinedSignal = vi.spyOn(AbortSignal, 'any').mockReturnValue(new AbortController().signal);
+  let publishControl!: (control: {
+    reattach: () => Promise<{ status: 'missing' }>;
+    cleanup: () => Promise<{ status: 'already-missing' }>;
+    [Symbol.asyncDispose]: () => Promise<void>;
+  }) => void;
+  const cleanupFailures = vi.fn();
+  try {
+    const acquisition = acquireDurableCaptureRecoveryAuthorityBeforeDeadline({
+      displayName: 'app-log',
+      envelope,
+      scope: {
+        signal: controller.signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+      deadlineMs: 10_000,
+      acquireControl: async () =>
+        await new Promise((resolve) => {
+          publishControl = resolve;
+        }),
+      onLateCleanupFailure: cleanupFailures,
+    });
+
+    controller.abort(cancellation);
+    await expect(acquisition).rejects.toBe(cancellation);
+
+    publishControl({
+      reattach: async () => ({ status: 'missing' }),
+      cleanup: async () => ({ status: 'already-missing' }),
+      [Symbol.asyncDispose]: async () => {
+        throw cleanupError;
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(cleanupFailures).toHaveBeenCalledWith(
+        'late_control_cleanup_failed',
+        cleanupError,
+        cancellation,
+      ),
+    );
+  } finally {
+    combinedSignal.mockRestore();
   }
 });
 
