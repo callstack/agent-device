@@ -479,8 +479,6 @@ test('the real tree parses, declares, and passes R11', () => {
     true,
     'provision-kit stays a private implementation package',
   );
-  // Provisioning subpaths; any further subpath widens this key list and fails
-  // the assertion, same as the capture-kit pin above.
   assert.deepEqual([...provisionKitPackage.exportTargets.keys()].sort(), [
     '@agent-device/provision-kit/app-resolution-cache',
     '@agent-device/provision-kit/boot-diagnostics',
