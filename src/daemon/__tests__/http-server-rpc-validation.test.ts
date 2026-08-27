@@ -127,3 +127,88 @@ test('the rpc boundary never accepts internal request fields from the wire', asy
     await closeLoopbackServer(server);
   }
 });
+
+async function withInstallFromSourceRpcServer(
+  run: (
+    post: (source: unknown) => Promise<{
+      status: number;
+      body: RpcErrorResponse;
+      dispatched: DaemonRequest[];
+    }>,
+  ) => Promise<void>,
+  t: { skip(reason?: string): void },
+): Promise<void> {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const dispatched: DaemonRequest[] = [];
+  const handleRequest = async (req: DaemonRequest): Promise<DaemonResponse> => {
+    dispatched.push(req);
+    return { ok: true, data: { ok: true } };
+  };
+  const server = await createDaemonHttpServer({ handleRequest });
+
+  try {
+    const port = await listenOnLoopback(server);
+    const post = async (source: unknown) => {
+      const response = await fetch(`http://127.0.0.1:${port}/rpc`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'req-1',
+          method: 'agent_device.install_from_source',
+          params: { platform: 'android', source },
+        }),
+      });
+      return {
+        status: response.status,
+        body: (await response.json()) as RpcErrorResponse,
+        dispatched,
+      };
+    };
+    await run(post);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+}
+
+// #2097: honoring `source.kind: "path"` from the wire would hand any authenticated
+// caller a read of whatever the daemon user can read, through the install pipeline.
+test('install_from_source rejects a host path source at the rpc boundary', async (t) => {
+  await withInstallFromSourceRpcServer(async (post) => {
+    const { status, body, dispatched } = await post({ kind: 'path', path: '/etc/passwd' });
+
+    assert.equal(status, 400);
+    assert.equal(body.error?.code, -32602);
+    assert.equal(body.error?.data?.code, 'INVALID_ARGS');
+    assert.equal(dispatched.length, 0, 'a host path source must never reach the handler');
+  }, t);
+});
+
+test('install_from_source still admits url sources', async (t) => {
+  await withInstallFromSourceRpcServer(async (post) => {
+    const { status, dispatched } = await post({ kind: 'url', url: 'https://example.com/app.apk' });
+
+    assert.equal(status, 200);
+    assert.equal(dispatched.length, 1);
+    assert.deepEqual(dispatched[0]?.meta?.installSource, {
+      kind: 'url',
+      url: 'https://example.com/app.apk',
+    });
+  }, t);
+});
+
+test('install_from_source still admits github-actions-artifact sources', async (t) => {
+  await withInstallFromSourceRpcServer(async (post) => {
+    const { status, dispatched } = await post({
+      kind: 'github-actions-artifact',
+      owner: 'callstack',
+      repo: 'agent-device',
+      artifactId: 42,
+    });
+
+    assert.equal(status, 200);
+    assert.equal(dispatched.length, 1);
+    assert.equal(dispatched[0]?.meta?.installSource?.kind, 'github-actions-artifact');
+  }, t);
+});

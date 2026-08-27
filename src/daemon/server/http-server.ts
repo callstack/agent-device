@@ -76,6 +76,13 @@ type HttpAuthDecision =
   | { ok: true; tenantId?: string }
   | { ok: false; statusCode: number; response: JsonRpcResponse };
 
+/**
+ * The install sources the daemon's HTTP surface admits. A `path` source names a file
+ * on the daemon's own host, so it stays an in-process affordance for callers that
+ * already carry the daemon's authority (#2097).
+ */
+type HttpInstallSource = Exclude<DaemonInstallSource, { kind: 'path' }>;
+
 const MAX_HTTP_RPC_BODY_BYTES = 1024 * 1024;
 const COMMAND_RPC_METHODS = new Set(['agent_device.command', 'agent-device.command']);
 const INSTALL_FROM_SOURCE_RPC_METHODS = new Set([
@@ -219,7 +226,7 @@ function readGitHubArtifactInteger(record: Record<string, unknown>, key: 'artifa
   return parsed;
 }
 
-function parseGitHubActionsArtifactSource(record: Record<string, unknown>): DaemonInstallSource {
+function parseGitHubActionsArtifactSource(record: Record<string, unknown>): HttpInstallSource {
   const owner = readRequiredGitHubArtifactText(record, 'owner');
   const repo = readRequiredGitHubArtifactText(record, 'repo');
   const hasArtifactId = record.artifactId !== undefined;
@@ -288,7 +295,7 @@ function toLeaseDaemonRequest(
   };
 }
 
-function parseInstallSource(params: Record<string, unknown>): DaemonInstallSource {
+function parseInstallSource(params: Record<string, unknown>): HttpInstallSource {
   const source = params.source;
   if (!source || typeof source !== 'object') {
     throw new AppError('INVALID_ARGS', 'Invalid params: source is required');
@@ -318,21 +325,18 @@ function parseInstallSource(params: Record<string, unknown>): DaemonInstallSourc
     return Object.keys(headers).length > 0 ? { kind: 'url', url, headers } : { kind: 'url', url };
   }
   if (record.kind === 'path') {
-    const artifactPath = typeof record.path === 'string' ? record.path.trim() : '';
-    if (!artifactPath) {
-      throw new AppError(
-        'INVALID_ARGS',
-        'Invalid params: source.path is required for path sources',
-      );
-    }
-    return { kind: 'path', path: artifactPath };
+    throw new AppError(
+      'INVALID_ARGS',
+      'Invalid params: source.kind "path" names a file on the daemon host and is not accepted over HTTP',
+      { hint: 'Use a "url" or "github-actions-artifact" source.' },
+    );
   }
   if (record.kind === 'github-actions-artifact') {
     return parseGitHubActionsArtifactSource(record);
   }
   throw new AppError(
     'INVALID_ARGS',
-    'Invalid params: source.kind must be "url", "path", or "github-actions-artifact"',
+    'Invalid params: source.kind must be "url" or "github-actions-artifact"',
   );
 }
 
