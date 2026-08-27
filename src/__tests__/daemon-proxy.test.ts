@@ -513,3 +513,134 @@ function sendUploadProxyFinalize(
   res.setHeader('content-type', 'application/json');
   res.end(JSON.stringify({ ok: true, uploadId: 'tracked-upload-1' }));
 }
+
+type ProxyRpcOutcome = {
+  status: number;
+  body: { error?: { code?: number; message?: string; data?: { code?: string } } };
+  upstreamCalls: number;
+};
+
+async function postInstallRpcThroughProxy(
+  params: Record<string, unknown>,
+): Promise<ProxyRpcOutcome> {
+  let upstreamCalls = 0;
+  const upstream = http.createServer((req, res) => {
+    upstreamCalls += 1;
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', () => {
+      res.setHeader('content-type', 'application/json');
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: (JSON.parse(body) as { id?: unknown }).id,
+          result: { ok: true, data: { reached: 'upstream' } },
+        }),
+      );
+    });
+  });
+  const proxy = createDaemonProxyServer({
+    upstreamBaseUrl: `http://127.0.0.1:${await listenOnLoopback(upstream)}`,
+    upstreamToken: 'daemon-secret',
+    clientToken: 'proxy-secret',
+  });
+
+  try {
+    const proxyPort = await listenOnLoopback(proxy);
+    const response = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/rpc`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer proxy-secret' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 'req-1', ...params }),
+    });
+    return {
+      status: response.status,
+      body: (await response.json()) as ProxyRpcOutcome['body'],
+      upstreamCalls,
+    };
+  } finally {
+    await closeLoopbackServer(proxy);
+    await closeLoopbackServer(upstream);
+  }
+}
+
+// #2097: the daemon's own HTTP server binds loopback, so the proxy is the seam between
+// the daemon's host and callers that are not on it. A `path` install source names a file
+// on that host, so it must not cross — through either rpc method that can carry one.
+test('proxy refuses a host path install source on the generic command method', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const { status, body, upstreamCalls } = await postInstallRpcThroughProxy({
+    method: 'agent_device.command',
+    params: {
+      token: 'proxy-secret',
+      command: 'install_source',
+      positionals: [],
+      flags: { platform: 'android' },
+      meta: { installSource: { kind: 'path', path: '/etc/passwd' } },
+    },
+  });
+
+  assert.equal(status, 400);
+  assert.equal(body.error?.code, -32602);
+  assert.equal(body.error?.data?.code, 'INVALID_ARGS');
+  assert.equal(upstreamCalls, 0, 'the daemon must never see a proxied host path source');
+});
+
+test('proxy refuses a host path install source on the install_from_source method', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const { status, body, upstreamCalls } = await postInstallRpcThroughProxy({
+    method: 'agent_device.install_from_source',
+    params: {
+      token: 'proxy-secret',
+      platform: 'android',
+      source: { kind: 'path', path: '/etc/passwd' },
+    },
+  });
+
+  assert.equal(status, 400);
+  assert.equal(body.error?.data?.code, 'INVALID_ARGS');
+  assert.equal(upstreamCalls, 0);
+});
+
+// The sanctioned remote install route: the client uploads the artifact first, and the
+// daemon substitutes the uploaded file for the wire path, so the path is never read.
+test('proxy forwards a path source backed by an uploaded artifact', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const { status, upstreamCalls } = await postInstallRpcThroughProxy({
+    method: 'agent_device.command',
+    params: {
+      token: 'proxy-secret',
+      command: 'install_source',
+      positionals: [],
+      flags: { platform: 'android' },
+      meta: {
+        installSource: { kind: 'path', path: '/Users/dev/Downloads/Sample.apk' },
+        uploadedArtifactId: 'upload-1',
+      },
+    },
+  });
+
+  assert.equal(status, 200);
+  assert.equal(upstreamCalls, 1);
+});
+
+test('proxy forwards url install sources unchanged', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const { status, upstreamCalls } = await postInstallRpcThroughProxy({
+    method: 'agent_device.install_from_source',
+    params: {
+      token: 'proxy-secret',
+      platform: 'android',
+      source: { kind: 'url', url: 'https://example.com/app.apk' },
+    },
+  });
+
+  assert.equal(status, 200);
+  assert.equal(upstreamCalls, 1);
+});

@@ -80,6 +80,11 @@ async function handleProxyRequest(
     return;
   }
 
+  if (carriesUnbackedHostPathInstallSource(rpcBody)) {
+    sendHostPathInstallSourceRefused(res, readJsonRpcId(rpcBody));
+    return;
+  }
+
   await forwardProxyRequest({ req, res, route, options, rpcBody });
 }
 
@@ -369,6 +374,62 @@ function rewriteRpcToken(body: string, upstreamToken: string): string {
     token: upstreamToken,
   };
   return JSON.stringify(parsed);
+}
+
+/**
+ * A `path` install source names a file on the daemon's own host. The daemon's HTTP
+ * server binds loopback, so this proxy is the seam between that host and callers who
+ * are not on it, and no such source may cross it (#2097). An uploaded artifact backs
+ * the only legitimate crossing: the daemon substitutes the uploaded file and never
+ * reads the path from the wire, and it rejects an upload id that is not the caller's.
+ */
+function carriesUnbackedHostPathInstallSource(rpcBody: string | undefined): boolean {
+  const params = readRpcParams(rpcBody);
+  if (!params) return false;
+  const meta = readRecord(params.meta);
+  if (hasUploadedArtifactId(meta)) return false;
+  return isHostPathInstallSource(params.source) || isHostPathInstallSource(meta?.installSource);
+}
+
+function readRpcParams(rpcBody: string | undefined): Record<string, unknown> | undefined {
+  if (!rpcBody) return undefined;
+  try {
+    return readRecord(readRecord(JSON.parse(rpcBody))?.params);
+  } catch {
+    return undefined;
+  }
+}
+
+function hasUploadedArtifactId(meta: Record<string, unknown> | undefined): boolean {
+  const uploadedArtifactId = meta?.uploadedArtifactId;
+  return typeof uploadedArtifactId === 'string' && uploadedArtifactId.trim().length > 0;
+}
+
+function isHostPathInstallSource(source: unknown): boolean {
+  return readRecord(source)?.kind === 'path';
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function sendHostPathInstallSourceRefused(res: ServerResponse, rpcId: unknown): void {
+  const error = new AppError(
+    'INVALID_ARGS',
+    'Invalid params: an install source of kind "path" names a file on the daemon host and is not accepted through the proxy',
+    { hint: 'Upload the artifact, or use a "url" or "github-actions-artifact" source.' },
+  );
+  res.statusCode = 400;
+  res.setHeader('content-type', 'application/json');
+  res.end(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id: rpcId,
+      error: { code: -32602, message: error.message, data: normalizeError(error) },
+    }),
+  );
 }
 
 function readJsonRpcToken(body: string): string {
