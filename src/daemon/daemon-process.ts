@@ -56,33 +56,19 @@ export type DaemonProcessIdentity = {
 };
 
 export type DaemonExitWait = {
-  /** The pid no longer belongs to the identity: it exited, or the host recycled it. */
+  /** The pid was released, or the host handed it to a different process. */
   exited: boolean;
   elapsedMs: number;
 };
 
-/**
- * Poll for {@link waitForDaemonExit}. {@link classifyDaemonPid} reads `ps` only
- * once the cheap liveness check says the pid is still taken, so a daemon that has
- * already gone costs no subprocess at all.
- */
 const DAEMON_EXIT_POLL_MS = 100;
 
-/**
- * What a pid is doing relative to the identity that claimed it. `exiting` is the
- * state a bare liveness read cannot express: `kill(pid, 0)` still succeeds for a
- * process that has died but has not been reaped yet, while `ps` has already
- * dropped its row — a pid on its way out, not a pid handed to somebody else.
- */
 type DaemonPidState = 'ours' | 'exiting' | 'released' | 'recycled';
 
 function classifyDaemonPid(identity: DaemonProcessIdentity): DaemonPidState {
   if (!isProcessAlive(identity.pid)) return 'released';
-  // State and start time in one `ps` read. A process that has died but has not
-  // been reaped answers kill(pid, 0) AND still reports its original start time,
-  // so the state is the only field that separates it from one still running —
-  // and its command reads `<defunct>`, which would otherwise look like a pid
-  // handed to a different program.
+  // A terminated pid awaiting reap answers kill(pid, 0), keeps its start time, and
+  // reports its command as `<defunct>`; only the process state distinguishes it.
   const observed = readHostProcessIdentityObservations([identity.pid]).get(identity.pid);
   if (!observed || observed.state.startsWith('Z')) return 'exiting';
   if (observed.startTime !== identity.startTime) return 'recycled';
@@ -92,13 +78,8 @@ function classifyDaemonPid(identity: DaemonProcessIdentity): DaemonPidState {
 }
 
 /**
- * Waits for a daemon identity to leave the host. Two endings count as exited: the
- * pid was released, or the host handed it to someone else. Recycling is the one a
- * bare liveness wait gets wrong — it reports a stranger's pid as "still running",
- * which is what lets a grace wait escalate a SIGKILL onto an unrelated process —
- * so escalating callers must branch on this result, never on bare liveness. A pid
- * still being torn down is neither ending, so the wait keeps polling and callers
- * retain the old guarantee that the number is free before they act on it.
+ * Resolves once `identity` has left the host — released or recycled. A pid still
+ * being torn down is neither, so the wait continues until the number is free.
  */
 export async function waitForDaemonExit(
   identity: DaemonProcessIdentity,
@@ -119,12 +100,6 @@ export async function waitForDaemonExit(
   return { exited, elapsedMs: Date.now() - startedAt };
 }
 
-/**
- * The only way this module signals a daemon: identity is re-read immediately
- * before the write, so a pid recycled since the last observation cannot be
- * signaled at all. Escalation safety is then a property of the call, not a rule
- * each call site has to remember.
- */
 function signalDaemonIdentity(identity: DaemonProcessIdentity, signal: NodeJS.Signals): boolean {
   if (!isAgentDeviceDaemonProcess(identity.pid, identity.startTime)) return false;
   return trySignalProcess(identity.pid, signal);

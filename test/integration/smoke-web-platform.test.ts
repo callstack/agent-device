@@ -193,10 +193,6 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
     // orchestrator shutting the container down would, rather than going through `close`.
     process.kill(daemonPid, 'SIGTERM');
 
-    // The fleet dying and the daemon exiting are unordered — the daemon awaits the
-    // `agent-browser close` CLI's return, not the disappearance of the pids it reaps — so each
-    // settles on its own deadline from this SIGTERM and neither waits the other out. That the
-    // fleet closed BECAUSE the daemon closed it is held by WEB_SHUTDOWN_IDLE_TIMEOUT_MS above.
     const [after, daemonExit] = await Promise.all([
       settleManagedBrowserProcesses(status),
       waitForDaemonExit(daemonIdentity, {

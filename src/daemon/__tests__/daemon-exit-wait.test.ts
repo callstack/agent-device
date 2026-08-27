@@ -5,14 +5,9 @@ const DAEMON_COMMAND = '/opt/checkout/dist/src/internal/daemon.js';
 const OURS = 'Mon Aug 24 10:00:00 2026';
 const RECYCLED = 'Mon Aug 24 10:00:07 2026';
 const PID = 4242;
-// Small enough that a regression that waits the budget out still lands inside the
-// unit lane's wall-clock gate and fails on its assertion rather than on the clock.
 const TIMEOUT_MS = 1_000;
 const POLL_MS = 5;
 
-// A live process cannot be made to change identity mid-wait, so the host reads are
-// mocked: a recycled pid is the same live pid reporting a different start time,
-// which is what the host presents after reuse.
 const state = vi.hoisted(() => ({
   alive: new Map<number, boolean>(),
   starts: new Map<number, string>(),
@@ -36,7 +31,6 @@ vi.mock('../../utils/host-process.ts', async (importOriginal) => ({
   },
 }));
 
-/** Delivered signals only; a `0` probe is a liveness read, not a write. */
 const signals: NodeJS.Signals[] = [];
 let onSignal: (signal: NodeJS.Signals) => void = () => {};
 
@@ -81,10 +75,6 @@ test('waitForDaemonExit reports a daemon that keeps its identity as not exited',
   expect(wait.exited).toBe(false);
 });
 
-// A daemon killed by its own parent lingers as a zombie: kill(pid, 0) still succeeds
-// and the start time still matches, while ps reports the command as `<defunct>`.
-// Reading that as a recycled pid would hand the number back to callers while it is
-// still taken, so it must count as neither ending until the reap lands.
 test('waitForDaemonExit keeps waiting through a zombie until the pid is reaped', async () => {
   state.states.set(PID, 'Z+');
   state.commands.set(PID, '<defunct>');
@@ -102,9 +92,6 @@ test('waitForDaemonExit keeps waiting through a zombie until the pid is reaped',
   expect(reaped.exited).toBe(true);
 });
 
-// Planted red for the defect this pair exists to prevent: the grace wait used to poll
-// the bare pid, so a daemon that exited and had its pid reused read as "still running"
-// and the takeover escalated SIGKILL onto whatever now held that number.
 test('stopProcessForTakeover does not SIGKILL a pid recycled during the grace wait', async () => {
   onSignal = (signal) => {
     if (signal === 'SIGTERM') state.starts.set(PID, RECYCLED);
