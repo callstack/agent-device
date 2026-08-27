@@ -1,8 +1,4 @@
-import {
-  commandRuntimeUseRequirements,
-  isCommandSupportedOnDevice,
-  listCapabilityCommands,
-} from '../../core/capabilities.ts';
+import { commandRuntimeUseRequirements, listRuntimeFactCommands } from '../../core/capabilities.ts';
 import { listDeviceInventory } from '../../request/device-inventory-context.ts';
 import { assertResolvedAppsFilter } from '@agent-device/contracts/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
@@ -219,13 +215,11 @@ async function capabilitiesInventoryResponse(params: {
     ok: true,
     data: {
       device: publicDeviceInfo(device),
-      availableCommands: listCapabilityCommands().filter((command) => {
+      availableCommands: listRuntimeFactCommands().filter((command) => {
         // A session that already owns an app identity answers appstate itself, so it stays
         // available even when the sessionless runtime probe cannot see a foreground app.
         if (command === 'appstate' && sessionOwnedAppStateAvailable) return true;
-        const factOwned = factOwnedCapabilityAvailable(command, facts);
-        if (factOwned !== undefined) return factOwned;
-        return isCommandSupportedOnDevice(command, device);
+        return factOwnedCapabilityAvailable(command, facts);
       }),
     },
   };
@@ -270,9 +264,9 @@ function hasMacSessionSurface(
 function factOwnedCapabilityAvailable(
   command: string,
   facts: RuntimeFacts<PlatformRuntimeOperations> | undefined,
-): boolean | undefined {
+): boolean {
   const declaredUses = commandRuntimeUseRequirements(command);
-  if (!declaredUses) return undefined;
+  if (!declaredUses) return false;
   if (!facts) return false;
   // A request names exactly one action, so one fully admitted use is enough. An empty `required`
   // is not one: `[].every` is vacuously true, and a plan that needs no operation must not read as

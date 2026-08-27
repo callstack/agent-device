@@ -63,24 +63,6 @@ test('registry coverage is byte-for-byte equal to the parsePlatform hand allow-l
   }
 });
 
-test('every plugin capability bucket matches the platform -> bucket table', () => {
-  const expectedBuckets: Record<Platform, string> = {
-    apple: 'apple',
-    android: 'android',
-    harmonyos: 'harmonyos',
-    vega: 'vega',
-    linux: 'linux',
-    web: 'web',
-  };
-  for (const platform of PLATFORMS) {
-    assert.equal(
-      getPlugin(platform).capability.bucket,
-      expectedBuckets[platform],
-      `bucket for ${platform}`,
-    );
-  }
-});
-
 test('a family plugin resolves to the SAME instance for every leaf it owns', () => {
   // Apple owns both ios + macos (folds in the eventual macOS unwind).
   assert.equal(getPlugin('apple'), getPlugin('apple'));

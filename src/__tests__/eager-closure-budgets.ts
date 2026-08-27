@@ -339,7 +339,7 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // module records for the same code, with no new subtree behind any of them.
   'src/cli.ts': 368,
   'src/platform-runtime.ts': 47,
-  'src/core/capabilities.ts': 73,
+  'src/core/capabilities.ts': 68,
   'src/core/command-descriptor/registry.ts': 67,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,
   'src/core/interactors/register-builtins.ts': 6,

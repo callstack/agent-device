@@ -12,17 +12,8 @@ const VEGA_VVD = {
   booted: true,
 } satisfies DeviceInfo;
 
-test('Vega plugin owns the Vega platform and carries no capability closures', () => {
+test('Vega plugin owns the Vega platform', () => {
   assert.deepEqual(vegaPlugin.platforms, ['vega']);
-  assert.equal(vegaPlugin.capability.bucket, 'vega');
-
-  // R42/R43/R45 retired the plugin's only closures (the `back`/`home`/`tv-remote` TV-target
-  // gate): admission is now the platform-vega runtime's own facts, exercised in its owner suite
-  // (packages/platform-vega/src/runtime.test.ts). The literal type below carries no
-  // `supportsByDefault`/`unsupportedHintByDefault` key at all — a compile-time proof of
-  // retirement, since either key reappearing would fail this assignment.
-  const capability: Readonly<{ bucket: 'vega' }> = vegaPlugin.capability;
-  assert.equal(capability.bucket, 'vega');
 });
 
 test('Vega plugin creates the Vega interactor lazily', async () => {

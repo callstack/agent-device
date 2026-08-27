@@ -10,7 +10,6 @@ import {
   retriableForErrorCode,
   type DaemonError,
 } from '@agent-device/kernel/errors';
-import { supportedPlatformsForCommand } from '../core/capabilities.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
 import type { DaemonArtifactType, ResponseCost } from '@agent-device/kernel/contracts';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
@@ -171,17 +170,12 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       },
       async () => {
         const response = await runRequestWithinScope(req);
-        // Phase 2 (typed errors) graft: enrich error responses with additive,
-        // machine-readable signals — `supportedOn` for platform mismatches and
-        // `retriable` for transient failures — so an agent self-corrects without a
-        // wasted round-trip. Returned unchanged when neither applies, so the
-        // default error wire shape is preserved.
         if (!response.ok) {
           // ADR 0012 decision 6, R7 (C5a): a command that finds no session but
           // hits a live repair tombstone gets `REPAIR_SESSION_EXPIRED` with
           // re-run guidance, never a bare SESSION_NOT_FOUND.
           const error = repairExpiredIfTombstoned(req, response.error, sessionStore);
-          return { ok: false, error: enrichDaemonError(req.command, error) };
+          return { ok: false, error: enrichDaemonError(error) };
         }
         // Phase 4 (agent-cost) grafts on the success path. Runs inside the
         // diagnostics scope so cost can read this request's runner-round-trip tally.
@@ -594,20 +588,14 @@ function repairExpiredIfTombstoned(
 // Phase 2 typed-error graft: add machine-readable signals to an error response.
 // Returns the error unchanged unless a signal applies, so the default wire shape
 // is preserved for the common codes.
-function enrichDaemonError(command: string, error: DaemonError): DaemonError {
-  const supportedPlatforms =
-    error.code === 'UNSUPPORTED_OPERATION' || error.code === 'UNSUPPORTED_PLATFORM'
-      ? supportedPlatformsForCommand(command)
-      : [];
-  const supportedOn = supportedPlatforms.length > 0 ? supportedPlatforms.join(', ') : undefined;
+function enrichDaemonError(error: DaemonError): DaemonError {
   // A throw-site classification (lifted from details by normalizeError) wins
   // over the conservative code-level policy.
   const retriable = error.retriable ?? retriableForErrorCode(error.code);
-  if (supportedOn === undefined && retriable === undefined) return error;
+  if (retriable === undefined) return error;
   return {
     ...error,
-    ...(retriable !== undefined ? { retriable } : {}),
-    ...(supportedOn !== undefined ? { supportedOn } : {}),
+    retriable,
   };
 }
 

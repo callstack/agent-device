@@ -5,9 +5,6 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 export const vegaPlugin = {
   id: 'vega',
   platforms: ['vega'],
-  capability: {
-    bucket: 'vega',
-  },
   providers: { platformGatedResolvers: ['vegaToolProvider'] },
   createInteractor: async (
     device: DeviceInfo,

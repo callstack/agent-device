@@ -1,4 +1,3 @@
-import type { CommandCapability } from '../capabilities.ts';
 import type { DaemonCommandDescriptor } from '../../daemon/daemon-command-registry.ts';
 // The typed-flags request from contracts/, not the daemon's server-side refinement: these
 // descriptors read `command`, `positionals` and `flags` and never touch `internal`.
@@ -165,8 +164,6 @@ export type TargetIdentityVerification = 'pre-dispatch' | 'post-resolution';
  *  - `daemon`     — the daemon route + request-policy traits
  *                   (from DAEMON_COMMAND_DESCRIPTORS). Absent for commands that
  *                   have no daemon route (e.g. `app-switcher`, `install-from-source`).
- *  - `capability` — the optional platform/kind capability entry
- *                   (from BASE_COMMAND_CAPABILITY_MATRIX).
  *  - `batchable`  — whether the command is exposed through `batch`
  *                   (from STRUCTURED_BATCH_COMMAND_NAMES).
  *  - `mcpExposed` — whether the command is surfaced over MCP.
@@ -186,16 +183,10 @@ export type TargetIdentityVerification = 'pre-dispatch' | 'post-resolution';
  *                   declares its catalog group explicitly.
  *  - `frameworkTier` — which default tool set a framework adapter includes a
  *                   public command in (see {@link CommandFrameworkTier}).
- *
- * The registry started dormant (proven byte-equal to the hand tables by the
- * parity tests) and is now the live source: the daemon registry, capability
- * matrix, batch allowlist, and the daemon client's timeout policy are all
- * built from it.
  */
 type CommandDescriptorBase = {
   name: string;
   daemon?: DaemonCommandTraits;
-  capability?: CommandCapability;
   batchable: boolean;
   mcpExposed: boolean;
   timeoutPolicy: CommandTimeoutPolicy;

@@ -16,8 +16,7 @@ export type AndroidEmulatorCoverageEntry =
       assertion: string;
       evidence: AndroidContractEvidence;
       level: 'command-contract';
-    }
-  | { assertion: string; level: 'capability-denial' };
+    };
 
 const C = PUBLIC_COMMANDS;
 const live = (scenario: string, assertion: string): AndroidEmulatorCoverageEntry => ({
@@ -36,12 +35,17 @@ const contract = (
 const ANDROID_APPLICATION_LIFECYCLE_CONTRACT_EVIDENCE = defineAndroidContractEvidence(
   'packages/platform-android/src/runtime.test.ts',
   [C.prepare],
-  'Android platform runtime classifies prepareAppleRunner unavailable',
+  'classifies the Android %s lifecycle denominator against the legacy dispatch cell',
 );
 const ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE = defineAndroidContractEvidence(
   'src/daemon/__tests__/viewport-runtime.test.ts',
   [C.viewport],
   'rejects an unavailable exact-owner fact before binding',
+);
+const ANDROID_HOVER_RUNTIME_CONTRACT_EVIDENCE = defineAndroidContractEvidence(
+  'packages/platform-android/src/runtime.test.ts',
+  [C.hover],
+  'classifies the Android %s runtime denominator',
 );
 
 /** One primary, observable owner for every public command on an Android emulator. */
@@ -197,10 +201,10 @@ export const ANDROID_EMULATOR_E2E_COVERAGE = {
     'Android tv-remote admission is owned by its exact-owner runtime fact: available only for a real Android TV target, not the mobile emulator',
   ),
   [C.type]: live('smoke:form-input', 'typed suffix is read back from focused Android field'),
-  [C.hover]: {
-    assertion: 'Android emulator capability model rejects hover, a pointer-only web contract',
-    level: 'capability-denial',
-  },
+  [C.hover]: contract(
+    ANDROID_HOVER_RUNTIME_CONTRACT_EVIDENCE,
+    'Android runtime facts reject hover with the pointer-only web contract hint',
+  ),
   [C.viewport]: contract(
     ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE,
     'Android viewport fails closed through its unavailable exact-owner runtime fact',

@@ -30,10 +30,6 @@ export type TvOsPlatformCoverageEntry =
   | TvOsCommandContractEntry
   | {
       assertion: string;
-      level: 'capability-denial';
-    }
-  | {
-      assertion: string;
       level: 'known-gap';
       trackingIssue: number;
     };
@@ -46,8 +42,8 @@ export const TVOS_REMOTE_EVIDENCE: RepositoryEvidence = {
   test: TVOS_REMOTE_TEST_NAME,
 };
 const TVOS_AUDIO_EVIDENCE: RepositoryEvidence = {
-  path: 'src/core/__tests__/capability-plugin-routing-parity.test.ts',
-  test: '(b.1) isCommandSupportedOnDevice is unchanged across the command x device matrix',
+  path: 'packages/platform-apple/src/runtime.test.ts',
+  test: 'tvOS audio capture availability follows the exact host-owned runtime fact',
 };
 export const TVOS_REMOTE_SCENARIO_COMMANDS: readonly PublicCommand[] = [
   PUBLIC_COMMANDS.open,

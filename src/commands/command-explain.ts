@@ -4,7 +4,6 @@ import { buildCommandUsage } from '../cli-schema/usage.ts';
 import type { DaemonCommandRoute } from '../daemon/daemon-command-registry.ts';
 import { commandDescriptors, type Command } from '../core/command-descriptor/registry.ts';
 import { ownerFilesForCommand } from '../core/command-descriptor/owner-files.ts';
-import type { CommandCapability } from '../core/capabilities.ts';
 import type { CommandTimeoutPolicy } from '../core/command-descriptor/types.ts';
 import {
   getCliCommandSchema,
@@ -36,7 +35,6 @@ export type CommandExplanation = {
   catalog: { group: string; key: string };
   family?: string;
   daemon?: { route: string; traits: string[] };
-  capability?: CommandCapability;
   exposure: {
     batchable: boolean;
     mcp: boolean;
@@ -115,7 +113,6 @@ function buildCommandExplanation(
     catalog: { group: descriptor.catalog.group, key: catalogKey },
     ...(family ? { family: family.name } : {}),
     ...describeCommandDaemon(descriptor),
-    ...describeCommandCapability(descriptor),
     exposure: describeCommandExposure(descriptor),
     timeout: describeTimeoutPolicy(descriptor.timeoutPolicy),
     ...(cliSchema ? { cli: describeCliSurface(descriptor.name, cliSchema) } : {}),
@@ -124,7 +121,6 @@ function buildCommandExplanation(
       ownerFilesForCommand(descriptor.name),
       family?.name,
       'daemon' in descriptor ? descriptor.daemon?.route : undefined,
-      Boolean('capability' in descriptor && descriptor.capability),
       fileExists,
       daemonRouteOwnerFiles,
     ),
@@ -147,9 +143,6 @@ export function formatCommandExplanation(
     `exposure: batch=${yesNo(explanation.exposure.batchable)}, mcp=${yesNo(explanation.exposure.mcp)}${explanation.exposure.postActionObservation ? `, observe=${explanation.exposure.postActionObservation}` : ''}`,
     `timeout: envelope=${formatEnvelope(explanation.timeout.envelopeMs)}, on-timeout=${explanation.timeout.onTimeout}, budget=${explanation.timeout.budget}`,
   ];
-  if (explanation.capability) {
-    lines.push(`capability: ${JSON.stringify(explanation.capability)}`);
-  }
   if (explanation.cli) {
     lines.push(`usage: ${explanation.cli.usage}`);
     lines.push(`flags: ${formatFlagList(explanation.cli.commandFlags)}`);
@@ -214,13 +207,6 @@ function describeCommandDaemon(descriptor: CommandDescriptor): Pick<CommandExpla
       traits: describeDaemonTraits(descriptor.daemon),
     },
   };
-}
-
-function describeCommandCapability(
-  descriptor: CommandDescriptor,
-): Pick<CommandExplanation, 'capability'> {
-  if (!('capability' in descriptor) || !descriptor.capability) return {};
-  return { capability: descriptor.capability };
 }
 
 function describeCommandExposure(descriptor: CommandDescriptor): CommandExplanation['exposure'] {
@@ -316,7 +302,6 @@ function commandFiles(
   ownerFiles: readonly string[],
   family: string | undefined,
   daemonRoute: DaemonCommandRoute | undefined,
-  hasCapability: boolean,
   fileExists: FileExists | undefined,
   daemonRouteOwnerFiles: Readonly<Record<DaemonCommandRoute, string>>,
 ): string[] {
@@ -332,7 +317,6 @@ function commandFiles(
     derived.push('src/cli-schema/command-overrides.ts');
   }
   if (daemonRoute) derived.push(daemonRouteOwnerFiles[daemonRoute]);
-  if (hasCapability) derived.push('src/core/capabilities.ts');
   const present = fileExists ? opportunistic.filter(fileExists) : opportunistic;
   return [...new Set([...derived, ...ownerFiles, ...present])];
 }

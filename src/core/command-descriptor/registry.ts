@@ -234,32 +234,6 @@ function readOnlySubactionRecordingEffect(
     : 'mutates-app';
 }
 
-// ---------------------------------------------------------------------------
-// Capability matrices — platform/kind buckets, copied VERBATIM from
-// src/core/capabilities.ts (BASE_COMMAND_CAPABILITY_MATRIX).
-//
-// The per-command `supports()` / `unsupportedHint()` device closures that used to
-// live here were RELOCATED VERBATIM onto the owning PlatformPlugin's
-// `capability.supportsByDefault` / `unsupportedHintByDefault` in Phase 3 step b.2
-// (the Apple family's closures live on the Apple plugin, src/platforms/apple/plugin.ts;
-// android/linux/web plugins are wired in src/core/interactors/register-builtins.ts). The
-// capability facet now carries platform/kind buckets only; admission reads the closure
-// off the plugin.
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// ADR 0019 §6 platform-execution modes. Every descriptor declares one; there is
-// no registry-entry default (see `readDeclaredPlatformExecution`).
-//   `none`   — executes no platform behavior at all: never binds a device, owns
-//              no capability bucket, no platform adapter, no runtime/inventory
-//              use. Outside the migration denominator.
-//   `legacy` — unmigrated platform execution. This is the denominator: the
-//              tracker closes when no descriptor declares it.
-//   `host`   — host-scoped platform work behind a neutral typed service (diagnostics,
-//              owner cleanup, or managed tooling); the descriptor binds no device runtime.
-// The migrated modes (`inventory`, `device-runtime`) are declared inline with
-// the use they name.
-// ---------------------------------------------------------------------------
 const NO_PLATFORM_EXECUTION = { kind: 'none' } as const;
 // Host-scoped platform work (ADR 0019): the descriptor consumes a neutral typed host service and
 // binds no device runtime of its own.
@@ -1175,10 +1149,6 @@ export const RAW_COMMAND_DESCRIPTORS = [
       route: 'interaction',
       refFrameEffect: 'may-invalidate',
     },
-    // Hover is a pointer-only state (#1783): the web provider moves the mouse
-    // without pressing. Touch platforms have no hover, so no device bucket
-    // admits it; `WEB_INTERACTION_COMMANDS` in src/core/capabilities.ts adds the
-    // web bucket; runtime-owned web-only commands use exact operation facts instead.
     timeoutPolicy: postActionObservationTimeoutPolicy('hover', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('hover'),
     batchable: true,

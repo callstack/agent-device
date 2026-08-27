@@ -8,20 +8,11 @@ type RepositoryEvidence = {
   test: string;
 };
 
-type CapabilityDeclarationEvidence = RepositoryEvidence & {
-  declaration: string;
-};
-
 export type LinuxPlatformCoverageEntry =
   | {
       assertion: string;
       level: 'live' | 'command-contract';
       owner: RepositoryEvidence;
-    }
-  | {
-      assertion: string;
-      level: 'capability-denial';
-      owner: CapabilityDeclarationEvidence;
     }
   | {
       assertion: string;

@@ -4,9 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
-import { LINUX_DEVICE } from '../../src/__tests__/test-utils/device-fixtures.ts';
 import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
-import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import {
   LINUX_COVERAGE_GAP_ISSUE,
   LINUX_COMMAND_EVIDENCE,
@@ -50,20 +48,14 @@ test('Linux coverage report has the expected classification counts', () => {
     // inventory remains a gap because local Linux screenshot paths are not daemon-downloadable.
     // Keyboard, orientation and tv-remote were already fact-owned command-contract rows rather
     // than catalog denials; R56 moves app-switcher the same way, for the same reason.
-    // R57 moves trigger-app-event from capability-denial to command-contract: it is fact-owned now.
-    // R58 moves settings from capability-denial to command-contract: it is fact-owned now.
-    // R59/R61 moves alert and react-native from capability-denial to command-contract: it is fact-owned now.
-    // R60 moves audio the same way; R64 moves perf from catalog denial to runtime-owned facts.
-    capabilityDenial: 0,
     contract: 28,
     gap: 9,
     live: 17,
     total: 54,
   });
 
-  const { capabilityDenial, contract, gap, live, total } =
-    LINUX_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY;
-  assert.equal(capabilityDenial + contract + gap + live, total);
+  const { contract, gap, live, total } = LINUX_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY;
+  assert.equal(contract + gap + live, total);
 });
 
 test('Linux live claims reference commands in the existing smoke replay', () => {
@@ -125,34 +117,6 @@ test('Linux contract claims name existing executable evidence', () => {
       fs.readFileSync(evidencePath, 'utf8').includes(entry.owner.test),
       true,
       `${command} owner does not contain named evidence`,
-    );
-  }
-});
-
-test('Linux capability denials match the owning descriptor matrix', () => {
-  const deniedByCapabilities = publicCommands.filter(
-    (command) => !isCommandSupportedOnDevice(command, LINUX_DEVICE),
-  );
-  const deniedByManifest = Object.entries(LINUX_PLATFORM_COVERAGE)
-    .filter(([, entry]) => entry.level === 'capability-denial')
-    .map(([command]) => command)
-    .sort();
-
-  assert.deepEqual(deniedByManifest, deniedByCapabilities);
-
-  for (const [command, entry] of Object.entries(LINUX_PLATFORM_COVERAGE)) {
-    if (entry.level !== 'capability-denial') continue;
-    const declarationPath = path.resolve(entry.owner.path);
-    const declarationSource = fs.readFileSync(declarationPath, 'utf8');
-    assert.equal(
-      declarationSource.includes(entry.owner.test),
-      true,
-      `${command} capability owner does not name its descriptor`,
-    );
-    assert.equal(
-      declarationSource.includes(entry.owner.declaration),
-      true,
-      `${command} capability owner does not cite its Linux declaration`,
     );
   }
 });

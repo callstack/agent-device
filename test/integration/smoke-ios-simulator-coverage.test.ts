@@ -11,7 +11,6 @@ import {
   swipePayloadFromPositionals,
 } from '@agent-device/contracts/gesture-normalization';
 import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
-import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { isValidSelectorExpression } from '@agent-device/selectors';
 import { IOS_SIMULATOR_BEHAVIOR_COVERAGE } from './ios-simulator-e2e/behavior-coverage.ts';
@@ -22,15 +21,6 @@ import {
 import { collectPagedEventTimeline } from './live-device-e2e/event-timeline.ts';
 import { findMissingFixtureIdentifiers } from './ios-simulator-e2e/fixture-identifier-coverage.ts';
 import { IOS_SIMULATOR_LIVE_SCENARIOS } from './ios-simulator-e2e/scenarios.ts';
-
-const IOS_SIMULATOR = {
-  appleOs: 'ios' as const,
-  id: 'ci-ios-simulator',
-  kind: 'simulator' as const,
-  name: 'CI iPhone',
-  platform: 'apple' as const,
-  target: 'mobile' as const,
-};
 
 test('iOS simulator coverage exhaustively classifies the public catalog', () => {
   const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
@@ -138,31 +128,7 @@ test('live iOS scenarios reference fixture identifiers that exist', () => {
   );
 });
 
-test('capability classifications match executable simulator behavior', () => {
-  const factOwnedCommands: readonly string[] = [
-    PUBLIC_COMMANDS.viewport,
-    PUBLIC_COMMANDS.tvRemote,
-    // R60: the darwin-only ScreenCaptureKit gate moved from the capability catalog into the
-    // exact-owner runtime fact, so audio admission is no longer host-dependent here.
-    PUBLIC_COMMANDS.audio,
-  ];
-  for (const [command, entry] of Object.entries(IOS_SIMULATOR_E2E_COVERAGE)) {
-    if (factOwnedCommands.includes(command)) {
-      assert.equal(
-        entry.level,
-        'command-contract',
-        `${command} admission belongs to the exact-owner runtime fact, not the capability catalog`,
-      );
-      continue;
-    }
-    const supported = isCommandSupportedOnDevice(command, IOS_SIMULATOR);
-    if (entry.level === 'capability-denial') {
-      assert.equal(supported, false, `${command} denial must match capability admission`);
-    } else {
-      assert.equal(supported, true, `${command} evidence requires simulator capability admission`);
-    }
-  }
-
+test('fact-owned simulator denials carry runtime contract evidence', () => {
   assert.equal(
     IOS_SIMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.tvRemote].level,
     'command-contract',

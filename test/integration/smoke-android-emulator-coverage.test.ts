@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 
 import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
-import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import { ANDROID_EMULATOR_BEHAVIOR_COVERAGE } from './android-emulator-e2e/behavior-coverage.ts';
 import { ANDROID_PERMISSION_PROMPT_COMMAND } from './android-emulator-e2e/live-lifecycle-scenario.ts';
 import {
@@ -17,14 +18,6 @@ import {
   ANDROID_EMULATOR_LIVE_SCENARIOS,
   selectAndroidEmulatorScenarios,
 } from './android-emulator-e2e/scenarios.ts';
-
-const ANDROID_EMULATOR = {
-  id: 'ci-android-emulator',
-  kind: 'emulator' as const,
-  name: 'CI Android Emulator',
-  platform: 'android' as const,
-  target: 'mobile' as const,
-};
 
 test('Android emulator coverage exhaustively classifies the public catalog', () => {
   const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
@@ -47,16 +40,12 @@ test('Android emulator coverage exhaustively classifies the public catalog', () 
 test('Android coverage report summary accounts for every manifest classification', () => {
   const summary = ANDROID_EMULATOR_COVERAGE_CLASSIFICATION_SUMMARY;
   assert.deepEqual(summary, {
-    capabilityDenial: 1,
-    contract: 12,
+    contract: 13,
     gap: 0,
     live: 41,
     total: 54,
   });
-  assert.equal(
-    summary.live + summary.contract + summary.gap + summary.capabilityDenial,
-    summary.total,
-  );
+  assert.equal(summary.live + summary.contract + summary.gap, summary.total);
 });
 
 test('Android live command ownership is structural and exhaustive', () => {
@@ -232,11 +221,26 @@ test('Android command-contract declarations are unique and exhaustive', () => {
       >,
     ] => entry[1].level === 'command-contract',
   );
-  const declarations = new Map(
-    contractEntries.map(([, entry]) => [entry.evidence.owner, entry.evidence] as const),
-  );
-  for (const evidence of declarations.values()) {
+  const declarations = new Map<string, (typeof contractEntries)[number][1]['evidence']>();
+  for (const [command, entry] of contractEntries) {
+    const { evidence } = entry;
     assert.ok(evidence.testName.trim().length > 0, `${evidence.owner} needs an executable test`);
+    if (evidence.owner.endsWith('.ts')) {
+      const evidencePath = path.resolve(evidence.owner);
+      assert.equal(fs.existsSync(evidencePath), true, `${command} owner does not exist`);
+      assert.equal(
+        fs.readFileSync(evidencePath, 'utf8').includes(evidence.testName),
+        true,
+        `${command} evidence is not named in ${evidence.owner}`,
+      );
+    }
+    const declarationKey = `${evidence.owner}:${evidence.testName}`;
+    const existing = declarations.get(declarationKey);
+    if (existing) {
+      assert.deepEqual(existing, evidence, `${command} contract evidence is inconsistent`);
+    } else {
+      declarations.set(declarationKey, evidence);
+    }
   }
   assert.ok(declarations.size > 0, 'Android command contracts need executable evidence');
 });
@@ -267,8 +271,7 @@ test('Android behavior patterns are owned by live fixture journeys', () => {
   );
 });
 
-test('Android catalog denials exclude fact-owned runtime commands', () => {
-  assert.equal(isCommandSupportedOnDevice(PUBLIC_COMMANDS.tvRemote, ANDROID_EMULATOR), true);
+test('Android fact-owned denials carry runtime contract evidence', () => {
   assert.equal(
     ANDROID_EMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.tvRemote].level,
     'command-contract',
@@ -284,4 +287,5 @@ test('Android catalog denials exclude fact-owned runtime commands', () => {
     'command-contract',
     'prepare support is controlled by its platform runtime facts, not the capability catalog',
   );
+  assert.equal(ANDROID_EMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.hover].level, 'command-contract');
 });

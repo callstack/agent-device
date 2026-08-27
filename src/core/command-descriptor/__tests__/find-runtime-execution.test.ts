@@ -1,7 +1,6 @@
 import { expect, test } from 'vitest';
 import { findRuntimePlanUses } from '@agent-device/contracts/platform-runtime-operations';
 import { commandDescriptors } from '../registry.ts';
-import { BASE_COMMAND_CAPABILITY_MATRIX } from '../../capabilities.ts';
 
 test('find descriptor declares its complete runtime uses with no legacy projection', () => {
   const find = commandDescriptors.find(({ name }) => name === 'find');
@@ -25,8 +24,4 @@ test('find descriptor declares its complete runtime uses with no legacy projecti
     ['captureSnapshot', 'focusPoint', 'typeText'],
     ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'focusPoint', 'typeText'],
   ]);
-});
-
-test('find leaves the capability matrix and both hand-maintained overlays', () => {
-  expect(BASE_COMMAND_CAPABILITY_MATRIX).not.toHaveProperty('find');
 });

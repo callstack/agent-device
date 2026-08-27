@@ -2,8 +2,6 @@ import type { DeviceInfo, Platform, PlatformSelector } from '@agent-device/kerne
 import type { PlatformGatedProviderResolverKey } from './platform-providers.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 
-type CapabilityBucket = 'apple' | 'android' | 'harmonyos' | 'vega' | 'linux' | 'web';
-
 /**
  * The platform-plugin contract (ADR-0009).
  *
@@ -28,7 +26,6 @@ type CapabilityBucket = 'apple' | 'android' | 'harmonyos' | 'vega' | 'linux' | '
  * docs/adr/0009-apple-platform-consolidation.md (tracked in issue #974).
  */
 export type PlatformPlugin = {
-  /** Plugin/family id; also the capability-matrix bucket key for its platforms. */
   readonly id: string;
   /** Leaf platforms this plugin owns (e.g. `['ios', 'macos']` for Apple). */
   readonly platforms: readonly Platform[];
@@ -36,28 +33,6 @@ export type PlatformPlugin = {
   readonly familySelector?: PlatformSelector;
   /** Lazily builds the {@link Interactor} for `device` — wraps today's `getInteractor` switch arm. */
   createInteractor(device: DeviceInfo, runner: RunnerContext): Promise<Interactor>;
-  /**
-   * The capability facet. `bucket` is the {@link CapabilityBucket} this family
-   * reads from a `CommandCapability`.
-   *
-   * `supportsByDefault` / `unsupportedHintByDefault` carry the per-command
-   * `supports()` / `unsupportedHint()` device closures RELOCATED VERBATIM off the
-   * command-descriptor facet (ADR-0009: relocate, never
-   * flatten). They are keyed by command name and owned by the family that owns the
-   * device's platform; `isCommandSupportedOnDevice` / `unsupportedHintForDevice`
-   * consult the root platform-plugin registry, so a family with no entry for a command
-   * (the key is absent) admits it unchanged. Only the Apple family carries
-   * entries today — every relocated closure is a no-op (returns `true` / `undefined`)
-   * on non-Apple devices, proven byte-for-byte by the parity gate before the
-   * command-facet closures were deleted.
-   */
-  readonly capability: {
-    readonly bucket: CapabilityBucket;
-    readonly supportsByDefault?: Readonly<Record<string, (device: DeviceInfo) => boolean>>;
-    readonly unsupportedHintByDefault?: Readonly<
-      Record<string, (device: DeviceInfo) => string | undefined>
-    >;
-  };
   /**
    * The request-scope provider facet (issue #974). `platformGatedResolvers`
    * declares which PLATFORM-GATED request provider resolvers apply to this family's

@@ -6,10 +6,7 @@ const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
   // Request provider composition now consumes the neutral contracts context instead of importing
   // daemon request/session types, removing the root provider seam from this component.
   '(root)': 1,
-  // R58 retired the legacy command dispatcher, taking `core/dispatch.ts` and the
-  // `core/interactors.ts` registry it pulled in out of the cycle with it. R64 removes the
-  // legacy perf projection and lowers the remaining core component by one more file.
-  core: 5,
+  core: 4,
   // Same move, daemon side: with no dispatcher to re-fire a tap through, the pending-outcome
   // retry declares its own callback seam instead of importing runtime admission, so
   // `interaction-outcome-policy.ts` and `deferred-interaction-outcome.ts` both left the cycle.

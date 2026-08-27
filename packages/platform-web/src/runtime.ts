@@ -380,9 +380,6 @@ function webRuntimeFacts(
         findSelector: openTargetKindUnavailable,
       }),
       ...screenshotRuntimeOperationFacts({ capture: browserDevice }),
-      // Parity with the retired `focus` capability bucket, which the web overlay in
-      // `core/capabilities.ts` filled as `{ device: true }`: the browser device is the only
-      // web cell with an interactor to drive.
       ...focusRuntimeOperationFacts({ focus: browserDevice }),
       // Text entry shares focus's cell: the browser device is the only web cell with an
       // interactor to drive (parity with the retired `type` overlay membership).

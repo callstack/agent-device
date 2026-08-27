@@ -15,7 +15,7 @@ export type IosSimulatorCoverageEntry =
     }
   | {
       assertion: string;
-      level: 'command-contract' | 'workflow-live' | 'capability-denial';
+      level: 'command-contract' | 'workflow-live';
       owner: RepositoryEvidence;
     };
 

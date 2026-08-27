@@ -16,10 +16,6 @@ export type WebPlatformCoverageEntry =
     }
   | {
       assertion: string;
-      level: 'capability-denial';
-    }
-  | {
-      assertion: string;
       level: 'known-gap';
       trackingIssue: number;
     };

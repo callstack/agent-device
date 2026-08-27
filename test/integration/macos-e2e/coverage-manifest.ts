@@ -24,7 +24,7 @@ export type MacOsPlatformCoverageEntry =
     }
   | {
       assertion: string;
-      level: 'command-contract' | 'capability-denial';
+      level: 'command-contract';
       owner: RepositoryEvidence;
     }
   | {
@@ -47,10 +47,6 @@ const contract = (path: string, test: string, assertion: string): MacOsPlatformC
   level: 'command-contract',
   owner: { path, test },
 });
-// No `denial` constructor: R56 moved the last macOS capability-denial row (`app-switcher`) onto
-// owner facts, so no command is denied on this host by a capability declaration any more. The
-// level stays in the entry type because `macOS capability-denial rows match the owning capability
-// matrix` still enforces both sides — today it asserts the denied set is empty.
 const gap = (assertion: string): MacOsPlatformCoverageEntry => ({
   assertion,
   level: 'known-gap',
@@ -70,9 +66,9 @@ export const MACOS_PLATFORM_COVERAGE = {
     'Apple inventory projects the local macOS host as a desktop device',
   ),
   [C.capabilities]: contract(
-    'src/core/__tests__/capabilities.test.ts',
-    'macOS supports the Apple runner interaction core but excludes mobile-only commands',
-    'the capability matrix admits the verified macOS interaction core',
+    'src/daemon/handlers/__tests__/session-capabilities.test.ts',
+    'capabilities preserves session-owned appstate for an active %s session',
+    'the capabilities response projects exact runtime facts plus active macOS session state',
   ),
   [C.doctor]: gap('No command-specific macOS doctor evidence exists yet'),
   [C.apps]: live(

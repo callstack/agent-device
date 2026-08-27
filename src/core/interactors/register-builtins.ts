@@ -5,21 +5,9 @@ import { applePlugin } from '../../platforms/apple/plugin.ts';
 import { vegaPlugin } from '../../platforms/vega/plugin.ts';
 import type { Platform, DeviceInfo } from '@agent-device/kernel/device';
 
-// The builtin-plugin wiring lives at the interactor seam (src/core/interactors/) —
-// the one place R3 (see scripts/layering/check.ts) permits a STATIC value import of
-// `platforms/`, so this module can pull the relocated `applePlugin`
-// (src/platforms/apple/plugin.ts) into the registry while the generic registry + type
-// stay in `core/` (src/core/platform-plugin/plugin.ts) where non-interactor core code
-// like `core/capabilities.ts` may import them. The Apple plugin instance and its
-// capability closures now live under `platforms/apple/`; the android/linux/web wiring
-// stays here. Each plugin WRAPS today's existing interactor factories lazily.
-// `as const satisfies PlatformPlugin` preserves each plugin's literal `platforms` tuple
-// so the totality assertion below is a real compile-time check.
-
 const androidPlugin = {
   id: 'android',
   platforms: ['android'],
-  capability: { bucket: 'android' },
   // Declares the platform-gated request provider resolver the Android family owns (the
   // adb provider, formerly gated by `device.platform === 'android'`).
   providers: { platformGatedResolvers: ['androidAdbProvider'] },
@@ -32,7 +20,6 @@ const androidPlugin = {
 const harmonyosPlugin = {
   id: 'harmonyos',
   platforms: ['harmonyos'],
-  capability: { bucket: 'harmonyos' },
   createInteractor: async (device: DeviceInfo, runner: RunnerContext) => {
     const { createHarmonyInteractor } = await import('./harmonyos.ts');
     return createHarmonyInteractor(device, runner);
@@ -42,7 +29,6 @@ const harmonyosPlugin = {
 const linuxPlugin = {
   id: 'linux',
   platforms: ['linux'],
-  capability: { bucket: 'linux' },
   // Declares the platform-gated request provider resolver the linux family owns (the
   // linux tool provider, formerly gated by `device.platform === 'linux'`).
   providers: { platformGatedResolvers: ['linuxToolProvider'] },
@@ -55,7 +41,6 @@ const linuxPlugin = {
 const webPlugin = {
   id: 'web',
   platforms: ['web'],
-  capability: { bucket: 'web' },
   // Declares the platform-gated request provider resolver the web family owns (the web
   // provider, formerly gated by `device.platform === 'web'`).
   providers: { platformGatedResolvers: ['webProvider'] },

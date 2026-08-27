@@ -3,10 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { WEB_DESKTOP_DEVICE } from '../../src/__tests__/test-utils/device-fixtures.ts';
 import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
 import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
-import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import {
   WEB_COVERAGE_GAP_ISSUE,
   WEB_PLATFORM_COVERAGE,
@@ -41,7 +39,6 @@ test('web coverage exhaustively classifies the public catalog', () => {
 
 test('web coverage report has the expected classification counts', () => {
   assert.deepEqual(WEB_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    capabilityDenial: 0,
     contract: 41,
     gap: 1,
     live: 12,
@@ -75,18 +72,6 @@ test('web contract claims name existing executable evidence', () => {
       `${command} owner does not contain named evidence`,
     );
   }
-});
-
-test('web capability denials match the mechanical capability matrix', () => {
-  const deniedByCapabilities = publicCommands.filter(
-    (command) => !isCommandSupportedOnDevice(command, WEB_DESKTOP_DEVICE),
-  );
-  const deniedByManifest = Object.entries(WEB_PLATFORM_COVERAGE)
-    .filter(([, entry]) => entry.level === 'capability-denial')
-    .map(([command]) => command)
-    .sort();
-
-  assert.deepEqual(deniedByManifest, deniedByCapabilities);
 });
 
 // #1900 closed 14 of the 15 known-gap rows this manifest originally carried (see the comment

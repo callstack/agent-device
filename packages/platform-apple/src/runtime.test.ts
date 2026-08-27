@@ -28,6 +28,28 @@ const leaves = {
   watchos: appleDevice({ appleOs: 'watchos' }),
 } satisfies Record<AppleOS, DeviceInfo>;
 
+test('tvOS audio capture availability follows the exact host-owned runtime fact', async () => {
+  const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+    device: leaves.tvos,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+
+  expect(binding.facts.operations.audioProbeStart).toEqual(
+    process.platform === 'darwin'
+      ? { available: true }
+      : {
+          available: false,
+          reason: 'unsupported-device-backend',
+          hint: 'audio probe capture requires a macOS host.',
+        },
+  );
+});
+
 test.each([
   ['iOS simulator', leaves.ios, true, undefined],
   [

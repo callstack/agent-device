@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseSync } from 'oxc-parser';
 import type { BinaryExpression, Expression, PrivateIdentifier } from 'oxc-parser';
-import { listCapabilityCommands } from '../core/capabilities.ts';
+import { listRuntimeFactCommands } from '../core/capabilities.ts';
 import {
   INTERNAL_COMMANDS,
   isKnownCliCommandName,
@@ -14,9 +14,9 @@ import {
 import { commandDescriptors } from '../core/command-descriptor/registry.ts';
 import { getCliCommandSchema } from './command-schema.ts';
 
-test('every public capability command has a parser schema entry', () => {
+test('every public runtime-fact command has a parser schema entry', () => {
   const schemaCommands = new Set<string>(listCliCommandNames());
-  for (const command of listCapabilityCommands()) {
+  for (const command of listRuntimeFactCommands()) {
     assert.equal(schemaCommands.has(command), true, `Missing schema for command: ${command}`);
   }
 });
@@ -56,19 +56,18 @@ test('cli.ts command dispatch checks are recognized by parser-level unknown-comm
   }
 });
 
-test('schema capability mappings match capability source-of-truth', () => {
+test('schema runtime-fact mappings match descriptor source-of-truth', () => {
   const cliCommands = new Set<string>(listCliCommandNames());
-  const capabilityCatalogCommands = commandDescriptors
+  const runtimeFactCatalogCommands = commandDescriptors
     .filter(
       (descriptor) =>
         descriptor.catalog.group === 'public' &&
-        (('capability' in descriptor && descriptor.capability !== undefined) ||
-          descriptor.platformExecution.kind === 'device-runtime') &&
+        descriptor.platformExecution.kind === 'device-runtime' &&
         cliCommands.has(descriptor.name),
     )
     .map((descriptor) => descriptor.name)
     .sort();
-  assert.deepEqual(capabilityCatalogCommands, listCapabilityCommands());
+  assert.deepEqual(runtimeFactCatalogCommands, listRuntimeFactCommands());
 });
 
 function collectCliDispatchCommandLiterals(): Set<string> {

@@ -5,7 +5,6 @@ import test from 'node:test';
 
 import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
 import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
-import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import {
   MACOS_COVERAGE_GAP_ISSUE,
   MACOS_LIVE_SCENARIOS,
@@ -14,15 +13,6 @@ import {
   liveCommandsForScenario,
 } from './macos-e2e/coverage-manifest.ts';
 import { writeCoverageReport } from './macos-e2e/coverage-report.ts';
-
-const MACOS_DEVICE = {
-  appleOs: 'macos' as const,
-  id: 'coverage-macos-host',
-  kind: 'device' as const,
-  name: 'Coverage Mac',
-  platform: 'apple' as const,
-  target: 'desktop' as const,
-};
 
 test('macOS coverage exhaustively classifies the public catalog', () => {
   const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
@@ -49,7 +39,6 @@ test('macOS coverage exhaustively classifies the public catalog', () => {
 
 test('macOS coverage report counts every manifest classification', () => {
   assert.deepEqual(MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    capabilityDenial: 0,
     contract: 21,
     gap: 15,
     live: 18,
@@ -58,7 +47,6 @@ test('macOS coverage report counts every manifest classification', () => {
   assert.equal(
     MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY.live +
       MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY.contract +
-      MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY.capabilityDenial +
       MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY.gap,
     MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY.total,
   );
@@ -102,18 +90,6 @@ test('macOS non-live evidence owners name existing executable repository evidenc
       `${command} owner does not contain named evidence: ${entry.owner.test}`,
     );
   }
-});
-
-test('macOS capability-denial rows match the owning capability matrix', () => {
-  const deniedByCapabilities = Object.values(PUBLIC_COMMANDS)
-    .filter((command) => !isCommandSupportedOnDevice(command, MACOS_DEVICE))
-    .sort();
-  const deniedByManifest = Object.entries(MACOS_PLATFORM_COVERAGE)
-    .filter(([, entry]) => entry.level === 'capability-denial')
-    .map(([command]) => command)
-    .sort();
-
-  assert.deepEqual(deniedByManifest, deniedByCapabilities);
 });
 
 test('macOS known gaps use one grouped tracking issue', () => {

@@ -1,4 +1,3 @@
-import type { CommandCapability } from '../capabilities.ts';
 import type { DaemonCommandDescriptor } from '../../daemon/daemon-command-registry.ts';
 import type { CommandDescriptor } from './types.ts';
 
@@ -20,17 +19,6 @@ export function deriveDaemonCommandDescriptors(
       ...descriptor.daemon,
       replayScopedAction: descriptor.recordsSessionAction,
     });
-  }
-  return result;
-}
-
-/** Reconstructs the BASE_COMMAND_CAPABILITY_MATRIX record. */
-export function deriveCapabilityMatrix(
-  descriptors: readonly CommandDescriptor[],
-): Record<string, CommandCapability> {
-  const result: Record<string, CommandCapability> = {};
-  for (const descriptor of descriptors) {
-    if (descriptor.capability) result[descriptor.name] = descriptor.capability;
   }
   return result;
 }

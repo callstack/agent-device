@@ -10,7 +10,6 @@ import {
  */
 type PlatformExecutionDeclarationSite = {
   readonly name: string;
-  readonly capability?: unknown;
   readonly platformExecution?: unknown;
 };
 
@@ -18,10 +17,6 @@ type PlatformExecutionDeclarationSite = {
  * ADR 0019 §6: every descriptor declares its platform-execution mode explicitly.
  * An undeclared discriminator is a registry-load error, so a command cannot
  * acquire platform execution by omission.
- *
- * `none` with a capability bucket is also rejected: a capability bucket is
- * platform admission, so the command executes platform behavior. `host` is held
- * to the same rule — host-scoped diagnostics carry no per-device admission.
  *
  * This gate sees one descriptor at a time. Platform execution delegated to
  * another command is covered by the CLI-route dominance gate in
@@ -37,13 +32,5 @@ export function readDeclaredPlatformExecution(
     );
   }
   assertCommandPlatformExecution(declared);
-  if (
-    (declared.kind === 'none' || declared.kind === 'host') &&
-    descriptor.capability !== undefined
-  ) {
-    throw new TypeError(
-      `Command descriptor "${descriptor.name}" declares platformExecution ${declared.kind} but keeps a capability bucket; a command with platform admission is not platform-free`,
-    );
-  }
   return declared;
 }

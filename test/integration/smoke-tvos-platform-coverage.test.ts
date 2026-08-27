@@ -5,7 +5,6 @@ import test from 'node:test';
 
 import { TVOS_SIMULATOR } from '../../src/__tests__/test-utils/device-fixtures.ts';
 import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
-import { isCommandSupportedOnDevice } from '../../src/core/capabilities.ts';
 import { createPlatformRuntimeGateway } from '../../src/platform-runtime.ts';
 import { gestureRefusalMessage } from '@agent-device/contracts/gesture-admission';
 import {
@@ -41,7 +40,6 @@ test('tvOS coverage exhaustively classifies the public catalog', () => {
 
 test('tvOS coverage report has the expected classification counts', () => {
   assert.deepEqual(TVOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    capabilityDenial: 0,
     contract: 16,
     gap: 38,
     live: 0,
@@ -76,26 +74,7 @@ test('tvOS provider contract claims only commands executed by the existing scena
   }
 });
 
-test('tvOS capability denials match the mechanical capability matrix', () => {
-  const deniedByCapabilities = publicCommands
-    .filter((command) => !isCommandSupportedOnDevice(command, TVOS_SIMULATOR))
-    .sort();
-  const manifestCapabilityProjection = Object.entries(TVOS_PLATFORM_COVERAGE)
-    .flatMap(([command, entry]) => {
-      if (entry.level === 'capability-denial') return [command];
-      if (
-        entry.level === 'command-contract' &&
-        'admission' in entry &&
-        entry.admission === 'host-dependent' &&
-        !isCommandSupportedOnDevice(command, TVOS_SIMULATOR)
-      ) {
-        return [command];
-      }
-      return [];
-    })
-    .sort();
-
-  assert.deepEqual(manifestCapabilityProjection, deniedByCapabilities);
+test('tvOS host-dependent audio admission remains explicit', () => {
   const audio = TVOS_PLATFORM_COVERAGE[PUBLIC_COMMANDS.audio];
   assert.equal(audio.level, 'command-contract');
   assert.equal('admission' in audio ? audio.admission : undefined, 'host-dependent');
