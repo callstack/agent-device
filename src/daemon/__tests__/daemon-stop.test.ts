@@ -8,16 +8,16 @@ const mocks = vi.hoisted(() => ({
   isProcessAlive: vi.fn(),
   sleep: vi.fn(async () => undefined),
   trySignalProcess: vi.fn(),
-  waitForProcessExit: vi.fn(),
+  waitForDaemonExit: vi.fn(),
 }));
 
 vi.mock('../daemon-process.ts', () => ({
   isAgentDeviceDaemonProcess: mocks.isAgentDeviceDaemonProcess,
   trySignalProcess: mocks.trySignalProcess,
+  waitForDaemonExit: mocks.waitForDaemonExit,
 }));
 vi.mock('../../utils/host-process.ts', () => ({
   isProcessAlive: mocks.isProcessAlive,
-  waitForProcessExit: mocks.waitForProcessExit,
 }));
 vi.mock('../../utils/timeouts.ts', () => ({ sleep: mocks.sleep }));
 
@@ -102,9 +102,9 @@ test('reports graceful cleanup after SIGTERM exits the verified daemon', async (
   const paths = createDaemonPaths();
   mocks.isAgentDeviceDaemonProcess.mockReturnValue(true);
   mocks.trySignalProcess.mockReturnValue(true);
-  mocks.waitForProcessExit.mockImplementation(async () => {
+  mocks.waitForDaemonExit.mockImplementation(async () => {
     fs.rmSync(paths.infoPath, { force: true });
-    return true;
+    return { exited: true, elapsedMs: 0 };
   });
 
   try {
@@ -125,7 +125,9 @@ test('re-verifies identity before SIGKILL and reports forced cleanup as unknown'
   const paths = createDaemonPaths();
   mocks.isAgentDeviceDaemonProcess.mockReturnValue(true);
   mocks.trySignalProcess.mockReturnValue(true);
-  mocks.waitForProcessExit.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  mocks.waitForDaemonExit
+    .mockResolvedValueOnce({ exited: false, elapsedMs: 0 })
+    .mockResolvedValueOnce({ exited: true, elapsedMs: 0 });
 
   try {
     const result = await stopDaemon({ paths });
@@ -146,7 +148,9 @@ test('does not send SIGKILL if the daemon identity changes during the graceful w
   const paths = createDaemonPaths();
   mocks.isAgentDeviceDaemonProcess.mockReturnValueOnce(true).mockReturnValueOnce(false);
   mocks.trySignalProcess.mockReturnValue(true);
-  mocks.waitForProcessExit.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  mocks.waitForDaemonExit
+    .mockResolvedValueOnce({ exited: false, elapsedMs: 0 })
+    .mockResolvedValueOnce({ exited: true, elapsedMs: 0 });
 
   try {
     await stopDaemon({ paths });

@@ -1,7 +1,12 @@
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
-import { isAgentDeviceDaemonProcess, trySignalProcess } from './daemon-process.ts';
-import { isProcessAlive, waitForProcessExit } from '../utils/host-process.ts';
+import {
+  isAgentDeviceDaemonProcess,
+  trySignalProcess,
+  waitForDaemonExit,
+  type DaemonProcessIdentity,
+} from './daemon-process.ts';
+import { isProcessAlive } from '../utils/host-process.ts';
 import { sleep } from '../utils/timeouts.ts';
 import type { DaemonPaths } from './config.ts';
 import { readRegisteredDaemonIdentity } from './daemon-registration.ts';
@@ -56,11 +61,11 @@ export async function stopDaemon(params: {
     );
   }
 
+  const identity: DaemonProcessIdentity = { pid: info.pid, startTime: info.startTime };
   if (!signalDaemonProcess(info.pid, 'SIGTERM')) return notRunningResult();
-  const graceful = await waitForProcessExit(
-    info.pid,
-    params.graceTimeoutMs ?? DAEMON_STOP_GRACE_TIMEOUT_MS,
-  );
+  const { exited: graceful } = await waitForDaemonExit(identity, {
+    timeoutMs: params.graceTimeoutMs ?? DAEMON_STOP_GRACE_TIMEOUT_MS,
+  });
   if (graceful) {
     await waitForDaemonMetadataRemoval(params.paths, DAEMON_STOP_METADATA_WAIT_MS);
     return {
@@ -80,10 +85,9 @@ export async function stopDaemon(params: {
   if (isAgentDeviceDaemonProcess(info.pid, info.startTime)) {
     signalDaemonProcess(info.pid, 'SIGKILL');
   }
-  const stopped = await waitForProcessExit(
-    info.pid,
-    params.killTimeoutMs ?? DAEMON_STOP_KILL_TIMEOUT_MS,
-  );
+  const { exited: stopped } = await waitForDaemonExit(identity, {
+    timeoutMs: params.killTimeoutMs ?? DAEMON_STOP_KILL_TIMEOUT_MS,
+  });
   if (!stopped) {
     throw new AppError('COMMAND_FAILED', 'Daemon did not exit after SIGKILL.', { pid: info.pid });
   }
