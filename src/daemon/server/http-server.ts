@@ -38,6 +38,7 @@ import { sendRestJsonError, statusCodeForNormalizedError } from '../http-errors.
 import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
 import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-http.ts';
+import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
 
@@ -665,6 +666,7 @@ export async function createDaemonHttpServer(options: {
           requestId: requestIdForCleanup,
         };
         requestAbortRegistration = registerRequestAbort(requestIdForCleanup);
+        const clientDeclaredTenant = daemonRequest.meta?.tenantId ?? daemonRequest.flags?.tenant;
 
         const authResult = await runHttpAuthHook(authHook, {
           headers: req.headers,
@@ -675,15 +677,31 @@ export async function createDaemonHttpServer(options: {
           sendJson(res, authResult.response, authResult.statusCode);
           return;
         }
-        if (authResult.tenantId) {
-          daemonRequest.meta = {
-            ...daemonRequest.meta,
-            tenantId: authResult.tenantId,
-            sessionIsolation:
-              daemonRequest.meta?.sessionIsolation ??
+        const tenantTrust = resolveTrustedTenant({
+          hookConfigured: authHook !== null,
+          hookAttestedTenant: authResult.tenantId,
+          clientDeclaredTenant,
+        });
+        if (!tenantTrust.trusted) {
+          const normalized = tenantTrustRejectionError();
+          sendJson(
+            res,
+            createRpcError(rpcRequest.id ?? null, -32001, normalized.message, normalized),
+            401,
+          );
+          return;
+        }
+        daemonRequest.meta = {
+          ...daemonRequest.meta,
+          tenantId: tenantTrust.tenantId,
+          sessionIsolation: authResult.tenantId
+            ? (daemonRequest.meta?.sessionIsolation ??
               daemonRequest.flags?.sessionIsolation ??
-              'tenant',
-          };
+              'tenant')
+            : daemonRequest.meta?.sessionIsolation,
+        };
+        if (daemonRequest.flags?.tenant !== undefined) {
+          daemonRequest.flags = { ...daemonRequest.flags, tenant: tenantTrust.tenantId };
         }
 
         let canceledInFlight = false;
@@ -825,9 +843,17 @@ async function authorizeAuxiliaryHttpRequest(params: {
     return null;
   }
 
-  // Auth-hook identity remains authoritative. The header fallback only preserves the
-  // client-declared tenant used by RPC when a deployment does not derive tenant scope in its hook.
-  return { tenantId: authResult.tenantId ?? tenantId };
+  const tenantTrust = resolveTrustedTenant({
+    hookConfigured: authHook !== null,
+    hookAttestedTenant: authResult.tenantId,
+    clientDeclaredTenant: tenantId,
+  });
+  if (!tenantTrust.trusted) {
+    sendRestJsonError(res, tenantTrustRejectionError());
+    return null;
+  }
+
+  return { tenantId: tenantTrust.tenantId };
 }
 
 function readHeaderValue(headers: IncomingHttpHeaders, name: string): string | undefined {

@@ -103,7 +103,7 @@
     "src/daemon/server/http-server.ts#MAX_HTTP_RPC_BODY_BYTES": "sha256:3cb06e12b3110fa27e390d5c6473578b3f13c93b9f2b571e0e8e42d7ce29d48a",
     "src/daemon/server/http-server.ts#RELEASE_MATERIALIZED_PATHS_RPC_METHODS": "sha256:75a18d3496894309dd6042b16c4dcc241c16ec6336783e6310eddd6db7437ccb",
     "src/daemon/server/http-server.ts#SUPPORTED_RPC_METHODS": "sha256:4d5ed730dcb669b0dacca3bb4977f35686bab9b7fb464c0590fd50f838e6c243",
-    "src/daemon/server/http-server.ts#authorizeAuxiliaryHttpRequest": "sha256:6351886d5e412006a06b4cdbdc2a59ba103416c92ccf80c664afb8705e6b5816",
+    "src/daemon/server/http-server.ts#authorizeAuxiliaryHttpRequest": "sha256:f74f2fc70313a4cc048bcd531f9831970cab75c2b098688e846c44b3c37a7185",
     "src/daemon/server/http-server.ts#createRpcError": "sha256:1921762129636afc7772937d48e8afb8f09047b343e3a27d18b49c1c4385bbe8",
     "src/daemon/server/http-server.ts#enforceDaemonToken": "sha256:60036cffc34388b33fc0dad39c905d9cb3fc18c9ed0cf24255bb7105f5d444c7",
     "src/daemon/server/http-server.ts#isCommandRpcMethod": "sha256:9922102ba9c72c3032f205717d772ab7c3506c6f3012f55b8e7e5636b672ed7e",
@@ -173,6 +173,11 @@
     "src/remote/upload-stream.ts#streamFileToHttpRequestAttempt": "sha256:da39a79fa7c1f81e55caf613eedc347c0f3a9a9711b265a4db185677532d9552"
   },
   "compatibleChanges": [
+    {
+      "declaration": "src/daemon/server/http-server.ts#authorizeAuxiliaryHttpRequest",
+      "digest": "sha256:f74f2fc70313a4cc048bcd531f9831970cab75c2b098688e846c44b3c37a7185",
+      "rationale": "#2095 adds one new rejection condition (a configured-but-tenant-silent auth hook plus a client-declared tenant) that answers with the same 401 `{ok:false,error,code}` REST shape `sendRestJsonError` already sends for the token-error and hook-rejected cases on this route. An older client already parses that shape; nothing new appears on the wire, only a request that used to be silently trusted now gets an error it already knows how to read."
+    },
     {
       "declaration": "packages/kernel/src/errors.ts#DaemonError",
       "digest": "sha256:ae49c9c9c8fb93bb6b31ab865f37cc8b0db6c1b6ff026cc2791425b772c162a6",

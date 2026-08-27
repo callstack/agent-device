@@ -264,10 +264,7 @@ async function removeProviderScenarioTempDir(dir: string): Promise<void> {
   }
 }
 
-export function restoreEnv(key: string, previous: string | undefined): void {
-  if (previous === undefined) delete process.env[key];
-  else process.env[key] = previous;
-}
+export { restoreEnv } from '../../../src/__tests__/test-utils/env.ts';
 
 export function likelyPlayableMp4Container(): Buffer {
   return Buffer.concat([atom('ftyp', Buffer.from('isom0000isom')), atom('moov')]);

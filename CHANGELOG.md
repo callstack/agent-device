@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Security (daemon, remote/proxy HTTP only): when `AGENT_DEVICE_HTTP_AUTH_HOOK` is configured and a
+  request's hook result does not attest a `tenantId`, the request is now refused (401) outright — the
+  daemon no longer runs it as whichever tenant the client declared (RPC body `meta.tenantId` or
+  `flags.tenant`, or the `x-agent-device-tenant` header on the upload/artifact-download/diagnostics
+  routes) and no longer admits it unscoped when the client declares nothing either. This closes both
+  a shared-token impersonation path and an unscoped-access path to tenant-owned sessions/artifacts in
+  multi-tenant deployments. Deployments with no hook configured (the local loopback CLI) are
+  unaffected. A hook must attest `tenantId` on every request it wants the daemon to admit.
 - Breaking (0.21): removed aggregate performance compatibility (`perf`, `perf sample`, `perf metrics`, the `metrics` alias, optionless `client.observability.perf()`, and SDK `area: 'metrics'`). Use `perf frames`, `perf memory sample`, `perf cpu profile start|stop|report`, or `perf trace start|stop`; removed CLI and raw daemon forms fail with this migration guidance.
 - Breaking (0.21): removed legacy batch JSON steps with `positionals`/`flags`. Use `{"command":"...","input":{...}}`; rejected steps now include a concrete structured example.
 - Breaking (0.21): removed the deprecated Node client `command.rotate` wrapper and its `RotateCommandOptions` / `RotateCommandResult` exports. Use `command.orientation`; the already-removed CLI `rotate` form keeps its targeted migration error.
