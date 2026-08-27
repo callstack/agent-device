@@ -446,6 +446,7 @@ export async function startDaemonRuntime(
         handleRequest,
         token,
         retainArtifacts,
+        env,
         // #1801: the same record `DaemonError.logPath` names, addressed by its
         // locator so a remote caller can fetch what it cannot read by path.
         resolveRequestDiagnosticsPath: (ref) =>

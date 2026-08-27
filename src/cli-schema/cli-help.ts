@@ -38,6 +38,14 @@ const ENVIRONMENT_LINES = [
     description: 'Remote daemon service/API token',
   },
   {
+    label: 'AGENT_DEVICE_HTTP_ALLOW_HOST_PATH_INSTALL',
+    description: 'Explicit remote host-path install opt-in',
+  },
+  {
+    label: 'AGENT_DEVICE_HTTP_HOST_PATH_INSTALL_ROOT',
+    description: 'Realpath root for remote host-path installs',
+  },
+  {
     label: 'AGENT_DEVICE_CLOUD_BASE_URL',
     description: 'Bridge/control-plane API origin for cloud auth and /api-keys',
   },
@@ -822,6 +830,7 @@ Rules:
   disconnect releases local connection state; close releases the active session and device lease.
   A busy direct-proxy device error means another agent owns the device until it closes or its inactivity lease expires.
   Keep the proxy token secret. Anyone with the token can control the proxied daemon.
+  A daemon with AGENT_DEVICE_HTTP_AUTH_HOOK configured treats HTTP requests as remote: host-path install sources are rejected by default, and Maestro runScript HTTP helpers allow only public network destinations. To opt into path installs, set AGENT_DEVICE_HTTP_ALLOW_HOST_PATH_INSTALL=true and AGENT_DEVICE_HTTP_HOST_PATH_INSTALL_ROOT to an existing directory; the daemon resolves the requested path and rejects traversal or symlink escapes. No-hook local HTTP and socket flows retain their local behavior.
   If local/proxy iOS reports that the runner is already owned by another agent-device daemon after lease admission, retry after the owning session closes or after lease expiry. If the conflict repeats, clean stale daemon state on the machine with simulator access.
   Do not use --config as a remote profile flag. --config loads CLI defaults; --remote-config selects remote daemon/profile settings.
   For self-contained scripts, pass the same --remote-config to every operational command, including disconnect; a preceding connect is optional but not required.

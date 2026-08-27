@@ -1,12 +1,17 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { createDaemonHttpServer } from '../server/http-server.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import { cleanupUploadedArtifact, trackUploadedArtifact } from '../artifact-tracking.ts';
+import { resolveInstallSource } from '../install-source-resolution.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
 } from '../../__tests__/test-utils/loopback.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 type RpcErrorResponse = {
   jsonrpc: string;
@@ -137,6 +142,7 @@ async function withInstallFromSourceRpcServer(
     }>,
   ) => Promise<void>,
   t: { skip(reason?: string): void },
+  env?: NodeJS.ProcessEnv,
 ): Promise<void> {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
@@ -145,7 +151,7 @@ async function withInstallFromSourceRpcServer(
     dispatched.push(req);
     return { ok: true, data: { ok: true } };
   };
-  const server = await createDaemonHttpServer({ handleRequest });
+  const server = await createDaemonHttpServer({ handleRequest, env });
 
   try {
     const port = await listenOnLoopback(server);
@@ -172,15 +178,24 @@ async function withInstallFromSourceRpcServer(
   }
 }
 
-test('install_from_source rejects a host path source at the rpc boundary', async (t) => {
-  await withInstallFromSourceRpcServer(async (post) => {
-    const { status, body, dispatched } = await post({ kind: 'path', path: '/etc/passwd' });
+test('install_from_source rejects a host path source on an authenticated HTTP surface', async (t) => {
+  const root = mkdtempForTestSync('agent-device-http-path-boundary-');
+  try {
+    await withInstallFromSourceRpcServer(
+      async (post) => {
+        const { status, body, dispatched } = await post({ kind: 'path', path: '/etc/passwd' });
 
-    assert.equal(status, 400);
-    assert.equal(body.error?.code, -32602);
-    assert.equal(body.error?.data?.code, 'INVALID_ARGS');
-    assert.equal(dispatched.length, 0, 'a host path source must never reach the handler');
-  }, t);
+        assert.equal(status, 400);
+        assert.equal(body.error?.code, -32602);
+        assert.equal(body.error?.data?.code, 'INVALID_ARGS');
+        assert.equal(dispatched.length, 0, 'a host path source must never reach the handler');
+      },
+      t,
+      remoteHttpEnvironment(writeAllowingAuthHook(root)),
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('install_from_source still admits url sources', async (t) => {
@@ -210,3 +225,287 @@ test('install_from_source still admits github-actions-artifact sources', async (
     assert.equal(dispatched[0]?.meta?.installSource?.kind, 'github-actions-artifact');
   }, t);
 });
+test('remote HTTP rejects host path install sources by default', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const root = mkdtempForTestSync('agent-device-http-path-default-');
+  const hookPath = writeAllowingAuthHook(root);
+  let handlerCalls = 0;
+  const server = await createDaemonHttpServer({
+    env: remoteHttpEnvironment(hookPath),
+    handleRequest: async (): Promise<DaemonResponse> => {
+      handlerCalls += 1;
+      return { ok: true, data: {} };
+    },
+  });
+
+  try {
+    const port = await listenOnLoopback(server);
+    const response = await postInstallFromSource(port, {
+      kind: 'path',
+      path: path.join(root, 'app.apk'),
+    });
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error?.code, -32602);
+    assert.equal(response.body.error?.data?.code, 'INVALID_ARGS');
+    assert.match(response.body.error?.message ?? '', /disabled on the remote HTTP surface/);
+    assert.equal(handlerCalls, 0);
+  } finally {
+    await closeLoopbackServer(server);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('remote HTTP rejects host path install sources in the command RPC used by the CLI', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const root = mkdtempForTestSync('agent-device-http-command-path-default-');
+  const hookPath = writeAllowingAuthHook(root);
+  let handlerCalls = 0;
+  const server = await createDaemonHttpServer({
+    env: remoteHttpEnvironment(hookPath),
+    handleRequest: async (): Promise<DaemonResponse> => {
+      handlerCalls += 1;
+      return { ok: true, data: {} };
+    },
+  });
+
+  try {
+    const port = await listenOnLoopback(server);
+    const response = await postCommandRpc(port, {
+      command: 'install_source',
+      positionals: [],
+      flags: { platform: 'android' },
+      meta: {
+        installSource: { kind: 'path', path: path.join(root, 'app.apk') },
+      },
+    });
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error?.code, -32602);
+    assert.equal(response.body.error?.data?.code, 'INVALID_ARGS');
+    assert.match(response.body.error?.message ?? '', /disabled on the remote HTTP surface/);
+    assert.equal(handlerCalls, 0);
+  } finally {
+    await closeLoopbackServer(server);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('remote HTTP accepts an uploaded path artifact without resolving the client path', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const root = mkdtempForTestSync('agent-device-http-uploaded-path-');
+  const artifactPath = path.join(root, 'uploaded.apk');
+  fs.writeFileSync(artifactPath, 'uploaded');
+  const uploadedArtifactId = trackUploadedArtifact({ artifactPath, tempDir: root });
+  const hookPath = writeAllowingAuthHook(root);
+  const received: DaemonRequest[] = [];
+  const server = await createDaemonHttpServer({
+    env: remoteHttpEnvironment(hookPath),
+    handleRequest: async (request): Promise<DaemonResponse> => {
+      received.push(request);
+      const resolved = resolveInstallSource(request);
+      try {
+        assert.equal(resolved.source.kind, 'path');
+        assert.equal(resolved.source.path, artifactPath);
+      } finally {
+        resolved.cleanup();
+      }
+      return { ok: true, data: {} };
+    },
+  });
+
+  try {
+    const port = await listenOnLoopback(server);
+    const response = await postCommandRpc(port, {
+      command: 'install_source',
+      positionals: [],
+      flags: { platform: 'android' },
+      meta: {
+        installSource: { kind: 'path', path: '/etc/hosts' },
+        uploadedArtifactId,
+      },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(received.length, 1);
+  } finally {
+    await closeLoopbackServer(server);
+    cleanupUploadedArtifact(uploadedArtifactId);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('remote HTTP confines opted-in path installs to the realpath-approved root', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  await withPathConfinementServer(async ({ port, received, inside, traversal, outsideLink }) => {
+    await assertAllowedPathInstall(port, received, inside);
+    await assertRejectedPathInstall(port, traversal);
+    await assertRejectedPathInstall(port, outsideLink);
+    assert.equal(received.length, 1);
+  });
+});
+
+test('local HTTP keeps path install sources available without an auth hook', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const root = mkdtempForTestSync('agent-device-http-path-local-');
+  const artifactPath = path.join(root, 'app.apk');
+  fs.writeFileSync(artifactPath, 'local');
+  const received: DaemonRequest[] = [];
+  const server = await createDaemonHttpServer({
+    env: localHttpEnvironment(),
+    handleRequest: async (request): Promise<DaemonResponse> => {
+      received.push(request);
+      return { ok: true, data: {} };
+    },
+  });
+
+  try {
+    const port = await listenOnLoopback(server);
+    const response = await postInstallFromSource(port, { kind: 'path', path: artifactPath });
+    assert.equal(response.status, 200);
+    assert.equal(
+      received[0]?.meta?.installSource?.kind === 'path'
+        ? received[0].meta.installSource.path
+        : undefined,
+      artifactPath,
+    );
+    assert.equal(received[0]?.internal, undefined);
+  } finally {
+    await closeLoopbackServer(server);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function writeAllowingAuthHook(root: string): string {
+  const hookPath = path.join(root, 'auth-hook.mjs');
+  fs.writeFileSync(hookPath, 'export default () => true;\n');
+  return hookPath;
+}
+
+async function withPathConfinementServer(
+  run: (context: {
+    port: number;
+    received: DaemonRequest[];
+    inside: string;
+    traversal: string;
+    outsideLink: string;
+  }) => Promise<void>,
+): Promise<void> {
+  const parent = mkdtempForTestSync('agent-device-http-path-confinement-');
+  const root = path.join(parent, 'approved');
+  const outside = path.join(parent, 'outside.apk');
+  const inside = path.join(root, 'inside.apk');
+  const insideLink = path.join(root, 'inside-link.apk');
+  const outsideLink = path.join(root, 'outside-link.apk');
+  fs.mkdirSync(root);
+  fs.writeFileSync(outside, 'outside');
+  fs.writeFileSync(inside, 'inside');
+  fs.symlinkSync(inside, insideLink);
+  fs.symlinkSync(outside, outsideLink);
+  const hookPath = writeAllowingAuthHook(parent);
+  const received: DaemonRequest[] = [];
+  const server = await createDaemonHttpServer({
+    env: remoteHttpEnvironment(hookPath, {
+      AGENT_DEVICE_HTTP_ALLOW_HOST_PATH_INSTALL: 'true',
+      AGENT_DEVICE_HTTP_HOST_PATH_INSTALL_ROOT: root,
+    }),
+    handleRequest: async (request): Promise<DaemonResponse> => {
+      received.push(request);
+      return { ok: true, data: {} };
+    },
+  });
+
+  try {
+    await run({
+      port: await listenOnLoopback(server),
+      received,
+      inside,
+      traversal: path.join(root, '..', path.basename(outside)),
+      outsideLink,
+    });
+  } finally {
+    await closeLoopbackServer(server);
+    fs.rmSync(parent, { recursive: true, force: true });
+  }
+}
+
+async function assertAllowedPathInstall(
+  port: number,
+  received: DaemonRequest[],
+  inside: string,
+): Promise<void> {
+  const allowed = await postInstallFromSource(port, {
+    kind: 'path',
+    path: path.join(path.dirname(inside), 'inside-link.apk'),
+  });
+  assert.equal(allowed.status, 200);
+  assert.equal(received[0]?.meta?.installSource?.kind, 'path');
+  assert.equal(
+    received[0]?.meta?.installSource?.kind === 'path'
+      ? received[0].meta.installSource.path
+      : undefined,
+    fs.realpathSync(inside),
+  );
+  assert.equal(received[0]?.internal?.networkAccess, 'public-only');
+}
+
+async function assertRejectedPathInstall(port: number, rejectedPath: string): Promise<void> {
+  const rejected = await postInstallFromSource(port, { kind: 'path', path: rejectedPath });
+  assert.equal(rejected.status, 400, rejectedPath);
+  assert.equal(rejected.body.error?.data?.code, 'INVALID_ARGS');
+  assert.match(rejected.body.error?.message ?? '', /outside the approved root/);
+}
+
+function remoteHttpEnvironment(
+  hookPath: string,
+  overrides: NodeJS.ProcessEnv = {},
+): NodeJS.ProcessEnv {
+  const env = localHttpEnvironment();
+  env.AGENT_DEVICE_HTTP_AUTH_HOOK = hookPath;
+  return { ...env, ...overrides };
+}
+
+function localHttpEnvironment(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.AGENT_DEVICE_HTTP_AUTH_HOOK;
+  delete env.AGENT_DEVICE_HTTP_AUTH_EXPORT;
+  delete env.AGENT_DEVICE_HTTP_ALLOW_HOST_PATH_INSTALL;
+  delete env.AGENT_DEVICE_HTTP_HOST_PATH_INSTALL_ROOT;
+  return env;
+}
+
+async function postInstallFromSource(
+  port: number,
+  source: Record<string, unknown>,
+): Promise<{ status: number; body: RpcErrorResponse }> {
+  const response = await fetch(`http://127.0.0.1:${port}/rpc`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'install-source',
+      method: 'agent_device.install_from_source',
+      params: { platform: 'android', source },
+    }),
+  });
+  return { status: response.status, body: (await response.json()) as RpcErrorResponse };
+}
+
+async function postCommandRpc(
+  port: number,
+  params: Record<string, unknown>,
+): Promise<{ status: number; body: RpcErrorResponse }> {
+  const response = await fetch(`http://127.0.0.1:${port}/rpc`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'command-install-source',
+      method: 'agent_device.command',
+      params,
+    }),
+  });
+  return { status: response.status, body: (await response.json()) as RpcErrorResponse };
+}

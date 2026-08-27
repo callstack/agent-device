@@ -143,6 +143,14 @@ test('root help routes detailed reference material to progressive topics', async
   assert.match(commandsHelp, /Default config files: ~\/\.agent-device\/config\.json/);
   assert.match(commandsHelp, /^Environment:/m);
   assert.match(commandsHelp, /AGENT_DEVICE_SESSION\s+Explicit session name/);
+  assert.match(
+    commandsHelp,
+    /AGENT_DEVICE_HTTP_ALLOW_HOST_PATH_INSTALL\s+Explicit remote host-path install opt-in/,
+  );
+  assert.match(
+    commandsHelp,
+    /AGENT_DEVICE_HTTP_HOST_PATH_INSTALL_ROOT\s+Realpath root for remote host-path installs/,
+  );
   assert.match(commandsHelp, /^Examples:/m);
   assert.match(commandsHelp, /agent-device open Settings --platform ios/);
 
@@ -464,6 +472,10 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /Multiple agents can share one proxy/);
   assert.match(help, /disconnect releases local connection state/);
   assert.match(help, /A busy direct-proxy device error means another agent owns the device/);
+  assert.match(help, /AGENT_DEVICE_HTTP_AUTH_HOOK configured treats HTTP requests as remote/);
+  assert.match(help, /AGENT_DEVICE_HTTP_ALLOW_HOST_PATH_INSTALL=true/);
+  assert.match(help, /AGENT_DEVICE_HTTP_HOST_PATH_INSTALL_ROOT/);
+  assert.match(help, /rejects traversal or symlink escapes/);
   assert.match(help, /Limrun, BrowserStack, and AWS Device Farm through local provider profiles/);
   assert.match(help, /Limrun uses LIMRUN_API_KEY/);
   assert.match(help, /BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY/);

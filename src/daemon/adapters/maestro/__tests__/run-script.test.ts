@@ -95,3 +95,21 @@ output.result = [
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('executeRunScriptFile blocks non-public HTTP destinations for remote requests', () => {
+  const root = mkdtempForTestSync('agent-device-maestro-run-script-');
+  const scriptPath = path.join(root, 'setup.js');
+  fs.writeFileSync(scriptPath, `output.result = http.post('http://127.0.0.1:1')`);
+
+  try {
+    expect(() =>
+      executeRunScriptFile({
+        scriptPath,
+        env: {},
+        networkAccess: 'public-only',
+      }),
+    ).toThrow(/non-public address/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

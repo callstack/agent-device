@@ -1,8 +1,11 @@
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { stripUndefined } from '@agent-device/kernel/record';
+import type { DaemonNetworkAccessPolicy } from '../../types.ts';
 
 const RUN_SCRIPT_TIMEOUT_MS = 30_000;
 const RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS = 1_000;
@@ -13,29 +16,6 @@ type HttpResponse = {
   headers: Record<string, string>;
 };
 
-const HTTP_REQUEST_SCRIPT = `
-const fs = require('node:fs');
-const input = JSON.parse(fs.readFileSync(0, 'utf8'));
-if (typeof fetch !== 'function') {
-  console.error('global fetch is required for Maestro runScript http helpers');
-  process.exit(1);
-}
-fetch(input.url, {
-  method: input.method,
-  headers: input.headers,
-  body: input.body,
-}).then(async response => {
-  process.stdout.write(JSON.stringify({
-    status: response.status,
-    body: await response.text(),
-    headers: Object.fromEntries(response.headers.entries()),
-  }));
-}).catch(error => {
-  console.error(error && error.stack ? error.stack : String(error));
-  process.exit(1);
-});
-`;
-
 /**
  * Executes a trusted flow-local script with the compatibility helpers Maestro
  * exposes. `node:vm` isolates globals for the run but is not a security
@@ -44,15 +24,16 @@ fetch(input.url, {
 export function executeRunScriptFile(params: {
   scriptPath: string;
   env: Record<string, string>;
+  networkAccess?: DaemonNetworkAccessPolicy;
 }): Record<string, string> {
-  const { scriptPath, env } = params;
+  const { scriptPath, env, networkAccess = 'unrestricted' } = params;
   const script = fs.readFileSync(scriptPath, 'utf8');
   const output: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
 
   try {
     // The synchronous script budget is independent from the child-process
     // budget used by http.post below.
-    vm.runInNewContext(script, buildScriptGlobals(env, output), {
+    vm.runInNewContext(script, buildScriptGlobals(env, output, networkAccess), {
       filename: scriptPath,
       timeout: RUN_SCRIPT_TIMEOUT_MS,
     });
@@ -86,6 +67,7 @@ export function executeRunScriptFile(params: {
 function buildScriptGlobals(
   env: Record<string, string>,
   output: Record<string, unknown>,
+  networkAccess: DaemonNetworkAccessPolicy,
 ): vm.Context {
   return {
     ...env,
@@ -93,7 +75,7 @@ function buildScriptGlobals(
     json: parseRunScriptJson,
     http: {
       post: (url: string, options?: { headers?: Record<string, string>; body?: string }) =>
-        runHttpRequestSync('POST', url, options),
+        runHttpRequestSync('POST', url, options, networkAccess),
     },
   };
 }
@@ -130,38 +112,90 @@ function runHttpRequestSync(
   method: string,
   url: string,
   options?: { headers?: Record<string, string>; body?: string },
+  networkAccess: DaemonNetworkAccessPolicy = 'unrestricted',
 ): HttpResponse {
-  // Keep http.post synchronous from the flow author's point of view while the
-  // network request remains timeout-bounded independently from node:vm.
-  const result = runCmdSync(process.execPath, ['-e', HTTP_REQUEST_SCRIPT], {
-    stdin: JSON.stringify({
-      method,
-      url,
-      headers: options?.headers ?? {},
-      body: options?.body ?? '',
-    }),
+  const result = runCmdSync(process.execPath, resolveHttpChildArgs(), {
+    stdin: JSON.stringify(buildHttpChildInput(method, url, options, networkAccess)),
     timeoutMs: RUN_SCRIPT_TIMEOUT_MS,
     allowFailure: true,
   });
   if (result.exitCode !== 0) {
+    throwHttpChildFailure(method, url, result.exitCode, result.stderr);
+  }
+  return parseHttpChildResponse(method, url, result.stdout, result.stderr);
+}
+
+function resolveHttpChildArgs(): string[] {
+  const modulePath = resolveHttpChildModulePath(import.meta.url);
+  if (!modulePath) {
     throw new AppError(
       'COMMAND_FAILED',
-      `Maestro runScript http.${method.toLowerCase()} failed for ${url}: ${trimHttpErrorOutput(result.stderr)}`,
-      {
-        exitCode: result.exitCode,
-        stderr: result.stderr,
-      },
+      'Maestro runScript http helper entrypoint is unavailable; rebuild the package',
     );
   }
+  return modulePath.endsWith('.ts') ? ['--experimental-strip-types', modulePath] : [modulePath];
+}
+
+function resolveHttpChildModulePath(importMetaUrl: string): string | null {
   try {
-    return JSON.parse(result.stdout) as HttpResponse;
+    const currentModulePath = fileURLToPath(importMetaUrl);
+    const extension = path.extname(currentModulePath) || '.js';
+    const candidates = [
+      path.join(path.dirname(currentModulePath), 'run-script-http-child' + extension),
+      path.join(path.dirname(currentModulePath), 'internal', 'run-script-http-child' + extension),
+    ];
+    return candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function buildHttpChildInput(
+  method: string,
+  url: string,
+  options: { headers?: Record<string, string>; body?: string } | undefined,
+  networkAccess: DaemonNetworkAccessPolicy,
+): Record<string, unknown> {
+  return {
+    method,
+    url,
+    headers: options?.headers ?? {},
+    body: options?.body ?? '',
+    networkAccess,
+  };
+}
+
+function throwHttpChildFailure(
+  method: string,
+  url: string,
+  exitCode: number | null,
+  stderr: string,
+): never {
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Maestro runScript http.${method.toLowerCase()} failed for ${url}: ${trimHttpErrorOutput(stderr)}`,
+    {
+      exitCode,
+      stderr,
+    },
+  );
+}
+
+function parseHttpChildResponse(
+  method: string,
+  url: string,
+  stdout: string,
+  stderr: string,
+): HttpResponse {
+  try {
+    return JSON.parse(stdout) as HttpResponse;
   } catch (error) {
     throw new AppError(
       'COMMAND_FAILED',
       `Maestro runScript http.${method.toLowerCase()} returned invalid JSON for ${url}`,
       {
-        stdout: result.stdout.slice(0, RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS),
-        stderr: result.stderr.slice(0, RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS),
+        stdout: stdout.slice(0, RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS),
+        stderr: stderr.slice(0, RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS),
       },
       error instanceof Error ? error : undefined,
     );
