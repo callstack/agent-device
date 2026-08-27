@@ -50,7 +50,8 @@ import {
   mockInspectDeviceRuntimeFacts,
   mockShutdownTargetRuntime,
 } from './session-command-harness.ts';
-import { teardownSessionResources } from '../../session-teardown.ts';
+import { teardownSessionResources as teardownProductionSessionResources } from '../../session-teardown.ts';
+import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { shutdownSimulator } from '../../../platforms/apple/core/simulator.ts';
 import { runCmd } from '../../../utils/exec.ts';
@@ -86,6 +87,14 @@ const mockStopAndroidSnapshotHelperSessionForDevice = vi.mocked(
   stopAndroidSnapshotHelperSessionForDevice,
 );
 const mockStopIosRunnerSession = vi.mocked(stopIosRunnerSession);
+
+const teardownSessionResources = (
+  request: Parameters<typeof teardownProductionSessionResources>[0],
+) =>
+  teardownProductionSessionResources({
+    ...request,
+    platformCleanup: request.platformCleanup ?? platformResourceCleanup,
+  });
 
 const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({
   ok: true,

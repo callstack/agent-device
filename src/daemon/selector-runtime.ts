@@ -353,7 +353,7 @@ export async function dispatchWaitViaRuntime(
   // Both a satisfied wait and a timeout consumed the polled capture stored on the session:
   // when it is an occluding system surface, the outcome must disclose the occlusion.
   return withSystemSurfaceDisclosure(
-    await withSessionlessRunnerCleanup(session, device, execute),
+    await withSessionlessRunnerCleanup(session, device, execute, params.platformResourceCleanup),
     consumedSessionSnapshot(params),
   );
 }

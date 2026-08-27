@@ -22,6 +22,7 @@ import type { ScreenRecordingAdmissionLedger } from './screen-recording-admissio
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { RequestPlatformProviderScope } from '@agent-device/contracts/platform-providers';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 
 type RequestHandlerChainParams = {
   req: DaemonRequest;
@@ -43,6 +44,7 @@ type RequestHandlerChainParams = {
    */
   providerScope: RequestPlatformProviderScope;
   androidObservation?: AndroidObservationAdapter;
+  platformResourceCleanup?: PlatformResourceCleanup;
   bindDevice: BindDeviceRuntime;
   inspectFacts: InspectDeviceRuntimeFacts;
   bindExactDevice: BindExactDeviceRuntime;
@@ -161,6 +163,7 @@ async function runSessionHandler(
       requestScope: params.requestScope,
       retainDeviceExecutionLock: params.retainDeviceExecutionLock,
       throwIfCanceled: params.throwIfCanceled,
+      platformResourceCleanup: params.platformResourceCleanup,
     }),
   );
 }
@@ -179,6 +182,7 @@ async function runSnapshotHandler(
       sessionStore: params.sessionStore,
       inspectFacts: params.inspectFacts,
       bindDevice: params.bindDevice,
+      platformResourceCleanup: params.platformResourceCleanup,
     }),
   );
 }
@@ -262,6 +266,7 @@ async function runInteractionHandler(
       inspectFacts: params.inspectFacts,
       bindDevice: params.bindDevice,
       androidObservation: params.androidObservation,
+      platformResourceCleanup: params.platformResourceCleanup,
     }),
   );
 }

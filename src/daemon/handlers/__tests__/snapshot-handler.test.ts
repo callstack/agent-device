@@ -8,13 +8,13 @@ import {
 import fs from 'node:fs';
 import path from 'node:path';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../snapshot.ts';
-import { withSessionlessRunnerCleanup } from '../snapshot-session.ts';
 import { captureSnapshot } from '../snapshot-capture.ts';
 import { SessionStore } from '../../session-store.ts';
 import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtime.ts';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { DaemonResponse, SessionState } from '../../types.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { buildSnapshotSignatures } from '../../../snapshot/snapshot-freshness/index.ts';
 import { buildInteractionSurfaceSignature } from '../../interaction-outcome-policy.ts';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
@@ -40,15 +40,6 @@ vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal)
   return {
     ...actual,
     runAppleRunnerCommand: vi.fn(async () => ({})),
-    stopIosRunnerSession: vi.fn(async () => {}),
-  };
-});
-
-vi.mock('../../../platforms/apple/core/apps.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/apple/core/apps.ts')>();
-  return {
-    ...actual,
-    closeIosApp: vi.fn(async () => {}),
   };
 });
 
@@ -60,16 +51,10 @@ vi.mock('../../ios-app-session-hint.ts', () => ({
   buildIosOpenCommandHint: vi.fn(async () => undefined),
 }));
 
-import {
-  runAppleRunnerCommand,
-  stopIosRunnerSession,
-} from '../../../platforms/apple/core/runner-client.ts';
-import { closeIosApp } from '../../../platforms/apple/core/apps.ts';
+import { runAppleRunnerCommand } from '../../../platforms/apple/core/runner-client.ts';
 import { buildIosOpenCommandHint } from '../../ios-app-session-hint.ts';
 
 const mockRunnerCommand = vi.mocked(runAppleRunnerCommand);
-const mockStopIosRunnerSession = vi.mocked(stopIosRunnerSession);
-const mockCloseIosApp = vi.mocked(closeIosApp);
 const mockBuildIosOpenCommandHint = vi.mocked(buildIosOpenCommandHint);
 
 const SNAPSHOT_ROUTE_RUNTIME_COMMANDS = new Set(['snapshot', 'diff', 'settings', 'alert']);
@@ -77,15 +62,18 @@ const SNAPSHOT_ROUTE_RUNTIME_COMMANDS = new Set(['snapshot', 'diff', 'settings',
 function handleSnapshotCommands(
   params: Parameters<typeof handleProductionSnapshotCommands>[0],
 ): ReturnType<typeof handleProductionSnapshotCommands> {
-  // R58/R59 bound `settings` and `alert` too, so the fixture serves those commands as well.
   if (!SNAPSHOT_ROUTE_RUNTIME_COMMANDS.has(params.req.command)) {
-    return handleProductionSnapshotCommands(params);
+    return handleProductionSnapshotCommands({
+      ...params,
+      platformResourceCleanup: params.platformResourceCleanup ?? platformResourceCleanup,
+    });
   }
   const runtime = snapshotRuntimeFixture(params.req.meta?.requestId);
   return handleProductionSnapshotCommands({
     ...params,
     inspectFacts: params.inspectFacts ?? runtime.inspectFacts,
     bindDevice: params.bindDevice ?? runtime.bindDevice,
+    platformResourceCleanup: params.platformResourceCleanup ?? platformResourceCleanup,
   });
 }
 
@@ -161,10 +149,6 @@ beforeEach(() => {
   resetGetRuntimeFixture();
   mockRunnerCommand.mockReset();
   mockRunnerCommand.mockResolvedValue({});
-  mockStopIosRunnerSession.mockReset();
-  mockStopIosRunnerSession.mockResolvedValue();
-  mockCloseIosApp.mockReset();
-  mockCloseIosApp.mockResolvedValue();
   mockBuildIosOpenCommandHint.mockReset();
   mockBuildIosOpenCommandHint.mockResolvedValue(undefined);
 });
@@ -2255,30 +2239,4 @@ test('wait sleep bypasses sessionless runner cleanup wrapper', async () => {
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-});
-
-const returnOk = async () => 'ok';
-
-test('sessionless iOS runner cleanup stops the runner host app', async () => {
-  const result = await withSessionlessRunnerCleanup(undefined, iosSimulatorDevice, returnOk);
-
-  expect(result).toBe('ok');
-  expect(mockStopIosRunnerSession).toHaveBeenCalledWith(iosSimulatorDevice.id);
-  expect(mockCloseIosApp).toHaveBeenCalledWith(
-    iosSimulatorDevice,
-    'com.callstack.agentdevice.runner',
-  );
-});
-
-test('sessionless iOS runner host close is best effort', async () => {
-  mockCloseIosApp.mockRejectedValueOnce(new Error('terminate failed'));
-
-  const result = await withSessionlessRunnerCleanup(undefined, iosSimulatorDevice, returnOk);
-
-  expect(result).toBe('ok');
-  expect(mockStopIosRunnerSession).toHaveBeenCalledWith(iosSimulatorDevice.id);
-  expect(mockCloseIosApp).toHaveBeenCalledWith(
-    iosSimulatorDevice,
-    'com.callstack.agentdevice.runner',
-  );
 });

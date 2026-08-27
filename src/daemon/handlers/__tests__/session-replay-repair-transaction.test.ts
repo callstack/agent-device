@@ -2,8 +2,8 @@
  * ADR 0012 decision 6 "repair transaction" lifecycle fixes (Q1/Q2a/Q2b/Q2c):
  * proves the WHOLE chain end to end, at the layer these fixes actually live —
  * `runReplayScriptSource` + `handleCloseCommand` sharing a live `SessionStore`,
- * exactly like an agent's separate CLI invocations against the same daemon
- * session would. `sendToDaemon`'s process-level keep-alive (Fix 1's daemon
+ * exactly like separate CLI invocations against the same daemon. `sendToDaemon`'s
+ * process-level keep-alive (Fix 1's daemon
  * teardown guard) is a different architectural layer — a client-side process
  * manager, not session/script state — and is covered separately in
  * `src/utils/__tests__/daemon-client-lifecycle.test.ts`
@@ -16,8 +16,6 @@
  * abandoned close.
  * Fix 3: the source plan's terminal `close` is skipped while repair-armed, so
  * the resume completes instead of diverging on lifecycle.
- * Fix 4: the publish is atomic (temp + rename) and carries the completeness
- * sentinel, so a stale/partial file never blocks a later repair.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
@@ -93,6 +91,7 @@ import {
   bindLifecycleRuntime,
   inspectLifecycleRuntimeFacts,
 } from './application-lifecycle-runtime-harness.ts';
+import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 
 const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
@@ -103,6 +102,7 @@ function handleCloseCommand(
 ) {
   return handleProductionCloseCommand({
     ...params,
+    platformResourceCleanup,
     inspectFacts: inspectLifecycleRuntimeFacts,
     bindDevice: bindLifecycleRuntime,
   });

@@ -14,6 +14,7 @@ import { handleSessionReplayCommands } from '../session-replay.ts';
 import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '../session-replay-test-policy.ts';
 import { replayCommandFamily } from '../../../commands/replay/index.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 
 // --- ADR 0012 decision 4 / migration step 5: `--from` is replay-only ---
 
@@ -51,6 +52,7 @@ test('test rejects raw --keep-session with INVALID_ARGS before running the suite
     logPath: path.join(root, 'daemon.log'),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    platformResourceCleanup,
     invoke,
   });
 
@@ -81,6 +83,7 @@ test('test rejects --from with INVALID_ARGS before running the suite', async () 
     logPath: path.join(root, 'daemon.log'),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    platformResourceCleanup,
     invoke: async () => {
       throw new Error('test must not start executing when --from is rejected');
     },
@@ -112,6 +115,7 @@ test('test rejects --plan-digest alone with INVALID_ARGS before running the suit
     logPath: path.join(root, 'daemon.log'),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    platformResourceCleanup,
     invoke: async () => {
       throw new Error('test must not start executing when --plan-digest is rejected');
     },
@@ -144,6 +148,7 @@ test('test rejects --save-script with INVALID_ARGS before running the suite', as
     logPath: path.join(root, 'daemon.log'),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    platformResourceCleanup,
     invoke: async () => {
       throw new Error('test must not start executing when --save-script is rejected');
     },
@@ -176,6 +181,7 @@ test('test rejects raw --force without --save-script before running the suite', 
     logPath: path.join(root, 'daemon.log'),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    platformResourceCleanup,
     invoke,
   });
 

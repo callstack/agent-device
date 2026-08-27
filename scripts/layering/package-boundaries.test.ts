@@ -124,6 +124,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/platform-module',
   '@agent-device/contracts/platform-plugin',
   '@agent-device/contracts/platform-providers',
+  '@agent-device/contracts/platform-resource-cleanup',
   '@agent-device/contracts/platform-runtime',
   '@agent-device/contracts/platform-runtime-host',
   '@agent-device/contracts/platform-runtime-operations',

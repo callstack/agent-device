@@ -31,6 +31,7 @@ import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
 } from './test-device-runtime-gateway.ts';
+import { createRequestHandler as createProductionRequestHandler } from '../request-router.ts';
 import { resolveRequestExecutionLockKeys } from '../request-binding.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
@@ -398,6 +399,43 @@ test('close releases the session lease', async () => {
   expect(response.ok).toBe(true);
   expect(sessionStore.get('default')).toBeUndefined();
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
+});
+
+test('close fails synchronously when root composition omits platform resource cleanup', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-open-');
+  sessionStore.set('default', {
+    name: 'default',
+    device: makeIosDevice('SIM-CLOSE-MISSING-CLEANUP'),
+    createdAt: Date.now(),
+    actions: [],
+  });
+  const handler = createProductionRequestHandler({
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'close',
+    positionals: [],
+    meta: { requestId: 'req-close-missing-cleanup' },
+  });
+
+  expect(response.ok).toBe(false);
+  if (!response.ok) {
+    expect(response.error).toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'Platform resource cleanup was not supplied by root runtime composition',
+    });
+  }
+  expect(sessionStore.get('default')).toBeDefined();
+  expect(legacyDispatchCapture).not.toHaveBeenCalled();
 });
 
 test('close rejects a different client before cleanup', async () => {

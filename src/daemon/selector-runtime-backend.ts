@@ -26,6 +26,7 @@ import {
 } from './selector-capture-binding.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 import { getRequestSignal } from '../request/cancel.ts';
 import { snapshotOptionsToFlags } from '../backend-snapshot-options.ts';
 
@@ -42,6 +43,7 @@ export type SelectorRuntimeParams = {
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
   androidObservation?: AndroidObservationAdapter;
+  platformResourceCleanup?: PlatformResourceCleanup;
 };
 
 export type SelectorRuntimeDeviceParams = SelectorRuntimeParams & {

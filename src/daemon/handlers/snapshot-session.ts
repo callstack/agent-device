@@ -1,6 +1,5 @@
-import { isIosFamily } from '@agent-device/kernel/device';
 import { resolveTargetDevice } from '../../core/dispatch-resolve.ts';
-import { cleanupSessionlessAppleRunnerHost } from '../../platform-runtime-apple-resources.ts';
+import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 import { SessionStore } from '../session-store.ts';
@@ -20,16 +19,15 @@ export async function withSessionlessRunnerCleanup<T>(
   session: SessionState | undefined,
   device: SessionState['device'],
   task: () => Promise<T>,
+  platformCleanup?: PlatformResourceCleanup,
 ): Promise<T> {
-  const shouldCleanupSessionlessIosRunner = !session && isIosFamily(device);
+  if (!session && !platformCleanup) {
+    throw new Error('Platform resource cleanup was not injected');
+  }
   try {
     return await task();
   } finally {
-    // Sessionless iOS commands intentionally stop the runner to avoid leaked xcodebuild processes.
-    // For multi-command flows, keep an active session via `open` so the runner can be reused.
-    if (shouldCleanupSessionlessIosRunner) {
-      await cleanupSessionlessAppleRunnerHost(device);
-    }
+    if (!session) await platformCleanup!.cleanupSessionlessExecutionHost(device);
   }
 }
 

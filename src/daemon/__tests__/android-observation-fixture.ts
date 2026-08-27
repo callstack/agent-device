@@ -24,7 +24,6 @@ export const androidObservationFixture: AndroidObservationAdapter = Object.freez
   readScreenSize: async (device) => await getAndroidScreenSize(device),
   isPermissionPackage: async (packageName) => isAndroidPermissionPackage(packageName),
 });
-
 /** Benign router default for tests that exercise locking or response shape, not Android state. */
 export const clearAndroidObservationFixture = Object.freeze({
   ...androidObservation,

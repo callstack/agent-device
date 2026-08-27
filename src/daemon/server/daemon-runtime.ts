@@ -20,7 +20,7 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { clearDaemonShutdownReport, writeDaemonShutdownReport } from '../daemon-shutdown-report.ts';
 import { createRequestHandler } from '../request-router.ts';
-import { isWebSession, stopSessionAppLog, teardownSessionResources } from '../session-teardown.ts';
+import { stopSessionAppLog, teardownSessionResources } from '../session-teardown.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
 import { runtimeHintValues } from '../handlers/session-runtime.ts';
 import { closeDaemonServers } from './server-shutdown.ts';
@@ -58,9 +58,10 @@ import { sleep } from '../../utils/timeouts.ts';
 import { configureAppleRunnerLeaseOwnerStateDir } from '../../platform-runtime-apple-runner-owner.ts';
 import {
   cleanupManagedWebRuntimeOrphans,
+  platformResourceCleanup,
   resetAndroidSnapshotHelperRuntime,
 } from '../../platform-runtime-resource-cleanup.ts';
-import { openWebSessionNames } from '../web-session-names.ts';
+import { isWebSession, openWebSessionNames } from '../web-session-names.ts';
 import {
   recoverAppLogResourcesAfterDaemonLock,
   type AppLogRecoveryDiagnostic,
@@ -174,6 +175,7 @@ export async function teardownDaemonSessionForShutdown(params: {
           sessionName,
           sessionStore,
           stateDir,
+          platformCleanup: platformResourceCleanup,
         }),
     });
     const lifecycleTeardownSucceeded = finalizeApplicationLifecycle
@@ -338,6 +340,7 @@ export async function startDaemonRuntime(
     screenRecordingAdmissionLedger,
     requestPlatformProviders,
     androidObservation,
+    platformResourceCleanup,
     providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
     providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
     providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,

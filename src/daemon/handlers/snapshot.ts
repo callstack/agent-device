@@ -8,6 +8,7 @@ import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import { dispatchWaitViaRuntime } from '../selector-runtime.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './snapshot-session.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
+import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 
 type SnapshotCommandParams = {
   req: DaemonRequest;
@@ -16,12 +17,21 @@ type SnapshotCommandParams = {
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
+  platformResourceCleanup?: PlatformResourceCleanup;
 };
 
 type SnapshotCommandHandler = (params: SnapshotCommandParams) => Promise<DaemonResponse>;
 
 const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
-  snapshot: async ({ req, sessionName, logPath, sessionStore, inspectFacts, bindDevice }) =>
+  snapshot: async ({
+    req,
+    sessionName,
+    logPath,
+    sessionStore,
+    inspectFacts,
+    bindDevice,
+    platformResourceCleanup,
+  }) =>
     await dispatchSnapshotViaRuntime({
       req,
       sessionName,
@@ -29,8 +39,17 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
       sessionStore,
       inspectFacts,
       bindDevice,
+      platformResourceCleanup,
     }),
-  diff: async ({ req, sessionName, logPath, sessionStore, inspectFacts, bindDevice }) => {
+  diff: async ({
+    req,
+    sessionName,
+    logPath,
+    sessionStore,
+    inspectFacts,
+    bindDevice,
+    platformResourceCleanup,
+  }) => {
     if (req.positionals?.[0] !== 'snapshot') {
       return errorResponse('INVALID_ARGS', 'diff currently supports only: diff snapshot');
     }
@@ -41,9 +60,18 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
       sessionStore,
       inspectFacts,
       bindDevice,
+      platformResourceCleanup,
     });
   },
-  wait: async ({ req, sessionName, logPath, sessionStore, inspectFacts, bindDevice }) =>
+  wait: async ({
+    req,
+    sessionName,
+    logPath,
+    sessionStore,
+    inspectFacts,
+    bindDevice,
+    platformResourceCleanup,
+  }) =>
     await dispatchWaitViaRuntime({
       req,
       sessionName,
@@ -51,37 +79,64 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
       sessionStore,
       inspectFacts,
       bindDevice,
+      platformResourceCleanup,
     }),
-  alert: async ({ req, sessionName, logPath, sessionStore, inspectFacts, bindDevice }) => {
+  alert: async ({
+    req,
+    sessionName,
+    logPath,
+    sessionStore,
+    inspectFacts,
+    bindDevice,
+    platformResourceCleanup,
+  }) => {
     const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
-    return await withSessionlessRunnerCleanup(session, device, async () => {
-      return await handleAlertCommand({
-        req,
-        logPath,
-        sessionStore,
-        session,
-        device,
-        inspectFacts,
-        bindDevice,
-      });
-    });
+    return await withSessionlessRunnerCleanup(
+      session,
+      device,
+      async () => {
+        return await handleAlertCommand({
+          req,
+          logPath,
+          sessionStore,
+          session,
+          device,
+          inspectFacts,
+          bindDevice,
+        });
+      },
+      platformResourceCleanup,
+    );
   },
-  settings: async ({ req, sessionName, logPath, sessionStore, inspectFacts, bindDevice }) => {
+  settings: async ({
+    req,
+    sessionName,
+    logPath,
+    sessionStore,
+    inspectFacts,
+    bindDevice,
+    platformResourceCleanup,
+  }) => {
     const parsedSettings = parseSettingsArgs(req);
     if (!parsedSettings.ok) return parsedSettings;
     const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
-    return await withSessionlessRunnerCleanup(session, device, async () => {
-      return await handleSettingsCommand({
-        req,
-        logPath,
-        sessionStore,
-        session,
-        device,
-        parsed: parsedSettings.parsed,
-        inspectFacts,
-        bindDevice,
-      });
-    });
+    return await withSessionlessRunnerCleanup(
+      session,
+      device,
+      async () => {
+        return await handleSettingsCommand({
+          req,
+          logPath,
+          sessionStore,
+          session,
+          device,
+          parsed: parsedSettings.parsed,
+          inspectFacts,
+          bindDevice,
+        });
+      },
+      platformResourceCleanup,
+    );
   },
 } satisfies Record<string, SnapshotCommandHandler>;
 

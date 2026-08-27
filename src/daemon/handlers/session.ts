@@ -32,6 +32,7 @@ import type { PerfCaptureAdmissionLedger } from '../perf-capture-admission-ledge
 import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
+import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 
 export type SessionCommandInput = {
   req: DaemonRequest;
@@ -60,6 +61,7 @@ export type SessionCommandInput = {
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   throwIfCanceled?: () => void;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+  platformResourceCleanup?: PlatformResourceCleanup;
 };
 
 type SessionCommandParams = Omit<SessionCommandInput, 'leaseRegistry'> & {
@@ -136,6 +138,7 @@ const handleSessionReplayCommandGroup: SessionCommandHandler = async ({
   requestScope,
   retainDeviceExecutionLock,
   throwIfCanceled,
+  platformResourceCleanup,
 }) =>
   await handleSessionReplayCommands({
     req,
@@ -151,6 +154,7 @@ const handleSessionReplayCommandGroup: SessionCommandHandler = async ({
     requestScope,
     retainDeviceExecutionLock,
     throwIfCanceled,
+    platformResourceCleanup,
   });
 
 /**
@@ -272,6 +276,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
     leaseLifecycleProvider,
     inspectFacts,
     bindDevice,
+    platformResourceCleanup,
   }) =>
     await handleCloseCommand({
       req,
@@ -282,6 +287,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
       leaseLifecycleProvider,
       inspectFacts,
       bindDevice,
+      platformResourceCleanup,
     }),
 } satisfies Record<DescriptorSessionRouteCommandName, SessionCommandHandler>;
 
@@ -310,6 +316,7 @@ export async function handleSessionCommands(
     retainDeviceExecutionLock,
     throwIfCanceled,
     reconcileOrphanedDeviceClaim,
+    platformResourceCleanup,
   } = params;
 
   const handler =
@@ -338,5 +345,6 @@ export async function handleSessionCommands(
     retainDeviceExecutionLock,
     throwIfCanceled,
     reconcileOrphanedDeviceClaim,
+    platformResourceCleanup,
   });
 }

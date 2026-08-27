@@ -19,7 +19,9 @@
 //     an import whose source zone outranks its target zone, plus a ratchet on the
 //     same inversion measured over TYPE-ONLY edges (R6).
 //   - Over the DAEMON only: SessionState field ownership (R7), because the session
-//     record is store-owned mutable state that any daemon module can write.
+//     record is store-owned mutable state that any daemon module can write; and the terminal
+//     concrete-platform boundary (R65), which rejects every import form into src/platforms or a
+//     platform package.
 //   - Over the TYPE GRAPH: the largest type-level import cycle is pinned by
 //     equality (R9). R4 keeps the value graph acyclic, so these cycles are free at
 //     runtime but bound what can be read in isolation; growth fails, and so does a
@@ -98,6 +100,7 @@ import { policyLead, policyViolation, ZONE_POLICIES } from './zone-policy.ts';
 import { contractsImplementationAuthorityViolations } from './contracts-implementation-policy.ts';
 import { selectorPipelineOwnershipViolations } from './selector-pipeline-ownership.ts';
 import { recordRuntimeRegistryJoinViolations } from './record-runtime-registry-policy.ts';
+import { checkDaemonPlatformBoundary } from './daemon-platform-boundary.ts';
 import { listTrackedProductionSources, listTrackedTypeScriptFiles } from './tracked-sources.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
@@ -485,7 +488,9 @@ function report(
         `inside its declared owner (R7); the largest type-level cycle is ${typeCycle} files ` +
         `(R9); ${daemonModularitySummary()}; ` +
         `${packageBoundariesSummary(repoRoot)}; ${platformPackagePolicySummary()}; ` +
-        `${runtimeCommandCutoverSummary()}; and bin.ts imports normalizeCliCommandAlias, ` +
+        `${runtimeCommandCutoverSummary()}; R65 keeps production src/daemon free of concrete ` +
+        `platform imports in every executable and type-only form; and bin.ts imports ` +
+        `normalizeCliCommandAlias, ` +
         `actually passes it into buildCommandUsageText, and holds no local alias literals ` +
         `(R12).\n`,
     );
@@ -543,6 +548,7 @@ export const LAYERING_RULE_IDS = [
   'type-spine-inversions',
   'session-state-ownership',
   'daemon-modularity-ratchets',
+  'daemon-platform-boundary',
   'bin-alias-fast-path',
   'package-boundaries',
   'platform-package-policy',
@@ -564,6 +570,8 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
   'session-state-ownership': (context) => checkSessionStateOwnership(context.sources),
   'daemon-modularity-ratchets': (context) =>
     checkDaemonModularityRatchets(context.edges, context.typeCycleMembers),
+  'daemon-platform-boundary': (context) =>
+    checkDaemonPlatformBoundary([...context.sources].map(([path, source]) => ({ path, source }))),
   'bin-alias-fast-path': (context) => checkBinAliasFastPath(context.sources),
   'package-boundaries': () => checkPackageBoundaries(repoRoot),
   'platform-package-policy': (context) =>

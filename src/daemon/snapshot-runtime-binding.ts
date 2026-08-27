@@ -12,6 +12,7 @@ import type {
 import { buildIosOpenCommandHint } from './ios-app-session-hint.ts';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
+import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import {
@@ -40,6 +41,7 @@ export type SnapshotRuntimeRouteParams = {
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
+  platformResourceCleanup?: PlatformResourceCleanup;
 };
 
 type ResolvedSnapshotCaptureRuntime =

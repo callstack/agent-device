@@ -23,6 +23,7 @@ import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__
 import { withClientReplayScriptSources } from '../../__tests__/test-utils/replay-script-source.ts';
 import type { DaemonInvokeFn } from '../types.ts';
 import { clearAndroidObservationFixture } from './android-observation-fixture.ts';
+import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 
 const unavailable = Object.freeze({
   available: false as const,
@@ -260,6 +261,7 @@ export function createRequestHandler(
   const { deviceRuntimeGateway = unavailableDeviceRuntimeGateway, ...rest } = deps;
   const handle = createProductionRequestHandler({
     androidObservation: clearAndroidObservationFixture,
+    platformResourceCleanup,
     ...rest,
     deviceRuntimeGateway,
   });

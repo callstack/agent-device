@@ -60,6 +60,7 @@ import {
   inspectProviderLifecycleRuntimeFacts,
   inspectLifecycleRuntimeFacts,
 } from './application-lifecycle-runtime-harness.ts';
+import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const mockDiscoverReadyAndroidEmulators = vi.mocked(discoverReadyAndroidEmulators);
@@ -89,6 +90,7 @@ function handleCloseCommand(
 ) {
   return handleProductionCloseCommand({
     ...params,
+    platformResourceCleanup,
     inspectFacts: inspectLifecycleRuntimeFacts,
     bindDevice: bindLifecycleRuntime,
   });

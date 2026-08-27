@@ -60,10 +60,9 @@ export const ZONE_POLICIES: readonly ZonePolicy[] = [
     rule: 'R3 platforms-seam',
     to: ['platforms'],
     tolerates: ['type-only', 'dynamic'],
-    seam: ['src/core/interactors/', 'src/daemon/', 'src/sdk/'],
-    seamExcept: ['src/daemon/client/'],
+    seam: ['src/core/interactors/', 'src/sdk/'],
     hint:
-      'Only src/core/interactors/, the daemon server and the sdk barrel may statically import ' +
+      'Only src/core/interactors/ and the sdk barrel may statically import ' +
       'platforms/; elsewhere use a dynamic import() or a type-only import to preserve CLI ' +
       'cold-start.',
   },

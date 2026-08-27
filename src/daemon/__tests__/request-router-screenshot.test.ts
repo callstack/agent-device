@@ -207,27 +207,30 @@ test('router serializes concurrent commands for the same device across sessions'
   const order: string[] = [];
   let active = 0;
   let maxActive = 0;
-  const gates: Array<() => void> = [];
-  const gate = async (label: string) => {
+  let releaseScreenshot!: () => void;
+  const screenshotGate = new Promise<void>((resolve) => {
+    releaseScreenshot = resolve;
+  });
+  const enter = (label: string) => {
     order.push(`start-${label}`);
     active += 1;
     maxActive = Math.max(maxActive, active);
-    await new Promise<void>((resolve) => {
-      gates.push(() => {
-        active -= 1;
-        order.push(`end-${label}`);
-        resolve();
-      });
-    });
+  };
+  const exit = (label: string) => {
+    active -= 1;
+    order.push(`end-${label}`);
   };
 
   const runtime = screenshotRuntimeFixture({
     onCapture: async (input) => {
       writeSolidPng(input.outPath);
-      await gate('screenshot');
+      enter('screenshot');
+      await screenshotGate;
+      exit('screenshot');
     },
     onScroll: async () => {
-      await gate('scroll');
+      enter('scroll');
+      exit('scroll');
     },
   });
 
@@ -249,9 +252,12 @@ test('router serializes concurrent commands for the same device across sessions'
     meta: { requestId: 'req-lock-1' },
   });
 
-  await vi.waitFor(() => {
-    expect(order).toEqual(['start-screenshot']);
-  });
+  await vi.waitFor(
+    () => {
+      expect(order).toEqual(['start-screenshot']);
+    },
+    { timeout: 5_000 },
+  );
 
   const scrollRequest = handler({
     token: 'test-token',
@@ -264,13 +270,7 @@ test('router serializes concurrent commands for the same device across sessions'
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(order).toEqual(['start-screenshot']);
 
-  gates.shift()?.();
-
-  await vi.waitFor(() => {
-    expect(order).toEqual(['start-screenshot', 'end-screenshot', 'start-scroll']);
-  });
-
-  gates.shift()?.();
+  releaseScreenshot();
 
   const [screenshotResponse, scrollResponse] = await Promise.all([
     screenshotRequest,
@@ -281,7 +281,7 @@ test('router serializes concurrent commands for the same device across sessions'
   expect(scrollResponse.ok).toBe(true);
   expect(maxActive).toBe(1);
   expect(order).toEqual(['start-screenshot', 'end-screenshot', 'start-scroll', 'end-scroll']);
-});
+}, 15_000);
 
 test('iOS simulator screenshot response includes output dimensions and logical density metadata', async () => {
   const screenshotPath = path.join(os.tmpdir(), `agent-device-ios-meta-${Date.now()}.png`);

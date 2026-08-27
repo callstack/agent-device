@@ -53,6 +53,7 @@ import {
   startReplayTestVideoRecordingIfReady,
 } from './session-replay-video-recording.ts';
 import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from './session-replay-test-policy.ts';
+import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 
 /**
  * Binds one replay-test attempt to daemon request cancellation (#1478 P3b).
@@ -158,12 +159,20 @@ export type ReplayTestSuiteCommandParams = {
   requestScope?: PlatformRequestScope;
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   throwIfCanceled?: () => void;
+  platformResourceCleanup?: PlatformResourceCleanup;
 };
 
 export async function runReplayTestSuiteCommand(
   params: ReplayTestSuiteCommandParams,
 ): Promise<DaemonResponse> {
   const { req, sessionName, logPath, sessionStore, leaseRegistry, invoke } = params;
+  if (!params.platformResourceCleanup) {
+    throw new AppError(
+      'INTERNAL_ERROR',
+      'Platform resource cleanup was not supplied by root runtime composition',
+    );
+  }
+  const platformResourceCleanup = params.platformResourceCleanup;
   const replayVideoRuntime = resolveReplayVideoRuntime(params);
   if (req.flags?.recordVideo === true && replayVideoRuntime === undefined) {
     return errorResponse(
@@ -319,6 +328,7 @@ export async function runReplayTestSuiteCommand(
         leaseRegistry,
         inspectFacts: params.inspectFacts,
         bindDevice: params.bindDevice,
+        platformResourceCleanup,
       });
       if (!closeResponse.ok) {
         throw new AppError(closeResponse.error.code, closeResponse.error.message, {

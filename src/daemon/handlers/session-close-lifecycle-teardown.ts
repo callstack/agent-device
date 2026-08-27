@@ -7,13 +7,13 @@ import {
   reportSessionCleanupFailures,
   finishSessionAudioProbe,
   finishSessionScreenRecording,
-  stopSessionAndroidSnapshotHelper,
+  stopSessionSnapshotHelper,
   stopSessionAppLog,
   stopSessionPerfCapture,
   type SessionCleanupFailure,
 } from '../session-teardown.ts';
+import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 import { hasRuntimeTransportHints, runtimeHintValues } from './session-runtime.ts';
-import { isIosSimulator } from './session-device-utils.ts';
 import type {
   CloseRuntime,
   CloseRuntimeWithRuntimeHintClear,
@@ -51,6 +51,7 @@ export async function runSessionCloseTeardown(params: {
     sessionStore: SessionStore;
     platformCloseError: unknown;
   }): Error | undefined;
+  platformResourceCleanup: PlatformResourceCleanup;
 }): Promise<SessionCloseTeardownResult> {
   const {
     req,
@@ -76,9 +77,19 @@ export async function runSessionCloseTeardown(params: {
       return undefined;
     }
   };
-  const retainAppleRunner = shouldRetainAppleRunnerAfterClose(req, session);
+  const retainExecutionHost = params.platformResourceCleanup.retainExecutionHostAfterClose({
+    device: session.device,
+    shutdownRequested: req.flags?.shutdown === true,
+    hasScreenRecording: Boolean(session.screenRecording),
+    hasLease: Boolean(session.lease),
+  });
   const configuredRuntimeHints = sessionStore.getRuntimeHints(sessionName);
-  await stopBestEffortSessionResources(session, sessionStore, attemptCleanup);
+  await stopBestEffortSessionResources(
+    session,
+    sessionStore,
+    attemptCleanup,
+    params.platformResourceCleanup,
+  );
   const platformCloseError = repairArmed
     ? undefined
     : await dispatchTargetedPlatformClose({ req, session, logPath, lifecycle });
@@ -100,7 +111,7 @@ export async function runSessionCloseTeardown(params: {
       (await lifecycle.operations.finalizeApplicationClose({
         appBundleId: session.appBundleId,
         surface: session.surface ?? 'app',
-        retainRunner: retainAppleRunner,
+        retainRunner: retainExecutionHost,
         stateDir: sessionStore.resolveDaemonStateDir(),
         shutdownTarget: req.flags?.shutdown === true,
       })) ?? {},
@@ -114,22 +125,13 @@ export async function runSessionCloseTeardown(params: {
   return { platformCloseError, saveScriptError, shutdownResult: finalization?.shutdown };
 }
 
-function shouldRetainAppleRunnerAfterClose(req: DaemonRequest, session: SessionState): boolean {
-  return (
-    isIosSimulator(session.device) &&
-    !req.flags?.shutdown &&
-    !session.screenRecording &&
-    !session.lease &&
-    !session.device.simulatorSetPath
-  );
-}
-
 type CleanupRunner = (step: string, run: () => Promise<void>) => Promise<void>;
 
 async function stopBestEffortSessionResources(
   session: SessionState,
   sessionStore: SessionStore,
   attemptCleanup: CleanupRunner,
+  platformCleanup: PlatformResourceCleanup,
 ): Promise<void> {
   // Recording overlay finalization needs the Apple runner.
   const currentSession = sessionStore.get(session.name) ?? session;
@@ -151,7 +153,9 @@ async function stopBestEffortSessionResources(
   await attemptCleanup('perf_capture', () =>
     stopSessionPerfCapture({ session, sessionName: session.name, sessionStore }),
   );
-  await attemptCleanup('android_snapshot_helper', () => stopSessionAndroidSnapshotHelper(session));
+  await attemptCleanup('platform_snapshot_helper', () =>
+    stopSessionSnapshotHelper(session, platformCleanup),
+  );
 }
 
 export function closeCleanupError(

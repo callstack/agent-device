@@ -16,6 +16,7 @@ import {
   androidObservation,
   type PlatformProviderResolvers,
 } from '../../../src/platform-runtime.ts';
+import { platformResourceCleanup } from '../../../src/platform-runtime-resource-cleanup.ts';
 import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import { trackDownloadableArtifact } from '../../../src/daemon/artifact-tracking.ts';
 import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
@@ -157,6 +158,7 @@ export async function createProviderScenarioHarness(
     // diagnostics are injected at the root, so the harness composes them the same way.
     hostDiagnostics: createHostDiagnostics(),
     androidObservation,
+    platformResourceCleanup,
     requestPlatformProviders:
       configuredRequestPlatformProviders ??
       createRequestPlatformProviders({

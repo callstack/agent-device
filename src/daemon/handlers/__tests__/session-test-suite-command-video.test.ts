@@ -23,6 +23,7 @@ import type { RecordRuntimeHandlerParams } from '../record-runtime.ts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
+import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 
 const recordRuntimeMocks = vi.hoisted(() => ({
   handleRecordCommand: vi.fn(),
@@ -268,6 +269,7 @@ test('test finalizes replay video exactly once when cancellation arrives after s
     logPath: path.join(root, 'daemon.log'),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    platformResourceCleanup,
     bindDevice: unavailableBindDevice,
     bindExactDevice: unavailableBindExactDevice,
     screenRecordingAdmissionLedger,

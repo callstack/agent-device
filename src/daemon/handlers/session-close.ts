@@ -15,7 +15,8 @@ import {
   recordRepairPlatformClose,
 } from '../session-replay-transaction.ts';
 import { isAuthoringArmedSession } from '../session-script-publication-capability.ts';
-import { isWebSession, type SessionCleanupFailure } from '../session-teardown.ts';
+import type { SessionCleanupFailure } from '../session-teardown.ts';
+import { isWebSession } from '../web-session-names.ts';
 import { clearDeviceClaim } from '../device-claims.ts';
 import { applicationLifecycleExecutionFromRequest } from '../application-lifecycle-execution.ts';
 import { hasRuntimeTransportHints } from './session-runtime.ts';
@@ -32,6 +33,7 @@ import {
   type RuntimeHintClearOperation,
 } from './session-close-runtime-admission.ts';
 import { closeCleanupError, runSessionCloseTeardown } from './session-close-lifecycle-teardown.ts';
+import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 
 function toRepairPlatformCloseFailure(error: unknown): AppError {
   if (error instanceof AppError) return error;
@@ -39,6 +41,18 @@ function toRepairPlatformCloseFailure(error: unknown): AppError {
   return new AppError('COMMAND_FAILED', `The platform close failed: ${detail}`, {
     hint: 'The repair transaction was not committed because the platform close failed; fix the underlying issue and retry close --save-script.',
   });
+}
+
+function requirePlatformCleanup(
+  cleanup: PlatformResourceCleanup | undefined,
+): PlatformResourceCleanup {
+  if (!cleanup) {
+    throw new AppError(
+      'INTERNAL_ERROR',
+      'Platform resource cleanup was not supplied by root runtime composition',
+    );
+  }
+  return cleanup;
 }
 
 function buildRepairPlatformCloseReceipt(req: DaemonRequest): string {
@@ -181,6 +195,7 @@ export async function handleCloseCommand(params: {
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
+  platformResourceCleanup?: PlatformResourceCleanup;
 }): Promise<DaemonResponse> {
   const { req, sessionName, logPath, sessionStore, leaseRegistry, leaseLifecycleProvider } = params;
   const session = sessionStore.get(sessionName);
@@ -196,6 +211,7 @@ export async function handleCloseCommand(params: {
   if (req.internal?.closeAppOnly === true && !req.positionals?.[0]) {
     return errorResponse('INVALID_ARGS', 'App-only close requires an app target');
   }
+  const platformResourceCleanup = requirePlatformCleanup(params.platformResourceCleanup);
   const admission = await admitCloseRuntime({
     device: session.device,
     clearRuntimeHints:
@@ -236,6 +252,7 @@ export async function handleCloseCommand(params: {
     lifecycle: admission.runtime,
     clearRuntimeHints: admission.clearRuntimeHints,
     repairArmed: repair.repairArmed,
+    platformResourceCleanup,
   });
   if (closed.kind === 'response') return closed.response;
   return buildCloseSuccessResponse({
@@ -270,6 +287,7 @@ async function runCloseTeardownAndRelease(params: {
   lifecycle: CloseRuntime | CloseRuntimeWithRuntimeHintClear;
   clearRuntimeHints?: RuntimeHintClearOperation;
   repairArmed: boolean;
+  platformResourceCleanup: PlatformResourceCleanup;
 }): Promise<SessionCloseFinalization> {
   const {
     req,
@@ -295,6 +313,7 @@ async function runCloseTeardownAndRelease(params: {
     repairArmed: params.repairArmed,
     dispatchTargetedPlatformClose,
     finalizeOrdinaryCloseScript,
+    platformResourceCleanup: params.platformResourceCleanup,
   });
   const leaseRelease = await releaseProviderLeaseForClose({
     session,

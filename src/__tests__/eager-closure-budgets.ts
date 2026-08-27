@@ -195,6 +195,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/platform-module.ts': 5,
   'packages/contracts/src/platform-plugin.ts': 1,
   'packages/contracts/src/platform-providers.ts': 1,
+  'packages/contracts/src/platform-resource-cleanup.ts': 1,
   'packages/contracts/src/platform-runtime-host.ts': 1,
   'packages/contracts/src/platform-runtime-operations.ts': 2,
   'packages/contracts/src/platform-runtime-unavailable.ts': 30,

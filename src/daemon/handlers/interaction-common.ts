@@ -14,6 +14,7 @@ import { parameterizeRecordedFillPayload } from '../parameterized-recorded-fill.
 import { isSessionRecording } from '../session-script-publication-capability.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 
 export type ContextFromFlags = (
   flags: CommandFlags | undefined,
@@ -30,6 +31,7 @@ export type InteractionHandlerParams = {
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
   androidObservation?: AndroidObservationAdapter;
+  platformResourceCleanup?: PlatformResourceCleanup;
 };
 
 export function finalizeTouchInteraction(params: {

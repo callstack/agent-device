@@ -9,16 +9,7 @@ import { finishLiveScreenRecording } from './screen-recording-session-resource.t
 import { finishLiveAudioProbe } from './audio-probe-session-resource.ts';
 import { finishLivePerfCapture } from './perf-capture-session-resource.ts';
 import { openWebSessionNames } from './web-session-names.ts';
-import {
-  closeManagedWebRuntimeSession,
-  stopAndroidSnapshotHelperRuntimeForDevice,
-} from '../platform-runtime-resource-cleanup.ts';
-
-// Android cleanup helpers and the web managed-browser provider stay behind dynamic imports: every
-// teardown caller pays this module's graph, while the helpers only matter when the corresponding
-// capture (or platform) actually applies to the session. Each import sits inside its sole caller,
-// next to the existing guard, matching register-builtins' interactor lazy pattern; the seam is
-// pinned by src/daemon/__tests__/session-teardown-import-closure.test.ts.
+import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 
 export async function stopSessionAppLog(params: {
   session: SessionState;
@@ -45,16 +36,11 @@ export async function stopSessionPerfCapture(params: {
   await finishLivePerfCapture({ ...params, session: currentSession });
 }
 
-export async function stopSessionAndroidSnapshotHelper(session: SessionState): Promise<void> {
-  if (session.device.platform !== 'android') return;
-  await stopAndroidSnapshotHelperRuntimeForDevice(session.device);
-}
-
-// Single source of truth for "is this a web session", shared with `shouldDispatchPlatformClose`
-// in daemon/handlers/session-close.ts so the ordinary-close and teardown platform-close gates
-// cannot silently drift apart.
-export function isWebSession(session: SessionState): boolean {
-  return session.device.platform === 'web';
+export async function stopSessionSnapshotHelper(
+  session: SessionState,
+  platformCleanup: PlatformResourceCleanup,
+): Promise<void> {
+  await platformCleanup.stopSnapshotHelper(session.device);
 }
 
 // Best-effort mirror of the platform close `session close` dispatches for a web session
@@ -67,13 +53,14 @@ async function stopSessionWebBrowser(params: {
   session: SessionState;
   sessionName: string;
   sessionStore: SessionStore;
+  platformCleanup: PlatformResourceCleanup;
 }): Promise<void> {
-  const { session, sessionName, sessionStore } = params;
-  if (!isWebSession(session)) return;
-  await closeManagedWebRuntimeSession({
+  const { session, sessionName, sessionStore, platformCleanup } = params;
+  await platformCleanup.closeManagedBrowser({
+    device: session.device,
     sessionName,
     stateDir: sessionStore.resolveDaemonStateDir(),
-    openWebSessionNames: () => openWebSessionNames(sessionStore),
+    openSessionNames: () => openWebSessionNames(sessionStore),
   });
 }
 
@@ -137,12 +124,20 @@ type SessionResourceTeardownRequest = {
   sessionStore: SessionStore;
   stateDir?: string;
   appLog: 'run' | 'already-settled';
+  platformCleanup?: PlatformResourceCleanup;
 };
 
 export async function teardownSessionResources(
   request: SessionResourceTeardownRequest,
 ): Promise<void> {
   const { session, sessionName, sessionStore } = request;
+  if (!request.platformCleanup) {
+    throw new AppError(
+      'INTERNAL_ERROR',
+      'Platform resource cleanup was not supplied by root runtime composition',
+    );
+  }
+  const platformCleanup = request.platformCleanup;
   const appLogSteps: SessionCleanupStep[] =
     request.appLog === 'run'
       ? [
@@ -176,13 +171,22 @@ export async function teardownSessionResources(
       step: 'perf_capture',
       run: () => stopSessionPerfCapture({ session, sessionName, sessionStore }),
     },
-    { step: 'android_snapshot_helper', run: () => stopSessionAndroidSnapshotHelper(session) },
+    {
+      step: 'platform_snapshot_helper',
+      run: () => stopSessionSnapshotHelper(session, platformCleanup),
+    },
     // Runs after the resource steps above (recording, app-log, audio, perf) so nothing is still
     // reading through the browser when it closes, mirroring the ordering `runSessionCloseTeardown`
     // uses for an ordinary `session close`: best-effort resources first, platform close after.
     {
       step: 'web_browser',
-      run: () => stopSessionWebBrowser({ session, sessionName, sessionStore }),
+      run: () =>
+        stopSessionWebBrowser({
+          session,
+          sessionName,
+          sessionStore,
+          platformCleanup,
+        }),
     },
   ];
   steps.push({

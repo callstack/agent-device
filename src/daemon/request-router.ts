@@ -45,7 +45,7 @@ import {
 } from './request-execution-scope.ts';
 import { unsupportedSaveScriptFlagResponse } from './request-save-script-policy.ts';
 import { canRunReplayScopedAction } from './daemon-command-registry.ts';
-import { isWebSession } from './session-teardown.ts';
+import { isWebSession } from './web-session-names.ts';
 import { inferFillText } from './action-utils.ts';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
 import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
@@ -68,6 +68,7 @@ import {
 } from './screen-recording-admission-ledger.ts';
 import { resolveGenericRuntimeExecution } from './generic-runtime-execution.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -91,6 +92,7 @@ export type RequestRouterDeps = {
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
   androidObservation?: AndroidObservationAdapter;
+  platformResourceCleanup?: PlatformResourceCleanup;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
   trackDownloadableArtifact: (opts: {
     artifactPath: string;
@@ -111,6 +113,28 @@ const unavailableAndroidObservation = new Proxy({} as AndroidObservationAdapter,
   },
 });
 
+function missingPlatformResourceCleanup(): AppError {
+  return new AppError(
+    'INTERNAL_ERROR',
+    'Platform resource cleanup was not supplied by root runtime composition',
+  );
+}
+
+const unavailablePlatformResourceCleanup: PlatformResourceCleanup = Object.freeze({
+  stopSnapshotHelper: async () => {
+    throw missingPlatformResourceCleanup();
+  },
+  closeManagedBrowser: async () => {
+    throw missingPlatformResourceCleanup();
+  },
+  cleanupSessionlessExecutionHost: async () => {
+    throw missingPlatformResourceCleanup();
+  },
+  retainExecutionHostAfterClose: () => {
+    throw missingPlatformResourceCleanup();
+  },
+});
+
 export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   const {
     logPath,
@@ -128,6 +152,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     leaseLifecycleProvider,
     cloudArtifactProvider,
     androidObservation = unavailableAndroidObservation,
+    platformResourceCleanup = unavailablePlatformResourceCleanup,
     providerDeviceRuntimeScope,
     trackDownloadableArtifact,
   } = deps;
@@ -196,6 +221,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               leaseRegistry,
               deviceRuntimeGateway,
               platformRequestScope,
+              platformResourceCleanup,
             });
             return await executeRequestScope(scope);
           }),
@@ -271,6 +297,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         : undefined,
       providerScope,
       androidObservation,
+      platformResourceCleanup,
       bindDevice: lockedScope.bindDevice,
       inspectFacts: lockedScope.inspectFacts,
       bindExactDevice: lockedScope.bindExactDevice,
@@ -319,6 +346,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           leaseRegistry,
           deviceRuntimeGateway,
           platformRequestScope: createPlatformRequestScope(scopedReq),
+          platformResourceCleanup,
         });
         // The outer replay keeps its stable session lock plus the device lock
         // from the first device binding through response projection and ref

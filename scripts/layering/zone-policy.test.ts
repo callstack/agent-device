@@ -43,21 +43,20 @@ test('R2 commands-floor closes the four zones below the command surface, whateve
   assert.deepEqual(firing(edge('src/mcp/tools.ts', 'mcp', 'commands')), []);
 });
 
-test('R3 platforms-seam closes static value imports and opens the three declared seam owners', () => {
+test('R3 platforms-seam closes static value imports and opens the two declared seam owners', () => {
   // Closed from an ordinary zone.
   assert.deepEqual(firing(edge('src/cli/run.ts', 'cli', 'platforms')), ['R3 platforms-seam']);
 
   // Open to the seam owners.
-  for (const file of [
-    'src/core/interactors/android.ts',
-    'src/daemon/handlers/perf.ts',
-    'src/sdk/android-adb.ts',
-  ]) {
+  for (const file of ['src/core/interactors/android.ts', 'src/sdk/android-adb.ts']) {
     assert.deepEqual(firing(edge(file, 'core', 'platforms')), [], `${file} is a seam owner`);
   }
 
-  // daemon/client/ is inside the daemon prefix but is NOT part of the seam: it is the client half
-  // of the process boundary (ADR 0008), so it must not reach platform code at all.
+  // The daemon has completed ADR 0019 and is no longer a platform seam. Neither its server nor
+  // its process-boundary client may reach platform code directly.
+  assert.deepEqual(firing(edge('src/daemon/handlers/perf.ts', 'daemon', 'platforms')), [
+    'R3 platforms-seam',
+  ]);
   assert.deepEqual(firing(edge('src/daemon/client/daemon-client.ts', 'daemon', 'platforms')), [
     'R3 platforms-seam',
   ]);

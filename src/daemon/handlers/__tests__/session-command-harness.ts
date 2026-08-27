@@ -32,6 +32,7 @@ import { deviceShape, isIosFamily, type DeviceInfo } from '@agent-device/kernel/
 import { beforeEach, vi } from 'vitest';
 import { applicationLifecycleRuntimeFixture } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
 import { withClientReplayScriptSources } from '../../../__tests__/test-utils/replay-script-source.ts';
+import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 
 const unavailable = Object.freeze({
   available: false,
@@ -107,6 +108,7 @@ export async function handleSessionCommands(
     req: await withClientReplayScriptSources(params.req),
     inspectFacts: params.inspectFacts ?? mockInspectDeviceRuntimeFacts,
     bindDevice: params.bindDevice ?? mockBindDeviceRuntime,
+    platformResourceCleanup: params.platformResourceCleanup ?? platformResourceCleanup,
     reconcileOrphanedDeviceClaim: async () => ({
       status: 'retained',
       reason: 'test-harness-has-no-exact-owner-recovery',
