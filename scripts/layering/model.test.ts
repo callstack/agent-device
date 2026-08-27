@@ -181,6 +181,7 @@ test('classifyZone separates the ranked spine from intentionally-unranked zones'
   assert.equal(classifyZone('contracts'), 'ranked');
   assert.equal(classifyZone('daemon-server'), 'ranked');
   assert.equal(classifyZone('(root)'), 'unranked');
+  assert.equal(classifyZone('platform-runtime'), 'unranked');
   assert.equal(classifyZone('utils'), 'ranked');
   // Every satellite zone joined the spine; only the composition root stays out, because R2
   // forbids daemon/ from importing commands/ so the files that wire them cannot be ranked.

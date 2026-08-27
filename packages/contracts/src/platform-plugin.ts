@@ -18,10 +18,10 @@ type CapabilityBucket = 'apple' | 'android' | 'harmonyos' | 'vega' | 'linux' | '
  * `import()` inside `createInteractor`, preserving the
  * CLI cold-start laziness that today's `getInteractor` switch relies on.
  *
- * Daemon-owned columns (step b.3, issue #974): each is declared ONLY once it is
+ * Root-composed columns (step b.3, issue #974): each is declared ONLY once it is
  * populated by wrapping the existing daemon branch AND pinned by a table-equivalence
  * parity test before a real call-site routes through it. A facet's type stays
- * PLATFORM-NEUTRAL and daemon-owned (never the iOS-simulator-shaped provider seam):
+ * PLATFORM-NEUTRAL and composition-owned (never the iOS-simulator-shaped provider seam):
  * {@link PlatformPlugin.providers} carries the per-family platform-gated request
  * provider resolver list (replaces the hand `device.platform === …` gate in
  * `request-platform-providers.ts`, pinned by the providers routing parity test). The
@@ -59,15 +59,15 @@ export type PlatformPlugin = {
     >;
   };
   /**
-   * The daemon request-scope provider facet (issue #974). `platformGatedResolvers`
+   * The request-scope provider facet (issue #974). `platformGatedResolvers`
    * declares which PLATFORM-GATED request provider resolvers apply to this family's
    * devices — the DATA that replaces the hand `device.platform === …` gate formerly
    * open-coded inside each descriptor's `resolve` in
-   * src/daemon/request-platform-providers.ts. The daemon still OWNS the resolver
+   * src/platform-runtime/request-providers.ts. The canonical root composition owns the resolver
    * functions, their wrapper composition, and the request-scope concurrency isolation;
    * this facet supplies only the per-family gate (a plain string list, the keys
    * type-only in the plugin). Focused command transports that are not family-gated
-   * are intentionally NOT part of the facet and stay ungated in the daemon.
+   * are intentionally NOT part of the facet and stay ungated in the composition.
    * Every family carries this facet (each
    * owns at least one platform-specific resolver); a device on an unregistered platform
    * resolves to no gated resolvers, matching the former hand gate. Pinned by the

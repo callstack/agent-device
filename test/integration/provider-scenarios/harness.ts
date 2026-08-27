@@ -10,6 +10,11 @@ import {
   createRequestHandler,
   type RequestRouterDeps,
 } from '../../../src/daemon/request-router.ts';
+import {
+  createPlatformRuntimeGateway,
+  createRequestPlatformProviders,
+  type PlatformProviderResolvers,
+} from '../../../src/platform-runtime.ts';
 import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import { trackDownloadableArtifact } from '../../../src/daemon/artifact-tracking.ts';
 import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
@@ -26,12 +31,12 @@ import {
   createTestDeviceInventoryGateways,
   createTestDeviceInventoryGatewaysFromProvider,
 } from '../../../src/__tests__/test-utils/device-inventory-gateways.ts';
-import { createPlatformRuntimeGateway } from '../../../src/platform-runtime.ts';
 import { createHostDiagnostics } from '../../../src/platform-runtime-host-diagnostics.ts';
 import type { PlatformRuntimeProviderRegistration } from '../../../src/platform-runtime-gateway.ts';
 import { createProviderPlatformRuntimeRegistrations } from '../../../src/provider-device-runtimes.ts';
 import { unavailableDeviceRuntimeGateway } from '../../../src/daemon/__tests__/test-device-runtime-gateway.ts';
 import { createOwnedProcessRecordStore } from '../../../src/utils/owned-process-record.ts';
+import { openWebSessionNames } from '../../../src/daemon/web-session-names.ts';
 
 const PROVIDER_SCENARIO_TOKEN = 'provider-scenario-token';
 const PROVIDER_SCENARIO_TEMP_REMOVE_OPTIONS = {
@@ -75,6 +80,7 @@ export type ProviderScenarioPlatformRuntime =
 
 export async function createProviderScenarioHarness(
   deps: Partial<Omit<RequestRouterDeps, 'deviceInventoryGateways'>> &
+    Partial<PlatformProviderResolvers> &
     (
       | { deviceInventoryProvider: DeviceInventoryProvider; deviceInventorySource?: never }
       | { deviceInventorySource: ProviderDeviceInventorySource; deviceInventoryProvider?: never }
@@ -102,6 +108,15 @@ export async function createProviderScenarioHarness(
     deviceRuntimeGateway: configuredDeviceRuntimeGateway,
     platformRuntime = true,
     providerRuntimes,
+    requestPlatformProviders: configuredRequestPlatformProviders,
+    androidAdbProvider,
+    appleRunnerProvider,
+    appleRunnerScreenRecordingTransport,
+    appleToolProvider,
+    linuxToolProvider,
+    vegaToolProvider,
+    webProvider,
+    appleSimulatorScreenRecordingTransport,
     ...routerDeps
   } = deps;
   const platformRuntimeOptions =
@@ -131,7 +146,6 @@ export async function createProviderScenarioHarness(
     logPath: path.join(os.tmpdir(), 'agent-device-provider-scenario-daemon.log'),
     token: PROVIDER_SCENARIO_TOKEN,
     sessionStore,
-    ownedProcessRecords,
     leaseRegistry: new LeaseRegistry(),
     deviceInventoryGateways: deviceInventorySource
       ? createTestDeviceInventoryGateways({ provider: deviceInventorySource })
@@ -141,6 +155,25 @@ export async function createProviderScenarioHarness(
     // Match daemon composition (src/daemon/server/daemon-runtime.ts): doctor's host-scoped
     // diagnostics are injected at the root, so the harness composes them the same way.
     hostDiagnostics: createHostDiagnostics(),
+    requestPlatformProviders:
+      configuredRequestPlatformProviders ??
+      createRequestPlatformProviders({
+        providers: {
+          androidAdbProvider,
+          appleRunnerProvider,
+          appleRunnerScreenRecordingTransport,
+          appleToolProvider,
+          linuxToolProvider,
+          vegaToolProvider,
+          webProvider,
+          appleSimulatorScreenRecordingTransport,
+        },
+        defaultWebProvider: {
+          stateDir: path.dirname(sessionDir),
+          openWebSessionNames: () => openWebSessionNames(sessionStore),
+          ownedProcessRecords,
+        },
+      }),
     ...routerDeps,
   });
   const handleRequest: typeof requestHandler = async (request) => {

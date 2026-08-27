@@ -14,7 +14,6 @@ function createHarness() {
     root,
     handler: createRequestHandler({
       logPath: path.join(root, 'daemon.log'),
-      stateDir: root,
       token: 'test-token',
       sessionStore: makeSessionStore('agent-device-router-replay-env-store-'),
       leaseRegistry: new LeaseRegistry(),

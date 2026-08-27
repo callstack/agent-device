@@ -8,6 +8,7 @@ import { createProviderDeviceRuntimeRequestProviders } from '../../provider-devi
 import {
   createPlatformRuntimeGateway,
   createPlatformDeviceInventoryGateways,
+  createRequestPlatformProviders,
 } from '../../platform-runtime.ts';
 import { createHostDiagnostics } from '../../platform-runtime-host-diagnostics.ts';
 import {
@@ -285,6 +286,18 @@ export async function startDaemonRuntime(
     providerDeviceRuntimes,
     { providerRuntimeRequiredIds: DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS },
   );
+  const requestPlatformProviders = createRequestPlatformProviders({
+    providers: {
+      appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,
+      appleRunnerScreenRecordingTransport:
+        providerRuntimeProviders.appleRunnerScreenRecordingTransport,
+    },
+    defaultWebProvider: {
+      stateDir: baseDir,
+      openWebSessionNames: () => openWebSessionNames(sessionStore),
+      ownedProcessRecords,
+    },
+  });
   const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
     leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
     providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
@@ -309,8 +322,6 @@ export async function startDaemonRuntime(
 
   const dispatchRequest = createRequestHandler({
     logPath,
-    stateDir: baseDir,
-    ownedProcessRecords,
     token,
     sessionStore,
     leaseRegistry,
@@ -323,9 +334,7 @@ export async function startDaemonRuntime(
     perfCaptureAdmissionLedger,
     hostDiagnostics,
     screenRecordingAdmissionLedger,
-    appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,
-    appleRunnerScreenRecordingTransport:
-      providerRuntimeProviders.appleRunnerScreenRecordingTransport,
+    requestPlatformProviders,
     providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
     providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
     providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,

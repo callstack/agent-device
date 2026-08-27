@@ -1,4 +1,4 @@
-import { isInfrastructureBootFailureReason } from '../../platforms/boot-diagnostics.ts';
+import { isInfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
 import type { DaemonResponse } from '../types.ts';
 import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 import { isDeviceClaimConflictReason } from '../device-claim-conflict.ts';

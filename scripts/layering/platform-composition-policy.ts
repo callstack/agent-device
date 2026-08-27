@@ -63,6 +63,7 @@ function isAllowedCompositionImport(specifier: string): boolean {
     specifier === './platform-runtime-app-state-host.ts' ||
     specifier === './platform-runtime-device-inventory.ts' ||
     specifier === './platform-runtime-host.ts' ||
+    specifier === './platform-runtime/request-providers.ts' ||
     specifier.startsWith('./platform-runtime-host/')
   );
 }

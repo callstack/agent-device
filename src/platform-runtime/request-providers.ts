@@ -1,31 +1,27 @@
-import type { PlatformGatedProviderResolverKey } from '@agent-device/contracts/platform-providers';
-import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
-import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
-import { tryGetPlugin } from '../core/platform-plugin-registry.ts';
+import type {
+  PlatformGatedProviderResolverKey,
+  PlatformProviderRequestContext,
+  RequestPlatformProviderScope,
+  RequestPlatformProviders,
+} from '@agent-device/contracts/platform-providers';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../platforms/android/adb-executor.ts';
 import type {
   AppleRunnerCommandExecutor,
   AppleRunnerProvider,
 } from '@agent-device/platform-apple/runner';
+import type { WebProvider } from '../platforms/web/provider.ts';
 import type { AppleToolProvider } from '../platforms/apple/core/tool-provider.ts';
 import type { LinuxToolProvider } from '../platforms/linux/tool-provider.ts';
 import type { VegaToolProvider } from '../platforms/vega/tool-provider.ts';
-import { withWebProvider, type WebProvider } from '../platforms/web/provider.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppleSimulatorScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-transport.ts';
 import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-runner-transport.ts';
-import { hasDeviceSelectionInput, hasExplicitDeviceSelector } from './device-selector-intent.ts';
-import { buildOpenTargetDeviceResolutionOptions } from './open-device-selection.ts';
-import type { DaemonRequest, SessionState } from './types.ts';
-import { resolveProviderDeviceResolutionIntent } from './daemon-command-registry.ts';
-
-export type PlatformProviderRequestSession = Pick<
-  SessionState,
-  'name' | 'device' | 'appBundleId' | 'appName' | 'surface'
->;
+import type { OwnedProcessRecordStore } from '../utils/owned-process-record.ts';
+import { tryGetPlugin } from '../core/platform-plugin-registry.ts';
+import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
 
 export type PlatformProviderResolver<TResult> = (
-  params: RequestPlatformProviderResolverContext,
+  context: PlatformProviderRequestContext,
 ) => TResult;
 
 export type AndroidAdbProviderResolver = PlatformProviderResolver<
@@ -63,47 +59,16 @@ export type PlatformProviderResolvers = {
   appleSimulatorScreenRecordingTransport?: AppleSimulatorScreenRecordingTransportResolver;
 };
 
-// Compile-time: every gated key is a real resolver key (so the facet can never name a
-// resolver the daemon does not compose).
-type AssertTrue<T extends true> = T;
-/** Exported only so `noUnusedLocals` keeps the guard alive. */
-export type GatedKeysAreResolverKeys = AssertTrue<
-  [PlatformGatedProviderResolverKey] extends [keyof PlatformProviderResolvers] ? true : false
->;
+export type DefaultWebProviderOptions = Readonly<{
+  stateDir?: string;
+  openWebSessionNames: () => readonly string[];
+  ownedProcessRecords?: OwnedProcessRecordStore;
+}>;
 
-// The plugin registry backs `platformGatedResolverApplies`; register the builtin
-// plugins on load so the lookup is populated (idempotent, mirrors app-log.ts).
-registerBuiltinPlatformPlugins();
-
-/**
- * Whether the platform-gated resolver `key` applies to `device`, per the owning
- * family's PlatformPlugin `providers` facet. A device on a platform with no plugin, or
- * a family that does not list `key`, resolves to `false` — byte-identical to the former
- * hand `device.platform === …` gate (which also excluded every other platform). Pinned
- * by the providers-plugin routing parity test.
- */
-function platformGatedResolverApplies(
-  key: PlatformGatedProviderResolverKey,
-  device: DeviceInfo,
-): boolean {
-  return tryGetPlugin(device.platform)?.providers?.platformGatedResolvers.includes(key) ?? false;
-}
-
-export type RequestPlatformProviderScope = {
-  androidAdbExecutor?: AndroidAdbExecutor;
-};
-
-type RequestPlatformProviderParams = {
-  req: DaemonRequest;
-  existingSession: SessionState | undefined;
-  providers: PlatformProviderResolvers;
-};
-
-type RequestPlatformProviderResolverContext = {
-  req: DaemonRequest;
-  device: DeviceInfo;
-  session?: PlatformProviderRequestSession;
-};
+export type RequestPlatformProviderOptions = Readonly<{
+  providers?: PlatformProviderResolvers;
+  defaultWebProvider?: DefaultWebProviderOptions;
+}>;
 
 type ResolvedRequestPlatformProviders = {
   androidAdb?: {
@@ -116,24 +81,12 @@ type ResolvedRequestPlatformProviders = {
     deviceId?: string;
     requestId?: string;
   };
-  appleTool?: {
-    provider?: AppleToolProvider;
-  };
-  linuxTool?: {
-    provider?: LinuxToolProvider;
-  };
-  vegaTool?: {
-    provider?: VegaToolProvider;
-  };
-  web?: {
-    provider?: WebProvider;
-  };
-  appleSimulatorScreenRecording?: {
-    provider?: AppleSimulatorScreenRecordingTransport;
-  };
-  appleRunnerScreenRecording?: {
-    provider?: AppleRunnerScreenRecordingTransport;
-  };
+  appleTool?: { provider?: AppleToolProvider };
+  linuxTool?: { provider?: LinuxToolProvider };
+  vegaTool?: { provider?: VegaToolProvider };
+  web?: { provider?: WebProvider };
+  appleSimulatorScreenRecording?: { provider?: AppleSimulatorScreenRecordingTransport };
+  appleRunnerScreenRecording?: { provider?: AppleRunnerScreenRecordingTransport };
 };
 
 type RequestPlatformProviderScopeWrapper = <T>(task: () => Promise<T>) => Promise<T>;
@@ -142,7 +95,7 @@ type RequestPlatformProviderDescriptor = {
   resolverKey: keyof PlatformProviderResolvers;
   resolve: (
     providers: PlatformProviderResolvers,
-    context: RequestPlatformProviderResolverContext,
+    context: PlatformProviderRequestContext,
   ) => ResolvedRequestPlatformProviders;
   appendWrapper: (
     scopedProviders: ResolvedRequestPlatformProviders,
@@ -150,17 +103,67 @@ type RequestPlatformProviderDescriptor = {
   ) => Promise<void>;
 };
 
+/**
+ * Root-owned provider composition. Device selection is intentionally absent: the daemon resolves
+ * the provider device first and supplies only this neutral context. Concrete providers are loaded
+ * lazily at the moment their request scope is actually needed.
+ */
+export function createComposedRequestPlatformProviders(
+  options: RequestPlatformProviderOptions = {},
+): RequestPlatformProviders {
+  const providers = options.providers ?? {};
+  const hasConfiguredResolvers = hasPlatformProviderResolvers(providers);
+  return Object.freeze({
+    hasConfiguredResolvers,
+    run: async <T>(
+      context: PlatformProviderRequestContext,
+      task: (scope: RequestPlatformProviderScope) => Promise<T>,
+    ): Promise<T> => {
+      const effectiveProviders = await providersForContext(
+        providers,
+        options.defaultWebProvider,
+        context,
+      );
+      const scopedProviders = resolveRequestPlatformProviders(effectiveProviders, context);
+      const scope: RequestPlatformProviderScope = {
+        androidAdbExecutor: scopedProviders.androidAdb?.executor,
+      };
+      const wrappers = await requestPlatformProviderScopeWrappers(scopedProviders);
+      return await runRequestPlatformProviderScopes(wrappers, async () => await task(scope));
+    },
+  });
+}
+
+async function providersForContext(
+  providers: PlatformProviderResolvers,
+  defaultWebProvider: DefaultWebProviderOptions | undefined,
+  context: PlatformProviderRequestContext,
+): Promise<PlatformProviderResolvers> {
+  if (providers.webProvider || !context.useDefaultWebProvider || !defaultWebProvider) {
+    return providers;
+  }
+  const { createAgentBrowserWebProvider } =
+    await import('../platforms/web/agent-browser-provider.ts');
+  return {
+    ...providers,
+    webProvider: ({ requestedSession, session }) =>
+      createAgentBrowserWebProvider({
+        session: session?.name ?? requestedSession,
+        stateDir: defaultWebProvider.stateDir,
+        openWebSessionNames: defaultWebProvider.openWebSessionNames,
+        ownedProcessRecords: defaultWebProvider.ownedProcessRecords,
+      }),
+  };
+}
+
 const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
   {
     resolverKey: 'androidAdbProvider',
     resolve(providers, context) {
-      const androidAdbProvider = providers.androidAdbProvider;
-      if (
-        !androidAdbProvider ||
-        !platformGatedResolverApplies('androidAdbProvider', context.device)
-      )
+      const resolver = providers.androidAdbProvider;
+      if (!resolver || !platformGatedResolverApplies('androidAdbProvider', context.device))
         return {};
-      const provider = androidAdbProvider(context);
+      const provider = resolver(context);
       const executor = typeof provider === 'function' ? provider : provider?.exec;
       return { androidAdb: { provider, executor, serial: context.device.id } };
     },
@@ -179,18 +182,15 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
   {
     resolverKey: 'appleRunnerProvider',
     resolve(providers, context) {
-      const appleRunnerProvider = providers.appleRunnerProvider;
-      if (
-        !appleRunnerProvider ||
-        !platformGatedResolverApplies('appleRunnerProvider', context.device)
-      )
+      const resolver = providers.appleRunnerProvider;
+      if (!resolver || !platformGatedResolverApplies('appleRunnerProvider', context.device))
         return {};
-      const provider = appleRunnerProvider(context);
+      const provider = resolver(context);
       return {
         appleRunner: {
           provider,
           deviceId: context.device.id,
-          requestId: context.req.meta?.requestId,
+          requestId: context.requestId,
         },
       };
     },
@@ -214,10 +214,10 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
   {
     resolverKey: 'appleToolProvider',
     resolve(providers, context) {
-      const appleToolProvider = providers.appleToolProvider;
-      if (!appleToolProvider || !platformGatedResolverApplies('appleToolProvider', context.device))
+      const resolver = providers.appleToolProvider;
+      if (!resolver || !platformGatedResolverApplies('appleToolProvider', context.device))
         return {};
-      return { appleTool: { provider: appleToolProvider(context) } };
+      return { appleTool: { provider: resolver(context) } };
     },
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.appleTool?.provider) return;
@@ -228,10 +228,9 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
   {
     resolverKey: 'vegaToolProvider',
     resolve(providers, context) {
-      const vegaToolProvider = providers.vegaToolProvider;
-      if (!vegaToolProvider || !platformGatedResolverApplies('vegaToolProvider', context.device))
-        return {};
-      return { vegaTool: { provider: vegaToolProvider(context) } };
+      const resolver = providers.vegaToolProvider;
+      if (!resolver || !platformGatedResolverApplies('vegaToolProvider', context.device)) return {};
+      return { vegaTool: { provider: resolver(context) } };
     },
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.vegaTool?.provider) return;
@@ -242,10 +241,10 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
   {
     resolverKey: 'linuxToolProvider',
     resolve(providers, context) {
-      const linuxToolProvider = providers.linuxToolProvider;
-      if (!linuxToolProvider || !platformGatedResolverApplies('linuxToolProvider', context.device))
+      const resolver = providers.linuxToolProvider;
+      if (!resolver || !platformGatedResolverApplies('linuxToolProvider', context.device))
         return {};
-      return { linuxTool: { provider: linuxToolProvider(context) } };
+      return { linuxTool: { provider: resolver(context) } };
     },
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.linuxTool?.provider) return;
@@ -256,12 +255,13 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
   {
     resolverKey: 'webProvider',
     resolve(providers, context) {
-      const webProvider = providers.webProvider;
-      if (!webProvider || !platformGatedResolverApplies('webProvider', context.device)) return {};
-      return { web: { provider: webProvider(context) } };
+      const resolver = providers.webProvider;
+      if (!resolver || !platformGatedResolverApplies('webProvider', context.device)) return {};
+      return { web: { provider: resolver(context) } };
     },
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.web?.provider) return;
+      const { withWebProvider } = await import('../platforms/web/provider.ts');
       appendRequestProviderWrapper(wrappers, scopedProviders.web, withWebProvider);
     },
   },
@@ -299,31 +299,12 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
   },
 ] satisfies RequestPlatformProviderDescriptor[];
 
-export async function withRequestPlatformProviderScope<T>(
-  params: RequestPlatformProviderParams,
-  task: (scope: RequestPlatformProviderScope) => Promise<T>,
-): Promise<T> {
-  const scopedProviders = await resolveRequestPlatformProviders(params);
-  const scope: RequestPlatformProviderScope = {
-    androidAdbExecutor: scopedProviders.androidAdb?.executor,
-  };
-  const wrappers = await requestPlatformProviderScopeWrappers(scopedProviders);
-
-  return await runRequestPlatformProviderScopes(wrappers, async () => await task(scope));
-}
-
-async function resolveRequestPlatformProviders(
-  params: RequestPlatformProviderParams,
-): Promise<ResolvedRequestPlatformProviders> {
-  if (!hasPlatformProviderResolvers(params.providers)) return {};
-  const device = await resolveScopedProviderDevice(params.req, params.existingSession);
-  if (!device) return {};
-  const context = requestProviderResolverContext(params, device);
+function resolveRequestPlatformProviders(
+  providers: PlatformProviderResolvers,
+  context: PlatformProviderRequestContext,
+): ResolvedRequestPlatformProviders {
   return REQUEST_PLATFORM_PROVIDER_DESCRIPTORS.reduce<ResolvedRequestPlatformProviders>(
-    (resolved, descriptor) => ({
-      ...resolved,
-      ...descriptor.resolve(params.providers, context),
-    }),
+    (resolved, descriptor) => ({ ...resolved, ...descriptor.resolve(providers, context) }),
     {},
   );
 }
@@ -334,51 +315,15 @@ function hasPlatformProviderResolvers(providers: PlatformProviderResolvers): boo
   );
 }
 
-function requestProviderResolverContext(
-  params: RequestPlatformProviderParams,
+function platformGatedResolverApplies(
+  key: PlatformGatedProviderResolverKey,
   device: DeviceInfo,
-): RequestPlatformProviderResolverContext {
-  return {
-    req: params.req,
-    device,
-    session: params.existingSession,
-  };
+): boolean {
+  // The registry is intentionally loaded by the root composition, not by the daemon request path.
+  return tryGetPlugin(device.platform)?.providers?.platformGatedResolvers.includes(key) ?? false;
 }
 
-async function resolveScopedProviderDevice(
-  req: DaemonRequest,
-  existingSession: SessionState | undefined,
-): Promise<DeviceInfo | undefined> {
-  const intent = resolveProviderDeviceResolutionIntent(req, {
-    hasExistingSession: Boolean(existingSession),
-    hasExplicitDeviceIdentity: hasExplicitDeviceSelector(req.flags),
-    hasDeviceSelectionInput: hasDeviceSelectionInput(req.flags),
-  });
-  switch (intent) {
-    case 'existing-session':
-      return existingSession?.device;
-    case 'explicit-device':
-    case 'sessionless-default-device':
-      // Provider-scope plumbing only: an unresolvable device means "no provider
-      // scope for this request", never a failed request — the command's own
-      // device resolution still reports its errors downstream.
-      try {
-        return await resolveProviderTargetDevice(req);
-      } catch {
-        return undefined;
-      }
-    case 'skip':
-      return undefined;
-  }
-}
-
-async function resolveProviderTargetDevice(req: DaemonRequest): Promise<DeviceInfo> {
-  const options =
-    req.command === 'open'
-      ? buildOpenTargetDeviceResolutionOptions(req.positionals?.[0])
-      : undefined;
-  return await resolveTargetDevice(req.flags ?? {}, options);
-}
+registerBuiltinPlatformPlugins();
 
 async function requestPlatformProviderScopeWrappers(
   scopedProviders: ResolvedRequestPlatformProviders,

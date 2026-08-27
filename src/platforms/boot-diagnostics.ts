@@ -1,35 +1,18 @@
 import { asAppError } from '@agent-device/kernel/errors';
+import type { InfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
+export { isInfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
+export type { InfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
 
 export type BootFailureReason =
-  | 'IOS_BOOT_TIMEOUT'
-  | 'IOS_RUNNER_CONNECT_TIMEOUT'
-  | 'IOS_RUNNER_OWNED_BY_OTHER_DAEMON'
+  | InfrastructureBootFailureReason
   | 'IOS_RUNNER_DEVICE_NOT_PROVISIONED'
-  | 'IOS_TOOL_MISSING'
-  | 'ANDROID_BOOT_TIMEOUT'
-  | 'ADB_TRANSPORT_UNAVAILABLE'
-  | 'CI_RESOURCE_STARVATION_SUSPECTED'
   | 'BOOT_COMMAND_FAILED'
   | 'UNKNOWN';
-
-const INFRASTRUCTURE_BOOT_FAILURE_REASONS = new Set<BootFailureReason>([
-  'IOS_BOOT_TIMEOUT',
-  'IOS_RUNNER_CONNECT_TIMEOUT',
-  'IOS_RUNNER_OWNED_BY_OTHER_DAEMON',
-  'IOS_TOOL_MISSING',
-  'ANDROID_BOOT_TIMEOUT',
-  'ADB_TRANSPORT_UNAVAILABLE',
-  'CI_RESOURCE_STARVATION_SUSPECTED',
-]);
 
 type BootDiagnosticContext = {
   platform?: 'ios' | 'android';
   phase?: 'boot' | 'connect' | 'transport';
 };
-
-export function isInfrastructureBootFailureReason(reason: string): boolean {
-  return INFRASTRUCTURE_BOOT_FAILURE_REASONS.has(reason.toUpperCase() as BootFailureReason);
-}
 
 export function classifyBootFailure(input: {
   error?: unknown;

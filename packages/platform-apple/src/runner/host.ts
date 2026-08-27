@@ -1,6 +1,7 @@
 import type { ChildProcess } from 'node:child_process';
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { InfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
 import type { XmlNode } from '@agent-device/xml';
 
 /**
@@ -123,14 +124,8 @@ export type TtlMemoOptions = {
 export type DefinedEnvMap = Record<string, string>;
 
 export type BootFailureReason =
-  | 'IOS_BOOT_TIMEOUT'
-  | 'IOS_RUNNER_CONNECT_TIMEOUT'
-  | 'IOS_RUNNER_OWNED_BY_OTHER_DAEMON'
+  | InfrastructureBootFailureReason
   | 'IOS_RUNNER_DEVICE_NOT_PROVISIONED'
-  | 'IOS_TOOL_MISSING'
-  | 'ANDROID_BOOT_TIMEOUT'
-  | 'ADB_TRANSPORT_UNAVAILABLE'
-  | 'CI_RESOURCE_STARVATION_SUSPECTED'
   | 'BOOT_COMMAND_FAILED'
   | 'UNKNOWN';
 

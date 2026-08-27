@@ -1,17 +1,7 @@
-import type { AppleRunnerLifecycleOptions } from '@agent-device/platform-apple/runner';
+import type { AppleRunnerRequestOptions } from '@agent-device/contracts/apple-runner-request';
 import type { DaemonRequest } from './types.ts';
 
-export type AppleRunnerRequestOptions = Pick<
-  AppleRunnerLifecycleOptions,
-  | 'verbose'
-  | 'logPath'
-  | 'traceLogPath'
-  | 'requestId'
-  | 'runnerLeaseContext'
-  | 'iosXctestrunFile'
-  | 'iosXctestDerivedDataPath'
-  | 'iosXctestEnvDir'
->;
+export type { AppleRunnerRequestOptions } from '@agent-device/contracts/apple-runner-request';
 
 export function buildAppleRunnerRequestOptions(params: {
   req: Pick<DaemonRequest, 'flags' | 'meta'>;

@@ -15,6 +15,11 @@ import {
 } from '@agent-device/contracts/platform-module';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type {
+  PlatformProviderRequestContext,
+  RequestPlatformProviderScope,
+  RequestPlatformProviders,
+} from '@agent-device/contracts/platform-providers';
+import type {
   PlatformRuntimeModule,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
@@ -51,6 +56,13 @@ import {
   type PlatformRuntimeProviderRegistration,
 } from './platform-runtime-gateway.ts';
 import { createComposedDeviceInventoryGateways } from './platform-runtime-device-inventory.ts';
+import type { RequestPlatformProviderOptions } from './platform-runtime/request-providers.ts';
+
+export type {
+  AppleRunnerProviderResolver,
+  AppleRunnerScreenRecordingTransportResolver,
+  PlatformProviderResolvers,
+} from './platform-runtime/request-providers.ts';
 
 export async function readAndroidAppStateWithHost(
   host: AppStateRuntimeHost['android'],
@@ -142,6 +154,31 @@ export function createPlatformRuntimeGateway(
     },
     providerRuntimes: options.providerRuntimes,
     providerModules: options.providerModules,
+  });
+}
+
+/**
+ * The canonical root owns request-provider composition as well as device-runtime composition.
+ * Its private submodule stays unevaluated until a request actually enters a provider scope, so
+ * importing the runtime registry does not load provider or plugin implementations eagerly.
+ */
+export function createRequestPlatformProviders(
+  options: RequestPlatformProviderOptions = {},
+): RequestPlatformProviders {
+  let composed: Promise<RequestPlatformProviders> | undefined;
+  const resolveComposed = (): Promise<RequestPlatformProviders> => {
+    composed ??= import('./platform-runtime/request-providers.ts').then(
+      ({ createComposedRequestPlatformProviders }) =>
+        createComposedRequestPlatformProviders(options),
+    );
+    return composed;
+  };
+  return Object.freeze({
+    hasConfiguredResolvers: Object.values(options.providers ?? {}).some(Boolean),
+    run: async <T>(
+      context: PlatformProviderRequestContext,
+      task: (scope: RequestPlatformProviderScope) => Promise<T>,
+    ): Promise<T> => await (await resolveComposed()).run(context, task),
   });
 }
 

@@ -8,7 +8,10 @@ import type {
   AndroidAdbExecutor,
   AndroidAdbProvider,
 } from '../../platforms/android/adb-executor.ts';
-import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
+import {
+  createPlatformRuntimeGateway,
+  createRequestPlatformProviders,
+} from '../../platform-runtime.ts';
 
 function makeAndroidSessionStore(name: string): SessionStore {
   const sessionStore = new SessionStore(`/tmp/${name}`);
@@ -42,7 +45,9 @@ function makeHandler(sessionStore: SessionStore, androidAdbProvider: () => Andro
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    androidAdbProvider,
+    requestPlatformProviders: createRequestPlatformProviders({
+      providers: { androidAdbProvider },
+    }),
     deviceRuntimeGateway,
     trackDownloadableArtifact: () => 'artifact-id',
   });

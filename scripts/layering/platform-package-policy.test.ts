@@ -128,7 +128,7 @@ test('composition policy does not pin local platform-module identifier spelling'
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 });
 
-test('only src/platform-runtime.ts may import a concrete platform package', () => {
+test('only the canonical composition root and its governed provider submodule may import a concrete platform package', () => {
   for (const statement of [
     "import { applePlatformMetadata } from '@agent-device/platform-apple';",
     "import type { AppleThing } from '@agent-device/platform-apple';",
@@ -137,8 +137,37 @@ test('only src/platform-runtime.ts may import a concrete platform package', () =
   ]) {
     const sources = validSources();
     sources.set('src/daemon/not-the-root.test.ts', statement);
-    assert.match(messages(sources).join('\n'), /only src\/platform-runtime\.ts may import/);
+    assert.match(
+      messages(sources).join('\n'),
+      /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import/,
+    );
   }
+
+  const governed = validSources();
+  governed.set(
+    'src/platform-runtime/request-providers.ts',
+    "void import('@agent-device/platform-web');",
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(governed, declarations()), []);
+});
+
+test('only the canonical composition root may import the private provider composition submodule', () => {
+  const sources = validSources();
+  sources.set(
+    'src/platform-runtime.ts',
+    composition() + "\nvoid import('./platform-runtime/request-providers.ts');",
+  );
+  sources.set('src/platform-runtime/request-providers.ts', 'export const providerScope = true;');
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+
+  sources.set(
+    'src/daemon/request-router.ts',
+    "import { providerScope } from '../platform-runtime/request-providers.ts';",
+  );
+  assert.match(
+    messages(sources).join('\n'),
+    /only src\/platform-runtime\.ts may import the private request-provider composition submodule/,
+  );
 });
 
 test('the apple runner mechanics facet subpaths are the enumerated exception', () => {
@@ -250,7 +279,7 @@ test('transitional #2041 android adb subpaths are importable only by their named
   denied.set('src/daemon/handlers/session.ts', shimImport);
   assert.match(
     messages(denied).join('\n'),
-    /only src\/platform-runtime\.ts may import '@agent-device\/platform-android\/adb-executor'/,
+    /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import '@agent-device\/platform-android\/adb-executor'/,
   );
 
   // The cluster's own root tests may name the package module (to mock its internal edges) …
@@ -266,7 +295,7 @@ test('transitional #2041 android adb subpaths are importable only by their named
   foreignTest.set('src/daemon/handlers/session.test.ts', shimImport);
   assert.match(
     messages(foreignTest).join('\n'),
-    /only src\/platform-runtime\.ts may import '@agent-device\/platform-android\/adb-executor'/,
+    /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import '@agent-device\/platform-android\/adb-executor'/,
   );
 
   // Android may export exactly the transitional subpaths; any other subpath is still a violation.

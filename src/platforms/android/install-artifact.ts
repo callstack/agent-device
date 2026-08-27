@@ -1,9 +1,6 @@
 import path from 'node:path';
-import {
-  isTrustedInstallSourceUrl,
-  materializeInstallablePath,
-  type MaterializeInstallSource,
-} from '../install-source.ts';
+import type { LocalInstallSource } from '@agent-device/kernel/contracts';
+import { isTrustedInstallSourceUrl, materializeInstallablePath } from '../install-source.ts';
 import * as manifest from './manifest.ts';
 
 export type PreparedAndroidInstallArtifact = {
@@ -14,7 +11,7 @@ export type PreparedAndroidInstallArtifact = {
 };
 
 export async function prepareAndroidInstallArtifact(
-  source: MaterializeInstallSource,
+  source: LocalInstallSource,
   options?: { signal?: AbortSignal; resolveIdentity?: boolean },
 ): Promise<PreparedAndroidInstallArtifact> {
   const trustedUrlSource = source.kind === 'url' && isTrustedInstallSourceUrl(source.url);

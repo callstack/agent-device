@@ -84,11 +84,12 @@ test('provider device runtime composition exposes focused runner recording autho
   const resolver = createProviderDeviceRuntimeRequestProviders([
     runtime,
   ]).appleRunnerScreenRecordingTransport;
-  const req = { token: 'token', session: 'default', command: 'record', positionals: [], flags: {} };
-
-  assert.equal(resolver?.({ req, device }), transport);
+  assert.equal(resolver?.({ requestedSession: 'default', device }), transport);
   assert.equal(
-    resolver?.({ req, device: { ...device, id: 'provider:macos:replacement' } }),
+    resolver?.({
+      requestedSession: 'default',
+      device: { ...device, id: 'provider:macos:replacement' },
+    }),
     undefined,
   );
 });

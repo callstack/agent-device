@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type { LocalInstallSource } from '@agent-device/kernel/contracts';
 import { readInfoPlistString } from './plist.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { extractArchiveSafely } from '../../../utils/archive-extraction.ts';
@@ -11,11 +12,7 @@ import {
   noteInstallArtifactArchiveDepth,
   withInstallArtifactArchiveScope,
 } from '../../install-artifact-archive-context.ts';
-import {
-  isTrustedInstallSourceUrl,
-  materializeInstallablePath,
-  type MaterializeInstallSource,
-} from '../../install-source.ts';
+import { isTrustedInstallSourceUrl, materializeInstallablePath } from '../../install-source.ts';
 
 type InstallIosArtifactOptions = {
   appIdentifierHint?: string;
@@ -38,7 +35,7 @@ export type PreparedIosInstallArtifact = {
 };
 
 export async function prepareIosInstallArtifact(
-  source: MaterializeInstallSource,
+  source: LocalInstallSource,
   options?: InstallIosArtifactOptions,
 ): Promise<PreparedIosInstallArtifact> {
   return await withInstallArtifactArchiveScope(
@@ -47,7 +44,7 @@ export async function prepareIosInstallArtifact(
 }
 
 async function prepareIosInstallArtifactInScope(
-  source: MaterializeInstallSource,
+  source: LocalInstallSource,
   options?: InstallIosArtifactOptions,
 ): Promise<PreparedIosInstallArtifact> {
   if (source.kind === 'url' && !isTrustedInstallSourceUrl(source.url)) {

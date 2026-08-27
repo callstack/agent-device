@@ -3,7 +3,9 @@ import { targetDagZone, type LayeringViolation, type ResolvedImportEdge } from '
 import { SESSION_STATE_FIELD_OWNERS } from './session-state.ts';
 
 const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
-  '(root)': 2,
+  // Request provider composition now consumes the neutral contracts context instead of importing
+  // daemon request/session types, removing the root provider seam from this component.
+  '(root)': 1,
   // R58 retired the legacy command dispatcher, taking `core/dispatch.ts` and the
   // `core/interactors.ts` registry it pulled in out of the cycle with it. R64 removes the
   // legacy perf projection and lowers the remaining core component by one more file.
@@ -13,7 +15,8 @@ const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
   // `interaction-outcome-policy.ts` and `deferred-interaction-outcome.ts` both left the cycle.
   // R63 then deleted `session-install-capability-projection.ts` outright — the general
   // fact-owned projection subsumes it — taking a third member with it.
-  'daemon-server': 11,
+  // The daemon side of that seam no longer imports the concrete provider resolver table.
+  'daemon-server': 10,
   // R64 deletes the last perf support closure from `apple/plugin.ts`, taking the final
   // platform-owned member out of the type cycle.
   platforms: 0,

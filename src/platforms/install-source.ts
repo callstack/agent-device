@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type { LocalInstallSource } from '@agent-device/kernel/contracts';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { expandUserHomePath } from '../utils/path-resolution.ts';
 import { ArchiveBudget } from '../utils/archive-safety.ts';
@@ -12,24 +13,13 @@ import {
 import { approveDownloadSourceUrl } from './install-source-network.ts';
 import { downloadInstallSource } from './install-source-download.ts';
 
-export type MaterializeInstallSource =
-  | {
-      kind: 'url';
-      url: string;
-      headers?: Record<string, string>;
-    }
-  | {
-      kind: 'path';
-      path: string;
-    };
-
 type MaterializeLocalSourceResult = {
   localPath: string;
   cleanup: () => Promise<void>;
 };
 
 export type MaterializeInstallableOptions = {
-  source: MaterializeInstallSource;
+  source: LocalInstallSource;
   isInstallablePath: (
     candidatePath: string,
     stat: { isFile(): boolean; isDirectory(): boolean },
@@ -94,7 +84,7 @@ function expandSourcePath(inputPath: string): string {
 }
 
 async function materializeLocalSource(
-  source: MaterializeInstallSource,
+  source: LocalInstallSource,
   options?: { signal?: AbortSignal; downloadTimeoutMs?: number },
 ): Promise<MaterializeLocalSourceResult> {
   if (source.kind === 'path') {

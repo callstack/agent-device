@@ -4,4 +4,4 @@ export {
   validateDownloadSourceUrl,
 } from '../platforms/install-source.ts';
 
-export type { MaterializeInstallSource } from '../platforms/install-source.ts';
+export type { LocalInstallSource as MaterializeInstallSource } from '@agent-device/kernel/contracts';

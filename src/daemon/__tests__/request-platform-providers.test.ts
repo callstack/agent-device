@@ -17,13 +17,22 @@ import {
   createLocalAppleToolProvider,
   runXcrun,
 } from '../../platforms/apple/core/tool-provider.ts';
+import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
 import {
   resolveAppleRunnerScreenRecordingTransport,
   type AppleRunnerScreenRecordingTransport,
 } from '../../platform-runtime-screen-recording-apple-runner-transport.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { withRequestPlatformProviderScope } from '../request-platform-providers.ts';
+import {
+  createRequestPlatformProviders,
+  type PlatformProviderResolvers,
+} from '../../platform-runtime.ts';
+import type {
+  RequestPlatformProviderScope,
+  PlatformProviderRequestContext,
+} from '@agent-device/contracts/platform-providers';
+import { resolvePlatformProviderRequestContext } from '../request-platform-provider-context.ts';
 import type { DaemonRequest } from '../types.ts';
 
 const OTHER_IOS_SIMULATOR: DeviceInfo = {
@@ -171,8 +180,9 @@ test('request platform provider scopes stay isolated across concurrent requests'
       },
     },
     async (scope) => {
-      assert.ok(scope.androidAdbExecutor);
-      return (await scope.androidAdbExecutor(['shell', 'echo', 'android'])).stdout;
+      const executor = scope.androidAdbExecutor as AndroidAdbExecutor | undefined;
+      assert.ok(executor);
+      return (await executor(['shell', 'echo', 'android'])).stdout;
     },
   );
 
@@ -251,6 +261,15 @@ test('generic Apple runner provider cannot fall back to local recording authorit
       assert.equal(transport.available, false);
     },
   );
+});
+
+test('request provider context preserves an explicitly empty request id', async () => {
+  const context = await resolvePlatformProviderRequestContext({
+    req: { ...request('snapshot'), meta: { requestId: '' } },
+    existingSession: makeIosSession('ios-session'),
+  });
+
+  assert.equal(context?.requestId, '');
 });
 
 test('focused Apple runner recording authority remains exact across recreated request scopes', async () => {
@@ -351,6 +370,23 @@ function request(command: string): DaemonRequest {
     flags: {},
     meta: { requestId: `req-${command}` },
   };
+}
+
+async function withRequestPlatformProviderScope<T>(
+  params: {
+    req: DaemonRequest;
+    existingSession: Parameters<typeof resolvePlatformProviderRequestContext>[0]['existingSession'];
+    providers: PlatformProviderResolvers;
+  },
+  task: (scope: RequestPlatformProviderScope) => Promise<T>,
+): Promise<T> {
+  const context: PlatformProviderRequestContext | undefined =
+    await resolvePlatformProviderRequestContext({
+      req: params.req,
+      existingSession: params.existingSession,
+    });
+  if (!context) return await task({});
+  return await createRequestPlatformProviders({ providers: params.providers }).run(context, task);
 }
 
 function makeWebProvider(overrides: Partial<WebProvider> = {}): WebProvider {

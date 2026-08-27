@@ -42,6 +42,7 @@ import {
 import { ensureDeviceReady } from '../device-ready.ts';
 // Readiness is package-owned; hold the open at the fixture's platform-neutral readiness gate.
 import { awaitFixtureReadiness } from './application-lifecycle-runtime-fixture.ts';
+import { createRequestPlatformProviders } from '../../platform-runtime.ts';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
@@ -75,7 +76,9 @@ test('replay runs active-session actions inside the parent request provider scop
     leaseRegistry: new LeaseRegistry(),
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    appleRunnerProvider,
+    requestPlatformProviders: createRequestPlatformProviders({
+      providers: { appleRunnerProvider },
+    }),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -111,7 +114,9 @@ test('replay routes session-changing actions through the full request path', asy
     leaseRegistry: new LeaseRegistry(),
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    appleRunnerProvider,
+    requestPlatformProviders: createRequestPlatformProviders({
+      providers: { appleRunnerProvider },
+    }),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -144,7 +149,9 @@ test('session list includes a cwd-scoped session opened by replay', async () => 
     leaseRegistry: new LeaseRegistry(),
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    appleRunnerProvider: () => undefined,
+    requestPlatformProviders: createRequestPlatformProviders({
+      providers: { appleRunnerProvider: () => undefined },
+    }),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -207,7 +214,9 @@ test('fresh replay retains a dynamically selected device through finalization', 
     leaseRegistry,
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    appleRunnerProvider: () => undefined,
+    requestPlatformProviders: createRequestPlatformProviders({
+      providers: { appleRunnerProvider: () => undefined },
+    }),
     trackDownloadableArtifact: () => 'artifact-id',
   });
   const replayResponse = handler({

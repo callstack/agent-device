@@ -67,6 +67,10 @@
       "types": "./src/apple-multitouch-support.ts",
       "default": "./src/apple-multitouch-support.ts"
     },
+    "./apple-runner-request": {
+      "types": "./src/apple-runner-request.ts",
+      "default": "./src/apple-runner-request.ts"
+    },
     "./application-lifecycle-interaction": {
       "types": "./src/application-lifecycle-interaction.ts",
       "default": "./src/application-lifecycle-interaction.ts"
@@ -110,6 +114,10 @@
     "./back-runtime": {
       "types": "./src/back-runtime.ts",
       "default": "./src/back-runtime.ts"
+    },
+    "./boot-failure": {
+      "types": "./src/boot-failure.ts",
+      "default": "./src/boot-failure.ts"
     },
     "./capture": {
       "types": "./src/facades/capture.ts",

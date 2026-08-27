@@ -39,6 +39,9 @@ export type DaemonInstallSource =
         }
     ));
 
+/** Install sources that can be materialized by a local daemon. */
+export type LocalInstallSource = Extract<DaemonInstallSource, { kind: 'url' | 'path' }>;
+
 const DAEMON_LOCK_POLICIES = ['reject', 'strip'] as const;
 export type DaemonLockPolicy = (typeof DAEMON_LOCK_POLICIES)[number];
 const LEASE_BACKENDS = ['ios-simulator', 'ios-instance', 'android-instance'] as const;

@@ -20,6 +20,8 @@ export type PlatformPackageDeclaration = {
   exportedSubpaths: readonly string[];
 };
 const COMPOSITION_FILE = 'src/platform-runtime.ts';
+const REQUEST_PROVIDER_COMPOSITION_FILE = 'src/platform-runtime/request-providers.ts';
+const COMPOSITION_FILES = new Set([COMPOSITION_FILE, REQUEST_PROVIDER_COMPOSITION_FILE]);
 const RULE = 'R13 platform-package-substrate';
 const RAW_PROCESS_SPECIFIERS = new Set(['child_process', 'node:child_process']);
 
@@ -110,6 +112,12 @@ function resolvesOutsidePackage(file: string, specifier: string, family: string)
   return !resolved.startsWith(`packages/platform-${family}/`);
 }
 
+function resolvesToRequestProviderComposition(file: string, specifier: string): boolean {
+  if (!specifier.startsWith('.')) return false;
+  const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
+  return resolved === REQUEST_PROVIDER_COMPOSITION_FILE;
+}
+
 function isPackageOwnedFacadeTest(file: string, family: string, specifier: string): boolean {
   return (
     file.startsWith(`packages/platform-${family}/`) &&
@@ -194,6 +202,15 @@ function checkSource(file: string, source: string): LayeringViolation[] {
     violations.push(...checkPlatformPackageSourcePolicy(file, source, ownerFamily));
   }
   for (const site of parseImports(source)) {
+    if (resolvesToRequestProviderComposition(file, site.spec) && file !== COMPOSITION_FILE) {
+      violations.push(
+        violation(
+          file,
+          site.line,
+          `only ${COMPOSITION_FILE} may import the private request-provider composition submodule`,
+        ),
+      );
+    }
     const importedFamily = concretePlatformFamily(site.spec);
     if (file.startsWith('packages/contracts/') && importedFamily) {
       violations.push(
@@ -222,7 +239,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
       );
     } else if (
       importedFamily &&
-      file !== COMPOSITION_FILE &&
+      !COMPOSITION_FILES.has(file) &&
       // The runner façade subpath is the facet's consumer seam: root code
       // that reaches runner mechanics directly imports its types and host-free
       // helpers here. R11's workspace-dependency declarations bound the
@@ -237,7 +254,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
         violation(
           file,
           site.line,
-          `only ${COMPOSITION_FILE} may import '${site.spec}' outside its package-owned tests`,
+          `only ${COMPOSITION_FILE} or its governed request-provider composition submodule may import '${site.spec}' outside its package-owned tests`,
         ),
       );
     }
@@ -322,5 +339,5 @@ export function checkPlatformPackagePolicy(
 }
 
 export function platformPackagePolicySummary(): string {
-  return 'R13 holds six private implementation-lazy platform packages above capture-kit behind one composition root, with the apple runner mechanics facet behind its enumerated seam';
+  return 'R13 holds six private implementation-lazy platform packages above capture-kit behind one canonical composition root and its single private provider-composition submodule, with the apple runner mechanics facet behind its enumerated seam';
 }

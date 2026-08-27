@@ -115,10 +115,15 @@ never daemon orchestration, command policy, or cross-family defaults.
 
 The root composition module, `src/platform-runtime.ts`, constructs immutable
 inventory/runtime registries and injects a composed inventory gateway plus provider-first runtime
-gateway into daemon request execution. Daemon device-execution modules import runtime contracts only.
+gateway into daemon request execution. Its private
+`src/platform-runtime/request-providers.ts` implementation submodule owns the cross-family request
+provider resolver table and wrapper ordering; only the canonical root may load it, and it remains
+lazy until a request enters a provider scope. Daemon device-execution modules import the canonical
+root interface or runtime contracts only.
 Shared runtime interfaces and neutral data types live in `@agent-device/contracts`. In production,
-only that composition module may import a concrete platform package; reusable types do not leak
-through type-only platform imports. Platform packages may import contracts, kernel/domain packages,
+only that composition module or its one R13-governed private implementation submodule may import a
+concrete platform package; reusable types do not leak through type-only platform imports. Platform
+packages may import contracts, kernel/domain packages,
 and explicitly injected host capabilities; they may not import daemon requests or responses, mutable
 session state, command catalogs/grammar, root implementation files, sibling platform packages, or raw
 process primitives outside the shared host-command port. R13 applies these rules to static, type-only,
@@ -615,7 +620,8 @@ The final gates passed:
   integration-progress checks.
 - `pnpm check:layering` passed 131 structural/model tests and scanned 1,157 production source files.
   R11 owns 17 workspace packages behind 39 exported subpaths with no root back-imports; R13 keeps six
-  private implementation-lazy platform packages above capture-kit behind one composition root; R14
+  private implementation-lazy platform packages above capture-kit behind one canonical composition
+  root and its single private provider-composition implementation submodule; R14
   and R15 retain one typed route for `logs` and `network` with no legacy route.
 - Six local inventory/runtime owners, all enumerated Apple leaf/kind cells, and the production
   BrowserStack, AWS Device Farm, and Limrun provider modes remain covered. Provider ownership and

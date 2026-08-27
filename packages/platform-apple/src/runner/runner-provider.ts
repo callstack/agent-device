@@ -1,23 +1,14 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
+import type { AppleRunnerRequestOptions } from '@agent-device/contracts/apple-runner-request';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Deadline } from './host.ts';
 import type { RunnerCommand } from './runner-contract.ts';
-import type {
-  RunnerXctestrunArtifactState,
-  RunnerXctestrunCacheKind,
-  ExternalXctestRunnerOptions,
-} from './runner-xctestrun.ts';
+import type { RunnerXctestrunArtifactState, RunnerXctestrunCacheKind } from './runner-xctestrun.ts';
 
-export type AppleRunnerCommandOptions = ExternalXctestRunnerOptions & {
+export type AppleRunnerCommandOptions = AppleRunnerRequestOptions & {
   signal?: AbortSignal;
-  verbose?: boolean;
-  logPath?: string;
-  traceLogPath?: string;
   cleanStaleBundles?: boolean;
   startupTimeoutMs?: number;
-  requestId?: string;
-  runnerLeaseContext?: RunnerLogicalLeaseContext;
   /**
    * Restricts a command to the already-owned durable runner session. Exact
    * cleanup must never start, adopt, or dispatch to a replacement session.

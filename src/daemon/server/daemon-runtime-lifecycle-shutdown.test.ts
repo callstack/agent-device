@@ -5,6 +5,9 @@ import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 const lifecycleEvents = vi.hoisted(() => [] as string[]);
 
 vi.mock('../../platform-runtime.ts', () => ({
+  createRequestPlatformProviders: () => ({
+    run: async (_context: unknown, task: () => Promise<unknown>) => await task(),
+  }),
   createPlatformRuntimeGateway: () => ({
     applicationLifecycle: {
       recoverStartupResources: async () => {},

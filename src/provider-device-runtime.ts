@@ -18,7 +18,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type {
   AppleRunnerProviderResolver,
   AppleRunnerScreenRecordingTransportResolver,
-} from './daemon/request-platform-providers.ts';
+} from './platform-runtime.ts';
 import type { AppleRunnerScreenRecordingTransport } from './platform-runtime-screen-recording-apple-runner-transport.ts';
 import type {
   AppleRunnerCommandExecutor,

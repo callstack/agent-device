@@ -14,22 +14,15 @@ import { supportedPlatformsForCommand } from '../core/capabilities.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
 import type { DaemonArtifactType, ResponseCost } from '@agent-device/kernel/contracts';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
+import type {
+  RequestPlatformProviderScope,
+  RequestPlatformProviders,
+} from '@agent-device/contracts/platform-providers';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
 import { RESPONSE_VIEWS } from './response-views.ts';
 import { SessionStore } from './session-store.ts';
 import { errorResponse, noActiveSessionError } from './handlers/response.ts';
-import {
-  type AndroidAdbProviderResolver,
-  type AppleRunnerProviderResolver,
-  type AppleRunnerScreenRecordingTransportResolver,
-  type AppleToolProviderResolver,
-  type LinuxToolProviderResolver,
-  type RequestPlatformProviderScope,
-  type AppleSimulatorScreenRecordingTransportResolver,
-  type VegaToolProviderResolver,
-  type WebProviderResolver,
-  withRequestPlatformProviderScope,
-} from './request-platform-providers.ts';
+import { resolvePlatformProviderRequestContext } from './request-platform-provider-context.ts';
 import {
   countDiagnosticEventsByPhase,
   emitDiagnostic,
@@ -52,9 +45,7 @@ import {
 } from './request-execution-scope.ts';
 import { unsupportedSaveScriptFlagResponse } from './request-save-script-policy.ts';
 import { canRunReplayScopedAction } from './daemon-command-registry.ts';
-import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-provider.ts';
 import { isWebSession } from './session-teardown.ts';
-import { openWebSessionNames } from './web-session-names.ts';
 import { inferFillText } from './action-utils.ts';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
 import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
@@ -76,7 +67,6 @@ import {
   type ScreenRecordingAdmissionLedger,
 } from './screen-recording-admission-ledger.ts';
 import { resolveGenericRuntimeExecution } from './generic-runtime-execution.ts';
-import type { OwnedProcessRecordStore } from '../utils/owned-process-record.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -84,19 +74,10 @@ import type { OwnedProcessRecordStore } from '../utils/owned-process-record.ts';
 
 export type RequestRouterDeps = {
   logPath: string;
-  stateDir?: string;
-  ownedProcessRecords?: OwnedProcessRecordStore;
   token: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
-  androidAdbProvider?: AndroidAdbProviderResolver;
-  appleRunnerProvider?: AppleRunnerProviderResolver;
-  appleRunnerScreenRecordingTransport?: AppleRunnerScreenRecordingTransportResolver;
-  appleToolProvider?: AppleToolProviderResolver;
-  linuxToolProvider?: LinuxToolProviderResolver;
-  vegaToolProvider?: VegaToolProviderResolver;
-  webProvider?: WebProviderResolver;
-  appleSimulatorScreenRecordingTransport?: AppleSimulatorScreenRecordingTransportResolver;
+  requestPlatformProviders?: RequestPlatformProviders;
   deviceInventoryGateways: ComposedDeviceInventoryGateways;
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
@@ -120,17 +101,8 @@ export type RequestRouterDeps = {
 export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   const {
     logPath,
-    stateDir,
-    ownedProcessRecords,
     token,
-    androidAdbProvider,
-    appleRunnerProvider,
-    appleRunnerScreenRecordingTransport,
-    appleToolProvider,
-    linuxToolProvider,
-    vegaToolProvider,
-    webProvider,
-    appleSimulatorScreenRecordingTransport,
+    requestPlatformProviders = EMPTY_REQUEST_PLATFORM_PROVIDERS,
     deviceInventoryGateways,
     deviceRuntimeGateway,
     appLogAdmissionLedger = createAppLogAdmissionLedger(),
@@ -244,29 +216,19 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           : await runLockedRequest();
       };
 
-      return inheritedProviderScope
-        ? await executeLocked(inheritedProviderScope)
-        : await withRequestPlatformProviderScope(
-            {
-              req: lockedScope.req,
-              existingSession: lockedScope.existingSession,
-              providers: {
-                androidAdbProvider,
-                appleRunnerProvider,
-                appleRunnerScreenRecordingTransport,
-                appleToolProvider,
-                linuxToolProvider,
-                vegaToolProvider,
-                webProvider:
-                  webProvider ??
-                  (shouldUseDefaultWebProvider(lockedScope)
-                    ? createDefaultWebProvider(stateDir, sessionStore, ownedProcessRecords)
-                    : undefined),
-                appleSimulatorScreenRecordingTransport,
-              },
-            },
-            executeLocked,
-          );
+      if (inheritedProviderScope) return await executeLocked(inheritedProviderScope);
+      const useDefaultWebProvider = shouldUseDefaultWebProvider(lockedScope);
+      if (!requestPlatformProviders.hasConfiguredResolvers && !useDefaultWebProvider) {
+        return await executeLocked({});
+      }
+      const context = await resolvePlatformProviderRequestContext({
+        req: lockedScope.req,
+        existingSession: lockedScope.existingSession,
+        useDefaultWebProvider,
+      });
+      return context
+        ? await requestPlatformProviders.run(context, executeLocked)
+        : await executeLocked({});
     };
 
     return inheritedProviderScope ? await scope.runAdmitted(run) : await scope.runLocked(run);
@@ -361,19 +323,10 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   return handleRequest;
 }
 
-const createDefaultWebProvider =
-  (
-    stateDir: string | undefined,
-    sessionStore: SessionStore,
-    ownedProcessRecords: OwnedProcessRecordStore | undefined,
-  ): WebProviderResolver =>
-  ({ req, session }) =>
-    createAgentBrowserWebProvider({
-      session: session?.name ?? req.session,
-      stateDir,
-      openWebSessionNames: () => openWebSessionNames(sessionStore),
-      ownedProcessRecords,
-    });
+const EMPTY_REQUEST_PLATFORM_PROVIDERS: RequestPlatformProviders = Object.freeze({
+  hasConfiguredResolvers: false,
+  run: async (_context, task) => await task({}),
+});
 
 function shouldUseDefaultWebProvider(scope: LockedRequestScope): boolean {
   return (

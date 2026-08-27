@@ -20,7 +20,7 @@ import type { PerfCaptureAdmissionLedger } from './perf-capture-admission-ledger
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
-import type { RequestPlatformProviderScope } from './request-platform-providers.ts';
+import type { RequestPlatformProviderScope } from '@agent-device/contracts/platform-providers';
 
 type RequestHandlerChainParams = {
   req: DaemonRequest;
@@ -36,7 +36,7 @@ type RequestHandlerChainParams = {
   invokeReplayAction?: DaemonInvokeFn;
   /**
    * Per-request platform-provider injections resolved by the generic
-   * `withRequestPlatformProviderScope` mechanism. Route handlers pick their own
+   * root-composed request-provider seam. Route handlers pick their own
    * platform-specific field back out of this neutral scope instead of the chain
    * carrying one named slot per platform (e.g. `androidAdbExecutor`).
    */

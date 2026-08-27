@@ -85,6 +85,9 @@ export function zoneRank(zone: string): number | null {
 // exact-family/composition/laziness policy.
 export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   '(root)',
+  // Private implementation submodules of the canonical root composition. R13 owns their exact
+  // importer and concrete-platform authority; giving them a spine rank would duplicate that seam.
+  'platform-runtime',
   'kernel',
   'capture-kit',
   'platform-apple',
