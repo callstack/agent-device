@@ -1,5 +1,5 @@
 import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
-import { shapeDesktopSurfaceSnapshot } from '@agent-device/contracts/snapshot-desktop-projection';
+import { shapeDesktopSurfaceSnapshot } from '@agent-device/capture-kit/snapshot-desktop-projection';
 
 type SnapshotSurfaceOptions = NonNullable<CaptureSnapshotInput['options']>;
 

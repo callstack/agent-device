@@ -19,7 +19,7 @@ import {
   annotateSnapshotNodesCoveredByPolicy,
 } from '@agent-device/capture-kit/snapshot-occlusion';
 import { coveredAndroidReplacementNodeIndexes } from '../snapshot/android-replacement-surface-occlusion.ts';
-import { scopeSnapshotNodes } from '@agent-device/contracts/snapshot-desktop-projection';
+import { scopeSnapshotNodes } from '@agent-device/capture-kit/snapshot-desktop-projection';
 import { normalizeSnapshotTree, pruneGroupNodes } from '../core/snapshot-tree-ingestion.ts';
 import { presentIosInteractiveSnapshot } from '../snapshot/snapshot-presentation/ios/index.ts';
 

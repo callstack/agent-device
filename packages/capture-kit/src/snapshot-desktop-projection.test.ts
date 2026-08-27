@@ -3,10 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { scopeSnapshotNodes } from './snapshot-desktop-projection.ts';
 
-// Golden scope-policy leg (#1832 C2): the post-wire pass must agree with
-// contracts/fixtures/snapshot-scope-policy.json — the same table the Android projection and the
-// shared predicate are asserted against. Fixture position rides in `rect.x` so the check is
-// text-independent.
 test('scopeSnapshotNodes agrees with every golden scope-policy table case', () => {
   const cases = JSON.parse(
     fs.readFileSync(

@@ -5,10 +5,23 @@ export {
   type AndroidAdbProvider,
   type AndroidPortReverseEndpoint,
 } from '../platforms/android/adb-executor.ts';
-export {
-  getAndroidAppStateWithAdb,
-  listAndroidAppsWithAdb,
-} from '../platforms/android/app-helpers.ts';
+export { listAndroidAppsWithAdb } from '../platforms/android/app-helpers.ts';
+
+import { createAndroidAppStateReader } from '../platforms/android/app-helpers.ts';
+import type { AndroidAdbExecutor } from '../platforms/android/adb-executor.ts';
+import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
+
+/**
+ * Composition seam: the dumpsys foreground parser is platform-android's, so
+ * only the root composition may load it (R13); the published signature stays
+ * `(adb) => AppStateRuntimeResult`.
+ */
+export async function getAndroidAppStateWithAdb(
+  adb: AndroidAdbExecutor,
+): Promise<AppStateRuntimeResult> {
+  const { parseAndroidForegroundApp } = await import('../platform-runtime.ts');
+  return await createAndroidAppStateReader(parseAndroidForegroundApp)(adb);
+}
 export {
   forceStopAndroidAppWithAdb,
   openAndroidAppWithAdb,

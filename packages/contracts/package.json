@@ -419,10 +419,6 @@
       "types": "./src/facades/snapshot.ts",
       "default": "./src/facades/snapshot.ts"
     },
-    "./snapshot-desktop-projection": {
-      "types": "./src/snapshot-desktop-projection.ts",
-      "default": "./src/snapshot-desktop-projection.ts"
-    },
     "./snapshot-presentation": {
       "types": "./src/snapshot-presentation.ts",
       "default": "./src/snapshot-presentation.ts"
@@ -430,6 +426,10 @@
     "./snapshot-runtime": {
       "types": "./src/snapshot-runtime.ts",
       "default": "./src/snapshot-runtime.ts"
+    },
+    "./snapshot-scope": {
+      "types": "./src/snapshot-scope.ts",
+      "default": "./src/snapshot-scope.ts"
     },
     "./snapshot-timeout-evidence": {
       "types": "./src/snapshot-timeout-evidence.ts",

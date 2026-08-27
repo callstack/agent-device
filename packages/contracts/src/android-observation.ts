@@ -48,29 +48,3 @@ export type AndroidObservationAdapter = Readonly<{
   readScreenSize(device: DeviceInfo): Promise<Readonly<{ width: number; height: number }>>;
   isPermissionPackage(packageName: string): Promise<boolean>;
 }>;
-
-const ANDROID_FOCUS_MARKERS = [
-  'mCurrentFocus=Window{',
-  'mFocusedApp=AppWindowToken{',
-  'mResumedActivity:',
-  'ResumedActivity:',
-] as const;
-
-/** Extracts the foreground package/activity from `dumpsys window`/`activity` output. */
-export function parseAndroidForegroundApp(text: string): AppStateRuntimeResult | null {
-  const lines = text.split('\n');
-  for (const marker of ANDROID_FOCUS_MARKERS) {
-    for (const line of lines) {
-      const markerIndex = line.indexOf(marker);
-      if (markerIndex === -1) continue;
-      const parsed = parseAndroidComponentFromSegment(line.slice(markerIndex + marker.length));
-      if (parsed) return parsed;
-    }
-  }
-  return null;
-}
-
-function parseAndroidComponentFromSegment(segment: string): AppStateRuntimeResult | null {
-  const match = segment.match(/\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/([A-Za-z0-9_.$]+)/);
-  return match?.[1] && match[2] ? { package: match[1], activity: match[2] } : null;
-}

@@ -1,10 +1,10 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import type { SnapshotOptions, SnapshotResult } from './interactor-types.ts';
+import type { SnapshotOptions, SnapshotResult } from '@agent-device/contracts/interactor-types';
 import {
   findSnapshotScopeRange,
   normalizeSnapshotScope,
   reindexSnapshotNodes,
-} from './snapshot-scope.ts';
+} from '@agent-device/contracts/snapshot-scope';
 
 const INTERACTIVE_ROLE_TOKENS = [
   'button',
@@ -34,7 +34,7 @@ export function shapeDesktopSurfaceSnapshot(
   return { ...data, nodes };
 }
 
-/** The shared scope specification applied post-wire (`./snapshot-scope.ts`). */
+/** The shared scope specification applied post-wire (contracts' `snapshot-scope`). */
 export function scopeSnapshotNodes(
   nodes: RawSnapshotNode[],
   scope: string,

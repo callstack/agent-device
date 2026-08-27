@@ -4,7 +4,6 @@ import type {
   AppStateRuntimeResult,
 } from '@agent-device/contracts/app-state-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { parseAndroidForegroundApp } from '@agent-device/contracts/android-observation';
 
 export type AndroidAppStateHost = Readonly<{
   run(
@@ -22,6 +21,12 @@ const ACTIVITY_COMMANDS = [
   ['shell', 'dumpsys', 'activity', 'activities'],
   ['shell', 'dumpsys', 'activity'],
 ] as const;
+const ANDROID_FOCUS_MARKERS = [
+  'mCurrentFocus=Window{',
+  'mFocusedApp=AppWindowToken{',
+  'mResumedActivity:',
+  'ResumedActivity:',
+] as const;
 
 export async function readAndroidAppState(
   host: AndroidAppStateHost,
@@ -34,6 +39,19 @@ export async function readAndroidAppState(
   const activityFocus = await readAndroidFocus(host, device, ACTIVITY_COMMANDS, signal);
   if (activityFocus) return activityFocus;
   return {};
+}
+
+export function parseAndroidForegroundApp(text: string): AppStateRuntimeResult | null {
+  const lines = text.split('\n');
+  for (const marker of ANDROID_FOCUS_MARKERS) {
+    for (const line of lines) {
+      const markerIndex = line.indexOf(marker);
+      if (markerIndex === -1) continue;
+      const parsed = parseAndroidComponentFromSegment(line.slice(markerIndex + marker.length));
+      if (parsed) return parsed;
+    }
+  }
+  return null;
 }
 
 async function readAndroidFocus(
@@ -50,4 +68,9 @@ async function readAndroidFocus(
     if (parsed) return parsed;
   }
   return null;
+}
+
+function parseAndroidComponentFromSegment(segment: string): AppStateRuntimeResult | null {
+  const match = segment.match(/\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/([A-Za-z0-9_.$]+)/);
+  return match?.[1] && match[2] ? { package: match[1], activity: match[2] } : null;
 }

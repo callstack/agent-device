@@ -15,10 +15,6 @@ vi.mock('@limrun/api', () => ({
 vi.mock('../platforms/android/app-helpers.ts', () => {
   moduleLoads.androidAppHelpers += 1;
   return {
-    getAndroidAppStateWithAdb: vi.fn(async () => ({
-      package: 'com.example.app',
-      activity: '.MainActivity',
-    })),
     listAndroidAppsWithAdb: vi.fn(async () => [{ package: 'com.example.app', name: 'Example' }]),
   };
 });

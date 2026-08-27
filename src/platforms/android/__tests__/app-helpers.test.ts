@@ -4,7 +4,8 @@ import path from 'node:path';
 import { test } from 'vitest';
 import type { AndroidAdbExecutor } from '../adb-executor.ts';
 import { createDeviceAdbExecutor } from '../adb-executor.ts';
-import { getAndroidAppStateWithAdb, listAndroidAppsWithAdb } from '../app-helpers.ts';
+import { listAndroidAppsWithAdb } from '../app-helpers.ts';
+import { getAndroidAppStateWithAdb } from '../../../sdk/android-adb.ts';
 import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 async function withMockedAdbScript(script: string, run: () => Promise<void>): Promise<void> {
