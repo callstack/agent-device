@@ -4,14 +4,16 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseSync } from 'oxc-parser';
 import type { BinaryExpression, Expression, PrivateIdentifier } from 'oxc-parser';
-import { listRuntimeFactCommands } from '../core/capabilities.ts';
 import {
   INTERNAL_COMMANDS,
   isKnownCliCommandName,
   listCliCommandNames,
   SPECIAL_CLI_COMMANDS,
 } from '../command-catalog.ts';
-import { commandDescriptors } from '../core/command-descriptor/registry.ts';
+import {
+  commandDescriptors,
+  listRuntimeFactCommands,
+} from '../core/command-descriptor/registry.ts';
 import { getCliCommandSchema } from './command-schema.ts';
 
 test('every public runtime-fact command has a parser schema entry', () => {

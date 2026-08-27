@@ -1,4 +1,7 @@
-import { commandRuntimeUseRequirements, listRuntimeFactCommands } from '../../core/capabilities.ts';
+import {
+  commandRuntimeUseRequirements,
+  listRuntimeFactCommands,
+} from '../../core/command-descriptor/registry.ts';
 import { listDeviceInventory } from '../../request/device-inventory-context.ts';
 import { assertResolvedAppsFilter } from '@agent-device/contracts/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';

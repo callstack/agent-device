@@ -1,7 +1,6 @@
 import { expect, test } from 'vitest';
 import { focusRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
-import { commandDescriptors } from '../registry.ts';
-import { listRuntimeFactCommands } from '../../capabilities.ts';
+import { commandDescriptors, listRuntimeFactCommands } from '../registry.ts';
 
 test('focus descriptor declares its complete runtime use with no legacy projection', () => {
   const focus = commandDescriptors.find(({ name }) => name === 'focus');

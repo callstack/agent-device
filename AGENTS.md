@@ -50,12 +50,14 @@ Versioned CLI help is the source of truth for command behavior. Start workflow p
 
 Read the declaration rather than maintaining a prose copy:
 
-- commands and their surface, capability, batch, and timeout traits:
+- commands and their surface, runtime-use, batch, and timeout traits:
   `src/core/command-descriptor/registry.ts`
 - daemon route ownership and request-policy traits: `src/daemon/daemon-command-registry.ts`
 - interaction paths and guarantees: `packages/contracts/src/interaction-guarantees.ts`
 - canonical command names: `src/command-catalog.ts`
-- device capability admission: `src/core/capabilities.ts`
+- device runtime-use declarations and fact admission:
+  `src/core/command-descriptor/registry.ts`, `src/daemon/runtime-admission.ts`, and
+  `src/platform-runtime-gateway.ts`
 - common command input fields, and which surface may write an input key (model, operator, retired):
   `src/commands/common-input-fields.ts` and `src/commands/input-audience.ts`
 
@@ -72,7 +74,7 @@ cross-language rules change through golden tables under `contracts/fixtures/`.
 
 - Plain `.mjs` packaging fixtures that cannot import TypeScript execution helpers keep child-process
   use local and prefer `execFile`.
-- Apple target changes keep the kernel device model, capability admission, dispatch resolution,
+- Apple target changes keep the kernel device model, runtime-fact admission, dispatch resolution,
   Apple discovery, and xctestrun preparation in sync.
 - iOS simulator-set scoping must never hide the host macOS desktop target.
 - Skills may carry a minimal start/routing card; command semantics belong in versioned CLI help.

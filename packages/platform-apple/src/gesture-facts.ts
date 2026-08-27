@@ -12,7 +12,7 @@ import { resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/devi
  * The Apple owner's gesture-family cell table (R52/R53).
  *
  * This is admission the daemon used to own: `requireGestureSupported` decided Apple's gesture
- * tiers from inside `core/capabilities.ts`. Every refusal below reproduces the exact cell — and
+ * tiers. Every refusal below reproduces the exact cell — and
  * the exact hint — that function produced, which is why the wording constants are imported rather
  * than restated. `runtime.ts` composes these facts; it does not decide them.
  */
