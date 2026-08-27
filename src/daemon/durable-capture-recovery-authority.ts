@@ -163,11 +163,14 @@ async function acquireRecoveryAuthority<K extends string, H extends LiveResource
     scope.signal.throwIfAborted();
     return { control, reattached };
   } catch (error) {
-    if (reattached?.status === 'active') {
-      await disposeLateAuthority(params, reattached.handle, 'late_handle_cleanup_failed', error);
-    }
-    if (control) {
-      await disposeLateAuthority(params, control, 'late_control_cleanup_failed', error);
+    try {
+      if (reattached?.status === 'active') {
+        await disposeLateAuthority(params, reattached.handle, 'late_handle_cleanup_failed', error);
+      }
+    } finally {
+      if (control) {
+        await disposeLateAuthority(params, control, 'late_control_cleanup_failed', error);
+      }
     }
     throw error;
   }

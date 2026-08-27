@@ -245,6 +245,82 @@ test('late handle cleanup failure does not skip control disposal when diagnostic
   }
 });
 
+test('aborted recovery does not skip control disposal when late handle diagnostics throw', async () => {
+  vi.useFakeTimers();
+  try {
+    const controller = new AbortController();
+    const cancellation = new Error('request canceled');
+    const cleanupError = new Error('late handle cleanup failed');
+    const reporterError = new Error('late cleanup diagnostic reporter failed');
+    const cleanupFailures = vi.fn(() => {
+      throw reporterError;
+    });
+    const disposeControl = vi.fn(async () => {});
+    let observedSignal: AbortSignal | undefined;
+    let resolveReattach!: (outcome: { status: 'active'; handle: AppLogLiveHandle }) => void;
+    let signalReattachStarted!: () => void;
+    const reattachStarted = new Promise<void>((resolve) => {
+      signalReattachStarted = resolve;
+    });
+    const acquisition = acquireDurableCaptureRecoveryAuthorityBeforeDeadline({
+      displayName: 'app-log',
+      envelope,
+      scope: {
+        signal: controller.signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+      deadlineMs: 10_000,
+      acquireControl: async (_candidate, scope) => {
+        observedSignal = scope.signal;
+        return {
+          reattach: async () => {
+            signalReattachStarted();
+            return await new Promise<{ status: 'active'; handle: AppLogLiveHandle }>((resolve) => {
+              resolveReattach = resolve;
+            });
+          },
+          cleanup: async () => ({ status: 'already-missing' as const }),
+          [Symbol.asyncDispose]: disposeControl,
+        };
+      },
+      onLateCleanupFailure: cleanupFailures,
+    });
+    const primaryErrorPromise = acquisition.catch((error: unknown) => error);
+    await reattachStarted;
+    controller.abort(cancellation);
+    const primaryError = await primaryErrorPromise;
+
+    expect(observedSignal?.aborted).toBe(true);
+    expect(observedSignal?.reason).toBe(cancellation);
+    resolveReattach({
+      status: 'active',
+      handle: createTestAppLogLiveHandle({
+        inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
+        finish: async () => ({
+          status: 'completed',
+          alreadyCompleted: true,
+          result: { backend: 'android', outputPath: '/tmp/app.log', completedAt: 1 },
+        }),
+        forceCleanup: vi.fn(async () => {
+          throw cleanupError;
+        }),
+      }),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(primaryError).toBe(cancellation);
+    expect(cleanupFailures).toHaveBeenCalledWith(
+      'late_handle_cleanup_failed',
+      cleanupError,
+      cancellation,
+    );
+    expect(disposeControl).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test.each(['deadline', 'cancellation'] as const)(
   'late control cleanup failure remains secondary to the %s error',
   async (winner) => {
