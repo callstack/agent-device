@@ -1,4 +1,4 @@
-import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   type DeviceBinding,
   type RuntimeFacts,
@@ -7,19 +7,21 @@ import {
   narrowDeviceBinding,
   providerRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
-import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
-import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
-import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
-import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
-import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
-import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
+import { HOVER_UNAVAILABLE_HINT } from '@agent-device/contracts/touch-runtime';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../request-runtime-binding.ts';
-import { unavailableApplicationLifecycleOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
+import {
+  createUnavailableRuntimeFactsForTest,
+  unavailableApplicationLifecycleOperationFacts,
+} from '../../../__tests__/test-utils/runtime-operation-facts.ts';
+
+const nativeRefUnavailable = Object.freeze({
+  available: false,
+  reason: 'owner-capability-missing',
+} as const);
 
 export type CapabilitiesAdmissionRuntimeOptions = Readonly<{
   appLogAvailable: boolean;
@@ -69,79 +71,29 @@ function createAdmissionFacts(
   const cell = (enabled: boolean | undefined) => (enabled ? available : unavailable);
   const appsFact = cell(options.appsAvailable);
   const screenshotFact = cell(options.screenshotAvailable !== false);
+  const base = createUnavailableRuntimeFactsForTest(
+    device,
+    runtimeOwnerFor(device, options.providerMode),
+    unavailable,
+  );
   return {
-    device: { ...deviceShape(device), providerMode: options.providerMode },
+    device: { ...base.device, providerMode: options.providerMode },
     operations: {
+      ...base.operations,
+      // Ref support is a native-owner capability, independent of provider transport support.
+      tapRef: nativeRefUnavailable,
+      hoverRef: Object.freeze({ ...nativeRefUnavailable, hint: HOVER_UNAVAILABLE_HINT }),
+      fillRef: nativeRefUnavailable,
+      // This fake historically keeps lifecycle ownership local and independently fail-closed.
       ...unavailableApplicationLifecycleOperationFacts,
       appLogInspect: cell(options.appLogAvailable),
-      appLogDoctor: unavailable,
-      appLogStart: unavailable,
-      appLogReattach: unavailable,
-      appLogCleanup: unavailable,
-      appState: unavailable,
-      ...snapshotRuntimeOperationFacts({
-        capture: unavailable,
-        customActions: unavailable,
-        withoutActiveApp: unavailable,
-      }),
-      ...screenshotRuntimeOperationFacts({ capture: screenshotFact }),
-      findText: unavailable,
-      findSelector: unavailable,
-      setViewport: unavailable,
-      focusPoint: unavailable,
-      typeText: unavailable,
-      back: unavailable,
-      home: unavailable,
-      setOrientation: unavailable,
-      tvRemote: unavailable,
-      keyboardStatus: unavailable,
-      keyboardDismiss: unavailable,
-      keyboardEnter: unavailable,
-      readClipboard: unavailable,
-      writeClipboard: unavailable,
-      appSwitcher: unavailable,
-      triggerAppEvent: unavailable,
-      setSetting: unavailable,
-      readAlert: unavailable,
-      awaitAlert: unavailable,
-      acceptAlert: unavailable,
-      dismissAlert: unavailable,
-      ...touchRuntimeOperationFacts({
-        tap: unavailable,
-        longPress: unavailable,
-        hover: unavailable,
-        fill: unavailable,
-        tapElementSelector: unavailable,
-      }),
-      ...gestureRuntimeOperationFacts({
-        plan: unavailable,
-        directionalFling: unavailable,
-        multiTouch: unavailable,
-        targetAuthoredDrag: unavailable,
-        viewport: unavailable,
-      }),
-      ...scrollRuntimeOperationFacts({ scroll: unavailable }),
+      captureScreenshot: screenshotFact,
       deployApp: cell(options.deployAvailable),
       materializeAppSource: cell(options.sourceAvailable),
       deployMaterializedApp: cell(options.sourceAvailable),
       sendPushNotification: cell(options.pushAvailable),
       networkDump: cell(options.networkAvailable),
-      readTextAtPoint: unavailable,
-      screenRecordingStart: unavailable,
-      screenRecordingReattach: unavailable,
-      screenRecordingCleanup: unavailable,
-      ...audioProbeRuntimeOperationFacts({ capture: unavailable, query: unavailable }),
-      ...perfRuntimeOperationFacts({
-        frames: unavailable,
-        memorySample: unavailable,
-        memorySnapshot: unavailable,
-        nativeCapture: unavailable,
-        profileReport: unavailable,
-      }),
       ensureReady: options.readinessAvailable ? available : appsFact,
-      bootTarget: unavailable,
-      bootTargetHeadless: unavailable,
-      shutdownTarget: unavailable,
       listApps: appsFact,
     },
   };
@@ -153,10 +105,7 @@ function createAdmissionBinding(
 ): DeviceBinding<PlatformRuntimeOperations> {
   return {
     device,
-    owner:
-      options.providerMode === 'provider-runtime'
-        ? providerRuntimeOwner('test', 'capabilities')
-        : localRuntimeOwner(device.platform),
+    owner: runtimeOwnerFor(device, options.providerMode),
     facts: createAdmissionFacts(device, options),
     operations: {
       ...(options.appLogAvailable ? { appLogInspect: inspectAndroidAppLog } : {}),
@@ -164,6 +113,12 @@ function createAdmissionBinding(
     },
     [Symbol.asyncDispose]: async () => {},
   };
+}
+
+function runtimeOwnerFor(device: DeviceInfo, providerMode: RuntimeProviderMode) {
+  return providerMode === 'provider-runtime'
+    ? providerRuntimeOwner('test', 'capabilities')
+    : localRuntimeOwner(device.platform);
 }
 
 function unavailableOperationFact(providerMode: RuntimeProviderMode) {

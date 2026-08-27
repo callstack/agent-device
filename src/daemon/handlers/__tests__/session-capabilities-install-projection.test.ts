@@ -107,6 +107,37 @@ test('capabilities fails closed for every fact-owned command when facts inspecti
   expect(runtime.uses).toEqual([]);
 });
 
+test('capabilities fixture preserves transport mode and owner-specific refusal reasons', async () => {
+  const device = makeAndroidSession('fixture-semantics').device;
+  const transport = createCapabilitiesAdmissionRuntime({
+    appLogAvailable: false,
+    networkAvailable: false,
+    providerMode: 'transport-composed',
+  });
+  const provider = createCapabilitiesAdmissionRuntime({
+    appLogAvailable: false,
+    networkAvailable: false,
+    providerMode: 'provider-runtime',
+  });
+
+  const transportFacts = await transport.inspectFacts(device);
+  const providerFacts = await provider.inspectFacts(device);
+
+  expect(transportFacts.device.providerMode).toBe('transport-composed');
+  expect(providerFacts.operations.networkDump).toMatchObject({
+    available: false,
+    reason: 'unsupported-provider-mode',
+  });
+  expect(providerFacts.operations.tapRef).toEqual({
+    available: false,
+    reason: 'owner-capability-missing',
+  });
+  expect(providerFacts.operations.finalizeApplicationClose).toEqual({
+    available: false,
+    reason: 'owner-capability-missing',
+  });
+});
+
 function createAndroidCapabilitiesSession(suffix: string) {
   const sessionName = `android-capabilities-${suffix}`;
   const sessionStore = makeSessionStore(`agent-device-capabilities-${suffix}-`);

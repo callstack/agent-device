@@ -20,18 +20,13 @@ import {
   localRuntimeOwner,
   narrowDeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
-import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
-import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
-import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
-import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
-import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
-import { deviceShape, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { beforeEach, vi } from 'vitest';
 import { applicationLifecycleRuntimeFixture } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
 import { withClientReplayScriptSources } from '../../../__tests__/test-utils/replay-script-source.ts';
+import { createUnavailableRuntimeFactsForTest } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 
 const unavailable = Object.freeze({
@@ -132,85 +127,24 @@ function readinessFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperati
   const headlessAvailable = device.platform === 'android' && device.kind === 'emulator';
   const shutdownAvailable = isShutdownDevice(device);
   const deployment = deploymentAvailability(device);
+  const base = createUnavailableRuntimeFactsForTest(device, localRuntimeOwner(device.platform));
   return {
-    device: { ...deviceShape(device), providerMode: 'local' },
+    device: base.device,
     operations: {
-      appLogInspect: unavailable,
-      appLogDoctor: unavailable,
-      appLogStart: unavailable,
-      appLogReattach: unavailable,
-      appLogCleanup: unavailable,
-      ...snapshotRuntimeOperationFacts({
-        capture: unavailable,
-        customActions: unavailable,
-        withoutActiveApp: unavailable,
-      }),
-      ...perfRuntimeOperationFacts({
-        frames: unavailable,
-        memorySample: unavailable,
-        memorySnapshot: unavailable,
-        nativeCapture: unavailable,
-        profileReport: unavailable,
-      }),
+      ...base.operations,
       // Mirrors the real owners: every kind this harness models except an Apple `simulator`-shaped
       // Android placeholder can capture pixels, and `capabilities` now reads this cell.
-      ...screenshotRuntimeOperationFacts({
-        capture: operationAvailability(device.kind !== 'simulator' || device.platform === 'apple'),
-      }),
-      findText: unavailable,
-      findSelector: unavailable,
-      setViewport: unavailable,
-      focusPoint: unavailable,
-      typeText: unavailable,
-      ...touchRuntimeOperationFacts({
-        tap: unavailable,
-        longPress: unavailable,
-        hover: unavailable,
-        fill: unavailable,
-        tapElementSelector: unavailable,
-      }),
-      ...gestureRuntimeOperationFacts({
-        plan: unavailable,
-        directionalFling: unavailable,
-        multiTouch: unavailable,
-        targetAuthoredDrag: unavailable,
-        viewport: unavailable,
-      }),
-      ...scrollRuntimeOperationFacts({ scroll: unavailable }),
-      readTextAtPoint: unavailable,
-      back: unavailable,
-      home: unavailable,
-      setOrientation: unavailable,
-      tvRemote: unavailable,
-      keyboardStatus: unavailable,
-      keyboardDismiss: unavailable,
-      keyboardEnter: unavailable,
-      readClipboard: unavailable,
-      writeClipboard: unavailable,
-      appSwitcher: unavailable,
-      triggerAppEvent: unavailable,
-      setSetting: unavailable,
-      readAlert: unavailable,
-      awaitAlert: unavailable,
-      acceptAlert: unavailable,
-      dismissAlert: unavailable,
-      audioProbeStart: unavailable,
-      audioProbeReattach: unavailable,
-      audioProbeCleanup: unavailable,
-      audioProbeQuery: unavailable,
+      captureScreenshot: operationAvailability(
+        device.kind !== 'simulator' || device.platform === 'apple',
+      ),
       deployApp: operationAvailability(deployment.deploy),
       materializeAppSource: operationAvailability(deployment.source),
       deployMaterializedApp: operationAvailability(deployment.source),
       sendPushNotification: operationAvailability(deployment.push),
       appState: operationAvailability(device.platform === 'android'),
-      networkDump: unavailable,
-      screenRecordingStart: unavailable,
-      screenRecordingReattach: unavailable,
-      screenRecordingCleanup: unavailable,
       ensureReady: operationAvailability(device.appleOs !== 'watchos'),
       bootTarget: operationAvailability(normalAvailable),
       bootTargetHeadless: operationAvailability(headlessAvailable),
-      listApps: unavailable,
       shutdownTarget: shutdownAvailable ? available : unavailable,
       ...applicationLifecycleOperationFacts({
         resolveOpenTarget: available,

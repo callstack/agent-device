@@ -1,6 +1,5 @@
 import { vi } from 'vitest';
 import type { TypeTextBackendResult } from '@agent-device/contracts/interactor-types';
-import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import type {
   ElementTextReadOutcome,
   ReadTextAtPointInput,
@@ -13,7 +12,6 @@ import {
   narrowDeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
 import type { TypeTextInput } from '@agent-device/contracts/type-text-runtime';
 import {
@@ -34,6 +32,7 @@ import type {
 } from '../../request-runtime-binding.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 import { androidObservationFixture } from '../../__tests__/android-observation-fixture.ts';
+import { createUnavailableRuntimeFactsForTest } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
 
 /**
  * The request-bound runtime seam `get` consumes, faked at `inspectFacts` / `bindDevice` — never
@@ -154,47 +153,7 @@ const unavailable = Object.freeze({
 } as const);
 
 function elementReadFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> {
-  const base = createUnavailablePlatformRuntimeFacts(device, localRuntimeOwner('apple'), {
-    appLog: unavailable,
-    network: unavailable,
-    viewport: unavailable,
-    focus: unavailable,
-    gesture: unavailable,
-    scroll: unavailable,
-    typeText: unavailable,
-    touch: unavailable,
-    elementText: unavailable,
-    back: unavailable,
-    home: unavailable,
-    orientation: unavailable,
-    tvRemote: unavailable,
-    keyboardStatus: unavailable,
-    keyboardDismiss: unavailable,
-    keyboardEnter: unavailable,
-    readClipboard: unavailable,
-    writeClipboard: unavailable,
-    appSwitcher: unavailable,
-    triggerAppEvent: unavailable,
-    setSetting: unavailable,
-    readAlert: unavailable,
-    awaitAlert: unavailable,
-    acceptAlert: unavailable,
-    dismissAlert: unavailable,
-    screenshot: unavailable,
-    audioProbeCapture: unavailable,
-    audioProbeQuery: unavailable,
-    lifecycle: applicationLifecycleOperationFacts({
-      resolveOpenTarget: unavailable,
-      prepareApplicationOpen: unavailable,
-      openApplication: unavailable,
-      applyRuntimeHints: unavailable,
-      clearRuntimeHints: unavailable,
-      closeApplication: unavailable,
-      finalizeApplicationClose: unavailable,
-      prepareAppleRunner: unavailable,
-      configureProviderPortReverse: unavailable,
-    }),
-  });
+  const base = createUnavailableRuntimeFactsForTest(device, localRuntimeOwner('apple'));
   return Object.freeze({
     device: base.device,
     operations: {
