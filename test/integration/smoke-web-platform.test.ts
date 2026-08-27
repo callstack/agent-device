@@ -17,7 +17,10 @@ import {
   getManagedAgentBrowserStatus,
   type AgentBrowserToolStatus,
 } from '../../src/platforms/web/agent-browser-tool.ts';
-import { stopProcessForTakeover } from '../../src/daemon/daemon-process.ts';
+import {
+  isAgentDeviceDaemonProcess,
+  stopProcessForTakeover,
+} from '../../src/daemon/daemon-process.ts';
 import {
   expandProcessTree,
   isProcessAlive,
@@ -194,16 +197,28 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
     // orchestrator shutting the container down would, rather than going through `close`.
     process.kill(daemonPid, 'SIGTERM');
 
-    const after = await settleManagedBrowserProcesses(status);
+    // Two unordered endings, so each gets its own deadline from this SIGTERM rather than one
+    // waiting out the other. The daemon awaits the `agent-browser close` CLI's RETURN, never the
+    // disappearance of the Chrome pids that call reaps, and awaits it under a teardown-budget
+    // race it walks away from on expiry — so either can finish first, and both orders have been
+    // seen (macOS: fleet gone ~13s after the daemon; CI: daemon alive ~4.8s after the fleet).
+    // Settling only the fleet and then reading daemon liveness once, as this did, silently lent
+    // the daemon the fleet's deadline and failed whenever CI reaped Chrome first. The guarantee
+    // #1868 is about — the fleet closed BECAUSE the daemon closed it — is held by
+    // WEB_SHUTDOWN_IDLE_TIMEOUT_MS, not by any ordering between these two.
+    const [after, daemonExit] = await Promise.all([
+      settleManagedBrowserProcesses(status),
+      settleDaemonExit(daemonIdentity),
+    ]);
     assert.equal(
       after.count,
       0,
       `expected zero owned Chrome processes after daemon shutdown, found: ${formatProcessSummary(after)}`,
     );
     assert.equal(
-      isProcessAlive(daemonPid),
-      false,
-      'expected the daemon process itself to have exited after SIGTERM',
+      daemonExit.exited,
+      true,
+      `expected the daemon process itself to have exited after SIGTERM, still alive ${daemonExit.elapsedMs}ms later`,
     );
 
     // #1781 B1: the daemon leak oracle this fix unblocks wiring to a web lane — no stray
@@ -296,6 +311,27 @@ async function settleManagedBrowserProcesses(
     summary = await inspectManagedAgentBrowserProcesses(status);
   }
   return summary;
+}
+
+// The daemon-side sibling of settleManagedBrowserProcesses, on the same deadline and poll: 45s
+// clears the daemon's dominant term, the web session's 35s teardown budget
+// (WEB_BROWSER_SESSION_TEARDOWN_BUDGET_MS + DAEMON_SESSION_TEARDOWN_TIMEOUT_MS), spent before the
+// rest of its shutdown sequence even starts. Waits out the identity, not the bare pid: a pid the
+// host recycled inside that 45s window is a DIFFERENT process, and reading it as "the daemon is
+// still alive" would fail this lane for the one reason it is not allowed to — a false red. The
+// sibling test at the top of this file exists for that same hazard. Reports elapsed time so a
+// deadline failure says how long the daemon outlived its SIGTERM, not merely that it did.
+async function settleDaemonExit(
+  identity: WebShutdownDaemonIdentity,
+): Promise<{ exited: boolean; elapsedMs: number }> {
+  const start = Date.now();
+  const deadline = start + WEB_SHUTDOWN_SETTLE_TIMEOUT_MS;
+  let alive = isAgentDeviceDaemonProcess(identity.pid, identity.startTime);
+  while (alive && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, WEB_SHUTDOWN_SETTLE_POLL_MS));
+    alive = isAgentDeviceDaemonProcess(identity.pid, identity.startTime);
+  }
+  return { exited: !alive, elapsedMs: Date.now() - start };
 }
 
 function formatProcessSummary(summary: AgentBrowserProcessSummary): string {
