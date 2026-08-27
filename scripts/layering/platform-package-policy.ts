@@ -34,10 +34,6 @@ const RAW_PROCESS_SPECIFIERS = new Set(['child_process', 'node:child_process']);
 // temporary exception).
 export const APPLE_RUNNER_SUBTREE = 'packages/platform-apple/src/runner/';
 
-/**
- * The `src/platforms` root holds ONLY the six family directories plus the
- * shared `__tests__` directory; shared code belongs in a substrate package.
- */
 export function checkPlatformsRootShape(files: readonly string[]): LayeringViolation[] {
   const allowedChild = new RegExp(
     `^src/platforms/(?:${[...CANONICAL_PLATFORM_FAMILIES, '__tests__'].join('|')})/`,

@@ -50,10 +50,6 @@
       "types": "./src/snapshot-desktop-projection.ts",
       "default": "./src/snapshot-desktop-projection.ts"
     },
-    "./snapshot-desktop-projection": {
-      "types": "./src/snapshot-desktop-projection.ts",
-      "default": "./src/snapshot-desktop-projection.ts"
-    },
     "./snapshot-occlusion": {
       "types": "./src/snapshot-occlusion.ts",
       "default": "./src/snapshot-occlusion.ts"
