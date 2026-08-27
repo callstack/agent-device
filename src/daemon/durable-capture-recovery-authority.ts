@@ -131,20 +131,23 @@ async function disposeLateRecoveryAuthority<K extends string, H extends LiveReso
   authority: DurableCaptureRecoveryAuthority<K, H, C>,
   primaryError: unknown,
 ): Promise<void> {
-  if (authority.reattached.status === 'active') {
+  try {
+    if (authority.reattached.status === 'active') {
+      await disposeLateAuthority(
+        params,
+        authority.reattached.handle,
+        'late_handle_cleanup_failed',
+        primaryError,
+      );
+    }
+  } finally {
     await disposeLateAuthority(
       params,
-      authority.reattached.handle,
-      'late_handle_cleanup_failed',
+      authority.control,
+      'late_control_cleanup_failed',
       primaryError,
     );
   }
-  await disposeLateAuthority(
-    params,
-    authority.control,
-    'late_control_cleanup_failed',
-    primaryError,
-  );
 }
 
 async function acquireRecoveryAuthority<K extends string, H extends LiveResourceHandle<C>, C>(
