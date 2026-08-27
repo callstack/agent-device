@@ -278,22 +278,11 @@ jobs:
         run: node --experimental-strip-types scripts/check-package.ts
 
   # Runs the full unit + provider-integration suites under coverage with
-  # thresholds, so a separate unit-tests job would rerun the same tests. The
-  # suite is sharded across runners; each shard writes a blob report and the
-  # Coverage Report job merges them, evaluates thresholds once over the full
-  # suite, and produces every coverage artifact (vitest.config.ts carries the
-  # shard/merge switches).
+  # thresholds, so a separate unit-tests job would rerun the same tests.
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
-    env:
-      AGENT_DEVICE_COVERAGE_SHARD: ${{ matrix.shard }}/2
-      OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -304,76 +293,31 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Test changed-line coverage gate
-        if: matrix.shard == 1
         uses: ./.github/actions/run-gate
         with: { gate: coverage-model }
 
-      - name: Run coverage shard
+      - name: Run coverage
+        id: run-coverage
+        env:
+          OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         uses: ./.github/actions/run-gate
         with: { gate: unit-ci }
 
       # The TMPDIR redirection both test lanes depend on (#1593/#1595). The check is a real
       # package script that no workflow ran: it is reachable only through `check:unit`, an
-      # aggregate CI never invokes, so a leak regression could not fail a PR. Runs per shard,
-      # because a leak lands on whichever runner executed the leaking file.
+      # aggregate CI never invokes, so a leak regression could not fail a PR. Placed here
+      # because this is the lane whose instrumented suite would leak a run directory.
       - name: Check for leaked temp directories
         uses: ./.github/actions/run-gate
         with: { gate: tmpdir-leaks }
 
-      - name: Upload coverage blob
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: coverage-blob-${{ matrix.shard }}
-          path: .vitest-reports/
-          # The directory is dot-prefixed, which v4 excludes by default.
-          include-hidden-files: true
-          if-no-files-found: error
-
-  coverage-report:
-    name: Coverage Report
-    needs: coverage
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      AGENT_DEVICE_COVERAGE_MERGE: '1'
-      OUTPUT_ECONOMY_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Download coverage blobs
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          pattern: coverage-blob-*
-          path: .tmp/coverage-blobs
-
-      # download-artifact nests each artifact in its own subdirectory; the blob
-      # merge reads one flat directory.
-      - name: Collect coverage blobs
-        run: |
-          set -euo pipefail
-          mkdir -p .vitest-reports
-          find .tmp/coverage-blobs -name '*.json' -exec mv {} .vitest-reports/ \;
-          ls .vitest-reports
-
-      # Reuses the blobs the shards wrote (never reruns tests) and fails when
-      # merged changed-line coverage < the threshold in
+      # Reuses the lcov the coverage step just wrote (never runs coverage twice)
+      # and fails when changed-line coverage < the threshold in
       # scripts/coverage-changed/model.ts. The `coverage-waiver` PR label maps to
       # the waiver env, which skips the failure but still prints the numbers.
-      # Gated on the merge step's own outcome (#1781 A5): when it fails,
-      # lcov.info is never written, so this step would just re-report that
+      # Gated on the coverage step's own outcome (#1781 A5): when `Run coverage`
+      # fails, lcov.info is never written, so this step would just re-report that
       # failure as its own red ("no lcov report") instead of a coverage verdict.
-      - name: Merge coverage shards
-        id: run-coverage
-        uses: ./.github/actions/run-gate
-        with: { gate: unit-ci }
-
       - name: Enforce changed-line coverage gate
         if: steps.run-coverage.outcome == 'success' && github.event_name == 'pull_request'
         env:

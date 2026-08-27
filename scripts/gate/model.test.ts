@@ -72,9 +72,9 @@ test('a negated --project subtracts from the configured set, so the skipped one 
   );
 });
 
-// The real `test:coverage:ci` shape: the second leg is a nested script whose body carries an env
-// prefix (it blanks the coverage-shard switches). Both indirections have to survive, or the lane
-// stops owning the project it hands to that leg.
+// The real `test:coverage:ci` shape: a negated `--project` leg, then a second leg that is a
+// nested script. Both indirections have to survive, or the lane stops owning the project it
+// hands to that leg.
 test('the two halves of test:coverage:ci together still own every project', () => {
   assert.deepEqual(
     scriptUnits(
@@ -82,8 +82,7 @@ test('the two halves of test:coverage:ci together still own every project', () =
       scriptModel({
         'test:coverage:ci':
           'vitest run --coverage --project=!subprocess-stub && pnpm test:subprocess-stub',
-        'test:subprocess-stub':
-          'AGENT_DEVICE_COVERAGE_SHARD= AGENT_DEVICE_COVERAGE_MERGE= vitest run --project subprocess-stub',
+        'test:subprocess-stub': 'vitest run --project subprocess-stub',
       }),
     ),
     ['vitest:unit-core', 'vitest:subprocess-stub'],

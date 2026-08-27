@@ -35,14 +35,6 @@ const SUBPROCESS_STUB_TESTS: readonly string[] = [
 // assumed: the cases execute out of process, which the fork's inspector session never
 // instruments, so this file reports the same lines with or without it.
 //
-// The second leg goes through `test:fuzz-worker`, which blanks AGENT_DEVICE_COVERAGE_SHARD and
-// AGENT_DEVICE_COVERAGE_MERGE — the sharding switches read just below. ci.yml sets them as
-// *job*-level env over a single `gate: unit-ci` step, so without the blanking both legs inherit
-// them and the shard dies: Vitest refuses `--shard=1/2` over a one-file project ("must be a
-// smaller than count of test files"), and the blob reporter overwrites the instrumented shard's
-// report on its way out, leaving the Coverage Report job nothing to merge. Measured, not
-// reasoned: the unguarded leg leaves a 1.4 kB blob holding only this project plus that error.
-//
 // Membership is by demonstrated failure, not by a property of the code. In particular it is
 // NOT "constructs a `node:worker_threads` Worker": `session-replay-runtime-maestro.test.ts`
 // does exactly that and stays in `unit-core`, instrumented and green. The proximate cause was
@@ -80,22 +72,8 @@ export const SETUP_FILES = [
   'src/__tests__/process-memo-setup.ts',
 ];
 
-// The CI Coverage lane shards the instrumented suite across runners and merges
-// the results on one of them (see ci.yml). AGENT_DEVICE_COVERAGE_SHARD="<i>/<n>"
-// turns an invocation into shard i of n writing a blob report; both unset means
-// the ordinary full run. AGENT_DEVICE_COVERAGE_MERGE=1 aggregates previously
-// written blobs instead of collecting tests — it still evaluates thresholds and
-// writes every configured coverage report.
-const COVERAGE_SHARD = process.env.AGENT_DEVICE_COVERAGE_SHARD;
-const COVERAGE_MERGE = process.env.AGENT_DEVICE_COVERAGE_MERGE === '1';
-
 export default defineConfig({
   test: {
-    ...(COVERAGE_SHARD ? { shard: COVERAGE_SHARD } : {}),
-    ...(COVERAGE_MERGE ? { mergeReports: '.vitest-reports' } : {}),
-    outputFile: COVERAGE_SHARD
-      ? { blob: `.vitest-reports/blob-${COVERAGE_SHARD.split('/')[0]}.json` }
-      : undefined,
     // Redirects TMPDIR to one per-run directory for the whole invocation (all
     // projects, every worker) and removes it once at the end — see the file
     // for why a single global hook beats per-file cleanup here.
@@ -117,9 +95,7 @@ export default defineConfig({
     // assumption without reducing ordinary file-level parallelism.
     maxConcurrency: 1,
     // Gate reporters for every lane; a `--reporter` flag would replace them, so no lane passes one.
-    // A coverage shard swaps in the blob reporter alongside the default one: its console output is
-    // only per-shard noise anyway, and the merge run below needs the blobs to exist.
-    reporters: COVERAGE_SHARD ? ['default', 'blob'] : ['default', slowTestGateReporter()],
+    reporters: ['default', slowTestGateReporter()],
     projects: [
       {
         test: {
@@ -251,9 +227,10 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov', 'json-summary'],
-      // A shard sees roughly half the suite, so its own numbers sit far below
-      // the gate; thresholds are enforced once on the merged full-suite run.
-      thresholds: COVERAGE_SHARD ? { statements: 0, lines: 0 } : { statements: 78, lines: 80 },
+      thresholds: {
+        statements: 78,
+        lines: 80,
+      },
       include: ['src/**/*.ts', 'packages/*/src/**/*.ts'],
       exclude: [
         'src/**/*.test.ts',

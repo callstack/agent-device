@@ -177,7 +177,7 @@
     "test:maestro-compat": "vitest run --project unit-core packages/maestro src/daemon/adapters/maestro src/compat/__tests__/replay-input.test.ts",
     "test:coverage": "vitest run --coverage --project=!fuzz-worker && pnpm test:fuzz-worker",
     "test:coverage:ci": "vitest run --coverage --project=!fuzz-worker && pnpm test:fuzz-worker",
-    "test:fuzz-worker": "AGENT_DEVICE_COVERAGE_SHARD= AGENT_DEVICE_COVERAGE_MERGE= vitest run --project fuzz-worker",
+    "test:fuzz-worker": "vitest run --project fuzz-worker",
     "test:integration:provider": "vitest run --project provider-integration",
     "test:integration:progress": "node --experimental-strip-types scripts/integration-progress.ts",
     "test:integration:progress:check": "node --experimental-strip-types scripts/integration-progress.ts --check",

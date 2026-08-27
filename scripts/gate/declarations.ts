@@ -3,8 +3,8 @@
 // A script whose Vitest/node-test invocation the loader cannot read, mapped to the units it
 // really runs. Empty right now: the one entry was a coverage wrapper, and `test:coverage:ci`
 // is back to shapes the loader reads directly. It is no longer a single bare run — it is a
-// negated `--project` leg plus a nested script whose body carries an env prefix — but
-// scripts/gate/model.ts resolves both, so the units still come from the script itself.
+// negated `--project` leg plus a nested script — but scripts/gate/model.ts resolves both, so
+// the units still come from the script itself.
 export const OPAQUE_RUNNERS: Readonly<Record<string, readonly string[]>> = {};
 
 export const REPORTING_SCRIPTS: Readonly<Record<string, string>> = {
