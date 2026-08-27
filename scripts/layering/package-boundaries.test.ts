@@ -52,6 +52,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/android-clipboard-support',
   '@agent-device/contracts/android-helper-artifacts',
   '@agent-device/contracts/android-input-ownership',
+  '@agent-device/contracts/android-observation',
   '@agent-device/contracts/android-snapshot-quality',
   '@agent-device/contracts/android-system-chrome',
   '@agent-device/contracts/android-touch-plan',

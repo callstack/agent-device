@@ -33,6 +33,7 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../request-runtime-binding.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
+import { androidObservationFixture } from '../../__tests__/android-observation-fixture.ts';
 
 /**
  * The request-bound runtime seam `get` consumes, faked at `inspectFacts` / `bindDevice` — never
@@ -281,8 +282,13 @@ const mockBindElementReadRuntime: BindDeviceRuntime = vi.fn(async (device: Devic
 export function getRuntimeBindings(): Readonly<{
   inspectFacts: InspectDeviceRuntimeFacts;
   bindDevice: BindDeviceRuntime;
+  androidObservation: typeof androidObservationFixture;
 }> {
-  return { inspectFacts: mockInspectElementReadFacts, bindDevice: mockBindElementReadRuntime };
+  return {
+    inspectFacts: mockInspectElementReadFacts,
+    bindDevice: mockBindElementReadRuntime,
+    androidObservation: androidObservationFixture,
+  };
 }
 
 /** The binding spies, exposed so handler tests can assert the ADR 0019 §9 one-bind invariant. */

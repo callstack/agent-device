@@ -21,6 +21,7 @@ import {
 } from './daemon-command-registry.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import { buildActionEventResult } from './session-event-action-presentation.ts';
+import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 
 export type GenericPlatformExecutionParams = {
   session: SessionState;
@@ -70,11 +71,16 @@ export async function dispatchGenericCommand(params: {
   ) => DaemonCommandContext;
   executePlatformCommand: GenericPlatformExecution;
   recordedRequest?: RecordedGenericRequest;
+  androidObservation?: AndroidObservationAdapter;
 }): Promise<DaemonResponse> {
   const { req, session, logPath, sessionStore, contextFromFlags } = params;
   const platformCommand = req.command;
 
-  const commandReadiness = await ensureGenericCommandReady(session, platformCommand);
+  const commandReadiness = await ensureGenericCommandReady(
+    session,
+    platformCommand,
+    params.androidObservation,
+  );
   if (commandReadiness.response) return commandReadiness.response;
   // #1638: freeze the settled diff's baseline before anything can mutate the
   // screen or the stored snapshot — including the Android dialog preflight.
@@ -89,7 +95,11 @@ export async function dispatchGenericCommand(params: {
     flags: req.flags,
   });
   if ('response' in settlePlan) return settlePlan.response;
-  const preflightReadiness = await ensureNoAndroidBlockingDialogReady(session, platformCommand);
+  const preflightReadiness = await ensureNoAndroidBlockingDialogReady(
+    session,
+    platformCommand,
+    params.androidObservation,
+  );
   if ('response' in preflightReadiness) return preflightReadiness.response;
 
   const resolvedPositionals = req.positionals ?? [];
@@ -135,6 +145,7 @@ export async function dispatchGenericCommand(params: {
       preflightReadiness.status === 'recovered' ? preflightReadiness.warning : undefined,
     ],
     observeSettle: settlePlan.observe,
+    androidObservation: params.androidObservation,
   });
 }
 
@@ -154,11 +165,13 @@ async function finalizeGenericCommand(params: {
   actionStartedAt: number;
   readinessWarnings: readonly (string | undefined)[];
   observeSettle?: () => Promise<SettleObservation | undefined>;
+  androidObservation?: AndroidObservationAdapter;
 }): Promise<DaemonResponse> {
   const { req, session, sessionStore, command } = params;
   const postflightReadiness = await ensureNoAndroidBlockingDialogReady(
     session,
     command,
+    params.androidObservation,
     'after-command',
   );
   if ('response' in postflightReadiness) return postflightReadiness.response;
@@ -260,6 +273,7 @@ type GenericCommandReadiness = {
 async function ensureNoAndroidBlockingDialogReady(
   session: SessionState,
   platformCommand: string,
+  observation: AndroidObservationAdapter | undefined,
   phase: 'before-command' | 'after-command' = 'before-command',
 ): Promise<AndroidDialogReadiness> {
   if (session.device.platform !== 'android' || !shouldGuardAndroidBlockingDialog(platformCommand)) {
@@ -273,6 +287,7 @@ async function ensureNoAndroidBlockingDialogReady(
       session,
       command: platformCommand,
       phase,
+      observation,
     });
   } catch (error) {
     return { response: { ok: false, error: normalizeError(error) } };
@@ -282,6 +297,7 @@ async function ensureNoAndroidBlockingDialogReady(
 async function ensureGenericCommandReady(
   session: SessionState,
   platformCommand: string,
+  observation: AndroidObservationAdapter | undefined,
 ): Promise<GenericCommandReadiness> {
   // No support gate survives here. R56 migrated `app-switcher`, the last generic-route descriptor
   // with a capability bucket, so every command that reaches this dispatcher was already admitted
@@ -296,7 +312,7 @@ async function ensureGenericCommandReady(
   ) {
     return {};
   }
-  const recovery = await recoverAndroidBlockingSystemDialog({ session });
+  const recovery = await recoverAndroidBlockingSystemDialog({ session, observation });
   if (recovery.status !== 'failed') {
     return recovery.status === 'unknown' ? { warning: recovery.warning } : {};
   }

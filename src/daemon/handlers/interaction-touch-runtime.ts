@@ -79,6 +79,7 @@ export async function dispatchRuntimeInteraction<
         afterRunWarning = await options.afterRun?.(result);
         return result;
       },
+      params.androidObservation,
     );
     if (outcome.aborted) return outcome.response;
     const { readiness, runtimeResult } = outcome;

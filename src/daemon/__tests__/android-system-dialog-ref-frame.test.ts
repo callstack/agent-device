@@ -7,10 +7,15 @@ vi.mock('../../platforms/android/adb.ts', () => ({ runAndroidAdb: vi.fn() }));
 
 import { snapshotAndroid } from '../../platforms/android/snapshot.ts';
 import { runAndroidAdb } from '../../platforms/android/adb.ts';
-import { recoverAndroidBlockingSystemDialog } from '../android-system-dialog.ts';
+import { recoverAndroidBlockingSystemDialog as recoverOwnedAndroidBlockingSystemDialog } from '../android-system-dialog.ts';
+import { androidObservation } from '../../platform-runtime.ts';
 import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 import { makeAndroidSnapshotCapture } from '../../__tests__/test-utils/android-snapshot-capture.ts';
+
+const recoverAndroidBlockingSystemDialog = (
+  params: Omit<Parameters<typeof recoverOwnedAndroidBlockingSystemDialog>[0], 'observation'>,
+) => recoverOwnedAndroidBlockingSystemDialog({ ...params, observation: androidObservation });
 
 test('android blocking-dialog recovery expires the ref frame before its recovery tap', async () => {
   const dialog = {

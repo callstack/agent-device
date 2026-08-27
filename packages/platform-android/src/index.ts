@@ -11,6 +11,10 @@ import type { DeviceShutdownRuntimeDependencies } from '@agent-device/contracts/
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidInventoryConfig } from './inventory-config.ts';
 import type { AndroidAppStateHost } from './app-state.ts';
+import type {
+  AndroidObservationAdapter,
+  AndroidObservationHost,
+} from '@agent-device/contracts/android-observation';
 
 const metadata = Object.freeze({
   family: 'android',
@@ -18,6 +22,29 @@ const metadata = Object.freeze({
 
 export type { AndroidInventoryConfig } from './inventory-config.ts';
 export type { AndroidAppStateHost } from './app-state.ts';
+
+/** Package-owned Android observation policy, loaded only when a daemon request needs it. */
+export function createAndroidObservationAdapter(
+  host: AndroidObservationHost,
+): AndroidObservationAdapter {
+  let implementation: Promise<AndroidObservationAdapter> | undefined;
+  const load = () => {
+    implementation ??= import('./observation.ts').then(({ createAndroidObservationAdapter }) =>
+      createAndroidObservationAdapter(host),
+    );
+    return implementation;
+  };
+  return Object.freeze({
+    readAppState: async (...args) => await (await load()).readAppState(...args),
+    readBlockingDialog: async (...args) => await (await load()).readBlockingDialog(...args),
+    readAppFocus: async (...args) => await (await load()).readAppFocus(...args),
+    readSnapshotNodes: async (...args) => await (await load()).readSnapshotNodes(...args),
+    tap: async (...args) => await (await load()).tap(...args),
+    openApp: async (...args) => await (await load()).openApp(...args),
+    readScreenSize: async (...args) => await (await load()).readScreenSize(...args),
+    isPermissionPackage: async (...args) => await (await load()).isPermissionPackage(...args),
+  });
+}
 
 export async function readAndroidAppState(
   host: AndroidAppStateHost | AppStateRuntimeHost['android'],

@@ -69,7 +69,10 @@ async function dispatchTypeViaRuntime(
     bindDevice: params.bindDevice,
   });
   if (!bound.ok) return bound.response;
-  const recordingRecovery = await recoverAndroidRecordingDialogForType(session);
+  const recordingRecovery = await recoverAndroidRecordingDialogForType(
+    session,
+    params.androidObservation,
+  );
   if (recordingRecovery.response) return recordingRecovery.response;
 
   return await runTypeTextViaRuntime(params, session, bound.typeText, recordingRecovery.warning);
@@ -82,9 +85,15 @@ type AndroidRecordingDialogRecovery = {
 
 async function recoverAndroidRecordingDialogForType(
   session: SessionState,
+  observation:
+    | import('@agent-device/contracts/android-observation').AndroidObservationAdapter
+    | undefined,
 ): Promise<AndroidRecordingDialogRecovery> {
   if (session.device.platform === 'android' && session.screenRecording) {
-    const androidRecoveryResult = await recoverAndroidBlockingSystemDialog({ session });
+    const androidRecoveryResult = await recoverAndroidBlockingSystemDialog({
+      session,
+      observation,
+    });
     if (androidRecoveryResult.status === 'failed') {
       return {
         response: errorResponse(
@@ -113,6 +122,7 @@ async function runTypeTextViaRuntime(
       session,
       command: req.command,
       phase: 'before-command',
+      observation: params.androidObservation,
     });
     // ADR 0014 side-effect seam: the entry mutates the focused field; expire the frame before
     // executing so a later step cannot reuse it. R41: the bound executor already validates and
@@ -126,6 +136,7 @@ async function runTypeTextViaRuntime(
       session,
       command: req.command,
       phase: 'after-command',
+      observation: params.androidObservation,
     });
     const actionFinishedAt = Date.now();
     const responseData: Record<string, unknown> = { ...result };

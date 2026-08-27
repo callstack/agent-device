@@ -305,6 +305,7 @@ export async function buildTargetedTouchResponsePayloads(params: {
           sessionStore: handlerParams.sessionStore,
           contextFromFlags: handlerParams.contextFromFlags,
           captureSnapshotForSession: handlerParams.captureSnapshotForSession,
+          observation: handlerParams.androidObservation,
         })
       : readSnapshotNodesReferenceFrame(session.snapshot?.nodes ?? []);
   return buildInteractionResponseData({

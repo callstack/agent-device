@@ -6,6 +6,7 @@ import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
 import {
+  androidObservation,
   createPlatformRuntimeGateway,
   createPlatformDeviceInventoryGateways,
   createRequestPlatformProviders,
@@ -335,6 +336,7 @@ export async function startDaemonRuntime(
     hostDiagnostics,
     screenRecordingAdmissionLedger,
     requestPlatformProviders,
+    androidObservation,
     providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
     providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
     providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,

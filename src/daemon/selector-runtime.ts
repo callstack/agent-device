@@ -491,7 +491,8 @@ async function maybeAndroidForegroundBlockerResponse(
   if (!session) return response;
   let surface: Awaited<ReturnType<typeof detectAndroidEscapeSurface>>;
   try {
-    surface = await detectAndroidEscapeSurface(session);
+    if (!params.androidObservation) return response;
+    surface = await detectAndroidEscapeSurface(session, params.androidObservation);
   } catch {
     return response;
   }

@@ -3,6 +3,7 @@ import { makeAndroidSession } from '../../../__tests__/test-utils/session-factor
 import { withFakeAdb } from '../../../__tests__/test-utils/fake-adb.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
 import { runWithAndroidDialogReadinessCheck } from '../interaction-touch-android-readiness.ts';
+import { androidObservation } from '../../../platform-runtime.ts';
 
 // What blocking-dialog readiness costs a run of taps, end to end. Every one of these `dumpsys`
 // spawns is a device round trip on the critical path of an interaction, so the budget is pinned
@@ -27,6 +28,7 @@ test('a run of taps on a clear screen costs one window dump per tap', async () =
             expireRefFrame(session);
             return { pressed: true };
           },
+          androidObservation,
         );
         expect(outcome.aborted).toBe(false);
       }

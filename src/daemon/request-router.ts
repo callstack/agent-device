@@ -67,6 +67,7 @@ import {
   type ScreenRecordingAdmissionLedger,
 } from './screen-recording-admission-ledger.ts';
 import { resolveGenericRuntimeExecution } from './generic-runtime-execution.ts';
+import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -89,6 +90,7 @@ export type RequestRouterDeps = {
   providerRuntimeRequiredIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  androidObservation?: AndroidObservationAdapter;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
   trackDownloadableArtifact: (opts: {
     artifactPath: string;
@@ -97,6 +99,17 @@ export type RequestRouterDeps = {
     fileName?: string;
   }) => string;
 };
+
+const unavailableAndroidObservation = new Proxy({} as AndroidObservationAdapter, {
+  get() {
+    return async () => {
+      throw new AppError(
+        'INTERNAL_ERROR',
+        'Android observation was not supplied by root runtime composition',
+      );
+    };
+  },
+});
 
 export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   const {
@@ -114,6 +127,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     providerRuntimeRequiredIds,
     leaseLifecycleProvider,
     cloudArtifactProvider,
+    androidObservation = unavailableAndroidObservation,
     providerDeviceRuntimeScope,
     trackDownloadableArtifact,
   } = deps;
@@ -256,6 +270,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         ? createReplayScopedActionInvoker(lockedScope, providerScope)
         : undefined,
       providerScope,
+      androidObservation,
       bindDevice: lockedScope.bindDevice,
       inspectFacts: lockedScope.inspectFacts,
       bindExactDevice: lockedScope.bindExactDevice,
@@ -279,6 +294,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       lockedScope,
       logPath: lockedScope.logPath,
       sessionStore,
+      androidObservation,
     });
   }
 
@@ -400,8 +416,9 @@ async function dispatchGenericForLockedScope(params: {
   lockedScope: LockedRequestScope;
   logPath: string;
   sessionStore: SessionStore;
+  androidObservation: AndroidObservationAdapter;
 }): Promise<DaemonResponse> {
-  const { lockedScope, logPath, sessionStore } = params;
+  const { lockedScope, logPath, sessionStore, androidObservation } = params;
   const session = sessionStore.get(lockedScope.sessionName);
   if (!session) {
     return noActiveSessionError();
@@ -431,6 +448,7 @@ async function dispatchGenericForLockedScope(params: {
     sessionStore,
     contextFromFlags: lockedScope.contextFromFlags,
     executePlatformCommand: runtimeExecution.execute,
+    androidObservation,
     ...(runtimeExecution.recorded ? { recordedRequest: runtimeExecution.recorded } : {}),
   });
   return dispatchResponse;

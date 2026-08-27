@@ -47,6 +47,7 @@ import {
   resolveBoundOrientationRuntime,
 } from '../orientation-runtime.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
+import { androidObservationFixture } from './android-observation-fixture.ts';
 
 // File-scoped id, not a shared literal: this owner binding's `local-family` kind reaches the
 // real on-disk device-claim admission (`require-owner` policy), so a shared id risks a
@@ -213,6 +214,7 @@ test('request router joins orientation admission to execution and ref invalidati
     leaseRegistry: new LeaseRegistry(),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     deviceRuntimeGateway: harness.gateway,
+    androidObservation: androidObservationFixture,
     trackDownloadableArtifact: () => 'artifact',
   });
 

@@ -6,7 +6,12 @@ import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/scre
 vi.mock('../../platforms/android/snapshot.ts', () => ({ snapshotAndroid: vi.fn() }));
 
 import { snapshotAndroid } from '../../platforms/android/snapshot.ts';
-import { recoverAndroidBlockingSystemDialog } from '../android-system-dialog.ts';
+import { recoverAndroidBlockingSystemDialog as recoverOwnedAndroidBlockingSystemDialog } from '../android-system-dialog.ts';
+import { androidObservation } from '../../platform-runtime.ts';
+
+const recoverAndroidBlockingSystemDialog = (
+  params: Omit<Parameters<typeof recoverOwnedAndroidBlockingSystemDialog>[0], 'observation'>,
+) => recoverOwnedAndroidBlockingSystemDialog({ ...params, observation: androidObservation });
 
 test('inspection failure is carried as a bounded unknown readiness warning', async () => {
   const longErrorMessage = `Android snapshot helper is unavailable:\n\t${'message  '.repeat(60)}`;

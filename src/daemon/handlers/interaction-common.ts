@@ -13,6 +13,7 @@ import { recordedInputPlaceholder } from '../../replay/recorded-input.ts';
 import { parameterizeRecordedFillPayload } from '../parameterized-recorded-fill.ts';
 import { isSessionRecording } from '../session-script-publication-capability.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
+import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 
 export type ContextFromFlags = (
   flags: CommandFlags | undefined,
@@ -28,6 +29,7 @@ export type InteractionHandlerParams = {
   contextFromFlags: ContextFromFlags;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
+  androidObservation?: AndroidObservationAdapter;
 };
 
 export function finalizeTouchInteraction(params: {

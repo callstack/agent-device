@@ -21,6 +21,7 @@ import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { RequestPlatformProviderScope } from '@agent-device/contracts/platform-providers';
+import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 
 type RequestHandlerChainParams = {
   req: DaemonRequest;
@@ -41,6 +42,7 @@ type RequestHandlerChainParams = {
    * carrying one named slot per platform (e.g. `androidAdbExecutor`).
    */
   providerScope: RequestPlatformProviderScope;
+  androidObservation?: AndroidObservationAdapter;
   bindDevice: BindDeviceRuntime;
   inspectFacts: InspectDeviceRuntimeFacts;
   bindExactDevice: BindExactDeviceRuntime;
@@ -259,6 +261,7 @@ async function runInteractionHandler(
       contextFromFlags: params.contextFromFlags,
       inspectFacts: params.inspectFacts,
       bindDevice: params.bindDevice,
+      androidObservation: params.androidObservation,
     }),
   );
 }

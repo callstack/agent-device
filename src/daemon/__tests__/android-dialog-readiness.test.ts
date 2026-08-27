@@ -25,7 +25,12 @@ vi.mock('../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
 import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
 import { withFakeAdb, type FakeAdbScript } from '../../__tests__/test-utils/fake-adb.ts';
 import { countDiagnosticEventsByPhase, withDiagnosticsScope } from '../../utils/diagnostics.ts';
-import { ensureAndroidBlockingSystemDialogReady } from '../android-system-dialog.ts';
+import { ensureAndroidBlockingSystemDialogReady as ensureOwnedAndroidBlockingSystemDialogReady } from '../android-system-dialog.ts';
+import { androidObservation } from '../../platform-runtime.ts';
+
+const ensureAndroidBlockingSystemDialogReady = (
+  params: Omit<Parameters<typeof ensureOwnedAndroidBlockingSystemDialogReady>[0], 'observation'>,
+) => ensureOwnedAndroidBlockingSystemDialogReady({ ...params, observation: androidObservation });
 
 // A blocking dialog can surface with no adb traffic at all, so nothing a previous command observed
 // is evidence about this one. These pin what each readiness phase owes the command it guards.

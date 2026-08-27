@@ -27,6 +27,10 @@
       "types": "./src/android-input-ownership.ts",
       "default": "./src/android-input-ownership.ts"
     },
+    "./android-observation": {
+      "types": "./src/android-observation.ts",
+      "default": "./src/android-observation.ts"
+    },
     "./android-snapshot-quality": {
       "types": "./src/android-snapshot-quality.ts",
       "default": "./src/android-snapshot-quality.ts"

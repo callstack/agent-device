@@ -22,6 +22,7 @@ import { applicationLifecycleRuntimeFixture } from './application-lifecycle-runt
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { withClientReplayScriptSources } from '../../__tests__/test-utils/replay-script-source.ts';
 import type { DaemonInvokeFn } from '../types.ts';
+import { clearAndroidObservationFixture } from './android-observation-fixture.ts';
 
 const unavailable = Object.freeze({
   available: false as const,
@@ -257,7 +258,11 @@ export function createRequestHandler(
     Partial<Pick<RequestRouterDeps, 'deviceRuntimeGateway'>>,
 ) {
   const { deviceRuntimeGateway = unavailableDeviceRuntimeGateway, ...rest } = deps;
-  const handle = createProductionRequestHandler({ ...rest, deviceRuntimeGateway });
+  const handle = createProductionRequestHandler({
+    androidObservation: clearAndroidObservationFixture,
+    ...rest,
+    deviceRuntimeGateway,
+  });
   // #1802: stand in for the client that reads a replay script and sends its content, so router
   // cases keep naming a path while the daemon still sees only bundled sources.
   const handleWithClientScriptSources: DaemonInvokeFn = async (req) =>

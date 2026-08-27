@@ -25,6 +25,7 @@ import {
   type SelectorCaptureCommand,
 } from './selector-capture-binding.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
+import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import { getRequestSignal } from '../request/cancel.ts';
 import { snapshotOptionsToFlags } from '../backend-snapshot-options.ts';
 
@@ -40,6 +41,7 @@ export type SelectorRuntimeParams = {
   signal?: AbortSignal;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
+  androidObservation?: AndroidObservationAdapter;
 };
 
 export type SelectorRuntimeDeviceParams = SelectorRuntimeParams & {

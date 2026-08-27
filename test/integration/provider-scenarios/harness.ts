@@ -13,6 +13,7 @@ import {
 import {
   createPlatformRuntimeGateway,
   createRequestPlatformProviders,
+  androidObservation,
   type PlatformProviderResolvers,
 } from '../../../src/platform-runtime.ts';
 import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
@@ -155,6 +156,7 @@ export async function createProviderScenarioHarness(
     // Match daemon composition (src/daemon/server/daemon-runtime.ts): doctor's host-scoped
     // diagnostics are injected at the root, so the harness composes them the same way.
     hostDiagnostics: createHostDiagnostics(),
+    androidObservation,
     requestPlatformProviders:
       configuredRequestPlatformProviders ??
       createRequestPlatformProviders({

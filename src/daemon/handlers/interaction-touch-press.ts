@@ -119,7 +119,11 @@ function buildTargetedRuntimeOptions(
       }),
     afterRun: async (result) => {
       if (session.lease?.leaseProvider) return undefined;
-      return await assertAndroidPressStayedInApp(session, formatTouchTargetLabel(target, result));
+      return await assertAndroidPressStayedInApp(
+        session,
+        formatTouchTargetLabel(target, result),
+        params.androidObservation,
+      );
     },
     buildPayloads: async (result) => {
       const resultDurationMs = readLongPressResultDuration(result);

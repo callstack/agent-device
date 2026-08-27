@@ -214,6 +214,7 @@ async function dispatchGestureInteraction(
           session,
           command,
           phase: 'before-command',
+          observation: params.androidObservation,
         });
     const outcome = await run(session);
     if (isRefusal(outcome)) return outcome.refused;
@@ -222,6 +223,7 @@ async function dispatchGestureInteraction(
         session,
         command,
         phase: 'after-command',
+        observation: params.androidObservation,
       });
     }
     const responseData = { ...outcome.responseData };

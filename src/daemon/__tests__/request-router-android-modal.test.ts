@@ -19,6 +19,8 @@ import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
+import { androidObservation } from '../../platform-runtime.ts';
+import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 
 vi.mock('../../platforms/android/snapshot.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/android/snapshot.ts')>();
@@ -88,6 +90,29 @@ vi.mock('../../platforms/android/window-state.ts', async (importOriginal) => {
 
 const execCalls: string[][] = [];
 
+const modalObservation: AndroidObservationAdapter = {
+  ...androidObservation,
+  readAppState: async () => ({ package: 'com.android.settings' }),
+  readBlockingDialog: async () => ({ status: 'clear' as const }),
+  readAppFocus: async () => true,
+  async tap(device, x, y) {
+    execCalls.push([
+      '-s',
+      device.id,
+      'shell',
+      'input',
+      'tap',
+      String(Math.round(x)),
+      String(Math.round(y)),
+    ]);
+    return { stdout: '', stderr: '', exitCode: 0 };
+  },
+  async openApp(device, appBundleId) {
+    const { openAndroidApp } = await import('../../platforms/android/app-lifecycle.ts');
+    await openAndroidApp(device, appBundleId);
+  },
+};
+
 vi.mock('../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../utils/exec.ts')>();
   return {
@@ -142,6 +167,7 @@ test('generic Android gesture commands dismiss blocking system dialogs during re
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
     deviceRuntimeGateway: gestureDeviceRuntimeGateway,
+    androidObservation: modalObservation,
   });
 
   const response = await handler({
@@ -193,6 +219,7 @@ test('generic Android gesture commands continue when recording dialog inspection
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
     deviceRuntimeGateway: gestureDeviceRuntimeGateway,
+    androidObservation: modalObservation,
   });
 
   const response = await handler({
@@ -252,6 +279,7 @@ test('generic Android gesture commands skip local dialog recovery for provider d
     providerDeviceRuntimeScope: providers.providerDeviceRuntimeScope,
     trackDownloadableArtifact: () => 'artifact-id',
     deviceRuntimeGateway: gestureDeviceRuntimeGateway,
+    androidObservation: modalObservation,
   });
 
   const response = await handler({

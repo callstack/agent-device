@@ -5,6 +5,7 @@ import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 const lifecycleEvents = vi.hoisted(() => [] as string[]);
 
 vi.mock('../../platform-runtime.ts', () => ({
+  androidObservation: {},
   createRequestPlatformProviders: () => ({
     run: async (_context: unknown, task: () => Promise<unknown>) => await task(),
   }),

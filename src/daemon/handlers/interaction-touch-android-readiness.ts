@@ -4,6 +4,7 @@ import {
 } from '../android-system-dialog.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
+import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 
 /**
  * How Android blocking-dialog readiness composes with `@ref` admission around a
@@ -30,6 +31,7 @@ export async function runWithAndroidDialogReadinessCheck<TResult>(
   command: string,
   options: { refContext: RefAdmissionContext | undefined },
   run: () => Promise<TResult>,
+  observation?: AndroidObservationAdapter,
 ): Promise<ReadinessOutcome<TResult>> {
   if (session.lease?.leaseProvider) {
     return { aborted: false, readiness: { status: 'clear' }, runtimeResult: await run() };
@@ -38,6 +40,7 @@ export async function runWithAndroidDialogReadinessCheck<TResult>(
     session,
     command,
     phase: 'before-command',
+    observation,
   });
   // ADR 0014: blocking-dialog recovery is itself device-mutating and expires the
   // frame at its own seam. A ref action admitted against the pre-recovery frame
@@ -60,6 +63,7 @@ export async function runWithAndroidDialogReadinessCheck<TResult>(
     session,
     command,
     phase: 'after-command',
+    observation,
   });
   return { aborted: false, readiness, runtimeResult };
 }

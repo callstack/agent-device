@@ -131,6 +131,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/android-helper-artifacts.ts': 3,
   'packages/contracts/src/android-touch-plan.ts': 13,
   'packages/contracts/src/android-input-ownership.ts': 1,
+  'packages/contracts/src/android-observation.ts': 1,
   'packages/contracts/src/android-snapshot-quality.ts': 1,
   'packages/contracts/src/android-system-chrome.ts': 1,
   'packages/contracts/src/app-deployment-runtime-plan.ts': 3,
@@ -331,7 +332,7 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // #2054 splits daemon cleanup and managed web backend into separate neutral contract entries;
   // the CLI already loads both command modules, so the second one-module contract is deliberate.
   'src/cli.ts': 365,
-  'src/platform-runtime.ts': 46,
+  'src/platform-runtime.ts': 47,
   'src/core/capabilities.ts': 73,
   'src/core/command-descriptor/registry.ts': 67,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,

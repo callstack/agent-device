@@ -29,6 +29,7 @@ import {
   runtimeModule as appleRuntimeModule,
 } from '@agent-device/platform-apple';
 import {
+  createAndroidObservationAdapter as createPackageAndroidObservationAdapter,
   createAndroidInventoryModule,
   parseAndroidForegroundApp as parseAndroidPackageForegroundApp,
   readAndroidAppState as readAndroidPackageAppState,
@@ -56,6 +57,7 @@ import {
   type PlatformRuntimeProviderRegistration,
 } from './platform-runtime-gateway.ts';
 import { createComposedDeviceInventoryGateways } from './platform-runtime-device-inventory.ts';
+import { createAndroidObservationHost } from './platform-runtime-android-observation-host.ts';
 import type { RequestPlatformProviderOptions } from './platform-runtime/request-providers.ts';
 
 export type {
@@ -81,6 +83,11 @@ export async function parseAndroidForegroundApp(
 const androidInventoryModule = createAndroidInventoryModule({
   sdkRoots: configuredValues(process.env.ANDROID_SDK_ROOT, process.env.ANDROID_HOME),
 });
+
+/** One root-composed Android observer shared by every daemon request. */
+export const androidObservation = createPackageAndroidObservationAdapter(
+  createAndroidObservationHost(),
+);
 
 const shutdownLoaders = Object.freeze({
   apple: async (dependencies: Pick<DeviceShutdownRuntimeDependencies, 'appleTools'>) =>
