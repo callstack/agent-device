@@ -162,7 +162,10 @@ jobs:
 
           attempts_after_capture=5
           for attempt in {1..60}; do
-            if "$helper" alert dismiss --surface frontmost-app; then
+            if "$helper" alert dismiss \
+              --surface frontmost-app \
+              --screenshot "$screenshot_path"; then
+              sleep 1
               break
             fi
             if [ -f "$screenshot_path" ]; then
