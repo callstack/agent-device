@@ -59,12 +59,30 @@ export function normalizeBatchCommandName(command: unknown): string {
   return typeof command === 'string' ? command.trim().toLowerCase() : '';
 }
 
+/**
+ * The command a raw step value will RUN as, or undefined.
+ *
+ * Every caller that decides something about a step — the readers below, and the
+ * model-facing admission boundary in `mcp/command-tools.ts` — must resolve the
+ * name through THIS function, because a step is normalized before it runs:
+ * a caller matching the raw value exactly would see ` SNAPSHOT ` as no command
+ * at all, while the reader resolves it to `snapshot` and runs it. Admission
+ * checking one command while the daemon runs another is the whole failure, so
+ * the read below is this function plus an error rather than a second copy.
+ */
+export function resolveStructuredBatchCommandName(
+  command: unknown,
+): StructuredBatchCommandName | undefined {
+  const normalized = normalizeBatchCommandName(command);
+  return isStructuredBatchCommandName(normalized) ? normalized : undefined;
+}
+
 export function readStructuredBatchCommandName(
   command: unknown,
   stepNumber: number,
 ): StructuredBatchCommandName {
-  const normalized = normalizeBatchCommandName(command);
-  if (isStructuredBatchCommandName(normalized)) return normalized;
+  const resolved = resolveStructuredBatchCommandName(command);
+  if (resolved !== undefined) return resolved;
   throw new AppError(
     'INVALID_ARGS',
     `Batch step ${stepNumber} command is not available through command batch: ${String(command)}`,

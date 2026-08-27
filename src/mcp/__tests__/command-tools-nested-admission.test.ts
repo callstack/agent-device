@@ -103,6 +103,63 @@ test('nested admission leaves legitimate batch input untouched', async () => {
   assert.deepEqual(calls[0]?.input.steps, steps);
 });
 
+// A step is NORMALIZED before it runs (`resolveStructuredBatchCommandName`
+// trims and lowercases), so an admission boundary that matched the raw value
+// exactly would see ` SNAPSHOT ` as no command at all, check nothing, and let
+// the daemon run `snapshot` with the operator paths still aboard. Admission and
+// the reader must resolve a name identically or the boundary guards a different
+// command than the one that runs.
+const COMMAND_SPELLINGS = [
+  'snapshot',
+  ' snapshot',
+  'snapshot ',
+  ' SNAPSHOT ',
+  'SnApShOt',
+  '\tsnapshot\n',
+] as const;
+
+test('a step is admitted as the command it will run as, however it is spelled', async () => {
+  const { calls, executor } = createProbeExecutor();
+
+  for (const command of COMMAND_SPELLINGS) {
+    const steps = [{ command, input: { iosXctestrunFile: '/attacker/run.xctestrun' } }];
+    calls.length = 0;
+    const result = await executor.execute('batch', { steps });
+
+    assert.equal(result.isError, true, `${JSON.stringify(command)} must be refused`);
+    assert.match(
+      result.content[0]?.text ?? '',
+      /batch\.steps\[0\]\.input: iosXctestrunFile is not/,
+      `${JSON.stringify(command)} must be refused as the command it resolves to`,
+    );
+    assert.deepEqual(calls, [], `${JSON.stringify(command)} must not be dispatched`);
+  }
+});
+
+// The drift guard behind the case above: whatever spelling the reader accepts,
+// admission must have checked. Stated against the reader itself, so a change to
+// how a step name is normalized cannot quietly reopen the gap.
+test('admission refuses every spelling the batch reader resolves', async () => {
+  const { executor } = createProbeExecutor();
+  const readBatch = findCommandMetadata('batch').readInput;
+
+  for (const command of [...COMMAND_SPELLINGS, 'not-a-command', 'batch', '', '  ']) {
+    const steps = [{ command, input: { iosXctestrunFile: '/attacker/run.xctestrun' } }];
+    let resolves = true;
+    try {
+      readBatch({ steps });
+    } catch {
+      resolves = false;
+    }
+    const result = await executor.execute('batch', { steps });
+    assert.equal(
+      result.isError,
+      resolves,
+      `${JSON.stringify(command)}: admission must refuse it iff the reader runs it`,
+    );
+  }
+});
+
 // A step whose command cannot be resolved has no schema to check its input
 // against — and needs none, because that step cannot run. Admission must fall
 // through to the reader that owns the error instead of answering with a key

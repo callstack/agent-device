@@ -11,6 +11,7 @@ import {
   type CommandName,
 } from '../commands/command-metadata.ts';
 import { mcpBody } from '../commands/command-text.ts';
+import { resolveStructuredBatchCommandName } from '../core/batch-policy.ts';
 import {
   resolveCommandRecordsSessionAction,
   resolveCommandTimeoutPolicy,
@@ -410,15 +411,18 @@ function findInadmissibleNestedProperty(
   if (commandKey === undefined) {
     return findInadmissibleNestedCommandInput(property, parent[key], path);
   }
-  const command = parent[commandKey];
   const nested = parent[key];
-  // A missing or unrecognized command name leaves nothing to check against, and
-  // nothing to protect: the nested reader rejects that step, so nothing it
-  // carries reaches a daemon request flag. Reporting it is the reader's job —
-  // answering here would bury the real error under a key complaint.
-  if (typeof command !== 'string' || !isCommandName(command) || !isRecord(nested)) {
-    return undefined;
-  }
+  // Resolve exactly as the nested reader does, never by matching the raw value:
+  // a step is normalized before it runs, so ` SNAPSHOT ` is no command here and
+  // `snapshot` there — admission would check nothing and the daemon would run it
+  // with the operator paths still aboard. `resolveStructuredBatchCommandName` is
+  // the function the readers themselves call, so the two cannot drift apart.
+  const command = resolveStructuredBatchCommandName(parent[commandKey]);
+  // A name that resolves to nothing leaves nothing to check against, and nothing
+  // to protect: the reader refuses that step, so nothing it carries reaches a
+  // daemon request flag. Reporting it is the reader's job — answering here would
+  // bury the real error under a key complaint.
+  if (command === undefined || !isRecord(nested)) return undefined;
   const rejection = findInadmissibleInput(command, findCommandMetadata(command), nested);
   return rejection === undefined ? undefined : `${path}: ${rejection}`;
 }
