@@ -3,7 +3,6 @@ import { test } from 'node:test';
 import {
   checkDaemonModularityRatchets,
   DAEMON_MODULARITY_BASELINE,
-  LOGICAL_MODULE_POLICIES,
   TYPE_CYCLE_BASELINE,
 } from './daemon-modularity.ts';
 import { SESSION_STATE_FIELD_OWNERS } from './session-state.ts';
@@ -28,18 +27,9 @@ function baselineDaemonTypesEdges(): ResolvedImportEdge[] {
   );
 }
 
-function recordedMigrationEdges(): ResolvedImportEdge[] {
-  return LOGICAL_MODULE_POLICIES.flatMap((module) =>
-    (module.recordedMigrationImports ?? []).map((recorded) => {
-      const [file, target] = recorded.split(' -> ');
-      return importEdge(file!, target!);
-    }),
-  );
-}
-
-/** Every recorded import present and nothing else forbidden: the quiet state of the ratchets. */
+/** Every baseline edge is present and nothing else is forbidden: the quiet state of the ratchets. */
 function baselineEdges(): ResolvedImportEdge[] {
-  return [...baselineDaemonTypesEdges(), ...recordedMigrationEdges()];
+  return baselineDaemonTypesEdges();
 }
 
 /** Where a member of `zone` lives, so a zone count can be turned back into file paths. */
@@ -94,14 +84,14 @@ test('external daemon/types.ts importer membership changes require the baseline 
   assert.match(violations[0]!.message, /may only shrink from the recorded 2/);
 
   const removed = checkDaemonModularityRatchets(
-    [...baselineDaemonTypesEdges().slice(1), ...recordedMigrationEdges()],
+    baselineDaemonTypesEdges().slice(1),
     baselineTypeCycleMembers(),
   );
   assert.equal(removed.length, 1);
   assert.match(removed[0]!.message, /delete it from externalDaemonTypesImporters/);
 });
 
-test('planned logical modules start with zero forbidden imports', () => {
+test('logical modules reject forbidden imports', () => {
   const edges = resolveImportEdges(
     new Map([
       [
@@ -166,22 +156,6 @@ test('replay-test may still import its own files inside the package', () => {
     checkDaemonModularityRatchets([...baselineEdges(), ...edges], baselineTypeCycleMembers()),
     [],
   );
-});
-
-// #1478 P3 cleared every recorded replay-test migration import: the ADR 0012 divergence
-// vocabulary became a neutral contracts leaf, and the reporter tree now reads the progress
-// wire vocabulary from contracts instead of request-global plumbing. The rule enforces
-// unconditionally for replay-test from here on.
-test('replay-test carries no recorded migration imports', () => {
-  assert.equal(
-    LOGICAL_MODULE_POLICIES.find(({ name }) => name === 'replay-test')?.recordedMigrationImports,
-    undefined,
-  );
-  assert.deepEqual(
-    LOGICAL_MODULE_POLICIES.flatMap((module) => module.recordedMigrationImports ?? []),
-    [],
-  );
-  assert.deepEqual(checkDaemonModularityRatchets(baselineEdges(), baselineTypeCycleMembers()), []);
 });
 
 test('internal trees reject deep imports globally, including from daemon', () => {

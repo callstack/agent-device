@@ -1,5 +1,5 @@
 import { parseSync } from 'oxc-parser';
-import { visitAst } from './cutover-policy-ast.ts';
+import { visitAst } from './layering-ast.ts';
 import type { LayeringViolation } from './model.ts';
 
 export const SOURCE_EXECUTION_COMPATIBILITY_RULE = 'R67 source-execution-compatibility';

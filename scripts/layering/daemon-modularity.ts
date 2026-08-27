@@ -44,14 +44,6 @@ type LogicalModulePolicy = {
   name: string;
   roots: readonly string[];
   forbiddenTargetRoots: readonly string[];
-  /**
-   * Imports that already violate `forbiddenTargetRoots` on the day the rule was written, recorded
-   * as `source -> target`. The rule enforces immediately for everything else, so a new violation
-   * cannot be added while the module waits for its extraction PR; each recorded edge must be
-   * deleted from this list by the change that removes the import, and re-adding one is a diff a
-   * reviewer sees.
-   */
-  recordedMigrationImports?: readonly string[];
 };
 
 /**
@@ -242,7 +234,6 @@ function checkDaemonTypesImporters(edges: readonly ResolvedImportEdge[]): Layeri
 
 function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
-  const observedMigrationImports = new Set<string>();
   for (const edge of edges) {
     const sourceModule = moduleForFile(edge.file);
     const targetModule = moduleForFile(edge.target);
@@ -265,33 +256,12 @@ function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): Layeri
     // `src/replay/` engine root it may not import from.
     if (sourceModule.roots.some((root) => edge.target.startsWith(root))) continue;
     if (!sourceModule.forbiddenTargetRoots.some((root) => edge.target.startsWith(root))) continue;
-    const migrationImport = `${edge.file} -> ${edge.target}`;
-    if (sourceModule.recordedMigrationImports?.includes(migrationImport)) {
-      observedMigrationImports.add(migrationImport);
-      continue;
-    }
     violations.push({
       rule: 'R10 daemon-modularity',
       file: edge.file,
       line: edge.line,
       message: `${sourceModule.name} must not import ${edge.target}; communicate through its façade and a narrow port with two real adapters.`,
     });
-  }
-  return [...violations, ...checkRecordedMigrationImports(observedMigrationImports)];
-}
-
-function checkRecordedMigrationImports(observed: ReadonlySet<string>): LayeringViolation[] {
-  const violations: LayeringViolation[] = [];
-  for (const module of LOGICAL_MODULE_POLICIES) {
-    for (const migrationImport of module.recordedMigrationImports ?? []) {
-      if (observed.has(migrationImport)) continue;
-      violations.push({
-        rule: 'R10 daemon-modularity',
-        file: 'scripts/layering/daemon-modularity.ts',
-        line: 1,
-        message: `${migrationImport} no longer exists — delete it from ${module.name}'s recordedMigrationImports in the same change so the import cannot return.`,
-      });
-    }
   }
   return violations;
 }
@@ -322,14 +292,10 @@ function groupBy(
 
 export function daemonModularitySummary(): string {
   const session = DAEMON_MODULARITY_BASELINE.sessionState;
-  const recordedMigrationImports = LOGICAL_MODULE_POLICIES.reduce(
-    (sum, module) => sum + (module.recordedMigrationImports?.length ?? 0),
-    0,
-  );
   return (
     `R10 pins R7 at ${session.writerOwnedFields} writer-owned fields / ` +
     `${session.ownerFileClaims} owner claims, R9 at ${TYPE_CYCLE_BASELINE} files with zone ceilings, ` +
     `${DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters.length} external daemon/types.ts importers, ` +
-    `and zero forbidden logical-module imports beyond ${recordedMigrationImports} recorded migration import(s)`
+    'and zero forbidden logical-module imports'
   );
 }

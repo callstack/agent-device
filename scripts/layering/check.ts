@@ -37,8 +37,7 @@
 //   - Over PLATFORM PACKAGE COMPOSITION: six private metadata façades meet at the exact root
 //     composition file; premature implementation loading and forbidden cross-boundary edges fail (R13).
 //   - Over REQUEST-BOUND RUNTIME EXECUTION: facts remain the only admission authority and daemon
-//     code cannot manufacture or repair a narrowed runtime proof (R66). The historical per-command
-//     cutover table was deleted after the last legacy execution shape disappeared.
+//     code cannot manufacture or repair a narrowed runtime proof (R66).
 //   - Over CONTRACTS PRODUCTION SOURCE: contracts owns vocabulary only — host, process, and timer
 //     mechanics belong in capture-kit or an adapter (R18).
 // Only `(root)` is unranked among src/ zones (see `UNRANKED_ZONES` in model.ts):

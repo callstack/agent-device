@@ -201,7 +201,7 @@ type CommandDescriptorBase = {
   catalog: CommandCatalogFacet;
   /** Required iff `catalog.group === 'public'`; see {@link CommandFrameworkTier}. */
   frameworkTier?: CommandFrameworkTier;
-  /** Internal-only ADR 0019 cutover discriminant; public projections must ignore it. */
+  /** Internal-only ADR 0019 execution discriminant; public projections must ignore it. */
   platformExecution: CommandPlatformExecution;
   /** ADR 0012 / #1349: present iff this command's recorded steps can carry `target-v1` evidence. */
   targetIdentityVerification?: TargetIdentityVerification;

@@ -21,8 +21,8 @@ test('focus descriptor declares its complete runtime use with no legacy projecti
 test('focus keeps the traits its retired bucket did not own', () => {
   const focus = commandDescriptors.find(({ name }) => name === 'focus');
 
-  // The Android blocking-dialog guard is admission-independent: it survived the cutover because
-  // it describes when the command may run, not which platform executes it.
+  // The Android blocking-dialog guard is admission-independent: it describes when the command may
+  // run, not which platform executes it.
   expect(focus).toMatchObject({
     daemon: {
       route: 'generic',

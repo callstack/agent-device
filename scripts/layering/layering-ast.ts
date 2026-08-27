@@ -1,4 +1,4 @@
-/** A production file the cutover policies scan: repo-relative path plus its source. */
+/** Shared AST helpers for permanent layering policies. */
 export type ProductionSource = Readonly<{ path: string; source: string }>;
 
 export function memberName(node: Record<string, unknown>): string | undefined {

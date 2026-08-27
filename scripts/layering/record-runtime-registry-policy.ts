@@ -1,5 +1,5 @@
 import { parseSync } from 'oxc-parser';
-import { memberName, type ProductionSource, visitAst } from './cutover-policy-ast.ts';
+import { memberName, type ProductionSource, visitAst } from './layering-ast.ts';
 
 export function recordRuntimeRegistryJoinViolations(
   sources: readonly ProductionSource[],

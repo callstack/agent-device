@@ -1,5 +1,5 @@
 import { parseSync } from 'oxc-parser';
-import { propertyName, visitAst } from './cutover-policy-ast.ts';
+import { propertyName, visitAst } from './layering-ast.ts';
 import type { LayeringViolation } from './model.ts';
 
 type AstNode = Record<string, unknown>;

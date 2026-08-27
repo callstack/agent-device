@@ -4,14 +4,7 @@ import { isProductionSourceFile } from './tracked-sources.ts';
 import type { LayeringViolation } from './model.ts';
 
 /**
- * R65 is the terminal daemon/platform boundary.
- *
- * R3's old platforms seam deliberately tolerated dynamic and type-only edges while the
- * request-bound runtime migration was in flight. That tolerance is not a terminal property:
- * either edge still makes the daemon depend on a concrete platform implementation. This policy
- * closes the boundary completely for tracked production daemon sources. It is kept independent
- * from `check.ts` until the remaining live edges are removed, so the migration can plant and
- * verify the red forms before making the repository-wide gate fail.
+ * R65 rejects every concrete-platform dependency from tracked production daemon sources.
  *
  * The module record supplies static imports and re-exports; the AST supplies dynamic imports and
  * TypeScript import types. Reading syntax through oxc-parser, rather than searching source text,

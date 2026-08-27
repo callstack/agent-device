@@ -1,5 +1,5 @@
 import { parseSync } from 'oxc-parser';
-import { memberPath } from './cutover-policy-ast.ts';
+import { memberPath } from './layering-ast.ts';
 import { parseImports, type LayeringViolation } from './model.ts';
 
 const RULE = 'R13 platform-package-substrate';

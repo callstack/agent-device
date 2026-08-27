@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { commandDescriptors } from '../registry.ts';
 import { deriveDaemonCommandDescriptors } from '../derive.ts';
 
-describe('command platform execution cutover', () => {
+describe('command platform execution declaration', () => {
   test('declares devices through the descriptor-owned inventory use', () => {
     expect(commandDescriptors.find(({ name }) => name === 'devices')?.platformExecution).toEqual({
       kind: 'inventory',
@@ -11,7 +11,7 @@ describe('command platform execution cutover', () => {
     });
   });
 
-  test('keeps the internal cutover discriminant out of daemon/public projections', () => {
+  test('keeps the internal execution discriminant out of daemon/public projections', () => {
     const devices = deriveDaemonCommandDescriptors(commandDescriptors).find(
       ({ command }) => command === 'devices',
     );

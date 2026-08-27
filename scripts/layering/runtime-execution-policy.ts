@@ -1,5 +1,5 @@
 import { parseSync } from 'oxc-parser';
-import { memberName, propertyName, visitAst } from './cutover-policy-ast.ts';
+import { memberName, propertyName, visitAst } from './layering-ast.ts';
 import type { LayeringViolation } from './model.ts';
 
 type AstNode = Record<string, unknown>;
@@ -10,15 +10,7 @@ const COMMAND_DESCRIPTOR_MODULE = 'src/core/command-descriptor/registry.ts';
 const RUNTIME_ADMISSION_MODULE = 'src/daemon/runtime-admission.ts';
 const RUNTIME_PROOF_TYPES = new Set(['AdmittedRuntimePlan', 'BoundDeviceRuntime']);
 
-/**
- * Permanent runtime invariants after ADR 0019's command-by-command migration completed.
- *
- * The old cutover table named every retired symbol and every operation owner. Those were useful
- * assertions while two execution systems coexisted, but keeping them after the old system was
- * deleted made handler names and historical routes a second source of truth. The surviving
- * invariant is generic: facts are the only admission authority, and daemon code must not
- * manufacture or repair the proof carried by a narrowed runtime.
- */
+/** Facts are the only admission authority, and daemon code must consume narrowed runtime proofs. */
 export function runtimeExecutionIntegrityViolations(
   sources: ReadonlyMap<string, string>,
 ): LayeringViolation[] {
