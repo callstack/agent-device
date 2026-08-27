@@ -8,14 +8,6 @@ import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runt
 import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
 import { resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
 
-/**
- * The Apple owner's gesture-family cell table (R52/R53).
- *
- * This is admission the daemon used to own: `requireGestureSupported` decided Apple's gesture
- * tiers. Every refusal below reproduces the exact cell — and
- * the exact hint — that function produced, which is why the wording constants are imported rather
- * than restated. `runtime.ts` composes these facts; it does not decide them.
- */
 const available = Object.freeze({ available: true } as const);
 const gestureLeafUnavailable = Object.freeze({
   available: false,
