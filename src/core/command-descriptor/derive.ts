@@ -1,4 +1,4 @@
-import type { DaemonCommandDescriptor } from '../../daemon/daemon-command-registry.ts';
+import type { DaemonCommandDescriptor } from './daemon-command-descriptor.ts';
 import type { CommandDescriptor } from './types.ts';
 
 /**

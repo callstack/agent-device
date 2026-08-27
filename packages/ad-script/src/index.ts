@@ -41,12 +41,8 @@
  * record/replay AND the daemon" shape this package exists to own.
  */
 
-export {
-  parseReplayScriptDetailed,
-  readReplayScriptMetadata,
-  REPLAY_VAR_KEY_RE,
-} from './internal/script.ts';
-export type { ParsedReplayScript, ReplayScriptMetadata } from './internal/script.ts';
+export { parseReplayScriptDetailed, readReplayScriptMetadata } from './internal/script.ts';
+export type { ReplayScriptMetadata } from './internal/script.ts';
 
 export { resolveDeclaredScriptPlatform } from './internal/open-script.ts';
 
@@ -101,3 +97,23 @@ export {
   readReplayShellEnvSource,
   resolveReplayAction,
 } from './internal/vars.ts';
+
+export {
+  isMaestroYamlPath,
+  maestroBackendRequiredMessage,
+  resolveReplayFormat,
+} from './internal/format.ts';
+
+export {
+  readRecordedInputVariableName,
+  recordedInputPlaceholder,
+  validateRecordedInputVariableName,
+} from './internal/recorded-input.ts';
+
+export {
+  buildAncestryChain,
+  buildIndexMap,
+  filterIdentitySet,
+} from './internal/target-evidence-tree.ts';
+
+export { parseReplayInput } from './internal/replay-input.ts';

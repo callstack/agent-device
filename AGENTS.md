@@ -63,7 +63,7 @@ Read the declaration rather than maintaining a prose copy:
 
 Shared selector parsing and matching belongs in `@agent-device/selectors`; request cancellation
 and progress in `@agent-device/capture-kit` (`request-cancel`, `request-progress`); cross-layer
-contracts in `src/contracts`; CLI flags in `src/commands/cli-grammar`; cross-surface schema
+contracts in `@agent-device/contracts`; CLI flags in `src/commands/cli-grammar`; cross-surface schema
 composition in `src/cli-schema`.
 
 The enforced registries are self-declaring. A failing completeness, parity, coverage, timeout,

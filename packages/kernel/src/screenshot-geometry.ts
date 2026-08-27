@@ -1,4 +1,4 @@
-import type { Rect } from '@agent-device/kernel/snapshot';
+import type { Rect } from './snapshot.ts';
 
 export type ImageDimensions = { width: number; height: number };
 

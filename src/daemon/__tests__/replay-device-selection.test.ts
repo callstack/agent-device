@@ -1,7 +1,7 @@
 import { test, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseReplayInput } from '../../compat/replay-input.ts';
+import { parseReplayInput } from '@agent-device/ad-script';
 import {
   buildReplayScriptPlatformFlags,
   buildReplayTargetDeviceResolution,

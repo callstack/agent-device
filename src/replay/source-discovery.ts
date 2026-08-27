@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveUserPath } from '@agent-device/host-kit/file';
-import { isMaestroYamlPath, maestroBackendRequiredMessage } from './format.ts';
+import { isMaestroYamlPath, maestroBackendRequiredMessage } from '@agent-device/ad-script';
 
 const GLOB_PATTERN_CHARS = /[*?[\]{}]/;
 type ReplayInputSource = 'directory' | 'file' | 'glob';

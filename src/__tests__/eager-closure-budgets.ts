@@ -106,10 +106,13 @@ export function discoverFacadeEntryFiles(repoRoot: string): string[] {
  */
 export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // --- @agent-device/ad-replay ---
-  'packages/ad-replay/src/index.ts': 57,
+  'packages/ad-replay/src/index.ts': 61,
 
   // --- @agent-device/ad-script ---
-  'packages/ad-script/src/index.ts': 37,
+  // +4: format, recorded-input, target-evidence-tree, and parseReplayInput join the codec façade
+  // after leaving root src. Consumers of the façade (selectors, maestro, ad-replay) move by the
+  // same 4; the CLI already had three of those modules via other edges and moves by 1.
+  'packages/ad-script/src/index.ts': 41,
 
   // --- @agent-device/platform-apple/runner ---
   // #2040 extraction: the façade stays types/pure-helpers/bundle-ids; the whole
@@ -122,6 +125,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // --- @agent-device/capture-kit ---
   // R60 review: audio-probe split into descriptor/status/recovery/live-process modules (+3 files).
   'packages/capture-kit/src/index.ts': 32,
+  'packages/capture-kit/src/device-inventory-context.ts': 3,
   'packages/capture-kit/src/png-resize.ts': 18,
   'packages/capture-kit/src/png-rgb-difference.ts': 1,
   'packages/capture-kit/src/png-size.ts': 3,
@@ -216,6 +220,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/interaction.ts': 1,
   'packages/contracts/src/interaction-error.ts': 1,
   'packages/contracts/src/interaction-guarantees.ts': 1,
+  'packages/contracts/src/interaction-outcome.ts': 1,
   'packages/contracts/src/interactor-types.ts': 1,
   'packages/contracts/src/keyboard.ts': 1,
   'packages/contracts/src/logs-runtime-plan.ts': 5,
@@ -249,6 +254,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/selector-observation-runtime.ts': 1,
   'packages/contracts/src/settings.ts': 3,
   'packages/contracts/src/snapshot-presentation.ts': 2,
+  'packages/contracts/src/snapshot-quality-warnings.ts': 1,
   'packages/contracts/src/snapshot-runtime.ts': 3,
   'packages/contracts/src/snapshot-scope.ts': 1,
   'packages/contracts/src/snapshot-timeout-evidence.ts': 1,
@@ -275,6 +281,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/kernel/src/location-coordinates.ts': 3,
   'packages/kernel/src/record.ts': 3,
   'packages/kernel/src/scoped-provider.ts': 1,
+  'packages/kernel/src/screenshot-geometry.ts': 1,
   'packages/kernel/src/source-value.ts': 3,
   'packages/kernel/src/success-text.ts': 1,
   'packages/kernel/src/ttl-memo.ts': 1,
@@ -283,7 +290,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/kernel/src/snapshot.ts': 1,
 
   // --- @agent-device/maestro ---
-  'packages/maestro/src/index.ts': 106,
+  'packages/maestro/src/index.ts': 110,
 
   // --- @agent-device/platform-*: ADR-0019's metadata-eager/implementation-lazy façades. Each
   // evaluates only itself; every implementation sits behind a function-scoped `await import`.
@@ -324,7 +331,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // --- @agent-device/selectors ---
   'packages/selectors/src/ast.ts': 16,
   'packages/selectors/src/engine.ts': 19,
-  'packages/selectors/src/index.ts': 50,
+  'packages/selectors/src/index.ts': 54,
 
   // --- @agent-device/xml ---
   'packages/xml/src/index.ts': 3,
@@ -380,9 +387,9 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // readers), `input-audience.ts` (who may write a key), and `common-input-fields.ts` (the table
   // itself). Every command schema already evaluated all three concerns; the growth is three more
   // module records for the same code, with no new subtree behind any of them.
-  'src/cli.ts': 380,
+  'src/cli.ts': 381,
   'src/platform-runtime.ts': 47,
-  'src/core/command-descriptor/registry.ts': 67,
+  'src/core/command-descriptor/registry.ts': 71,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,
   'src/core/interactors/register-builtins.ts': 6,
   // R64 removes the perf plugin facet and keeps collector binding behind the selected runtime

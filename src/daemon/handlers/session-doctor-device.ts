@@ -1,5 +1,5 @@
 import { buildDeviceInventoryRequestFromFlags } from '../../core/dispatch-resolve.ts';
-import { listDeviceInventory } from '../../request/device-inventory-context.ts';
+import { listDeviceInventory } from '@agent-device/capture-kit/device-inventory-context';
 import {
   countDeviceInventoryByGroup,
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,

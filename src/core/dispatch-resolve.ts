@@ -18,7 +18,7 @@ import {
   listLocalDeviceInventory,
   readDeviceInventory,
   shouldPropagateDeviceInventoryProbeError,
-} from '../request/device-inventory-context.ts';
+} from '@agent-device/capture-kit/device-inventory-context';
 import type {
   DeviceSelectionResult,
   InventoryDeviceSelectionParams,

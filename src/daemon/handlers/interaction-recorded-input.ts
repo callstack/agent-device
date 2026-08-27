@@ -1,6 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { validateRecordedInputVariableName } from '../../replay/recorded-input.ts';
+import { validateRecordedInputVariableName } from '@agent-device/ad-script';
 import type { SessionState } from '../types.ts';
 import { isSessionRecording } from '../session-script-publication-capability.ts';
 

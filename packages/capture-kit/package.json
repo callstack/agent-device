@@ -14,6 +14,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./device-inventory-context": {
+      "types": "./src/device-inventory-context.ts",
+      "default": "./src/device-inventory-context.ts"
+    },
     "./mobile-snapshot-semantics": {
       "types": "./src/mobile-snapshot-semantics.ts",
       "default": "./src/mobile-snapshot-semantics.ts"

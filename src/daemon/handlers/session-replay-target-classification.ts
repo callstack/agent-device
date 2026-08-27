@@ -34,10 +34,14 @@ import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import { findNodeByRef, normalizeRef, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { findNodeByLabel } from '../../core/snapshot-node-lookup.ts';
 import {
+  annotationLocalIdentity,
   buildAncestryChain,
   buildIndexMap,
+  classifyTargetBindingMatch,
   filterIdentitySet,
-} from '../../replay/target-evidence-tree.ts';
+  firstAncestryMismatch,
+  identityFieldMismatches,
+} from '@agent-device/ad-script';
 import {
   boundedLocalIdentity,
   computeSiblingOrdinal,
@@ -46,12 +50,6 @@ import {
   orderByViewportPosition,
 } from '../session-target-evidence.ts';
 import { resolveRecordedTarget } from '@agent-device/selectors';
-import {
-  annotationLocalIdentity,
-  classifyTargetBindingMatch,
-  firstAncestryMismatch,
-  identityFieldMismatches,
-} from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { ReplayDivergenceTargetBindingKind } from '@agent-device/contracts/divergence';
 

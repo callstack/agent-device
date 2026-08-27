@@ -105,6 +105,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/interaction',
   '@agent-device/contracts/interaction-error',
   '@agent-device/contracts/interaction-guarantees',
+  '@agent-device/contracts/interaction-outcome',
   '@agent-device/contracts/interactor-operation-catalog',
   '@agent-device/contracts/interactor-types',
   '@agent-device/contracts/keyboard',
@@ -150,6 +151,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/settings-runtime',
   '@agent-device/contracts/snapshot',
   '@agent-device/contracts/snapshot-presentation',
+  '@agent-device/contracts/snapshot-quality-warnings',
   '@agent-device/contracts/snapshot-runtime',
   '@agent-device/contracts/snapshot-scope',
   '@agent-device/contracts/snapshot-timeout-evidence',
@@ -457,6 +459,7 @@ test('the real tree parses, declares, and passes R11', () => {
   );
   assert.deepEqual([...captureKitPackage.exportTargets.keys()].sort(), [
     '@agent-device/capture-kit',
+    '@agent-device/capture-kit/device-inventory-context',
     '@agent-device/capture-kit/mobile-snapshot-semantics',
     '@agent-device/capture-kit/png',
     '@agent-device/capture-kit/png-resize',

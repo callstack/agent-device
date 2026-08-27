@@ -10,7 +10,7 @@ import { inferFillText } from './action-utils.ts';
 import {
   recordedInputPlaceholder,
   validateRecordedInputVariableName,
-} from '../replay/recorded-input.ts';
+} from '@agent-device/ad-script';
 import {
   parameterizeRecordedFillPayload,
   parameterizeRecordedFillTargetEvidence,

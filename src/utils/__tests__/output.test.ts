@@ -9,7 +9,7 @@ import {
   printHumanError,
 } from '../output.ts';
 import { formatRole, formatSnapshotLine } from '../../snapshot/snapshot-lines.ts';
-import { normalizedRect } from '../screenshot-geometry.ts';
+import { normalizedRect } from '@agent-device/kernel/screenshot-geometry';
 import { AppError } from '@agent-device/kernel/errors';
 
 function captureStderr(run: () => void): string {

@@ -34,7 +34,7 @@ import type { ConnectVerification } from '../../src/cli/connection/connect-provi
 import type { RemoteConnectionState } from '../../src/remote/remote-connection-state.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import { renderSnapshotQualityWarnings } from '../../src/snapshot-quality/warnings.ts';
+import { renderSnapshotQualityWarnings } from '@agent-device/contracts/snapshot-quality-warnings';
 import { formatSnapshotText, printHumanError } from '../../src/utils/output.ts';
 
 // The production renderer behind each captured sample in

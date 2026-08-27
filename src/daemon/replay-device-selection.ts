@@ -1,10 +1,12 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { inspectMaestroFlow } from '@agent-device/maestro';
-import { resolveDeclaredScriptPlatform } from '@agent-device/ad-script';
-import { parseReplayInput } from '../compat/replay-input.ts';
+import {
+  parseReplayInput,
+  resolveDeclaredScriptPlatform,
+  resolveReplayFormat,
+} from '@agent-device/ad-script';
 import type { ResolveTargetDeviceOptions } from '../core/dispatch-resolve.ts';
 import { isDeepLinkTarget, type CommandFlags } from '@agent-device/contracts/command';
-import { resolveReplayFormat } from '../replay/format.ts';
 import { readReplayScriptSourceFile } from '../replay/script-source-bundle.ts';
 import { appleSimulatorAppTargetForOpenTarget } from './open-device-selection.ts';
 import type { DaemonRequest } from './types.ts';

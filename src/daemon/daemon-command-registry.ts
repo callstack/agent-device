@@ -1,61 +1,14 @@
+import {
+  type DaemonCommandDescriptor,
+  type DaemonCommandRoute,
+  type SessionCommandKind,
+} from '../core/command-descriptor/daemon-command-descriptor.ts';
 import { deriveDaemonCommandDescriptors } from '../core/command-descriptor/derive.ts';
 import { commandDescriptors } from '../core/command-descriptor/registry.ts';
-import type { DaemonCommandRoute } from './request-handler-chain.ts';
+import type { RefFrameEffect } from '@agent-device/contracts/replay';
 import type { DaemonRequest } from './types.ts';
 
-export type { DaemonCommandRoute } from './request-handler-chain.ts';
-
-export type SessionCommandKind = 'inventory' | 'state' | 'observability' | 'publication' | 'replay';
-
-// Declared in contracts/ so core/ can classify commands without importing the daemon;
-// re-exported here because the descriptor shape below is stated in terms of it.
-import type { RefFrameEffect } from '@agent-device/contracts/replay';
-
-/**
- * Request-sensitive form of {@link RefFrameEffect}. Commands whose subactions
- * differ (keyboard `status` vs `dismiss`, alert `get`/`wait` vs
- * `accept`/`dismiss`) use the resolver form instead of pretending all
- * subcommands behave alike. Mirrors the existing `(req) => boolean` closure
- * traits below.
- */
-export type DaemonRefFrameEffect = RefFrameEffect | ((req: DaemonRequest) => RefFrameEffect);
-
-export type DaemonCommandDescriptor = {
-  command: string;
-  route: DaemonCommandRoute;
-  sessionKind?: SessionCommandKind;
-  refFrameEffect?: DaemonRefFrameEffect;
-  leaseAdmissionExempt?: boolean;
-  sessionExecutionLockExempt?: boolean;
-  selectorValidationExempt?: boolean;
-  replayScopedAction?: boolean;
-  allowInvalidRecording?: boolean;
-  /**
-   * #1478: this command's REQUEST may carry `flags.saveScript` to arm session
-   * script publication. Only the released flag owners (`open`, `close`,
-   * `replay` — the commands whose CLI grammar declares `--save-script`) set
-   * this; every other command's raw request is rejected at the daemon request
-   * seam by `unsupportedSaveScriptFlagResponse`, so a recordable command such
-   * as `record` or `trace` cannot arm publication over the wire.
-   */
-  saveScriptFlagOwner?: boolean;
-  lockPolicySelectorOverride?: boolean;
-  androidBlockingDialogGuard?: boolean;
-  preferExplicitDeviceOverExistingSession?: boolean;
-  allowSessionlessDefaultDevice?: (req: DaemonRequest) => boolean;
-  skipSessionlessProviderDevice?: (req: DaemonRequest) => boolean;
-  /**
-   * #2016: this request shape is eligible for the sessionless,
-   * no-lease-anywhere lease-admission bypass — a session that was never
-   * created (deferred `connect`, `open` never ran) has no lease to admit or
-   * release. Only `close` declares it, and only for the plain-close shape
-   * (no app-target positional): `close <app>` resolves its device straight
-   * from flags when there's no session, so it must stay behind full
-   * lease/tenant admission. Declared here so `request-admission.ts` asks the
-   * registry instead of reclassifying `req.command`/`req.positionals` itself.
-   */
-  sessionlessPlainCloseAdmissionExempt?: (req: DaemonRequest) => boolean;
-};
+export type { DaemonCommandDescriptor, DaemonCommandRoute, SessionCommandKind };
 
 export type DaemonProviderDeviceResolutionIntent =
   | 'existing-session'
@@ -67,9 +20,7 @@ export type DaemonProviderDeviceResolutionIntent =
 // The hand-authored literal that previously lived here was proven byte-equal to
 // this derived value by `src/core/command-descriptor/__tests__/parity.test.ts` (#906)
 // and has been deleted; the daemon now derives its routes/traits from the single
-// source. The back-edge from derive.ts/registry.ts to this module's
-// `DaemonCommandDescriptor` is type-only (erased at runtime), so there is no
-// runtime import cycle.
+// source. The descriptor shape lives in core so that zone does not import daemon.
 export const DAEMON_COMMAND_DESCRIPTORS: readonly DaemonCommandDescriptor[] =
   deriveDaemonCommandDescriptors(commandDescriptors);
 

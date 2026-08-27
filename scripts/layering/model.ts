@@ -51,7 +51,6 @@ const TARGET_DAG_RANK = new Map([
   ['mcp', 3],
   ['ai-sdk', 4],
   ['client', 4],
-  ['compat', 4],
   ['daemon-server', 4],
   ['metro', 4],
   ['remote', 4],

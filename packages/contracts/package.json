@@ -243,6 +243,10 @@
       "types": "./src/interaction-guarantees.ts",
       "default": "./src/interaction-guarantees.ts"
     },
+    "./interaction-outcome": {
+      "types": "./src/interaction-outcome.ts",
+      "default": "./src/interaction-outcome.ts"
+    },
     "./interactor-operation-catalog": {
       "types": "./src/interactor-operation-catalog.ts",
       "default": "./src/interactor-operation-catalog.ts"
@@ -422,6 +426,10 @@
     "./snapshot-presentation": {
       "types": "./src/snapshot-presentation.ts",
       "default": "./src/snapshot-presentation.ts"
+    },
+    "./snapshot-quality-warnings": {
+      "types": "./src/snapshot-quality-warnings.ts",
+      "default": "./src/snapshot-quality-warnings.ts"
     },
     "./snapshot-runtime": {
       "types": "./src/snapshot-runtime.ts",

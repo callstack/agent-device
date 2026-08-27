@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import { resolveUserPath } from '@agent-device/host-kit/file';
-import { resolveReplayFormat } from './format.ts';
+import { resolveReplayFormat } from '@agent-device/ad-script';
 
 /**
  * The caller-side half of the replay script source bundle (#1802): the CLI,

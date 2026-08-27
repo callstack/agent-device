@@ -1,21 +1,10 @@
-/**
- * ADR 0012 decision 3: the tree-structural evidence primitives shared by the
- * record-time writer (`src/daemon/session-target-evidence.ts`), replay-time
- * verification (`src/daemon/handlers/session-replay-target-classification.ts`),
- * and the command-resolution landmark check `wait` runs inside its polling
- * loop (#1349, `src/commands/interaction/runtime/selector-read.ts`). They are
- * pure functions over `SnapshotNode` trees; keeping them in the shared
- * `replay/` zone lets the commands runtime consume them without importing the
- * daemon.
- */
-
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   matchesAncestryPrefix,
   matchesLocalIdentity,
   readNodeLocalIdentity,
   type LocalIdentity,
-} from '@agent-device/ad-script';
+} from './target-annotation-identity.ts';
 import type { TargetAncestryEntry } from '@agent-device/contracts/replay';
 
 export function buildIndexMap(nodes: readonly SnapshotNode[]): Map<number, SnapshotNode> {

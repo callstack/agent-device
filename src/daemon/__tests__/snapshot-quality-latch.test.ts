@@ -6,7 +6,7 @@ import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts'
 import {
   recoveredSnapshotQualityWarning,
   renderSnapshotQualityWarnings,
-} from '../../snapshot-quality/warnings.ts';
+} from '@agent-device/contracts/snapshot-quality-warnings';
 import {
   applyRecoveredWarningLatch,
   resolveRecoveredWarningLatch,

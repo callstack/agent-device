@@ -24,8 +24,11 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { resolveRectCenter } from '@agent-device/kernel/rect-center';
 import { findNearestScrollableContainer } from '../snapshot/snapshot-presentation/tree.ts';
 import {
+  buildAncestryChain,
+  buildIndexMap,
   classifyTargetBindingMatch,
   demoteNonUniqueLocalIdentity,
+  filterIdentitySet,
   matchesLocalIdentity,
   readNodeLocalIdentity,
   serializeTargetAnnotationV1,
@@ -35,11 +38,6 @@ import {
   TARGET_ANNOTATION_MAX_ANCESTRY,
   TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
 } from '@agent-device/ad-script';
-import {
-  buildAncestryChain,
-  buildIndexMap,
-  filterIdentitySet,
-} from '../replay/target-evidence-tree.ts';
 import type {
   TargetAncestryEntry,
   TargetAnnotationV1,

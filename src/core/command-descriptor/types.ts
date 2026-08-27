@@ -1,4 +1,4 @@
-import type { DaemonCommandDescriptor } from '../../daemon/daemon-command-registry.ts';
+import type { DaemonCommandDescriptor } from './daemon-command-descriptor.ts';
 // The typed-flags request from contracts/, not the daemon's server-side refinement: these
 // descriptors read `command`, `positionals` and `flags` and never touch `internal`.
 import type { DispatchedCommand } from '@agent-device/contracts/command';

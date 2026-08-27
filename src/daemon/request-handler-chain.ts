@@ -1,6 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
 import { AppError } from '@agent-device/kernel/errors';
+import type { DaemonCommandRoute } from '../core/command-descriptor/daemon-command-descriptor.ts';
 import { getDaemonCommandRoute } from './daemon-command-registry.ts';
 import * as genericRequestHandlerModule from './request-generic-dispatch.ts';
 import type { DaemonCommandContext } from './context.ts';
@@ -97,9 +98,15 @@ const DAEMON_ROUTE_HANDLERS = {
     load: async () => genericRequestHandlerModule,
     run: async () => null,
   }),
-} as const;
+} as const satisfies Record<
+  DaemonCommandRoute,
+  {
+    loadModule: () => Promise<unknown>;
+    run: (params: RequestHandlerChainParams) => Promise<DaemonResponse | null>;
+  }
+>;
 
-export type DaemonCommandRoute = keyof typeof DAEMON_ROUTE_HANDLERS;
+export type { DaemonCommandRoute };
 
 export async function runRequestHandlerChain(
   params: RequestHandlerChainParams,

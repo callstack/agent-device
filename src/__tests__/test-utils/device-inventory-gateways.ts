@@ -14,7 +14,7 @@ import type {
   PlatformRequestScope,
 } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
-import { withDeviceInventoryContext } from '../../request/device-inventory-context.ts';
+import { withDeviceInventoryContext } from '@agent-device/capture-kit/device-inventory-context';
 import { createComposedDeviceInventoryGateways } from '../../platform-runtime-device-inventory.ts';
 
 type TestDeviceInventoryOptions = Readonly<{

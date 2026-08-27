@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { REPLAY_VAR_KEY_RE } from '@agent-device/ad-script';
+import { REPLAY_VAR_KEY_RE } from './script.ts';
 
 const RECORDED_INPUT_PLACEHOLDER_RE = /^\$\{([A-Z_][A-Z0-9_]*)\}$/;
 

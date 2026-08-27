@@ -447,7 +447,7 @@ test('replay rejects legacy JSON payload files', async () => {
 // #1555 P1: the P5 extraction moved `.ad` inspection to `inspectAdReplay`
 // (`packages/ad-replay/src/internal/inspect.ts`), which never receives
 // `req.flags` — so the `parseReplayInput` check that used to reject an
-// unrecognized `--replay-backend` value (`src/compat/replay-input.ts`) no
+// unrecognized `--replay-backend` value (`parseReplayInput`) no
 // longer ran on this path. `buildReplayTargetDeviceResolution`
 // (`src/daemon/replay-device-selection.ts`) still calls `parseReplayInput`
 // for advisory device-lock binding, but its `catch` deliberately swallows
@@ -474,8 +474,7 @@ test('replay rejects an unknown --replay-backend value before any step dispatch 
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.code).toBe('INVALID_ARGS');
-  // Byte-identical to `parseReplayInput`'s message on main
-  // (`src/compat/replay-input.ts`), so the CLI/client-facing text is unchanged.
+  // Byte-identical to `parseReplayInput`'s message, so the CLI/client-facing text is unchanged.
   expect(response.error.message).toBe('Unsupported replay backend "unknown".');
   expect(invoke).not.toHaveBeenCalled();
 });

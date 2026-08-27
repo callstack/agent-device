@@ -13,7 +13,7 @@ import {
   normalizeRect,
   resolveRectCenter,
 } from '@agent-device/kernel/rect-center';
-import { intersectArea } from '../utils/screenshot-geometry.ts';
+import { intersectArea } from '@agent-device/kernel/screenshot-geometry';
 import { isSemanticTouchTarget } from './touch-semantics.ts';
 
 type ActionableTouchResolutionReason =

@@ -13,7 +13,7 @@ import { resolveReplayEntryIndex, type PendingRecordAndHeal } from './resume.ts'
  * #1478 P5 stage C2b: the read-only `.ad` inspection façade. Moved out of
  * `session-replay-runtime.ts`'s old `parseReplayScript` (the
  * legacy-JSON-payload rejection it guarded) plus the `parseReplayInput`
- * composition (`src/compat/replay-input.ts`) it fed into — this is the same
+ * composition (`parseReplayInput`) it fed into — this is the same
  * `parseReplayScriptDetailed` + `readReplayScriptMetadata` pair
  * `src/cli/commands/replay.ts` and `session-test-source-discovery.ts` already
  * call directly off `@agent-device/ad-script`; nothing beyond the actions,

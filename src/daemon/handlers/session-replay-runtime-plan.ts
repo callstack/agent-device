@@ -15,9 +15,9 @@ import {
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
+  resolveReplayFormat,
   type ReplayScriptMetadata,
 } from '@agent-device/ad-script';
-import { resolveReplayFormat } from '../../replay/format.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
 import { runTypedMaestroReplay } from './session-replay-maestro-runtime.ts';
 import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
@@ -154,7 +154,7 @@ export function prepareReplayPlan(params: {
  * value. Extraction moved `.ad` inspection to `inspectAdReplay`, which never
  * receives flags — restoring the check here (the one caller of
  * `inspectAdReplay` that reaches this point with a non-Maestro request)
- * matches `src/compat/replay-input.ts`'s `parseReplayInput` exactly, byte for
+ * matches `parseReplayInput` exactly, byte for
  * byte, before any plan/session work begins. `replayBackend: 'maestro'` still
  * passes here because `runReplayScriptSource` has already routed a real
  * Maestro-format request to `runTypedMaestroReplay` above; only a

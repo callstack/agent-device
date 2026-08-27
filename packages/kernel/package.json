@@ -53,6 +53,10 @@
       "types": "./src/rect-center.ts",
       "default": "./src/rect-center.ts"
     },
+    "./screenshot-geometry": {
+      "types": "./src/screenshot-geometry.ts",
+      "default": "./src/screenshot-geometry.ts"
+    },
     "./redaction": {
       "types": "./src/redaction.ts",
       "default": "./src/redaction.ts"

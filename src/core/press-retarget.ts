@@ -15,8 +15,11 @@
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { containsPoint } from '@agent-device/kernel/rect';
 import { resolveRectCenter } from '@agent-device/kernel/rect-center';
-import { demoteNonUniqueLocalIdentity, readNodeLocalIdentity } from '@agent-device/ad-script';
-import { buildIndexMap } from '../replay/target-evidence-tree.ts';
+import {
+  buildIndexMap,
+  demoteNonUniqueLocalIdentity,
+  readNodeLocalIdentity,
+} from '@agent-device/ad-script';
 import { normalizeSelectorText } from '@agent-device/selectors';
 import { isSemanticTouchTarget } from './touch-semantics.ts';
 

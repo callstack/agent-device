@@ -9,7 +9,7 @@ import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts'
 import { computeTargetEvidence, type RecordedTargetCapture } from '../session-target-evidence.ts';
 import type { MultiTargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { inferFillText } from '../action-utils.ts';
-import { recordedInputPlaceholder } from '../../replay/recorded-input.ts';
+import { recordedInputPlaceholder } from '@agent-device/ad-script';
 import { parameterizeRecordedFillPayload } from '../parameterized-recorded-fill.ts';
 import { isSessionRecording } from '../session-script-publication-capability.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';

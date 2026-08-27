@@ -3,20 +3,11 @@ import { targetDagZone, type LayeringViolation, type ResolvedImportEdge } from '
 import { SESSION_STATE_FIELD_OWNERS } from './session-state.ts';
 
 const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
-  // Request provider composition now consumes the neutral contracts context instead of importing
-  // daemon request/session types, removing the root provider seam from this component.
-  '(root)': 1,
-  core: 4,
-  // Same move, daemon side: with no dispatcher to re-fire a tap through, the pending-outcome
-  // retry declares its own callback seam instead of importing runtime admission, so
-  // `interaction-outcome-policy.ts` and `deferred-interaction-outcome.ts` both left the cycle.
-  // R63 then deleted `session-install-capability-projection.ts` outright — the general
-  // fact-owned projection subsumes it — taking a third member with it.
-  // The daemon side of that seam no longer imports the concrete provider resolver table.
-  'daemon-server': 10,
-  // R64 deletes the last perf support closure from `apple/plugin.ts`, taking the final
-  // platform-owned member out of the type cycle.
-  platforms: 0,
+  // After cutting the two core→daemon DaemonCommandDescriptor type edges, the previous
+  // 15-file mixed-zone component collapsed; the largest remaining cycle is this
+  // co-defined-contract pair (`capabilities.ts` ↔ `runtime.ts` and the four files they
+  // pull in). The standard shrink is a third module holding the shared type.
+  'provider-webdriver': 6,
 };
 
 export const DAEMON_MODULARITY_BASELINE = {
