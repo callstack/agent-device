@@ -332,7 +332,12 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // (`resolveLocalDaemonCodeSignature`) rather than appearing here.
   // #2054 splits daemon cleanup and managed web backend into separate neutral contract entries;
   // the CLI already loads both command modules, so the second one-module contract is deliberate.
-  'src/cli.ts': 365,
+  // #2027 splits the 705-line `commands/command-input.ts` into the three leaf modules the
+  // common-field table needs to exist without an import cycle: `input-readers.ts` (record
+  // readers), `input-audience.ts` (who may write a key), and `common-input-fields.ts` (the table
+  // itself). Every command schema already evaluated all three concerns; the growth is three more
+  // module records for the same code, with no new subtree behind any of them.
+  'src/cli.ts': 368,
   'src/platform-runtime.ts': 47,
   'src/core/capabilities.ts': 73,
   'src/core/command-descriptor/registry.ts': 67,

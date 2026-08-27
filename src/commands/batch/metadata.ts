@@ -13,16 +13,10 @@ import {
   STRUCTURED_BATCH_COMMAND_NAMES,
   readStructuredBatchCommandName,
 } from '../../core/batch-policy.ts';
+import { type CommandMetadata, type JsonSchema } from '../command-contract.ts';
 import {
-  defineCommandMetadata,
-  type CommandMetadata,
-  type JsonSchema,
-} from '../command-contract.ts';
-import {
-  assertAllowedKeys,
   customField,
   enumField,
-  fieldsInputSchema,
   integerField,
   readFieldInput,
   requiredField,
@@ -30,6 +24,8 @@ import {
   type CommandFieldMap,
   type InferCommandInput,
 } from '../command-input.ts';
+import { defineFieldCommandMetadata } from '../field-command-contract.ts';
+import { assertAllowedKeys } from '../input-readers.ts';
 
 export type BatchCommandStep = {
   command: string;
@@ -48,12 +44,12 @@ export function createBatchCommandMetadata(
   nestedCommands: readonly string[] = STRUCTURED_BATCH_COMMAND_NAMES,
 ): CommandMetadata<'batch', BatchInput> {
   const fields = batchFields(nestedCommands);
-  return defineCommandMetadata({
-    name: 'batch',
-    description: 'Execute multiple commands in one daemon request.',
-    inputSchema: fieldsInputSchema(fields),
-    readInput: (input) => readBatchInput(input, fields),
-  });
+  return defineFieldCommandMetadata(
+    'batch',
+    'Execute multiple commands in one daemon request.',
+    fields,
+    { readInput: (input) => readBatchInput(input, fields) },
+  );
 }
 
 function batchFields(nestedCommands: readonly string[]) {

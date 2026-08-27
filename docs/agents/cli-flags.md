@@ -17,7 +17,11 @@ mattering — threading it further is the common failure, not stopping too early
 3. `src/commands/command-projection.ts` and command-family projection helpers: write the input into
    the daemon request only if the flag affects daemon execution.
 4. `src/commands/*-command-contracts.ts`: add to the command input schema only if the option should
-   be available through Node.js or MCP as structured input.
+   be available through Node.js or MCP as structured input. An input key that names a credential,
+   an endpoint a credential is sent to, or operator infrastructure declares `operatorField(...)`
+   (`src/commands/command-input.ts`), which is what keeps the MCP and AI SDK tool schemas from
+   offering the model a parameter to write it into. One of the shared common keys declares the same
+   audience in its `src/commands/common-input-fields.ts` row instead.
 5. `src/client/client-types.ts`: update the public typed client option only when the Node.js
    interface exposes it.
 6. `src/client/client-normalizers.ts`: update daemon flag normalization only when the request still

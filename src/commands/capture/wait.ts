@@ -5,13 +5,8 @@ import { parseWaitPositionals } from '../../core/wait-positionals.ts';
 import { SELECTOR_SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isValidSelectorExpression } from '@agent-device/selectors';
-import {
-  booleanField,
-  enumField,
-  integerField,
-  optionalEnum,
-  stringField,
-} from '../command-input.ts';
+import { booleanField, enumField, integerField, stringField } from '../command-input.ts';
+import { optionalEnum } from '../input-readers.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {
   direct,

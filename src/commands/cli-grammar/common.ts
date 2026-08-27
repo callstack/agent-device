@@ -11,7 +11,8 @@ import {
   SELECTOR_EXPRESSION_REQUIRED_MESSAGE,
   splitSelectorFromArgs,
 } from '@agent-device/selectors';
-import { compactRecord, type SelectorSnapshotInput } from '../command-input.ts';
+import type { SelectorSnapshotInput } from '../command-input.ts';
+import { compactRecord } from '../input-readers.ts';
 import type {
   CommandInput,
   DaemonCommandRequest,
@@ -62,7 +63,7 @@ export function commonInputFromFlags(flags: CliFlags): Record<string, unknown> {
     // the common seam every reader already spreads, so a reader cannot forget
     // it and a new reader inherits it for free. The three seams it must survive
     // are this one, `readCommonInput`, and `commonToClientOptions`
-    // (`commands/command-input.ts`) — a drop at any one of them silently
+    // (`commands/common-input-fields.ts`) — a drop at any one of them silently
     // disables the flag (#1304/#1305 fixed only the reader layer, so the flag
     // still never reached the daemon).
     //

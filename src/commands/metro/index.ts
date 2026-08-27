@@ -11,6 +11,7 @@ import {
   enumField,
   integerField,
   jsonSchemaField,
+  operatorField,
   requiredField,
   stringField,
   stringSchema,
@@ -37,8 +38,15 @@ export const metroCommandMetadata = defineFieldCommandMetadata(
     projectRoot: stringField(),
     kind: jsonSchemaField<MetroPrepareOptions['kind']>(stringSchema()),
     publicBaseUrl: stringField(),
-    proxyBaseUrl: stringField(),
-    bearerToken: stringField(),
+    // Operator-owned: the endpoint a bearer token is sent to, and the token
+    // itself. Both stay CLI/Node inputs; no model-facing tool schema offers them.
+    proxyBaseUrl: operatorField(stringField(), {
+      operatorPath:
+        'Configure the remote proxy in the remote-config profile or operator config for the process serving these tools.',
+    }),
+    bearerToken: operatorField(stringField(), {
+      envFlagKeys: ['metroBearerToken', 'daemonAuthToken'],
+    }),
     bridgeScope: jsonSchemaField<MetroPrepareOptions['bridgeScope']>({
       type: 'object',
       additionalProperties: true,

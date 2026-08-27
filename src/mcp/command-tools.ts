@@ -1,12 +1,13 @@
 import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';
 import type { AgentDeviceClient } from '../client/client-types.ts';
-import type { JsonSchema } from '../commands/command-contract.ts';
+import type { CommandMetadata, JsonSchema } from '../commands/command-contract.ts';
 import type { CommandExecutionResult } from '../commands/command-surface.ts';
 import { RESPONSE_LEVELS, type ResponseLevel } from '@agent-device/kernel/contracts';
 import { formatCliOutput } from '../commands/cli-output.ts';
 import {
   findCommandMetadata,
   isCommandName,
+  listCommandMetadata,
   listMcpCommandMetadata,
   type CommandName,
 } from '../commands/command-metadata.ts';
@@ -17,6 +18,17 @@ import {
   resolveCommandTimeoutPolicy,
 } from '../core/command-descriptor/registry.ts';
 import { MCP_COMMAND_OUTPUT_SCHEMAS } from './mcp-output-schemas.ts';
+import { COMMON_INPUT_AUDIENCE } from '../commands/common-input-fields.ts';
+import {
+  operatorAudience,
+  operatorInputRefusal,
+  type InputAudienceMap,
+} from '../commands/input-audience.ts';
+import {
+  MCP_TOOL_CONFIG_AUDIENCE,
+  MCP_TOOL_CONFIG_KEYS,
+  mcpToolConfigProperties,
+} from './tool-control-fields.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '../utils/parsing.ts';
 import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
@@ -53,43 +65,59 @@ type McpToolConfig = {
 };
 
 /**
- * Operator-owned inputs are never model-writable: the model both reads
- * untrusted app UI text and picks tool arguments, so a screen that steers it
- * into writing a token, an endpoint, or an infrastructure path must find no
- * parameter to write it into. Credentials and the endpoints they are sent to
- * are the hard security boundary (a model-writable daemonBaseUrl or
- * proxyBaseUrl redirects the env-resolved token to an arbitrary server);
- * state/build paths ride along because they select operator infrastructure,
- * not per-call work. All keys are removed from every advertised tool schema
- * and refused as explicit input with migration guidance (the retired-field
- * posture: refuse, never silently drop). Operator-sourced values still flow —
- * env/config defaults merge in `resolveMcpConfigDefaults`, and the daemon and
- * Metro clients fall back to their env vars on their own.
+ * Config-file-loading keys. Not per-command flags but flags the MCP config
+ * resolver reads to load an arbitrary file; never model-writable, since that
+ * file can carry operator credentials and endpoints. They appear in no tool
+ * schema, so admission rejects them like any unadvertised key — with a message
+ * that points at the operator path instead of the generic unknown-key text.
  */
-const OPERATOR_INPUT_GUIDANCE: Readonly<Record<string, string>> = {
-  // Credentials.
-  daemonAuthToken:
-    'daemonAuthToken is not accepted as a tool argument. Set the AGENT_DEVICE_DAEMON_AUTH_TOKEN environment variable (or daemonAuthToken in ~/.agent-device/config.json) for the process serving these tools.',
-  bearerToken:
-    'bearerToken is not accepted as a tool argument. Set the AGENT_DEVICE_METRO_BEARER_TOKEN or AGENT_DEVICE_DAEMON_AUTH_TOKEN environment variable for the process serving these tools.',
-  // Endpoints the resolved credentials are sent to.
-  daemonBaseUrl:
-    'daemonBaseUrl is not accepted as a tool argument. Set the AGENT_DEVICE_DAEMON_BASE_URL environment variable (or daemonBaseUrl in ~/.agent-device/config.json) for the process serving these tools.',
-  proxyBaseUrl:
-    'proxyBaseUrl is not accepted as a tool argument. Configure the remote proxy in the remote-config profile or operator config for the process serving these tools.',
-  // Operator infrastructure paths.
-  stateDir:
-    'stateDir is not accepted as a tool argument. Set the AGENT_DEVICE_STATE_DIR environment variable (or stateDir in ~/.agent-device/config.json) for the process serving these tools.',
-  cwd: 'cwd is not accepted as a tool argument. Start the process serving these tools in the desired working directory, or pass absolute paths.',
-  iosSimulatorDeviceSet:
-    'iosSimulatorDeviceSet is not accepted as a tool argument. Set iosSimulatorDeviceSet in ~/.agent-device/config.json for the process serving these tools.',
-  iosXctestrunFile:
-    'iosXctestrunFile is not accepted as a tool argument. Set the AGENT_DEVICE_IOS_XCTESTRUN_FILE environment variable (or iosXctestrunFile in ~/.agent-device/config.json) for the process serving these tools.',
-  iosXctestDerivedDataPath:
-    'iosXctestDerivedDataPath is not accepted as a tool argument. Set the AGENT_DEVICE_IOS_XCTEST_DERIVED_DATA_PATH environment variable (or iosXctestDerivedDataPath in ~/.agent-device/config.json) for the process serving these tools.',
-  iosXctestEnvDir:
-    'iosXctestEnvDir is not accepted as a tool argument. Set the AGENT_DEVICE_IOS_XCTEST_ENV_DIR environment variable (or iosXctestEnvDir in ~/.agent-device/config.json) for the process serving these tools.',
+const CONFIG_LOADER_AUDIENCE: InputAudienceMap = {
+  config: operatorAudience({
+    operatorPath:
+      'Point the process serving these tools at a config file with the AGENT_DEVICE_CONFIG environment variable.',
+  }),
+  remoteConfig: operatorAudience({
+    operatorPath:
+      'Configure the remote profile on the process serving these tools, not per tool call.',
+  }),
 };
+
+/**
+ * Every `operator` key any command declares. The deny side is deliberately
+ * global rather than per-command: a screen that steers the model into writing a
+ * credential must find no tool that takes it, and must be told the operator path
+ * on whichever tool it tried. `retired` audiences stay per-command — a key one
+ * command removed is simply unknown to the rest.
+ */
+const DECLARED_OPERATOR_AUDIENCE: InputAudienceMap = Object.fromEntries(
+  listCommandMetadata().flatMap((metadata) =>
+    Object.entries(metadata.inputAudience).filter(([, audience]) => audience.kind === 'operator'),
+  ),
+);
+
+/**
+ * Who may write each input key of one tool, merged from every declaration that
+ * governs it: this command's own fields, the shared common fields, this
+ * surface's own tool-config keys and config loaders, and every command-declared
+ * operator key. `listCommandTools` and admission both read this, so a key can
+ * never be hidden from the model yet admitted from the wire.
+ *
+ * The command's own map is spread FIRST so an `operator` classification always
+ * outranks it. `retired` keys are admitted (the command's reader answers with
+ * migration guidance), so a command that retired a key whose name another
+ * declaration owns as `operator` must fail closed on the refusal, not open on
+ * the guidance. Every operator key a command declares is already in
+ * `DECLARED_OPERATOR_AUDIENCE`, so nothing is lost by letting the globals win.
+ */
+function toolInputAudience(metadata: AdmissionMetadata): InputAudienceMap {
+  return {
+    ...metadata.inputAudience,
+    ...COMMON_INPUT_AUDIENCE,
+    ...MCP_TOOL_CONFIG_AUDIENCE,
+    ...CONFIG_LOADER_AUDIENCE,
+    ...DECLARED_OPERATOR_AUDIENCE,
+  };
+}
 
 export function listCommandTools(): Array<{
   name: string;
@@ -104,9 +132,7 @@ export function listCommandTools(): Array<{
       definition.name in MCP_COMMAND_OUTPUT_SCHEMAS
         ? MCP_COMMAND_OUTPUT_SCHEMAS[definition.name as keyof typeof MCP_COMMAND_OUTPUT_SCHEMAS]
         : undefined;
-    const advertised = omitOperatorProperties(
-      withMcpConfigSchema(definition.name, definition.inputSchema),
-    );
+    const advertised = advertisedInputSchema(definition.name, definition);
     return {
       name: definition.name,
       description: withTimeoutNote(definition.name, mcpBody(definition)),
@@ -283,52 +309,30 @@ function readMcpOutputFormat(outputFormat: unknown): McpOutputFormat {
 }
 
 function stripMcpConfigFields(input: Record<string, unknown>): Record<string, unknown> {
-  const {
-    stateDir: _stateDir,
-    mcpOutputFormat: _mcpOutputFormat,
-    includeCost: _includeCost,
-    responseLevel: _responseLevel,
-    ...commandInput
-  } = input;
-  return commandInput;
+  return Object.fromEntries(
+    Object.entries(input).filter(([key]) => !MCP_TOOL_CONFIG_KEYS.has(key)),
+  );
 }
 
-function omitOperatorProperties(
-  schema: JsonSchema & { properties: Record<string, JsonSchema> },
+type AdmissionMetadata = Pick<CommandMetadata<string, unknown>, 'inputSchema' | 'inputAudience'>;
+
+/**
+ * The advertised schema for a tool — exactly what `listCommandTools` exposes.
+ * Admission derives from this same function so a key can never be hidden from
+ * the model yet admitted from the wire.
+ */
+function advertisedInputSchema(
+  name: CommandName,
+  metadata: AdmissionMetadata,
 ): JsonSchema & { properties: Record<string, JsonSchema> } {
+  const audience = toolInputAudience(metadata);
+  const schema = withMcpConfigSchema(name, metadata.inputSchema);
   return {
     ...schema,
     properties: Object.fromEntries(
-      Object.entries(schema.properties).filter(
-        ([key]) => !Object.hasOwn(OPERATOR_INPUT_GUIDANCE, key),
-      ),
+      Object.entries(schema.properties).filter(([key]) => audience[key]?.kind !== 'operator'),
     ),
   };
-}
-
-// Config-file-loading keys. Not per-command flags but flags the MCP config
-// resolver reads to load an arbitrary file; never model-writable, since that
-// file can carry operator credentials and endpoints. Rejected by admission
-// like any unadvertised key, with a message that points at the operator path.
-const CONFIG_LOADER_GUIDANCE: Readonly<Record<string, string>> = {
-  config:
-    'config is not accepted as a tool argument. Point the process serving these tools at a config file with the AGENT_DEVICE_CONFIG environment variable.',
-  remoteConfig:
-    'remoteConfig is not accepted as a tool argument. Configure the remote profile on the process serving these tools, not per tool call.',
-};
-
-/**
- * The advertised property set for a tool — exactly what `listCommandTools`
- * exposes. Admission and the tool listing derive from this one function so a
- * key can never be hidden from the model yet admitted from the wire.
- */
-type AdmissionMetadata = { inputSchema: JsonSchema; retiredInputKeys?: readonly string[] };
-
-function advertisedInputProperties(
-  name: CommandName,
-  metadata: AdmissionMetadata,
-): Record<string, JsonSchema> {
-  return omitOperatorProperties(withMcpConfigSchema(name, metadata.inputSchema)).properties;
 }
 
 /** The first raw input key the advertised schema does not list, with guidance, or undefined. */
@@ -337,18 +341,20 @@ function findInadmissibleInput(
   metadata: AdmissionMetadata,
   input: Record<string, unknown>,
 ): string | undefined {
-  const advertised = advertisedInputProperties(name, metadata);
-  // Retired keys are absent from the advertised schema but still recognized:
-  // admit them so the command's own reader answers with migration guidance
-  // (e.g. maxSize -> "use --scale") instead of a bare unknown-key rejection.
-  const retired = new Set(metadata.retiredInputKeys ?? []);
+  const advertised = advertisedInputSchema(name, metadata).properties;
+  const audience = toolInputAudience(metadata);
   for (const key of Object.keys(input)) {
-    if (Object.hasOwn(advertised, key) || retired.has(key)) continue;
-    return (
-      OPERATOR_INPUT_GUIDANCE[key] ??
-      CONFIG_LOADER_GUIDANCE[key] ??
-      `${key} is not an accepted argument for the ${name} tool.`
-    );
+    if (Object.hasOwn(advertised, key)) continue;
+    // `Object.hasOwn`, not a plain lookup: `key` is a raw tool argument name, so
+    // `__proto__`/`constructor`/`toString` would otherwise read a value off
+    // `Object.prototype` and classify against it.
+    const keyAudience = Object.hasOwn(audience, key) ? audience[key] : undefined;
+    // Retired keys are absent from the advertised schema but still recognized:
+    // admit them so the command's own reader answers with migration guidance
+    // (e.g. maxSize -> "use --scale") instead of a bare unknown-key rejection.
+    if (keyAudience?.kind === 'retired') continue;
+    if (keyAudience?.kind === 'operator') return operatorInputRefusal(key, keyAudience.source);
+    return `${key} is not an accepted argument for the ${name} tool.`;
   }
   return undefined;
 }
@@ -471,24 +477,7 @@ function withMcpConfigSchema(
             },
           }
         : {}),
-      stateDir: { type: 'string', description: 'Agent-device state directory.' },
-      mcpOutputFormat: {
-        type: 'string',
-        enum: ['optimized', 'json'],
-        description:
-          'MCP text content format. Defaults to optimized agent-friendly text; use json for JSON text. Structured content is always returned separately.',
-      },
-      includeCost: {
-        type: 'boolean',
-        description:
-          'Include per-command agent-cost (cost.wallClockMs, …) in structuredContent. Defaults to off; the default response shape is unchanged.',
-      },
-      responseLevel: {
-        type: 'string',
-        enum: ['digest', 'default', 'full'],
-        description:
-          'Response verbosity: token-cheap digest / default (today) / full. Defaults to default; the default response shape is unchanged.',
-      },
+      ...mcpToolConfigProperties(),
     },
   };
 }

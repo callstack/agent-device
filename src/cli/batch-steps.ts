@@ -10,7 +10,7 @@ import {
   BATCH_AVAILABLE_COMMANDS_HINT,
   readStructuredBatchCommandName,
 } from '../core/batch-policy.ts';
-import { assertAllowedKeys } from '../commands/command-input.ts';
+import { assertAllowedKeys } from '../commands/input-readers.ts';
 
 /**
  * The terminal half of the step-shape refusal. `@agent-device/contracts` states the shape for

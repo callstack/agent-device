@@ -53,6 +53,8 @@ Read the declaration rather than maintaining a prose copy:
 - interaction paths and guarantees: `packages/contracts/src/interaction-guarantees.ts`
 - canonical command names: `src/command-catalog.ts`
 - device capability admission: `src/core/capabilities.ts`
+- common command input fields, and which surface may write an input key (model, operator, retired):
+  `src/commands/common-input-fields.ts` and `src/commands/input-audience.ts`
 
 Shared selector parsing and matching belongs in `@agent-device/selectors`; request cancellation and
 progress in `src/request`; cross-layer contracts in `src/contracts`; CLI flags in

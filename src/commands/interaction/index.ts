@@ -24,12 +24,12 @@ import { REPEATED_TOUCH_FLAGS, SELECTOR_SNAPSHOT_FLAGS } from '../cli-grammar/fl
 import { defineExecutableCommand } from '../command-contract.ts';
 import { postActionObservationCliFlags } from '../post-action-observation-grammar.ts';
 import {
-  commonToClientOptions,
   toClientElementTarget,
   toClientInteractionTarget,
   toRepeatedOptions,
   toSelectorSnapshotOptions,
 } from '../command-input.ts';
+import { commonToClientOptions } from '../common-input-fields.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { gestureCliReaders, gestureDaemonWriters } from './gesture.ts';
 import { interactionCliReaders, interactionDaemonWriters } from './interactions.ts';

@@ -4,7 +4,7 @@ import { commonInputFromFlags } from '../cli-grammar/common.ts';
 import type { CliReader } from '../cli-grammar/types.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
-import { commonToClientOptions } from '../command-input.ts';
+import { commonToClientOptions } from '../common-input-fields.ts';
 import { batchCliOutputFormatters } from './output.ts';
 import { createBatchCommandMetadata, type BatchCommandStep, type BatchInput } from './metadata.ts';
 import { STRUCTURED_BATCH_COMMAND_NAMES } from '../../core/batch-policy.ts';

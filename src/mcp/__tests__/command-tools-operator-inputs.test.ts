@@ -26,12 +26,42 @@ const OPERATOR_OWNED_KEYS = [
   'iosXctestEnvDir',
 ] as const;
 
+// The rest of the shared common input: keys a model may write, because they
+// name which device or session THIS call targets, not who the operator is.
+const MODEL_WRITABLE_COMMON_KEYS = [
+  'session',
+  'platform',
+  'deviceTarget',
+  'target',
+  'device',
+  'udid',
+  'serial',
+  'androidDeviceAllowlist',
+  'tenant',
+  'runId',
+  'leaseId',
+  'debug',
+] as const;
+
 test('MCP tool schemas advertise no operator-owned inputs', () => {
   for (const tool of listCommandTools()) {
     const properties = tool.inputSchema.properties ?? {};
     for (const key of OPERATOR_OWNED_KEYS) {
       assert.equal(key in properties, false, `${tool.name} advertises ${key}`);
     }
+  }
+});
+
+// The complement, so a misclassification fails in both directions. An
+// over-broad operator row narrows every tool's schema at once, and the absence
+// assertions above would stay green while the model lost the ability to say
+// which device a call targets.
+test('MCP tool schemas keep every common input the model may write', () => {
+  const wait = listCommandTools().find((tool) => tool.name === 'wait');
+  assert.ok(wait, 'expected an MCP tool named wait');
+  const properties = wait.inputSchema.properties ?? {};
+  for (const key of MODEL_WRITABLE_COMMON_KEYS) {
+    assert.equal(key in properties, true, `wait no longer advertises ${key}`);
   }
 });
 

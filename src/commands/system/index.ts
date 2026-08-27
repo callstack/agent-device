@@ -18,13 +18,8 @@ import {
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
-import {
-  compactRecord,
-  enumField,
-  integerField,
-  requiredField,
-  stringField,
-} from '../command-input.ts';
+import { enumField, integerField, requiredField, stringField } from '../command-input.ts';
+import { compactRecord } from '../input-readers.ts';
 import {
   defineCommandFacet,
   defineCommandFamilyFromFacets,

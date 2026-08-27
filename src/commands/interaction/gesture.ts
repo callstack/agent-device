@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { compactRecord } from '../command-input.ts';
+import { compactRecord } from '../input-readers.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { commonInputFromFlags, request } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';

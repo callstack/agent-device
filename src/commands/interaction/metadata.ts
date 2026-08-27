@@ -19,27 +19,23 @@ import {
   SWIPE_REPETITION_MAX,
 } from '@agent-device/contracts/scroll-gesture';
 import { FIND_LOCATORS } from '@agent-device/selectors';
-import { defineCommandMetadata } from '../command-contract.ts';
 import {
   booleanField,
   elementTargetField,
   enumField,
-  fieldsInputSchema,
   integerField,
   interactionTargetField,
   numberField,
   pointField,
-  readCommonInput,
-  readFieldInput,
-  readInputRecord,
   repeatedFields,
   requiredField,
   selectorSnapshotFields,
   stringField,
   type CommandFieldMap,
-  type CommonCommandInput,
   type InferCommandInput,
 } from '../command-input.ts';
+import { readCommonInput, type CommonCommandInput } from '../common-input-fields.ts';
+import { readInputRecord } from '../input-readers.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { postActionObservationFields } from '../post-action-observation-grammar.ts';
 import { SCROLL_INPUT_DIRECTIONS } from './runtime/gestures.ts';
@@ -245,24 +241,9 @@ export type GestureInput =
   | DragInput;
 
 export const interactionCommandMetadata = [
-  defineCommandMetadata({
-    name: 'click',
-    description: interactionCommandDescriptions.click,
-    inputSchema: fieldsInputSchema(clickFields),
-    readInput: (input) => readFieldInput(input, clickFields),
-  }),
-  defineCommandMetadata({
-    name: 'press',
-    description: interactionCommandDescriptions.press,
-    inputSchema: fieldsInputSchema(pressFields),
-    readInput: (input) => readFieldInput(input, pressFields),
-  }),
-  defineCommandMetadata({
-    name: 'fill',
-    description: interactionCommandDescriptions.fill,
-    inputSchema: fieldsInputSchema(fillFields),
-    readInput: (input) => readFieldInput(input, fillFields),
-  }),
+  defineInteractionCommandMetadata('click', clickFields),
+  defineInteractionCommandMetadata('press', pressFields),
+  defineInteractionCommandMetadata('fill', fillFields),
   defineInteractionCommandMetadata('longpress', longPressFields),
   defineInteractionCommandMetadata('hover', hoverFields),
   defineInteractionCommandMetadata('swipe', swipeFields),
@@ -272,10 +253,7 @@ export const interactionCommandMetadata = [
   defineInteractionCommandMetadata('get', getFields),
   defineInteractionCommandMetadata('is', isFields),
   defineInteractionCommandMetadata('find', findFields),
-  defineCommandMetadata({
-    name: 'gesture',
-    description: interactionCommandDescriptions.gesture,
-    inputSchema: fieldsInputSchema(gestureFields),
+  defineFieldCommandMetadata('gesture', interactionCommandDescriptions.gesture, gestureFields, {
     readInput: readGestureInput,
   }),
 ] as const;

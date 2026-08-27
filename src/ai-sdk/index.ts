@@ -6,6 +6,7 @@ import type { AgentDeviceClient } from '../client/client-types.ts';
 import type { JsonSchema } from '../commands/command-contract.ts';
 import { resolveCommandFrameworkTier } from '../core/command-descriptor/registry.ts';
 import { createCommandToolExecutor, listCommandTools } from '../mcp/command-tools.ts';
+import { MCP_TOOL_CONFIG_KEYS } from '../mcp/tool-control-fields.ts';
 import { formatToolErrorText } from '../mcp/tool-error.ts';
 
 /**
@@ -53,22 +54,13 @@ export type AgentDeviceTools = {
 // `execute` forwards to the shared executor:
 //  - `session` is always pinned by this factory — the whole point is that a
 //    tool call can never target a session other than the one passed in.
-//  - `stateDir` selects which daemon state directory (and therefore which
-//    daemon/session namespace) a call resolves against. Left model-visible,
-//    it would let a call escape the pinned session into another daemon's
-//    state entirely, defeating that guarantee.
-//  - `mcpOutputFormat`, `includeCost`, `responseLevel` are MCP tool-config
-//    knobs, not command arguments; irrelevant here since `execute` below
-//    returns structuredContent directly and never reads a tool's rendered
-//    text, and shaping the response is this factory's decision, not the
-//    model's.
-const ALWAYS_HIDDEN_FIELDS = [
-  'session',
-  'stateDir',
-  'mcpOutputFormat',
-  'includeCost',
-  'responseLevel',
-] as const;
+//  - every MCP tool-config key: `stateDir` selects which daemon state directory
+//    (and therefore which daemon/session namespace) a call resolves against, so
+//    left model-visible it would let a call escape the pinned session into
+//    another daemon's state entirely; the rest shape the response, which is this
+//    factory's decision, not the model's (`execute` below returns
+//    structuredContent directly and never reads a tool's rendered text).
+const ALWAYS_HIDDEN_FIELDS: readonly string[] = ['session', ...MCP_TOOL_CONFIG_KEYS];
 
 // The registry's hand-rolled JsonSchema type and `jsonSchema()`'s expected
 // JSONSchema7 (re-exported from @ai-sdk/provider, not from `ai` itself) are

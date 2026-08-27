@@ -45,6 +45,16 @@ export const REPEATED_TOUCH_FLAGS = flagKeys(
 export const SETTLE_FLAGS = flagKeys('settle', 'settleQuietMs', 'timeoutMs');
 export const REPLAY_FLAGS = flagKeys('replayUpdate', 'replayEnv');
 
+// Which flags the CLI PARSER accepts on every command — a different axis from
+// the common input keys in `commands/common-input-fields.ts`, which #2027
+// unified into one table. Neither list contains the other: 25 of the 42 keys
+// below (`remoteConfig`, `stateDir`, `daemonTransport`, `sessionIsolation`,
+// `leaseBackend`, `sessionLock`, every `provider*` and `aws*`) never become
+// structured command input, while the table's `cwd` and `debug` are not flags
+// and its `deviceTarget` row is spelled `target` here. Deriving this list from
+// that table would mean 25 rows carrying no schema, reader, or projection, so
+// the two stay separate; the table declares only `envFlagKeys`, where a flag key
+// names the environment variable an operator-owned input comes from.
 export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'remoteConfig',
   'stateDir',

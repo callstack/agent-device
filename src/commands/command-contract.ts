@@ -1,4 +1,5 @@
 import type { AgentDeviceClient } from '../client/client-types.ts';
+import type { InputAudienceMap } from './input-audience.ts';
 
 export type JsonSchema = {
   type?: string | readonly string[];
@@ -34,12 +35,20 @@ export type CommandMetadata<Name extends string, Input> = {
   inputSchema: JsonSchema;
   readInput: (input: unknown) => Input;
   /**
-   * Released input keys the command removed. Excluded from `inputSchema` (not
-   * advertised), but still recognized: `readInput` throws migration guidance
-   * when one is supplied. The MCP admission boundary reads this so it lets a
-   * retired key reach that message instead of rejecting it as unknown.
+   * Non-model audiences this command's own input keys declare
+   * (`commands/input-audience.ts`). `retired` keys are excluded from
+   * `inputSchema` but still recognized, so the MCP admission boundary lets one
+   * through to `readInput`'s migration guidance instead of rejecting it as
+   * unknown; `operator` keys stay in `inputSchema` for the CLI and the Node
+   * client, and the MCP boundary hides and refuses them.
+   *
+   * Required, and empty for most commands: a field that declares an audience is
+   * only honored because its command carries it here, so leaving this optional
+   * would make "forgot to wire it up" a silent model-writable credential rather
+   * than a type error. `defineFieldCommandMetadata` derives it from the field
+   * map, which is why that is the one construction path for a field command.
    */
-  retiredInputKeys?: readonly string[];
+  inputAudience: InputAudienceMap;
 };
 
 export type ExecutableCommandContract<Name extends string, Input, Result> = CommandMetadata<
