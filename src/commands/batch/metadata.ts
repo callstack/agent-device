@@ -89,6 +89,12 @@ function batchStepSchema(nestedCommands: readonly string[]): JsonSchema {
       input: {
         type: 'object',
         additionalProperties: true,
+        // The accepted keys depend on `command`, so this object cannot be typed
+        // here. `commandInputFor` names the sibling that resolves them, which is
+        // what lets the model-facing admission boundary check a step's input
+        // against that command's own advertised schema instead of waving through
+        // an opaque object (`mcp/command-tools.ts`).
+        commandInputFor: 'command',
         description:
           'Structured command input for the nested command. Use the matching MCP tool schema for this object.',
       },

@@ -17,6 +17,7 @@ import {
 } from '../core/command-descriptor/registry.ts';
 import { MCP_COMMAND_OUTPUT_SCHEMAS } from './mcp-output-schemas.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { isRecord } from '../utils/parsing.ts';
 import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
 import { resolveMcpConfigDefaults } from './tool-input-config.ts';
 import { projectStructuredContent } from './tool-result.ts';
@@ -134,8 +135,16 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       // with the operator's token. Reject every raw key the advertised schema
       // does not list, BEFORE config/env defaults merge (operator env/config
       // values still resolve below — they never arrive as tool input).
+      //
+      // "Every tool schema is additionalProperties:false" holds for the keys a
+      // schema can NAME. A nested command's input keys depend on a sibling
+      // value, so `batch` cannot name them and declares that object free-form;
+      // the flat scan below then looked straight past it. The second check
+      // recurses there — see `findInadmissibleNestedCommandInput`.
       const metadata = findCommandMetadata(name);
-      const rejection = findInadmissibleInput(name, metadata, input);
+      const rejection =
+        findInadmissibleInput(name, metadata, input) ??
+        findInadmissibleNestedCommandInput(metadata.inputSchema, input, name);
       if (rejection) {
         return buildErrorToolResult(
           new AppError('INVALID_ARGS', rejection),
@@ -339,6 +348,88 @@ function findInadmissibleInput(
       CONFIG_LOADER_GUIDANCE[key] ??
       `${key} is not an accepted argument for the ${name} tool.`
     );
+  }
+  return undefined;
+}
+
+/**
+ * The first inadmissible key inside a NESTED command input, with guidance, or
+ * undefined.
+ *
+ * {@link findInadmissibleInput} reads the FLAT keys of a tool call, which is the
+ * whole boundary for a tool whose schema is `additionalProperties:false` all the
+ * way down. `batch` is not: a step's accepted keys depend on its sibling
+ * `command`, which JSON Schema cannot express, so `steps[].input` is declared
+ * free-form and the flat scan looked straight past it. Everything the flat scan
+ * refuses was therefore admitted one level in — and `readBatchDaemonStep`
+ * projects a step's input into per-step daemon request FLAGS, where
+ * `iosSimulatorDeviceSet` picks the simulator device set `resolveTargetDevice`
+ * searches and `iosXctestrunFile` picks the `.xctestrun` the Apple runner
+ * launches. That is the operator-infrastructure write
+ * {@link OPERATOR_INPUT_GUIDANCE} exists to refuse, reached through the one
+ * input the model is invited to nest.
+ *
+ * So the schema declares where those objects are (`commandInputFor` names the
+ * sibling holding the command name) and this walks the tool's own schema against
+ * the raw arguments, checking each one with {@link findInadmissibleInput}
+ * against that command's advertised schema. Nested admission is the same
+ * function, and returns the same answer, as flat admission: a step's input
+ * accepts exactly what the nested command's own tool accepts, no more.
+ */
+function findInadmissibleNestedCommandInput(
+  schema: JsonSchema | undefined,
+  value: unknown,
+  path: string,
+): string | undefined {
+  if (!schema || value === undefined) return undefined;
+  if (Array.isArray(value)) {
+    return firstRejection(value, (item, index) =>
+      findInadmissibleNestedCommandInput(schema.items, item, `${path}[${index}]`),
+    );
+  }
+  if (!isRecord(value)) return undefined;
+  return (
+    firstRejection(schema.oneOf ?? [], (branch) =>
+      findInadmissibleNestedCommandInput(branch, value, path),
+    ) ??
+    firstRejection(Object.entries(schema.properties ?? {}), ([key, property]) =>
+      Object.hasOwn(value, key)
+        ? findInadmissibleNestedProperty(property, value, key, `${path}.${key}`)
+        : undefined,
+    )
+  );
+}
+
+function findInadmissibleNestedProperty(
+  property: JsonSchema,
+  parent: Record<string, unknown>,
+  key: string,
+  path: string,
+): string | undefined {
+  const commandKey = property.commandInputFor;
+  if (commandKey === undefined) {
+    return findInadmissibleNestedCommandInput(property, parent[key], path);
+  }
+  const command = parent[commandKey];
+  const nested = parent[key];
+  // A missing or unrecognized command name leaves nothing to check against, and
+  // nothing to protect: the nested reader rejects that step, so nothing it
+  // carries reaches a daemon request flag. Reporting it is the reader's job —
+  // answering here would bury the real error under a key complaint.
+  if (typeof command !== 'string' || !isCommandName(command) || !isRecord(nested)) {
+    return undefined;
+  }
+  const rejection = findInadmissibleInput(command, findCommandMetadata(command), nested);
+  return rejection === undefined ? undefined : `${path}: ${rejection}`;
+}
+
+function firstRejection<TItem>(
+  items: readonly TItem[],
+  check: (item: TItem, index: number) => string | undefined,
+): string | undefined {
+  for (const [index, item] of items.entries()) {
+    const rejection = check(item, index);
+    if (rejection) return rejection;
   }
   return undefined;
 }

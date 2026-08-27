@@ -14,6 +14,15 @@ export type JsonSchema = {
   const?: unknown;
   minimum?: number;
   maximum?: number;
+  /**
+   * Marks this object as ANOTHER command's input, naming the sibling property
+   * that holds that command's name. Such an object is free-form by necessity —
+   * its accepted keys depend on a value, which JSON Schema cannot express — so
+   * without the marker it is opaque to the model-facing admission boundary,
+   * which then checks nothing inside it. Declaring it here is what lets
+   * admission recurse with the named command's own advertised schema.
+   */
+  commandInputFor?: string;
 };
 
 export type CommandMetadata<Name extends string, Input> = {
