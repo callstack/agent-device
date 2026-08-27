@@ -1,5 +1,5 @@
-import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import { resolveIosPhysicalDeviceControl } from '../platforms/apple/core/physical-device-control.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { ensureLocalPlatformDeviceReady } from '../platform-runtime-device-ready.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import { createTtlMemo } from '../utils/ttl-memo.ts';
 
@@ -27,26 +27,8 @@ export async function ensureDeviceReady(
     readyCache.delete(cacheKey);
   }
 
-  if (isIosFamily(device)) {
-    if (device.kind === 'simulator') {
-      const { ensureBootedSimulator } = await import('../platforms/apple/core/simulator.ts');
-      await ensureBootedSimulator(device, {
-        deviceHub: options.deviceHub,
-        focusExisting: options.focusExisting,
-        onColdBootStart: options.onIosSimulatorColdBootStart,
-      });
-      markDeviceReady(cacheKey);
-      return;
-    }
-    if (device.kind === 'device') {
-      await resolveIosPhysicalDeviceControl(device).ensureReady(device);
-      markDeviceReady(cacheKey);
-      return;
-    }
-  }
-  if (device.platform === 'android') {
-    const { waitForAndroidBoot } = await import('../platforms/android/emulator-lifecycle.ts');
-    await waitForAndroidBoot(device.id);
+  const handled = await ensureLocalPlatformDeviceReady(device, options);
+  if (handled) {
     markDeviceReady(cacheKey);
   }
 }

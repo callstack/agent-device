@@ -9,6 +9,10 @@ import { finishLiveScreenRecording } from './screen-recording-session-resource.t
 import { finishLiveAudioProbe } from './audio-probe-session-resource.ts';
 import { finishLivePerfCapture } from './perf-capture-session-resource.ts';
 import { openWebSessionNames } from './web-session-names.ts';
+import {
+  closeManagedWebRuntimeSession,
+  stopAndroidSnapshotHelperRuntimeForDevice,
+} from '../platform-runtime-resource-cleanup.ts';
 
 // Android cleanup helpers and the web managed-browser provider stay behind dynamic imports: every
 // teardown caller pays this module's graph, while the helpers only matter when the corresponding
@@ -43,9 +47,7 @@ export async function stopSessionPerfCapture(params: {
 
 export async function stopSessionAndroidSnapshotHelper(session: SessionState): Promise<void> {
   if (session.device.platform !== 'android') return;
-  const { stopAndroidSnapshotHelperSessionForDevice } =
-    await import('../platforms/android/snapshot-helper.ts');
-  await stopAndroidSnapshotHelperSessionForDevice(session.device);
+  await stopAndroidSnapshotHelperRuntimeForDevice(session.device);
 }
 
 // Single source of truth for "is this a web session", shared with `shouldDispatchPlatformClose`
@@ -68,13 +70,11 @@ async function stopSessionWebBrowser(params: {
 }): Promise<void> {
   const { session, sessionName, sessionStore } = params;
   if (!isWebSession(session)) return;
-  const { createAgentBrowserWebProvider } =
-    await import('../platforms/web/agent-browser-provider.ts');
-  await createAgentBrowserWebProvider({
-    session: sessionName,
+  await closeManagedWebRuntimeSession({
+    sessionName,
     stateDir: sessionStore.resolveDaemonStateDir(),
     openWebSessionNames: () => openWebSessionNames(sessionStore),
-  }).close();
+  });
 }
 
 type SessionCleanupStep = { step: string; run: () => Promise<void> };

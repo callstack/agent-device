@@ -1,0 +1,40 @@
+import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+
+export type LocalPlatformDeviceReadyOptions = {
+  deviceHub?: boolean;
+  focusExisting?: boolean;
+  onIosSimulatorColdBootStart?: (device: DeviceInfo) => void;
+};
+
+/**
+ * Runs concrete local-platform readiness mechanics from the root composition layer.
+ * Returns false when the platform has no readiness preparation step.
+ */
+export async function ensureLocalPlatformDeviceReady(
+  device: DeviceInfo,
+  options: LocalPlatformDeviceReadyOptions = {},
+): Promise<boolean> {
+  if (isIosFamily(device)) {
+    if (device.kind === 'simulator') {
+      const { ensureBootedSimulator } = await import('./platforms/apple/core/simulator.ts');
+      await ensureBootedSimulator(device, {
+        deviceHub: options.deviceHub,
+        focusExisting: options.focusExisting,
+        onColdBootStart: options.onIosSimulatorColdBootStart,
+      });
+      return true;
+    }
+    if (device.kind === 'device') {
+      const { resolveIosPhysicalDeviceControl } =
+        await import('./platforms/apple/core/physical-device-control.ts');
+      await resolveIosPhysicalDeviceControl(device).ensureReady(device);
+      return true;
+    }
+  }
+  if (device.platform === 'android') {
+    const { waitForAndroidBoot } = await import('./platforms/android/emulator-lifecycle.ts');
+    await waitForAndroidBoot(device.id);
+    return true;
+  }
+  return false;
+}
