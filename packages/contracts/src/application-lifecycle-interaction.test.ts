@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor } from './interactor-types.ts';
 import type { OpenApplicationInput } from './application-lifecycle-runtime.ts';
@@ -89,6 +89,37 @@ test('direct lifecycle owners preserve the daemon runtime launch URL follow-up',
   });
   expect(calls[1]?.options).toMatchObject({ appBundleId: 'com.example.app' });
   expect(calls[1]?.options).toHaveProperty('launchArgs', undefined);
+});
+
+test('direct lifecycle owners resolve app aliases once before target dispatch', async () => {
+  const open = vi.fn(async () => undefined);
+  const binding = bindLocalApplicationLifecycleInteractor({
+    device: WEB_DEVICE,
+    signal: new AbortController().signal,
+    resolveInteractor: async () => interactorWithOpen(open),
+  });
+  const lifecycle = bindDirectApplicationLifecycle({
+    binding,
+    owner: 'Provider',
+    openTargetIdentity: 'bundle-id',
+    resolveAppAlias: (app) => (app === 'Example.app.zip' ? 'com.example.app' : app),
+  });
+
+  await expect(
+    lifecycle.resolveOpenTarget({ target: 'Example.app.zip', surface: 'app' }),
+  ).resolves.toEqual({ appBundleId: 'com.example.app', appName: 'com.example.app' });
+  await lifecycle.openApplication(
+    openInput({
+      target: 'Example.app.zip',
+      positionals: ['Example.app.zip'],
+      appBundleId: 'Example.app.zip',
+    }),
+  );
+
+  expect(open).toHaveBeenCalledWith(
+    'com.example.app',
+    expect.objectContaining({ appBundleId: 'com.example.app' }),
+  );
 });
 
 test.each([

@@ -111,6 +111,13 @@ export async function materializeRemoteConnectionForCommand(options: {
       remoteConfig.profile,
     );
   const nextFlags = { ...mergedFlags, session: state.session };
+  if (
+    state.leaseProvider === 'limrun' &&
+    command === PUBLIC_COMMANDS.open &&
+    typeof options.positionals?.[0] === 'string'
+  ) {
+    nextFlags.providerApp = options.positionals[0];
+  }
   let nextRuntime = selectCompatibleRuntime(state.runtime, nextFlags.platform) ?? options.runtime;
   let nextState = state;
   let changed = !existingState;
@@ -378,11 +385,19 @@ type ConnectionLeasePolicy = {
 
 function connectionLeasePolicyForState(state: RemoteConnectionState): ConnectionLeasePolicy {
   if (state.leaseProvider === 'proxy') return PROXY_CONNECTION_LEASE_POLICY;
+  if (state.leaseProvider === 'limrun') return LIMRUN_CONNECTION_LEASE_POLICY;
   if (isCloudWebDriverProviderName(state.leaseProvider)) {
     return CLOUD_WEBDRIVER_CONNECTION_LEASE_POLICY;
   }
   return DEFAULT_CONNECTION_LEASE_POLICY;
 }
+
+const LIMRUN_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
+  shouldAllocate: (command) =>
+    command !== PUBLIC_COMMANDS.apps && !leaseDeferredCommands.has(command),
+  ttlMs: () => undefined,
+  resolveLeaseState: async (options) => ({ state: options.state }),
+};
 
 const DEFAULT_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
   shouldAllocate: (command) => !leaseDeferredCommands.has(command),

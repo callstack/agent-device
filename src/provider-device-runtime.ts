@@ -3,6 +3,7 @@ import type {
   DeviceLease,
   LeaseLifecycleContext,
   LeaseLifecycleProvider,
+  ProviderAppCatalog,
   ProviderDeviceRuntime,
   ProviderExpiredLeaseRecovery,
 } from '@agent-device/contracts/device';
@@ -46,6 +47,7 @@ export type ProviderDeviceRuntimeRequestProviders = {
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   recoverExpiredLease?: ProviderExpiredLeaseRecovery;
   cloudArtifactProvider?: CloudArtifactProvider;
+  providerAppCatalog?: ProviderAppCatalog;
   deviceInventorySource?: ProviderDeviceInventorySource;
   appleRunnerProvider?: AppleRunnerProviderResolver;
   appleRunnerScreenRecordingTransport?: AppleRunnerScreenRecordingTransportResolver;
@@ -108,6 +110,7 @@ export function createProviderDeviceRuntimeRequestProviders(
       .map((runtime) => runtime.provider),
     recoverExpiredLease: composeExpiredLeaseRecovery(runtimes),
     cloudArtifactProvider: composeCloudArtifactProvider(runtimes),
+    providerAppCatalog: composeProviderAppCatalog(runtimes),
     deviceInventorySource: composeDeviceInventorySource(runtimes),
     appleRunnerProvider: composeAppleRunnerProviderResolver(runtimes),
     appleRunnerScreenRecordingTransport:
@@ -207,6 +210,20 @@ function composeCloudArtifactProvider(
   if (runtimes.length === 0) return undefined;
   return {
     listCloudArtifacts: async (query) => await firstCloudArtifactsResult(runtimes, query),
+  };
+}
+
+function composeProviderAppCatalog(
+  runtimes: ProviderDeviceRuntime[],
+): ProviderAppCatalog | undefined {
+  if (!runtimes.some((runtime) => runtime.appCatalog !== undefined)) return undefined;
+  return async (query, signal) => {
+    for (const runtime of runtimes) {
+      if (!runtime.appCatalog || !runtimeMatchesProvider(runtime, query.provider)) continue;
+      const apps = await runtime.appCatalog(query, signal);
+      if (apps) return apps;
+    }
+    return undefined;
   };
 }
 

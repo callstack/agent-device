@@ -262,6 +262,7 @@ export type DirectApplicationLifecycleParams = Readonly<{
   openTargetIdentity: DirectOpenTargetIdentity;
   /** Owners whose native open does not replace a running application close it first. */
   closeBeforeRelaunch?: boolean;
+  resolveAppAlias?(app: string): string;
   /** Port reverse is the one non-direct operation a provider owner may still implement. */
   configureProviderPortReverse?: ApplicationLifecycleRuntimeOperations['configureProviderPortReverse'];
 }>;
@@ -282,7 +283,8 @@ export function bindDirectApplicationLifecycle(
     );
   };
   return Object.freeze({
-    resolveOpenTarget: async (input) => resolveDirectOpenTarget(params.openTargetIdentity, input),
+    resolveOpenTarget: async (input) =>
+      resolveDirectOpenTarget(params.openTargetIdentity, resolveOpenTargetAlias(params, input)),
     prepareApplicationOpen: async () => undefined,
     openApplication: async (input) => await openDirectApplication(params, input),
     applyRuntimeHints: unavailable,
@@ -304,38 +306,64 @@ async function openDirectApplication(
   params: DirectApplicationLifecycleParams,
   input: OpenApplicationInput,
 ): Promise<OpenApplicationOutcome> {
+  const resolvedInput = resolveOpenApplicationAliases(params, input);
   const { binding } = params;
-  const interactor = await binding.resolveInteractor(input.execution, input.appBundleId);
-  if (params.closeBeforeRelaunch && input.relaunch && input.target !== undefined) {
+  const interactor = await binding.resolveInteractor(
+    resolvedInput.execution,
+    resolvedInput.appBundleId,
+  );
+  if (params.closeBeforeRelaunch && resolvedInput.relaunch && resolvedInput.target !== undefined) {
     await invokeApplicationClose({
       device: binding.device,
       interactor,
-      positionals: [input.appBundleId ?? input.target],
+      positionals: [resolvedInput.appBundleId ?? resolvedInput.target],
     });
   }
   await invokeApplicationOpen({
     device: binding.device,
     interactor,
-    positionals: input.positionals,
-    appBundleId: input.appBundleId,
-    execution: input.execution,
+    positionals: resolvedInput.positionals,
+    appBundleId: resolvedInput.appBundleId,
+    execution: resolvedInput.execution,
   });
-  const followUpUrl = followUpRuntimeLaunchUrl(input);
+  const followUpUrl = followUpRuntimeLaunchUrl(resolvedInput);
   if (followUpUrl) {
     await invokeApplicationOpen({
       device: binding.device,
       interactor,
       positionals: [followUpUrl],
-      appBundleId: input.appBundleId,
+      appBundleId: resolvedInput.appBundleId,
       execution: {
-        ...input.execution,
+        ...resolvedInput.execution,
         clearAppState: undefined,
         launchConsole: undefined,
         launchArgs: undefined,
       },
     });
   }
-  return { appBundleId: input.appBundleId, timing: {} };
+  return { appBundleId: resolvedInput.appBundleId, timing: {} };
+}
+
+function resolveOpenTargetAlias(
+  params: DirectApplicationLifecycleParams,
+  input: OpenTargetResolutionInput,
+): OpenTargetResolutionInput {
+  if (!input.target || !params.resolveAppAlias) return input;
+  return { ...input, target: params.resolveAppAlias(input.target) };
+}
+
+function resolveOpenApplicationAliases(
+  params: DirectApplicationLifecycleParams,
+  input: OpenApplicationInput,
+): OpenApplicationInput {
+  const resolve = params.resolveAppAlias;
+  if (!resolve) return input;
+  return {
+    ...input,
+    target: input.target ? resolve(input.target) : undefined,
+    positionals: input.positionals.map((value, index) => (index === 0 ? resolve(value) : value)),
+    appBundleId: input.appBundleId ? resolve(input.appBundleId) : undefined,
+  };
 }
 
 export function followUpRuntimeLaunchUrl(input: OpenApplicationInput): string | undefined {

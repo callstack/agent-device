@@ -1,6 +1,6 @@
 import { withResolveTargetDeviceCacheScope } from '../core/dispatch-resolve.ts';
 import { withDeviceInventoryContext } from '../request/device-inventory-context.ts';
-import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
+import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { ComposedDeviceInventoryGateways } from '@agent-device/contracts/platform-module';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
@@ -90,6 +90,7 @@ export type RequestRouterDeps = {
   providerRuntimeRequiredIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  providerAppCatalog?: ProviderAppCatalog;
   androidObservation?: AndroidObservationAdapter;
   platformResourceCleanup?: PlatformResourceCleanup;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
@@ -150,6 +151,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     providerRuntimeRequiredIds,
     leaseLifecycleProvider,
     cloudArtifactProvider,
+    providerAppCatalog,
     androidObservation = unavailableAndroidObservation,
     platformResourceCleanup = unavailablePlatformResourceCleanup,
     providerDeviceRuntimeScope,
@@ -285,6 +287,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       providerRuntimeIds,
       providerRuntimeRequiredIds,
       cloudArtifactProvider,
+      providerAppCatalog,
       invoke: handleRequest,
       invokeReplayAction: allowReplayActions
         ? createReplayScopedActionInvoker(lockedScope, providerScope)

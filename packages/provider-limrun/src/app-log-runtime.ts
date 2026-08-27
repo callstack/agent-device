@@ -59,6 +59,7 @@ export type LimrunPlatformRuntimeOwnerOptions = Omit<
     runtimeInstance: string;
     ownsDevice(device: DeviceInfo): boolean;
     getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
+    resolveAppAlias?(device: DeviceInfo, app: string): string;
     openCurrent(device: DeviceInfo): Promise<LimrunAppLogReader | undefined>;
     hasLiveSession(device: DeviceInfo): boolean;
     reconnect(
@@ -280,6 +281,7 @@ function bindLimrunAppLogs(
         device,
         signal,
         getInteractor: options.getInteractor,
+        resolveAppAlias: (app) => options.resolveAppAlias?.(device, app) ?? app,
         configurePortReverse: options.configurePortReverse,
       }),
       runtimeFacts.operations,

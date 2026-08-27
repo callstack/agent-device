@@ -5,6 +5,7 @@ import {
   isLeaseAdmissionExempt,
   isHumanControlMutation,
   isSessionlessPlainCloseAdmissionExempt,
+  isSessionlessLeaseAdmissionExempt,
 } from './daemon-command-registry.ts';
 import {
   DEFAULT_PROXY_LEASE_TTL_MS,
@@ -73,22 +74,10 @@ export function assertRequestLeaseAdmission(
   const requestLeaseScope = resolveLeaseScope(req);
   assertProxyOpenLeaseMetadata(req, requestLeaseScope);
   const sessionLease = session?.lease;
-  // #2016: a tenant-isolated connection that never reached `open` has no
-  // daemon session and no lease to admit or release. Falling through would
-  // make the generic tenant/run/lease check below throw "tenant isolation
-  // requires lease id.", which reads as an access-control failure instead of
-  // "nothing to close". Let the close handler's own session lookup return
-  // its SESSION_NOT_FOUND response instead. Requires `session === undefined`,
-  // not just a lease-less session: a *stored* session under tenant isolation
-  // is keyed by tenant, not by run, so a lease-less stored session could
-  // belong to another run in the same tenant — admission must still verify a
-  // matching lease before that run's session can be torn down. Which request
-  // shape qualifies (plain `close`, not an app-target `close <app>`) is the
-  // registry's call, not this module's — see `sessionlessPlainCloseAdmissionExempt`.
   if (
     session === undefined &&
     !requestLeaseScope.leaseId &&
-    isSessionlessPlainCloseAdmissionExempt(req)
+    (isSessionlessPlainCloseAdmissionExempt(req) || isSessionlessLeaseAdmissionExempt(req))
   ) {
     return undefined;
   }

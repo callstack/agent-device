@@ -14,6 +14,10 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../request-runtime-binding.ts';
+import {
+  clearRequestAbortRegistration,
+  registerRequestAbort,
+} from '@agent-device/host-kit/request';
 
 const MACOS_DEVICE = {
   platform: 'apple' as const,
@@ -122,4 +126,75 @@ test('macOS apps consumes generic readiness and app inventory through one runtim
   expect(bindCount).toBe(1);
   expect(ensureReady).toHaveBeenCalledOnce();
   expect(listApps).toHaveBeenCalledOnce();
+});
+
+test('deferred provider apps returns uploaded assets without resolving a device', async () => {
+  const sessionStore = makeSessionStore();
+  const listAvailableApps = vi.fn(async () => ['Example.apk', 'Settings.apk']);
+  const req: DaemonRequest = {
+    token: 'test-token',
+    session: 'limrun-apps',
+    command: 'apps',
+    positionals: [],
+    flags: {
+      platform: 'android',
+      leaseProvider: 'limrun',
+    },
+  };
+
+  const response = await handleSessionInventoryCommands({
+    req,
+    sessionName: req.session,
+    sessionStore,
+    inspectFacts,
+    bindDevice,
+    providerAppCatalog: listAvailableApps,
+  });
+
+  expect(response).toEqual({
+    ok: true,
+    data: { apps: ['Example.apk', 'Settings.apk'] },
+  });
+  expect(listAvailableApps).toHaveBeenCalledWith(
+    {
+      provider: 'limrun',
+      platform: 'android',
+    },
+    undefined,
+  );
+  expect(inspectFacts).not.toHaveBeenCalled();
+  expect(bindCount).toBe(0);
+});
+
+test('deferred provider apps forwards request cancellation to the catalog', async () => {
+  const requestId = 'provider-app-catalog-abort';
+  const registration = registerRequestAbort(requestId);
+  const reason = new Error('catalog canceled');
+  const providerAppCatalog = vi.fn(async (_query, signal?: AbortSignal) => {
+    expect(signal).toBe(registration?.controller.signal);
+    return await new Promise<readonly string[]>((_resolve, reject) => {
+      signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+  });
+  const req: DaemonRequest = {
+    token: 'test-token',
+    session: 'limrun-apps-abort',
+    command: 'apps',
+    positionals: [],
+    flags: { platform: 'ios', leaseProvider: 'limrun' },
+    meta: { requestId },
+  };
+
+  try {
+    const response = handleSessionInventoryCommands({
+      req,
+      sessionName: req.session,
+      sessionStore: makeSessionStore(),
+      providerAppCatalog,
+    });
+    registration?.controller.abort(reason);
+    await expect(response).rejects.toBe(reason);
+  } finally {
+    clearRequestAbortRegistration(registration);
+  }
 });

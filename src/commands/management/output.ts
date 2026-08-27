@@ -67,13 +67,13 @@ function appsCliOutput(params: {
     stderr:
       params.appsFilter === 'all'
         ? 'Showing all apps, including system apps.\n'
-        : 'Showing user-installed apps. Use --all to include system apps.\n',
+        : 'Showing user-installed apps or deferred provider app assets. Use --all to include system apps on a live device.\n',
     text:
       params.result.length > 0
         ? params.result.join('\n')
         : params.appsFilter === 'all'
           ? 'No apps found.'
-          : 'No user-installed apps found.',
+          : 'No user apps or provider app assets found.',
   };
 }
 

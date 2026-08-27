@@ -736,9 +736,9 @@ Providers:
 After direct-provider connect:
   Read the printed Device, App, Next, and workflow-note lines. They are also available as verification/device/app/liveSession/nextSteps/notes in --json output.
   BrowserStack and AWS Device Farm create the hosted session on open. open needs the installed package or bundle identifier, not the app artifact name or ARN.
-  A new Limrun instance has no user app. Run install <package-or-bundle-id> <app-path-or-url> first; install allocates the instance, then open launches the installed id.
+  Before Limrun allocation, apps lists compatible uploaded app assets without creating an instance. open <exact-asset-name> creates the instance with that asset, resolves its installed app id, and launches it. install remains available when the app comes from a fresh local path or URL.
   AWS Device Farm cannot install after allocation. If connect reports no attached app, run its printed reconnect command, which includes --session <name> --force, before open.
-  Do not run devices or apps as a pre-open catalog probe for direct providers; those commands can allocate the deferred provider session and only inspect that live device.
+  Do not run devices as a pre-open catalog probe for direct providers; it can allocate the deferred provider session. Limrun is the exception for apps: before allocation it lists uploaded assets for the selected platform.
 
 Device cloud interfaces:
   CLI is the canonical bootstrap path: connect limrun/browserstack/aws-device-farm, then use normal open/snapshot/click/close/artifacts/disconnect commands.
@@ -795,7 +795,8 @@ Limrun direct-device flow:
   agent-device connect limrun --platform android
 
   Limrun creates remote iOS simulators and Android emulators only. Do not pass local device selectors such as --udid, --serial, or --device.
-  agent-device open com.example.app
+  agent-device apps
+  agent-device open Example.apk
   agent-device snapshot -i
   agent-device close
   agent-device disconnect

@@ -19,7 +19,7 @@ import { handleDoctorCommand } from './session-doctor.ts';
 import { handlePrepareCommand } from './session-prepare.ts';
 import type { DescriptorSessionRouteCommandName } from '../../core/command-descriptor/registry.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
+import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import type {
   BindDeviceRuntime,
   BindExactDeviceRuntime,
@@ -41,6 +41,7 @@ export type SessionCommandInput = {
   sessionStore: SessionStore;
   leaseRegistry?: LeaseRegistry;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
+  providerAppCatalog?: ProviderAppCatalog;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
   /**
@@ -76,6 +77,7 @@ const handleSessionInventoryCommandGroup: SessionCommandHandler = async ({
   sessionStore,
   inspectFacts,
   bindDevice,
+  providerAppCatalog,
 }) =>
   await handleSessionInventoryCommands({
     req,
@@ -83,6 +85,7 @@ const handleSessionInventoryCommandGroup: SessionCommandHandler = async ({
     sessionStore,
     inspectFacts,
     bindDevice,
+    providerAppCatalog,
   });
 
 const handleSessionStateCommandGroup: SessionCommandHandler = async ({
@@ -301,6 +304,7 @@ export async function handleSessionCommands(
     sessionStore,
     leaseRegistry = new LeaseRegistry(),
     leaseLifecycleProvider,
+    providerAppCatalog,
     invoke,
     invokeReplayAction,
     androidAdbExecutor,
@@ -330,6 +334,7 @@ export async function handleSessionCommands(
     sessionStore,
     leaseRegistry,
     leaseLifecycleProvider,
+    providerAppCatalog,
     invoke,
     invokeReplayAction,
     androidAdbExecutor,

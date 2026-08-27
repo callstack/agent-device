@@ -102,6 +102,17 @@ test('request handler chain routes trace commands to the record-trace family', a
   assert.equal(response?.data?.trace, 'started');
 });
 
+test('request handler chain forwards the deferred provider app catalog to inventory', async () => {
+  const req = makeRequest('apps');
+  req.flags = { platform: 'android', leaseProvider: 'limrun' };
+  const response = await runRequestHandlerChain({
+    ...makeChainParams(req),
+    providerAppCatalog: async () => ['Example.apk'],
+  });
+
+  assert.deepEqual(response, { ok: true, data: { apps: ['Example.apk'] } });
+});
+
 // R61 put `react-native dismiss-overlay` behind the owner's own `tapPoint` admission, and the
 // chain had never forwarded the request's runtime bindings to that route — so the dismissal leg
 // had been reaching a missing gateway ever since R48 moved it off the retired dispatcher. Only

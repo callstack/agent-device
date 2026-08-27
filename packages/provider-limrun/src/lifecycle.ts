@@ -14,6 +14,7 @@ type LimrunLifecycleParams = Readonly<{
   configurePortReverse(
     options: ProviderPortReverseOptions,
   ): Promise<Record<string, unknown> | undefined>;
+  resolveAppAlias?(app: string): string;
 }>;
 
 /** Limrun owns its live-session lifecycle, relaunch, and exact port-reverse mechanics. */
@@ -24,6 +25,7 @@ export function bindLimrunApplicationLifecycle(
     owner: 'Limrun',
     openTargetIdentity: 'bundle-id',
     closeBeforeRelaunch: true,
+    resolveAppAlias: params.resolveAppAlias,
     configureProviderPortReverse: async (input) => await params.configurePortReverse(input),
     binding: bindProviderApplicationLifecycleInteractor({
       device: params.device,

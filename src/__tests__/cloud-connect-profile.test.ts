@@ -53,7 +53,7 @@ beforeEach(() => {
     },
     app: {
       status: 'missing',
-      message: 'A new Limrun instance does not have your app yet.',
+      message: 'Run apps to choose an uploaded asset before allocation.',
     },
   });
   mockedVerifyWebDriverConnection.mockImplementation(async (options) =>
@@ -544,12 +544,13 @@ test('connect output makes verified configuration, deferred device allocation, a
   );
   assert.match(
     result.stdout,
-    /App: not installed yet — A new Limrun instance does not have your app yet/,
+    /App: not installed yet — Run apps to choose an uploaded asset before allocation/,
   );
   assert.match(result.stdout, /No live device session has been created/);
   assert.match(result.stdout, /Next:/);
-  assert.match(result.stdout, /agent-device install <package-id> <app-path-or-url>/);
-  assert.match(result.stdout, /agent-device open <package-id> --relaunch/);
+  assert.match(result.stdout, /agent-device apps/);
+  assert.match(result.stdout, /agent-device open <uploaded-asset-name>/);
+  assert.doesNotMatch(result.stdout, /agent-device install/);
   assert.doesNotMatch(result.stdout, /lease pending/);
 });
 

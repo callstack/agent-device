@@ -40,6 +40,14 @@ export function buildLeasePreparationNotice(
         'No live device session has been created. Run devices to inspect inventory without allocating, then open when ready.',
     };
   }
+  if (state.leaseProvider === 'limrun') {
+    return {
+      status: 'deferred',
+      nextSteps: buildConnectWorkflow(state, verification).nextSteps,
+      message:
+        'No live device session has been created. Run apps to inspect uploaded assets without allocating; open <uploaded-asset-name> creates the instance.',
+    };
+  }
   if (leaseKind === 'direct-device-provider') {
     return {
       status: 'deferred',
@@ -232,6 +240,11 @@ function buildUnscopedConnectWorkflow(
   }
   if (!verification && leaseKind === 'direct-device-provider') {
     return { nextSteps: defaultDirectProviderLifecycle() };
+  }
+  if (verification?.provider === 'limrun') {
+    return {
+      nextSteps: ['agent-device apps', 'agent-device open <uploaded-asset-name>'],
+    };
   }
   const appMissing = verification?.app?.status === 'missing';
   return {

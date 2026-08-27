@@ -39,6 +39,9 @@ import {
 } from '@agent-device/contracts/platform-runtime-operations';
 import { ensureAppsRuntimeReady, listAppsFromRuntime } from '../apps-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
+import type { ProviderAppCatalog } from '@agent-device/contracts/device';
+import { resolveLeaseScope } from '../lease-context.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 
 export async function handleSessionInventoryCommands(params: {
   req: DaemonRequest;
@@ -46,6 +49,7 @@ export async function handleSessionInventoryCommands(params: {
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
+  providerAppCatalog?: ProviderAppCatalog;
 }): Promise<DaemonResponse | null> {
   const { req, sessionName, sessionStore } = params;
   switch (req.command) {
@@ -67,6 +71,7 @@ export async function handleSessionInventoryCommands(params: {
         sessionStore,
         bindDevice: params.bindDevice,
         inspectFacts: params.inspectFacts,
+        providerAppCatalog: params.providerAppCatalog,
       });
     default:
       return null;
@@ -302,9 +307,15 @@ async function handleAppsInventory(params: {
   sessionName: string;
   sessionStore: SessionStore;
   bindDevice?: BindDeviceRuntime;
+  providerAppCatalog?: ProviderAppCatalog;
   inspectFacts?: InspectDeviceRuntimeFacts;
 }): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore, bindDevice, inspectFacts } = params;
+  const providerCatalogResponse = await resolveProviderAppCatalogResponse(
+    req,
+    params.providerAppCatalog,
+  );
+  if (providerCatalogResponse) return providerCatalogResponse;
   const resolution = await resolveInventoryCommandDevice({
     req,
     sessionName,
@@ -330,6 +341,26 @@ async function handleAppsInventory(params: {
   });
   const apps = await listAppsFromRuntime(runtime, readyDevice, appsFilter);
   return appsInventoryResponse(apps);
+}
+
+async function resolveProviderAppCatalogResponse(
+  req: DaemonRequest,
+  providerAppCatalog: ProviderAppCatalog | undefined,
+): Promise<DaemonResponse | undefined> {
+  if (!providerAppCatalog) return undefined;
+  const leaseScope = resolveLeaseScope(req);
+  if (leaseScope.leaseId) return undefined;
+  const provider = leaseScope.leaseProvider;
+  const platform = req.flags?.platform;
+  if (!provider || (platform !== 'android' && platform !== 'ios')) return undefined;
+  const apps = await providerAppCatalog(
+    {
+      provider,
+      platform,
+    },
+    getRequestSignal(req.meta?.requestId),
+  );
+  return apps ? { ok: true, data: { apps: [...apps] } } : undefined;
 }
 
 async function inspectCapabilityFacts(

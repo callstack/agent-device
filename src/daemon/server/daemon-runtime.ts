@@ -321,6 +321,7 @@ export async function startDaemonRuntime(
     },
   });
   const cloudArtifactProvider = providerRuntimeProviders.cloudArtifactProvider;
+  const providerAppCatalog = providerRuntimeProviders.providerAppCatalog;
   const deviceInventoryGateways = createPlatformDeviceInventoryGateways(
     providerRuntimeProviders.deviceInventorySource,
   );
@@ -332,6 +333,7 @@ export async function startDaemonRuntime(
     leaseRegistry,
     leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
     cloudArtifactProvider,
+    providerAppCatalog,
     deviceInventoryGateways,
     deviceRuntimeGateway,
     appLogAdmissionLedger,

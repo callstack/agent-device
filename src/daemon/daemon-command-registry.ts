@@ -95,9 +95,8 @@ export function usesSessionlessDefaultProviderDevice(req: DaemonRequest): boolea
   return typeof allow === 'function' ? allow(req) : false;
 }
 
-/** #2016: whether this request qualifies for the sessionless plain-close lease-admission bypass. */
-export function isSessionlessPlainCloseAdmissionExempt(req: DaemonRequest): boolean {
-  const exempt = getDaemonCommandDescriptor(req.command)?.sessionlessPlainCloseAdmissionExempt;
+export function isSessionlessLeaseAdmissionExempt(req: DaemonRequest): boolean {
+  const exempt = getDaemonCommandDescriptor(req.command)?.sessionlessLeaseAdmissionExempt;
   return typeof exempt === 'function' ? exempt(req) : false;
 }
 

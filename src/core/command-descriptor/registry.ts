@@ -179,6 +179,11 @@ const isShardedTestRequest = (req: DispatchedCommand): boolean =>
 const isPlainCloseRequest = (req: DispatchedCommand): boolean =>
   (req.positionals?.length ?? 0) === 0;
 
+const isDeferredProviderAppCatalogRequest = (req: DispatchedCommand): boolean =>
+  req.flags?.leaseId === undefined &&
+  typeof req.flags?.leaseProvider === 'string' &&
+  (req.flags?.platform === 'android' || req.flags?.platform === 'ios');
+
 // ADR 0014 request-sensitive ref-frame resolvers. The action is the leading
 // positional (see keyboard/alert daemon writers in src/commands/system/index.ts
 // and src/commands/capture/alert.ts). Only the read-only status probes preserve
@@ -607,6 +612,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       sessionKind: 'inventory',
       lockPolicySelectorOverride: true,
       preferExplicitDeviceOverExistingSession: true,
+      sessionlessLeaseAdmissionExempt: isDeferredProviderAppCatalogRequest,
     },
     platformExecution: { kind: 'device-runtime', uses: [appsRuntimeUse] as const },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
@@ -980,7 +986,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       refFrameEffect: 'may-invalidate',
       allowInvalidRecording: true,
       saveScriptFlagOwner: true,
-      sessionlessPlainCloseAdmissionExempt: isPlainCloseRequest,
+      sessionlessLeaseAdmissionExempt: isPlainCloseRequest,
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
