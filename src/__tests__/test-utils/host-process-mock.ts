@@ -2,26 +2,6 @@ type HostProcessModule = typeof import('@agent-device/host-kit/process');
 type HostProcessIdentityObservation =
   import('@agent-device/host-kit/process').HostProcessIdentityObservation;
 
-/**
- * `vi.mock` factory for the host-kit `exec` seam in tests that seed a "live"
- * owner from the test process's own identity (readCurrentOwnerIdentity and
- * friends) and later have production code re-read it during classification.
- *
- * readProcessStartTime shells out to `ps` with a 1s timeout; under full-suite
- * CPU contention a re-read can miss that deadline and return null, mismatching
- * the seeded value and flipping a genuinely-live owner to 'owner-process-dead'.
- * This factory assigns our own pid a stable synthetic start time, then serves
- * that value so every read is self-consistent without a subprocess. Other pids read as null, same
- * as a real `ps` miss. isProcessAlive stays real (a plain `kill(pid, 0)`
- * syscall, not a subprocess), so fabricated dead-pid fixtures still classify
- * as dead through that non-flaky check.
- *
- * Usage: `vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
- * (await import('<path>/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(importOriginal))`
- */
-// Consumed by three suites, but only through `(await import(...)).pinOwnProcessStartTime`
-// inside `vi.mock` factories — vitest hoists those above static imports, so the dynamic
-// form is required and fallow cannot trace the consumers statically.
 export async function pinOwnProcessStartTime(
   importOriginal: () => Promise<HostProcessModule>,
 ): Promise<HostProcessModule> {
@@ -29,8 +9,6 @@ export async function pinOwnProcessStartTime(
   const ownStartTime = 'test-process-start-time';
   return {
     ...actual,
-    // The seam mock cannot reach readCurrentOwnerIdentity's internal
-    // readProcessStartTime call, so the recorded identity is pinned here too.
     readCurrentOwnerIdentity: () => ({ pid: process.pid, startTime: ownStartTime }),
     readProcessStartTime: (pid: number) => {
       if (pid !== process.pid) return null;

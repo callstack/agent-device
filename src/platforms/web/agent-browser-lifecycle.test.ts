@@ -18,8 +18,6 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   return {
     ...actual,
-    // The port mock cannot reach listHostProcesses' internal runCmd call, so
-    // the ps read is routed through its runCommand injection point instead.
     listHostProcesses: async (options: Parameters<typeof actual.listHostProcesses>[0]) =>
       await actual.listHostProcesses({ ...options, runCommand: runCmdMock }),
     readProcessStartTime: (pid: number) => `start-${pid}`,

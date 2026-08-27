@@ -26,10 +26,6 @@ export function createScopedProvider<TProvider, TInput = TProvider>(
   };
 }
 
-/**
- * Wraps every method call on `target` in `runScope`, so leaf code below the
- * method resolves scope-injected state instead of the local default.
- */
 export function withMethodScope<T extends object>(
   target: T,
   runScope: <R>(task: () => Promise<R>) => Promise<R>,
