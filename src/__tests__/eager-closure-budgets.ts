@@ -135,8 +135,6 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/capture-kit/src/snapshot-quality-verdict.ts': 2,
 
   // --- @agent-device/host-kit ---
-  // One capability port per export: the row is what a consumer of that
-  // capability evaluates, so a port that grew unrelated mechanics shows here.
   'packages/host-kit/src/archive.ts': 9,
   'packages/host-kit/src/command.ts': 7,
   'packages/host-kit/src/diagnostics.ts': 3,
@@ -211,7 +209,6 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/keyboard.ts': 1,
   'packages/contracts/src/logs-runtime-plan.ts': 5,
   'packages/contracts/src/managed-web-backend.ts': 1,
-  // #2082 W1: snapshot semantics moved out of root src.
   'packages/contracts/src/navigation.ts': 1,
   'packages/contracts/src/network-runtime-plan.ts': 5,
   'packages/contracts/src/network-runtime.ts': 1,
@@ -259,10 +256,8 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/kernel/src/errors.ts': 2,
   // Added by #2041: keyed async lock moved from src/utils for the extracted IME lifecycle.
   'packages/kernel/src/keyed-lock.ts': 1,
-  // #2082 W1: geometry/vocabulary sunk below contracts.
   'packages/kernel/src/rect-center.ts': 2,
   'packages/kernel/src/rect.ts': 1,
-  // #2082 W1: pure primitives that were never host mechanics.
   'packages/kernel/src/device-isolation.ts': 1,
   'packages/kernel/src/location-coordinates.ts': 3,
   'packages/kernel/src/record.ts': 3,
@@ -275,7 +270,6 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/kernel/src/snapshot.ts': 1,
 
   // --- @agent-device/maestro ---
-  // +1 in #2082 W1: internal/shared.ts reuses @agent-device/kernel/rect-center.
   'packages/maestro/src/index.ts': 106,
 
   // --- @agent-device/platform-*: ADR-0019's metadata-eager/implementation-lazy façades. Each

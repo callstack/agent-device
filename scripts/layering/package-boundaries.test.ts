@@ -453,8 +453,6 @@ test('the real tree parses, declares, and passes R11', () => {
     true,
     'capture-kit stays a private implementation package',
   );
-  // #2082 W1 host-mechanics subpaths; any further subpath widens this key list
-  // and fails the assertion, same as the platform-apple pin below.
   assert.deepEqual([...captureKitPackage.exportTargets.keys()].sort(), [
     '@agent-device/capture-kit',
     '@agent-device/capture-kit/mobile-snapshot-semantics',
@@ -482,9 +480,6 @@ test('the real tree parses, declares, and passes R11', () => {
     true,
     'host-kit stays a private implementation package',
   );
-  // One narrow capability port over the host machine per export; any further
-  // subpath widens this key list and fails the assertion, same as the
-  // capture-kit pin above.
   assert.deepEqual([...hostKitPackage.exportTargets.keys()].sort(), [
     '@agent-device/host-kit/archive',
     '@agent-device/host-kit/command',

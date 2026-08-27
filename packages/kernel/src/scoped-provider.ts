@@ -28,9 +28,7 @@ export function createScopedProvider<TProvider, TInput = TProvider>(
 
 /**
  * Wraps every method call on `target` in `runScope`, so leaf code below the
- * method resolves scope-injected state (AsyncLocalStorage transports) instead
- * of the local default. Shared by the Android adb-provider and Apple
- * runner-provider interactor seams.
+ * method resolves scope-injected state instead of the local default.
  */
 export function withMethodScope<T extends object>(
   target: T,
