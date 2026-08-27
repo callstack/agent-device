@@ -499,6 +499,14 @@ describe('composed platform runtime gateway', () => {
       });
 
       const facts = await runtimeGateway.inspectFacts(device);
+      expect(facts.operations.captureScreenshot).toMatchObject({
+        available: false,
+        reason: 'owner-capability-missing',
+      });
+      expect(facts.operations.appLogInspect).toMatchObject({
+        available: false,
+        reason: 'unsupported-provider-mode',
+      });
       for (const operation of operations) {
         expect(facts.operations[operation].available).toBe(false);
       }

@@ -19,7 +19,10 @@ import type {
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from './__tests__/test-utils/runtime-operation-facts.ts';
+import {
+  createUnavailableRuntimeFactsForTest,
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+} from './__tests__/test-utils/runtime-operation-facts.ts';
 import {
   createComposedPlatformRuntimeGateway,
   type PlatformRuntimeProviderRegistration,
@@ -134,32 +137,12 @@ function binding(options: {
 function unavailableFacts() {
   const unavailable = { available: false, reason: 'unsupported-provider-mode' } as const;
   return {
+    ...createUnavailableRuntimeFactsForTest(
+      gatewayFixtureDevice,
+      providerRuntimeOwner('limrun', 'fixtures'),
+      unavailable,
+    ).operations,
     ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
-    appLogInspect: unavailable,
-    appLogDoctor: unavailable,
-    appLogStart: unavailable,
-    appLogReattach: unavailable,
-    appLogCleanup: unavailable,
-    appState: unavailable,
-    networkDump: unavailable,
-    screenRecordingStart: unavailable,
-    screenRecordingReattach: unavailable,
-    screenRecordingCleanup: unavailable,
-    ensureReady: unavailable,
-    bootTarget: unavailable,
-    bootTargetHeadless: unavailable,
-    listApps: unavailable,
-    ...applicationLifecycleOperationFacts({
-      resolveOpenTarget: unavailable,
-      prepareApplicationOpen: unavailable,
-      openApplication: unavailable,
-      applyRuntimeHints: unavailable,
-      clearRuntimeHints: unavailable,
-      closeApplication: unavailable,
-      finalizeApplicationClose: unavailable,
-      prepareAppleRunner: unavailable,
-      configureProviderPortReverse: unavailable,
-    }),
   };
 }
 
