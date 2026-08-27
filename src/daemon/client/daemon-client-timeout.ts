@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmdSync, emitDiagnostic } from '@agent-device/host-kit/exec';
+import { runCmdSync } from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';

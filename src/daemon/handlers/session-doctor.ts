@@ -8,7 +8,7 @@ import {
   listLocalDeviceInventory,
   shouldPropagateDeviceInventoryProbeError,
 } from '../../request/device-inventory-context.ts';
-import { readVersion } from '@agent-device/host-kit/values';
+import { readVersion } from '@agent-device/host-kit/version';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { appendAppChecks, type DoctorAppInventory } from './session-doctor-app.ts';
@@ -36,7 +36,7 @@ import type {
   HostDiagnostics,
   HostDiagnosticsContext,
 } from '@agent-device/contracts/host-diagnostics';
-import { resolveAndroidSerialAllowlist } from '@agent-device/host-kit/fs';
+import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import type { InstalledAppInfo } from '@agent-device/contracts/app-inventory-runtime';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import { appsRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';

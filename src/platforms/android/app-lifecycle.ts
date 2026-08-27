@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
-import { sleep, shellQuoteIfNeeded } from '@agent-device/host-kit/exec';
+import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
+import { sleep } from '@agent-device/host-kit/retry';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';

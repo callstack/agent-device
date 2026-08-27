@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock(import('@agent-device/host-kit/exec'), async (importOriginal) => ({
+vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
   runCmd: vi.fn(async (_cmd: string, args: string[]) => {
     const outputPath = args[args.indexOf('-o') + 1]!;
@@ -13,7 +13,7 @@ vi.mock(import('@agent-device/host-kit/exec'), async (importOriginal) => ({
   }),
 }));
 
-import { runCmd } from '@agent-device/host-kit/exec';
+import { runCmd } from '@agent-device/host-kit/command';
 import { compileSwiftSourceFile, compileSwiftSourceText } from '../swift-cache.ts';
 
 const mockRunCmd = vi.mocked(runCmd);

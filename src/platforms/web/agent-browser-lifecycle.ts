@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { uniqueStrings } from '@agent-device/kernel/collections';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
-  emitDiagnostic,
   type OwnedProcessRecordStore,
   reapOwnedProcessRecordsAtStartup,
-} from '@agent-device/host-kit/exec';
+} from '@agent-device/host-kit/process';
 
 import type { AgentBrowserToolStatus } from './agent-browser-tool.ts';
 import type { AgentBrowserProcessSummary } from './agent-browser-process-record.ts';

@@ -25,7 +25,7 @@ import {
 } from '@agent-device/kernel/snapshot';
 import { resolveBoundGestureRuntime, type BoundGestureExecutor } from '../gesture-runtime.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
-import { sleep } from '@agent-device/host-kit/exec';
+import { sleep } from '@agent-device/host-kit/retry';
 import { ensureAndroidBlockingSystemDialogReady } from '../android-system-dialog.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import type { InteractionHandlerParams } from './interaction-common.ts';

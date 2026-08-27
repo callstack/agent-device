@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 
-vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
+vi.mock('@agent-device/host-kit/retry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/retry')>();
   return { ...actual, sleep: vi.fn(async () => {}) };
 });
 
 import { exitAfterFlush } from '../process-exit.ts';
-import { sleep } from '@agent-device/host-kit/exec';
+import { sleep } from '@agent-device/host-kit/retry';
 
 type FakeWriteStream = {
   writableLength: number;

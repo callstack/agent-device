@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { Platform, PlatformSelector } from '@agent-device/kernel/device';
-import { resolveUserPath } from '@agent-device/host-kit/fs';
+import { resolveUserPath } from '@agent-device/host-kit/file';
 
 const DEFAULT_RECORDING_EXTENSION = '.mp4';
 const WEB_RECORDING_EXTENSION = '.webm';

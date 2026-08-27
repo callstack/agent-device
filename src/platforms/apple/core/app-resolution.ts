@@ -14,7 +14,7 @@ import { listMacApps, resolveMacOsApp } from '../os/macos/apps.ts';
 import { runAppleToolCommand } from './tool-provider.ts';
 import { runSimctl } from './apps-simctl.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
-import { createTtlMemo } from '@agent-device/host-kit/values';
+import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
 const ALIASES: Record<string, string> = {
   settings: 'com.apple.Preferences',

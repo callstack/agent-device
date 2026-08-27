@@ -1,12 +1,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import {
-  emitDiagnostic,
-  type ExecOptions,
-  Deadline,
-  retryWithPolicy,
-} from '@agent-device/host-kit/exec';
+import { type ExecOptions } from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 
 import { resizePngFile } from '@agent-device/capture-kit/png-resize';

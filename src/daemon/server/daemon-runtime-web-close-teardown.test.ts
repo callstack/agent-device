@@ -1,8 +1,8 @@
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 
-vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn() };
 });
 
@@ -10,7 +10,7 @@ import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
 import { AGENT_BROWSER_TIMEOUT_MS } from '../../platforms/web/agent-browser-provider.ts';
 import { installFakeManagedAgentBrowser } from '../../platforms/web/__tests__/test-utils.ts';
-import { runCmd } from '@agent-device/host-kit/exec';
+import { runCmd } from '@agent-device/host-kit/command';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
 import {

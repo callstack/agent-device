@@ -3,7 +3,7 @@ import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
-} from '@agent-device/host-kit/exec';
+} from '@agent-device/host-kit/diagnostics';
 import { listSaveScriptFlagOwnerCommands, ownsSaveScriptFlag } from './daemon-command-registry.ts';
 import type { DaemonRequest, DaemonResponse } from './types.ts';
 

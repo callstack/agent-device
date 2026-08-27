@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { MAESTRO_RUNTIME_ADAPTER_POLICY } from '@agent-device/maestro';
 import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { computePngRgbDifferenceAsync } from '@agent-device/capture-kit/png-worker-client';
 import type { PngRgbDifferenceResult } from '@agent-device/capture-kit/png-rgb-difference';
 

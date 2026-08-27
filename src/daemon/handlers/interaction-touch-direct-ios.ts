@@ -1,6 +1,6 @@
 import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   isDirectIosSelectorFallbackError,
   type DirectIosSelectorTarget,

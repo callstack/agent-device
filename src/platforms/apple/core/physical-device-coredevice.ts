@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { execFailureDetails } from '@agent-device/host-kit/exec';
+import { execFailureDetails } from '@agent-device/host-kit/command';
 import {
   IOS_DEVICECTL_DEFAULT_HINT,
   resolveIosDevicectlHint,

@@ -11,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
-import { runCmd, whichCmd } from '@agent-device/host-kit/exec';
+import { runCmd, whichCmd } from '@agent-device/host-kit/command';
 
 export function createDeviceInventoryHost(): DeviceInventoryHost {
   return Object.freeze({

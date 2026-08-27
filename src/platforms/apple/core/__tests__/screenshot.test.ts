@@ -4,13 +4,13 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
-  return {
-    ...actual,
-    runCmd: vi.fn(actual.runCmd),
-    retryWithPolicy: vi.fn(actual.retryWithPolicy),
-  };
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
+  return { ...actual, runCmd: vi.fn(actual.runCmd) };
+});
+vi.mock('@agent-device/host-kit/retry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/retry')>();
+  return { ...actual, retryWithPolicy: vi.fn(actual.retryWithPolicy) };
 });
 vi.mock('../runner-client.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../runner-client.ts')>();
@@ -32,11 +32,11 @@ vi.mock('../screenshot-status-bar.ts', async (importOriginal) => {
   };
 });
 
-const execActual = await vi.importActual<typeof import('@agent-device/host-kit/exec')>(
-  '@agent-device/host-kit/exec',
+const execActual = await vi.importActual<typeof import('@agent-device/host-kit/command')>(
+  '@agent-device/host-kit/command',
 );
-const retryActual = await vi.importActual<typeof import('@agent-device/host-kit/exec')>(
-  '@agent-device/host-kit/exec',
+const retryActual = await vi.importActual<typeof import('@agent-device/host-kit/retry')>(
+  '@agent-device/host-kit/retry',
 );
 const runnerActual =
   await vi.importActual<typeof import('../runner-client.ts')>('../runner-client.ts');
@@ -55,7 +55,9 @@ import {
 import { ensureBootedSimulator, openIosSimulatorApp } from '../simulator.ts';
 import { prepareSimulatorStatusBarForScreenshot } from '../screenshot-status-bar.ts';
 import { runAppleRunnerCommand } from '../runner-client.ts';
-import { withDiagnosticsScope, runCmd, retryWithPolicy } from '@agent-device/host-kit/exec';
+import { runCmd } from '@agent-device/host-kit/command';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
+import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 
 import { IOS_TEST_SIMULATOR, MACOS_TEST_DEVICE } from './apple-core-stub-helpers.ts';

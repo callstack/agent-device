@@ -1,14 +1,8 @@
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
-import {
-  type ExecResult,
-  runCmdDetached,
-  whichCmd,
-  Deadline,
-  retryWithPolicy,
-  sleep,
-} from '@agent-device/host-kit/exec';
+import { type ExecResult, runCmdDetached, whichCmd } from '@agent-device/host-kit/command';
+import { Deadline, retryWithPolicy, sleep } from '@agent-device/host-kit/retry';
 
 import { runAndroidHostAdb } from './adb-executor.ts';
 

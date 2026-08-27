@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { sleep } from '@agent-device/host-kit/exec';
+import { sleep } from '@agent-device/host-kit/retry';
 import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
 import { annotateAndroidNativePerfError } from './perf-native-errors.ts';
 import { buildAndroidNativePerfStopSummary } from './perf-native-summary.ts';

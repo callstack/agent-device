@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Private generic host mechanics behind four deep seams: process execution and supervision (exec), filesystem and archive guards (fs), pure value helpers (values), and request-scoped plumbing (request). Internal workspace package bundled into the published agent-device artifact.",
+  "description": "Private host-mechanics package: each export is one narrow capability port over the host machine \u2014 running commands, observing and owning processes, diagnostics, retry/deadline, archive extraction, durable files and locks, request-scoped plumbing, and the installed version.",
   "dependencies": {
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*",
@@ -15,21 +15,37 @@
     "@types/yauzl": "^3.4.0"
   },
   "exports": {
-    "./exec": {
-      "types": "./src/exec.ts",
-      "default": "./src/exec.ts"
+    "./archive": {
+      "types": "./src/archive.ts",
+      "default": "./src/archive.ts"
     },
-    "./fs": {
-      "types": "./src/fs.ts",
-      "default": "./src/fs.ts"
+    "./command": {
+      "types": "./src/command.ts",
+      "default": "./src/command.ts"
+    },
+    "./diagnostics": {
+      "types": "./src/diagnostics.ts",
+      "default": "./src/diagnostics.ts"
+    },
+    "./file": {
+      "types": "./src/file.ts",
+      "default": "./src/file.ts"
+    },
+    "./process": {
+      "types": "./src/process.ts",
+      "default": "./src/process.ts"
     },
     "./request": {
       "types": "./src/request.ts",
       "default": "./src/request.ts"
     },
-    "./values": {
-      "types": "./src/values.ts",
-      "default": "./src/values.ts"
+    "./retry": {
+      "types": "./src/retry.ts",
+      "default": "./src/retry.ts"
+    },
+    "./version": {
+      "types": "./src/version.ts",
+      "default": "./src/version.ts"
     }
   }
 }

@@ -12,7 +12,7 @@ import { expireRefFrame } from '../ref-frame.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
-import { readCommandMessage, successText } from '@agent-device/host-kit/values';
+import { readCommandMessage, successText } from '@agent-device/kernel/success-text';
 import { errorResponse, noActiveSessionError } from './response.ts';
 import { withSystemSurfaceDisclosure } from './system-surface-disclosure.ts';
 import { recordSessionAction } from './handler-utils.ts';

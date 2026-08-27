@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
-vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn() };
 });
 
@@ -25,7 +25,7 @@ import {
   parseHarmonyLaunchTarget,
   resolveHarmonyArchiveBundleName,
 } from '../app-lifecycle.ts';
-import { runCmd } from '@agent-device/host-kit/exec';
+import { runCmd } from '@agent-device/host-kit/command';
 
 const mockRunCmd = vi.mocked(runCmd);
 

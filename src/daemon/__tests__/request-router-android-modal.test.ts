@@ -113,8 +113,8 @@ const modalObservation: AndroidObservationAdapter = {
   },
 };
 
-vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return {
     ...actual,
     runCmd: vi.fn(async (_cmd: string, args: string[]) => {

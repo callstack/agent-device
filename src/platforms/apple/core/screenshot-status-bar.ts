@@ -1,5 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { emitDiagnostic, requireExecSuccess, type ExecOptions } from '@agent-device/host-kit/exec';
+import { requireExecSuccess, type ExecOptions } from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 
 import { runSimctlForDevice } from './simctl.ts';

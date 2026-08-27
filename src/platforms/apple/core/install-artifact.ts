@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { LocalInstallSource } from '@agent-device/kernel/contracts';
 import { readInfoPlistString } from './plist.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { extractArchiveSafely, ArchiveBudget } from '@agent-device/host-kit/fs';
+import { extractArchiveSafely, ArchiveBudget } from '@agent-device/host-kit/archive';
 
 import {
   installArtifactArchiveBudget,

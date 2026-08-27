@@ -7,7 +7,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { emitDiagnostic, getDiagnosticsMeta, updateDiagnosticsScope } from './diagnostics.ts';
-import { parseBooleanLiteral } from './source-value.ts';
+import { parseBooleanLiteral } from '@agent-device/kernel/source-value';
 
 export type ExecResult = {
   stdout: string;

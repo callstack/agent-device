@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { onTestFinished, test } from 'vitest';
-import { runCmd } from '@agent-device/host-kit/exec';
+import { runCmd } from '@agent-device/host-kit/command';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');

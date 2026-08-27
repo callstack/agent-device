@@ -6,8 +6,8 @@ import {
   runCmdBackground,
   withCommandExecutorOverride,
   withoutCommandExecutorOverride,
-  emitDiagnostic,
-} from '@agent-device/host-kit/exec';
+} from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 import {
   clearAndroidTestImeRecoveryMarker,

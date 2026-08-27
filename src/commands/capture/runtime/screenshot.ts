@@ -1,6 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { validateScreenshotScale } from '@agent-device/contracts/capture';
-import { successText } from '@agent-device/host-kit/values';
+import { successText } from '@agent-device/kernel/success-text';
 import { resizePngFileToScale } from '@agent-device/capture-kit/png-resize';
 import type { ArtifactDescriptor } from '../../../io.ts';
 import type { RuntimeCommand, ScreenshotCommandOptions } from '../../runtime-types.ts';

@@ -1,6 +1,6 @@
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import type { SessionSurface } from '@agent-device/contracts/session';
-import { createScopedProvider } from '@agent-device/host-kit/values';
+import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { BackendDumpNetworkOptions, BackendDumpNetworkResult } from '../../backend.ts';
 import type { AudioProbeResult } from '@agent-device/contracts/audio-probe-result';

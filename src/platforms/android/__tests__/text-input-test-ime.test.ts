@@ -32,7 +32,10 @@ vi.mock('@agent-device/platform-android/ime-helper', async (importOriginal) => {
 import fs from 'node:fs/promises';
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
-import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '@agent-device/host-kit/exec';
+import {
+  flushDiagnosticsToSessionFile,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 import {
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
   createAndroidSnapshotHelperExecutor,

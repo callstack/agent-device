@@ -2,7 +2,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../session-store.ts';
 import { getSnapshotReferenceFrame } from '../touch-reference-frame.ts';
 import type { SessionState } from '../types.ts';

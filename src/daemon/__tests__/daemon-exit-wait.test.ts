@@ -15,8 +15,8 @@ const state = vi.hoisted(() => ({
   commands: new Map<number, string>(),
 }));
 
-vi.mock('@agent-device/host-kit/exec', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/host-kit/exec')>()),
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/process')>()),
   isProcessAlive: (pid: number) => state.alive.get(pid) ?? false,
   readProcessStartTime: (pid: number) => state.starts.get(pid) ?? null,
   readProcessCommand: (pid: number) => state.commands.get(pid) ?? null,

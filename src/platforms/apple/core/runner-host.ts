@@ -1,17 +1,15 @@
 import type { AppleRunnerHost } from '@agent-device/platform-apple/runner';
-import {
-  publishFileSync,
-  resolveIosSimulatorDeviceSetPath,
-  acquireProcessLock,
-} from '@agent-device/host-kit/fs';
+import { publishFileSync, acquireProcessLock } from '@agent-device/host-kit/file';
+import { resolveIosSimulatorDeviceSetPath } from '@agent-device/kernel/device-isolation';
 
 import {
-  emitDiagnostic,
-  withDiagnosticTimer,
   requireExecSuccess,
   runCmdBackground,
   runCmdStreaming,
   runCmdSync,
+} from '@agent-device/host-kit/command';
+import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
+import {
   isProcessAlive,
   isProcessGroupAlive,
   readProcessCommand,
@@ -19,20 +17,15 @@ import {
   signalPidsBestEffort,
   signalProcessGroupBestEffort,
   classifyOwnerLiveness,
-  Deadline,
-  isEnvTruthy,
-  retryWithPolicy,
-} from '@agent-device/host-kit/exec';
+} from '@agent-device/host-kit/process';
+import { Deadline, isEnvTruthy, retryWithPolicy } from '@agent-device/host-kit/retry';
 
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 
-import {
-  isRecord,
-  parseBooleanLiteral,
-  createTtlMemo,
-  findProjectRoot,
-  readVersion,
-} from '@agent-device/host-kit/values';
+import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
+import { isRecord } from '@agent-device/kernel/record';
+import { parseBooleanLiteral } from '@agent-device/kernel/source-value';
+import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
 import {
   getRequestSignal,

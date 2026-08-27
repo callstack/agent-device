@@ -6,9 +6,9 @@ import {
   toAppErrorCode,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
-import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/exec';
+import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { findProjectRoot, readVersion } from '@agent-device/host-kit/values';
+import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
 import {
   attachRefs,
   type HiddenContentHint,

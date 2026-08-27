@@ -10,7 +10,9 @@ import type {
 } from '@agent-device/contracts/remote';
 import fs from 'node:fs';
 import path from 'node:path';
-import { sleep, runCmdSync, runCmdDetached, waitForProcessExit } from '@agent-device/host-kit/exec';
+import { runCmdSync, runCmdDetached } from '@agent-device/host-kit/command';
+import { waitForProcessExit } from '@agent-device/host-kit/process';
+import { sleep } from '@agent-device/host-kit/retry';
 import { ensureMetroCompanion } from './client-metro-companion.ts';
 import type {
   MetroBridgeDescriptor,
@@ -20,7 +22,7 @@ import type {
 } from './metro-types.ts';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 
-import { resolveUserPath } from '@agent-device/host-kit/fs';
+import { resolveUserPath } from '@agent-device/host-kit/file';
 
 import {
   detectProjectRuntimeKindFromPackageJson,

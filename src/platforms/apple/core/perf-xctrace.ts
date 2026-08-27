@@ -17,7 +17,7 @@ import {
   runCmdBackground,
   type ExecBackgroundResult,
   type ExecResult,
-} from '@agent-device/host-kit/exec';
+} from '@agent-device/host-kit/command';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { findAllXmlNodes } from './perf-xml.ts';
 import {

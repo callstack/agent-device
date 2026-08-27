@@ -7,7 +7,7 @@ import {
 } from '@agent-device/contracts/scroll-gesture';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { sleep } from '@agent-device/host-kit/exec';
+import { sleep } from '@agent-device/host-kit/retry';
 import { runHarmonyHdc } from './hdc.ts';
 import { invalidateHarmonyGestureViewport, readHarmonyGestureViewport } from './snapshot.ts';
 

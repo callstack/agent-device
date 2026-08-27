@@ -2,7 +2,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { AppleToolProvider } from '../../platforms/apple/core/tool-provider.ts';
 import { withAppleToolProvider } from '../../platforms/apple/core/tool-provider.ts';
-import { execFailureDetails, type ExecResult } from '@agent-device/host-kit/exec';
+import { execFailureDetails, type ExecResult } from '@agent-device/host-kit/command';
 import { IOS_DEVICE } from './device-fixtures.ts';
 
 /**

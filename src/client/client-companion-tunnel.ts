@@ -18,13 +18,13 @@ import {
   ENV_COMPANION_TUNNEL_UNREGISTER_PATH,
 } from './client-companion-tunnel-contract.ts';
 import { normalizeBaseUrl } from '../utils/url.ts';
+import { runCmdDetached } from '@agent-device/host-kit/command';
 import {
-  runCmdDetached,
   isProcessAlive,
   readProcessCommand,
   readProcessStartTime,
   waitForProcessExit,
-} from '@agent-device/host-kit/exec';
+} from '@agent-device/host-kit/process';
 
 const COMPANION_TUNNEL_TERM_TIMEOUT_MS = 1_000;
 const COMPANION_TUNNEL_KILL_TIMEOUT_MS = 1_000;

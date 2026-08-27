@@ -7,7 +7,8 @@
 import type { FillUnconfirmedVerification } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { emitDiagnostic, shellQuoteIfNeeded } from '@agent-device/host-kit/exec';
+import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 import {
   resolveAndroidAdbExecutor,

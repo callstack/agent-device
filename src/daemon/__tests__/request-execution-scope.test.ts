@@ -5,7 +5,7 @@ import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
-} from '@agent-device/host-kit/exec';
+} from '@agent-device/host-kit/diagnostics';
 import {
   makeAndroidSession,
   makeIosSession,

@@ -4,8 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { trimEdgeDashes } from '@agent-device/kernel/collections';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd, readProcessStartTime } from '@agent-device/host-kit/exec';
-import { acquireProcessLock } from '@agent-device/host-kit/fs';
+import { runCmd } from '@agent-device/host-kit/command';
+import { readProcessStartTime } from '@agent-device/host-kit/process';
+import { acquireProcessLock } from '@agent-device/host-kit/file';
 
 const SWIFT_CACHE_VERSION = '2';
 const LOCK_RETRY_DELAY_MS = 25;

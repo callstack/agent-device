@@ -1,4 +1,4 @@
-import { sleep } from '@agent-device/host-kit/exec';
+import { sleep } from '@agent-device/host-kit/retry';
 
 const FLUSH_TIMEOUT_MS = 2000;
 

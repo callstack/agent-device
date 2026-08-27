@@ -1,0 +1,198 @@
+{
+  "archive-extraction-tar": [["extractTarArchive", "value"]],
+  "archive-extraction-zip": [["extractZipArchive", "value"]],
+  "archive-extraction": [
+    ["SupportedArchiveType", "type"],
+    ["ExtractArchiveOptions", "type"],
+    ["extractArchiveSafely", "value"],
+    ["archiveTypeFromPath", "value"]
+  ],
+  "archive-safety": [
+    ["ArchiveManifestEntry", "type"],
+    ["ArchiveBudget", "value"],
+    ["reserveArchiveManifest", "value"],
+    ["sameArchiveManifestEntry", "value"],
+    ["normalizeArchiveEntryName", "value"],
+    ["resolveArchiveOutputPath", "value"],
+    ["archiveError", "value"]
+  ],
+  "artifact-limits": [
+    ["MAX_ARTIFACT_COMPRESSED_BYTES", "value"],
+    ["MAX_ARCHIVE_EXPANDED_BYTES", "value"],
+    ["MAX_ARCHIVE_ENTRIES", "value"],
+    ["MAX_ARCHIVE_NESTING_DEPTH", "value"]
+  ],
+  "atomic-file": [
+    ["AtomicPublishMode", "type"],
+    ["publishFileSync", "value"],
+    ["withAtomicPublishTempPathSync", "value"],
+    ["isAtomicPublishTemporaryPath", "value"]
+  ],
+  "byte-limit-stream": [
+    ["ByteLimitStream", "type"],
+    ["createByteLimitStream", "value"]
+  ],
+  "device-isolation": [
+    ["resolveIosSimulatorDeviceSetPath", "value"],
+    ["parseSerialAllowlist", "value"],
+    ["resolveAndroidSerialAllowlist", "value"]
+  ],
+  "diagnostics": [
+    ["createRequestId", "value"],
+    ["withDiagnosticsScope", "value"],
+    ["updateDiagnosticsScope", "value"],
+    ["getDiagnosticsMeta", "value"],
+    ["registerDiagnosticSensitiveValue", "value"],
+    ["countDiagnosticEventsByPhase", "value"],
+    ["emitDiagnostic", "value"],
+    ["withDiagnosticTimer", "value"],
+    ["FlushedDiagnosticsRecord", "type"],
+    ["flushDiagnosticsToSessionFile", "value"]
+  ],
+  "env-map": [["EnvMap", "type"]],
+  "exec": [
+    ["ExecResult", "type"],
+    ["ExecOptions", "type"],
+    ["ExecBackgroundResult", "type"],
+    ["ExecDetachedExit", "type"],
+    ["ExecDetachedProcess", "type"],
+    ["ExecBackgroundOptions", "type"],
+    ["CommandExecutorOverride", "type"],
+    ["withCommandExecutorOverride", "value"],
+    ["withoutCommandExecutorOverride", "value"],
+    ["runCmd", "value"],
+    ["runCmdStreaming", "value"],
+    ["coerceExecResult", "value"],
+    ["whichCmd", "value"],
+    ["resolveExecutableOverridePath", "value"],
+    ["resolveFileOverridePath", "value"],
+    ["runCmdSync", "value"],
+    ["runCmdDetached", "value"],
+    ["runCmdDetachedMonitored", "value"],
+    ["runCmdBackground", "value"],
+    ["requireExecSuccess", "value"],
+    ["execFailureDetails", "value"],
+    ["isExecutablePath", "value"]
+  ],
+  "host-process": [
+    ["HostProcessInfo", "type"],
+    ["HostProcessIdentityObservation", "type"],
+    ["ListHostProcessesOptions", "type"],
+    ["StopPidsWithEscalationOptions", "type"],
+    ["isProcessAlive", "value"],
+    ["isProcessGroupAlive", "value"],
+    ["readProcessStartTime", "value"],
+    ["readProcessCommand", "value"],
+    ["isProcessZombie", "value"],
+    ["readHostProcessIdentityObservations", "value"],
+    ["parseHostProcessList", "value"],
+    ["listHostProcesses", "value"],
+    ["expandProcessTree", "value"],
+    ["uniquePositivePids", "value"],
+    ["signalPidsBestEffort", "value"],
+    ["signalProcessGroupBestEffort", "value"],
+    ["waitForProcessExit", "value"],
+    ["stopPidsWithEscalation", "value"]
+  ],
+  "location-coordinates": [
+    ["LocationCoordinateLabel", "type"],
+    ["LocationCoordinates", "type"],
+    ["readLocationCoordinate", "value"],
+    ["requireLocationCoordinates", "value"]
+  ],
+  "method-scope": [["withMethodScope", "value"]],
+  "owned-process-reaper": [
+    ["OwnedProcessReapSummary", "type"],
+    ["reapOwnedProcessRecordsAtStartup", "value"]
+  ],
+  "owned-process-record": [
+    ["OwnedProcessRecordRead", "type"],
+    ["OwnedProcessRecordStore", "type"],
+    ["createOwnedProcessRecordStore", "value"],
+    ["readOwnedProcessRecordFile", "value"]
+  ],
+  "owner-identity": [
+    ["OwnerIdentity", "type"],
+    ["OwnerLiveness", "type"],
+    ["readCurrentOwnerIdentity", "value"],
+    ["ownerIdentityMatches", "value"],
+    ["ownerIdentityDiffers", "value"],
+    ["classifyOwnerLiveness", "value"],
+    ["classifyOwnerLivenessFromObservation", "value"]
+  ],
+  "parsing": [
+    ["readRequiredString", "value"],
+    ["readOptionalString", "value"],
+    ["readNullableString", "value"],
+    ["readRequiredNumber", "value"],
+    ["readRequiredPlatform", "value"],
+    ["readRequiredDeviceKind", "value"],
+    ["readDeviceTarget", "value"],
+    ["parseRect", "value"],
+    ["parsePoint", "value"],
+    ["asRecord", "value"],
+    ["isRecord", "value"],
+    ["asOptionalRecord", "value"],
+    ["stripUndefined", "value"],
+    ["splitNonEmptyTrimmedLines", "value"]
+  ],
+  "path-resolution": [
+    ["expandUserHomePath", "value"],
+    ["resolveUserPath", "value"]
+  ],
+  "process-lock": [
+    ["ProcessLockOwner", "type"],
+    ["acquireProcessLock", "value"]
+  ],
+  "project-root": [["resolveAgentDeviceProjectRoot", "value"]],
+  "request-cancel": [
+    ["RequestAbortRegistration", "type"],
+    ["resolveRequestTrackingId", "value"],
+    ["registerRequestAbort", "value"],
+    ["markRequestCanceled", "value"],
+    ["clearRequestCanceled", "value"],
+    ["clearRequestAbortRegistration", "value"],
+    ["isRequestCanceled", "value"],
+    ["getRequestSignal", "value"],
+    ["throwIfRequestCanceled", "value"]
+  ],
+  "request-progress": [
+    ["withRequestProgressSink", "value"],
+    ["emitRequestProgress", "value"]
+  ],
+  "retry": [
+    ["isEnvTruthy", "value"],
+    ["Deadline", "value"],
+    ["retryWithPolicy", "value"]
+  ],
+  "scoped-provider": [
+    ["ScopedProvider", "type"],
+    ["createScopedProvider", "value"]
+  ],
+  "shell-quote": [
+    ["shellQuote", "value"],
+    ["shellQuoteIfNeeded", "value"]
+  ],
+  "source-value": [
+    ["SourceValueDefinition", "type"],
+    ["buildPrimaryEnvVarName", "value"],
+    ["parseSourceValue", "value"],
+    ["parseBooleanLiteral", "value"]
+  ],
+  "success-text": [
+    ["successText", "value"],
+    ["withSuccessText", "value"],
+    ["readCommandMessage", "value"]
+  ],
+  "timeouts": [["sleep", "value"]],
+  "ttl-memo": [
+    ["TtlMemo", "type"],
+    ["TtlMemoOptions", "type"],
+    ["createTtlMemo", "value"],
+    ["resetAllProcessMemosForTests", "value"]
+  ],
+  "version": [
+    ["readVersion", "value"],
+    ["findProjectRoot", "value"]
+  ]
+}

@@ -11,8 +11,8 @@ const state = vi.hoisted(() => ({
   signaled: [] as Array<{ pids: readonly number[]; signal: NodeJS.Signals }>,
 }));
 
-vi.mock('@agent-device/host-kit/exec', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/host-kit/exec')>()),
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/process')>()),
   isProcessAlive: (pid: number) => state.alive.get(pid) ?? false,
   isProcessZombie: () => false,
   readProcessStartTime: (pid: number) => state.starts.get(pid) ?? null,

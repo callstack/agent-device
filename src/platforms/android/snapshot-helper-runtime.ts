@@ -1,5 +1,5 @@
 import { normalizeError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from './adb.ts';
 import type { AndroidAdbExecutor } from './adb-executor.ts';
 import { stopAndroidSnapshotHelperSession } from './snapshot-helper-session-lifecycle.ts';

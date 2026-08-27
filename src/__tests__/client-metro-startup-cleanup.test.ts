@@ -4,14 +4,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
-vi.mock('@agent-device/host-kit/exec', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/host-kit/exec')>()),
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
   runCmdDetached: vi.fn(),
   runCmdSync: vi.fn(),
+}));
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/process')>()),
   waitForProcessExit: vi.fn(),
 }));
 
-import { runCmdDetached, waitForProcessExit } from '@agent-device/host-kit/exec';
+import { runCmdDetached } from '@agent-device/host-kit/command';
+import { waitForProcessExit } from '@agent-device/host-kit/process';
 
 import { prepareMetroRuntime } from '../metro/client-metro.ts';
 

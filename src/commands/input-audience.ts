@@ -1,4 +1,4 @@
-import { buildPrimaryEnvVarName } from '@agent-device/host-kit/values';
+import { buildPrimaryEnvVarName } from '@agent-device/kernel/source-value';
 
 /**
  * Where an operator supplies a value that no model-facing surface may accept as

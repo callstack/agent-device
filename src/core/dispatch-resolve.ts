@@ -12,8 +12,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   resolveAndroidSerialAllowlist,
   resolveIosSimulatorDeviceSetPath,
-} from '@agent-device/host-kit/fs';
-import { withDiagnosticTimer } from '@agent-device/host-kit/exec';
+} from '@agent-device/kernel/device-isolation';
+import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import {
   listLocalDeviceInventory,
   readDeviceInventory,

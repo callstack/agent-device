@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { withDiagnosticTimer } from '@agent-device/host-kit/exec';
+import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import {
   backLinux,
   closeLinuxApp,

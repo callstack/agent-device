@@ -18,7 +18,7 @@ import {
 import {
   resolveAndroidSerialAllowlist,
   resolveIosSimulatorDeviceSetPath,
-} from '@agent-device/host-kit/fs';
+} from '@agent-device/kernel/device-isolation';
 import type { DaemonRequest, DaemonResponse, SessionRef } from '../types.ts';
 import { resolveSessionRunnerLogPath, SessionStore } from '../session-store.ts';
 import {

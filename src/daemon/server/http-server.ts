@@ -6,7 +6,7 @@ import {
   toAppErrorCode,
   type DiagnosticsRecordRef,
 } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { timingSafeStringEqual } from '../../utils/timing-safe-equal.ts';
 import type {
   CommandRpcParams,

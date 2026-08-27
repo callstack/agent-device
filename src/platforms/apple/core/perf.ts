@@ -15,8 +15,8 @@ import {
   execFailureDetails,
   requireExecSuccess,
   type ExecResult,
-} from '@agent-device/host-kit/exec';
-import { splitNonEmptyTrimmedLines } from '@agent-device/host-kit/values';
+} from '@agent-device/host-kit/command';
+import { splitNonEmptyTrimmedLines } from '@agent-device/kernel/record';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { IOS_DEVICECTL_DEFAULT_HINT, resolveIosDevicectlHint } from './devicectl.ts';
 import type { IosDeviceProcessInfo } from './app-info.ts';

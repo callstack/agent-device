@@ -6,7 +6,7 @@ import type {
   AppleToolProvider,
   AppleToolSubcommandExecutor,
 } from '../../../src/platforms/apple/core/tool-provider.ts';
-import type { ExecResult } from '@agent-device/host-kit/exec';
+import { type ExecResult } from '@agent-device/host-kit/command';
 import type { ProviderScenarioTranscript } from './transcript.ts';
 
 export type FlatToolCall = [string, ...string[]];

@@ -38,7 +38,7 @@ export function createAppleApplicationTools(): AppleApplicationTools {
       );
     },
     prepareRunner: async (device, input, signal) => {
-      const { Deadline } = await import('@agent-device/host-kit/exec');
+      const { Deadline } = await import('@agent-device/host-kit/retry');
       const { prepareIosRunner } = await import('./platforms/apple/core/runner-client.ts');
       const startedAtMs = Date.now();
       return await prepareIosRunner(device, {

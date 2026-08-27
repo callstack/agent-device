@@ -4,12 +4,12 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn(actual.runCmd) };
 });
 
-import { runCmd } from '@agent-device/host-kit/exec';
+import { runCmd } from '@agent-device/host-kit/command';
 import { readInfoPlistString } from '../plist.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 

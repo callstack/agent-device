@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
-vi.mock('@agent-device/host-kit/exec', () => ({
+vi.mock('@agent-device/host-kit/command', () => ({
   runCmdDetached: vi.fn(),
 }));
 
-import { runCmdDetached } from '@agent-device/host-kit/exec';
+import { runCmdDetached } from '@agent-device/host-kit/command';
 import { maybeRunUpgradeNotifier, runUpdateCheckWorker } from '../utils/update-check.ts';
 
 function makeTempStateDir(): string {

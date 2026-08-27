@@ -3,7 +3,7 @@ import {
   buildPrimaryEnvVarName,
   parseSourceValue,
   type SourceValueDefinition,
-} from '@agent-device/host-kit/values';
+} from '@agent-device/kernel/source-value';
 
 const LABEL = 'config file';
 

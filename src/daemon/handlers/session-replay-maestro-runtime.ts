@@ -9,7 +9,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveTargetDevice } from '../../core/dispatch-resolve.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import { stripUndefined } from '@agent-device/host-kit/values';
+import { stripUndefined } from '@agent-device/kernel/record';
 import {
   collectReplayShellEnv,
   parseReplayCliEnvEntries,

@@ -5,7 +5,7 @@ import {
   isConfirmedCleanup,
 } from '@agent-device/contracts/durable-resource';
 import { AppError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   withDurableCaptureResourceFence,
   type DurableCaptureResourceFenceLease,

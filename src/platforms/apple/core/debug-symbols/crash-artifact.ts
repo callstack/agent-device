@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { isRecord } from '@agent-device/host-kit/values';
+import { isRecord } from '@agent-device/kernel/record';
 import type {
   AppleImage,
   CrashArtifact,

@@ -1,6 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { sleep } from '@agent-device/host-kit/exec';
+import { sleep } from '@agent-device/host-kit/retry';
 import { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';

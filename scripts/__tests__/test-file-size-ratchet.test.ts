@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { walkFiles } from '../lib/walk-files.ts';
-import { runCmdSync } from '@agent-device/host-kit/exec';
+import { runCmdSync } from '@agent-device/host-kit/command';
 
 /**
  * Test-file size ratchet (AGENTS.md "Scope & shape": past 1,000 lines is architecture debt,
@@ -44,7 +44,7 @@ const PINNED_TEST_FILE_LINES: Readonly<Record<string, number>> = Object.freeze({
   'packages/platform-apple/src/runner/__tests__/runner-client.test.ts': 1577,
   'src/__tests__/client.test.ts': 1592,
   'test/integration/provider-scenarios/android-lifecycle.test.ts': 1556,
-  'src/utils/__tests__/daemon-client-lifecycle.test.ts': 1414,
+  'src/utils/__tests__/daemon-client-lifecycle.test.ts': 1413,
   'packages/platform-apple/src/runner/__tests__/runner-command-retry.test.ts': 1325,
   'src/__tests__/cli-client-commands.test.ts': 1317,
   'src/__tests__/cli-config.test.ts': 1282,

@@ -6,7 +6,8 @@ import {
   waitForDaemonExit,
   type DaemonProcessIdentity,
 } from './daemon-process.ts';
-import { isProcessAlive, sleep } from '@agent-device/host-kit/exec';
+import { isProcessAlive } from '@agent-device/host-kit/process';
+import { sleep } from '@agent-device/host-kit/retry';
 
 import type { DaemonPaths } from './config.ts';
 import { readRegisteredDaemonIdentity } from './daemon-registration.ts';

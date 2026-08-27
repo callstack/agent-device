@@ -9,7 +9,7 @@ import {
 import { summarizeAxEvidence } from '../../utils/ax-digest.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { isLocalIosRunnerSession } from '../direct-ios-selector.ts';
-import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
 import type { ContextFromFlags } from './interaction-common.ts';

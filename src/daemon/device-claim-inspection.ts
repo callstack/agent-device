@@ -12,7 +12,7 @@ import {
   classifyOwnerLivenessFromObservation,
   type OwnerLiveness,
   readHostProcessIdentityObservations,
-} from '@agent-device/host-kit/exec';
+} from '@agent-device/host-kit/process';
 
 import { isSupersededDaemonOwner } from './daemon-registration.ts';
 import { canonicalLocalDeviceKey, resolveDeviceClaimRoot } from './device-claim-paths.ts';

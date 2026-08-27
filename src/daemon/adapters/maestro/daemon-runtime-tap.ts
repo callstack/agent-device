@@ -10,7 +10,7 @@ import {
   type MaestroTargetMatch,
   type MaestroTargetQuery,
 } from '@agent-device/maestro';
-import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { pointInsideRect } from '@agent-device/kernel/rect-center';
 import {
   withMaestroScreenshotBaseline,

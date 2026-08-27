@@ -6,7 +6,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import { runCmdSync, withCommandExecutorOverride } from '@agent-device/host-kit/exec';
+import { runCmdSync, withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import {
   ARCHIVE_EXTENSIONS,
   isTrustedInstallSourceUrl,

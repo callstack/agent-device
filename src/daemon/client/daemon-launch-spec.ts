@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { createTtlMemo, findProjectRoot } from '@agent-device/host-kit/values';
+import { findProjectRoot } from '@agent-device/host-kit/version';
+import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
 import { computeDaemonCodeSignature } from '../code-signature.ts';
 

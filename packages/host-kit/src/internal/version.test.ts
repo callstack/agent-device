@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
-import { resetAllProcessMemosForTests } from './ttl-memo.ts';
+import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import { resolveAgentDeviceProjectRoot } from './project-root.ts';
 import { findProjectRoot, readVersion } from './version.ts';
 

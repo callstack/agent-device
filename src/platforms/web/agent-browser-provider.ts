@@ -1,9 +1,7 @@
-import {
-  execFailureDetails,
-  emitDiagnostic,
-  sleep,
-  type OwnedProcessRecordStore,
-} from '@agent-device/host-kit/exec';
+import { execFailureDetails } from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
+import { sleep } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 
 import type { Rect } from '@agent-device/kernel/snapshot';

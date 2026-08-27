@@ -16,7 +16,7 @@ import {
   REPLAY_COMPAT_RELEASED_TAGS,
 } from '../test/replay-compat/manifest.ts';
 import { findProvenanceKindViolations } from '../test/replay-compat/provenance-rules.ts';
-import { runCmdSync } from '@agent-device/host-kit/exec';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import { repoGit, requireUnshallowHistory } from './lib/repo-git.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');

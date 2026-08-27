@@ -1,4 +1,4 @@
-import { runCmdStreaming } from '@agent-device/host-kit/exec';
+import { runCmdStreaming } from '@agent-device/host-kit/command';
 import {
   ensureReactDevtoolsCompanion,
   stopReactDevtoolsCompanion,

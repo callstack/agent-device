@@ -4,8 +4,8 @@ import {
   whichCmd,
   type ExecOptions,
   type ExecResult,
-} from '@agent-device/host-kit/exec';
-import { createScopedProvider } from '@agent-device/host-kit/values';
+} from '@agent-device/host-kit/command';
+import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
 import { createLocalAppleMacOsHostProvider } from '../os/macos/host-provider.ts';
 import type {
   AppleMacOsHelperProvider,

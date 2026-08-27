@@ -2,12 +2,9 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  emitDiagnostic,
-  execFailureDetails,
-  Deadline,
-  retryWithPolicy,
-} from '@agent-device/host-kit/exec';
+import { execFailureDetails } from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 
 import {
   LAUNCH_CONSOLE_DIRECT_APP_ONLY_MESSAGE,

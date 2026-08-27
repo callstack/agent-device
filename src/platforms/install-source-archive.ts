@@ -6,7 +6,7 @@ import {
   extractArchiveSafely,
   archiveTypeFromPath,
   ArchiveBudget,
-} from '@agent-device/host-kit/fs';
+} from '@agent-device/host-kit/archive';
 
 const MAX_INSTALL_SOURCE_SEARCH_DEPTH = 5;
 

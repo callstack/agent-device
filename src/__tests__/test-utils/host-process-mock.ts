@@ -1,6 +1,6 @@
-type HostProcessModule = typeof import('@agent-device/host-kit/exec');
+type HostProcessModule = typeof import('@agent-device/host-kit/process');
 type HostProcessIdentityObservation =
-  import('@agent-device/host-kit/exec').HostProcessIdentityObservation;
+  import('@agent-device/host-kit/process').HostProcessIdentityObservation;
 
 /**
  * `vi.mock` factory for the host-kit `exec` seam in tests that seed a "live"
@@ -16,7 +16,7 @@ type HostProcessIdentityObservation =
  * syscall, not a subprocess), so fabricated dead-pid fixtures still classify
  * as dead through that non-flaky check.
  *
- * Usage: `vi.mock('@agent-device/host-kit/exec', async (importOriginal) =>
+ * Usage: `vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
  * (await import('<path>/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(importOriginal))`
  */
 // Consumed by three suites, but only through `(await import(...)).pinOwnProcessStartTime`

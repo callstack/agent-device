@@ -8,11 +8,11 @@ import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import {
   runCmdDetachedMonitored,
   type ExecDetachedExit,
-  emitDiagnostic,
   shellQuoteIfNeeded,
-  sleep,
-} from '@agent-device/host-kit/exec';
-import { readVersion } from '@agent-device/host-kit/values';
+} from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { sleep } from '@agent-device/host-kit/retry';
+import { readVersion } from '@agent-device/host-kit/version';
 
 import { findUnrecoveredRepairCommitFailure } from '../session-store.ts';
 import {

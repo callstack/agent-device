@@ -9,7 +9,7 @@
 import type { AndroidAdbProcess } from './adb-executor.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   androidAdbForwardsDeviceExitStatus,
   resetAndroidAdbShellProtocolProbes,

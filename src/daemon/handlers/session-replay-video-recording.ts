@@ -1,7 +1,8 @@
 import path from 'node:path';
 import type { DaemonOpenLifecycle, DaemonRequest, DaemonResponse } from '../types.ts';
 import type { SessionStore } from '../session-store.ts';
-import { emitDiagnostic, sleep } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { sleep } from '@agent-device/host-kit/retry';
 
 import { handleRecordCommand } from './record-runtime.ts';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';

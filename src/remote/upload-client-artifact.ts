@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '@agent-device/host-kit/exec';
+import { runCmd } from '@agent-device/host-kit/command';
 
 const ARTIFACT_HASH_ALGORITHM = 'sha256';
 const DEFAULT_CONTENT_TYPE = 'application/octet-stream';

@@ -32,7 +32,7 @@ import {
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
 
-import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { buildReplayTestSourceDiscovery } from './session-test-source-discovery.ts';
 import {
   buildReplayTestShardFlags,

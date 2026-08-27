@@ -31,7 +31,7 @@ import {
 import { STARTUP_SAMPLE_METHOD, type StartupPerfSample } from './session-startup-metrics.ts';
 import { buildNextOpenSession, buildOpenResult } from './session-open-surface.ts';
 import { markDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
-import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/exec';
+import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
 import {
   prepareOpenCommandDetails,
   type ResolvedOpenRuntimeHintPlan,

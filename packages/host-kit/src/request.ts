@@ -7,6 +7,5 @@ export {
   registerRequestAbort,
   resolveRequestTrackingId,
   throwIfRequestCanceled,
-  type RequestAbortRegistration,
 } from './internal/request-cancel.ts';
 export { emitRequestProgress, withRequestProgressSink } from './internal/request-progress.ts';

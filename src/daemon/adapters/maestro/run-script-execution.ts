@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { runCmdSync } from '@agent-device/host-kit/exec';
-import { stripUndefined } from '@agent-device/host-kit/values';
+import { runCmdSync } from '@agent-device/host-kit/command';
+import { stripUndefined } from '@agent-device/kernel/record';
 
 const RUN_SCRIPT_TIMEOUT_MS = 30_000;
 const RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS = 1_000;

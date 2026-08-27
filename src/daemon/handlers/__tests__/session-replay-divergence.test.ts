@@ -18,8 +18,8 @@ vi.mock('../snapshot-interactor-capture.ts', () => ({
 // re-captures — so the test still proves two dispatches and use of the retried
 // tree. The #1385 `retryLaunchRace` retry loop (`captureDivergenceObservation`)
 // awaits this SAME `sleep`, further down in this file.
-vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
+vi.mock('@agent-device/host-kit/retry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/retry')>();
   return { ...actual, sleep: vi.fn(async () => {}) };
 });
 

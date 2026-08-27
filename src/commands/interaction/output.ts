@@ -2,7 +2,7 @@ import type { CommandRequestResult } from '@agent-device/contracts/client';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { CliOutput } from '../command-contract.ts';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
-import { readCommandMessage } from '@agent-device/host-kit/values';
+import { readCommandMessage } from '@agent-device/kernel/success-text';
 import {
   messageCliOutput,
   messageOutput,

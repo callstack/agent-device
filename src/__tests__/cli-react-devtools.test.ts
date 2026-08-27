@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 
-vi.mock('@agent-device/host-kit/exec', () => ({
+vi.mock('@agent-device/host-kit/command', () => ({
   runCmdStreaming: vi.fn(),
 }));
 
@@ -11,7 +11,7 @@ vi.mock('../client/client-react-devtools-companion.ts', () => ({
   stopReactDevtoolsCompanion: vi.fn(),
 }));
 
-import { runCmdStreaming } from '@agent-device/host-kit/exec';
+import { runCmdStreaming } from '@agent-device/host-kit/command';
 import {
   ensureReactDevtoolsCompanion,
   stopReactDevtoolsCompanion,

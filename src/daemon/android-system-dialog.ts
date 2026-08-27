@@ -2,7 +2,8 @@ import type {
   AndroidBlockingDialogFocus,
   AndroidObservationAdapter,
 } from '@agent-device/contracts/android-observation';
-import { emitDiagnostic, sleep } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { sleep } from '@agent-device/host-kit/retry';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { centerOfRect, type SnapshotNode } from '@agent-device/kernel/snapshot';
 

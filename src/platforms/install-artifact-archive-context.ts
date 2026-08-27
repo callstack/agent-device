@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { ArchiveBudget } from '@agent-device/host-kit/fs';
+import { ArchiveBudget } from '@agent-device/host-kit/archive';
 
 type ArchiveState = { budget: ArchiveBudget; depth: number };
 const ARCHIVE_STATE = new AsyncLocalStorage<ArchiveState>();

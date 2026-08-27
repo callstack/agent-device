@@ -9,7 +9,7 @@ import {
   readHostProcessIdentityObservations,
   readProcessCommand,
   readOwnedProcessRecordFile,
-} from '@agent-device/host-kit/exec';
+} from '@agent-device/host-kit/process';
 
 import { AppError } from '@agent-device/kernel/errors';
 import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';

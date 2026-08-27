@@ -1,7 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { runCmd, type ExecOptions, type ExecResult } from '@agent-device/host-kit/exec';
+import { runCmd, type ExecOptions, type ExecResult } from '@agent-device/host-kit/command';
 
 export type HarmonyHdcOptions = Pick<
   ExecOptions,

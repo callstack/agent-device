@@ -1,5 +1,5 @@
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { successText } from '@agent-device/host-kit/values';
+import { successText } from '@agent-device/kernel/success-text';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { recordSessionAction } from './handler-utils.ts';

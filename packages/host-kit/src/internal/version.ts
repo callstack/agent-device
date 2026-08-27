@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDeviceProjectRoot } from './project-root.ts';
-import { createTtlMemo } from './ttl-memo.ts';
+import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
 // Immutable for a process's lifetime, so resolved once; the process-memo reset clears them between tests.
 const versionMemo = createTtlMemo<string, string>();

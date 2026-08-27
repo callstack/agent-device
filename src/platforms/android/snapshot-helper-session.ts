@@ -4,7 +4,7 @@
  * `snapshot-helper-session-lifecycle.ts`, which this module acquires through.
  */
 import { AppError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { readAndroidCaptureFailureReason } from '@agent-device/contracts/android-snapshot-quality';
 import type {
   AndroidSnapshotHelperCaptureOptions,

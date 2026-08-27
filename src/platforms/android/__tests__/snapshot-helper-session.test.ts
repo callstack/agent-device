@@ -10,7 +10,7 @@ import {
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
-import { withDiagnosticsScope } from '@agent-device/host-kit/exec';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 
 beforeEach(async () => {
   await resetAndroidSnapshotHelperSessions();

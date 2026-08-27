@@ -1,6 +1,6 @@
 import type { DsymMatch, SymbolicatedAddress, SymbolicationGroup } from './types.ts';
 import { addressKey, hex, unique } from './utils.ts';
-import { requireExecSuccess, runCmd } from '@agent-device/host-kit/exec';
+import { requireExecSuccess, runCmd } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 
 export async function symbolicateAddresses(

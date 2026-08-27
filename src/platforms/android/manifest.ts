@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { TextDecoder } from 'node:util';
-import { isExecutablePath, runCmd } from '@agent-device/host-kit/exec';
+import { isExecutablePath, runCmd } from '@agent-device/host-kit/command';
 import { resolveAndroidSdkRoots } from './sdk.ts';
 
 const RES_XML_TYPE = 0x0003;

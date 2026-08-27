@@ -78,7 +78,7 @@ import {
   writeMetroSessionHints,
   type MetroSessionHints,
 } from './metro/metro-session-hints.ts';
-import { isRecord } from '@agent-device/host-kit/values';
+import { isRecord } from '@agent-device/kernel/record';
 import { readScreenshotResultData } from './utils/screenshot-result.ts';
 
 type ProjectedSystemCommandClient = ProjectedNavigationCommandClient<InternalRequestOptions> &

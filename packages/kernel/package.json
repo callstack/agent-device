@@ -21,6 +21,10 @@
       "types": "./src/device.ts",
       "default": "./src/device.ts"
     },
+    "./device-isolation": {
+      "types": "./src/device-isolation.ts",
+      "default": "./src/device-isolation.ts"
+    },
     "./errors": {
       "types": "./src/errors.ts",
       "default": "./src/errors.ts"
@@ -28,6 +32,14 @@
     "./keyed-lock": {
       "types": "./src/keyed-lock.ts",
       "default": "./src/keyed-lock.ts"
+    },
+    "./location-coordinates": {
+      "types": "./src/location-coordinates.ts",
+      "default": "./src/location-coordinates.ts"
+    },
+    "./record": {
+      "types": "./src/record.ts",
+      "default": "./src/record.ts"
     },
     "./rect": {
       "types": "./src/rect.ts",
@@ -41,6 +53,10 @@
       "types": "./src/redaction.ts",
       "default": "./src/redaction.ts"
     },
+    "./scoped-provider": {
+      "types": "./src/scoped-provider.ts",
+      "default": "./src/scoped-provider.ts"
+    },
     "./scroll-indicator": {
       "types": "./src/scroll-indicator.ts",
       "default": "./src/scroll-indicator.ts"
@@ -48,6 +64,18 @@
     "./snapshot": {
       "types": "./src/snapshot.ts",
       "default": "./src/snapshot.ts"
+    },
+    "./source-value": {
+      "types": "./src/source-value.ts",
+      "default": "./src/source-value.ts"
+    },
+    "./success-text": {
+      "types": "./src/success-text.ts",
+      "default": "./src/success-text.ts"
+    },
+    "./ttl-memo": {
+      "types": "./src/ttl-memo.ts",
+      "default": "./src/ttl-memo.ts"
     }
   }
 }

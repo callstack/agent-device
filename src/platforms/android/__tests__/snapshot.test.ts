@@ -5,8 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn() };
 });
 vi.mock('../adb.ts', async (importOriginal) => {
@@ -19,9 +19,9 @@ import { snapshotAndroid } from '../snapshot.ts';
 import { readAndroidGestureViewport } from '../touch-executor.ts';
 import { buildUiHierarchySnapshot, parseUiHierarchyTree } from '../ui-hierarchy.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import * as diagnosticsModule from '@agent-device/host-kit/exec';
+import * as diagnosticsModule from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '@agent-device/host-kit/exec';
+import { runCmd } from '@agent-device/host-kit/command';
 import { sleep } from '../adb.ts';
 import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-install.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';

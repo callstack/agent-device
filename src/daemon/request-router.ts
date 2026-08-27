@@ -29,7 +29,7 @@ import {
   getDiagnosticsMeta,
   registerDiagnosticSensitiveValue,
   withDiagnosticsScope,
-} from '@agent-device/host-kit/exec';
+} from '@agent-device/host-kit/diagnostics';
 import type { LeaseRegistry } from './lease-registry.ts';
 import {
   loadGenericRequestHandlerModule,

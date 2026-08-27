@@ -15,7 +15,7 @@ import type {
   SessionCloseResult,
 } from '@agent-device/contracts/client';
 import { isSerialAddressablePlatform, type PublicPlatform } from '@agent-device/kernel/device';
-import { successText, withSuccessText } from '@agent-device/host-kit/values';
+import { successText, withSuccessText } from '@agent-device/kernel/success-text';
 
 export function buildAppIdentifiers(params: {
   session?: string;

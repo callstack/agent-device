@@ -8,16 +8,20 @@ const { runCmdMock } = vi.hoisted(() => ({
   runCmdMock: vi.fn(),
 }));
 
-vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
+  runCmd: runCmdMock,
+  withoutCommandExecutorOverride: async <T>(fn: () => Promise<T>) => await fn(),
+}));
+
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   return {
     ...actual,
-    runCmd: runCmdMock,
-    // The seam mock cannot reach listHostProcesses' internal runCmd call, so
+    // The port mock cannot reach listHostProcesses' internal runCmd call, so
     // the ps read is routed through its runCommand injection point instead.
     listHostProcesses: async (options: Parameters<typeof actual.listHostProcesses>[0]) =>
       await actual.listHostProcesses({ ...options, runCommand: runCmdMock }),
-    withoutCommandExecutorOverride: async <T>(fn: () => Promise<T>) => await fn(),
     readProcessStartTime: (pid: number) => `start-${pid}`,
     readProcessCommand: (pid: number) => `command-${pid}`,
   };

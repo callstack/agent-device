@@ -35,12 +35,13 @@ import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
-  isEnvTruthy,
-  sleep,
+} from '@agent-device/host-kit/diagnostics';
+import {
   createOwnedProcessRecordStore,
   type OwnedProcessRecordStore,
   reapOwnedProcessRecordsAtStartup,
-} from '@agent-device/host-kit/exec';
+} from '@agent-device/host-kit/process';
+import { isEnvTruthy, sleep } from '@agent-device/host-kit/retry';
 
 import {
   acquireDaemonLock,

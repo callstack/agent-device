@@ -1,6 +1,6 @@
 import { INTERNAL_COMMANDS } from '../../command-catalog.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { successText } from '@agent-device/host-kit/values';
+import { successText } from '@agent-device/kernel/success-text';
 import {
   effectiveWriteForce,
   isAuthoringArmedSession,

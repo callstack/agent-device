@@ -2,11 +2,8 @@ import type { PointerTrajectory } from '@agent-device/contracts/gesture-plan-typ
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  execFailureDetails,
-  emitDiagnostic,
-  withDiagnosticTimer,
-} from '@agent-device/host-kit/exec';
+import { execFailureDetails } from '@agent-device/host-kit/command';
+import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 
 import {
   resolveAndroidAdbProvider,

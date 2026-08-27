@@ -122,10 +122,10 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // --- @agent-device/capture-kit ---
   // R60 review: audio-probe split into descriptor/status/recovery/live-process modules (+3 files).
   'packages/capture-kit/src/index.ts': 32,
-  'packages/capture-kit/src/png-resize.ts': 28,
+  'packages/capture-kit/src/png-resize.ts': 18,
   'packages/capture-kit/src/png-rgb-difference.ts': 1,
   'packages/capture-kit/src/png-size.ts': 3,
-  'packages/capture-kit/src/png-worker-client.ts': 20,
+  'packages/capture-kit/src/png-worker-client.ts': 10,
   'packages/capture-kit/src/png.ts': 3,
   'packages/capture-kit/src/screenshot-density.ts': 6,
   'packages/capture-kit/src/screenshot-diff-pixels.ts': 1,
@@ -135,11 +135,16 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/capture-kit/src/snapshot-quality-verdict.ts': 2,
 
   // --- @agent-device/host-kit ---
-  // Deep seams: each façade eagerly closes over the internal modules it names.
-  'packages/host-kit/src/exec.ts': 14,
-  'packages/host-kit/src/fs.ts': 19,
+  // One capability port per export: the row is what a consumer of that
+  // capability evaluates, so a port that grew unrelated mechanics shows here.
+  'packages/host-kit/src/archive.ts': 9,
+  'packages/host-kit/src/command.ts': 7,
+  'packages/host-kit/src/diagnostics.ts': 3,
+  'packages/host-kit/src/file.ts': 12,
+  'packages/host-kit/src/process.ts': 12,
   'packages/host-kit/src/request.ts': 5,
-  'packages/host-kit/src/values.ts': 12,
+  'packages/host-kit/src/retry.ts': 6,
+  'packages/host-kit/src/version.ts': 4,
 
   // --- @agent-device/contracts ---
   'packages/contracts/src/alert-contract.ts': 1,
@@ -257,6 +262,14 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // #2082 W1: geometry/vocabulary sunk below contracts.
   'packages/kernel/src/rect-center.ts': 2,
   'packages/kernel/src/rect.ts': 1,
+  // #2082 W1: pure primitives that were never host mechanics.
+  'packages/kernel/src/device-isolation.ts': 1,
+  'packages/kernel/src/location-coordinates.ts': 3,
+  'packages/kernel/src/record.ts': 3,
+  'packages/kernel/src/scoped-provider.ts': 1,
+  'packages/kernel/src/source-value.ts': 3,
+  'packages/kernel/src/success-text.ts': 1,
+  'packages/kernel/src/ttl-memo.ts': 1,
   'packages/kernel/src/redaction.ts': 1,
   'packages/kernel/src/scroll-indicator.ts': 1,
   'packages/kernel/src/snapshot.ts': 1,
@@ -360,7 +373,7 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // readers), `input-audience.ts` (who may write a key), and `common-input-fields.ts` (the table
   // itself). Every command schema already evaluated all three concerns; the growth is three more
   // module records for the same code, with no new subtree behind any of them.
-  'src/cli.ts': 386,
+  'src/cli.ts': 380,
   'src/platform-runtime.ts': 47,
   'src/core/command-descriptor/registry.ts': 67,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,
@@ -368,7 +381,7 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // R64 removes the perf plugin facet and keeps collector binding behind the selected runtime
   // operation. Teardown now owns only neutral durable-resource cleanup; platform collectors load
   // through the perf host when an admitted operation actually runs.
-  'src/daemon/session-teardown.ts': 79,
+  'src/daemon/session-teardown.ts': 68,
 });
 
 /**

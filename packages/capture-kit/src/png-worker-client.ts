@@ -1,5 +1,5 @@
 import { Worker } from 'node:worker_threads';
-import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
 import { resolveInternalEntryModulePath } from './internal-entry.ts';
 import { decodePng, PNG } from './png.ts';

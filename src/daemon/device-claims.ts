@@ -8,13 +8,10 @@ import {
   type DeviceIdentity,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import {
-  emitDiagnostic,
-  ownerIdentityMatches,
-  readCurrentOwnerIdentity,
-} from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { ownerIdentityMatches, readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
-import { publishFileSync, acquireProcessLock } from '@agent-device/host-kit/fs';
+import { publishFileSync, acquireProcessLock } from '@agent-device/host-kit/file';
 
 import {
   deviceClaimOwnerCannotRelease,

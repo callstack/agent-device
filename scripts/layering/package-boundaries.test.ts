@@ -482,13 +482,18 @@ test('the real tree parses, declares, and passes R11', () => {
     true,
     'host-kit stays a private implementation package',
   );
-  // The four deep host-mechanics seams; any further subpath widens this key
-  // list and fails the assertion, same as the capture-kit pin above.
+  // One narrow capability port over the host machine per export; any further
+  // subpath widens this key list and fails the assertion, same as the
+  // capture-kit pin above.
   assert.deepEqual([...hostKitPackage.exportTargets.keys()].sort(), [
-    '@agent-device/host-kit/exec',
-    '@agent-device/host-kit/fs',
+    '@agent-device/host-kit/archive',
+    '@agent-device/host-kit/command',
+    '@agent-device/host-kit/diagnostics',
+    '@agent-device/host-kit/file',
+    '@agent-device/host-kit/process',
     '@agent-device/host-kit/request',
-    '@agent-device/host-kit/values',
+    '@agent-device/host-kit/retry',
+    '@agent-device/host-kit/version',
   ]);
   assert.deepEqual([...hostKitPackage.workspaceDependencies].sort(), [
     '@agent-device/contracts',

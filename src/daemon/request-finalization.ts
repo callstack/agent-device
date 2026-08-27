@@ -4,7 +4,7 @@ import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
-} from '@agent-device/host-kit/exec';
+} from '@agent-device/host-kit/diagnostics';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
 import type { DaemonArtifact, DaemonArtifactType } from '@agent-device/kernel/contracts';
 

@@ -2,15 +2,15 @@ import type { ClickButton } from '@agent-device/contracts/click-button';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  emitDiagnostic,
   runCmd,
   whichCmd,
   type ExecOptions,
   type ExecResult,
-  sleep,
-} from '@agent-device/host-kit/exec';
+} from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { sleep } from '@agent-device/host-kit/retry';
 
-import { createScopedProvider } from '@agent-device/host-kit/values';
+import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
 
 import type {
   LinuxAccessibilityTree,

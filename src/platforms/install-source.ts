@@ -3,7 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { LocalInstallSource } from '@agent-device/kernel/contracts';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import { expandUserHomePath, ArchiveBudget } from '@agent-device/host-kit/fs';
+import { ArchiveBudget } from '@agent-device/host-kit/archive';
+import { expandUserHomePath } from '@agent-device/host-kit/file';
 
 import { resolveInstallableCandidate } from './install-source-archive.ts';
 import {

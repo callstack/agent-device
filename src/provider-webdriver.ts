@@ -1,6 +1,6 @@
 import { createProviderWebDriver } from '@agent-device/provider-webdriver';
-import { runCmd } from '@agent-device/host-kit/exec';
-import { readVersion } from '@agent-device/host-kit/values';
+import { runCmd } from '@agent-device/host-kit/command';
+import { readVersion } from '@agent-device/host-kit/version';
 
 export const providerWebDriver = createProviderWebDriver({
   clientVersion: readVersion(),

@@ -9,7 +9,8 @@ import {
   type ReactNativeOverlayDismissTarget,
 } from '../../core/react-native-overlay.ts';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { stripUndefined, successText } from '@agent-device/host-kit/values';
+import { stripUndefined } from '@agent-device/kernel/record';
+import { successText } from '@agent-device/kernel/success-text';
 
 import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';

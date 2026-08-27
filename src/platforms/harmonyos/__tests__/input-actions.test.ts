@@ -12,7 +12,7 @@ const { runHarmonyHdc, sleep, readHarmonyGestureViewport, invalidateHarmonyGestu
   }));
 
 vi.mock('../hdc.ts', () => ({ runHarmonyHdc }));
-vi.mock('@agent-device/host-kit/exec', () => ({ sleep }));
+vi.mock('@agent-device/host-kit/retry', () => ({ sleep }));
 vi.mock('../snapshot.ts', () => ({
   readHarmonyGestureViewport,
   invalidateHarmonyGestureViewport,

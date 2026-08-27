@@ -1,5 +1,5 @@
 import type { BatchRunResult, BatchStepResult } from '../../core/batch.ts';
-import { readCommandMessage } from '@agent-device/host-kit/values';
+import { readCommandMessage } from '@agent-device/kernel/success-text';
 import type { CliOutput } from '../command-contract.ts';
 import { resultOutput, type CliOutputFormatter } from '../output-common.ts';
 

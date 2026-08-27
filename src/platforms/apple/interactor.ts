@@ -23,10 +23,10 @@ import { toAppleTvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';
 import { normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
-import { withDiagnosticTimer } from '@agent-device/host-kit/exec';
+import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { withMethodScope } from '@agent-device/host-kit/values';
+import { withMethodScope } from '@agent-device/kernel/scoped-provider';
 import type { Point, RawSnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import type {
   Interactor,

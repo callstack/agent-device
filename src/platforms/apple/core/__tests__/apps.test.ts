@@ -4,24 +4,24 @@ import { promises as fs, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
-  return {
-    ...actual,
-    runCmd: vi.fn(actual.runCmd),
-    retryWithPolicy: vi.fn(actual.retryWithPolicy),
-  };
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
+  return { ...actual, runCmd: vi.fn(actual.runCmd) };
+});
+vi.mock('@agent-device/host-kit/retry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/retry')>();
+  return { ...actual, retryWithPolicy: vi.fn(actual.retryWithPolicy) };
 });
 vi.mock('../simulator.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../simulator.ts')>();
   return { ...actual, ensureBootedSimulator: vi.fn(actual.ensureBootedSimulator) };
 });
 
-const execActual = await vi.importActual<typeof import('@agent-device/host-kit/exec')>(
-  '@agent-device/host-kit/exec',
+const execActual = await vi.importActual<typeof import('@agent-device/host-kit/command')>(
+  '@agent-device/host-kit/command',
 );
-const retryActual = await vi.importActual<typeof import('@agent-device/host-kit/exec')>(
-  '@agent-device/host-kit/exec',
+const retryActual = await vi.importActual<typeof import('@agent-device/host-kit/retry')>(
+  '@agent-device/host-kit/retry',
 );
 const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>('../simulator.ts');
 
@@ -42,8 +42,8 @@ import { ensureBootedSimulator } from '../simulator.ts';
 import { IOS_DEVICE_INSTALL_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd, retryWithPolicy } from '@agent-device/host-kit/exec';
-
+import { runCmd } from '@agent-device/host-kit/command';
+import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { PNG } from '@agent-device/capture-kit/png';
 import { assertRejectsAppError } from '../../../../__tests__/test-utils/app-error.ts';
 import {

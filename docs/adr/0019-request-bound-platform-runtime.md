@@ -137,11 +137,18 @@ selection, R11/R13 package enumeration, and the composite typecheck project list
 > exports maps) forces every shared file onto a declared domain owner, and the paragraph above
 > is amended to name that layout rather than let capture-kit absorb it:
 >
-> - `@agent-device/host-kit` owns generic host mechanics — process execution, supervision, and
->   diagnostics; archives, streams, atomic files, locks, and path/device isolation; small host
->   value helpers; request-scoped plumbing — behind a small deep surface of exactly four seams:
->   `exec`, `fs`, `values`, `request`. Modules under `src/internal/` are reachable only through
->   those seams; consumers import a seam, never an internal module.
+> - `@agent-device/host-kit` owns mechanics that act on the host machine, and nothing else. Each
+>   export is one narrow capability port, not a category barrel: `command` (running host
+>   commands), `process` (observing and owning host processes), `diagnostics`, `retry`
+>   (deadline/backoff/sleep), `archive` (bounded extraction and byte limits), `file` (atomic
+>   publishes, locks, path resolution), `request` (request-scoped cancellation and progress),
+>   and `version` (the installed version off disk). Modules under `src/internal/` are reachable
+>   only through a port, and a port may only hold mechanics a consumer of that capability
+>   needs — the eager-closure row per port is what keeps that honest.
+> - A helper that touches no process, file, or environment is not host mechanics and does not
+>   belong here: pure record readers, config-source values, result text, memoization, async
+>   scoping, coordinate validation, and device-scope parsing live in `@agent-device/kernel`
+>   beside its other primitives.
 > - `@agent-device/capture-kit` owns capture, snapshot, and recording behavior — PNG tooling,
 >   screenshot density and pixel diffing, snapshot occlusion, mobile snapshot semantics,
 >   quality verdicts and backend capability tables. Snapshot *behavior* is capture domain, not

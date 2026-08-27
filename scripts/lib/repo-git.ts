@@ -1,4 +1,4 @@
-import { runCmdSync } from '@agent-device/host-kit/exec';
+import { runCmdSync } from '@agent-device/host-kit/command';
 
 export type RepoGit = (args: string[]) => string;
 

@@ -1,7 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { SCREENSHOT_ACTION_FLAG_KEYS } from '@agent-device/contracts/capture';
-import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DaemonRequest, SessionRuntimeHints, SessionState } from './types.ts';
 import { applyRecordedSaveScriptFlags } from './session-script-publication-capability.ts';
 import { repairSessionBoundary } from './session-replay-transaction.ts';

@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { requireExecSuccess } from '@agent-device/host-kit/exec';
+import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { filterAppleAppsByBundlePrefix } from '../../core/app-filter.ts';
 import type { IosAppInfo } from '../../core/app-info.ts';
 import type {

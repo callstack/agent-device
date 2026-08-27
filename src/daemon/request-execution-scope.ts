@@ -4,7 +4,7 @@ import {
   emitDiagnostic,
   getDiagnosticsMeta,
   updateDiagnosticsScope,
-} from '@agent-device/host-kit/exec';
+} from '@agent-device/host-kit/diagnostics';
 import { applyCommandDefaults } from '../cli-schema/command-schema.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {

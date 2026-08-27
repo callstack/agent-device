@@ -1,6 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
-import type { EnvMap } from './env-map.ts';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 
 type PathResolutionOptions = {
   cwd?: string;

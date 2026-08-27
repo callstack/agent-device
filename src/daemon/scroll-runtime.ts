@@ -22,7 +22,7 @@ import {
   type ScrollEdge,
   type ScrollEdgeState,
 } from '../utils/scroll-edge-state.ts';
-import { withSuccessText } from '@agent-device/host-kit/values';
+import { withSuccessText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
 import { errorResponse } from './handlers/response.ts';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';

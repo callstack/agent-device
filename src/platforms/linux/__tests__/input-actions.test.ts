@@ -1,12 +1,12 @@
 import { afterAll, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 
-vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn(), whichCmd: vi.fn() };
 });
 
-import { runCmd, whichCmd } from '@agent-device/host-kit/exec';
+import { runCmd, whichCmd } from '@agent-device/host-kit/command';
 import { resetInputToolCache } from '../linux-env.ts';
 import { fillLinux, pressLinux, scrollLinux, typeLinux, sendKey } from '../input-actions.ts';
 

@@ -137,3 +137,5 @@ function parseEnumSetValue(
     `Invalid value for "${rawKey}" in ${sourceLabel}. Expected boolean-like value for enum flag.`,
   );
 }
+
+export type EnvMap = Record<string, string | undefined>;

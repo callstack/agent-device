@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { Deadline } from '@agent-device/host-kit/exec';
+import { Deadline } from '@agent-device/host-kit/retry';
 import { IOS_RUNNER_SCREENSHOT_COPY_TIMEOUT_MS } from './config.ts';
 import { IOS_RUNNER_CONTAINER_BUNDLE_IDS } from '@agent-device/platform-apple/runner';
 import { runXcrun } from './tool-provider.ts';

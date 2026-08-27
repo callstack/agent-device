@@ -1,5 +1,5 @@
 import type { CommandSessionRecord, CommandSessionStore } from '../runtime-contract.ts';
-import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionState } from './types.ts';
 
 export type RuntimeSessionRecordOptions = {

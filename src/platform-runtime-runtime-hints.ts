@@ -2,7 +2,7 @@ import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { escapeXmlTextAndAttribute } from '@agent-device/xml';
 import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
-import { execFailureDetails, type ExecResult } from '@agent-device/host-kit/exec';
+import { execFailureDetails, type ExecResult } from '@agent-device/host-kit/command';
 import { type ResolvedRuntimeTransport } from './utils/runtime-transport.ts';
 
 // React Native's PackagerConnectionSettings/DevInternalSettings read debug_http_host via

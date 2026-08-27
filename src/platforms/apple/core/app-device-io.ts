@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { requireExecSuccess } from '@agent-device/host-kit/exec';
+import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
 import { readMacOsClipboardText, writeMacOsClipboardText } from '../os/macos/apps.ts';
 import { runSimctl } from './apps-simctl.ts';

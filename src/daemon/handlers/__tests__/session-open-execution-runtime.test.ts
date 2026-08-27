@@ -51,8 +51,8 @@ vi.mock('../../../platforms/android/ime-lifecycle.ts', async (importOriginal) =>
     await importOriginal<typeof import('../../../platforms/android/ime-lifecycle.ts')>();
   return { ...actual, activateAndroidTestIme: vi.fn(async () => ({ activated: false })) };
 });
-vi.mock('@agent-device/host-kit/exec', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/exec')>();
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
 });
 

@@ -10,7 +10,7 @@ import {
   resolveRequestTrackingId,
   withRequestProgressSink,
 } from '@agent-device/host-kit/request';
-import { emitDiagnostic } from '@agent-device/host-kit/exec';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { consumeTextLines } from '../../utils/line-stream.ts';
 
 import {

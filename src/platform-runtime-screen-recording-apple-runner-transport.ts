@@ -1,8 +1,8 @@
 import path from 'node:path';
 import type { ManagedProcessOwnership } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createScopedProvider } from '@agent-device/host-kit/values';
-import { isProcessAlive } from '@agent-device/host-kit/exec';
+import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
+import { isProcessAlive } from '@agent-device/host-kit/process';
 
 type AppleRunnerScreenRecordingStartRequest = Readonly<{
   device: DeviceInfo;

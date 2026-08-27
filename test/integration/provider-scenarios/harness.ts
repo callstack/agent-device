@@ -22,7 +22,8 @@ import { trackDownloadableArtifact } from '../../../src/daemon/artifact-tracking
 import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
 import { SessionStore } from '../../../src/daemon/session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../../src/daemon/types.ts';
-import { runCmdBackground, createOwnedProcessRecordStore } from '@agent-device/host-kit/exec';
+import { runCmdBackground } from '@agent-device/host-kit/command';
+import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.ts';
 import type {
   DeviceInventoryProvider,

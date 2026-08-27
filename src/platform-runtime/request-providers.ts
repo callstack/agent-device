@@ -16,7 +16,7 @@ import type { VegaToolProvider } from '../platforms/vega/tool-provider.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppleSimulatorScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-transport.ts';
 import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-runner-transport.ts';
-import type { OwnedProcessRecordStore } from '@agent-device/host-kit/exec';
+import { type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { tryGetPlugin } from '../core/platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
 
