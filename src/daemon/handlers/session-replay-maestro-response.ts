@@ -5,7 +5,6 @@ import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture'
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import type { SessionStore } from '../session-store.ts';
 import { buildTypedMaestroFailureResponse } from './session-replay-maestro-failure.ts';
-import { errorResponse } from './response.ts';
 
 export function buildTypedMaestroSuccessResponse(params: {
   outcome: Extract<MaestroExecutionOutcome, { ok: true }>;
@@ -62,10 +61,10 @@ export async function buildTypedMaestroReplayErrorResponse(params: {
       ),
     });
   }
-  return errorResponse(normalizedError.code, normalizedError.message, {
-    ...(normalizedError.details ?? {}),
-    ...buildErrorDetails(failure),
-  });
+  // The normalized error IS the wire error shape. Returning it whole keeps the
+  // fields `normalizeError` projects out of `details` — `hint`, `diagnosticId`,
+  // `logPath`, `retriable`, `supportedOn` — which re-spreading `details` drops.
+  return { ok: false, error: normalizedError };
 }
 
 function readSnapshotDiagnostics(
@@ -76,17 +75,6 @@ function readSnapshotDiagnostics(
   const samples =
     sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.slice(snapshotStart) ?? [];
   return summarizeSnapshotTimingSamples(samples);
-}
-
-function buildErrorDetails(
-  failure: Extract<MaestroExecutionOutcome, { ok: false }>['failure'],
-): Record<string, unknown> {
-  if (!failure) return {};
-  return {
-    replaySource: failure.source,
-    replayStep: failure.stepIndex,
-    replayStepTotal: failure.stepTotal,
-  };
 }
 
 function replaySuccessMessage(replayed: number, wallClockMs: number): string {
