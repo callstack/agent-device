@@ -566,9 +566,6 @@ async function postInstallRpcThroughProxy(
   }
 }
 
-// #2097: the daemon's own HTTP server binds loopback, so the proxy is the seam between
-// the daemon's host and callers that are not on it. A `path` install source names a file
-// on that host, so it must not cross — through either rpc method that can carry one.
 test('proxy refuses a host path install source on the generic command method', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
@@ -606,8 +603,6 @@ test('proxy refuses a host path install source on the install_from_source method
   assert.equal(upstreamCalls, 0);
 });
 
-// The sanctioned remote install route: the client uploads the artifact first, and the
-// daemon substitutes the uploaded file for the wire path, so the path is never read.
 test('proxy forwards a path source backed by an uploaded artifact', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 

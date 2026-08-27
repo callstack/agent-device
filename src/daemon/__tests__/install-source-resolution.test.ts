@@ -77,9 +77,6 @@ test('resolveInstallSource rejects GitHub Actions artifact sources on the local 
   ).toThrow(/compatible remote daemon/i);
 });
 
-// #2097: the proxy lets a path source cross only when an upload backs it, which is safe
-// solely because an upload id the caller does not own throws here instead of falling
-// back to the path from the wire. A fallback would turn that carve-out into the hole.
 test('resolveInstallSource refuses an unknown upload id rather than reading the wire path', () => {
   expect(() =>
     resolveInstallSource(

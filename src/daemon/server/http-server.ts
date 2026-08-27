@@ -76,11 +76,6 @@ type HttpAuthDecision =
   | { ok: true; tenantId?: string }
   | { ok: false; statusCode: number; response: JsonRpcResponse };
 
-/**
- * The install sources the daemon's HTTP surface admits. A `path` source names a file
- * on the daemon's own host, so it stays an in-process affordance for callers that
- * already carry the daemon's authority (#2097).
- */
 type HttpInstallSource = Exclude<DaemonInstallSource, { kind: 'path' }>;
 
 const MAX_HTTP_RPC_BODY_BYTES = 1024 * 1024;

@@ -172,8 +172,6 @@ async function withInstallFromSourceRpcServer(
   }
 }
 
-// #2097: honoring `source.kind: "path"` from the wire would hand any authenticated
-// caller a read of whatever the daemon user can read, through the install pipeline.
 test('install_from_source rejects a host path source at the rpc boundary', async (t) => {
   await withInstallFromSourceRpcServer(async (post) => {
     const { status, body, dispatched } = await post({ kind: 'path', path: '/etc/passwd' });
