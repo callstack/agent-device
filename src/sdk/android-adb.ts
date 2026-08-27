@@ -7,21 +7,17 @@ export {
 } from '../platforms/android/adb-executor.ts';
 export { listAndroidAppsWithAdb } from '../platforms/android/app-helpers.ts';
 
-import { createAndroidAppStateReader } from '../platforms/android/app-helpers.ts';
 import type { AndroidAdbExecutor } from '../platforms/android/adb-executor.ts';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 
-/**
- * Composition seam: the dumpsys foreground parser is platform-android's, so
- * only the root composition may load it (R13); the published signature stays
- * `(adb) => AppStateRuntimeResult`.
- */
+// R13: the adb read/parse behavior is platform-android's, reached through the composition root.
 export async function getAndroidAppStateWithAdb(
   adb: AndroidAdbExecutor,
 ): Promise<AppStateRuntimeResult> {
-  const { parseAndroidForegroundApp } = await import('../platform-runtime.ts');
-  return await createAndroidAppStateReader(parseAndroidForegroundApp)(adb);
+  const { getAndroidAppStateWithAdb: read } = await import('../platform-runtime.ts');
+  return await read(adb);
 }
+
 export {
   forceStopAndroidAppWithAdb,
   openAndroidAppWithAdb,

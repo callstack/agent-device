@@ -55,11 +55,11 @@ export async function readAndroidAppState(
   return await read(host, device, signal);
 }
 
-export async function parseAndroidForegroundApp(
-  text: string,
-): Promise<Readonly<{ package?: string; activity?: string }> | null> {
-  const { parseAndroidForegroundApp: parse } = await import('./app-state.ts');
-  return parse(text);
+export async function readAndroidAppStateWithExecutor(
+  run: import('./app-state.ts').AndroidCommandExecutor,
+): Promise<import('@agent-device/contracts/app-state-runtime').AppStateRuntimeResult> {
+  const { readAndroidAppStateWithExecutor: read } = await import('./app-state.ts');
+  return await read(run);
 }
 
 export const runtimeModule = Object.freeze({

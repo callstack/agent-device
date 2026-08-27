@@ -1,5 +1,4 @@
 import { resolveAppsFilter, type AppsFilter } from '@agent-device/contracts/device';
-import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import { androidAdbResultError, type AndroidAdbExecutor } from './adb-executor.ts';
 import {
   parseAndroidLaunchablePackages,
@@ -31,34 +30,6 @@ export async function listAndroidAppsWithAdb(
   return packageIds
     .map((packageName) => ({ package: packageName, name: inferAndroidAppName(packageName) }))
     .sort((a, b) => a.package.localeCompare(b.package));
-}
-
-export type AndroidForegroundAppParser = (
-  text: string,
-) => Promise<AppStateRuntimeResult | null> | AppStateRuntimeResult | null;
-
-/**
- * The dumpsys foreground parser belongs to @agent-device/platform-android;
- * the composition seam (src/sdk/android-adb.ts) injects it here so this
- * legacy family module never imports upward or across R13.
- */
-export function createAndroidAppStateReader(
-  parseForegroundApp: AndroidForegroundAppParser,
-): (adb: AndroidAdbExecutor) => Promise<AppStateRuntimeResult> {
-  return async (adb) => {
-    const windowFocus = await readAndroidFocusWithAdb(adb, parseForegroundApp, [
-      ['shell', 'dumpsys', 'window', 'windows'],
-      ['shell', 'dumpsys', 'window'],
-    ]);
-    if (windowFocus) return windowFocus;
-
-    const activityFocus = await readAndroidFocusWithAdb(adb, parseForegroundApp, [
-      ['shell', 'dumpsys', 'activity', 'activities'],
-      ['shell', 'dumpsys', 'activity'],
-    ]);
-    if (activityFocus) return activityFocus;
-    return {};
-  };
 }
 
 async function listAndroidLaunchablePackagesWithAdb(
@@ -113,17 +84,4 @@ async function listAndroidUserInstalledPackagesWithAdb(adb: AndroidAdbExecutor):
     throw androidAdbResultError('Failed to list Android user-installed apps', result);
   }
   return parseAndroidUserInstalledPackages(result.stdout);
-}
-
-async function readAndroidFocusWithAdb(
-  adb: AndroidAdbExecutor,
-  parseForegroundApp: AndroidForegroundAppParser,
-  commands: string[][],
-): Promise<AppStateRuntimeResult | null> {
-  for (const args of commands) {
-    const result = await adb(args, { allowFailure: true });
-    const parsed = await parseForegroundApp(result.stdout ?? '');
-    if (parsed) return parsed;
-  }
-  return null;
 }

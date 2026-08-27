@@ -31,7 +31,7 @@ import {
 import {
   createAndroidObservationAdapter as createPackageAndroidObservationAdapter,
   createAndroidInventoryModule,
-  parseAndroidForegroundApp as parseAndroidPackageForegroundApp,
+  readAndroidAppStateWithExecutor,
   readAndroidAppState as readAndroidPackageAppState,
   loadShutdownRuntime as loadAndroidShutdownRuntime,
   runtimeModule as androidRuntimeModule,
@@ -74,10 +74,10 @@ export async function readAndroidAppStateWithHost(
   return await readAndroidPackageAppState(host, device, signal);
 }
 
-export async function parseAndroidForegroundApp(
-  text: string,
-): Promise<Readonly<{ package?: string; activity?: string }> | null> {
-  return await parseAndroidPackageForegroundApp(text);
+export async function getAndroidAppStateWithAdb(
+  adb: Parameters<typeof readAndroidAppStateWithExecutor>[0],
+): Promise<AppStateRuntimeResult> {
+  return await readAndroidAppStateWithExecutor(adb);
 }
 
 const androidInventoryModule = createAndroidInventoryModule({

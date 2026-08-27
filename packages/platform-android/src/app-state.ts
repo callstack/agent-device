@@ -28,6 +28,35 @@ const ANDROID_FOCUS_MARKERS = [
   'ResumedActivity:',
 ] as const;
 
+export type AndroidCommandExecutor = (
+  args: string[],
+  options: { allowFailure: boolean },
+) => Promise<{ exitCode: number; stdout?: string; stderr?: string }>;
+
+/** The complete adb-executor read/parse loop, owned beside its host-based twin. */
+export async function readAndroidAppStateWithExecutor(
+  run: AndroidCommandExecutor,
+): Promise<AppStateRuntimeResult> {
+  const windowFocus = await readAndroidFocusWithExecutor(run, FOCUS_COMMANDS);
+  if (windowFocus) return windowFocus;
+
+  const activityFocus = await readAndroidFocusWithExecutor(run, ACTIVITY_COMMANDS);
+  if (activityFocus) return activityFocus;
+  return {};
+}
+
+async function readAndroidFocusWithExecutor(
+  run: AndroidCommandExecutor,
+  commands: readonly (readonly string[])[],
+): Promise<AppStateRuntimeResult | null> {
+  for (const args of commands) {
+    const result = await run([...args], { allowFailure: true });
+    const parsed = parseAndroidForegroundApp(result.stdout ?? '');
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
 export async function readAndroidAppState(
   host: AndroidAppStateHost,
   device: DeviceInfo,

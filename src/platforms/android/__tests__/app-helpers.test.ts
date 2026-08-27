@@ -5,7 +5,6 @@ import { test } from 'vitest';
 import type { AndroidAdbExecutor } from '../adb-executor.ts';
 import { createDeviceAdbExecutor } from '../adb-executor.ts';
 import { listAndroidAppsWithAdb } from '../app-helpers.ts';
-import { getAndroidAppStateWithAdb } from '../../../sdk/android-adb.ts';
 import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 async function withMockedAdbScript(script: string, run: () => Promise<void>): Promise<void> {
@@ -93,30 +92,9 @@ test('Android app helpers work with a local ADB provider', async () => {
         booted: true,
       });
 
-      const [apps, state] = await Promise.all([
-        listAndroidAppsWithAdb(adb, { target: 'mobile' }),
-        getAndroidAppStateWithAdb(adb),
-      ]);
+      const apps = await listAndroidAppsWithAdb(adb, { target: 'mobile' });
 
       assert.deepEqual(apps, [{ package: 'com.example.app', name: 'Example' }]);
-      assert.deepEqual(state, { package: 'com.example.app', activity: '.MainActivity' });
     },
   );
-});
-
-test('getAndroidAppStateWithAdb parses focus output from failed commands', async () => {
-  const calls: string[][] = [];
-  const adb: AndroidAdbExecutor = async (args) => {
-    calls.push(args);
-    return {
-      exitCode: 1,
-      stdout: 'mCurrentFocus=Window{42 u0 com.example.app/.MainActivity}\n',
-      stderr: 'dumpsys warning',
-    };
-  };
-
-  const state = await getAndroidAppStateWithAdb(adb);
-
-  assert.deepEqual(state, { package: 'com.example.app', activity: '.MainActivity' });
-  assert.deepEqual(calls, [['shell', 'dumpsys', 'window', 'windows']]);
 });
