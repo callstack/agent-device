@@ -219,7 +219,7 @@ final class RunnerTests: XCTestCase {
     return isLocalNetworkPrompt && ["don't allow", "don’t allow"].contains(normalizedButton)
   }
 
-  #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+  #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(macOS)
   func testHostLocalNetworkPermissionMonitorSelectsOnlyTheDenialAction() {
     let prompt = ["Allow hosted compute to find devices on local networks?"]
     XCTAssertTrue(
