@@ -3,7 +3,7 @@ import { focusRuntimeUse } from '@agent-device/contracts/platform-runtime-operat
 import { commandDescriptors } from '../registry.ts';
 import { listRuntimeFactCommands } from '../../capabilities.ts';
 
-test('focus descriptor declares its complete runtime use with no legacy projection', () => {
+test('focus descriptor declares its complete runtime use', () => {
   const focus = commandDescriptors.find(({ name }) => name === 'focus');
 
   expect(focus).not.toHaveProperty('capability');
@@ -18,11 +18,9 @@ test('focus descriptor declares its complete runtime use with no legacy projecti
   });
 });
 
-test('focus keeps the traits its retired bucket did not own', () => {
+test('focus preserves command traits outside platform execution', () => {
   const focus = commandDescriptors.find(({ name }) => name === 'focus');
 
-  // The Android blocking-dialog guard is admission-independent: it describes when the command may
-  // run, not which platform executes it.
   expect(focus).toMatchObject({
     daemon: {
       route: 'generic',
