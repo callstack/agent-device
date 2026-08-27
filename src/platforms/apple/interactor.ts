@@ -36,7 +36,7 @@ import type {
   SnapshotOptions,
 } from '@agent-device/contracts/interactor-types';
 import { readSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
-import { captureMacOsSurfaceSnapshot } from '../../snapshot/snapshot-desktop-surface.ts';
+import { captureMacOsSurfaceSnapshot } from './os/macos/surface-snapshot.ts';
 
 export function createAppleInteractor(
   device: DeviceInfo,

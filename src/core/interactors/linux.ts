@@ -21,7 +21,7 @@ import {
 } from '../../platforms/linux/input-actions.ts';
 import { singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
 import { screenshotLinux } from '../../platforms/linux/screenshot.ts';
-import { captureLinuxSurfaceSnapshot } from '../../snapshot/snapshot-desktop-surface.ts';
+import { captureLinuxSurfaceSnapshot } from '../../platforms/linux/surface-snapshot.ts';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 
 function unsupportedLinuxAlert(): Promise<never> {

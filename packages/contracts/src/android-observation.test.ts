@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { parseAndroidForegroundApp } from './app-state.ts';
+import { parseAndroidForegroundApp } from './android-observation.ts';
 
 test('parses Android window and activity foreground markers', () => {
   expect(

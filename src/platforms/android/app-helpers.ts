@@ -1,3 +1,4 @@
+import { parseAndroidForegroundApp } from '@agent-device/contracts/android-observation';
 import { resolveAppsFilter, type AppsFilter } from '@agent-device/contracts/device';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import { androidAdbResultError, type AndroidAdbExecutor } from './adb-executor.ts';
@@ -108,10 +109,9 @@ async function readAndroidFocusWithAdb(
   adb: AndroidAdbExecutor,
   commands: string[][],
 ): Promise<AppStateRuntimeResult | null> {
-  const { parseAndroidForegroundApp } = await import('../../platform-runtime.ts');
   for (const args of commands) {
     const result = await adb(args, { allowFailure: true });
-    const parsed = await parseAndroidForegroundApp(result.stdout ?? '');
+    const parsed = parseAndroidForegroundApp(result.stdout ?? '');
     if (parsed) return parsed;
   }
   return null;

@@ -2,7 +2,7 @@ import type {
   BackendDumpNetworkOptions,
   BackendDumpNetworkResult,
   BackendNetworkEntry,
-} from '../../backend.ts';
+} from '@agent-device/contracts/backend-diagnostics';
 import { stripUndefined } from '@agent-device/kernel/record';
 import { isJsonObject, readNumberProperty, readStringProperty } from './json-utils.ts';
 

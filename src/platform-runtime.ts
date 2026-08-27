@@ -31,7 +31,6 @@ import {
 import {
   createAndroidObservationAdapter as createPackageAndroidObservationAdapter,
   createAndroidInventoryModule,
-  parseAndroidForegroundApp as parseAndroidPackageForegroundApp,
   readAndroidAppState as readAndroidPackageAppState,
   loadShutdownRuntime as loadAndroidShutdownRuntime,
   runtimeModule as androidRuntimeModule,
@@ -72,12 +71,6 @@ export async function readAndroidAppStateWithHost(
   signal: AbortSignal,
 ): Promise<AppStateRuntimeResult> {
   return await readAndroidPackageAppState(host, device, signal);
-}
-
-export async function parseAndroidForegroundApp(
-  text: string,
-): Promise<Readonly<{ package?: string; activity?: string }> | null> {
-  return await parseAndroidPackageForegroundApp(text);
 }
 
 const androidInventoryModule = createAndroidInventoryModule({

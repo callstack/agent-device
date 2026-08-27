@@ -127,6 +127,10 @@
       "types": "./src/back-runtime.ts",
       "default": "./src/back-runtime.ts"
     },
+    "./backend-diagnostics": {
+      "types": "./src/backend-diagnostics.ts",
+      "default": "./src/backend-diagnostics.ts"
+    },
     "./boot-failure": {
       "types": "./src/boot-failure.ts",
       "default": "./src/boot-failure.ts"
@@ -414,6 +418,10 @@
     "./snapshot": {
       "types": "./src/facades/snapshot.ts",
       "default": "./src/facades/snapshot.ts"
+    },
+    "./snapshot-desktop-projection": {
+      "types": "./src/snapshot-desktop-projection.ts",
+      "default": "./src/snapshot-desktop-projection.ts"
     },
     "./snapshot-presentation": {
       "types": "./src/snapshot-presentation.ts",
