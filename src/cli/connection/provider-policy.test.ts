@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
+  connectionProviderCapabilitiesForLease,
+  connectionProviderCapabilitiesForVerification,
   connectionProviderRequiresAppAttachment,
   connectionProviderSupportsArtifacts,
   connectionProviderSupportsDeferredAppSelection,
@@ -27,4 +29,16 @@ test('provider capabilities stay declared outside command implementations', () =
   assert.equal(connectionProviderUsesCloudWebDriverLease('browserstack'), true);
   assert.equal(connectionProviderUsesCloudWebDriverLease('aws-device-farm'), true);
   assert.equal(connectionProviderUsesCloudWebDriverLease('limrun'), false);
+});
+
+test('provider carriers resolve to semantic capabilities before commands inspect them', () => {
+  assert.equal(
+    connectionProviderCapabilitiesForLease({ leaseProvider: 'limrun' })
+      .supportsDeferredAppSelection,
+    true,
+  );
+  assert.equal(
+    connectionProviderCapabilitiesForVerification({ provider: 'browserstack' }).supportsArtifacts,
+    true,
+  );
 });

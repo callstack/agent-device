@@ -7,6 +7,16 @@ import {
 export type DirectDeviceConnectProvider = CloudWebDriverKnownProviderName | 'limrun';
 export type ConnectProvider = 'cloud' | 'proxy' | DirectDeviceConnectProvider;
 
+type ConnectionProviderCapabilities = {
+  leaseKind: 'proxy' | 'direct-device-provider' | 'remote-provider';
+  requiresAppAttachment: boolean;
+  requiresRemoteDaemon: boolean;
+  supportsArtifacts: boolean;
+  supportsDeferredAppSelection: boolean;
+  supportsDirectPortReverse: boolean;
+  usesCloudWebDriverLease: boolean;
+};
+
 const DEFERRED_APP_SELECTION_PROVIDERS = new Set<DirectDeviceConnectProvider>(['limrun']);
 
 export function isConnectProviderName(value: string | undefined): value is ConnectProvider {
@@ -29,7 +39,7 @@ export function connectProviderNamesForError(): string {
   ].join(', ');
 }
 
-export function connectionProviderRequiresRemoteDaemon(provider: string | undefined): boolean {
+function connectionProviderRequiresRemoteDaemon(provider: string | undefined): boolean {
   return !isDirectDeviceConnectProvider(provider);
 }
 
@@ -55,10 +65,36 @@ export function connectionProviderUsesCloudWebDriverLease(provider: string | und
   return isCloudWebDriverProviderName(provider);
 }
 
-export function connectionProviderLeaseKind(
+function connectionProviderLeaseKind(
   provider: string | undefined,
 ): 'proxy' | 'direct-device-provider' | 'remote-provider' {
   if (provider === 'proxy') return 'proxy';
   if (isDirectDeviceConnectProvider(provider)) return 'direct-device-provider';
   return 'remote-provider';
+}
+
+export function connectionProviderCapabilitiesForLease(source: {
+  leaseProvider?: string;
+}): ConnectionProviderCapabilities {
+  return connectionProviderCapabilities(source.leaseProvider);
+}
+
+export function connectionProviderCapabilitiesForVerification(
+  verification: { provider?: string } | undefined,
+): ConnectionProviderCapabilities {
+  return connectionProviderCapabilities(verification?.provider);
+}
+
+function connectionProviderCapabilities(
+  provider: string | undefined,
+): ConnectionProviderCapabilities {
+  return {
+    leaseKind: connectionProviderLeaseKind(provider),
+    requiresAppAttachment: connectionProviderRequiresAppAttachment(provider),
+    requiresRemoteDaemon: connectionProviderRequiresRemoteDaemon(provider),
+    supportsArtifacts: connectionProviderSupportsArtifacts(provider),
+    supportsDeferredAppSelection: connectionProviderSupportsDeferredAppSelection(provider),
+    supportsDirectPortReverse: connectionProviderSupportsDirectPortReverse(provider),
+    usesCloudWebDriverLease: connectionProviderUsesCloudWebDriverLease(provider),
+  };
 }

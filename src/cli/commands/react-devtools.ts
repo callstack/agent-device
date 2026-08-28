@@ -6,7 +6,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { isRemoteBridgeBackend } from './remote-bridge.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { connectionProviderSupportsDirectPortReverse } from '../connection/provider-policy.ts';
+import { connectionProviderCapabilitiesForLease } from '../connection/provider-policy.ts';
 
 const AGENT_REACT_DEVTOOLS_VERSION = '0.4.0';
 export const AGENT_REACT_DEVTOOLS_PACKAGE = `agent-react-devtools@${AGENT_REACT_DEVTOOLS_VERSION}`;
@@ -169,7 +169,7 @@ function shouldConfigureDirectReverse(
   const { flags } = options;
   if (!flags) return false;
   return (
-    connectionProviderSupportsDirectPortReverse(flags.leaseProvider) &&
+    connectionProviderCapabilitiesForLease(flags).supportsDirectPortReverse &&
     flags.leaseBackend === 'android-instance' &&
     flags.metroProxyBaseUrl === undefined &&
     options.configureDirectPortReverse !== undefined

@@ -19,6 +19,7 @@ import {
   buildRemoteConnectionDaemonState,
   buildRemoteConnectionRequestMetadata,
   hashRemoteConfigFile,
+  mergeRemoteConnectionRequestMetadata,
   readRemoteConnectionState,
   writeRemoteConnectionState,
   type RemoteConnectionState,
@@ -33,12 +34,7 @@ import type { AgentDeviceClient, Lease } from '../../agent-device-client.ts';
 import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { readMetroPrepareKind } from '../../commands/metro/prepare-kind.ts';
-import {
-  connectionProviderLeaseKind,
-  connectionProviderRequiresRemoteDaemon,
-  connectionProviderSupportsDeferredAppSelection,
-  connectionProviderUsesCloudWebDriverLease,
-} from '../connection/provider-policy.ts';
+import { connectionProviderCapabilitiesForLease } from '../connection/provider-policy.ts';
 import { readCloudDeviceFeatureProfileFields } from '../connection/profile-fields.ts';
 import type { PreviousLeaseReleaseNotice } from './connection-presentation.ts';
 
@@ -116,7 +112,7 @@ export async function materializeRemoteConnectionForCommand(options: {
     );
   const nextFlags = { ...mergedFlags, session: state.session };
   if (
-    connectionProviderSupportsDeferredAppSelection(state.leaseProvider) &&
+    connectionProviderCapabilitiesForLease(state).supportsDeferredAppSelection &&
     command === PUBLIC_COMMANDS.open &&
     typeof options.positionals?.[0] === 'string'
   ) {
@@ -362,13 +358,12 @@ function buildMaterializedLeaseState(
   leaseBackend: LeaseBackend,
   flags: CliFlags,
 ): RemoteConnectionState {
+  const connection = mergeRemoteConnectionRequestMetadata(lease, state);
   return {
     ...state,
     leaseId: lease.leaseId,
     leaseBackend,
-    leaseProvider: lease.leaseProvider ?? state.leaseProvider,
-    clientId: lease.clientId ?? state.clientId,
-    deviceKey: lease.deviceKey ?? state.deviceKey,
+    ...connection,
     platform: state.platform ?? flags.platform,
     target: state.target ?? flags.target,
     updatedAt: new Date().toISOString(),
@@ -388,13 +383,14 @@ type ConnectionLeasePolicy = {
 };
 
 function connectionLeasePolicyForState(state: RemoteConnectionState): ConnectionLeasePolicy {
-  if (connectionProviderLeaseKind(state.leaseProvider) === 'proxy') {
+  const capabilities = connectionProviderCapabilitiesForLease(state);
+  if (capabilities.leaseKind === 'proxy') {
     return PROXY_CONNECTION_LEASE_POLICY;
   }
-  if (connectionProviderSupportsDeferredAppSelection(state.leaseProvider)) {
+  if (capabilities.supportsDeferredAppSelection) {
     return DEFERRED_APP_SELECTION_CONNECTION_LEASE_POLICY;
   }
-  if (connectionProviderUsesCloudWebDriverLease(state.leaseProvider)) {
+  if (capabilities.usesCloudWebDriverLease) {
     return CLOUD_WEBDRIVER_CONNECTION_LEASE_POLICY;
   }
   return DEFAULT_CONNECTION_LEASE_POLICY;
@@ -525,9 +521,7 @@ export async function releaseRemoteConnectionLease(
     daemonAuthToken,
     daemonTransport: state.daemon?.transport,
     daemonServerMode: state.daemon?.serverMode,
-    leaseProvider: state.leaseProvider,
-    clientId: state.clientId,
-    deviceKey: state.deviceKey,
+    ...buildRemoteConnectionRequestMetadata(state),
   });
   return result;
 }
@@ -676,14 +670,13 @@ async function releaseAcquiredLeaseOnWriteFailure(
 ): Promise<void> {
   if (!lease) return;
   try {
+    const connection = mergeRemoteConnectionRequestMetadata(state, lease);
     await client.leases.release({
       tenant: state.tenant,
       runId: state.runId,
       leaseId: lease.leaseId,
       leaseBackend: state.leaseBackend ?? lease.backend,
-      leaseProvider: state.leaseProvider ?? lease.leaseProvider,
-      clientId: state.clientId ?? lease.clientId,
-      deviceKey: state.deviceKey ?? lease.deviceKey,
+      ...connection,
     });
   } catch {
     // Preserve the state-write failure; cleanup is best-effort.
@@ -780,7 +773,10 @@ function createRemoteConnectionStateFromFlags(
       'remote command requires runId in remote config or via --run-id <id>.',
     );
   }
-  if (!flags.daemonBaseUrl && connectionProviderRequiresRemoteDaemon(profile.leaseProvider)) {
+  if (
+    !flags.daemonBaseUrl &&
+    connectionProviderCapabilitiesForLease(profile).requiresRemoteDaemon
+  ) {
     throw new AppError(
       'INVALID_ARGS',
       'remote command requires daemonBaseUrl in remote config, config, env, or --daemon-base-url.',
@@ -797,9 +793,7 @@ function createRemoteConnectionStateFromFlags(
     runId: flags.runId,
     leaseId: flags.leaseId,
     leaseBackend: flags.leaseBackend ?? resolveRequestedLeaseBackend(flags),
-    leaseProvider: profile.leaseProvider,
-    clientId: profile.clientId,
-    deviceKey: profile.deviceKey,
+    ...profile,
     platform: flags.platform,
     target: flags.target,
     connectedAt: now,
@@ -814,14 +808,13 @@ async function allocateOrReuseLease(
   policy: ConnectionLeasePolicy,
   flags: CliFlags,
 ): Promise<{ lease: Lease; acquired: boolean }> {
+  const connection = buildRemoteConnectionRequestMetadata(state);
   if (state.leaseId && state.leaseBackend === leaseBackend) {
     const existing = await heartbeatOrAllocateLease(client, state.leaseId, {
       tenant: state.tenant,
       runId: state.runId,
       leaseBackend,
-      leaseProvider: state.leaseProvider,
-      clientId: state.clientId,
-      deviceKey: state.deviceKey,
+      ...connection,
       ttlMs: policy.ttlMs(state),
     });
     if (existing) return { lease: existing, acquired: false };
@@ -830,9 +823,7 @@ async function allocateOrReuseLease(
     tenant: state.tenant,
     runId: state.runId,
     leaseBackend,
-    leaseProvider: state.leaseProvider,
-    clientId: state.clientId,
-    deviceKey: state.deviceKey,
+    ...connection,
     ttlMs: policy.ttlMs(state),
     platform: state.platform ?? flags.platform,
     target: state.target ?? flags.target,
@@ -981,14 +972,8 @@ async function heartbeatOrAllocateLease(
 ): Promise<Lease | undefined> {
   try {
     return await client.leases.heartbeat({
-      tenant: scope.tenant,
-      runId: scope.runId,
+      ...scope,
       leaseId,
-      leaseBackend: scope.leaseBackend,
-      leaseProvider: scope.leaseProvider,
-      clientId: scope.clientId,
-      deviceKey: scope.deviceKey,
-      ttlMs: scope.ttlMs,
     });
   } catch (error) {
     if (isInactiveLeaseError(error)) return undefined;

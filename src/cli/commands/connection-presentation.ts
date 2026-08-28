@@ -1,10 +1,12 @@
-import { fingerprint, type RemoteConnectionState } from '../../remote/remote-connection-state.ts';
+import {
+  fingerprint,
+  remoteConnectionProviderOutput,
+  type RemoteConnectionState,
+} from '../../remote/remote-connection-state.ts';
 import type { ConnectVerification } from '../connection/connect-provider-adapters.ts';
 import {
-  connectionProviderLeaseKind,
-  connectionProviderRequiresAppAttachment,
-  connectionProviderSupportsArtifacts,
-  connectionProviderSupportsDeferredAppSelection,
+  connectionProviderCapabilitiesForLease,
+  connectionProviderCapabilitiesForVerification,
 } from '../connection/provider-policy.ts';
 import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
 
@@ -36,7 +38,8 @@ export function buildLeasePreparationNotice(
   verification?: ConnectVerification,
 ): LeasePreparationNotice | undefined {
   if (state.leaseId) return undefined;
-  const leaseKind = connectionProviderLeaseKind(state.leaseProvider);
+  const capabilities = connectionProviderCapabilitiesForLease(state);
+  const leaseKind = capabilities.leaseKind;
   if (leaseKind === 'proxy') {
     return {
       status: 'deferred',
@@ -45,7 +48,7 @@ export function buildLeasePreparationNotice(
         'No live device session has been created. Run devices to inspect inventory without allocating, then open when ready.',
     };
   }
-  if (connectionProviderSupportsDeferredAppSelection(state.leaseProvider)) {
+  if (capabilities.supportsDeferredAppSelection) {
     return {
       status: 'deferred',
       nextSteps: buildConnectWorkflow(state, verification).nextSteps,
@@ -145,7 +148,7 @@ export function serializeConnectionState(options: {
     leaseAllocated: Boolean(state.leaseId),
     leaseId: state.leaseId,
     leaseBackend: state.leaseBackend,
-    leaseProvider: state.leaseProvider,
+    ...remoteConnectionProviderOutput(state),
     platform: state.platform,
     target: state.target,
     remoteConfig: state.remoteConfigPath,
@@ -234,7 +237,8 @@ function buildUnscopedConnectWorkflow(
   state: RemoteConnectionState,
   verification?: ConnectVerification,
 ): Pick<ConnectReadiness, 'nextSteps' | 'notes'> {
-  const leaseKind = connectionProviderLeaseKind(state.leaseProvider);
+  const capabilities = connectionProviderCapabilitiesForLease(state);
+  const leaseKind = capabilities.leaseKind;
   if (leaseKind === 'proxy') {
     return {
       nextSteps: [
@@ -246,7 +250,7 @@ function buildUnscopedConnectWorkflow(
   if (!verification && leaseKind === 'direct-device-provider') {
     return { nextSteps: defaultDirectProviderLifecycle() };
   }
-  if (connectionProviderSupportsDeferredAppSelection(verification?.provider)) {
+  if (connectionProviderCapabilitiesForVerification(verification).supportsDeferredAppSelection) {
     return {
       nextSteps: ['agent-device apps', 'agent-device open <uploaded-asset-name>'],
     };
@@ -267,7 +271,7 @@ function requiresInstall(verification?: ConnectVerification): boolean {
 }
 
 function supportsProviderArtifacts(verification?: ConnectVerification): boolean {
-  return connectionProviderSupportsArtifacts(verification?.provider);
+  return connectionProviderCapabilitiesForVerification(verification).supportsArtifacts;
 }
 
 function missingAttachedAppRecovery(verification?: ConnectVerification): string[] {
@@ -346,8 +350,9 @@ function appIdPlaceholder(platform: RemoteConnectionState['platform']): string {
 }
 
 function missingAppLabel(state: RemoteConnectionState): string {
-  if (connectionProviderRequiresAppAttachment(state.leaseProvider)) return 'not attached';
-  if (connectionProviderSupportsDeferredAppSelection(state.leaseProvider)) {
+  const capabilities = connectionProviderCapabilitiesForLease(state);
+  if (capabilities.requiresAppAttachment) return 'not attached';
+  if (capabilities.supportsDeferredAppSelection) {
     return 'not installed yet';
   }
   return 'not available';

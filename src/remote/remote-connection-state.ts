@@ -170,9 +170,37 @@ export function resolveRemoteConnectionDefaults(options: {
 }
 
 export function buildRemoteConnectionRequestMetadata(
-  state: RemoteConnectionState,
+  state: RemoteConnectionRequestMetadata,
 ): RemoteConnectionRequestMetadata | undefined {
   return leaseScopeToConnectionMetadata(leaseScopeFromOptions(state));
+}
+
+export function mergeRemoteConnectionRequestMetadata(
+  primary: RemoteConnectionRequestMetadata,
+  fallback: RemoteConnectionRequestMetadata,
+): RemoteConnectionRequestMetadata {
+  return {
+    leaseProvider: primary.leaseProvider ?? fallback.leaseProvider,
+    clientId: primary.clientId ?? fallback.clientId,
+    deviceKey: primary.deviceKey ?? fallback.deviceKey,
+  };
+}
+
+export function remoteConnectionProviderOutput(
+  state: RemoteConnectionState,
+): Pick<RemoteConnectionState, 'leaseProvider'> {
+  return { leaseProvider: state.leaseProvider };
+}
+
+export function remoteConnectionLeaseIdentityMatches(
+  state: RemoteConnectionState,
+  metadata: RemoteConnectionRequestMetadata | undefined,
+): boolean {
+  if (!metadata) return true;
+  return (
+    (metadata.leaseProvider === undefined || state.leaseProvider === metadata.leaseProvider) &&
+    (metadata.clientId === undefined || state.clientId === metadata.clientId)
+  );
 }
 
 export function hashRemoteConfigFile(configPath: string): string {

@@ -112,13 +112,10 @@ export async function resolveConnectProviderProfile(options: {
   return { ...profile, provider };
 }
 
-export async function verifyConnectProvider(options: {
-  provider?: ConnectProvider;
-  flags: CliFlags;
-  env?: EnvMap;
-}): Promise<ConnectVerification> {
-  const env = options.env ?? process.env;
-  if (!options.provider) {
+export async function verifyResolvedConnectProvider(
+  resolved: ResolvedConnectProfile,
+): Promise<ConnectVerification> {
+  if (!resolved.provider) {
     return {
       service: 'remote provider',
       status: 'configured',
@@ -126,9 +123,9 @@ export async function verifyConnectProvider(options: {
         'Remote connection profile loaded. Access is checked by the first remote command.',
     };
   }
-  return await CONNECT_PROVIDER_ADAPTERS[options.provider].verify({
-    flags: options.flags,
-    env,
+  return await CONNECT_PROVIDER_ADAPTERS[resolved.provider].verify({
+    flags: resolved.flags,
+    env: process.env,
   });
 }
 
