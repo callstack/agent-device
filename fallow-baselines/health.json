@@ -499,7 +499,7 @@
         "count": 1
       }
     },
-    "src/utils/text-surface.ts": {
+    "src/snapshot/snapshot-presentation/text-surface.ts": {
       "crap_high": {
         "count": 1
       }
@@ -588,7 +588,7 @@
     "src/utils/screenshot-result.ts:high impact",
     "packages/platform-web/src/json-utils.ts:high impact",
     "packages/platform-android/src/settings.ts:complexity",
-    "src/utils/text-surface.ts:high impact",
+    "src/snapshot/snapshot-presentation/text-surface.ts:high impact",
     "src/daemon/handlers/session-test-sharding.ts:high impact",
     "src/daemon/handlers/session-replay-runtime.ts:complexity",
     "packages/platform-apple/src/core/debug-symbols/utils.ts:high impact",

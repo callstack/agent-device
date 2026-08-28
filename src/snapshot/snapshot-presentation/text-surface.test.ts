@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { extractReadableText } from '../text-surface.ts';
+import { extractReadableText } from './text-surface.ts';
 
 test('extractReadableText ignores generic implementation identifiers as fallback text', () => {
   assert.equal(
