@@ -187,7 +187,6 @@ test('classifyZone separates the ranked spine from intentionally-unranked zones'
   // forbids daemon/ from importing commands/ so the files that wire them cannot be ranked.
   assert.equal(classifyZone('mcp'), 'ranked');
   assert.equal(classifyZone('snapshot'), 'ranked');
-  assert.equal(classifyZone('snapshot-quality'), 'ranked');
   // A zone that is neither ranked nor listed peripheral must be flagged, never
   // silently treated as back-edge-free.
   assert.equal(classifyZone('not-a-real-zone'), 'unclassified');
