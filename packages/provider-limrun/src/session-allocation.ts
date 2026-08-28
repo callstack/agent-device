@@ -1,10 +1,15 @@
 import type Limrun from '@limrun/api';
-import type { DeviceLease } from '@agent-device/contracts/device';
+import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { createLimrunAndroidSession, type LimrunAndroidSession } from './android.ts';
 import { buildLimrunDevice } from './device.ts';
 import { createLimrunIosSession, type LimrunIosSession } from './ios.ts';
-import type { LimrunAppAsset } from './app-catalog.ts';
+import {
+  resolveInstalledAppIdForAsset,
+  resolveLimrunAppAsset,
+  type LimrunAppAsset,
+} from './app-catalog.ts';
+import { createLimrunDeviceSession } from './device-session.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
 type LimrunInstance = {
@@ -27,6 +32,31 @@ type SessionAllocationParams = Readonly<{
   app?: LimrunAppAsset;
   dependencies: LimrunRuntimeDependencies;
 }>;
+
+export async function resolveRequestedLimrunAppAsset(
+  limrun: Limrun,
+  platform: 'android' | 'ios',
+  context?: LeaseLifecycleContext,
+): Promise<LimrunAppAsset | undefined> {
+  const value = context?.flags?.providerApp;
+  const name = typeof value === 'string' ? value.trim() : '';
+  if (!name) return undefined;
+  return await resolveLimrunAppAsset(limrun, platform, name, context?.signal);
+}
+
+export async function resolvePreinstalledAppId(
+  session: LimrunAndroidSession | LimrunIosSession,
+  asset: LimrunAppAsset,
+): Promise<string> {
+  const apps = await createLimrunDeviceSession(session).listApps('user-installed');
+  const matchedAppId = resolveInstalledAppIdForAsset(asset.name, apps);
+  if (matchedAppId) return matchedAppId;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Limrun installed ${asset.name}, but its application identifier could not be resolved unambiguously.`,
+    { asset: asset.name, installedApps: apps.map((app) => app.id) },
+  );
+}
 
 export async function allocateLimrunIosSession(
   params: SessionAllocationParams,
