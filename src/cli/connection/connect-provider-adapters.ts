@@ -1,5 +1,6 @@
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
+import { verifyDoublespeedConnection } from '@agent-device/provider-doublespeed';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';
 import { AppError } from '@agent-device/kernel/errors';
 import { providerWebDriver } from '../../provider-webdriver.ts';
@@ -8,6 +9,7 @@ import type { EnvMap } from '../../utils/env-map.ts';
 import { readVersion } from '../../utils/version.ts';
 import { resolveCloudConnectProfile } from './cloud-profile.ts';
 import { resolveCloudWebDriverConnectProfile } from './cloud-webdriver-profile.ts';
+import { resolveDoublespeedConnectProfile } from './doublespeed-profile.ts';
 import { resolveLimrunConnectProfile } from './limrun-profile.ts';
 import { resolveProxyConnectProfile } from './proxy-profile.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
@@ -71,6 +73,10 @@ const CONNECT_PROVIDER_ADAPTERS = {
   limrun: {
     resolve: resolveLimrunConnectProfile,
     verify: verifyLimrun,
+  },
+  doublespeed: {
+    resolve: resolveDoublespeedConnectProfile,
+    verify: verifyDoublespeed,
   },
 } satisfies Record<ConnectProvider, ConnectProviderAdapter>;
 
@@ -186,6 +192,20 @@ async function verifyLimrun(
     clientVersion: readVersion(),
     platform: requiredResolvedPlatform(context.flags.platform, 'Limrun'),
     region: context.env.LIMRUN_REGION?.trim() || undefined,
+  });
+}
+
+async function verifyDoublespeed(
+  context: Pick<AdapterContext, 'flags' | 'env'>,
+): Promise<ConnectVerification> {
+  return await verifyDoublespeedConnection({
+    apiKey: requiredResolvedValue(
+      context.env.DOUBLESPEED_API_KEY,
+      'Doublespeed profile missed DOUBLESPEED_API_KEY.',
+    ),
+    apiUrl: context.env.DOUBLESPEED_API_URL?.trim() || undefined,
+    clientVersion: readVersion(),
+    device: context.env.DOUBLESPEED_DEVICE?.trim() || undefined,
   });
 }
 

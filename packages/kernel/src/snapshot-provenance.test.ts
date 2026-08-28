@@ -32,4 +32,8 @@ test('snapshotStateProvenance extracts exactly the pair', () => {
     backend: 'xctest',
     producer: 'limrun-ios-tree',
   });
+  expect(snapshotStateProvenance({ backend: 'xctest', producer: 'doublespeed-ios-tree' })).toEqual({
+    backend: 'xctest',
+    producer: 'doublespeed-ios-tree',
+  });
 });

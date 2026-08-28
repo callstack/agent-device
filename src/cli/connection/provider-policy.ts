@@ -4,7 +4,10 @@ import {
   type CloudWebDriverKnownProviderName,
 } from '@agent-device/provider-webdriver';
 
-export type DirectDeviceConnectProvider = CloudWebDriverKnownProviderName | 'limrun';
+export type DirectDeviceConnectProvider =
+  | CloudWebDriverKnownProviderName
+  | 'limrun'
+  | 'doublespeed';
 export type ConnectProvider = 'cloud' | 'proxy' | DirectDeviceConnectProvider;
 
 export function isConnectProviderName(value: string | undefined): value is ConnectProvider {
@@ -14,7 +17,9 @@ export function isConnectProviderName(value: string | undefined): value is Conne
 function isDirectDeviceConnectProvider(
   provider: string | undefined,
 ): provider is DirectDeviceConnectProvider {
-  return provider === 'limrun' || isCloudWebDriverProviderName(provider);
+  return (
+    provider === 'limrun' || provider === 'doublespeed' || isCloudWebDriverProviderName(provider)
+  );
 }
 
 export function connectProviderNamesForError(): string {
@@ -24,6 +29,7 @@ export function connectProviderNamesForError(): string {
     CLOUD_WEBDRIVER_PROVIDERS.browserStack,
     CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
     'limrun',
+    'doublespeed',
   ].join(', ');
 }
 

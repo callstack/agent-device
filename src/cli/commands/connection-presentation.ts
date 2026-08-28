@@ -329,6 +329,8 @@ function appIdPlaceholder(platform: RemoteConnectionState['platform']): string {
 
 function missingAppLabel(state: RemoteConnectionState): string {
   if (state.leaseProvider === 'aws-device-farm') return 'not attached';
-  if (state.leaseProvider === 'limrun') return 'not installed yet';
+  if (state.leaseProvider === 'limrun' || state.leaseProvider === 'doublespeed') {
+    return 'not installed yet';
+  }
   return 'not available';
 }

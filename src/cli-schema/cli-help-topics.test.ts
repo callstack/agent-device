@@ -433,6 +433,8 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /BrowserStack: agent-device connect browserstack/);
   assert.match(help, /AWS Device Farm: agent-device connect aws-device-farm/);
   assert.match(help, /Limrun: agent-device connect limrun/);
+  assert.match(help, /Doublespeed: agent-device connect doublespeed/);
+  assert.match(help, /It does not create a simulator/);
   assert.match(help, /It does not create an App Automate session/);
   assert.match(help, /It does not create a remote access session/);
   assert.match(help, /It does not create an instance/);
@@ -445,6 +447,8 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /connect browserstack --platform android/);
   assert.match(help, /connect aws-device-farm --platform android/);
   assert.match(help, /connect limrun --platform android/);
+  assert.match(help, /connect doublespeed --platform ios/);
+  assert.match(help, /Doublespeed uses DOUBLESPEED_API_KEY/);
   assert.match(help, /AWS_REGION=us-west-2 AWS_ACCESS_KEY_ID/);
   assert.match(help, /AWS Device Farm uses the AWS CLI credential chain/);
   assert.match(help, /Prefer short-lived AWS role credentials in CI/);

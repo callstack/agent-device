@@ -1,5 +1,6 @@
 import type { DefaultCloudWebDriverProviderRuntimeEnv } from '@agent-device/provider-webdriver';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
+import type { DOUBLESPEED_PROVIDER } from '@agent-device/provider-doublespeed';
 import type { LIMRUN_PROVIDER } from '@agent-device/provider-limrun';
 import type {
   PlatformRuntimeHost,
@@ -15,6 +16,7 @@ export type DefaultProviderDeviceRuntimeEnv = DefaultCloudWebDriverProviderRunti
 export const DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS = [
   ...providerWebDriver.providerIds,
   'limrun' satisfies typeof LIMRUN_PROVIDER,
+  'doublespeed' satisfies typeof DOUBLESPEED_PROVIDER,
 ] as const;
 
 export type DefaultProviderRuntimeComposition = Readonly<{
@@ -45,28 +47,63 @@ export async function createDefaultProviderRuntimeComposition(
 ): Promise<DefaultProviderRuntimeComposition> {
   const runtimes = providerWebDriver.createDefaultRuntimes(env);
   const platformModules = [...createProviderPlatformRuntimeRegistrations(runtimes)];
-  const apiKey = env.LIMRUN_API_KEY?.trim();
-  if (!apiKey) return Object.freeze({ runtimes, platformModules: Object.freeze(platformModules) });
+  const registrations = [
+    ...(await loadLimrunRegistration(env)),
+    ...(await loadDoublespeedRegistration(env)),
+  ];
+  return Object.freeze({
+    runtimes: Object.freeze([...runtimes, ...registrations.map(({ runtime }) => runtime)]),
+    platformModules: Object.freeze([
+      ...platformModules,
+      ...registrations.map(({ runtime, platformModule }) => ({ runtime, module: platformModule })),
+    ]),
+  });
+}
 
+type ProviderRegistration = Readonly<{
+  runtime: ProviderDeviceRuntime;
+  platformModule: PlatformRuntimeProviderModule;
+}>;
+
+async function loadLimrunRegistration(
+  env: DefaultProviderDeviceRuntimeEnv,
+): Promise<readonly ProviderRegistration[]> {
+  const apiKey = env.LIMRUN_API_KEY?.trim();
+  if (!apiKey) return [];
   const [limrunRuntime, dependencies] = await Promise.all([
     import('@agent-device/provider-limrun'),
     import('./sdk/limrun-runtime-dependencies.ts'),
   ]);
-  const registration = limrunRuntime.createLimrunRuntime(
-    {
-      apiKey,
-      region: env.LIMRUN_REGION?.trim() || undefined,
-    },
-    dependencies.createLimrunRuntimeDependencies(),
-    { includePlatformModule: true },
-  );
-  return Object.freeze({
-    runtimes: Object.freeze([...runtimes, registration.runtime]),
-    platformModules: Object.freeze([
-      ...platformModules,
-      { runtime: registration.runtime, module: registration.platformModule },
-    ]),
-  });
+  return [
+    limrunRuntime.createLimrunRuntime(
+      {
+        apiKey,
+        region: env.LIMRUN_REGION?.trim() || undefined,
+      },
+      dependencies.createLimrunRuntimeDependencies(),
+      { includePlatformModule: true },
+    ),
+  ];
+}
+
+async function loadDoublespeedRegistration(
+  env: DefaultProviderDeviceRuntimeEnv,
+): Promise<readonly ProviderRegistration[]> {
+  const apiKey = env.DOUBLESPEED_API_KEY?.trim();
+  if (!apiKey) return [];
+  const doublespeedRuntime = await import('@agent-device/provider-doublespeed');
+  const dependencies = await import('./provider-doublespeed-dependencies.ts');
+  return [
+    doublespeedRuntime.createDoublespeedRuntime(
+      {
+        apiKey,
+        apiUrl: env.DOUBLESPEED_API_URL?.trim() || undefined,
+        device: env.DOUBLESPEED_DEVICE?.trim() || undefined,
+      },
+      dependencies.createDoublespeedRuntimeDependencies(),
+      { includePlatformModule: true },
+    ),
+  ];
 }
 
 type ProviderRuntimeWithPlatformModule = ProviderDeviceRuntime &

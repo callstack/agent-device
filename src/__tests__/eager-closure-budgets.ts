@@ -272,6 +272,9 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // --- @agent-device/provider-limrun ---
   'packages/provider-limrun/src/index.ts': 29,
 
+  // --- @agent-device/provider-doublespeed ---
+  'packages/provider-doublespeed/src/index.ts': 28,
+
   // --- @agent-device/provider-webdriver ---
   'packages/provider-webdriver/src/index.ts': 49,
 
