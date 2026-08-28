@@ -12,17 +12,18 @@ vi.mock('@limrun/api', () => ({
   default: class MockLimrun {},
 }));
 
-vi.mock('../platforms/android/app-helpers.ts', () => {
-  moduleLoads.androidAppHelpers += 1;
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
   return {
-    listAndroidAppsWithAdb: vi.fn(async () => [{ package: 'com.example.app', name: 'Example' }]),
-  };
-});
-
-vi.mock('../platforms/android/logcat.ts', () => {
-  moduleLoads.androidLogcat += 1;
-  return {
-    captureAndroidLogcatWithAdb: vi.fn(async () => 'log line\n'),
+    ...actual,
+    listAndroidAppsWithAdb: vi.fn(async () => {
+      moduleLoads.androidAppHelpers += 1;
+      return [{ package: 'com.example.app', name: 'Example' }];
+    }),
+    captureAndroidLogcatWithAdb: vi.fn(async () => {
+      moduleLoads.androidLogcat += 1;
+      return 'log line\n';
+    }),
   };
 });
 
@@ -135,7 +136,7 @@ test('Limrun appstate forwards an in-flight abort through the provider ADB execu
 
 test('host.runAdb keeps its exported shape and routes through the host transport', async () => {
   const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
-  const { withAndroidHostAdbTransport } = await import('../platforms/android/adb-executor.ts');
+  const { withAndroidHostAdbTransport } = await import('@agent-device/platform-android/mechanics');
   const dependencies = createLimrunRuntimeDependencies();
   const seen: Array<{ args: string[]; options?: Record<string, unknown> }> = [];
 

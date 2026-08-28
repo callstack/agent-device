@@ -17,7 +17,7 @@ const androidNative = vi.hoisted(() => ({
   cleanupAndroidNativePerfSession: vi.fn(),
 }));
 
-vi.mock('./platforms/android/perf-native.ts', () => androidNative);
+vi.mock('@agent-device/platform-android/mechanics', () => androidNative);
 
 const device: DeviceInfo = {
   platform: 'android',

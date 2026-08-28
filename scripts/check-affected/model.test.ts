@@ -70,7 +70,7 @@ test('root node-integration support modules select the node integration suite', 
 });
 
 test('android-adb stub test delegates project ownership to Vitest', () => {
-  const result = ids(['src/platforms/android/__tests__/notifications.test.ts']);
+  const result = ids(['packages/platform-android/src/__tests__/notifications.test.ts']);
   assert.ok(result.includes('vitest-related'));
 });
 

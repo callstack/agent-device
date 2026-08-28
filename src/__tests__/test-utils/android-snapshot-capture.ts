@@ -6,7 +6,7 @@ import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   createAndroidSnapshotCapture,
   type AndroidSnapshotCapture,
-} from '../../platforms/android/snapshot-capture.ts';
+} from '@agent-device/platform-android/mechanics';
 
 export function makeAndroidSnapshotCapture(
   nodes: RawSnapshotNode[],

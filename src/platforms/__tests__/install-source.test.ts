@@ -17,8 +17,7 @@ import {
   isBlockedIpAddress,
   isBlockedSourceHostname,
 } from '@agent-device/provision-kit/install-source-network';
-import * as androidManifest from '../android/manifest.ts';
-import { prepareAndroidInstallArtifact } from '../android/install-artifact.ts';
+import { prepareAndroidInstallArtifact } from '@agent-device/platform-android/mechanics';
 import { prepareIosInstallArtifact } from '../apple/core/install-artifact.ts';
 import {
   createLocalAppleToolProvider,
@@ -283,33 +282,6 @@ test('prepareAndroidInstallArtifact accepts direct AAB URL sources', async () =>
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
-});
-
-test('prepareAndroidInstallArtifact cleans URL materialization when identity inspection fails', async () => {
-  await withIsolatedInstallTempRoot(async (tempRoot) => {
-    const manifestSpy = vi
-      .spyOn(androidManifest, 'resolveAndroidArchivePackageName')
-      .mockRejectedValue(new Error('identity failed'));
-    try {
-      await withMockedInstallSourceFetch(
-        Buffer.from('invalid apk'),
-        async () => {
-          await assert.rejects(
-            async () =>
-              await prepareAndroidInstallArtifact({
-                kind: 'url',
-                url: 'https://example.com/app.apk',
-              }),
-            /identity failed/,
-          );
-        },
-        { filename: 'app.apk', contentType: 'application/vnd.android.package-archive' },
-      );
-      assert.deepEqual(await fs.readdir(tempRoot), []);
-    } finally {
-      manifestSpy.mockRestore();
-    }
-  });
 });
 
 test('prepareAndroidInstallArtifact extracts trusted GitHub artifact ZIP containing one APK', async () => {

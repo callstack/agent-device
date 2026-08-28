@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { AndroidAdbExecutor } from '../platforms/android/adb-executor.ts';
+import type { AndroidAdbExecutor } from '@agent-device/platform-android/mechanics';
 import { getAndroidAppStateWithAdb } from './android-adb.ts';
 
 test('getAndroidAppStateWithAdb parses focus output from failed commands', async () => {

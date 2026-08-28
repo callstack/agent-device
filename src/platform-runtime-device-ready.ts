@@ -1,4 +1,5 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 export type LocalPlatformDeviceReadyOptions = {
   deviceHub?: boolean;
@@ -32,7 +33,7 @@ export async function ensureLocalPlatformDeviceReady(
     }
   }
   if (device.platform === 'android') {
-    const { waitForAndroidBoot } = await import('./platforms/android/emulator-lifecycle.ts');
+    const { waitForAndroidBoot } = await loadAndroidMechanics();
     await waitForAndroidBoot(device.id);
     return true;
   }

@@ -22,7 +22,9 @@ const ENFORCE_FACTOR = 2;
 type Offender = { key: string; durationMs: number; budgetMs: number; enforce: boolean };
 
 function budgetForPath(relativePath: string): number {
-  return relativePath.startsWith('src/') ? UNIT_BUDGET_MS : INTEGRATION_BUDGET_MS;
+  return relativePath.startsWith('src/') || relativePath.startsWith('packages/')
+    ? UNIT_BUDGET_MS
+    : INTEGRATION_BUDGET_MS;
 }
 
 /**

@@ -1,7 +1,7 @@
 import type { PerfRuntimeHost } from '@agent-device/contracts/perf-runtime-host';
 import type { PerfProfileHandoff } from '@agent-device/contracts/perf-runtime';
 import { AppError } from '@agent-device/kernel/errors';
-import type { AndroidNativePerfSession } from './platforms/android/perf-native-types.ts';
+import type { AndroidNativePerfSession } from '@agent-device/platform-android/mechanics';
 import {
   cleanupAndroidPerfCaptureDescriptor,
   cleanupApplePerfCaptureDescriptor,
@@ -10,10 +10,11 @@ import {
   startAndroidPerfCapture,
   startApplePerfCapture,
 } from './platform-runtime-perf-capture-host.ts';
+import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
-const loadAndroidPerf = async () => await import('./platforms/android/perf.ts');
-const loadAndroidFramePerf = async () => await import('./platforms/android/perf-frame.ts');
-const loadAndroidNativePerf = async () => await import('./platforms/android/perf-native.ts');
+const loadAndroidPerf = loadAndroidMechanics;
+const loadAndroidFramePerf = loadAndroidMechanics;
+const loadAndroidNativePerf = loadAndroidMechanics;
 const loadApplePerf = async () => await import('./platforms/apple/core/perf.ts');
 const loadAppleXctrace = async () => await import('./platforms/apple/core/perf-xctrace.ts');
 const loadHarmonyPerf = async () => await import('@agent-device/platform-harmonyos');

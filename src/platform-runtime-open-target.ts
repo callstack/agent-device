@@ -6,6 +6,7 @@ import {
 import { parseSessionSurface, type SessionSurface } from '@agent-device/contracts/session';
 import { isMacOs, isApplePlatform, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 const LINUX_SUPPORTED_SURFACES = new Set<SessionSurface>(['app', 'desktop', 'frontmost-app']);
 
@@ -125,7 +126,7 @@ export async function validateOpenRelaunchTarget(params: {
   }
   if (platform === 'android' && target) {
     const { classifyAndroidAppTarget, formatAndroidInstalledPackageRequiredMessage } =
-      await import('./platforms/android/open-target.ts');
+      await loadAndroidMechanics();
     if (classifyAndroidAppTarget(target) === 'binary') {
       return formatAndroidInstalledPackageRequiredMessage(target);
     }
@@ -185,7 +186,7 @@ export async function resolveAndroidPackageForOpen(
   if (device.platform !== 'android' || !openTarget || isDeepLinkTarget(openTarget))
     return undefined;
   try {
-    const { resolveAndroidApp } = await import('./platforms/android/app-deployment-resolution.ts');
+    const { resolveAndroidApp } = await loadAndroidMechanics();
     const resolved = await resolveAndroidApp(device, openTarget);
     return resolved.type === 'package' ? resolved.value : undefined;
   } catch {
@@ -203,7 +204,7 @@ export async function inferAndroidPackageAfterOpen(
     return currentAppBundleId;
   }
   try {
-    const { getAndroidAppState } = await import('./platforms/android/window-state.ts');
+    const { getAndroidAppState } = await loadAndroidMechanics();
     const foreground = await getAndroidAppState(device);
     return foreground.package?.trim() || currentAppBundleId;
   } catch {

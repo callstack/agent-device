@@ -46,9 +46,8 @@ vi.mock('../../../platform-runtime-open-target.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../platform-runtime-open-target.ts')>();
   return { ...actual, resolveAndroidPackageForOpen: vi.fn(async () => undefined) };
 });
-vi.mock('../../../platforms/android/ime-lifecycle.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/android/ime-lifecycle.ts')>();
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
   return { ...actual, activateAndroidTestIme: vi.fn(async () => ({ activated: false })) };
 });
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {

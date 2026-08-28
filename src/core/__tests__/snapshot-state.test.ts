@@ -5,7 +5,7 @@ import { attachSnapshotOcclusionContextEvidence } from '@agent-device/contracts/
 import {
   buildUiHierarchySnapshot,
   parseUiHierarchyTree,
-} from '../../platforms/android/ui-hierarchy.ts';
+} from '@agent-device/platform-android/mechanics';
 
 test('buildSnapshotState handles undefined nodes gracefully', () => {
   const state = buildSnapshotState({ nodes: undefined, truncated: undefined }, undefined);

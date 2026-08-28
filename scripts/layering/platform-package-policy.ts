@@ -11,7 +11,7 @@ export const CANONICAL_PLATFORM_FAMILIES = [
   'linux',
   'web',
 ] as const;
-const RETIRED_PLATFORM_FAMILIES = ['harmonyos', 'linux', 'vega', 'web'] as const;
+const RETIRED_PLATFORM_FAMILIES = ['android', 'harmonyos', 'linux', 'vega', 'web'] as const;
 type PlatformFamily = (typeof CANONICAL_PLATFORM_FAMILIES)[number];
 export type PlatformPackageDeclaration = {
   dir: string;
@@ -49,7 +49,7 @@ const PLATFORM_RUNTIME_HOST_FILES = new Set([
 export const APPLE_RUNNER_SUBTREE = 'packages/platform-apple/src/runner/';
 
 export function checkPlatformsRootShape(files: readonly string[]): LayeringViolation[] {
-  const allowedChild = new RegExp(`^src/platforms/(?:apple|android|__tests__)/`);
+  const allowedChild = new RegExp(`^src/platforms/(?:apple|__tests__)/`);
   const retiredFamily = new RegExp(`^src/platforms/(?:${RETIRED_PLATFORM_FAMILIES.join('|')})/`);
   return files
     .filter(
@@ -61,7 +61,9 @@ export function checkPlatformsRootShape(files: readonly string[]): LayeringViola
       file,
       line: 1,
       message:
-        'src/platforms may hold only the remaining apple/android family directories and __tests__; retired family code belongs in its platform package and shared code belongs in a substrate package',
+        file.startsWith('src/platforms/android/')
+          ? 'the Android family has moved to packages/platform-android; remove the superseded src/platforms/android path'
+          : 'src/platforms may hold only the remaining apple family directory and __tests__; retired family code belongs in its platform package and shared code belongs in a substrate package',
     }));
 }
 const APPLE_RUNNER_FACADE = '@agent-device/platform-apple/runner';
@@ -69,47 +71,21 @@ const APPLE_RUNNER_CLIENT = '@agent-device/platform-apple/runner/client';
 const APPLE_RUNNER_TEST_HOST = '@agent-device/platform-apple/runner/test-host';
 const APPLE_RUNNER_CLIENT_COMPOSITION = 'src/platforms/apple/core/runner-client.ts';
 const APPLE_RUNNER_TEST_HOST_INSTALLER = 'scripts/vitest-apple-runner-host-setup.ts';
+const ANDROID_MECHANICS_FACADE = '@agent-device/platform-android/mechanics';
+const ANDROID_HOST_FACET = '@agent-device/platform-android/adb-host';
+const ANDROID_HOST_BINDING = 'src/platform-runtime-android-adb-host.ts';
 const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly string[]>>> = {
   apple: [APPLE_RUNNER_FACADE, APPLE_RUNNER_CLIENT, APPLE_RUNNER_TEST_HOST],
+  android: [ANDROID_HOST_FACET, ANDROID_MECHANICS_FACADE],
 };
 
-/**
- * Transitional (#2041): the extracted Android adb/IME cluster lives in
- * `@agent-device/platform-android` behind these subpaths, while live root runtime, core interactor,
- * SDK, and test-support consumers still import the root shims that re-export them. Each subpath is
- * importable ONLY by its named root shims; narrow this table when those callers move.
- */
-const TRANSITIONAL_ANDROID_ADB_SUBPATHS = new Map<string, ReadonlySet<string>>([
-  [
-    '@agent-device/platform-android/adb-executor',
-    new Set([
-      'src/platforms/android/adb-executor.ts',
-      // Imports the package directly (not the shim) to avoid a module cycle through the
-      // adb-host binding, which reaches this file for the helper port facets.
-      'src/platforms/android/helper-package-install.ts',
-    ]),
-  ],
-  [
-    '@agent-device/platform-android/adb-host',
-    new Set(['src/platforms/android/adb-host-binding.ts']),
-  ],
-  [
-    '@agent-device/platform-android/ime-lifecycle',
-    new Set(['src/platforms/android/ime-lifecycle.ts']),
-  ],
-  ['@agent-device/platform-android/ime-helper', new Set(['src/platforms/android/ime-helper.ts'])],
-]);
-
-function isTransitionalAndroidAdbShimImport(file: string, specifier: string): boolean {
-  const importers = TRANSITIONAL_ANDROID_ADB_SUBPATHS.get(specifier);
-  if (!importers) return false;
-  // The cluster's own root tests must name the package module to mock or type it — the shim
-  // re-exports would leave package-internal edges un-intercepted. Scoped to that one test
-  // directory; every other test file stays under the composition-only rule.
-  if (file.startsWith('src/platforms/android/__tests__/') && !isProductionSource(file)) {
-    return true;
-  }
-  return importers.has(file);
+function isAndroidMechanicsFacetImport(file: string, specifier: string): boolean {
+  if (specifier === ANDROID_HOST_FACET) return file === ANDROID_HOST_BINDING;
+  if (specifier !== ANDROID_MECHANICS_FACADE) return false;
+  // The mechanics facet is the named implementation seam for root/core/SDK consumers. Daemon
+  // production code still reaches platform behavior through the request-bound runtime gateway;
+  // tests may import the facet to exercise the package-owned mechanics directly.
+  return !file.startsWith('src/daemon/') || !isProductionSource(file);
 }
 
 function violation(file: string, line: number, message: string): LayeringViolation {
@@ -200,11 +176,7 @@ function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): Lay
         violation(`${expectedDir}/package.json`, 1, `${expectedDir} must be private`),
       );
     }
-    const expectedSubpaths = [
-      expectedName,
-      ...(MECHANICS_FACET_SUBPATHS[family] ?? []),
-      ...(family === 'android' ? TRANSITIONAL_ANDROID_ADB_SUBPATHS.keys() : []),
-    ];
+    const expectedSubpaths = [expectedName, ...(MECHANICS_FACET_SUBPATHS[family] ?? [])];
     if (
       declaration.exportedSubpaths.length !== expectedSubpaths.length ||
       expectedSubpaths.some((subpath) => !declaration.exportedSubpaths.includes(subpath))
@@ -214,9 +186,7 @@ function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): Lay
           `${expectedDir}/package.json`,
           1,
           `${expectedDir} must export exactly its root façade '${expectedName}'` +
-            (expectedSubpaths.length > 1
-              ? ` plus the enumerated mechanics facet and transitional subpaths`
-              : ''),
+            (expectedSubpaths.length > 1 ? ` plus its enumerated mechanics subpaths` : ''),
         ),
       );
     }
@@ -301,7 +271,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
       site.spec !== APPLE_RUNNER_TEST_HOST &&
       !isAllowedPlatformRootImport(file, site, importedFamily) &&
       !isPackageOwnedFacadeTest(file, importedFamily, site.spec) &&
-      !isTransitionalAndroidAdbShimImport(file, site.spec)
+      !isAndroidMechanicsFacetImport(file, site.spec)
     ) {
       violations.push(
         violation(
@@ -410,5 +380,5 @@ export function checkPlatformPackagePolicy(
 }
 
 export function platformPackagePolicySummary(): string {
-  return 'R13 holds six private implementation-lazy platform packages above capture-kit behind named root façades; production static value imports stop at the canonical composition and core interactor seams, while deferred or type-only edges are limited to the approved platform-runtime host watchlist, with the apple runner mechanics facet behind its enumerated seam';
+  return 'R13 holds six private implementation-lazy platform packages above capture-kit behind one canonical composition root and its single private provider-composition submodule, with the apple runner and android mechanics facets behind their enumerated seams; deferred or type-only edges are limited to the approved platform-runtime host watchlist';
 }

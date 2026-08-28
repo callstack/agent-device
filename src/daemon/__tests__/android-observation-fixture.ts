@@ -4,9 +4,9 @@ import {
   createAndroidWindowDumpReader,
   getAndroidAppState,
   getAndroidBlockingDialogObservation,
-} from '../../platforms/android/window-state.ts';
-import { getAndroidScreenSize } from '../../platforms/android/input-actions.ts';
-import { isAndroidPermissionPackage } from '../../platforms/android/alert-detection.ts';
+  getAndroidScreenSize,
+  isAndroidPermissionPackage,
+} from '@agent-device/platform-android/mechanics';
 
 /** Test adapter that preserves existing platform-leaf mocks while production uses package policy. */
 export const androidObservationFixture: AndroidObservationAdapter = Object.freeze({

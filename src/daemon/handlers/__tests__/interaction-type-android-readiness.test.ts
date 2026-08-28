@@ -11,19 +11,17 @@ import {
   resetGetRuntimeFixture,
 } from './interaction-get-runtime-fixture.ts';
 
-vi.mock('../../../platforms/android/snapshot.ts', () => ({ snapshotAndroid: vi.fn() }));
-
-vi.mock('../../../platforms/android/window-state.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/android/window-state.ts')>();
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
   return {
     ...actual,
+    snapshotAndroid: vi.fn(),
     getAndroidAppState: vi.fn(async () => ({})),
     getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
   };
 });
 
-import { snapshotAndroid } from '../../../platforms/android/snapshot.ts';
+import { snapshotAndroid } from '@agent-device/platform-android/mechanics';
 
 beforeEach(() => {
   resetGetRuntimeFixture();

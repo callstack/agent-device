@@ -114,14 +114,13 @@ process primitives outside the shared host-command port. R13 applies these rules
 dynamic, and re-export edges; package-owned tests may import their own public façade. Contracts may
 depend on kernel vocabulary but never on concrete platform packages or daemon implementation types.
 
-Transitional exception (#2041): the Android adb/IME transport cluster (`adb-executor`,
-`ime-lifecycle`, `ime-helper`) lives in `@agent-device/platform-android` behind four registered
-subpaths, with its raw host primitives injected through the package's `adb-host` port by root
-composition wiring. Live root runtime, core interactor, SDK, and test-support consumers still import
-the old root paths, so R13 names an explicit shim table: each subpath is importable only by its root
-re-export shim (plus the host-binding, the helper-install module the binding reaches, and the
-cluster's own tests under `src/platforms/android/__tests__/`). Delete the shims and narrow this table
-only after those consumers move; the table growing is drift, not precedent.
+The Android family mechanics now live entirely in `@agent-device/platform-android`. Its root façade
+remains metadata-only and lazy; the package exports exactly two implementation facets: `./mechanics`
+for named Android behavior consumed by root/core/SDK code and package-owned tests, and `./adb-host`
+for the host port bound only by `src/platform-runtime-android-adb-host.ts`. The old
+`src/platforms/android` family tree and root shims are deleted. R13 enumerates these two facets and
+rejects any additional Android subpath or daemon production import, so package closure and host
+authority stay explicit rather than being restored through compatibility paths.
 
 Durable-capture mechanics shared by more than one implementation live in the private
 `@agent-device/capture-kit` workspace package, with the enforced direction

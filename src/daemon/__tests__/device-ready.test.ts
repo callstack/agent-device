@@ -2,20 +2,24 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-vi.mock('@agent-device/host-kit/command', () => ({
-  runCmd: vi.fn(),
-  runCmdSync: vi.fn(),
-  whichCmd: vi.fn(async () => true),
-}));
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
+  return {
+    ...actual,
+    runCmd: vi.fn(),
+    runCmdSync: vi.fn(),
+    whichCmd: vi.fn(async () => true),
+  };
+});
 vi.mock('../../platforms/apple/core/simulator.ts', () => ({
   ensureBootedSimulator: vi.fn(async () => {}),
 }));
-vi.mock('../../platforms/android/emulator-lifecycle.ts', () => ({
+vi.mock('@agent-device/platform-android/mechanics', () => ({
   waitForAndroidBoot: vi.fn(async () => {}),
 }));
 
 import { runCmd } from '@agent-device/host-kit/command';
-import { waitForAndroidBoot } from '../../platforms/android/emulator-lifecycle.ts';
+import { waitForAndroidBoot } from '@agent-device/platform-android/mechanics';
 import { ensureBootedSimulator } from '../../platforms/apple/core/simulator.ts';
 import {
   ANDROID_EMULATOR,

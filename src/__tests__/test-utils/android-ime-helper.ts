@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import type { AndroidImeHelperArtifact } from '../../platforms/android/ime-helper-types.ts';
+import type { AndroidImeHelperArtifact } from '@agent-device/platform-android/mechanics';
 
 const IME_HELPER_PACKAGE = 'com.callstack.agentdevice.imehelper';
 const IME_HELPER_FIXTURE_APK_PATH = fileURLToPath(

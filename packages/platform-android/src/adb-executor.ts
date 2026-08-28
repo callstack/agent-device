@@ -1,10 +1,3 @@
-// The `adb-executor` entry surface, kept for the root shim and the transitional #2041
-// consumers. The implementation lives in focused owners: `adb-transport.ts` (vocabulary),
-// `adb-failure.ts` (classification + hint enrichment), `adb-provider-normalization.ts`,
-// `adb-provider-scope.ts` (request-scoped provider seam and routing),
-// `adb-port-reverse.ts` (owner-tracked reverse mappings), and `adb-transfer.ts`
-// (pull/install funnels).
-
 export {
   androidAdbResultError,
   attachAdbFailureHint,

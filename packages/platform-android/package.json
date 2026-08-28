@@ -7,28 +7,23 @@
   "dependencies": {
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
-    "@agent-device/kernel": "workspace:*"
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/provision-kit": "workspace:*",
+    "@agent-device/xml": "workspace:*"
   },
   "exports": {
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./adb-executor": {
-      "types": "./src/adb-executor.ts",
-      "default": "./src/adb-executor.ts"
-    },
     "./adb-host": {
       "types": "./src/adb-host.ts",
       "default": "./src/adb-host.ts"
     },
-    "./ime-helper": {
-      "types": "./src/ime-helper.ts",
-      "default": "./src/ime-helper.ts"
-    },
-    "./ime-lifecycle": {
-      "types": "./src/ime-lifecycle.ts",
-      "default": "./src/ime-lifecycle.ts"
+    "./mechanics": {
+      "types": "./src/mechanics.ts",
+      "default": "./src/mechanics.ts"
     }
   }
 }

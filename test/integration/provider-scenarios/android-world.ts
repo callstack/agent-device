@@ -7,7 +7,7 @@ import { PassThrough } from 'node:stream';
 import type {
   AndroidAdbProcess,
   AndroidAdbProvider,
-} from '../../../src/platforms/android/adb-executor.ts';
+} from '@agent-device/platform-android/mechanics';
 import type { DeviceInventoryRequest } from '../../../src/core/dispatch-resolve.ts';
 import { ANDROID_IME_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-ime-helper.ts';
 import {

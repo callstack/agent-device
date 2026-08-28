@@ -91,7 +91,7 @@ test('shared runtime surface owns every device lane', () => {
 });
 
 test('another family owns only its own lanes, so an Android-only change carries no iOS check', () => {
-  assert.deepEqual(lanes('src/platforms/android/perf.ts'), ['replay-android']);
+  assert.deepEqual(lanes('packages/platform-android/src/perf.ts'), ['replay-android']);
   assert.deepEqual(lanes('packages/platform-android/src/inventory.ts'), ['replay-android']);
   assert.deepEqual(lanes('android/snapshot-helper/src/main/java/X.java'), [
     'android-helpers',
@@ -187,7 +187,7 @@ test('a tooling change beside an Android-only change still fails open to the ful
     'scripts/check-affected/device-lanes.ts',
     'packages/platform-android/package.json',
   ]) {
-    const plan = selectChecks({ changedFiles: ['src/platforms/android/perf.ts', tooling] });
+    const plan = selectChecks({ changedFiles: ['packages/platform-android/src/perf.ts', tooling] });
     assert.equal(plan.failOpen, true, tooling);
     assert.ok(plan.checks.includes('swift-runner-ios'), tooling);
     assert.ok(plan.checks.includes('replay-ios'), tooling);

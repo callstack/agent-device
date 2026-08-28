@@ -538,6 +538,23 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/kernel',
     '@agent-device/xml',
   ]);
+  const platformAndroidPackage = packages.find(
+    (pkg) => pkg.name === '@agent-device/platform-android',
+  );
+  assert.ok(platformAndroidPackage, 'platform-android package must exist');
+  assert.deepEqual([...platformAndroidPackage.exportTargets.keys()].sort(), [
+    '@agent-device/platform-android',
+    '@agent-device/platform-android/adb-host',
+    '@agent-device/platform-android/mechanics',
+  ]);
+  assert.deepEqual([...platformAndroidPackage.workspaceDependencies].sort(), [
+    '@agent-device/capture-kit',
+    '@agent-device/contracts',
+    '@agent-device/host-kit',
+    '@agent-device/kernel',
+    '@agent-device/provision-kit',
+    '@agent-device/xml',
+  ]);
   const maestroPackage = packages.find((pkg) => pkg.name === '@agent-device/maestro');
   assert.ok(maestroPackage, 'maestro package must exist');
   assert.deepEqual([...maestroPackage.exportTargets.keys()], ['@agent-device/maestro']);

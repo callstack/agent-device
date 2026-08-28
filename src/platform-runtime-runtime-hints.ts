@@ -4,6 +4,7 @@ import { escapeXmlTextAndAttribute } from '@agent-device/xml';
 import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { execFailureDetails, type ExecResult } from '@agent-device/host-kit/command';
 import { type ResolvedRuntimeTransport } from './utils/runtime-transport.ts';
+import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 // React Native's PackagerConnectionSettings/DevInternalSettings read debug_http_host via
 // PreferenceManager.getDefaultSharedPreferences(context), which resolves to
@@ -162,7 +163,7 @@ async function runRuntimeHintsAndroidAdb(
   args: string[],
   options?: Readonly<{ allowFailure?: boolean; stdin?: string }>,
 ): Promise<ExecResult> {
-  const { runAndroidAdb } = await import('./platforms/android/adb.ts');
+  const { runAndroidAdb } = await loadAndroidMechanics();
   return await runAndroidAdb(device, args, options);
 }
 
@@ -353,7 +354,7 @@ function removeAndroidPrefEntry(xml: string, key: string): string {
 
 async function assertAndroidRuntimePackageName(packageName: string): Promise<void> {
   const { classifyAndroidAppTarget, formatAndroidInstalledPackageRequiredMessage } =
-    await import('./platforms/android/open-target.ts');
+    await loadAndroidMechanics();
   if (classifyAndroidAppTarget(packageName) !== 'binary') return;
   const message = formatAndroidInstalledPackageRequiredMessage(packageName);
   throw new AppError('INVALID_ARGS', message, {

@@ -5,8 +5,9 @@ import {
   type AndroidAdbExecutorOptions,
   type AndroidAdbExecutorResult,
   type AndroidAdbProvider,
-} from '../../platforms/android/adb-executor.ts';
+} from '@agent-device/platform-android/mechanics';
 import { ANDROID_EMULATOR } from './device-fixtures.ts';
+import '../../platform-runtime-android-adb-host.ts';
 
 /**
  * A scripted response for one fake adb invocation: a string is shorthand for

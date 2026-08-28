@@ -4,11 +4,12 @@ import { test, expect, vi } from 'vitest';
 // presentation's OCCLUSION result. A stale "App isn't responding" surface left under the foreground
 // one must not trigger recovery, and a covered "Close app" must not be tapped ahead of the visible
 // one — the exact disagreement routing through buildSnapshotState exists to remove.
-vi.mock('../../platforms/android/snapshot.ts', () => ({ snapshotAndroid: vi.fn() }));
-vi.mock('../../platforms/android/adb.ts', () => ({ runAndroidAdb: vi.fn() }));
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
+  return { ...actual, snapshotAndroid: vi.fn(), runAndroidAdb: vi.fn() };
+});
 
-import { snapshotAndroid } from '../../platforms/android/snapshot.ts';
-import { runAndroidAdb } from '../../platforms/android/adb.ts';
+import { runAndroidAdb, snapshotAndroid } from '@agent-device/platform-android/mechanics';
 import { recoverAndroidBlockingSystemDialog as recoverOwnedAndroidBlockingSystemDialog } from '../android-system-dialog.ts';
 import { androidObservation } from '../../platform-runtime.ts';
 import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';

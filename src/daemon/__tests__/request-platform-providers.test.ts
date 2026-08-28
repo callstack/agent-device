@@ -17,8 +17,8 @@ import {
   createLocalAppleToolProvider,
   runXcrun,
 } from '../../platforms/apple/core/tool-provider.ts';
-import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
-import { resolveWebProvider, type WebProvider } from '@agent-device/platform-web';
+import type { AndroidAdbExecutor } from '@agent-device/platform-android/mechanics';
+import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
 import {
   resolveAppleRunnerScreenRecordingTransport,
   type AppleRunnerScreenRecordingTransport,

@@ -407,10 +407,10 @@ target-binding divergences reported before the device action. This is not genera
 > for the wait keep-poll loop (`isUnreadableCaptureContentError`): the non-throwing `sparse-snapshot`
 > verdict always retries (it is already a content-quality signal), but a thrown `capture-failed` only
 > retries when the underlying error's `androidSnapshotHelperFailureReason` is one of the three literal
-> codes `rejectAndroidHelperContentUnavailable` (`platforms/android/snapshot.ts`) attaches to a
+> codes `rejectAndroidHelperContentUnavailable` (`packages/platform-android/src/snapshot.ts`) attaches to a
 > content-poor/system-window-only rejection — `empty-helper-output`, `system-window-only`,
 > `content-poor-app-window` (mirroring `AndroidHelperContentRecoveryDecision['reason']`,
-> `platforms/android/snapshot-content-recovery.ts`). This is deliberately narrower than the error's own
+> `packages/platform-android/src/snapshot-content-recovery.ts`). This is deliberately narrower than the error's own
 > generic `retriable` flag: Android's adb layer separately marks true mechanism failures retriable too
 > (`connection_dropped`, `device_offline`, `server_version_mismatch` — an unchanged retry of the SAME adb
 > command can succeed there), and a helper artifact permanently missing

@@ -34,10 +34,8 @@ function declarations(): PlatformPackageDeclaration[] {
         : family === 'android'
           ? [
               '@agent-device/platform-android',
-              '@agent-device/platform-android/adb-executor',
               '@agent-device/platform-android/adb-host',
-              '@agent-device/platform-android/ime-lifecycle',
-              '@agent-device/platform-android/ime-helper',
+              '@agent-device/platform-android/mechanics',
             ]
           : [`@agent-device/platform-${family}`],
   }));
@@ -350,58 +348,39 @@ test('platform packages may import the xml vocabulary package', () => {
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 });
 
-test('transitional #2041 android adb subpaths are importable only by their named shims', () => {
-  const shimImport =
-    "export { resolveAndroidAdbExecutor } from '@agent-device/platform-android/adb-executor';";
-
+test('the Android mechanics facet is the named consumer seam and adb host wiring is root-only', () => {
+  const mechanicsImport =
+    "import { resolveAndroidAdbExecutor } from '@agent-device/platform-android/mechanics';";
+  const hostImport =
+    "import { bindAndroidAdbHost } from '@agent-device/platform-android/adb-host';";
   const allowed = validSources();
-  allowed.set('src/platforms/android/adb-executor.ts', shimImport);
+  allowed.set('src/core/interactors/android.ts', mechanicsImport);
+  allowed.set('src/sdk/android-adb.ts', mechanicsImport);
+  allowed.set('src/daemon/handlers/session.test.ts', mechanicsImport);
+  allowed.set('src/platform-runtime-android-adb-host.ts', hostImport);
   assert.deepEqual(
     messages(allowed).filter((message) => message.includes('may import')),
     [],
   );
 
   const denied = validSources();
-  denied.set('src/daemon/handlers/session.ts', shimImport);
+  denied.set('src/daemon/handlers/session.ts', mechanicsImport);
   assert.match(
     messages(denied).join('\n'),
-    /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import '@agent-device\/platform-android\/adb-executor'/,
+    /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import '@agent-device\/platform-android\/mechanics'/,
   );
 
-  // The cluster's own root tests may name the package module (to mock its internal edges) …
-  const clusterTest = validSources();
-  clusterTest.set('src/platforms/android/__tests__/ime-lifecycle.test.ts', shimImport);
-  assert.deepEqual(
-    messages(clusterTest).filter((message) => message.includes('may import')),
-    [],
-  );
-
-  // … but an unrelated test file elsewhere stays under the composition-only rule.
-  const foreignTest = validSources();
-  foreignTest.set('src/daemon/handlers/session.test.ts', shimImport);
+  const deniedHost = validSources();
+  deniedHost.set('src/daemon/handlers/session.ts', hostImport);
   assert.match(
-    messages(foreignTest).join('\n'),
-    /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import '@agent-device\/platform-android\/adb-executor'/,
+    messages(deniedHost).join('\n'),
+    /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import '@agent-device\/platform-android\/adb-host'/,
   );
 
-  // Android may export exactly the transitional subpaths; any other subpath is still a violation.
-  const androidTransitional = declarations().map((declaration) =>
-    declaration.family === 'android'
-      ? {
-          ...declaration,
-          exportedSubpaths: [
-            declaration.name,
-            `${declaration.name}/adb-executor`,
-            `${declaration.name}/adb-host`,
-            `${declaration.name}/ime-helper`,
-            `${declaration.name}/ime-lifecycle`,
-          ],
-        }
-      : declaration,
-  );
-  assert.deepEqual(messages(validSources(), androidTransitional), []);
+  const androidMechanics = declarations();
+  assert.deepEqual(messages(validSources(), androidMechanics), []);
 
-  const androidWidened = androidTransitional.map((declaration) =>
+  const androidWidened = androidMechanics.map((declaration) =>
     declaration.family === 'android'
       ? {
           ...declaration,
@@ -578,10 +557,26 @@ test('Node resolves only each platform package root facade', () => {
 });
 
 test('the src/platforms root holds only the remaining family directories and __tests__', () => {
-  const clean = ['apple', 'android'].map((family) => `src/platforms/${family}/doctor.ts`);
+  const clean = ['apple'].map((family) => `src/platforms/${family}/doctor.ts`);
   assert.deepEqual(
     checkPlatformsRootShape([...clean, 'src/platforms/__tests__/install-source.test.ts']),
     [],
+  );
+});
+
+test('a moved Android family cannot leave production or test files under the old root', () => {
+  const planted = [
+    'src/platforms/android/adb.ts',
+    'src/platforms/android/__tests__/snapshot.test.ts',
+  ];
+  const found = checkPlatformsRootShape(planted);
+  assert.deepEqual(
+    found.map(({ file, message }) => ({ file, message })),
+    planted.map((file) => ({
+      file,
+      message:
+        'the Android family has moved to packages/platform-android; remove the superseded src/platforms/android path',
+    })),
   );
 });
 

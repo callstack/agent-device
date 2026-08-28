@@ -31,9 +31,8 @@ vi.mock('../snapshot-interactor-capture.ts', async () => {
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
-vi.mock('../../../platforms/android/window-state.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/android/window-state.ts')>();
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
   return {
     ...actual,
     getAndroidAppState: vi.fn(async () => ({})),
@@ -60,7 +59,7 @@ import {
 import {
   getAndroidAppState,
   getAndroidBlockingDialogObservation,
-} from '../../../platforms/android/window-state.ts';
+} from '@agent-device/platform-android/mechanics';
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
 beforeEach(() => {

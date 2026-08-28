@@ -1,45 +1,39 @@
-import {
-  closeAndroidApp,
-  openAndroidApp,
-  openAndroidDevice,
-} from '../../platforms/android/app-lifecycle.ts';
+import '../../platform-runtime-android-adb-host.ts';
 import {
   appSwitcherAndroid,
+  androidSnapshotPublicationInput,
   backAndroid,
+  closeAndroidApp,
+  dismissAndroidKeyboard,
+  executeAndroidTouchPlan,
+  fillAndroid,
   focusAndroid,
+  getAndroidKeyboardState,
+  handleAndroidAlert,
   homeAndroid,
   longPressAndroid,
+  openAndroidApp,
+  openAndroidDevice,
   pressAndroid,
   pressAndroidEnter,
   pressAndroidTvRemote,
-  scrollAndroid,
-  setAndroidOrientation,
-} from '../../platforms/android/input-actions.ts';
-import { fillAndroid, typeAndroid } from '../../platforms/android/text-input.ts';
-import {
-  executeAndroidTouchPlan,
-  readAndroidGestureViewport,
-} from '../../platforms/android/touch-executor.ts';
-import {
-  withAndroidAdbProvider,
-  type AndroidAdbProvider,
-} from '../../platforms/android/adb-executor.ts';
-import {
-  dismissAndroidKeyboard,
-  getAndroidKeyboardState,
   readAndroidClipboardText,
+  readAndroidGestureViewport,
+  scrollAndroid,
+  screenshotAndroid,
+  setAndroidOrientation,
+  setAndroidSetting,
+  snapshotAndroid,
+  typeAndroid,
+  withAndroidAdbProvider,
   writeAndroidClipboardText,
-} from '../../platforms/android/device-input-state.ts';
-import { setAndroidSetting } from '../../platforms/android/settings.ts';
-import { snapshotAndroid } from '../../platforms/android/snapshot.ts';
-import type { AndroidHelperSessionScope } from '../../platforms/android/snapshot-helper-types.ts';
-import { screenshotAndroid } from '../../platforms/android/screenshot.ts';
+  type AndroidAdbProvider,
+  type AndroidHelperSessionScope,
+} from '@agent-device/platform-android/mechanics';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { withMethodScope } from '@agent-device/kernel/scoped-provider';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import { androidSnapshotPublicationInput } from '../../platforms/android/snapshot-capture.ts';
-import { handleAndroidAlert } from '../../platforms/android/alert.ts';
 import { buildSnapshotState } from '../snapshot-state.ts';
 
 /**
@@ -90,8 +84,7 @@ export function createAndroidInteractor(
     screenshot: (outPath, options) => screenshotAndroid(device, outPath, options),
     // uiautomator reads the node covering a point; `undefined` means nothing covers it.
     readTextAtPoint: async (point, options) => {
-      const { readAndroidTextAtPoint } =
-        await import('../../platforms/android/fill-verification.ts');
+      const { readAndroidTextAtPoint } = await import('@agent-device/platform-android/mechanics');
       const read = await readAndroidTextAtPoint(device, point.x, point.y, {
         helperSessionScope: androidHelperSessionScope(options?.appBundleId),
       });

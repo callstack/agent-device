@@ -5,7 +5,7 @@ import {
   parseManifestWrite,
   type AndroidRecordingManifestFixture,
 } from './android-recording-manifest-fixtures.ts';
-import type { AndroidAdbProvider } from '../../../src/platforms/android/adb-executor.ts';
+import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 
 export type PullCall = { remotePath: string; localPath: string };
 

@@ -23,7 +23,7 @@ const localMechanics = vi.hoisted(() => ({
   simctlEvaluated: false,
 }));
 
-vi.mock('../../platforms/android/ime-lifecycle.ts', () => {
+vi.mock('@agent-device/platform-android/mechanics', () => {
   localMechanics.adbEvaluated = true;
   return { restoreAndroidTestIme: localMechanics.imeRestore };
 });

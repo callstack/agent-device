@@ -1,8 +1,8 @@
-import type { AndroidAdbProvider } from '../platforms/android/adb-executor.ts';
 import type {
+  AndroidAdbProvider,
   AndroidKeyboardDismissResult,
   AndroidKeyboardState,
-} from '../platforms/android/device-input-state.ts';
+} from '@agent-device/platform-android/mechanics';
 import type {
   LimrunAndroidDeviceSession as InternalLimrunAndroidDeviceSession,
   LimrunIosDeviceSession,

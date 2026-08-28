@@ -7,19 +7,29 @@ import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
  * the production constructor: a bare `{ nodes }` throws inside publication, and recovery would then
  * report "recovery failed" for a fixture reason rather than a device one.
  */
-vi.mock('../../platforms/android/snapshot.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/android/snapshot.ts')>();
-  const { makeAndroidSnapshotCapture } =
-    await import('../../__tests__/test-utils/android-snapshot-capture.ts');
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
+  const makeAndroidSnapshotCapture = (nodes: RawSnapshotNode[]) =>
+    actual.createAndroidSnapshotCapture(
+      {
+        nodes,
+        analysis: { rawNodeCount: nodes.length, maxDepth: 0 },
+        androidSnapshot: { backend: 'android-helper' },
+        quality: { state: 'healthy', backend: 'android-helper' },
+      },
+      {
+        clickability: {
+          kind: 'exact',
+          provider: 'android-helper',
+          clickableByNodeIndex: new Map(),
+        },
+      },
+    );
   return {
     ...actual,
     snapshotAndroid: vi.fn(async () => makeAndroidSnapshotCapture(screenNodes)),
+    openAndroidApp: vi.fn(async () => {}),
   };
-});
-
-vi.mock('../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/android/app-lifecycle.ts')>();
-  return { ...actual, openAndroidApp: vi.fn(async () => {}) };
 });
 
 import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';

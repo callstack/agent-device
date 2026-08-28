@@ -4,7 +4,10 @@ import type {
   RequestPlatformProviderScope,
   RequestPlatformProviders,
 } from '@agent-device/contracts/platform-providers';
-import type { AndroidAdbExecutor, AndroidAdbProvider } from '../platforms/android/adb-executor.ts';
+import type {
+  AndroidAdbExecutor,
+  AndroidAdbProvider,
+} from '@agent-device/platform-android/mechanics';
 import type {
   AppleRunnerCommandExecutor,
   AppleRunnerProvider,
@@ -19,6 +22,7 @@ import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-sc
 import { type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { tryGetPlugin } from '../core/platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
+import { loadAndroidMechanics } from '../platform-runtime-android-mechanics.ts';
 
 export type PlatformProviderResolver<TResult> = (
   context: PlatformProviderRequestContext,
@@ -168,7 +172,7 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     },
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.androidAdb?.provider) return;
-      const { withAndroidAdbProvider } = await import('../platforms/android/adb-executor.ts');
+      const { withAndroidAdbProvider } = await loadAndroidMechanics();
       appendRequestProviderWrapper(wrappers, scopedProviders.androidAdb, (provider, task) =>
         withAndroidAdbProvider(
           provider,

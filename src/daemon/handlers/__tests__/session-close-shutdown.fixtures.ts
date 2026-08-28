@@ -26,14 +26,13 @@ vi.mock('../../../platforms/apple/core/perf-xctrace.ts', async (importOriginal) 
     await importOriginal<typeof import('../../../platforms/apple/core/perf-xctrace.ts')>();
   return { ...actual, cleanupAppleXctracePerfCapture: vi.fn(async () => ({})) };
 });
-vi.mock('../../../platforms/android/perf-native.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/android/perf-native.ts')>();
-  return { ...actual, cleanupAndroidNativePerfSession: vi.fn(async () => {}) };
-});
-vi.mock('../../../platforms/android/snapshot-helper.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/android/snapshot-helper.ts')>();
-  return { ...actual, stopAndroidSnapshotHelperSessionForDevice: vi.fn(async () => {}) };
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
+  return {
+    ...actual,
+    cleanupAndroidNativePerfSession: vi.fn(async () => {}),
+    stopAndroidSnapshotHelperSessionForDevice: vi.fn(async () => {}),
+  };
 });
 vi.mock('../../../platforms/apple/os/macos/helper.ts', async (importOriginal) => {
   const actual =
@@ -60,8 +59,10 @@ import {
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
 import { cleanupAppleXctracePerfCapture } from '../../../platforms/apple/core/perf-xctrace.ts';
-import { cleanupAndroidNativePerfSession } from '../../../platforms/android/perf-native.ts';
-import { stopAndroidSnapshotHelperSessionForDevice } from '../../../platforms/android/snapshot-helper.ts';
+import {
+  cleanupAndroidNativePerfSession,
+  stopAndroidSnapshotHelperSessionForDevice,
+} from '@agent-device/platform-android/mechanics';
 import { stopIosRunnerSession } from '../../../platforms/apple/core/runner-client.ts';
 import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { acquireDeviceClaim } from '../../device-claims.ts';

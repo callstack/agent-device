@@ -134,7 +134,7 @@ test('the exemption cannot name a support file of an action the lane runs', () =
 // remedy is not "remove the ignore entry" — that would un-route every sibling `.ts` in the
 // tree. The selector gap is the fix, and the message has to say so.
 test('an unowned path under an ignored root asks for an owner, not for the entry’s removal', () => {
-  const planted = 'src/platforms/android/probe-fixture.json';
+  const planted = 'packages/platform-android/src/probe-fixture.json';
   const model = {
     ...base,
     trackedFiles: new Set([...base.trackedFiles, planted]),
@@ -149,13 +149,15 @@ test('an unowned path under an ignored root asks for an owner, not for the entry
 test('dropping a family root from the ignore list fails the routing claim for that tree', () => {
   const model = withIos((lane) => ({
     ...lane,
-    pathsIgnore: lane.pathsIgnore.filter((pattern) => pattern !== 'src/platforms/android/**'),
+    pathsIgnore: lane.pathsIgnore.filter(
+      (pattern) => pattern !== 'packages/platform-android/src/**',
+    ),
   }));
   const found = messages(model);
   assert.ok(
     found.some(
       (message) =>
-        /starts on src\/platforms\/android\//.test(message) &&
+        /starts on packages\/platform-android\/src\//.test(message) &&
         /android-owned \(lanes: replay-android\)/.test(message),
     ),
     found.slice(0, 3).join('\n'),

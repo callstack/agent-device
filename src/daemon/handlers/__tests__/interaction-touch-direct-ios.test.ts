@@ -14,17 +14,11 @@ import {
   runInteraction,
 } from './interaction-touch-fixtures.ts';
 
-vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/android/input-actions.ts')>();
-  return { ...actual, getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })) };
-});
-
-vi.mock('../../../platforms/android/window-state.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/android/window-state.ts')>();
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
   return {
     ...actual,
+    getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })),
     getAndroidAppState: vi.fn(async () => ({})),
     getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
   };

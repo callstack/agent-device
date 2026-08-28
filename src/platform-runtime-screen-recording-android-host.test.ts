@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
-import { withAndroidAdbProvider } from './platforms/android/adb-executor.ts';
+import { withAndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 import { createAndroidScreenRecordingTransport } from './platform-runtime-screen-recording-android-host.ts';
+import './platform-runtime-android-adb-host.ts';
 
 const adbExecutor = vi.hoisted(() => ({
   override: undefined as
@@ -8,8 +9,9 @@ const adbExecutor = vi.hoisted(() => ({
     | undefined,
 }));
 
-vi.mock('./platforms/android/adb-executor.ts', async (importOriginal) => {
-  const original = await importOriginal<typeof import('./platforms/android/adb-executor.ts')>();
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
   return {
     ...original,
     resolveAndroidAdbExecutor: (...args: Parameters<typeof original.resolveAndroidAdbExecutor>) =>

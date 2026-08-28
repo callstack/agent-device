@@ -10,8 +10,8 @@ import { expect, test, vi } from 'vitest';
 // The probe is owned by `window-state.ts`, which answers every window question from one dumpsys
 // read; a stub aimed at the module it used to live in is a silent no-op, because the spread only
 // adds a key nothing imports and the real spawn still runs.
-vi.mock('../../platforms/android/window-state.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/android/window-state.ts')>();
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
   return {
     ...actual,
     getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),

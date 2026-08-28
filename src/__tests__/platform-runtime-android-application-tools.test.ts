@@ -6,7 +6,7 @@ import { createAndroidApplicationTools } from '../platform-runtime-android-appli
 const activateAndroidTestIme = vi.hoisted(() => vi.fn());
 const restoreAndroidTestIme = vi.hoisted(() => vi.fn());
 
-vi.mock('../platforms/android/ime-lifecycle.ts', () => ({
+vi.mock('@agent-device/platform-android/mechanics', () => ({
   activateAndroidTestIme,
   restoreAndroidTestIme,
   listAndroidAdbSerialsQuick: async () => [],

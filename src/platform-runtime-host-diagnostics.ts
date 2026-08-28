@@ -4,6 +4,7 @@ import type {
   HostDiagnostics,
   HostDiagnosticsContext,
 } from '@agent-device/contracts/host-diagnostics';
+import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 /**
  * Composes each family's host-scoped diagnostics behind the neutral surface (ADR 0019 host
@@ -17,8 +18,8 @@ export function createHostDiagnostics(): HostDiagnostics {
       context: HostDiagnosticsContext,
     ): Promise<DoctorCheck | undefined> => {
       if (platform === 'android') {
-        const { androidToolchainCheck } = await import('./platforms/android/doctor.ts');
-        return await androidToolchainCheck();
+        const { androidToolchainCheck } = await loadAndroidMechanics();
+        return await androidToolchainCheck(process.env);
       }
       if (platform === 'vega') {
         const { vegaToolchainCheck } = await import('@agent-device/platform-vega');
@@ -39,7 +40,7 @@ export function createHostDiagnostics(): HostDiagnostics {
       context: HostDiagnosticsContext,
     ): Promise<readonly DoctorCheck[]> => {
       if (device.platform !== 'android') return [];
-      const { androidDeviceChecks } = await import('./platforms/android/doctor.ts');
+      const { androidDeviceChecks } = await loadAndroidMechanics();
       return await androidDeviceChecks(device, context);
     },
     ambientChecks: async (context: HostDiagnosticsContext): Promise<readonly DoctorCheck[]> => {

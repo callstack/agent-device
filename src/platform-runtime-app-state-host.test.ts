@@ -5,7 +5,7 @@ const executors = vi.hoisted(() => ({
   harmonyos: vi.fn(),
 }));
 
-vi.mock('./platforms/android/adb.ts', () => ({
+vi.mock('@agent-device/platform-android/mechanics', () => ({
   runAndroidAdb: executors.android,
 }));
 

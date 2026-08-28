@@ -336,22 +336,17 @@
         "count": 2
       }
     },
-    "src/platforms/android/app-parsers.ts": {
+    "packages/platform-android/src/app-parsers.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/platforms/android/manifest.ts": {
+    "packages/platform-android/src/manifest.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/platforms/android/scroll-hints.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/platforms/android/ui-hierarchy.ts": {
+    "packages/platform-android/src/ui-hierarchy.ts": {
       "crap_moderate": {
         "count": 2
       }
@@ -592,7 +587,7 @@
     "src/daemon/daemon-process.ts:high impact",
     "src/utils/screenshot-result.ts:high impact",
     "packages/platform-web/src/json-utils.ts:high impact",
-    "src/platforms/android/settings.ts:complexity",
+    "packages/platform-android/src/settings.ts:complexity",
     "src/utils/text-surface.ts:high impact",
     "src/daemon/handlers/session-test-sharding.ts:high impact",
     "src/daemon/handlers/session-replay-runtime.ts:complexity",
@@ -612,10 +607,10 @@
     "src/replay/test/reporters/format.ts:high impact",
     "src/daemon/handlers/session-test-infrastructure.ts:high impact",
     "src/daemon/handlers/session-test-artifacts.ts:high impact",
-    "src/platforms/android/app-parsers.ts:high impact",
+    "packages/platform-android/src/app-parsers.ts:high impact",
     "src/daemon/server/http-server.ts:complexity",
-    "src/platforms/android/ui-hierarchy.ts:high impact",
-    "src/platforms/android/sdk.ts:high impact",
+    "packages/platform-android/src/ui-hierarchy.ts:high impact",
+    "packages/platform-android/src/sdk.ts:high impact",
     "src/daemon/client/daemon-client-lifecycle.ts:complexity",
     "src/client/client-companion-tunnel-worker.ts:complexity"
   ]

@@ -73,7 +73,7 @@ const IOS_EMITTED_TYPES = [
   'Element(72)',
 ] as const;
 
-// src/platforms/android/ui-hierarchy.ts — `type` is the uiautomator `class`
+// packages/platform-android/src/ui-hierarchy.ts — `type` is the uiautomator `class`
 // attribute verbatim, a fully-qualified Java class name.
 const ANDROID_EMITTED_TYPES = [
   'android.view.View',

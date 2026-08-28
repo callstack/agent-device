@@ -159,7 +159,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/alert-contract.ts': 1,
   'packages/contracts/src/android-clipboard-support.ts': 1,
   // Added by #2041 (adb/IME cluster extraction): shared helper-artifact and touch-plan
-  // vocabulary moved out of src/platforms/android.
+  // vocabulary moved into the Android platform package.
   'packages/contracts/src/android-helper-artifacts.ts': 3,
   'packages/contracts/src/android-touch-plan.ts': 13,
   'packages/contracts/src/android-input-ownership.ts': 1,
@@ -291,13 +291,10 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // evaluates only itself; every implementation sits behind a function-scoped `await import`.
   // A pin of 1 is the tightest statement of that property the walker can make.
   'packages/platform-android/src/index.ts': 1,
-  // Transitional #2041 subpaths for the extracted adb/IME cluster; the root shims re-export
-  // them, so their closures carry what src/platforms/android/adb-executor.ts et al. carried
-  // before the move. Deleted together with the shims once the perf/trace migration lands.
-  'packages/platform-android/src/adb-executor.ts': 10,
   'packages/platform-android/src/adb-host.ts': 1,
-  'packages/platform-android/src/ime-helper.ts': 6,
-  'packages/platform-android/src/ime-lifecycle.ts': 17,
+  // The named mechanics facet is intentionally implementation-eager once selected. Its exact
+  // closure is pinned so a future facade expansion is visible in review.
+  'packages/platform-android/src/mechanics.ts': 177,
 
   // --- @agent-device/platform-apple ---
   'packages/platform-apple/src/index.ts': 1,
@@ -394,27 +391,14 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
 });
 
 /**
- * The runner mechanics facet inside platform-apple (#2040). Its entry surfaces
- * ARE platform implementation, so the deny-platform assertion is meaningless
- * for them the same way it would be vacuous for a platform façade without the
- * entry-self-exclusion: the whole closure is the mechanics being exported.
- * Their weight stays pinned by the exact budgets.
+ * Mechanics facets inside platform packages. Their entry surfaces ARE platform implementation,
+ * so the deny-platform assertion is meaningless for them: the whole closure is the mechanics
+ * being exported. Their weight stays pinned by the exact budgets.
  */
-const PLATFORM_MECHANICS_ENTRY_PREFIX = 'packages/platform-apple/src/runner/';
-
-/**
- * Transitional #2041 entry surfaces: the extracted Android adb/IME cluster. Unlike the six
- * metadata-eager family façades, these subpaths ARE concrete platform implementation — the root
- * shims re-export them wholesale, exactly as the pre-extraction src modules loaded. They cannot
- * satisfy "evaluates none of its own mechanics"; their rows above pin the closure size instead.
- * Deleted together with the shims and subpaths once the perf/trace migration lands.
- */
-const TRANSITIONAL_PLATFORM_IMPLEMENTATION_SURFACES: ReadonlySet<string> = new Set([
-  'packages/platform-android/src/adb-executor.ts',
-  'packages/platform-android/src/adb-host.ts',
-  'packages/platform-android/src/ime-helper.ts',
-  'packages/platform-android/src/ime-lifecycle.ts',
-]);
+const PLATFORM_MECHANICS_ENTRY_PREFIXES = [
+  'packages/platform-apple/src/runner/',
+  'packages/platform-android/src/mechanics.ts',
+] as const;
 
 function toRows(
   budgets: Readonly<Record<string, number>>,
@@ -427,8 +411,9 @@ function toRows(
     kind,
     denyPlatformImplementations:
       kind === 'facade' &&
-      !entryFile.startsWith(PLATFORM_MECHANICS_ENTRY_PREFIX) &&
-      !TRANSITIONAL_PLATFORM_IMPLEMENTATION_SURFACES.has(entryFile),
+      !PLATFORM_MECHANICS_ENTRY_PREFIXES.some((prefix) =>
+        prefix.endsWith('/') ? entryFile.startsWith(prefix) : entryFile === prefix,
+      ),
   }));
 }
 

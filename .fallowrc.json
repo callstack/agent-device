@@ -66,7 +66,7 @@
   "ignoreExports": [
     {
       "comment": "Android perf mechanics are selected through the lazy platform host so importing agent-device does not eagerly load adb mechanics. Fallow cannot follow the dynamic property read in src/platform-runtime-perf-host.ts.",
-      "file": "src/platforms/android/perf.ts",
+      "file": "packages/platform-android/src/perf.ts",
       "exports": ["sampleAndroidMemoryPerf"]
     },
     {
@@ -173,6 +173,11 @@
         "MAESTRO_COMPAT_SUPPORTED_CAPABILITIES",
         "createAppLogLiveHandle"
       ]
+    },
+    {
+      "comment": "Android mechanics facet: the package exports the complete named implementation seam for root/core/SDK consumers and package-owned tests; Fallow's production graph does not follow workspace subpath imports through the package exports map.",
+      "file": "packages/platform-android/src/mechanics.ts",
+      "exports": ["*"]
     },
     {
       "comment": "Deliberately kept off the @agent-device/maestro façade (index.test.ts asserts its absence) and consumed only by the conformance harness under packages/maestro/test/.",
@@ -373,6 +378,13 @@
     {
       "comment": "Host-kit seam façades: same false-positive shape as the contracts façades above — each seam names every type its re-exported functions put in a public signature, and callers use those types structurally without importing the name. unused-exports (the VALUE check) stays on.",
       "files": ["packages/host-kit/src/*.ts"],
+      "rules": {
+        "unused-types": "off"
+      }
+    },
+    {
+      "comment": "Android mechanics facet types are named explicitly for the same package-subpath public seam; unused-exports remains governed by the facet entry above.",
+      "files": ["packages/platform-android/src/mechanics.ts"],
       "rules": {
         "unused-types": "off"
       }

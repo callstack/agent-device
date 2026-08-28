@@ -4,21 +4,24 @@ import type { AndroidObservationHost } from '@agent-device/contracts/android-obs
 export function createAndroidObservationHost(): AndroidObservationHost {
   return Object.freeze({
     async runAdb(device, args, options) {
-      const { runAndroidAdb } = await import('./platforms/android/adb.ts');
+      const { runAndroidAdb } = await loadAndroidMechanics();
       const result = await runAndroidAdb(device, [...args], options);
       return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
     },
     async readSnapshotNodes(device) {
-      const { snapshotAndroid } = await import('./platforms/android/snapshot.ts');
-      const { androidSnapshotPublicationInput } =
-        await import('./platforms/android/snapshot-capture.ts');
+      const { snapshotAndroid, androidSnapshotPublicationInput } = await loadAndroidMechanics();
       const { buildSnapshotState } = await import('./core/snapshot-state.ts');
       const rawSnapshot = await snapshotAndroid(device, { interactiveOnly: false });
       return buildSnapshotState(androidSnapshotPublicationInput(rawSnapshot), undefined).nodes;
     },
     async openApp(device, appBundleId) {
-      const { openAndroidApp } = await import('./platforms/android/app-lifecycle.ts');
+      const { openAndroidApp } = await loadAndroidMechanics();
       await openAndroidApp(device, appBundleId);
     },
   });
+}
+
+async function loadAndroidMechanics() {
+  const { loadAndroidMechanics: load } = await import('./platform-runtime-android-mechanics.ts');
+  return await load();
 }

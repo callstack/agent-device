@@ -6,6 +6,7 @@ import type {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 /** Lazy Android tools; the Android package owns lifecycle sequencing and durable IME policy. */
 export function createAndroidApplicationTools(): AndroidApplicationTools {
@@ -16,7 +17,7 @@ export function createAndroidApplicationTools(): AndroidApplicationTools {
       return await inferAndroidPackageAfterOpen(device, target, currentAppBundleId);
     },
     resetFramePerfStats: async (device, appBundleId) => {
-      const { resetAndroidFramePerfStats } = await import('./platforms/android/perf-frame.ts');
+      const { resetAndroidFramePerfStats } = await loadAndroidMechanics();
       await resetAndroidFramePerfStats(device, appBundleId);
     },
     applyRuntimeHints: async (device, input) => {
@@ -28,7 +29,7 @@ export function createAndroidApplicationTools(): AndroidApplicationTools {
       await clearRuntimeHintValues({ device, ...input });
     },
     activateTestIme: async (device, input) => {
-      const { activateAndroidTestIme } = await import('./platforms/android/ime-lifecycle.ts');
+      const { activateAndroidTestIme } = await loadAndroidMechanics();
       // Anything this rejects with — startup fence, recovery lock, or a failure after durable
       // state was touched — propagates. Test IME is an opt-out text-entry accelerator, so only the
       // typed helper-unavailable outcome falls back to the ordinary text-entry path.
@@ -55,7 +56,7 @@ export function createAndroidApplicationTools(): AndroidApplicationTools {
       );
     },
     restoreTestIme: async (device, input) => {
-      const { restoreAndroidTestIme } = await import('./platforms/android/ime-lifecycle.ts');
+      const { restoreAndroidTestIme } = await loadAndroidMechanics();
       const result = await restoreAndroidTestIme(device, { stateDir: input.stateDir });
       if (result.reason !== 'set-failed') return;
       throw new AppError(
@@ -66,15 +67,14 @@ export function createAndroidApplicationTools(): AndroidApplicationTools {
     },
     recoverTestImeStartup: async (input) => {
       const { listAndroidAdbSerialsQuick, restoreOrphanedAndroidTestImeOnDaemonStartup } =
-        await import('./platforms/android/ime-lifecycle.ts');
+        await loadAndroidMechanics();
       await restoreOrphanedAndroidTestImeOnDaemonStartup({
         stateDir: input.stateDir,
         listSerials: listAndroidAdbSerialsQuick,
       });
     },
     hasTestImeRecoveryEvidence: async (stateDir) => {
-      const { readAndroidTestImeRecoveryMarkers } =
-        await import('./platforms/android/ime-recovery-marker.ts');
+      const { readAndroidTestImeRecoveryMarkers } = await loadAndroidMechanics();
       return (await readAndroidTestImeRecoveryMarkers(stateDir)).length > 0;
     },
   });

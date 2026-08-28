@@ -103,7 +103,7 @@ test('a WIDE platform violation is capped, not dumped as hundreds of chains', ()
     offenders.push(file);
   }
   for (let index = 0; index < 6; index += 1) {
-    const file = `/repo/src/platforms/android/extra-${index}.ts`;
+    const file = `/repo/packages/platform-android/src/extra-${index}.ts`;
     graph.set(file, entry);
     offenders.push(file);
   }

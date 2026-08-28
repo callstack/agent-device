@@ -1,9 +1,3 @@
-// The `ime-lifecycle` entry surface, kept for the root shim and the transitional #2041
-// consumers. The implementation lives in focused owners: `ime-state.ts` (process-lived
-// ownership + recovery lock), `ime-settings-record.ts` (on-device restore record),
-// `ime-activation.ts` (the activation transaction), and `ime-restore.ts` (restore + startup
-// orphan recovery).
-
 import { requireAndroidAdbHost, runAndroidHostAdb } from './adb-host.ts';
 
 export { activateAndroidTestIme } from './ime-activation.ts';

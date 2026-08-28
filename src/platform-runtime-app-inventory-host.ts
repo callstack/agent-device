@@ -4,6 +4,7 @@ import type {
 } from '@agent-device/contracts/app-inventory-runtime';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 export function createAppInventoryRuntimeHost(): AppInventoryRuntimeHost {
   return Object.freeze({
@@ -15,7 +16,7 @@ export function createAppInventoryRuntimeHost(): AppInventoryRuntimeHost {
     }),
     android: Object.freeze({
       listApps: async (device: DeviceInfo, filter: AppsFilter) => {
-        const { listAndroidApps } = await import('./platforms/android/app-lifecycle.ts');
+        const { listAndroidApps } = await loadAndroidMechanics();
         return (await listAndroidApps(device, filter)).map((app) => ({
           id: app.package,
           name: app.name,

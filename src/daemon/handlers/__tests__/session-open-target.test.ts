@@ -1,12 +1,12 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { getAndroidAppState } from '../../../platforms/android/window-state.ts';
+import { getAndroidAppState } from '@agent-device/platform-android/mechanics';
 import {
   inferAndroidPackageAfterOpen,
   resolveSessionAppBundleIdForTarget,
 } from '../../../platform-runtime-open-target.ts';
 
-vi.mock('../../../platforms/android/window-state.ts', () => ({
+vi.mock('@agent-device/platform-android/mechanics', () => ({
   getAndroidAppState: vi.fn(),
 }));
 

@@ -6,6 +6,7 @@ import type {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { shellQuote } from '@agent-device/host-kit/command';
 import { isPlayableVideo } from './utils/video.ts';
+import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 const ANDROID_MANIFEST_NAME = 'agent-device-recording-active.json';
 const ADB_TIMEOUT_MS = 5_000;
@@ -15,7 +16,7 @@ export async function createAndroidScreenRecordingTransport(
   device: DeviceInfo,
 ): Promise<AndroidScreenRecordingTransport> {
   const { resolveAndroidAdbExecutor, resolveScopedAndroidAdbBackgroundTransport } =
-    await import('./platforms/android/adb-executor.ts');
+    await loadAndroidMechanics();
   const adb = resolveAndroidAdbExecutor(device);
   const scoped = resolveScopedAndroidAdbBackgroundTransport(device);
   const shell = async (command: string, signal?: AbortSignal) =>

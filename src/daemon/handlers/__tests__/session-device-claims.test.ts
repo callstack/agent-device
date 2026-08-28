@@ -25,9 +25,10 @@ vi.mock('../../../platform-runtime-open-target.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../platform-runtime-open-target.ts')>();
   return { ...actual, resolveAndroidPackageForOpen: vi.fn() };
 });
-vi.mock('../../../platforms/android/ime-lifecycle.ts', () => ({
+vi.mock('@agent-device/platform-android/mechanics', () => ({
   activateAndroidTestIme: vi.fn(async () => ({ activated: false })),
   restoreAndroidTestIme: vi.fn(async () => ({ restored: false, reason: 'no-record' })),
+  stopAndroidSnapshotHelperSessionForDevice: vi.fn(async () => {}),
 }));
 vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
   (await import('../../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
@@ -39,7 +40,7 @@ import { resolveTargetDevice } from '../../../core/dispatch-resolve.ts';
 import { ensureDeviceReady } from '../../device-ready.ts';
 import { applyRuntimeHintValues } from '../../../platform-runtime-runtime-hints.ts';
 import { resolveAndroidPackageForOpen } from '../../../platform-runtime-open-target.ts';
-import { activateAndroidTestIme } from '../../../platforms/android/ime-lifecycle.ts';
+import { activateAndroidTestIme } from '@agent-device/platform-android/mechanics';
 import {
   discoverReadyAndroidEmulators,
   dispatchApplicationLifecycleEffect,

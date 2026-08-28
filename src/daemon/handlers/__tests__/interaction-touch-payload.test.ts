@@ -22,17 +22,11 @@ const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
 
-vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/android/input-actions.ts')>();
-  return { ...actual, getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })) };
-});
-
-vi.mock('../../../platforms/android/window-state.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/android/window-state.ts')>();
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
   return {
     ...actual,
+    getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })),
     getAndroidAppState: vi.fn(async () => ({})),
     getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
   };
@@ -51,8 +45,8 @@ vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal)
 import {
   getAndroidAppState,
   getAndroidBlockingDialogObservation,
-} from '../../../platforms/android/window-state.ts';
-import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
+  getAndroidScreenSize,
+} from '@agent-device/platform-android/mechanics';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
