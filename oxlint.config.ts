@@ -72,6 +72,30 @@ export default defineConfig({
       },
     },
     {
+      files: ['src/commands/**/*.ts', 'src/cli/commands/**/*.ts'],
+      rules: {
+        'no-restricted-imports': [
+          'error',
+          {
+            paths: [
+              {
+                name: 'node:child_process',
+                message:
+                  'Use process helpers from @agent-device/host-kit/command instead of importing node:child_process directly.',
+              },
+            ],
+            patterns: [
+              {
+                group: ['@agent-device/provider-*'],
+                message:
+                  'Command implementations must ask src/cli/connection/provider-policy.ts for provider capabilities.',
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
       files: [
         'packages/host-kit/src/internal/exec.ts',
         'packages/host-kit/src/**/*.test.ts',

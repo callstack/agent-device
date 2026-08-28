@@ -5,6 +5,7 @@ import {
   connectionProviderSupportsArtifacts,
   connectionProviderSupportsDeferredAppSelection,
   connectionProviderSupportsDirectPortReverse,
+  connectionProviderUsesCloudWebDriverLease,
 } from './provider-policy.ts';
 
 test('only providers declaring deferred app selection use app catalog before allocation', () => {
@@ -23,4 +24,7 @@ test('provider capabilities stay declared outside command implementations', () =
   assert.equal(connectionProviderSupportsArtifacts('limrun'), false);
   assert.equal(connectionProviderSupportsDirectPortReverse('limrun'), true);
   assert.equal(connectionProviderSupportsDirectPortReverse('aws-device-farm'), false);
+  assert.equal(connectionProviderUsesCloudWebDriverLease('browserstack'), true);
+  assert.equal(connectionProviderUsesCloudWebDriverLease('aws-device-farm'), true);
+  assert.equal(connectionProviderUsesCloudWebDriverLease('limrun'), false);
 });

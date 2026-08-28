@@ -51,6 +51,10 @@ export function connectionProviderSupportsDirectPortReverse(provider: string | u
   return provider === 'limrun';
 }
 
+export function connectionProviderUsesCloudWebDriverLease(provider: string | undefined): boolean {
+  return isCloudWebDriverProviderName(provider);
+}
+
 export function connectionProviderLeaseKind(
   provider: string | undefined,
 ): 'proxy' | 'direct-device-provider' | 'remote-provider' {

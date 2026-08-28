@@ -37,9 +37,9 @@ import {
   connectionProviderLeaseKind,
   connectionProviderRequiresRemoteDaemon,
   connectionProviderSupportsDeferredAppSelection,
+  connectionProviderUsesCloudWebDriverLease,
 } from '../connection/provider-policy.ts';
 import { readCloudDeviceFeatureProfileFields } from '../connection/profile-fields.ts';
-import { isCloudWebDriverProviderName } from '@agent-device/provider-webdriver';
 import type { PreviousLeaseReleaseNotice } from './connection-presentation.ts';
 
 const leaseDeferredCommands = new Set([
@@ -394,7 +394,7 @@ function connectionLeasePolicyForState(state: RemoteConnectionState): Connection
   if (connectionProviderSupportsDeferredAppSelection(state.leaseProvider)) {
     return DEFERRED_APP_SELECTION_CONNECTION_LEASE_POLICY;
   }
-  if (isCloudWebDriverProviderName(state.leaseProvider)) {
+  if (connectionProviderUsesCloudWebDriverLease(state.leaseProvider)) {
     return CLOUD_WEBDRIVER_CONNECTION_LEASE_POLICY;
   }
   return DEFAULT_CONNECTION_LEASE_POLICY;
