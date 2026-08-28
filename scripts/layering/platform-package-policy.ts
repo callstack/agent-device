@@ -68,7 +68,6 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
     '@agent-device/platform-apple/debug-symbols',
     '@agent-device/platform-apple/doctor',
     '@agent-device/platform-apple/install-artifact',
-    '@agent-device/platform-apple/interactor',
     '@agent-device/platform-apple/macos',
     '@agent-device/platform-apple/perf',
     '@agent-device/platform-apple/physical-device',

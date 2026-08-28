@@ -13,8 +13,7 @@ import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../..
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createTestAppLogLiveHandle } from '../../../src/__tests__/test-utils/app-log-live-handle.ts';
-import { createAppleInteractor, setIosSetting } from '@agent-device/platform-apple/interactor';
-import type { AppleRunnerProvider } from '@agent-device/platform-apple/runner';
+import { applePlugin } from '@agent-device/platform-apple';
 import type { AlertRuntimeInput } from '@agent-device/contracts/alert-runtime';
 import { assertFlatToolCall } from './assertions.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
@@ -101,7 +100,6 @@ test('Provider-backed integration iOS Settings permission and alert flow uses pr
   const appLogStarts: Array<{ appBundleId: string; outPath: string }> = [];
   const deviceRuntimeGateway = createRecordingPlatformRuntimeGateway({
     starts: appLogStarts,
-    runnerProvider: appleRunnerProvider,
     stopped: () => {
       appLogStopCount += 1;
     },
@@ -203,7 +201,6 @@ test('Provider-backed integration iOS Settings permission and alert flow uses pr
 
 function createRecordingPlatformRuntimeGateway(params: {
   starts: Array<{ appBundleId: string; outPath: string }>;
-  runnerProvider: AppleRunnerProvider;
   stopped(): void;
 }): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   const owner = providerRuntimeOwner('provider-scenario', 'ios-settings');
@@ -214,7 +211,7 @@ function createRecordingPlatformRuntimeGateway(params: {
         throw new TypeError('The iOS provider scenario requires an explicit Apple leaf');
       }
       const appleOs = device.appleOs;
-      const interactor = createAppleInteractor(device, {}, params.runnerProvider);
+      const interactor = await applePlugin.createInteractor(device, {});
       return {
         device,
         owner,
@@ -290,8 +287,7 @@ function createRecordingPlatformRuntimeGateway(params: {
           // family's implementation — the same shape Limrun's Android leg takes — so the simctl
           // argument mapping this scenario asserts still runs through the recorded tool seam.
           setSetting: async (input) =>
-            await setIosSetting(
-              device,
+            await interactor.setSetting(
               input.setting,
               input.state,
               input.appBundleId,

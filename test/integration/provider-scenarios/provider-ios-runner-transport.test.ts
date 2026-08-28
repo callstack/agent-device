@@ -10,12 +10,13 @@ import type {
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createAppleInteractor } from '@agent-device/platform-apple/interactor';
+import { applePlugin } from '@agent-device/platform-apple';
 import type {
   AppleRunnerCommandOptions,
   AppleRunnerProvider,
   RunnerCommand,
 } from '@agent-device/platform-apple/runner';
+import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
@@ -39,9 +40,8 @@ type RunnerTransportCalls = { runner: RecordedRunnerCall[]; opens: number };
 // AppleRunnerProvider transport (plus its own `open`) reuses the SHARED Apple
 // interactor — selector resolution, tap, fill, and snapshot all arrive at the
 // provider transport as runner-protocol commands instead of local XCTest.
-// This world has NO request-boundary resolver, so the interactor's injected
-// transport is the only thing keeping runner traffic off the local runtime:
-// removing the createAppleInteractor provider param fails this test.
+// This world has NO request-boundary resolver, so the fixture's method scope is
+// the only thing keeping runner traffic off the local runtime.
 test('provider-supplied Apple runner transport reuses the shared interactor stack', async () => {
   await withProviderScenarioResource(createInteractorSeamWorld, async ({ daemon, calls }) => {
     const lease = await allocateLease(daemon);
@@ -247,14 +247,31 @@ function createRunnerTransportInteractor(
   transport: AppleRunnerProvider,
   runnerContext: RunnerContext | undefined,
 ): Interactor {
-  return {
-    ...createAppleInteractor(DEVICE, runnerContext ?? {}, transport),
-    // App lifecycle stays provider-owned: the transport seam covers runner
-    // commands only, so the provider composes its own `open` on top.
-    open: async () => {
-      calls.opens += 1;
+  const runner = runnerContext ?? {};
+  const implementation = applePlugin.createInteractor(DEVICE, runner);
+  return new Proxy({} as Interactor, {
+    get(_target, property) {
+      if (property === 'then') return undefined;
+      if (property === 'open') {
+        return async () => {
+          calls.opens += 1;
+        };
+      }
+      return (...args: unknown[]) =>
+        withAppleRunnerProvider(
+          transport,
+          { deviceId: DEVICE.id, requestId: runner.requestId },
+          async () => {
+            const interactor = await implementation;
+            const operation = interactor[property as keyof Interactor];
+            if (typeof operation !== 'function') {
+              throw new TypeError(`Apple interactor method '${String(property)}' is unavailable`);
+            }
+            return Reflect.apply(operation, interactor, args);
+          },
+        );
     },
-  };
+  });
 }
 
 function runnerResultFor(command: RunnerCommand): Record<string, unknown> {

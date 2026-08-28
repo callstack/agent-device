@@ -187,8 +187,8 @@ second compatibility surface on the root.
 The Apple XCUITest runner client is a durable platform-owned implementation facet colocated
 inside `packages/platform-apple` as the `src/runner/` subtree (#2040) — Apple mechanics belong to
 the Apple package. R13 models the package by enumeration rather than by exception sprawl: the family
-exports its root façade plus fourteen named domain/mechanics facades — `./app-lifecycle`,
-`./app-resolution`, `./debug-symbols`, `./doctor`, `./install-artifact`, `./interactor`, `./macos`,
+exports its root façade plus thirteen named domain/mechanics facades — `./app-lifecycle`,
+`./app-resolution`, `./debug-symbols`, `./doctor`, `./install-artifact`, `./macos`,
 `./perf`, `./physical-device`, `./runner-owner`, `./runner/operations`, `./simctl`, `./simulator`, and
 `./tool-provider` — as well as exactly the `./runner` and `./runner/test-host`
 subpaths. The named facades replace root-only access for synchronous domain consumers without a

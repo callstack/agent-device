@@ -523,6 +523,24 @@ test('the real tree parses, declares, and passes R11', () => {
   ]);
   const platformApplePackage = packages.find((pkg) => pkg.name === '@agent-device/platform-apple');
   assert.ok(platformApplePackage, 'platform-apple package must exist');
+  assert.deepEqual([...platformApplePackage.exportTargets.keys()].sort(), [
+    '@agent-device/platform-apple',
+    '@agent-device/platform-apple/app-lifecycle',
+    '@agent-device/platform-apple/app-resolution',
+    '@agent-device/platform-apple/debug-symbols',
+    '@agent-device/platform-apple/doctor',
+    '@agent-device/platform-apple/install-artifact',
+    '@agent-device/platform-apple/macos',
+    '@agent-device/platform-apple/perf',
+    '@agent-device/platform-apple/physical-device',
+    '@agent-device/platform-apple/runner',
+    '@agent-device/platform-apple/runner-owner',
+    '@agent-device/platform-apple/runner/operations',
+    '@agent-device/platform-apple/runner/test-host',
+    '@agent-device/platform-apple/simctl',
+    '@agent-device/platform-apple/simulator',
+    '@agent-device/platform-apple/tool-provider',
+  ]);
   assert.deepEqual([...platformApplePackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',
     '@agent-device/contracts',
@@ -535,6 +553,11 @@ test('the real tree parses, declares, and passes R11', () => {
     (pkg) => pkg.name === '@agent-device/platform-android',
   );
   assert.ok(platformAndroidPackage, 'platform-android package must exist');
+  assert.deepEqual([...platformAndroidPackage.exportTargets.keys()].sort(), [
+    '@agent-device/platform-android',
+    '@agent-device/platform-android/adb-host',
+    '@agent-device/platform-android/mechanics',
+  ]);
   assert.deepEqual([...platformAndroidPackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',
     '@agent-device/contracts',

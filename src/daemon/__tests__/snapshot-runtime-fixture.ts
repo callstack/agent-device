@@ -30,7 +30,7 @@ import {
   isMacOs,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import { createAppleInteractor } from '@agent-device/platform-apple/interactor';
+import { applePlugin } from '@agent-device/platform-apple';
 import { type DispatchContext } from '../../core/dispatch-context.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
@@ -84,7 +84,7 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
     // runner underneath is the suite's own mock.
     const runnerOptions = { signal: requestSignal };
     const appleInteractor = isApplePlatform(device.platform)
-      ? createAppleInteractor(device, runnerOptions)
+      ? await applePlugin.createInteractor(device, runnerOptions)
       : undefined;
     const alertOptions = (input: AlertRuntimeInput) => ({
       ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),

@@ -32,7 +32,6 @@ function declarations(): PlatformPackageDeclaration[] {
             '@agent-device/platform-apple/debug-symbols',
             '@agent-device/platform-apple/doctor',
             '@agent-device/platform-apple/install-artifact',
-            '@agent-device/platform-apple/interactor',
             '@agent-device/platform-apple/macos',
             '@agent-device/platform-apple/perf',
             '@agent-device/platform-apple/physical-device',
@@ -312,7 +311,6 @@ test('the Apple domain facades preserve synchronous helpers without widening the
   for (const specifier of [
     '@agent-device/platform-apple/app-resolution',
     '@agent-device/platform-apple/install-artifact',
-    '@agent-device/platform-apple/interactor',
     '@agent-device/platform-apple/perf',
     '@agent-device/platform-apple/physical-device',
     '@agent-device/platform-apple/runner-owner',

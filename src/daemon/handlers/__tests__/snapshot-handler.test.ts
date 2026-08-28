@@ -37,10 +37,7 @@ vi.mock('../snapshot-interactor-capture.ts', async () => {
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
-  return {
-    ...actual,
-    runAppleRunnerCommand: vi.fn(async () => ({})),
-  };
+  return { ...actual, runAppleRunnerCommand: vi.fn(async () => ({})) };
 });
 
 // The real implementation shells out to simctl to probe for a hint-worthy

@@ -37,10 +37,6 @@
       "types": "./src/install-artifact-facade.ts",
       "default": "./src/install-artifact-facade.ts"
     },
-    "./interactor": {
-      "types": "./src/interactor-facade.ts",
-      "default": "./src/interactor-facade.ts"
-    },
     "./macos": {
       "types": "./src/macos-facade.ts",
       "default": "./src/macos-facade.ts"
