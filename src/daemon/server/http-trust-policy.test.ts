@@ -1,70 +1,49 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import { test } from 'vitest';
-import {
-  HTTP_ALLOW_HOST_PATH_INSTALL_ENV,
-  HTTP_HOST_PATH_INSTALL_ROOT_ENV,
-  confineHttpInstallSourcePath,
-  resolveHttpTrustPolicy,
-} from './http-trust-policy.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import type { DaemonRequest } from '../types.ts';
+import { applyHttpTrustPolicy, resolveHttpTrustPolicy } from './http-trust-policy.ts';
 
-test('remote host-path opt-in fails closed without an approved root', async () => {
-  await assert.rejects(
-    resolveHttpTrustPolicy({
-      authHookConfigured: true,
-      env: { [HTTP_ALLOW_HOST_PATH_INSTALL_ENV]: 'true' },
-    }),
-    new RegExp(
-      `${HTTP_ALLOW_HOST_PATH_INSTALL_ENV} requires ${HTTP_HOST_PATH_INSTALL_ROOT_ENV}`,
-      'i',
-    ),
+test('an auth-hook HTTP server uses the public-only trust policy', () => {
+  assert.deepEqual(resolveHttpTrustPolicy({ authHookConfigured: true }), {
+    networkAccess: 'public-only',
+  });
+});
+
+test('an HTTP server without an auth hook keeps local unrestricted behavior', () => {
+  assert.deepEqual(resolveHttpTrustPolicy({ authHookConfigured: false }), {
+    networkAccess: 'unrestricted',
+  });
+});
+
+test('the public-only policy rejects every unbacked host path source', () => {
+  assert.throws(
+    () =>
+      applyHttpTrustPolicy(
+        requestWithMeta({ installSource: { kind: 'path', path: '/etc/passwd' } }),
+        { networkAccess: 'public-only' },
+      ),
+    /path install sources are disabled on the remote HTTP surface/,
   );
 });
 
-test('remote host-path opt-in resolves a symlinked approved root', async () => {
-  const parent = mkdtempForTestSync('agent-device-http-trust-root-');
-  const root = path.join(parent, 'root');
-  const rootLink = path.join(parent, 'root-link');
-  fs.mkdirSync(root);
-  fs.symlinkSync(root, rootLink);
+test('the public-only policy preserves daemon-owned uploaded path sources', () => {
+  const request = requestWithMeta({
+    installSource: { kind: 'path', path: '/client/path.apk' },
+    uploadedArtifactId: 'artifact-1',
+  });
 
-  try {
-    const policy = await resolveHttpTrustPolicy({
-      authHookConfigured: true,
-      env: {
-        [HTTP_ALLOW_HOST_PATH_INSTALL_ENV]: 'yes',
-        [HTTP_HOST_PATH_INSTALL_ROOT_ENV]: rootLink,
-      },
-    });
-    assert.equal(policy.networkAccess, 'public-only');
-    assert.equal(policy.hostPathInstallRoot, fs.realpathSync(root));
-  } finally {
-    fs.rmSync(parent, { recursive: true, force: true });
-  }
+  assert.deepEqual(applyHttpTrustPolicy(request, { networkAccess: 'public-only' }), {
+    ...request,
+    internal: { networkAccess: 'public-only' },
+  });
 });
 
-test('path confinement returns the canonical target and rejects a symlink escape', async () => {
-  const parent = mkdtempForTestSync('agent-device-http-trust-path-');
-  const root = path.join(parent, 'root');
-  const inside = path.join(root, 'inside.apk');
-  const outside = path.join(parent, 'outside.apk');
-  const link = path.join(root, 'outside-link.apk');
-  fs.mkdirSync(root);
-  fs.writeFileSync(inside, 'inside');
-  fs.writeFileSync(outside, 'outside');
-  fs.symlinkSync(outside, link);
-
-  try {
-    const approvedRoot = fs.realpathSync(root);
-    assert.equal(await confineHttpInstallSourcePath(inside, approvedRoot), fs.realpathSync(inside));
-    await assert.rejects(
-      confineHttpInstallSourcePath(link, approvedRoot),
-      (error: unknown) =>
-        error instanceof Error && error.message.includes('resolves outside the approved root'),
-    );
-  } finally {
-    fs.rmSync(parent, { recursive: true, force: true });
-  }
-});
+function requestWithMeta(meta: DaemonRequest['meta']): DaemonRequest {
+  return {
+    command: 'install_source',
+    positionals: [],
+    token: 'test-token',
+    session: 'test-session',
+    meta,
+  };
+}
