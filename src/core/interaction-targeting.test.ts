@@ -21,7 +21,10 @@ import {
 test('collapses one same-label wrapper chain to its shared actionable node', () => {
   const snapshot = makeSnapshotState(EQUIVALENT_WRAPPER_CHAIN_NODES);
 
-  const result = classifyActionableTouchCandidates(snapshot.nodes, snapshot.nodes);
+  const result = classifyActionableTouchCandidates(
+    snapshot.nodes,
+    snapshot.nodes.filter((node) => node.label === 'Chat'),
+  );
 
   assert.equal(result.kind, 'equivalent');
   if (result.kind === 'equivalent') assert.equal(result.node.index, 1);
@@ -46,7 +49,8 @@ test('promotes static text inside a hittable row to the row', () => {
   const snapshot = makeSnapshotState([
     {
       index: 0,
-      depth: 0,
+      depth: 1,
+      parentIndex: 2,
       type: 'XCUIElementTypeCell',
       label: 'Account row',
       rect: { x: 10, y: 20, width: 300, height: 60 },
@@ -54,12 +58,19 @@ test('promotes static text inside a hittable row to the row', () => {
     },
     {
       index: 1,
-      depth: 1,
+      depth: 2,
       parentIndex: 0,
       type: 'XCUIElementTypeStaticText',
       label: 'Account',
       rect: { x: 24, y: 32, width: 80, height: 20 },
       hittable: false,
+    },
+    {
+      index: 2,
+      depth: 0,
+      type: 'XCUIElementTypeApplication',
+      rect: { x: 0, y: 0, width: 390, height: 844 },
+      hittable: true,
     },
   ]);
 
@@ -185,6 +196,85 @@ test('prevents full-screen window-like ancestors from stealing taps', () => {
 
   assert.equal(resolution.reason, 'overly-broad-ancestor');
   assert.equal(resolution.node.label, 'Status');
+});
+
+test('prevents a full-screen ancestor from stealing taps in a rootless Android-shaped tree', () => {
+  const snapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'android.widget.FrameLayout',
+      rect: { x: 0, y: 0, width: 1080, height: 2400 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'android.widget.TextView',
+      label: 'Inbox',
+      rect: { x: 24, y: 200, width: 160, height: 64 },
+      hittable: false,
+    },
+  ]);
+
+  const resolution = resolveActionableTouchResolution(snapshot.nodes, snapshot.nodes[1]!);
+
+  assert.equal(resolution.reason, 'overly-broad-ancestor');
+  assert.equal(resolution.node.label, 'Inbox');
+});
+
+test('applies the rootless viewport fallback without platform-shaped node types', () => {
+  const snapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Container',
+      rect: { x: 0, y: 0, width: 1080, height: 2400 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Label',
+      label: 'Inbox',
+      rect: { x: 24, y: 200, width: 160, height: 64 },
+      hittable: false,
+    },
+  ]);
+
+  const resolution = resolveActionableTouchResolution(snapshot.nodes, snapshot.nodes[1]!);
+
+  assert.equal(resolution.reason, 'overly-broad-ancestor');
+  assert.equal(resolution.node.label, 'Inbox');
+});
+
+test('keeps a rootless ancestor when its rectangle matches the target', () => {
+  const targetRect = { x: 24, y: 200, width: 160, height: 64 };
+  const snapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Container',
+      rect: targetRect,
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Label',
+      label: 'Inbox',
+      rect: targetRect,
+      hittable: false,
+    },
+  ]);
+
+  const resolution = resolveActionableTouchResolution(snapshot.nodes, snapshot.nodes[1]!);
+
+  assert.equal(resolution.reason, 'hittable-ancestor');
+  assert.equal(resolution.node.index, 0);
 });
 
 test('falls back to the original node when no usable touch target exists', () => {
