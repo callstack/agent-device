@@ -33,7 +33,7 @@ import {
   shouldStreamRequestProgress,
 } from '../request-progress-protocol.ts';
 import { buildDaemonHealthPayload } from '../http-health.ts';
-import { DAEMON_HTTP_TENANT_HEADER } from '../http-contract.ts';
+import { DAEMON_HTTP_NETWORK_ACCESS_HEADER, DAEMON_HTTP_TENANT_HEADER } from '../http-contract.ts';
 import { sendRestJsonError, statusCodeForNormalizedError } from '../http-errors.ts';
 import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
@@ -534,7 +534,6 @@ export async function createDaemonHttpServer(options: {
 }): Promise<http.Server> {
   const environment = options.env ?? process.env;
   const authHook = await loadHttpAuthHook(environment);
-  const trustPolicy = resolveHttpTrustPolicy({ authHookConfigured: authHook !== null });
   const { handleRequest, token, retainArtifacts = false, resolveRequestDiagnosticsPath } = options;
   return http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
@@ -710,7 +709,13 @@ export async function createDaemonHttpServer(options: {
         if (daemonRequest.flags?.tenant !== undefined) {
           daemonRequest.flags = { ...daemonRequest.flags, tenant: tenantTrust.tenantId };
         }
-        daemonRequest = applyHttpTrustPolicy(daemonRequest, trustPolicy);
+        daemonRequest = applyHttpTrustPolicy(
+          daemonRequest,
+          resolveHttpTrustPolicy({
+            authHookConfigured: authHook !== null,
+            networkAccessMarker: req.headers[DAEMON_HTTP_NETWORK_ACCESS_HEADER],
+          }),
+        );
 
         let canceledInFlight = false;
         // Request-scoped cancellation: mark this request canceled whenever its client

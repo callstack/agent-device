@@ -1,14 +1,27 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import http from 'node:http';
+import { Readable } from 'node:stream';
 import { createDaemonProxyServer } from '../remote/daemon-proxy.ts';
+import { createDaemonHttpServer } from '../daemon/server/http-server.ts';
+import { executeRunScriptHttpRequest } from '../daemon/adapters/maestro/run-script-http-child.ts';
+import {
+  DAEMON_HTTP_NETWORK_ACCESS_HEADER,
+  DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
+} from '../daemon/http-contract.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '../daemon/http-health.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
 } from './test-utils/loopback.ts';
+
+const requestApprovedUrlMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@agent-device/provision-kit/install-source-network-transport', () => ({
+  requestApprovedUrl: requestApprovedUrlMock,
+}));
 
 const PROXY_ARTIFACT_INVENTORY_ENTRY = {
   id: 'shot-1',
@@ -24,6 +37,7 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
 
   let upstreamAuth = '';
   let upstreamTokenHeader = '';
+  let upstreamNetworkAccess = '';
   let upstreamBody: Record<string, any> | undefined;
   const upstream = http.createServer((req, res) => {
     if (req.url === '/health') {
@@ -34,6 +48,7 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
     assert.equal(req.url, '/rpc');
     upstreamAuth = String(req.headers.authorization ?? '');
     upstreamTokenHeader = String(req.headers['x-agent-device-token'] ?? '');
+    upstreamNetworkAccess = String(req.headers[DAEMON_HTTP_NETWORK_ACCESS_HEADER] ?? '');
     let body = '';
     req.setEncoding('utf8');
     req.on('data', (chunk) => {
@@ -88,11 +103,101 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
     });
     assert.equal(upstreamAuth, 'Bearer daemon-secret');
     assert.equal(upstreamTokenHeader, 'daemon-secret');
+    assert.equal(upstreamNetworkAccess, DAEMON_HTTP_PUBLIC_NETWORK_ACCESS);
     assert.equal(upstreamBody?.params?.token, 'daemon-secret');
     assert.equal(upstreamBody?.params?.command, 'devices');
   } finally {
     await closeLoopbackServer(proxy);
     await closeLoopbackServer(upstream);
+  }
+});
+
+test('proxy enforces public-only Maestro HTTP policy on a local daemon', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  let loopbackRequests = 0;
+  const loopbackTarget = http.createServer((_req, res) => {
+    loopbackRequests += 1;
+    res.end('loopback-secret');
+  });
+  const env = { ...process.env };
+  delete env.AGENT_DEVICE_HTTP_AUTH_HOOK;
+  delete env.AGENT_DEVICE_HTTP_AUTH_EXPORT;
+  const daemon = await createDaemonHttpServer({
+    token: 'daemon-secret',
+    env,
+    handleRequest: async (request) => {
+      const url = request.positionals[0] ?? '';
+      return {
+        ok: true,
+        data: await executeRunScriptHttpRequest({
+          method: 'GET',
+          url,
+          headers: {},
+          networkAccess: request.internal?.networkAccess ?? 'unrestricted',
+        }),
+      };
+    },
+  });
+  const targetPort = await listenOnLoopback(loopbackTarget);
+  const daemonPort = await listenOnLoopback(daemon);
+  const proxy = createDaemonProxyServer({
+    upstreamBaseUrl: `http://127.0.0.1:${daemonPort}`,
+    upstreamToken: 'daemon-secret',
+    clientToken: 'proxy-secret',
+  });
+
+  try {
+    const proxyPort = await listenOnLoopback(proxy);
+    const post = async (url: string) => {
+      const response = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/rpc`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer proxy-secret' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'proxy-trust',
+          method: 'agent_device.command',
+          params: {
+            token: 'proxy-secret',
+            command: 'run_script_http',
+            positionals: [url],
+            flags: {},
+          },
+        }),
+      });
+      return { status: response.status, body: (await response.json()) as Record<string, any> };
+    };
+
+    const loopbackResponse = await post(`http://127.0.0.1:${targetPort}/secret`);
+    assert.equal(loopbackResponse.status, 400);
+    assert.equal(loopbackResponse.body.error?.data?.code, 'INVALID_ARGS');
+    assert.match(loopbackResponse.body.error?.message ?? '', /non-public address/);
+    assert.equal(loopbackRequests, 0, 'the proxy path must never reach a loopback target');
+    assert.equal(requestApprovedUrlMock.mock.calls.length, 0);
+
+    requestApprovedUrlMock.mockResolvedValue({
+      statusCode: 200,
+      headers: {},
+      body: Readable.from(['public-response']),
+      close: async () => {},
+    });
+    const publicUrl = 'https://93.184.216.34/public';
+    const publicResponse = await post(publicUrl);
+    assert.equal(publicResponse.status, 200);
+    assert.deepEqual(publicResponse.body.result?.data, {
+      status: 200,
+      body: 'public-response',
+      headers: {},
+    });
+    assert.equal(requestApprovedUrlMock.mock.calls.length, 1);
+    assert.equal(requestApprovedUrlMock.mock.calls[0]?.[0].url.href, publicUrl);
+    assert.equal(requestApprovedUrlMock.mock.calls[0]?.[0].approvedAddress, '93.184.216.34');
+    assert.equal(requestApprovedUrlMock.mock.calls[0]?.[0].family, 4);
+  } finally {
+    requestApprovedUrlMock.mockReset();
+    await closeLoopbackServer(proxy);
+    await closeLoopbackServer(daemon);
+    await closeLoopbackServer(loopbackTarget);
   }
 });
 

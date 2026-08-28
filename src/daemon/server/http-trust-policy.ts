@@ -1,11 +1,21 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonNetworkAccessPolicy, DaemonRequest } from '../types.ts';
+import { DAEMON_HTTP_PUBLIC_NETWORK_ACCESS } from '../http-contract.ts';
 
 export type HttpTrustPolicy = {
   networkAccess: DaemonNetworkAccessPolicy;
 };
 
-export function resolveHttpTrustPolicy(params: { authHookConfigured: boolean }): HttpTrustPolicy {
+export function resolveHttpTrustPolicy(params: {
+  authHookConfigured: boolean;
+  networkAccessMarker?: string | string[];
+}): HttpTrustPolicy {
+  if (params.networkAccessMarker !== undefined) {
+    if (params.networkAccessMarker !== DAEMON_HTTP_PUBLIC_NETWORK_ACCESS) {
+      throw new AppError('INVALID_ARGS', 'Invalid daemon HTTP network access marker');
+    }
+    return { networkAccess: DAEMON_HTTP_PUBLIC_NETWORK_ACCESS };
+  }
   return { networkAccess: params.authHookConfigured ? 'public-only' : 'unrestricted' };
 }
 
