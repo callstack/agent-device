@@ -106,6 +106,7 @@ import { sourceExecutionCompatibilityViolations } from './source-execution-polic
 import { sessionResourceOwnershipViolations } from './session-resource-ownership.ts';
 import { replayOwnershipViolations } from './replay-ownership.ts';
 import { applicationLifecycleOwnershipViolations } from './application-lifecycle-policy.ts';
+import { commandProviderPolicyViolations } from './command-provider-policy.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -540,6 +541,7 @@ export const LAYERING_RULE_IDS = [
   'record-runtime-ownership',
   'session-resource-ownership',
   'application-lifecycle-ownership',
+  'command-provider-policy',
   'contracts-implementation-authority',
   'substrate-domain-shape',
   'selector-pipeline-ownership',
@@ -567,6 +569,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
   'session-resource-ownership': (context) => sessionResourceOwnershipViolations(context.sources),
   'application-lifecycle-ownership': (context) =>
     applicationLifecycleOwnershipViolations(context.sources),
+  'command-provider-policy': (context) => commandProviderPolicyViolations(context.sources),
   'contracts-implementation-authority': (context) =>
     checkContractsImplementationAuthority(context.sources),
   'substrate-domain-shape': (context) =>

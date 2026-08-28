@@ -2,6 +2,8 @@ import { fingerprint, type RemoteConnectionState } from '../../remote/remote-con
 import type { ConnectVerification } from '../connection/connect-provider-adapters.ts';
 import {
   connectionProviderLeaseKind,
+  connectionProviderRequiresAppAttachment,
+  connectionProviderSupportsArtifacts,
   connectionProviderSupportsDeferredAppSelection,
 } from '../connection/provider-policy.ts';
 import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
@@ -265,7 +267,7 @@ function requiresInstall(verification?: ConnectVerification): boolean {
 }
 
 function supportsProviderArtifacts(verification?: ConnectVerification): boolean {
-  return verification?.provider === 'browserstack' || verification?.provider === 'aws-device-farm';
+  return connectionProviderSupportsArtifacts(verification?.provider);
 }
 
 function missingAttachedAppRecovery(verification?: ConnectVerification): string[] {
@@ -344,7 +346,7 @@ function appIdPlaceholder(platform: RemoteConnectionState['platform']): string {
 }
 
 function missingAppLabel(state: RemoteConnectionState): string {
-  if (state.leaseProvider === 'aws-device-farm') return 'not attached';
+  if (connectionProviderRequiresAppAttachment(state.leaseProvider)) return 'not attached';
   if (connectionProviderSupportsDeferredAppSelection(state.leaseProvider)) {
     return 'not installed yet';
   }

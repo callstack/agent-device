@@ -39,6 +39,18 @@ export function connectionProviderSupportsDeferredAppSelection(
   return isDirectDeviceConnectProvider(provider) && DEFERRED_APP_SELECTION_PROVIDERS.has(provider);
 }
 
+export function connectionProviderRequiresAppAttachment(provider: string | undefined): boolean {
+  return provider === CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm;
+}
+
+export function connectionProviderSupportsArtifacts(provider: string | undefined): boolean {
+  return isCloudWebDriverProviderName(provider);
+}
+
+export function connectionProviderSupportsDirectPortReverse(provider: string | undefined): boolean {
+  return provider === 'limrun';
+}
+
 export function connectionProviderLeaseKind(
   provider: string | undefined,
 ): 'proxy' | 'direct-device-provider' | 'remote-provider' {

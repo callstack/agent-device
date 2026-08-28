@@ -34,6 +34,7 @@ import type { CloudProviderSessionResult } from '@agent-device/contracts/observa
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { readMetroPrepareKind } from '../../commands/metro/prepare-kind.ts';
 import {
+  connectionProviderLeaseKind,
   connectionProviderRequiresRemoteDaemon,
   connectionProviderSupportsDeferredAppSelection,
 } from '../connection/provider-policy.ts';
@@ -387,7 +388,9 @@ type ConnectionLeasePolicy = {
 };
 
 function connectionLeasePolicyForState(state: RemoteConnectionState): ConnectionLeasePolicy {
-  if (state.leaseProvider === 'proxy') return PROXY_CONNECTION_LEASE_POLICY;
+  if (connectionProviderLeaseKind(state.leaseProvider) === 'proxy') {
+    return PROXY_CONNECTION_LEASE_POLICY;
+  }
   if (connectionProviderSupportsDeferredAppSelection(state.leaseProvider)) {
     return DEFERRED_APP_SELECTION_CONNECTION_LEASE_POLICY;
   }

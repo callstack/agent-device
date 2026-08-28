@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { connectionProviderSupportsDeferredAppSelection } from './provider-policy.ts';
+import {
+  connectionProviderRequiresAppAttachment,
+  connectionProviderSupportsArtifacts,
+  connectionProviderSupportsDeferredAppSelection,
+  connectionProviderSupportsDirectPortReverse,
+} from './provider-policy.ts';
 
 test('only providers declaring deferred app selection use app catalog before allocation', () => {
   assert.equal(connectionProviderSupportsDeferredAppSelection('limrun'), true);
@@ -8,4 +13,14 @@ test('only providers declaring deferred app selection use app catalog before all
   assert.equal(connectionProviderSupportsDeferredAppSelection('aws-device-farm'), false);
   assert.equal(connectionProviderSupportsDeferredAppSelection('proxy'), false);
   assert.equal(connectionProviderSupportsDeferredAppSelection(undefined), false);
+});
+
+test('provider capabilities stay declared outside command implementations', () => {
+  assert.equal(connectionProviderRequiresAppAttachment('aws-device-farm'), true);
+  assert.equal(connectionProviderRequiresAppAttachment('browserstack'), false);
+  assert.equal(connectionProviderSupportsArtifacts('aws-device-farm'), true);
+  assert.equal(connectionProviderSupportsArtifacts('browserstack'), true);
+  assert.equal(connectionProviderSupportsArtifacts('limrun'), false);
+  assert.equal(connectionProviderSupportsDirectPortReverse('limrun'), true);
+  assert.equal(connectionProviderSupportsDirectPortReverse('aws-device-farm'), false);
 });
