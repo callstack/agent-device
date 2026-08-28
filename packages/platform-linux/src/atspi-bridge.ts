@@ -12,7 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
-import { hostFileExistsSync } from '@agent-device/host-kit/file';
+import { hostFileExistsSync } from '@agent-device/host-kit/host-file';
 import { hostPlatform } from '@agent-device/host-kit/process';
 import { normalizeAtspiRole } from './role-map.ts';
 import { resolveLinuxToolProvider, runLinuxToolCommand } from './tool-provider.ts';

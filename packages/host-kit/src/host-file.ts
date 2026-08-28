@@ -1,0 +1,18 @@
+export {
+  createHostDirectoryLinkSync,
+  ensureHostDirectorySync,
+  hostFileExistsSync,
+  hostFileLstatSync,
+  hostFileStatSync,
+  hostHomeDirectory,
+  hostTemporaryDirectory,
+  makeHostTemporaryDirectory,
+  readHostBinaryFile,
+  readHostDirectorySync,
+  readHostSymbolicLinkSync,
+  readHostTextFile,
+  readHostTextFileSync,
+  removeHostDirectory,
+  removeHostFileSync,
+  writeHostTextFileSync,
+} from './internal/host-file.ts';

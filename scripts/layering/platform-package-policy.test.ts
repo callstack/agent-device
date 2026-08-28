@@ -165,8 +165,35 @@ test('external consumers use root facades with static imports only at the intera
   ]) {
     const sources = validSources();
     sources.set('src/daemon/not-the-root.ts', statement);
-    assert.deepEqual(messages(sources), []);
+    assert.match(
+      messages(sources).join('\n'),
+      /production static imports of '@agent-device\/platform-apple' are limited to/,
+    );
   }
+
+  const hostDynamic = validSources();
+  hostDynamic.set(
+    'src/platform-runtime-network-web-transport.ts',
+    "void import('@agent-device/platform-web');",
+  );
+  assert.deepEqual(messages(hostDynamic), []);
+
+  const hostTypeOnly = validSources();
+  hostTypeOnly.set(
+    'src/platform-runtime-network-web-transport.ts',
+    "import type { WebThing } from '@agent-device/platform-web';",
+  );
+  assert.deepEqual(messages(hostTypeOnly), []);
+
+  const hostStatic = validSources();
+  hostStatic.set(
+    'src/platform-runtime-network-web-transport.ts',
+    "import { resolveWebProvider } from '@agent-device/platform-web';",
+  );
+  assert.match(
+    messages(hostStatic).join('\n'),
+    /production static imports of '@agent-device\/platform-web' are limited to/,
+  );
 
   const interactor = validSources();
   interactor.set(

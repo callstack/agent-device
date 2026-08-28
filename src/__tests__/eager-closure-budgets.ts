@@ -140,6 +140,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/host-kit/src/command.ts': 7,
   'packages/host-kit/src/diagnostics.ts': 3,
   'packages/host-kit/src/file.ts': 12,
+  'packages/host-kit/src/host-file.ts': 2,
   'packages/host-kit/src/process.ts': 12,
   'packages/host-kit/src/request.ts': 5,
   'packages/host-kit/src/retry.ts': 6,

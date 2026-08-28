@@ -5,7 +5,7 @@ import {
   ensureHostDirectorySync,
   hostFileStatSync,
   writeHostTextFileSync,
-} from '@agent-device/host-kit/file';
+} from '@agent-device/host-kit/host-file';
 import {
   hostEnvironment,
   hostNodeExecutablePath,

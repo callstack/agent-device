@@ -1,12 +1,11 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-const { runMacOsSnapshotAction, captureLinuxSurfaceSnapshot } = vi.hoisted(() => ({
-  runMacOsSnapshotAction: vi.fn(),
+const { captureLinuxSurfaceSnapshot, captureMacOsSurfaceSnapshot } = vi.hoisted(() => ({
   captureLinuxSurfaceSnapshot: vi.fn(),
+  captureMacOsSurfaceSnapshot: vi.fn(),
 }));
 
-vi.mock('../platforms/apple/os/macos/helper.ts', () => ({ runMacOsSnapshotAction }));
 vi.mock('@agent-device/platform-linux', () => ({ captureLinuxSurfaceSnapshot }));
 
 import { createSnapshotRuntimeHost } from './snapshot-desktop-surface.ts';
@@ -27,28 +26,36 @@ const linuxDevice = {
 } as DeviceInfo;
 
 beforeEach(() => {
-  runMacOsSnapshotAction.mockReset();
   captureLinuxSurfaceSnapshot.mockReset();
+  captureMacOsSurfaceSnapshot.mockReset();
 });
 
+function createHost() {
+  return createSnapshotRuntimeHost({
+    linux: captureLinuxSurfaceSnapshot,
+    macos: captureMacOsSurfaceSnapshot,
+  });
+}
+
 test('Apple snapshot host preserves non-app macOS surface capture and menubar identity', async () => {
-  runMacOsSnapshotAction.mockResolvedValue({
+  captureMacOsSurfaceSnapshot.mockResolvedValue({
     nodes: [{ index: 0, depth: 0, type: 'MenuBar', label: 'System menu' }],
     truncated: false,
     backend: 'macos-helper',
+    producer: 'macos-helper',
   });
   const signal = new AbortController().signal;
 
-  const result = await createSnapshotRuntimeHost().captureSurface(
+  const result = await createHost().captureSurface(
     macosDevice,
     { surface: 'menubar', appBundleId: 'com.example.app' },
     signal,
   );
 
-  expect(runMacOsSnapshotAction).toHaveBeenCalledWith('menubar', {
-    bundleId: 'com.example.app',
+  expect(captureMacOsSurfaceSnapshot).toHaveBeenCalledWith(
+    { surface: 'menubar', appBundleId: 'com.example.app' },
     signal,
-  });
+  );
   expect(result).toEqual({
     nodes: [{ index: 0, depth: 0, type: 'MenuBar', label: 'System menu' }],
     truncated: false,
@@ -69,7 +76,7 @@ test('Linux snapshot host preserves interactive ancestor projection before depth
   });
   const signal = new AbortController().signal;
 
-  const result = await createSnapshotRuntimeHost().captureSurface(
+  const result = await createHost().captureSurface(
     linuxDevice,
     { surface: 'desktop', interactiveOnly: true, depth: 1 },
     signal,

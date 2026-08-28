@@ -22,6 +22,15 @@ vi.mock('./platform-runtime-toolchain-host.ts', () => ({
 
 import { createPlatformRuntimeHost } from './platform-runtime-operation-host.ts';
 
+const snapshot = {
+  captureSurface: async () => ({
+    backend: 'linux-atspi' as const,
+    producer: 'linux-atspi' as const,
+    nodes: [],
+    truncated: false,
+  }),
+};
+
 const shutdownLoaders = {
   apple: async () => ({
     canShutdownTarget: () => true,
@@ -41,6 +50,7 @@ test('operation host composes the shared lazy Apple-tool and toolchain capabilit
       pidPath: '/tmp/sessions/one/app-log.pid',
     }),
     shutdownLoaders,
+    snapshot,
   });
 
   expect(host.appleTools).toBe(capabilities.appleTools);

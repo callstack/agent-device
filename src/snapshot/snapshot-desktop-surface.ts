@@ -1,20 +1,28 @@
-import type { SnapshotRuntimeHost } from '@agent-device/contracts/snapshot-runtime';
+import type {
+  CaptureSnapshotInput,
+  SnapshotResult,
+  SnapshotRuntimeHost,
+} from '@agent-device/contracts/snapshot-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-export function createSnapshotRuntimeHost(): SnapshotRuntimeHost {
+export type SnapshotSurfaceLoader = (
+  options: CaptureSnapshotInput['options'],
+  signal?: AbortSignal,
+) => Promise<SnapshotResult>;
+
+export type SnapshotSurfaceLoaders = Readonly<{
+  linux: SnapshotSurfaceLoader;
+  macos: SnapshotSurfaceLoader;
+}>;
+
+export function createSnapshotRuntimeHost(loaders: SnapshotSurfaceLoaders): SnapshotRuntimeHost {
+  const captureSurface: SnapshotRuntimeHost['captureSurface'] = async (device, options, signal) => {
+    if (device.platform === 'linux') return await loaders.linux(options, signal);
+    requireMacOsSurfaceDevice(device);
+    return await loaders.macos(options, signal);
+  };
   return Object.freeze({ captureSurface });
 }
-
-const captureSurface: SnapshotRuntimeHost['captureSurface'] = async (device, options, signal) => {
-  if (device.platform === 'linux') {
-    const { captureLinuxSurfaceSnapshot } = await import('@agent-device/platform-linux');
-    return await captureLinuxSurfaceSnapshot(options, signal);
-  }
-  requireMacOsSurfaceDevice(device);
-  const { captureMacOsSurfaceSnapshot } =
-    await import('../platforms/apple/os/macos/surface-snapshot.ts');
-  return await captureMacOsSurfaceSnapshot(options ?? {}, signal);
-};
 
 function requireMacOsSurfaceDevice(device: DeviceInfo): void {
   if (device.platform !== 'apple' || device.appleOs !== 'macos') {

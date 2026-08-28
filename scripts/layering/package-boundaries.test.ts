@@ -511,6 +511,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/host-kit/command',
     '@agent-device/host-kit/diagnostics',
     '@agent-device/host-kit/file',
+    '@agent-device/host-kit/host-file',
     '@agent-device/host-kit/process',
     '@agent-device/host-kit/request',
     '@agent-device/host-kit/retry',

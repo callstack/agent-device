@@ -9,7 +9,7 @@ import {
   makeHostTemporaryDirectory,
   readHostTextFile,
   removeHostDirectory,
-} from '@agent-device/host-kit/file';
+} from '@agent-device/host-kit/host-file';
 import { runHarmonyHdc } from './hdc.ts';
 
 const MAX_NODES = 5_000;

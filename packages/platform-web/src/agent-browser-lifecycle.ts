@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { hostFileStatSync, readHostDirectorySync } from '@agent-device/host-kit/file';
+import { hostFileStatSync, readHostDirectorySync } from '@agent-device/host-kit/host-file';
 import {
   hostEnvironment,
   type OwnedProcessRecordStore,

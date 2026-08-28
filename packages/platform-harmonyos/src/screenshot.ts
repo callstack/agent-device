@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { readHostBinaryFile } from '@agent-device/host-kit/file';
+import { readHostBinaryFile } from '@agent-device/host-kit/host-file';
 import { runHarmonyHdc } from './hdc.ts';
 
 export async function screenshotHarmony(device: DeviceInfo, outPath: string): Promise<void> {

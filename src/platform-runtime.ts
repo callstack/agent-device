@@ -45,6 +45,7 @@ import {
   runtimeModule as vegaRuntimeModule,
 } from '@agent-device/platform-vega';
 import {
+  captureLinuxSurfaceSnapshot,
   inventoryModule as linuxInventoryModule,
   runtimeModule as linuxRuntimeModule,
 } from '@agent-device/platform-linux';
@@ -151,11 +152,16 @@ export function createPlatformRuntimeGateway(
   return createComposedPlatformRuntimeGateway({
     modules: platformRuntimeModules,
     loadHost: async () => {
-      const { createPlatformRuntimeHost } = await import('./platform-runtime-operation-host.ts');
+      const { createPlatformRuntimeHost, createSnapshotRuntimeHost, loadMacOsSurfaceSnapshot } =
+        await import('./platform-runtime-operation-host.ts');
       return createPlatformRuntimeHost({
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,
         shutdownLoaders,
+        snapshot: createSnapshotRuntimeHost({
+          linux: captureLinuxSurfaceSnapshot,
+          macos: loadMacOsSurfaceSnapshot,
+        }),
         ownedProcesses: options.ownedProcesses,
       });
     },

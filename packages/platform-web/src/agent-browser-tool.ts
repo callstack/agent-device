@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { runCmd, type ExecResult } from '@agent-device/host-kit/command';
+import { acquireProcessLock } from '@agent-device/host-kit/file';
 import {
   createHostDirectoryLinkSync,
   ensureHostDirectorySync,
@@ -11,8 +12,7 @@ import {
   readHostSymbolicLinkSync,
   readHostTextFileSync,
   removeHostFileSync,
-  acquireProcessLock,
-} from '@agent-device/host-kit/file';
+} from '@agent-device/host-kit/host-file';
 import {
   hostCurrentWorkingDirectory,
   hostEnvironment,

@@ -31,6 +31,10 @@
       "types": "./src/file.ts",
       "default": "./src/file.ts"
     },
+    "./host-file": {
+      "types": "./src/host-file.ts",
+      "default": "./src/host-file.ts"
+    },
     "./process": {
       "types": "./src/process.ts",
       "default": "./src/process.ts"

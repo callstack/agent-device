@@ -7,7 +7,7 @@ import {
   type ExecOptions,
   type ExecResult,
 } from '@agent-device/host-kit/command';
-import { hostHomeDirectory } from '@agent-device/host-kit/file';
+import { hostHomeDirectory } from '@agent-device/host-kit/host-file';
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
 
 export type VegaToolProvider = {

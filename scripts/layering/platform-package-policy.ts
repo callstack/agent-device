@@ -25,6 +25,19 @@ const REQUEST_PROVIDER_COMPOSITION_FILE = 'src/platform-runtime/request-provider
 const COMPOSITION_FILES = new Set([COMPOSITION_FILE, REQUEST_PROVIDER_COMPOSITION_FILE]);
 const RULE = 'R13 platform-package-substrate';
 const RAW_PROCESS_SPECIFIERS = new Set(['child_process', 'node:child_process']);
+const PLATFORM_RUNTIME_HOST_FILES = new Set([
+  'src/platform-runtime-app-inventory-host.ts',
+  'src/platform-runtime-app-state-host.ts',
+  'src/platform-runtime-audio-probe-host.ts',
+  'src/platform-runtime-host-diagnostics.ts',
+  'src/platform-runtime-managed-web-backend.ts',
+  'src/platform-runtime-network-web-transport.ts',
+  'src/platform-runtime-perf-host.ts',
+  'src/platform-runtime-resource-cleanup.ts',
+  'src/platform-runtime-screen-recording-harmony-host.ts',
+  'src/platform-runtime-screen-recording-web-host.ts',
+  'src/platform-runtime-toolchain-host.ts',
+]);
 
 // #2040: the Apple XCUITest runner client is a platform-owned implementation
 // facet colocated in platform-apple as the src/runner/ subtree. Its subpaths
@@ -295,7 +308,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
           file,
           site.line,
           site.spec === `@agent-device/platform-${importedFamily}`
-            ? `production static imports of '${site.spec}' are limited to ${COMPOSITION_FILE} and src/core/interactors/; use the named root façade through a deferred import or type-only edge elsewhere`
+            ? `production static imports of '${site.spec}' are limited to ${COMPOSITION_FILE} and src/core/interactors/; other value edges require a deferred import from an approved platform-runtime host file`
             : `only ${COMPOSITION_FILE} or its governed request-provider composition submodule may import '${site.spec}' outside its package-owned tests`,
         ),
       );
@@ -371,10 +384,9 @@ function isAllowedPlatformRootImport(
 ): boolean {
   if (site.spec !== `@agent-device/platform-${family}`) return false;
   return (
-    site.dynamic ||
-    site.typeOnly ||
     isNonProductionConsumer(file) ||
-    file.startsWith('src/core/interactors/')
+    file.startsWith('src/core/interactors/') ||
+    (PLATFORM_RUNTIME_HOST_FILES.has(file) && (site.dynamic || site.typeOnly))
   );
 }
 
@@ -398,5 +410,5 @@ export function checkPlatformPackagePolicy(
 }
 
 export function platformPackagePolicySummary(): string {
-  return 'R13 holds six private implementation-lazy platform packages above capture-kit behind named root façades; production static value imports stop at the canonical composition and core interactor seams, while other consumers use deferred or type-only edges, with the apple runner mechanics facet behind its enumerated seam';
+  return 'R13 holds six private implementation-lazy platform packages above capture-kit behind named root façades; production static value imports stop at the canonical composition and core interactor seams, while deferred or type-only edges are limited to the approved platform-runtime host watchlist, with the apple runner mechanics facet behind its enumerated seam';
 }
