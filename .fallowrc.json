@@ -141,11 +141,6 @@
       ]
     },
     {
-      "comment": "The interactions package facade is consumed through workspace package exports. Fallow does not follow that package boundary, so keep the synchronous helper explicitly accounted for.",
-      "file": "packages/platform-apple/src/interactions-facade.ts",
-      "exports": ["resolveAppleBackRunnerCommand"]
-    },
-    {
       "comment": "The runner-operations package facade is consumed through workspace package exports. Fallow does not follow that package boundary, so keep the two operations without visible production edges here explicitly accounted for.",
       "file": "packages/platform-apple/src/runner-operations-facade.ts",
       "exports": ["hasCachedAppleRunnerArtifact", "runApplePressSeries"]

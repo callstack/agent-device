@@ -1,6 +1,5 @@
 import { asAppError } from '@agent-device/kernel/errors';
 import type { InfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
-export { isInfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
 export type { InfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
 
 export type BootFailureReason =

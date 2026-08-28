@@ -1,6 +1,5 @@
 import { requireAndroidAdbHost, runAndroidHostAdb } from './adb-host.ts';
 
-export { activateAndroidTestIme } from './ime-activation.ts';
 export {
   restoreAndroidTestIme,
   restoreOrphanedAndroidTestImeOnDaemonStartup,

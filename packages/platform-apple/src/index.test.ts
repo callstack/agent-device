@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { buildAppNotInstalledError } from '@agent-device/platform-apple/app-resolution';
-import { resolveAppleBackRunnerCommand } from '@agent-device/platform-apple/interactions';
 import { createLocalAppleToolProvider } from './index.ts';
 import { buildSimctlArgs } from '@agent-device/platform-apple/simctl';
 
@@ -21,7 +20,6 @@ test('Apple domain facades preserve synchronous helper contracts', () => {
   const appError = buildAppNotInstalledError('Shoply');
 
   assert.equal(appError.code, 'APP_NOT_INSTALLED');
-  assert.equal(resolveAppleBackRunnerCommand(), 'backInApp');
   assert.deepEqual(buildSimctlArgs(['list']), ['simctl', 'list']);
   assert.equal(appError instanceof Promise, false);
 });

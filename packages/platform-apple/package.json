@@ -33,10 +33,6 @@
       "types": "./src/doctor-facade.ts",
       "default": "./src/doctor-facade.ts"
     },
-    "./interactions": {
-      "types": "./src/interactions-facade.ts",
-      "default": "./src/interactions-facade.ts"
-    },
     "./install-artifact": {
       "types": "./src/install-artifact-facade.ts",
       "default": "./src/install-artifact-facade.ts"
@@ -60,10 +56,6 @@
     "./runner/operations": {
       "types": "./src/runner-operations-facade.ts",
       "default": "./src/runner-operations-facade.ts"
-    },
-    "./runner/client": {
-      "types": "./src/runner/client.ts",
-      "default": "./src/runner/client.ts"
     },
     "./runner/test-host": {
       "types": "./src/runner/test-host.ts",

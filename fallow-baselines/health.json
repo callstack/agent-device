@@ -387,7 +387,7 @@
         "count": 1
       }
     },
-    "src/platforms/boot-diagnostics.ts": {
+    "packages/provision-kit/src/boot-diagnostics.ts": {
       "complexity_critical": {
         "count": 1
       },
@@ -565,7 +565,7 @@
     "src/daemon/handlers/session.ts:complexity",
     "src/replay/script-utils.ts:high impact",
     "packages/selectors/src/internal/predicates.ts:high impact",
-    "src/platforms/boot-diagnostics.ts:complexity",
+    "packages/provision-kit/src/boot-diagnostics.ts:complexity",
     "src/compat/maestro/support.ts:high impact",
     "src/daemon/session-routing.ts:high impact",
     "src/daemon/handlers/session-state.ts:complexity",

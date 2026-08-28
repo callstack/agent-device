@@ -2,7 +2,11 @@ import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { iosRunnerOverrides, performGestureApple } from '../../interactions.ts';
+import {
+  iosRunnerOverrides,
+  performGestureApple,
+  resolveAppleBackRunnerCommand,
+} from '../../interactions.ts';
 import { runAppleRunnerCommand } from '../runner-client.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -32,6 +36,12 @@ const mockRunAppleRunnerCommand = vi.mocked(runAppleRunnerCommand);
 beforeEach(() => {
   vi.resetAllMocks();
   mockRunAppleRunnerCommand.mockImplementation(runnerActual.runAppleRunnerCommand);
+});
+
+test('resolveAppleBackRunnerCommand maps the default and explicit back modes', () => {
+  assert.equal(resolveAppleBackRunnerCommand(), 'backInApp');
+  assert.equal(resolveAppleBackRunnerCommand('in-app'), 'backInApp');
+  assert.equal(resolveAppleBackRunnerCommand('system'), 'backSystem');
 });
 
 function twoFingerPanPlan(): Extract<GesturePlan, { topology: 'two' }> {

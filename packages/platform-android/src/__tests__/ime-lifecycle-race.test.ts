@@ -3,8 +3,8 @@ import { beforeEach, test, vi } from 'vitest';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import './test-utils/android-host-test-setup.ts';
 import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor.ts';
+import { activateAndroidTestIme } from '../ime-activation.ts';
 import {
-  activateAndroidTestIme,
   isAndroidTestImeActive,
   resetAndroidTestImeActivationCacheForTests,
   restoreOrphanedAndroidTestImeOnDaemonStartup,

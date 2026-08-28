@@ -211,7 +211,7 @@ export type AppleRunnerHost = {
   emitRequestProgress(event: RequestProgressEvent): void;
   getRequestSignal(requestId: string | undefined): AbortSignal | undefined;
   isRequestCanceled(requestId: string | undefined): boolean;
-  // Boot-failure classification (src/platforms/boot-diagnostics.ts)
+  // Boot-failure classification (@agent-device/provision-kit/boot-diagnostics)
   classifyBootFailure(input: {
     error?: unknown;
     message?: string;

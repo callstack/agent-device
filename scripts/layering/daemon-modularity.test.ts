@@ -97,9 +97,9 @@ test('logical modules reject forbidden imports', () => {
     new Map([
       [
         'packages/replay-test/src/internal/scheduler.ts',
-        "import type { Device } from '../../../../src/platforms/device.ts';",
+        "import type { Device } from '../../../../src/providers/device.ts';",
       ],
-      ['src/platforms/device.ts', 'export type Device = { id: string };'],
+      ['src/providers/device.ts', 'export type Device = { id: string };'],
     ]),
   );
 

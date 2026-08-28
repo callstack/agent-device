@@ -31,13 +31,11 @@ function declarations(): PlatformPackageDeclaration[] {
             '@agent-device/platform-apple/app-resolution',
             '@agent-device/platform-apple/debug-symbols',
             '@agent-device/platform-apple/doctor',
-            '@agent-device/platform-apple/interactions',
             '@agent-device/platform-apple/install-artifact',
             '@agent-device/platform-apple/macos',
             '@agent-device/platform-apple/perf',
             '@agent-device/platform-apple/physical-device',
             '@agent-device/platform-apple/runner',
-            '@agent-device/platform-apple/runner/client',
             '@agent-device/platform-apple/runner/test-host',
             '@agent-device/platform-apple/runner/operations',
             '@agent-device/platform-apple/runner-owner',
@@ -279,22 +277,6 @@ test('the apple runner mechanics facet subpaths are the enumerated exception', (
   );
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 
-  // The host-bound client factory has exactly one composition root.
-  const clientSources = validSources();
-  clientSources.set(
-    'packages/platform-apple/src/core/runner-client.ts',
-    "import { createAppleRunnerClient } from '@agent-device/platform-apple/runner/client';",
-  );
-  assert.deepEqual(checkPlatformPackagePolicy(clientSources, declarations()), []);
-  clientSources.set(
-    'src/daemon/handlers/session.ts',
-    "import { createAppleRunnerClient } from '@agent-device/platform-apple/runner/client';",
-  );
-  assert.match(
-    messages(clientSources).join('\n'),
-    /only the composition root packages\/platform-apple\/src\/core\/runner-client\.ts may construct/,
-  );
-
   // The test-host installer is a single vitest setup file, dynamic imports included.
   const testHostSources = validSources();
   testHostSources.set(
@@ -328,7 +310,6 @@ test('the Apple domain facades preserve synchronous helpers without widening the
   const sources = validSources();
   for (const specifier of [
     '@agent-device/platform-apple/app-resolution',
-    '@agent-device/platform-apple/interactions',
     '@agent-device/platform-apple/install-artifact',
     '@agent-device/platform-apple/perf',
     '@agent-device/platform-apple/physical-device',

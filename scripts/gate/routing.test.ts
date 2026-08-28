@@ -34,6 +34,13 @@ test('the live ios.yml paths-ignore agrees with the selector over every tracked 
   assert.deepEqual(messages(base), []);
 });
 
+test('the live iOS route carries no filters for the retired src/platforms tree', () => {
+  assert.deepEqual(
+    iosLane.pathsIgnore.filter((pattern) => pattern.startsWith('src/platforms/')),
+    [],
+  );
+});
+
 test('the routed lane derives its needs from its declared gate plus the sampled checks', () => {
   assert.ok(iosLane.gates.includes('swift-runner-ios'), 'ios.yml still declares the runner build');
   assert.deepEqual([...IOS.sampled], ['replay-ios', 'replay-ios-device']);

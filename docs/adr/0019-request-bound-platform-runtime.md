@@ -183,15 +183,15 @@ selection, R11/R13 package enumeration, and the composite typecheck project list
 The Apple XCUITest runner client is a durable platform-owned implementation facet colocated
 inside `packages/platform-apple` as the `src/runner/` subtree (#2040) — Apple mechanics belong to
 the Apple package. R13 models the package by enumeration rather than by exception sprawl: the family
-exports its root façade plus fourteen named domain/mechanics facades — `./app-lifecycle`,
-`./app-resolution`, `./debug-symbols`, `./doctor`, `./interactions`, `./install-artifact`, `./macos`,
+exports its root façade plus thirteen named domain/mechanics facades — `./app-lifecycle`,
+`./app-resolution`, `./debug-symbols`, `./doctor`, `./install-artifact`, `./macos`,
 `./perf`, `./physical-device`, `./runner-owner`, `./runner/operations`, `./simctl`, `./simulator`, and
-`./tool-provider` — as well as exactly the `./runner`, `./runner/client`, and `./runner/test-host`
+`./tool-provider` — as well as exactly the `./runner` and `./runner/test-host`
 subpaths. The named facades replace root-only access for synchronous domain consumers without a
 broad compatibility barrel; R13 pins the exact export set and allowed consumer seams. The
 `./runner` façade subpath is the seam through which daemon and root consumers reach runner mechanics
-directly today; the host-bound `./runner/client` factory has one composition root and
-`./runner/test-host` one vitest installer; the facet owns its cache files and usbmux sockets (the
+directly today; the host-bound runner client stays package-internal and `./runner/test-host` has one
+vitest installer; the facet owns its cache files and usbmux sockets (the
 ambient-host rule exempts exactly that subtree), while raw process primitives stay banned — host
 authority still enters through one focused injected port (`AppleRunnerHost`: process execution,
 diagnostics, retry, probes, locks, foreground Apple tooling, physical-device control) constructed by

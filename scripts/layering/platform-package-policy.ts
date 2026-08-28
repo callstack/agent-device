@@ -60,9 +60,7 @@ export function checkRetiredPlatformsZone(files: readonly string[]): LayeringVio
     }));
 }
 const APPLE_RUNNER_FACADE = '@agent-device/platform-apple/runner';
-const APPLE_RUNNER_CLIENT = '@agent-device/platform-apple/runner/client';
 const APPLE_RUNNER_TEST_HOST = '@agent-device/platform-apple/runner/test-host';
-const APPLE_RUNNER_CLIENT_COMPOSITION = 'packages/platform-apple/src/core/runner-client.ts';
 const APPLE_RUNNER_TEST_HOST_INSTALLER = 'scripts/vitest-apple-runner-host-setup.ts';
 const ANDROID_MECHANICS_FACADE = '@agent-device/platform-android/mechanics';
 const ANDROID_HOST_FACET = '@agent-device/platform-android/adb-host';
@@ -70,13 +68,11 @@ const ANDROID_HOST_BINDING = 'src/platform-runtime-android-adb-host.ts';
 const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly string[]>>> = {
   apple: [
     APPLE_RUNNER_FACADE,
-    APPLE_RUNNER_CLIENT,
     APPLE_RUNNER_TEST_HOST,
     '@agent-device/platform-apple/app-lifecycle',
     '@agent-device/platform-apple/app-resolution',
     '@agent-device/platform-apple/debug-symbols',
     '@agent-device/platform-apple/doctor',
-    '@agent-device/platform-apple/interactions',
     '@agent-device/platform-apple/install-artifact',
     '@agent-device/platform-apple/macos',
     '@agent-device/platform-apple/perf',
@@ -258,15 +254,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
         ),
       );
     }
-    if (site.spec === APPLE_RUNNER_CLIENT && file !== APPLE_RUNNER_CLIENT_COMPOSITION) {
-      violations.push(
-        violation(
-          file,
-          site.line,
-          `'${APPLE_RUNNER_CLIENT}' is the host-bound runner client factory — only the composition root ${APPLE_RUNNER_CLIENT_COMPOSITION} may construct the client`,
-        ),
-      );
-    } else if (site.spec === APPLE_RUNNER_TEST_HOST && file !== APPLE_RUNNER_TEST_HOST_INSTALLER) {
+    if (site.spec === APPLE_RUNNER_TEST_HOST && file !== APPLE_RUNNER_TEST_HOST_INSTALLER) {
       violations.push(
         violation(
           file,

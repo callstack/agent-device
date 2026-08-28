@@ -113,10 +113,8 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
 
   // --- @agent-device/platform-apple/runner ---
   // #2040 extraction: the façade stays types/pure-helpers/bundle-ids; the whole
-  // client implementation loads only through the './client' subpath, which the
-  // root composition module reaches behind its consumers' dynamic imports.
+  // client implementation is package-internal and loads only behind consumers' dynamic imports.
   'packages/platform-apple/src/runner/index.ts': 13,
-  'packages/platform-apple/src/runner/client.ts': 46,
   'packages/platform-apple/src/runner/test-host.ts': 2,
 
   // --- @agent-device/capture-kit ---
@@ -148,7 +146,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
 
   // --- @agent-device/provision-kit ---
   'packages/provision-kit/src/app-resolution-cache.ts': 1,
-  'packages/provision-kit/src/boot-diagnostics.ts': 4,
+  'packages/provision-kit/src/boot-diagnostics.ts': 3,
   'packages/provision-kit/src/install-artifact-archive-context.ts': 10,
   'packages/provision-kit/src/install-source.ts': 25,
   'packages/provision-kit/src/install-source-network.ts': 3,
@@ -294,23 +292,22 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/platform-android/src/adb-host.ts': 1,
   // The named mechanics facet is intentionally implementation-eager once selected. Its exact
   // closure is pinned so a future facade expansion is visible in review.
-  'packages/platform-android/src/mechanics.ts': 177,
+  'packages/platform-android/src/mechanics.ts': 176,
 
   // --- @agent-device/platform-apple ---
   'packages/platform-apple/src/index.ts': 1,
-  'packages/platform-apple/src/app-lifecycle-facade.ts': 120,
+  'packages/platform-apple/src/app-lifecycle-facade.ts': 119,
   'packages/platform-apple/src/app-resolution-facade.ts': 61,
   'packages/platform-apple/src/debug-symbols-facade.ts': 24,
-  'packages/platform-apple/src/doctor-facade.ts': 101,
-  'packages/platform-apple/src/interactions-facade.ts': 117,
+  'packages/platform-apple/src/doctor-facade.ts': 100,
   'packages/platform-apple/src/install-artifact-facade.ts': 41,
   'packages/platform-apple/src/macos-facade.ts': 25,
   'packages/platform-apple/src/perf-facade.ts': 60,
   'packages/platform-apple/src/physical-device-facade.ts': 47,
-  'packages/platform-apple/src/runner-operations-facade.ts': 100,
+  'packages/platform-apple/src/runner-operations-facade.ts': 99,
   'packages/platform-apple/src/runner-owner-facade.ts': 2,
   'packages/platform-apple/src/simctl-facade.ts': 18,
-  'packages/platform-apple/src/simulator-facade.ts': 26,
+  'packages/platform-apple/src/simulator-facade.ts': 25,
   'packages/platform-apple/src/tool-provider-facade.ts': 14,
 
   // --- @agent-device/platform-harmonyos ---
@@ -419,7 +416,6 @@ const APPLE_DOMAIN_MECHANICS_ENTRY_FILES: ReadonlySet<string> = new Set([
   'packages/platform-apple/src/app-resolution-facade.ts',
   'packages/platform-apple/src/debug-symbols-facade.ts',
   'packages/platform-apple/src/doctor-facade.ts',
-  'packages/platform-apple/src/interactions-facade.ts',
   'packages/platform-apple/src/install-artifact-facade.ts',
   'packages/platform-apple/src/macos-facade.ts',
   'packages/platform-apple/src/perf-facade.ts',

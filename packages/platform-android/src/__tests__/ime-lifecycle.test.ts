@@ -38,9 +38,9 @@ vi.mock('../ime-helper.ts', async (importOriginal) => {
 
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor.ts';
+import { activateAndroidTestIme } from '../ime-activation.ts';
 import { resetAndroidImeHelperInstallCache } from '../ime-helper.ts';
 import {
-  activateAndroidTestIme,
   isAndroidTestImeActive,
   restoreAndroidTestIme,
   restoreOrphanedAndroidTestImeOnDaemonStartup,
