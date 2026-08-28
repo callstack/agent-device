@@ -1,6 +1,9 @@
 import { fingerprint, type RemoteConnectionState } from '../../remote/remote-connection-state.ts';
 import type { ConnectVerification } from '../connection/connect-provider-adapters.ts';
-import { connectionProviderLeaseKind } from '../connection/provider-policy.ts';
+import {
+  connectionProviderLeaseKind,
+  connectionProviderSupportsDeferredAppSelection,
+} from '../connection/provider-policy.ts';
 import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
 
 export type ConnectReadiness = ConnectVerification & {
@@ -40,7 +43,7 @@ export function buildLeasePreparationNotice(
         'No live device session has been created. Run devices to inspect inventory without allocating, then open when ready.',
     };
   }
-  if (state.leaseProvider === 'limrun') {
+  if (connectionProviderSupportsDeferredAppSelection(state.leaseProvider)) {
     return {
       status: 'deferred',
       nextSteps: buildConnectWorkflow(state, verification).nextSteps,
@@ -241,7 +244,7 @@ function buildUnscopedConnectWorkflow(
   if (!verification && leaseKind === 'direct-device-provider') {
     return { nextSteps: defaultDirectProviderLifecycle() };
   }
-  if (verification?.provider === 'limrun') {
+  if (connectionProviderSupportsDeferredAppSelection(verification?.provider)) {
     return {
       nextSteps: ['agent-device apps', 'agent-device open <uploaded-asset-name>'],
     };
@@ -342,6 +345,8 @@ function appIdPlaceholder(platform: RemoteConnectionState['platform']): string {
 
 function missingAppLabel(state: RemoteConnectionState): string {
   if (state.leaseProvider === 'aws-device-farm') return 'not attached';
-  if (state.leaseProvider === 'limrun') return 'not installed yet';
+  if (connectionProviderSupportsDeferredAppSelection(state.leaseProvider)) {
+    return 'not installed yet';
+  }
   return 'not available';
 }
