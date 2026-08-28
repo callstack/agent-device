@@ -84,17 +84,23 @@ test('daemon command registry preserves request admission traits', () => {
   assert.equal(isLeaseAdmissionExempt(PUBLIC_COMMANDS.open), false);
   assert.equal(shouldLockSessionExecution(PUBLIC_COMMANDS.open), true);
   assert.equal(
-    isSessionlessLeaseAdmissionExempt({
-      ...makeRequest(PUBLIC_COMMANDS.apps),
-      flags: { platform: 'android', leaseProvider: 'limrun' },
-    }),
+    isSessionlessLeaseAdmissionExempt(
+      {
+        ...makeRequest(PUBLIC_COMMANDS.apps),
+        flags: { platform: 'android', leaseProvider: 'limrun' },
+      },
+      { providerAppCatalogIds: ['limrun'] },
+    ),
     true,
   );
   assert.equal(
-    isSessionlessLeaseAdmissionExempt({
-      ...makeRequest(PUBLIC_COMMANDS.apps),
-      flags: { platform: 'android', leaseProvider: 'limrun', leaseId: 'lease-a' },
-    }),
+    isSessionlessLeaseAdmissionExempt(
+      {
+        ...makeRequest(PUBLIC_COMMANDS.apps),
+        flags: { platform: 'android', leaseProvider: 'limrun', leaseId: 'lease-a' },
+      },
+      { providerAppCatalogIds: ['limrun'] },
+    ),
     false,
   );
 });

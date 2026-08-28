@@ -117,6 +117,7 @@ export async function createRequestExecutionScope(params: {
   deviceRuntimeGateway?: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   platformRequestScope?: PlatformRequestScope;
   platformResourceCleanup?: PlatformResourceCleanup;
+  providerAppCatalogIds?: readonly string[];
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
   let scopedReq = applyRequestCommandDefaults(scopeRequestSession(params.req));
@@ -236,6 +237,7 @@ export async function createRequestExecutionScope(params: {
           sessionName,
           sessionStore,
           leaseRegistry,
+          providerAppCatalogIds: params.providerAppCatalogIds,
         });
         scope.req = scopedReq;
         return isHumanControlMutation(scopedReq)

@@ -12,6 +12,7 @@ import {
 } from './timeout-policy.ts';
 import { resolvePostActionObservationSupport } from './post-action-observation.ts';
 import type { PostActionObservationSupport } from './post-action-observation.ts';
+import type { DaemonCommandDescriptor } from './daemon-command-descriptor.ts';
 import {
   deployAppUse,
   readyMaterializeAndDeployAppUse,
@@ -179,9 +180,12 @@ const isShardedTestRequest = (req: DispatchedCommand): boolean =>
 const isPlainCloseRequest = (req: DispatchedCommand): boolean =>
   (req.positionals?.length ?? 0) === 0;
 
-const isDeferredProviderAppCatalogRequest = (req: DispatchedCommand): boolean =>
+const isDeferredProviderAppCatalogRequest: NonNullable<
+  DaemonCommandDescriptor['sessionlessLeaseAdmissionExempt']
+> = (req, context) =>
   req.flags?.leaseId === undefined &&
   typeof req.flags?.leaseProvider === 'string' &&
+  context.providerAppCatalogIds.includes(req.flags.leaseProvider) &&
   (req.flags?.platform === 'android' || req.flags?.platform === 'ios');
 
 // ADR 0014 request-sensitive ref-frame resolvers. The action is the leading

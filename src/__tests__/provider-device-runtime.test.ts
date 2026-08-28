@@ -28,6 +28,7 @@ test('provider device runtime registry delegates lifecycle, inventory, and inter
   });
   await requestProviders.recoverExpiredLease?.(world.lease);
   assert.deepEqual(requestProviders.recoverableProviderIds, ['hit']);
+  assert.deepEqual(requestProviders.providerAppCatalogIds, ['hit']);
   assert.deepEqual(world.recoveredLeases, [world.lease]);
   assert.deepEqual(
     await requestProviders.deviceInventorySource?.discover(
@@ -142,6 +143,7 @@ function makeProviderRuntimeWorld() {
     interactor,
     portReverseResult: { provider: 'hit' },
   });
+  hitRuntime.appCatalog = async () => [];
   hitRuntime.recoverExpiredLease = async (expiredLease) => {
     recoveredLeases.push(expiredLease);
   };

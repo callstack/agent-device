@@ -120,6 +120,44 @@ test('non-close commands on a tenant-isolated session still require a lease id',
   );
 });
 
+test.each(['bogus', 'proxy', 'browserstack'])(
+  'sessionless apps for non-catalog provider %s still requires a tenant lease',
+  (leaseProvider) => {
+    const registry = new LeaseRegistry();
+
+    assert.throws(
+      () =>
+        assertRequestLeaseAdmission(
+          makeRequest({
+            command: 'apps',
+            flags: { platform: 'ios', leaseProvider },
+            meta: { tenantId: 'tenant-a', runId: 'run-1', sessionIsolation: 'tenant' },
+          }),
+          registry,
+          undefined,
+        ),
+      /tenant isolation requires lease id/,
+    );
+  },
+);
+
+test('sessionless apps admits a provider declared by the runtime app catalog', () => {
+  const registry = new LeaseRegistry();
+
+  const result = assertRequestLeaseAdmission(
+    makeRequest({
+      command: 'apps',
+      flags: { platform: 'ios', leaseProvider: 'limrun' },
+      meta: { tenantId: 'tenant-a', runId: 'run-1', sessionIsolation: 'tenant' },
+    }),
+    registry,
+    undefined,
+    { providerAppCatalogIds: ['limrun'] },
+  );
+
+  assert.equal(result, undefined);
+});
+
 test('close still admits and heartbeats a real active lease', () => {
   let now = 1_000;
   const registry = new LeaseRegistry({ now: () => now });

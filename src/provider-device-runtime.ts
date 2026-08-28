@@ -44,6 +44,7 @@ export type ProviderDeviceRuntimeRequestProviders = {
   providerRuntimeIds: readonly string[];
   providerRuntimeRequiredIds: readonly string[];
   recoverableProviderIds: readonly string[];
+  providerAppCatalogIds: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   recoverExpiredLease?: ProviderExpiredLeaseRecovery;
   cloudArtifactProvider?: CloudArtifactProvider;
@@ -107,6 +108,9 @@ export function createProviderDeviceRuntimeRequestProviders(
     leaseLifecycleProvider: composeLeaseProvider(runtimes),
     recoverableProviderIds: runtimes
       .filter((runtime) => runtime.recoverExpiredLease !== undefined)
+      .map((runtime) => runtime.provider),
+    providerAppCatalogIds: runtimes
+      .filter((runtime) => runtime.appCatalog !== undefined)
       .map((runtime) => runtime.provider),
     recoverExpiredLease: composeExpiredLeaseRecovery(runtimes),
     cloudArtifactProvider: composeCloudArtifactProvider(runtimes),

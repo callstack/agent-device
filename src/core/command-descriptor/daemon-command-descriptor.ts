@@ -22,6 +22,10 @@ export type DaemonRefFrameEffect<TRequest = DispatchedCommand> =
   | RefFrameEffect
   | ((req: TRequest) => RefFrameEffect);
 
+export type SessionlessLeaseAdmissionContext = Readonly<{
+  providerAppCatalogIds: readonly string[];
+}>;
+
 /**
  * Daemon route + request-policy traits for one command. Generic over the request
  * the closure traits read so core can declare the shape in terms of
@@ -51,5 +55,8 @@ export type DaemonCommandDescriptor<TRequest = DispatchedCommand> = {
   preferExplicitDeviceOverExistingSession?: boolean;
   allowSessionlessDefaultDevice?: (req: TRequest) => boolean;
   skipSessionlessProviderDevice?: (req: TRequest) => boolean;
-  sessionlessLeaseAdmissionExempt?: (req: TRequest) => boolean;
+  sessionlessLeaseAdmissionExempt?: (
+    req: TRequest,
+    context: SessionlessLeaseAdmissionContext,
+  ) => boolean;
 };

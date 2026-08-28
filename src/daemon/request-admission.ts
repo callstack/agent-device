@@ -67,6 +67,7 @@ export function assertRequestLeaseAdmission(
   req: DaemonRequest,
   leaseRegistry: LeaseRegistry,
   session?: SessionState,
+  options: Readonly<{ providerAppCatalogIds?: readonly string[] }> = {},
 ): DeviceLease | undefined {
   if (isLeaseAdmissionExempt(req.command)) {
     return undefined;
@@ -77,7 +78,10 @@ export function assertRequestLeaseAdmission(
   if (
     session === undefined &&
     !requestLeaseScope.leaseId &&
-    (isSessionlessPlainCloseAdmissionExempt(req) || isSessionlessLeaseAdmissionExempt(req))
+    (isSessionlessPlainCloseAdmissionExempt(req) ||
+      isSessionlessLeaseAdmissionExempt(req, {
+        providerAppCatalogIds: options.providerAppCatalogIds ?? [],
+      }))
   ) {
     return undefined;
   }

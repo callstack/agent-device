@@ -104,10 +104,13 @@ export function admitRequestLeaseForLockedScope(params: {
   sessionName: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
+  providerAppCatalogIds?: readonly string[];
 }): DaemonRequest {
   const { sessionName, sessionStore, leaseRegistry } = params;
   const existingSession = sessionStore.get(sessionName);
-  const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession);
+  const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession, {
+    providerAppCatalogIds: params.providerAppCatalogIds,
+  });
   if (!activeLease) return params.req;
 
   const nextReq = {
