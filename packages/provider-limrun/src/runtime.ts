@@ -5,7 +5,7 @@ import type {
   DeviceLease,
   LeaseLifecycleProvider,
   LeaseLifecycleContext,
-  ProviderAppCatalog,
+  ProviderAppCatalogHandler,
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
   ProviderDeviceRuntime,
@@ -100,8 +100,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     release: async (lease) => await this.release(lease),
   };
 
-  readonly appCatalog: ProviderAppCatalog = async (query, signal) => {
-    if (query.provider !== this.provider) return undefined;
+  readonly appCatalog: ProviderAppCatalogHandler = async (query, signal) => {
     const { listLimrunAppAssets } = await import('./app-catalog.ts');
     return (await listLimrunAppAssets(this.limrun, query.platform, signal)).map(
       (asset) => asset.name,

@@ -25,6 +25,7 @@ export type {
   LeaseLifecycleContext,
   LeaseLifecycleProvider,
   ProviderAppCatalog,
+  ProviderAppCatalogHandler,
   ProviderAppCatalogQuery,
   ProviderDeviceInventoryOutcome,
   ProviderDeviceInventorySource,

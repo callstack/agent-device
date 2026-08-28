@@ -107,7 +107,10 @@ test('request handler chain forwards the deferred provider app catalog to invent
   req.flags = { platform: 'android', leaseProvider: 'limrun' };
   const response = await runRequestHandlerChain({
     ...makeChainParams(req),
-    providerAppCatalog: async () => ['Example.apk'],
+    providerAppCatalog: {
+      supports: (provider) => provider === 'limrun',
+      list: async () => ['Example.apk'],
+    },
   });
 
   assert.deepEqual(response, { ok: true, data: { apps: ['Example.apk'] } });

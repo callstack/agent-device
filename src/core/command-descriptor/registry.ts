@@ -177,16 +177,21 @@ const isShardedTestRequest = (req: DispatchedCommand): boolean =>
 // no-lease-anywhere admission bypass in request-admission.ts. `close <app>`
 // resolves its device straight from flags when there's no session and must
 // stay behind full lease/tenant admission.
-const isPlainCloseRequest = (req: DispatchedCommand): boolean =>
-  (req.positionals?.length ?? 0) === 0;
+const resolvePlainCloseLeaseAdmissionExemption = (
+  req: DispatchedCommand,
+): { kind: 'unconditional' } | undefined =>
+  (req.positionals?.length ?? 0) === 0 ? { kind: 'unconditional' } : undefined;
 
-const isDeferredProviderAppCatalogRequest: NonNullable<
-  DaemonCommandDescriptor['sessionlessLeaseAdmissionExempt']
-> = (req, context) =>
-  req.flags?.leaseId === undefined &&
-  typeof req.flags?.leaseProvider === 'string' &&
-  context.providerAppCatalogIds.includes(req.flags.leaseProvider) &&
-  (req.flags?.platform === 'android' || req.flags?.platform === 'ios');
+const resolveDeferredProviderAppCatalogLeaseAdmissionExemption: NonNullable<
+  DaemonCommandDescriptor['sessionlessLeaseAdmissionExemption']
+> = (req) => {
+  const provider = req.flags?.leaseProvider;
+  return req.flags?.leaseId === undefined &&
+    typeof provider === 'string' &&
+    (req.flags?.platform === 'android' || req.flags?.platform === 'ios')
+    ? { kind: 'provider-app-catalog', provider }
+    : undefined;
+};
 
 // ADR 0014 request-sensitive ref-frame resolvers. The action is the leading
 // positional (see keyboard/alert daemon writers in src/commands/system/index.ts
@@ -616,7 +621,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       sessionKind: 'inventory',
       lockPolicySelectorOverride: true,
       preferExplicitDeviceOverExistingSession: true,
-      sessionlessLeaseAdmissionExempt: isDeferredProviderAppCatalogRequest,
+      sessionlessLeaseAdmissionExemption: resolveDeferredProviderAppCatalogLeaseAdmissionExemption,
     },
     platformExecution: { kind: 'device-runtime', uses: [appsRuntimeUse] as const },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
@@ -990,7 +995,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       refFrameEffect: 'may-invalidate',
       allowInvalidRecording: true,
       saveScriptFlagOwner: true,
-      sessionlessLeaseAdmissionExempt: isPlainCloseRequest,
+      sessionlessLeaseAdmissionExemption: resolvePlainCloseLeaseAdmissionExemption,
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,

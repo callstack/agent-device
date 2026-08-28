@@ -1,4 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import type { ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
 import {
   emitDiagnostic,
@@ -117,7 +118,7 @@ export async function createRequestExecutionScope(params: {
   deviceRuntimeGateway?: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   platformRequestScope?: PlatformRequestScope;
   platformResourceCleanup?: PlatformResourceCleanup;
-  providerAppCatalogIds?: readonly string[];
+  providerAppCatalog?: ProviderAppCatalog;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
   let scopedReq = applyRequestCommandDefaults(scopeRequestSession(params.req));
@@ -237,7 +238,7 @@ export async function createRequestExecutionScope(params: {
           sessionName,
           sessionStore,
           leaseRegistry,
-          providerAppCatalogIds: params.providerAppCatalogIds,
+          providerAppCatalog: params.providerAppCatalog,
         });
         scope.req = scopedReq;
         return isHumanControlMutation(scopedReq)

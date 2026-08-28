@@ -44,7 +44,6 @@ export type ProviderDeviceRuntimeRequestProviders = {
   providerRuntimeIds: readonly string[];
   providerRuntimeRequiredIds: readonly string[];
   recoverableProviderIds: readonly string[];
-  providerAppCatalogIds: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   recoverExpiredLease?: ProviderExpiredLeaseRecovery;
   cloudArtifactProvider?: CloudArtifactProvider;
@@ -108,9 +107,6 @@ export function createProviderDeviceRuntimeRequestProviders(
     leaseLifecycleProvider: composeLeaseProvider(runtimes),
     recoverableProviderIds: runtimes
       .filter((runtime) => runtime.recoverExpiredLease !== undefined)
-      .map((runtime) => runtime.provider),
-    providerAppCatalogIds: runtimes
-      .filter((runtime) => runtime.appCatalog !== undefined)
       .map((runtime) => runtime.provider),
     recoverExpiredLease: composeExpiredLeaseRecovery(runtimes),
     cloudArtifactProvider: composeCloudArtifactProvider(runtimes),
@@ -220,14 +216,24 @@ function composeCloudArtifactProvider(
 function composeProviderAppCatalog(
   runtimes: ProviderDeviceRuntime[],
 ): ProviderAppCatalog | undefined {
-  if (!runtimes.some((runtime) => runtime.appCatalog !== undefined)) return undefined;
-  return async (query, signal) => {
-    for (const runtime of runtimes) {
-      if (!runtime.appCatalog || !runtimeMatchesProvider(runtime, query.provider)) continue;
-      const apps = await runtime.appCatalog(query, signal);
-      if (apps) return apps;
-    }
-    return undefined;
+  const catalogRuntimes = runtimes.filter((runtime) => runtime.appCatalog !== undefined);
+  if (catalogRuntimes.length === 0) return undefined;
+  return {
+    supports: (provider) =>
+      catalogRuntimes.some((runtime) => runtimeMatchesProvider(runtime, provider)),
+    list: async (query, signal) => {
+      const runtime = catalogRuntimes.find((candidate) =>
+        runtimeMatchesProvider(candidate, query.provider),
+      );
+      if (!runtime?.appCatalog) {
+        throw new AppError(
+          'UNSUPPORTED_OPERATION',
+          `Provider ${query.provider} does not expose an app catalog.`,
+          { provider: query.provider },
+        );
+      }
+      return await runtime.appCatalog(query, signal);
+    },
   };
 }
 

@@ -2,7 +2,11 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { leaseScopeToReleaseRequest } from '../core/lease-scope.ts';
 import { clearDeviceClaim } from './device-claims.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
-import type { DeviceLease, LeaseLifecycleProvider } from '@agent-device/contracts/device';
+import type {
+  DeviceLease,
+  LeaseLifecycleProvider,
+  ProviderAppCatalog,
+} from '@agent-device/contracts/device';
 import { buildSessionLeaseFromRequest, type SessionLease } from './lease-context.ts';
 import {
   assertRequestLeaseAdmission,
@@ -104,12 +108,12 @@ export function admitRequestLeaseForLockedScope(params: {
   sessionName: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
-  providerAppCatalogIds?: readonly string[];
+  providerAppCatalog?: ProviderAppCatalog;
 }): DaemonRequest {
   const { sessionName, sessionStore, leaseRegistry } = params;
   const existingSession = sessionStore.get(sessionName);
   const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession, {
-    providerAppCatalogIds: params.providerAppCatalogIds,
+    providerAppCatalog: params.providerAppCatalog,
   });
   if (!activeLease) return params.req;
 

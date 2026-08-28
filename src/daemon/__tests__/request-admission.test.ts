@@ -4,6 +4,12 @@ import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts'
 import { LeaseRegistry } from '../lease-registry.ts';
 import { assertRequestLeaseAdmission } from '../request-admission.ts';
 import type { DaemonRequest } from '../types.ts';
+import type { ProviderAppCatalog } from '@agent-device/contracts/device';
+
+const limrunAppCatalog: ProviderAppCatalog = {
+  supports: (provider) => provider === 'limrun',
+  list: async () => [],
+};
 
 function makeRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
   return {
@@ -152,7 +158,7 @@ test('sessionless apps admits a provider declared by the runtime app catalog', (
     }),
     registry,
     undefined,
-    { providerAppCatalogIds: ['limrun'] },
+    { providerAppCatalog: limrunAppCatalog },
   );
 
   assert.equal(result, undefined);

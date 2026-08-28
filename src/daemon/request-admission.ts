@@ -5,8 +5,9 @@ import {
   isLeaseAdmissionExempt,
   isHumanControlMutation,
   isSessionlessPlainCloseAdmissionExempt,
-  isSessionlessLeaseAdmissionExempt,
+  resolveSessionlessLeaseAdmissionExemption,
 } from './daemon-command-registry.ts';
+import type { DeviceLease, ProviderAppCatalog } from '@agent-device/contracts/device';
 import {
   DEFAULT_PROXY_LEASE_TTL_MS,
   findMissingProxyLeaseFields,
@@ -16,7 +17,6 @@ import {
 } from './lease-context.ts';
 import { leaseScopeToHeartbeatRequest } from '../core/lease-scope.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
-import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DaemonRequest, SessionState } from './types.ts';
 
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
@@ -67,7 +67,7 @@ export function assertRequestLeaseAdmission(
   req: DaemonRequest,
   leaseRegistry: LeaseRegistry,
   session?: SessionState,
-  options: Readonly<{ providerAppCatalogIds?: readonly string[] }> = {},
+  options: Readonly<{ providerAppCatalog?: ProviderAppCatalog }> = {},
 ): DeviceLease | undefined {
   if (isLeaseAdmissionExempt(req.command)) {
     return undefined;
@@ -79,9 +79,7 @@ export function assertRequestLeaseAdmission(
     session === undefined &&
     !requestLeaseScope.leaseId &&
     (isSessionlessPlainCloseAdmissionExempt(req) ||
-      isSessionlessLeaseAdmissionExempt(req, {
-        providerAppCatalogIds: options.providerAppCatalogIds ?? [],
-      }))
+      hasSessionlessLeaseAdmissionExemption(req, options.providerAppCatalog))
   ) {
     return undefined;
   }
@@ -107,6 +105,18 @@ export function assertRequestLeaseAdmission(
   const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(heartbeatLeaseScope));
   if (isHumanControlMutation(req)) leaseRegistry.assertHumanControlAdmission(lease);
   return lease;
+}
+
+function hasSessionlessLeaseAdmissionExemption(
+  req: DaemonRequest,
+  providerAppCatalog: ProviderAppCatalog | undefined,
+): boolean {
+  const exemption = resolveSessionlessLeaseAdmissionExemption(req);
+  if (exemption?.kind === 'unconditional') return true;
+  return (
+    exemption?.kind === 'provider-app-catalog' &&
+    providerAppCatalog?.supports(exemption.provider) === true
+  );
 }
 
 export function assertRequestLeaseAdmissionPreflight(req: DaemonRequest): void {

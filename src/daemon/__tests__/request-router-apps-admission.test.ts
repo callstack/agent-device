@@ -9,8 +9,12 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import type { DaemonRequest } from '../types.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 
-function createAppsAdmissionHarness(apps: readonly string[] | undefined) {
-  const providerAppCatalog = vi.fn(async () => apps);
+function createAppsAdmissionHarness(apps: readonly string[] = []) {
+  const listProviderApps = vi.fn(async () => apps);
+  const providerAppCatalog = {
+    supports: vi.fn((provider: string) => provider === 'limrun'),
+    list: listProviderApps,
+  };
   const inspectFacts = vi.fn(async () => {
     throw new Error('apps catalog must not inspect device facts');
   });
@@ -29,10 +33,9 @@ function createAppsAdmissionHarness(apps: readonly string[] | undefined) {
       shutdown: async () => {},
     } satisfies DeviceRuntimeGateway<PlatformRuntimeOperations>,
     providerAppCatalog,
-    providerAppCatalogIds: ['limrun'],
     trackDownloadableArtifact: () => 'artifact-id',
   });
-  return { handler, providerAppCatalog, inspectFacts, bind };
+  return { handler, listProviderApps, inspectFacts, bind };
 }
 
 function appsRequest(leaseProvider: string): DaemonRequest {
@@ -49,28 +52,37 @@ function appsRequest(leaseProvider: string): DaemonRequest {
 test.each(['bogus', 'proxy', 'browserstack'])(
   'tenant apps rejects non-catalog provider %s before provider or device access',
   async (leaseProvider) => {
-    const { handler, providerAppCatalog, inspectFacts, bind } =
-      createAppsAdmissionHarness(undefined);
+    const { handler, listProviderApps, inspectFacts, bind } = createAppsAdmissionHarness(undefined);
     const response = await handler(appsRequest(leaseProvider));
 
     expect(response.ok).toBe(false);
     expect(response.ok === false && response.error.message).toMatch(
       /tenant isolation requires lease id/,
     );
-    expect(providerAppCatalog).not.toHaveBeenCalled();
+    expect(listProviderApps).not.toHaveBeenCalled();
     expect(inspectFacts).not.toHaveBeenCalled();
     expect(bind).not.toHaveBeenCalled();
   },
 );
 
 test('tenant apps admits the runtime-declared catalog provider without device access', async () => {
-  const { handler, providerAppCatalog, inspectFacts, bind } = createAppsAdmissionHarness([
+  const { handler, listProviderApps, inspectFacts, bind } = createAppsAdmissionHarness([
     'Example.app.zip',
   ]);
   const response = await handler(appsRequest('limrun'));
 
   expect(response).toEqual({ ok: true, data: { apps: ['Example.app.zip'] } });
-  expect(providerAppCatalog).toHaveBeenCalledTimes(1);
+  expect(listProviderApps).toHaveBeenCalledTimes(1);
+  expect(inspectFacts).not.toHaveBeenCalled();
+  expect(bind).not.toHaveBeenCalled();
+});
+
+test('tenant apps treats an empty provider catalog as authoritative', async () => {
+  const { handler, listProviderApps, inspectFacts, bind } = createAppsAdmissionHarness();
+  const response = await handler(appsRequest('limrun'));
+
+  expect(response).toEqual({ ok: true, data: { apps: [] } });
+  expect(listProviderApps).toHaveBeenCalledTimes(1);
   expect(inspectFacts).not.toHaveBeenCalled();
   expect(bind).not.toHaveBeenCalled();
 });

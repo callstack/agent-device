@@ -22,9 +22,9 @@ export type DaemonRefFrameEffect<TRequest = DispatchedCommand> =
   | RefFrameEffect
   | ((req: TRequest) => RefFrameEffect);
 
-export type SessionlessLeaseAdmissionContext = Readonly<{
-  providerAppCatalogIds: readonly string[];
-}>;
+export type SessionlessLeaseAdmissionExemption =
+  | Readonly<{ kind: 'unconditional' }>
+  | Readonly<{ kind: 'provider-app-catalog'; provider: string }>;
 
 /**
  * Daemon route + request-policy traits for one command. Generic over the request
@@ -55,8 +55,7 @@ export type DaemonCommandDescriptor<TRequest = DispatchedCommand> = {
   preferExplicitDeviceOverExistingSession?: boolean;
   allowSessionlessDefaultDevice?: (req: TRequest) => boolean;
   skipSessionlessProviderDevice?: (req: TRequest) => boolean;
-  sessionlessLeaseAdmissionExempt?: (
+  sessionlessLeaseAdmissionExemption?: (
     req: TRequest,
-    context: SessionlessLeaseAdmissionContext,
-  ) => boolean;
+  ) => SessionlessLeaseAdmissionExemption | undefined;
 };

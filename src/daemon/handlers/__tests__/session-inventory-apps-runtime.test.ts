@@ -148,7 +148,10 @@ test('deferred provider apps returns uploaded assets without resolving a device'
     sessionStore,
     inspectFacts,
     bindDevice,
-    providerAppCatalog: listAvailableApps,
+    providerAppCatalog: {
+      supports: (provider) => provider === 'limrun',
+      list: listAvailableApps,
+    },
   });
 
   expect(response).toEqual({
@@ -170,7 +173,7 @@ test('deferred provider apps forwards request cancellation to the catalog', asyn
   const requestId = 'provider-app-catalog-abort';
   const registration = registerRequestAbort(requestId);
   const reason = new Error('catalog canceled');
-  const providerAppCatalog = vi.fn(async (_query, signal?: AbortSignal) => {
+  const listAvailableApps = vi.fn(async (_query, signal?: AbortSignal) => {
     expect(signal).toBe(registration?.controller.signal);
     return await new Promise<readonly string[]>((_resolve, reject) => {
       signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
@@ -190,7 +193,10 @@ test('deferred provider apps forwards request cancellation to the catalog', asyn
       req,
       sessionName: req.session,
       sessionStore: makeSessionStore(),
-      providerAppCatalog,
+      providerAppCatalog: {
+        supports: (provider) => provider === 'limrun',
+        list: listAvailableApps,
+      },
     });
     registration?.controller.abort(reason);
     await expect(response).rejects.toBe(reason);

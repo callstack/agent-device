@@ -4,7 +4,7 @@ import type {
   DeviceInventoryProvider,
   DeviceLease,
   LeaseLifecycleProvider,
-  ProviderAppCatalog,
+  ProviderAppCatalogHandler,
 } from './device-provider.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 
@@ -37,7 +37,7 @@ export type ProviderDeviceRuntime = {
   leaseLifecycle: LeaseLifecycleProvider;
   recoverExpiredLease?: ProviderExpiredLeaseRecovery;
   cloudArtifacts?: CloudArtifactProvider;
-  appCatalog?: ProviderAppCatalog;
+  appCatalog?: ProviderAppCatalogHandler;
   deviceInventoryProvider: DeviceInventoryProvider;
   ownsDevice(device: DeviceInfo): boolean;
   getInteractor(device: DeviceInfo, runnerContext?: RunnerContext): Interactor | undefined;

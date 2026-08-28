@@ -334,7 +334,6 @@ export async function startDaemonRuntime(
     leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
     cloudArtifactProvider,
     providerAppCatalog,
-    providerAppCatalogIds: providerRuntimeProviders.providerAppCatalogIds,
     deviceInventoryGateways,
     deviceRuntimeGateway,
     appLogAdmissionLedger,

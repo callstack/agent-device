@@ -72,7 +72,12 @@ export type ProviderAppCatalogQuery = Readonly<{
   platform: 'android' | 'ios';
 }>;
 
-export type ProviderAppCatalog = (
+export type ProviderAppCatalogHandler = (
   query: ProviderAppCatalogQuery,
   signal?: AbortSignal,
-) => Promise<readonly string[] | undefined>;
+) => Promise<readonly string[]>;
+
+export type ProviderAppCatalog = Readonly<{
+  supports(provider: string): boolean;
+  list: ProviderAppCatalogHandler;
+}>;

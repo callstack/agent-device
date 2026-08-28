@@ -30,7 +30,7 @@ import {
 const DAEMON_FUNCTION_TRAITS = [
   'allowSessionlessDefaultDevice',
   'skipSessionlessProviderDevice',
-  'sessionlessLeaseAdmissionExempt',
+  'sessionlessLeaseAdmissionExemption',
 ] as const;
 
 // Public commands that intentionally have no daemon route — they live only in the
@@ -105,19 +105,14 @@ test('derived daemon descriptors preserve closure traits by presence and behavio
     const live = liveByCommand.get(derived.command);
     assert.ok(live, `${derived.command} present in hand table`);
     for (const trait of DAEMON_FUNCTION_TRAITS) {
-      const derivedFn = derived[trait] as
-        | ((req: DaemonRequest, context: { providerAppCatalogIds: readonly string[] }) => boolean)
-        | undefined;
-      const liveFn = live[trait] as
-        | ((req: DaemonRequest, context: { providerAppCatalogIds: readonly string[] }) => boolean)
-        | undefined;
+      const derivedFn = derived[trait] as ((req: DaemonRequest) => unknown) | undefined;
+      const liveFn = live[trait] as ((req: DaemonRequest) => unknown) | undefined;
       assert.equal(typeof derivedFn, typeof liveFn, `${derived.command} ${trait} presence`);
       if (typeof liveFn === 'function' && typeof derivedFn === 'function') {
         for (const request of sampleRequests(derived.command)) {
-          const context = { providerAppCatalogIds: ['limrun'] };
-          assert.equal(
-            derivedFn(request, context),
-            liveFn(request, context),
+          assert.deepEqual(
+            derivedFn(request),
+            liveFn(request),
             `${derived.command} ${trait} behavior`,
           );
         }

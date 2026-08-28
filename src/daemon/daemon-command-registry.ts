@@ -1,7 +1,7 @@
 import {
   type DaemonCommandDescriptor,
   type DaemonCommandRoute,
-  type SessionlessLeaseAdmissionContext,
+  type SessionlessLeaseAdmissionExemption,
   type SessionCommandKind,
 } from '../core/command-descriptor/daemon-command-descriptor.ts';
 import { deriveDaemonCommandDescriptors } from '../core/command-descriptor/derive.ts';
@@ -96,12 +96,10 @@ export function usesSessionlessDefaultProviderDevice(req: DaemonRequest): boolea
   return typeof allow === 'function' ? allow(req) : false;
 }
 
-export function isSessionlessLeaseAdmissionExempt(
+export function resolveSessionlessLeaseAdmissionExemption(
   req: DaemonRequest,
-  context: SessionlessLeaseAdmissionContext,
-): boolean {
-  const exempt = getDaemonCommandDescriptor(req.command)?.sessionlessLeaseAdmissionExempt;
-  return typeof exempt === 'function' ? exempt(req, context) : false;
+): SessionlessLeaseAdmissionExemption | undefined {
+  return getDaemonCommandDescriptor(req.command)?.sessionlessLeaseAdmissionExemption?.(req);
 }
 
 /**

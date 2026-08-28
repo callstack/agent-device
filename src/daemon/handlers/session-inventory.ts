@@ -353,14 +353,15 @@ async function resolveProviderAppCatalogResponse(
   const provider = leaseScope.leaseProvider;
   const platform = req.flags?.platform;
   if (!provider || (platform !== 'android' && platform !== 'ios')) return undefined;
-  const apps = await providerAppCatalog(
+  if (!providerAppCatalog.supports(provider)) return undefined;
+  const apps = await providerAppCatalog.list(
     {
       provider,
       platform,
     },
     getRequestSignal(req.meta?.requestId),
   );
-  return apps ? { ok: true, data: { apps: [...apps] } } : undefined;
+  return { ok: true, data: { apps: [...apps] } };
 }
 
 async function inspectCapabilityFacts(

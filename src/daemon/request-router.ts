@@ -91,7 +91,6 @@ export type RequestRouterDeps = {
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
   providerAppCatalog?: ProviderAppCatalog;
-  providerAppCatalogIds?: readonly string[];
   androidObservation?: AndroidObservationAdapter;
   platformResourceCleanup?: PlatformResourceCleanup;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
@@ -153,7 +152,6 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     leaseLifecycleProvider,
     cloudArtifactProvider,
     providerAppCatalog,
-    providerAppCatalogIds,
     androidObservation = unavailableAndroidObservation,
     platformResourceCleanup = unavailablePlatformResourceCleanup,
     providerDeviceRuntimeScope,
@@ -220,7 +218,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               deviceRuntimeGateway,
               platformRequestScope,
               platformResourceCleanup,
-              providerAppCatalogIds,
+              providerAppCatalog,
             });
             return await executeRequestScope(scope);
           }),
@@ -347,7 +345,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           deviceRuntimeGateway,
           platformRequestScope: createPlatformRequestScope(scopedReq),
           platformResourceCleanup,
-          providerAppCatalogIds,
+          providerAppCatalog,
         });
         // The outer replay keeps its stable session lock plus the device lock
         // from the first device binding through response projection and ref
