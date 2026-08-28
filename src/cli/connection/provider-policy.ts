@@ -17,8 +17,6 @@ type ConnectionProviderCapabilities = {
   usesCloudWebDriverLease: boolean;
 };
 
-const DEFERRED_APP_SELECTION_PROVIDERS = new Set<DirectDeviceConnectProvider>(['limrun']);
-
 export function isConnectProviderName(value: string | undefined): value is ConnectProvider {
   return value === 'cloud' || value === 'proxy' || isDirectDeviceConnectProvider(value);
 }
@@ -39,40 +37,6 @@ export function connectProviderNamesForError(): string {
   ].join(', ');
 }
 
-function connectionProviderRequiresRemoteDaemon(provider: string | undefined): boolean {
-  return !isDirectDeviceConnectProvider(provider);
-}
-
-export function connectionProviderSupportsDeferredAppSelection(
-  provider: string | undefined,
-): boolean {
-  return isDirectDeviceConnectProvider(provider) && DEFERRED_APP_SELECTION_PROVIDERS.has(provider);
-}
-
-export function connectionProviderRequiresAppAttachment(provider: string | undefined): boolean {
-  return provider === CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm;
-}
-
-export function connectionProviderSupportsArtifacts(provider: string | undefined): boolean {
-  return isCloudWebDriverProviderName(provider);
-}
-
-export function connectionProviderSupportsDirectPortReverse(provider: string | undefined): boolean {
-  return provider === 'limrun';
-}
-
-export function connectionProviderUsesCloudWebDriverLease(provider: string | undefined): boolean {
-  return isCloudWebDriverProviderName(provider);
-}
-
-function connectionProviderLeaseKind(
-  provider: string | undefined,
-): 'proxy' | 'direct-device-provider' | 'remote-provider' {
-  if (provider === 'proxy') return 'proxy';
-  if (isDirectDeviceConnectProvider(provider)) return 'direct-device-provider';
-  return 'remote-provider';
-}
-
 export function connectionProviderCapabilitiesForLease(source: {
   leaseProvider?: string;
 }): ConnectionProviderCapabilities {
@@ -88,13 +52,20 @@ export function connectionProviderCapabilitiesForVerification(
 function connectionProviderCapabilities(
   provider: string | undefined,
 ): ConnectionProviderCapabilities {
+  const directDeviceProvider = isDirectDeviceConnectProvider(provider);
+  const cloudWebDriver = isCloudWebDriverProviderName(provider);
   return {
-    leaseKind: connectionProviderLeaseKind(provider),
-    requiresAppAttachment: connectionProviderRequiresAppAttachment(provider),
-    requiresRemoteDaemon: connectionProviderRequiresRemoteDaemon(provider),
-    supportsArtifacts: connectionProviderSupportsArtifacts(provider),
-    supportsDeferredAppSelection: connectionProviderSupportsDeferredAppSelection(provider),
-    supportsDirectPortReverse: connectionProviderSupportsDirectPortReverse(provider),
-    usesCloudWebDriverLease: connectionProviderUsesCloudWebDriverLease(provider),
+    leaseKind:
+      provider === 'proxy'
+        ? 'proxy'
+        : directDeviceProvider
+          ? 'direct-device-provider'
+          : 'remote-provider',
+    requiresAppAttachment: provider === CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+    requiresRemoteDaemon: !directDeviceProvider,
+    supportsArtifacts: cloudWebDriver,
+    supportsDeferredAppSelection: provider === 'limrun',
+    supportsDirectPortReverse: provider === 'limrun',
+    usesCloudWebDriverLease: cloudWebDriver,
   };
 }

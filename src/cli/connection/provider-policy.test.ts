@@ -3,42 +3,30 @@ import { test } from 'vitest';
 import {
   connectionProviderCapabilitiesForLease,
   connectionProviderCapabilitiesForVerification,
-  connectionProviderRequiresAppAttachment,
-  connectionProviderSupportsArtifacts,
-  connectionProviderSupportsDeferredAppSelection,
-  connectionProviderSupportsDirectPortReverse,
-  connectionProviderUsesCloudWebDriverLease,
 } from './provider-policy.ts';
 
-test('only providers declaring deferred app selection use app catalog before allocation', () => {
-  assert.equal(connectionProviderSupportsDeferredAppSelection('limrun'), true);
-  assert.equal(connectionProviderSupportsDeferredAppSelection('browserstack'), false);
-  assert.equal(connectionProviderSupportsDeferredAppSelection('aws-device-farm'), false);
-  assert.equal(connectionProviderSupportsDeferredAppSelection('proxy'), false);
-  assert.equal(connectionProviderSupportsDeferredAppSelection(undefined), false);
-});
-
-test('provider capabilities stay declared outside command implementations', () => {
-  assert.equal(connectionProviderRequiresAppAttachment('aws-device-farm'), true);
-  assert.equal(connectionProviderRequiresAppAttachment('browserstack'), false);
-  assert.equal(connectionProviderSupportsArtifacts('aws-device-farm'), true);
-  assert.equal(connectionProviderSupportsArtifacts('browserstack'), true);
-  assert.equal(connectionProviderSupportsArtifacts('limrun'), false);
-  assert.equal(connectionProviderSupportsDirectPortReverse('limrun'), true);
-  assert.equal(connectionProviderSupportsDirectPortReverse('aws-device-farm'), false);
-  assert.equal(connectionProviderUsesCloudWebDriverLease('browserstack'), true);
-  assert.equal(connectionProviderUsesCloudWebDriverLease('aws-device-farm'), true);
-  assert.equal(connectionProviderUsesCloudWebDriverLease('limrun'), false);
-});
-
-test('provider carriers resolve to semantic capabilities before commands inspect them', () => {
+test('provider carriers project provider identity into semantic capabilities', () => {
+  assert.deepEqual(connectionProviderCapabilitiesForLease({ leaseProvider: 'limrun' }), {
+    leaseKind: 'direct-device-provider',
+    requiresAppAttachment: false,
+    requiresRemoteDaemon: false,
+    supportsArtifacts: false,
+    supportsDeferredAppSelection: true,
+    supportsDirectPortReverse: true,
+    usesCloudWebDriverLease: false,
+  });
+  const browserStack = connectionProviderCapabilitiesForVerification({
+    provider: 'browserstack',
+  });
+  assert.equal(browserStack.supportsArtifacts, true);
+  assert.equal(browserStack.usesCloudWebDriverLease, true);
   assert.equal(
-    connectionProviderCapabilitiesForLease({ leaseProvider: 'limrun' })
-      .supportsDeferredAppSelection,
+    connectionProviderCapabilitiesForLease({ leaseProvider: 'aws-device-farm' })
+      .requiresAppAttachment,
     true,
   );
   assert.equal(
-    connectionProviderCapabilitiesForVerification({ provider: 'browserstack' }).supportsArtifacts,
-    true,
+    connectionProviderCapabilitiesForLease({ leaseProvider: 'proxy' }).leaseKind,
+    'proxy',
   );
 });
