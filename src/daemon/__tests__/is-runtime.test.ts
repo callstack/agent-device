@@ -13,9 +13,8 @@ import { selectorCaptureFixture } from './selector-capture-fixture.ts';
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({ mockRunAppleRunnerCommand: vi.fn() }));
 
-vi.mock('../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../platforms/apple/core/runner-client.ts')>();
+vi.mock('@agent-device/platform-apple', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-apple')>();
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 

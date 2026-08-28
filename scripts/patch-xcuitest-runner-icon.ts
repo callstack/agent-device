@@ -5,6 +5,5 @@ if (!derivedPath) {
   process.exit(1);
 }
 
-const { applyXctestRunnerAppIconFromDerivedPath } =
-  await import('../src/platforms/apple/core/runner-client.ts');
+const { applyXctestRunnerAppIconFromDerivedPath } = await import('@agent-device/platform-apple');
 await applyXctestRunnerAppIconFromDerivedPath(derivedPath);

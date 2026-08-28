@@ -11,7 +11,8 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
     whichCmd: vi.fn(async () => true),
   };
 });
-vi.mock('../../platforms/apple/core/simulator.ts', () => ({
+vi.mock('@agent-device/platform-apple', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/platform-apple')>()),
   ensureBootedSimulator: vi.fn(async () => {}),
 }));
 vi.mock('@agent-device/platform-android/mechanics', () => ({
@@ -20,7 +21,7 @@ vi.mock('@agent-device/platform-android/mechanics', () => ({
 
 import { runCmd } from '@agent-device/host-kit/command';
 import { waitForAndroidBoot } from '@agent-device/platform-android/mechanics';
-import { ensureBootedSimulator } from '../../platforms/apple/core/simulator.ts';
+import { ensureBootedSimulator } from '@agent-device/platform-apple';
 import {
   ANDROID_EMULATOR,
   IOS_DEVICE,

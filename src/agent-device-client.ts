@@ -440,8 +440,7 @@ export function createAgentDeviceClient(
     },
     debug: {
       symbols: async (options) => {
-        const { symbolicateCrashArtifact } =
-          await import('./platforms/apple/core/debug-symbols.ts');
+        const { symbolicateCrashArtifact } = await import('@agent-device/platform-apple');
         return symbolicateCrashArtifact({ cwd: options.cwd ?? config.cwd, ...options });
       },
     },

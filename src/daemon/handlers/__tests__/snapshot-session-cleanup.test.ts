@@ -1,18 +1,14 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 
-vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../platforms/apple/core/runner-client.ts')>()),
+vi.mock('@agent-device/platform-apple', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/platform-apple')>()),
   stopIosRunnerSession: vi.fn(async () => {}),
-}));
-vi.mock('../../../platforms/apple/core/apps.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../platforms/apple/core/apps.ts')>()),
   closeIosApp: vi.fn(async () => {}),
 }));
 
 import { withSessionlessRunnerCleanup } from '../snapshot-session.ts';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
-import { stopIosRunnerSession } from '../../../platforms/apple/core/runner-client.ts';
-import { closeIosApp } from '../../../platforms/apple/core/apps.ts';
+import { closeIosApp, stopIosRunnerSession } from '@agent-device/platform-apple';
 import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 
 const mockStopIosRunnerSession = vi.mocked(stopIosRunnerSession);

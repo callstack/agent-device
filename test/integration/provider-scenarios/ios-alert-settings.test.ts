@@ -13,12 +13,12 @@ import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../..
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createTestAppLogLiveHandle } from '../../../src/__tests__/test-utils/app-log-live-handle.ts';
-import { setIosSetting } from '../../../src/platforms/apple/core/app-settings.ts';
 import {
   actOnAppleAlert,
   awaitAppleAlert,
   readAppleAlert,
-} from '../../../src/platforms/apple/alert.ts';
+  setIosSetting,
+} from '@agent-device/platform-apple';
 import type { AlertRuntimeInput } from '@agent-device/contracts/alert-runtime';
 import { assertFlatToolCall } from './assertions.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';

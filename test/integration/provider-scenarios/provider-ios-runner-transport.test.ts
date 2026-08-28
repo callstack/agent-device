@@ -10,7 +10,7 @@ import type {
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createAppleInteractor } from '../../../src/platforms/apple/interactor.ts';
+import { createAppleInteractor } from '@agent-device/platform-apple';
 import type {
   AppleRunnerCommandOptions,
   AppleRunnerProvider,

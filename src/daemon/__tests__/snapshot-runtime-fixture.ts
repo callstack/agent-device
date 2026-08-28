@@ -30,7 +30,7 @@ import {
   isMacOs,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from '../../platforms/apple/alert.ts';
+import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from '@agent-device/platform-apple';
 import { type DispatchContext } from '../../core/dispatch-context.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';

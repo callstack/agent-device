@@ -351,17 +351,17 @@
         "count": 2
       }
     },
-    "src/platforms/apple/core/app-resolution.ts": {
+    "packages/platform-apple/src/core/app-resolution.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/platforms/apple/core/app-settings.ts": {
+    "packages/platform-apple/src/core/app-settings.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/platforms/apple/core/perf.ts": {
+    "packages/platform-apple/src/core/perf.ts": {
       "complexity_high": {
         "count": 1
       },
@@ -369,7 +369,7 @@
         "count": 1
       }
     },
-    "src/platforms/apple/core/screenshot-status-bar.ts": {
+    "packages/platform-apple/src/core/screenshot-status-bar.ts": {
       "complexity_moderate": {
         "count": 1
       },
@@ -377,12 +377,12 @@
         "count": 2
       }
     },
-    "src/platforms/apple/core/screenshot.ts": {
+    "packages/platform-apple/src/core/screenshot.ts": {
       "complexity_moderate": {
         "count": 1
       }
     },
-    "src/platforms/apple/os/macos/helper.ts": {
+    "packages/platform-apple/src/os/macos/helper.ts": {
       "crap_high": {
         "count": 1
       }
@@ -578,12 +578,12 @@
     "src/snapshot/snapshot-lines.ts:high impact",
     "src/utils/result-serialization.ts:high impact",
     "src/utils/rect-center.ts:high impact",
-    "src/platforms/apple/core/app-launch.ts:complexity",
+    "packages/platform-apple/src/core/app-launch.ts:complexity",
     "src/utils/parsing.ts:high impact",
     "src/daemon/daemon-command-registry.ts:high impact",
     "src/replay/script.ts:complexity",
     "src/daemon/handlers/session-doctor-output.ts:high impact",
-    "src/platforms/apple/core/perf-xml.ts:high impact",
+    "packages/platform-apple/src/core/perf-xml.ts:high impact",
     "src/daemon/daemon-process.ts:high impact",
     "src/utils/screenshot-result.ts:high impact",
     "packages/platform-web/src/json-utils.ts:high impact",
@@ -591,7 +591,7 @@
     "src/utils/text-surface.ts:high impact",
     "src/daemon/handlers/session-test-sharding.ts:high impact",
     "src/daemon/handlers/session-replay-runtime.ts:complexity",
-    "src/platforms/apple/core/debug-symbols/utils.ts:high impact",
+    "packages/platform-apple/src/core/debug-symbols/utils.ts:high impact",
     "packages/platform-linux/src/snapshot.ts:high impact",
     "src/core/interaction-targeting.ts:high impact",
     "packages/maestro/src/internal/runtime-targets.ts:high impact",

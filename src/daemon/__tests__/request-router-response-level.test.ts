@@ -3,9 +3,8 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 
-vi.mock('../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../platforms/apple/core/runner-client.ts')>();
+vi.mock('@agent-device/platform-apple', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-apple')>();
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
 

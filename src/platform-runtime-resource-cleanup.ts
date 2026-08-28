@@ -63,10 +63,10 @@ export const platformResourceCleanup: PlatformResourceCleanup = Object.freeze({
   async cleanupSessionlessExecutionHost(device) {
     if (!isIosFamily(device)) return;
     const { resolveRunnerAppBundleId, stopIosRunnerSession } =
-      await import('./platforms/apple/core/runner-client.ts');
+      await import('@agent-device/platform-apple');
     await stopIosRunnerSession(device.id);
-    const bundleId = resolveRunnerAppBundleId();
-    const { closeIosApp } = await import('./platforms/apple/core/apps.ts');
+    const bundleId = await resolveRunnerAppBundleId();
+    const { closeIosApp } = await import('@agent-device/platform-apple');
     await closeIosApp(device, bundleId).catch((error) => {
       emitDiagnostic({
         level: 'debug',

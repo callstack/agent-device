@@ -42,7 +42,7 @@ const localTransport: AppleRunnerScreenRecordingTransport = Object.freeze({
   start: startLocalAppleRunnerRecording,
   inspect: async (device, runnerSessionId) => await inspectLocalRunner(device, runnerSessionId),
   stop: async ({ device, runnerSessionId, appBundleId, signal }) => {
-    const { runAppleRunnerCommand } = await import('./platforms/apple/core/runner-client.ts');
+    const { runAppleRunnerCommand } = await import('@agent-device/platform-apple');
     await runAppleRunnerCommand(
       device,
       { command: 'recordStop', appBundleId },
@@ -59,7 +59,7 @@ async function startLocalAppleRunnerRecording({
   signal,
 }: AppleRunnerScreenRecordingStartRequest): Promise<AppleRunnerScreenRecordingStartResult> {
   const { getRunnerSessionSnapshot, runAppleRunnerCommand } =
-    await import('./platforms/apple/core/runner-client.ts');
+    await import('@agent-device/platform-apple');
   const recordingFileName = `agent-device-recording-${Date.now()}.mp4`;
   const remotePath =
     device.appleOs === 'macos' || device.kind !== 'device' ? undefined : `tmp/${recordingFileName}`;
@@ -73,7 +73,7 @@ async function startLocalAppleRunnerRecording({
     },
     { signal },
   );
-  const session = getRunnerSessionSnapshot(device.id);
+  const session = await getRunnerSessionSnapshot(device.id);
   if (!session?.alive) {
     throw new Error('Apple runner recording did not expose a durable runner session identity');
   }
@@ -147,15 +147,17 @@ async function inspectLocalRunner(
   runnerSessionId: string,
 ): Promise<ManagedProcessOwnership> {
   const { getRunnerSessionSnapshot, readStaleRunnerLease, verifyLeaseRunnerPidIdentity } =
-    await import('./platforms/apple/core/runner-client.ts');
-  const active = getRunnerSessionSnapshot(device.id);
+    await import('@agent-device/platform-apple');
+  const active = await getRunnerSessionSnapshot(device.id);
   if (active) {
     if (!active.alive) return 'missing';
     return active.sessionId === runnerSessionId ? 'owned-alive' : 'ownership-lost';
   }
-  const lease = readStaleRunnerLease(device.id);
+  const lease = await readStaleRunnerLease(device.id);
   if (!lease) return 'missing';
   if (lease.sessionId !== runnerSessionId) return 'ownership-lost';
   if (lease.runnerPid === null || !isProcessAlive(lease.runnerPid)) return 'missing';
-  return verifyLeaseRunnerPidIdentity(lease, lease.runnerPid) ? 'owned-alive' : 'ownership-lost';
+  return (await verifyLeaseRunnerPidIdentity(lease, lease.runnerPid))
+    ? 'owned-alive'
+    : 'ownership-lost';
 }

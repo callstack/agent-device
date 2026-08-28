@@ -20,24 +20,18 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../../../platforms/apple/core/simulator.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/simulator.ts')>();
-  return { ...actual, shutdownSimulator: vi.fn() };
+vi.mock('@agent-device/platform-apple', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-apple')>();
+  return {
+    ...actual,
+    shutdownSimulator: vi.fn(),
+    stopIosRunnerSession: vi.fn(async () => {}),
+    cleanupAppleXctracePerfCapture: vi.fn(async () => ({})),
+  };
 });
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn() };
-});
-vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/runner-client.ts')>();
-  return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
-});
-vi.mock('../../../platforms/apple/core/perf-xctrace.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/perf-xctrace.ts')>();
-  return { ...actual, cleanupAppleXctracePerfCapture: vi.fn(async () => ({})) };
 });
 vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
   const actual =

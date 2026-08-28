@@ -15,8 +15,9 @@ import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 const loadAndroidPerf = loadAndroidMechanics;
 const loadAndroidFramePerf = loadAndroidMechanics;
 const loadAndroidNativePerf = loadAndroidMechanics;
-const loadApplePerf = async () => await import('./platforms/apple/core/perf.ts');
-const loadAppleXctrace = async () => await import('./platforms/apple/core/perf-xctrace.ts');
+const loadApplePerf = async () => await import('@agent-device/platform-apple');
+const loadApplePerfMechanics = async () => await import('@agent-device/platform-apple/perf');
+const loadAppleXctrace = async () => await import('@agent-device/platform-apple');
 const loadHarmonyPerf = async () => await import('@agent-device/platform-harmonyos');
 
 /** Lazy host-only mechanics. Platform packages own facts, policy, and operation construction. */
@@ -25,13 +26,13 @@ export function createPerfRuntimeHost(): PerfRuntimeHost {
     sampleFrames: async (device, appId) =>
       await (await loadApplePerf()).sampleAppleFramePerf(device, appId),
     frameSampling: async (device) =>
-      (await loadApplePerf()).buildAppleFrameSamplingMetadata(device),
+      (await loadApplePerfMechanics()).buildAppleFrameSamplingMetadata(device),
     sampleMemory: async (device, appId) =>
       await (await loadApplePerf()).sampleAppleMemoryPerf(device, appId),
     memorySampling: async (device) =>
-      (await loadApplePerf()).buildAppleMemorySamplingMetadata(device),
+      (await loadApplePerfMechanics()).buildAppleMemorySamplingMetadata(device),
     memorySnapshotSupport: async (device) =>
-      (await loadApplePerf()).buildAppleMemorySnapshotSupport(device),
+      (await loadApplePerfMechanics()).buildAppleMemorySnapshotSupport(device),
     captureMemorySnapshot: async (device, appId, outputPath) =>
       await (await loadApplePerf()).captureAppleMemorySnapshot(device, appId, outputPath),
     start: async (device, owner, input) => await startApplePerfCapture(device, owner, input),

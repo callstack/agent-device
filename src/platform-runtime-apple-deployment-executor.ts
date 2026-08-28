@@ -10,17 +10,15 @@ import type {
 export function createAppleAppDeploymentExecutor(): AppleAppDeploymentExecutor {
   return Object.freeze({
     withInvalidatedAppResolutionCache: async (device, operation) => {
-      const { invalidateIosAppResolutionCache } =
-        await import('./platforms/apple/core/app-resolution.ts');
+      const { invalidateIosAppResolutionCache } = await import('@agent-device/platform-apple');
       return await invalidateIosAppResolutionCache(device, operation);
     },
     prepareArtifact: async (input: MaterializeAppSourceInput, options) => {
-      const { prepareIosInstallArtifact } =
-        await import('./platforms/apple/core/install-artifact.ts');
+      const { prepareIosInstallArtifact } = await import('@agent-device/platform-apple');
       return await prepareIosInstallArtifact(input.source, options);
     },
     resolveAppBundleId: async (device, app) => {
-      const { resolveIosApp } = await import('./platforms/apple/core/app-resolution.ts');
+      const { resolveIosApp } = await import('@agent-device/platform-apple');
       return await resolveIosApp(device, app);
     },
   });

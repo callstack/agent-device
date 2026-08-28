@@ -34,7 +34,7 @@ const TRIPWIRE_LINES = 1_000;
 // Exact current lengths. Lower a pin when its file shrinks; never raise one — extract instead.
 const PINNED_TEST_FILE_LINES: Readonly<Record<string, number>> = Object.freeze({
   'src/__tests__/remote-connection.test.ts': 2973,
-  'src/daemon/handlers/__tests__/snapshot-handler.test.ts': 2242,
+  'src/daemon/handlers/__tests__/snapshot-handler.test.ts': 2140,
   'src/commands/interaction/runtime/settle.test.ts': 2359,
   'src/daemon/handlers/__tests__/session-replay-runtime-maestro.test.ts': 1963,
   'packages/platform-apple/src/runner/__tests__/runner-session.test.ts': 1957,
@@ -49,11 +49,11 @@ const PINNED_TEST_FILE_LINES: Readonly<Record<string, number>> = Object.freeze({
   'src/__tests__/cli-client-commands.test.ts': 1317,
   'src/__tests__/cli-config.test.ts': 1282,
   'src/daemon/handlers/__tests__/find.test.ts': 1199,
-  'src/platforms/apple/core/__tests__/perf.test.ts': 1222,
+  'packages/platform-apple/src/core/__tests__/perf.test.ts': 1222,
   'src/mcp/__tests__/command-tools.test.ts': 1216,
   'src/daemon/handlers/__tests__/session-replay-divergence.test.ts': 1136,
-  'src/platforms/apple/core/__tests__/apps.test.ts': 1210,
-  'src/daemon/handlers/__tests__/session-replay-repair-transaction.test.ts': 1208,
+  'packages/platform-apple/src/core/__tests__/apps.test.ts': 1207,
+  'src/daemon/handlers/__tests__/session-replay-repair-transaction.test.ts': 1202,
   'src/daemon/handlers/__tests__/session-replay-target-verification-runtime.test.ts': 1182,
   'src/__tests__/client-metro.test.ts': 1105,
   'src/__tests__/cli-network.test.ts': 1092,
@@ -144,7 +144,7 @@ function baseLineCounts(paths: readonly string[]): ReadonlyMap<string, number | 
   const renamedFrom = new Map<string, string>();
   const renames = runCmdSync(
     'git',
-    ['diff', '--name-status', '--find-renames', '--diff-filter=R', base, 'HEAD', '--', '*.test.*'],
+    ['diff', '--name-status', '--find-renames', '--diff-filter=R', base, '--', '*.test.*'],
     { cwd: REPO_ROOT },
   );
   for (const line of renames.stdout.split('\n')) {

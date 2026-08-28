@@ -3,7 +3,7 @@ import {
   createLocalAppleToolProvider,
   type AppleToolProvider,
   withAppleToolProvider,
-} from './platforms/apple/core/tool-provider.ts';
+} from '@agent-device/platform-apple';
 import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 
 test('Apple tool host uses a full scoped provider when local xcrun is unavailable', async () => {

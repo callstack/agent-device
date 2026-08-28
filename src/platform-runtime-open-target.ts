@@ -35,8 +35,7 @@ export async function resolveSoleForegroundIosApp(
     const [soleBootedDevice] = booted;
     if (!soleBootedDevice) return undefined;
 
-    const { detectSoleRunningIosSimulatorApp } =
-      await import('./platforms/apple/core/app-resolution.ts');
+    const { detectSoleRunningIosSimulatorApp } = await import('@agent-device/platform-apple');
     const app = await detectSoleRunningIosSimulatorApp(soleBootedDevice);
     return app ? { device: soleBootedDevice, app } : undefined;
   } catch (error) {
@@ -160,7 +159,7 @@ async function tryResolveIosSimulatorDeepLinkBundleId(
   openTarget: string,
 ): Promise<string | undefined> {
   try {
-    const { resolveIosSimulatorDeepLinkBundleId } = await import('./platforms/apple/core/apps.ts');
+    const { resolveIosSimulatorDeepLinkBundleId } = await import('@agent-device/platform-apple');
     return await resolveIosSimulatorDeepLinkBundleId(device, openTarget);
   } catch {
     return undefined;
@@ -172,7 +171,7 @@ async function tryResolveIosAppBundleId(
   openTarget: string,
 ): Promise<string | undefined> {
   try {
-    const { resolveIosApp } = await import('./platforms/apple/core/apps.ts');
+    const { resolveIosApp } = await import('@agent-device/platform-apple');
     return await resolveIosApp(device, openTarget);
   } catch {
     return undefined;

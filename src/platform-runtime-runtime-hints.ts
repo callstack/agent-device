@@ -313,10 +313,10 @@ async function runIosSimulatorRuntimeHintCommand(
   options?: Readonly<{ allowFailure?: boolean }>,
 ): Promise<void> {
   const [{ buildSimctlArgsForDevice }, { runXcrun }] = await Promise.all([
-    import('./platforms/apple/core/simctl.ts'),
-    import('./platforms/apple/core/tool-provider.ts'),
+    import('@agent-device/platform-apple'),
+    import('@agent-device/platform-apple'),
   ]);
-  await runXcrun(buildSimctlArgsForDevice(device, args), options);
+  await runXcrun(await buildSimctlArgsForDevice(device, args), options);
 }
 
 function normalizeAndroidPrefsXml(xml: string): string {

@@ -6,12 +6,12 @@ import {
   refreshSessionDeviceIfNeeded,
   selectorTargetsSessionDevice,
 } from '../session-device-utils.ts';
-import { getRunnerSessionSnapshot } from '../../../platforms/apple/core/runner-client.ts';
+import { getRunnerSessionSnapshot } from '@agent-device/platform-apple';
 import { resolveTargetDevice } from '../../../core/dispatch-resolve.ts';
 import { isActiveProviderDevice } from '../../../provider-device-runtime.ts';
 
-vi.mock('../../../platforms/apple/core/runner-client.ts', () => ({
-  getRunnerSessionSnapshot: vi.fn(() => null),
+vi.mock('@agent-device/platform-apple', () => ({
+  getRunnerSessionSnapshot: vi.fn(async () => null),
 }));
 vi.mock('../../../core/dispatch-resolve.ts', () => ({
   resolveTargetDevice: vi.fn(),
@@ -29,7 +29,7 @@ const mockIsActiveProviderDevice = vi.mocked(isActiveProviderDevice);
 
 beforeEach(() => {
   mockGetRunnerSessionSnapshot.mockReset();
-  mockGetRunnerSessionSnapshot.mockReturnValue(null);
+  mockGetRunnerSessionSnapshot.mockResolvedValue(null);
   mockResolveTargetDevice.mockReset();
   mockIsActiveProviderDevice.mockReset();
   mockIsActiveProviderDevice.mockReturnValue(false);
@@ -96,7 +96,7 @@ test('refreshSessionDeviceIfNeeded keeps provider-owned iOS simulators out of lo
 });
 
 test('refreshSessionDeviceIfNeeded skips re-resolve while the iOS runner session is alive', async () => {
-  mockGetRunnerSessionSnapshot.mockReturnValue({ sessionId: 'sim-1:1234:1', alive: true });
+  mockGetRunnerSessionSnapshot.mockResolvedValue({ sessionId: 'sim-1:1234:1', alive: true });
 
   const device = await withMockedPlatform('darwin', async () =>
     refreshSessionDeviceIfNeeded(iosSimulatorSession.device),
@@ -107,7 +107,7 @@ test('refreshSessionDeviceIfNeeded skips re-resolve while the iOS runner session
 });
 
 test('refreshSessionDeviceIfNeeded re-resolves when the iOS runner session is gone', async () => {
-  mockGetRunnerSessionSnapshot.mockReturnValue({ sessionId: 'sim-1:1234:1', alive: false });
+  mockGetRunnerSessionSnapshot.mockResolvedValue({ sessionId: 'sim-1:1234:1', alive: false });
   const resolved = { ...iosSimulatorSession.device, booted: true, name: 'renamed' };
   mockResolveTargetDevice.mockResolvedValue(resolved);
 

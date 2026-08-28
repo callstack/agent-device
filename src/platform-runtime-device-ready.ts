@@ -17,7 +17,7 @@ export async function ensureLocalPlatformDeviceReady(
 ): Promise<boolean> {
   if (isIosFamily(device)) {
     if (device.kind === 'simulator') {
-      const { ensureBootedSimulator } = await import('./platforms/apple/core/simulator.ts');
+      const { ensureBootedSimulator } = await import('@agent-device/platform-apple');
       await ensureBootedSimulator(device, {
         deviceHub: options.deviceHub,
         focusExisting: options.focusExisting,
@@ -26,9 +26,9 @@ export async function ensureLocalPlatformDeviceReady(
       return true;
     }
     if (device.kind === 'device') {
-      const { resolveIosPhysicalDeviceControl } =
-        await import('./platforms/apple/core/physical-device-control.ts');
-      await resolveIosPhysicalDeviceControl(device).ensureReady(device);
+      const { resolveIosPhysicalDeviceControl } = await import('@agent-device/platform-apple');
+      const control = await resolveIosPhysicalDeviceControl(device);
+      await control.ensureReady(device);
       return true;
     }
   }

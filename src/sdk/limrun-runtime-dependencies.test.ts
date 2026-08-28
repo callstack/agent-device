@@ -27,19 +27,17 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-vi.mock('../platforms/apple/core/app-resolution.ts', () => {
-  moduleLoads.appleAppResolution += 1;
-  return {
-    resolveIosAppAlias: vi.fn((app: string) => `resolved:${app}`),
-  };
-});
-
-vi.mock('../platforms/apple/core/install-artifact.ts', () => {
-  moduleLoads.appleInstallArtifact += 1;
-  return {
-    readIosBundleInfo: vi.fn(async () => ({ appName: 'Example' })),
-  };
-});
+vi.mock('@agent-device/platform-apple', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/platform-apple')>()),
+  resolveIosAppAlias: vi.fn((app: string) => {
+    moduleLoads.appleAppResolution += 1;
+    return `resolved:${app}`;
+  }),
+  readIosBundleInfo: vi.fn(async () => {
+    moduleLoads.appleInstallArtifact += 1;
+    return { appName: 'Example' };
+  }),
+}));
 
 test('Limrun construction defers operation and opposite-platform helper modules', async () => {
   const { LimrunRuntime } = await import('../provider-limrun-runtime.ts');

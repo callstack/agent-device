@@ -2,7 +2,6 @@
 export async function configureAppleRunnerLeaseOwnerStateDir(
   stateDir: string | undefined,
 ): Promise<void> {
-  const { setRunnerLeaseOwnerStateDir } =
-    await import('./platforms/apple/core/runner-owner-state.ts');
-  setRunnerLeaseOwnerStateDir(stateDir);
+  const { setRunnerLeaseOwnerStateDir } = await import('@agent-device/platform-apple');
+  await setRunnerLeaseOwnerStateDir(stateDir);
 }

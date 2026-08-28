@@ -82,6 +82,7 @@ import {
 } from './package-boundaries.ts';
 import {
   checkPlatformPackagePolicy,
+  checkRetiredAppleFamilySources,
   checkPlatformsRootShape,
   platformPackagePolicySummary,
 } from './platform-package-policy.ts';
@@ -546,6 +547,7 @@ export const LAYERING_RULE_IDS = [
   'bin-alias-fast-path',
   'package-boundaries',
   'platform-package-policy',
+  'platform-family-package-ownership',
   'platforms-root-shape',
 ] as const;
 
@@ -584,6 +586,8 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
       readTrackedPlatformPackageDeclarations(repoRoot),
       { untrackedProductionFiles: listUntrackedProductionTypeScriptFiles(repoRoot) },
     ),
+  'platform-family-package-ownership': (context) =>
+    checkRetiredAppleFamilySources([...context.allTypeScriptSources.keys()]),
   'platforms-root-shape': (context) =>
     checkPlatformsRootShape([...context.allTypeScriptSources.keys()]),
 };

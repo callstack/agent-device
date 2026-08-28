@@ -27,7 +27,8 @@ is therefore costly out of proportion to the actual work, and iPadOS/visionOS/wa
 
 Model Apple OSes with an **`AppleOS` discriminant** (`ios | ipados | tvos | watchos | visionos | macos`)
 under a single `apple` Platform — **not** six `Platform` literals. The OS-agnostic Apple engine consolidates
-under `src/platforms/apple/core/`, with genuinely per-OS code in `src/platforms/apple/os/<os>/` leaves;
+under `packages/platform-apple/src/core/`, with genuinely per-OS code in
+`packages/platform-apple/src/os/<os>/` leaves;
 the Apple plugin is the first instance of the platform-plugin registry (the platform axis of the
 completed perfect-shape refactor; the registry and enforcement paths below are authoritative).
 Per-OS capability differences become data keyed by `AppleOS`. The additive,
@@ -62,11 +63,12 @@ This composes with ADR 0008 (the descriptor's capability facet) and ADR 0003.
 Implementation status as of 2026-08:
 
 - Shipped: the internal `Platform` collapse to `apple`; additive `appleOs` groundwork; the shared
-  Apple engine under `src/platforms/apple/core`; macOS leaf files under
-  `src/platforms/apple/os/macos`; a dedicated tvOS leaf under `src/platforms/apple/os/tvos`;
-  direct internal imports to the Apple modules; the per-`AppleOS` capability table
-  (`APPLE_OS_CAPABILITIES`, `src/platforms/apple/capabilities.ts`, parity-pinned against the pre-table
-  predicates); the watchOS **unsupported sentinel** (reserved in the `AppleOS` type and interactor-rejected —
+  Apple engine under `packages/platform-apple/src/core`; macOS leaf files under
+  `packages/platform-apple/src/os/macos`; a dedicated tvOS leaf under
+  `packages/platform-apple/src/os/tvos`;
+  direct internal imports to the Apple modules; the per-`AppleOS` runtime facts (including
+  `packages/platform-apple/src/gesture-facts.ts`; the former capability projection was retired after
+  its predicates moved into request-bound facts); the watchOS **unsupported sentinel** (reserved in the `AppleOS` type and interactor-rejected —
   XCUITest cannot drive watchOS UI — `isSupportedAppleDeploymentLeaf`, the Apple interactor, and
   gesture admission reject it — never produced by discovery); and visionOS profile/build/discovery
   plus simulator-deployment evidence.

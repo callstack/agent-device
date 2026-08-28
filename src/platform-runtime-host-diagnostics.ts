@@ -30,7 +30,7 @@ export function createHostDiagnostics(): HostDiagnostics {
         return await harmonyToolchainCheck();
       }
       if (platform === 'ios' || platform === 'macos' || platform === 'apple') {
-        const { appleToolchainCheck } = await import('./platforms/apple/doctor.ts');
+        const { appleToolchainCheck } = await import('@agent-device/platform-apple');
         return await appleToolchainCheck();
       }
       return undefined;
@@ -52,7 +52,7 @@ export function createHostDiagnostics(): HostDiagnostics {
       context: HostDiagnosticsContext,
     ): Promise<DoctorCheck | undefined> => {
       if (device.platform !== 'apple') return undefined;
-      const { appleRunnerWarmupCheck } = await import('./platforms/apple/doctor.ts');
+      const { appleRunnerWarmupCheck } = await import('@agent-device/platform-apple');
       return await appleRunnerWarmupCheck(device, context);
     },
   });

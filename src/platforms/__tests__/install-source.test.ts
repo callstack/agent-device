@@ -17,12 +17,13 @@ import {
   isBlockedIpAddress,
   isBlockedSourceHostname,
 } from '@agent-device/provision-kit/install-source-network';
+import * as androidManifest from '../android/manifest.ts';
 import { prepareAndroidInstallArtifact } from '@agent-device/platform-android/mechanics';
-import { prepareIosInstallArtifact } from '../apple/core/install-artifact.ts';
 import {
   createLocalAppleToolProvider,
+  prepareIosInstallArtifact,
   withAppleToolProvider,
-} from '../apple/core/tool-provider.ts';
+} from '@agent-device/platform-apple';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from './install-source.coverage.ts';
 import { mkdtempForTest } from '../../__tests__/test-utils/tmp-dir.ts';
 import * as networkTransport from '@agent-device/provision-kit/install-source-network-transport';

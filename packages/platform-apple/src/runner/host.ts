@@ -10,7 +10,7 @@ import type { XmlNode } from '@agent-device/xml';
  * enters through this object: process execution, diagnostics, retry, process
  * probes, locks, Apple foreground tooling, and physical-device control. The
  * package never imports root implementation files; the composition root
- * (`src/platforms/apple/core/runner-client.ts`) constructs the client with the
+ * (`packages/platform-apple/src/core/runner-client.ts`) constructs the client with the
  * real implementations exactly once per process.
  *
  * Signatures mirror the root utilities structurally, narrowed to what the
@@ -220,20 +220,20 @@ export type AppleRunnerHost = {
     context?: { platform?: 'ios' | 'android'; phase?: 'boot' | 'connect' | 'transport' };
   }): BootFailureReason;
   bootFailureHint(reason: BootFailureReason): string;
-  // Apple foreground tooling (src/platforms/apple/core/tool-provider.ts)
+  // Apple foreground tooling (packages/platform-apple/src/core/tool-provider.ts)
   runAppleToolCommand(cmd: string, args: string[], options?: ExecOptions): Promise<ExecResult>;
   runXcrun(args: string[], options?: ExecOptions): Promise<ExecResult>;
   readApplePlistJson(
     plistPath: string,
     signal?: AbortSignal,
   ): Promise<Record<string, unknown> | null>;
-  // simctl argument shaping (src/platforms/apple/core/simctl.ts)
+  // simctl argument shaping (packages/platform-apple/src/core/simctl.ts)
   buildSimctlArgsForDevice(device: DeviceInfo, args: string[]): string[];
-  // Physical-device control routing (src/platforms/apple/core/physical-device-control.ts)
+  // Physical-device control routing (packages/platform-apple/src/core/physical-device-control.ts)
   resolveIosPhysicalDeviceControl(device: DeviceInfo): IosPhysicalDeviceRunnerControl;
-  // XML plist traversal (src/platforms/apple/core/plist-xml.ts)
+  // XML plist traversal (packages/platform-apple/src/core/plist-xml.ts)
   visitXmlPlistEntries(nodes: XmlNode[], visitor: (key: string, valueNode: XmlNode) => void): void;
-  // Daemon-owned lease owner state directory (src/platforms/apple/core/runner-owner-state.ts)
+  // Daemon-owned lease owner state directory (packages/platform-apple/src/core/runner-owner-state.ts)
   leaseOwnerStateDir(): string | undefined;
 };
 

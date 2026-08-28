@@ -23,7 +23,7 @@ import type {
   AndroidNativePerfStartResult,
   AndroidNativePerfStopResult,
 } from '@agent-device/platform-android/mechanics';
-import type { AppleXctracePerfCapture } from './platforms/apple/core/perf-xctrace.ts';
+import type { AppleXctracePerfCapture } from '@agent-device/platform-apple';
 import {
   inspectManagedProcess,
   resolveManagedProcessIdentity,
@@ -32,7 +32,7 @@ import {
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 const loadAndroidPerf = loadAndroidMechanics;
-const loadAppleXctrace = async () => await import('./platforms/apple/core/perf-xctrace.ts');
+const loadAppleXctrace = async () => await import('@agent-device/platform-apple');
 
 type PerfCaptureDescriptor =
   | Readonly<{

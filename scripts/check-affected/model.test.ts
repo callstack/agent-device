@@ -40,7 +40,7 @@ test('production source selects static/build gates and delegates tests to Vitest
 });
 
 test('platform source additionally selects provider-integration', () => {
-  const result = ids(['src/platforms/apple/core/apps.ts']);
+  const result = ids(['packages/platform-apple/src/core/apps.ts']);
   assert.ok(result.includes('provider-integration'));
   assert.ok(result.includes('coverage'));
   assert.ok(result.includes('vitest-related'));
@@ -84,7 +84,7 @@ test('Swift runner change selects both XCUITest platform builds', () => {
     'replay-ios-device',
     'replay-macos',
   ]);
-  assert.ok(ids(['src/platforms/apple/core/Support.swift']).includes('swift-runner-ios'));
+  assert.ok(ids(['packages/platform-apple/src/core/Support.swift']).includes('swift-runner-ios'));
 });
 
 test('a runner XCTest source also selects the test-list and package-source check', () => {

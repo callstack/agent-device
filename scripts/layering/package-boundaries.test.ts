@@ -510,6 +510,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/host-kit/archive',
     '@agent-device/host-kit/command',
     '@agent-device/host-kit/diagnostics',
+    '@agent-device/host-kit/environment',
     '@agent-device/host-kit/file',
     '@agent-device/host-kit/host-file',
     '@agent-device/host-kit/process',
@@ -535,7 +536,9 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.deepEqual([...platformApplePackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',
     '@agent-device/contracts',
+    '@agent-device/host-kit',
     '@agent-device/kernel',
+    '@agent-device/provision-kit',
     '@agent-device/xml',
   ]);
   const platformAndroidPackage = packages.find(

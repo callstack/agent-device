@@ -1,5 +1,6 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
+import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import {
@@ -17,6 +18,10 @@ const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
 
+async function withRunner<T>(operation: () => Promise<T>): Promise<T> {
+  return await withAppleRunnerProvider(mockRunAppleRunnerCommand, { deviceId: 'sim-1' }, operation);
+}
+
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
   return {
@@ -31,9 +36,8 @@ vi.mock('../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
-vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/runner-client.ts')>();
+vi.mock('@agent-device/platform-apple', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-apple')>();
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
@@ -234,19 +238,21 @@ test('press @ref fails fast when the target is off-screen', async () => {
   };
   sessionStore.set(sessionName, session);
 
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'press',
-      positionals: ['@e2'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-    ...getRuntimeBindings(),
-  });
+  const response = await withRunner(() =>
+    handleInteractionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'press',
+        positionals: ['@e2'],
+        flags: {},
+      },
+      sessionName,
+      sessionStore,
+      contextFromFlags,
+      ...getRuntimeBindings(),
+    }),
+  );
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(false);

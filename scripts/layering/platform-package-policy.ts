@@ -11,7 +11,14 @@ export const CANONICAL_PLATFORM_FAMILIES = [
   'linux',
   'web',
 ] as const;
-const RETIRED_PLATFORM_FAMILIES = ['android', 'harmonyos', 'linux', 'vega', 'web'] as const;
+const RETIRED_PLATFORM_FAMILIES = [
+  'apple',
+  'android',
+  'harmonyos',
+  'linux',
+  'vega',
+  'web',
+] as const;
 type PlatformFamily = (typeof CANONICAL_PLATFORM_FAMILIES)[number];
 export type PlatformPackageDeclaration = {
   dir: string;
@@ -49,7 +56,7 @@ const PLATFORM_RUNTIME_HOST_FILES = new Set([
 export const APPLE_RUNNER_SUBTREE = 'packages/platform-apple/src/runner/';
 
 export function checkPlatformsRootShape(files: readonly string[]): LayeringViolation[] {
-  const allowedChild = new RegExp(`^src/platforms/(?:apple|__tests__)/`);
+  const allowedChild = new RegExp(`^src/platforms/__tests__/`);
   const retiredFamily = new RegExp(`^src/platforms/(?:${RETIRED_PLATFORM_FAMILIES.join('|')})/`);
   return files
     .filter(
@@ -62,19 +69,35 @@ export function checkPlatformsRootShape(files: readonly string[]): LayeringViola
       line: 1,
       message: file.startsWith('src/platforms/android/')
         ? 'the Android family has moved to packages/platform-android; remove the superseded src/platforms/android path'
-        : 'src/platforms may hold only the remaining apple family directory and __tests__; retired family code belongs in its platform package and shared code belongs in a substrate package',
+        : 'src/platforms may hold only the shared __tests__ directory; retired family code belongs in its platform package and shared code belongs in a substrate package',
     }));
 }
 const APPLE_RUNNER_FACADE = '@agent-device/platform-apple/runner';
 const APPLE_RUNNER_CLIENT = '@agent-device/platform-apple/runner/client';
 const APPLE_RUNNER_TEST_HOST = '@agent-device/platform-apple/runner/test-host';
-const APPLE_RUNNER_CLIENT_COMPOSITION = 'src/platforms/apple/core/runner-client.ts';
+const APPLE_RUNNER_CLIENT_COMPOSITION = 'packages/platform-apple/src/core/runner-client.ts';
 const APPLE_RUNNER_TEST_HOST_INSTALLER = 'scripts/vitest-apple-runner-host-setup.ts';
 const ANDROID_MECHANICS_FACADE = '@agent-device/platform-android/mechanics';
 const ANDROID_HOST_FACET = '@agent-device/platform-android/adb-host';
 const ANDROID_HOST_BINDING = 'src/platform-runtime-android-adb-host.ts';
+const APPLE_DOMAIN_FACADES = [
+  '@agent-device/platform-apple/app-resolution',
+  '@agent-device/platform-apple/interactions',
+  '@agent-device/platform-apple/install-artifact',
+  '@agent-device/platform-apple/perf',
+  '@agent-device/platform-apple/physical-device',
+  '@agent-device/platform-apple/runner-owner',
+  '@agent-device/platform-apple/simctl',
+  '@agent-device/platform-apple/simulator',
+  '@agent-device/platform-apple/tool-provider',
+] as const;
 const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly string[]>>> = {
-  apple: [APPLE_RUNNER_FACADE, APPLE_RUNNER_CLIENT, APPLE_RUNNER_TEST_HOST],
+  apple: [
+    APPLE_RUNNER_FACADE,
+    APPLE_RUNNER_CLIENT,
+    APPLE_RUNNER_TEST_HOST,
+    ...APPLE_DOMAIN_FACADES,
+  ],
   android: [ANDROID_HOST_FACET, ANDROID_MECHANICS_FACADE],
 };
 
@@ -85,6 +108,74 @@ function isAndroidMechanicsFacetImport(file: string, specifier: string): boolean
   // production code still reaches platform behavior through the request-bound runtime gateway;
   // tests may import the facet to exercise the package-owned mechanics directly.
   return !file.startsWith('src/daemon/') || !isProductionSource(file);
+}
+
+function isAppleFacadeSubpathImport(specifier: string): boolean {
+  return (
+    specifier === APPLE_RUNNER_FACADE ||
+    specifier === APPLE_RUNNER_CLIENT ||
+    specifier === APPLE_RUNNER_TEST_HOST ||
+    APPLE_DOMAIN_FACADES.includes(specifier as (typeof APPLE_DOMAIN_FACADES)[number])
+  );
+}
+
+const APPLE_FACADE_CONSUMER_FILES = new Set([
+  'scripts/__tests__/help-conformance-sample-producers.ts',
+  'scripts/clean-daemon.ts',
+  'scripts/patch-xcuitest-runner-icon.ts',
+  'scripts/vitest-apple-runner-host-setup.ts',
+  'src/agent-device-client.ts',
+  'src/core/__tests__/device-selection-resolver.test.ts',
+  'src/core/__tests__/dispatch-resolve.test.ts',
+  'src/core/device-selection-resolver.ts',
+  'src/core/interactors/register-builtins.ts',
+  'src/daemon/ios-app-session-hint.test.ts',
+  'src/platform-runtime-apple-application-tools.ts',
+  'src/platform-runtime-apple-automation-keep-hot.ts',
+  'src/platform-runtime-apple-deployment-executor.test.ts',
+  'src/platform-runtime-apple-deployment-executor.ts',
+  'src/platform-runtime-apple-physical-readiness.ts',
+  'src/platform-runtime-apple-resources.ts',
+  'src/platform-runtime-apple-runner-owner.ts',
+  'src/platform-runtime-app-inventory-host.ts',
+  'src/platform-runtime-apple-tool-host.test.ts',
+  'src/platform-runtime-apple-tool-host.ts',
+  'src/platform-runtime-audio-probe-host.ts',
+  'src/platform-runtime-daemon-owner-cleanup.test.ts',
+  'src/platform-runtime-daemon-owner-cleanup.ts',
+  'src/platform-runtime-device-ready.ts',
+  'src/platform-runtime-host-diagnostics.ts',
+  'src/platform-runtime-host.test.ts',
+  'src/platform-runtime-host.ts',
+  'src/platform-runtime-open-target.ts',
+  'src/platform-runtime-perf-capture-host.ts',
+  'src/platform-runtime-perf-host.ts',
+  'src/platform-runtime-resource-cleanup.ts',
+  'src/platform-runtime-runtime-hints.ts',
+  'src/platform-runtime-screen-recording-apple-runner-host.test.ts',
+  'src/platform-runtime-screen-recording-apple-runner-host.ts',
+  'src/platform-runtime-screen-recording-apple-runner-transport.test.ts',
+  'src/platform-runtime-screen-recording-apple-runner-transport.ts',
+  'src/platform-runtime-screen-recording-apple-transport.ts',
+  'src/platforms/__tests__/install-source.test.ts',
+  'src/platform-runtime.ts',
+  'src/platform-runtime/request-providers.ts',
+  'src/sdk/limrun-runtime-dependencies.test.ts',
+  'src/sdk/limrun-runtime-dependencies.ts',
+  'src/snapshot/snapshot-desktop-surface.test.ts',
+  'src/snapshot/snapshot-desktop-surface.ts',
+  'src/utils/__tests__/interactors.test.ts',
+  'test/integration/provider-scenarios/ios-alert-settings.test.ts',
+  'test/integration/provider-scenarios/provider-ios-runner-transport.test.ts',
+  'test/integration/provider-scenarios/providers.ts',
+]);
+
+function isAppleFacadeConsumer(file: string): boolean {
+  return (
+    APPLE_FACADE_CONSUMER_FILES.has(file) ||
+    file.startsWith('src/daemon/__tests__/') ||
+    file.startsWith('src/daemon/handlers/__tests__/')
+  );
 }
 
 function violation(file: string, line: number, message: string): LayeringViolation {
@@ -261,16 +352,14 @@ function checkSource(file: string, source: string): LayeringViolation[] {
     } else if (
       importedFamily &&
       !COMPOSITION_FILES.has(file) &&
-      // The runner façade subpath is the facet's consumer seam: root code
-      // that reaches runner mechanics directly imports its types and host-free
-      // helpers here. R11's workspace-dependency declarations bound the
-      // importer set to the root package.
-      site.spec !== APPLE_RUNNER_FACADE &&
-      site.spec !== APPLE_RUNNER_CLIENT &&
-      site.spec !== APPLE_RUNNER_TEST_HOST &&
+      // Named Apple facades are the package's consumer seams. R11's
+      // workspace-dependency declarations bound the importer set to the root
+      // package.
+      !isAppleFacadeSubpathImport(site.spec) &&
       !isAllowedPlatformRootImport(file, site, importedFamily) &&
       !isPackageOwnedFacadeTest(file, importedFamily, site.spec) &&
-      !isAndroidMechanicsFacetImport(file, site.spec)
+      !isAndroidMechanicsFacetImport(file, site.spec) &&
+      !(site.spec === '@agent-device/platform-apple' && isAppleFacadeConsumer(file))
     ) {
       violations.push(
         violation(
@@ -292,6 +381,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
       !site.spec.startsWith('@agent-device/provision-kit/') &&
       !site.spec.startsWith('@agent-device/kernel/') &&
       site.spec !== '@agent-device/xml' &&
+      !isAppleFacadeSubpathImport(site.spec) &&
       !isPackageOwnedFacadeTest(file, ownerFamily, site.spec) &&
       !isWebPackageTestSelectorImport(file, ownerFamily, site.spec)
     ) {

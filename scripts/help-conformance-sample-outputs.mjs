@@ -131,7 +131,7 @@ Candidates:
 };
 
 // APP_NOT_INSTALLED from buildAppNotInstalledError
-// (src/platforms/apple/core/app-resolution.ts) — the parity test drives that
+// (packages/platform-apple/src/core/app-resolution.ts) — the parity test drives that
 // exact producer; the hint is defaultHintForCode('APP_NOT_INSTALLED').
 export const APP_NOT_INSTALLED_SAMPLE = {
   command: 'agent-device open Shoply --platform ios',

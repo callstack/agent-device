@@ -21,9 +21,9 @@ function lanes(file: string): CheckId[] {
 
 test('a TypeScript-only Apple change selects the iOS and macOS lanes without a Swift build', () => {
   for (const file of [
-    'src/platforms/apple/core/apps.ts',
+    'packages/platform-apple/src/core/apps.ts',
     'packages/platform-apple/src/runtime.ts',
-    'src/platforms/apple/os/macos/desktop.ts',
+    'packages/platform-apple/src/os/macos/desktop.ts',
   ]) {
     assert.deepEqual(lanes(file), ['replay-ios', 'replay-ios-device', 'replay-macos'], file);
     assert.ok(
@@ -129,7 +129,7 @@ test('unit tests under src/ and packages/*/src own no lane', () => {
   for (const file of [
     'src/daemon/selectors.test.ts',
     'src/__tests__/contracts/interaction-guarantees.test.ts',
-    'src/platforms/apple/__tests__/apps.test.ts',
+    'packages/platform-apple/src/__tests__/apps.test.ts',
     'packages/platform-apple/src/runtime.test.ts',
   ]) {
     assert.ok(isUnitTest(file), file);
@@ -147,9 +147,9 @@ test('unit tests under src/ and packages/*/src own no lane', () => {
 });
 
 test('a mixed tree is shared, and two Apple leaves are still Apple', () => {
-  assert.equal(deviceLaneLeaf('src/platforms/apple/os/macos/x.ts'), 'apple');
+  assert.equal(deviceLaneLeaf('packages/platform-apple/src/os/macos/x.ts'), 'apple');
   assert.equal(deviceLaneLeaf('test/integration/android-emulator-e2e/ios/x.ts'), 'shared');
-  assert.deepEqual(deviceLanesFor('src/platforms/apple/os/macos/x.ts').lanes, [
+  assert.deepEqual(deviceLanesFor('packages/platform-apple/src/os/macos/x.ts').lanes, [
     'replay-ios',
     'replay-ios-device',
     'replay-macos',

@@ -1,7 +1,7 @@
 import type { RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
 import { registerPlatformPlugin } from '../platform-plugin-registry.ts';
-import { applePlugin } from '../../platforms/apple/plugin.ts';
+import { applePlugin } from '@agent-device/platform-apple';
 import { vegaPlugin } from '@agent-device/platform-vega';
 import type { Platform, DeviceInfo } from '@agent-device/kernel/device';
 

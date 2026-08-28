@@ -42,14 +42,14 @@ test('the routed lane derives its needs from its declared gate plus the sampled 
 test('ignoring an Apple-owned tree is reported with the checks the selector routes it to', () => {
   const model = withIos((lane) => ({
     ...lane,
-    pathsIgnore: [...lane.pathsIgnore, 'src/platforms/apple/**'],
+    pathsIgnore: [...lane.pathsIgnore, 'packages/platform-apple/src/**'],
   }));
   const found = messages(model);
   assert.ok(found.length > 0);
   assert.ok(
     found.some(
       (message) =>
-        /ignores src\/platforms\/apple\//.test(message) &&
+        /ignores packages\/platform-apple\/src\//.test(message) &&
         /routes it to "replay-ios"/.test(message),
     ),
     found.slice(0, 3).join('\n'),

@@ -2,20 +2,20 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builders.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import { contextFromFlags as buildDaemonContext } from '../../context.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import { getRuntimeBindings } from './interaction-get-runtime-fixture.ts';
 
-vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/runner-client.ts')>();
+vi.mock('@agent-device/platform-apple', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-apple')>();
   return {
     ...actual,
     runAppleRunnerCommand: vi.fn(async () => ({})),
   };
 });
 
-import { runAppleRunnerCommand } from '../../../platforms/apple/core/runner-client.ts';
+import { runAppleRunnerCommand } from '@agent-device/platform-apple';
 
 const mockRunnerCommand = vi.mocked(runAppleRunnerCommand);
 const nodes = [
@@ -65,20 +65,22 @@ test('daemon press --settle pins private-ax on emitted snapshot runner requests'
     }),
   );
 
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'press',
-      positionals: ['label=Continue'],
-      flags: { settle: true, settleQuietMs: 25, timeoutMs: 1_000 },
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags: (flags, appBundleId, traceLogPath) =>
-      buildDaemonContext('', flags, appBundleId, traceLogPath),
-    ...getRuntimeBindings(),
-  });
+  const response = await withAppleRunnerProvider(mockRunnerCommand, { deviceId: 'sim-1' }, () =>
+    handleInteractionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'press',
+        positionals: ['label=Continue'],
+        flags: { settle: true, settleQuietMs: 25, timeoutMs: 1_000 },
+      },
+      sessionName,
+      sessionStore,
+      contextFromFlags: (flags, appBundleId, traceLogPath) =>
+        buildDaemonContext('', flags, appBundleId, traceLogPath),
+      ...getRuntimeBindings(),
+    }),
+  );
 
   expect(response?.ok).toBe(true);
   const snapshotCommands = mockRunnerCommand.mock.calls

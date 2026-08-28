@@ -27,14 +27,10 @@ vi.mock('@agent-device/platform-android/mechanics', () => {
   localMechanics.adbEvaluated = true;
   return { restoreAndroidTestIme: localMechanics.imeRestore };
 });
-vi.mock('../../platforms/apple/core/simctl.ts', async (importOriginal) => {
+vi.mock('@agent-device/platform-apple', async (importOriginal) => {
   localMechanics.simctlEvaluated = true;
-  return await importOriginal<typeof import('../../platforms/apple/core/simctl.ts')>();
-});
-vi.mock('../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
   localMechanics.runnerEvaluated = true;
-  const actual =
-    await importOriginal<typeof import('../../platforms/apple/core/runner-client.ts')>();
+  const actual = await importOriginal<typeof import('@agent-device/platform-apple')>();
   return { ...actual, stopIosRunnerSession: localMechanics.runnerStop };
 });
 

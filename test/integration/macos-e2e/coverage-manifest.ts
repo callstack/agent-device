@@ -194,7 +194,7 @@ export const MACOS_PLATFORM_COVERAGE = {
     'the System Settings replay returns from the About pane',
   ),
   [C.gesture]: contract(
-    'src/platforms/apple/core/__tests__/interactions.test.ts',
+    'packages/platform-apple/src/core/__tests__/interactions.test.ts',
     'performGestureApple composes macOS one-contact plans with the drag executor',
     'macOS gesture dispatch preserves the one-contact drag plan',
   ),

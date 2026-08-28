@@ -71,8 +71,117 @@
     },
     {
       "comment": "Apple perf sampling metadata is selected through the same lazy platform host; Fallow cannot follow the dynamic property read in src/platform-runtime-perf-host.ts.",
-      "file": "src/platforms/apple/core/perf.ts",
+      "file": "packages/platform-apple/src/core/perf.ts",
       "exports": ["buildAppleFrameSamplingMetadata", "buildAppleMemorySamplingMetadata"]
+    },
+    {
+      "comment": "Apple mechanics are reached through the named lazy façade in packages/platform-apple/src/index.ts. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to wrappers present in that façade.",
+      "file": "packages/platform-apple/src/core/app-resolution.ts",
+      "exports": ["buildAppNotInstalledError", "resolveIosAppAlias"]
+    },
+    {
+      "comment": "Apple mechanics are reached through the named lazy façade in packages/platform-apple/src/index.ts. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to wrappers present in that façade.",
+      "file": "packages/platform-apple/src/core/install-artifact.ts",
+      "exports": ["prepareIosInstallArtifact", "readIosBundleInfo"]
+    },
+    {
+      "comment": "Apple mechanics are reached through the named lazy façade in packages/platform-apple/src/index.ts. Fallow cannot connect dynamic import member reads to this source export; keep this list limited to wrappers present in that façade.",
+      "file": "packages/platform-apple/src/core/perf-xctrace.ts",
+      "exports": ["cleanupAppleXctracePerfCapture"]
+    },
+    {
+      "comment": "Apple runner mechanics are reached through the named lazy façade in packages/platform-apple/src/index.ts. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to wrappers present in that façade or its cleanup composition.",
+      "file": "packages/platform-apple/src/core/runner-client.ts",
+      "exports": [
+        "notifyIosRunnerAppRelaunched",
+        "prewarmIosRunnerSession",
+        "prepareIosRunner",
+        "resolveRunnerAppBundleId",
+        "detachIosSimulatorRunnerSessionsForShutdown",
+        "getRunnerSessionSnapshot",
+        "scheduleIosRunnerIdleStop",
+        "stopIosRunnerSession",
+        "stopAllIosRunnerSessions",
+        "readStaleRunnerLease",
+        "verifyLeaseRunnerPidIdentity",
+        "applyXctestRunnerAppIconFromDerivedPath"
+      ]
+    },
+    {
+      "comment": "The Apple root façade owns the lazy runner-owner mutator; Fallow cannot connect its dynamic import member read to the moved source export.",
+      "file": "packages/platform-apple/src/core/runner-owner-state.ts",
+      "exports": ["setRunnerLeaseOwnerStateDir"]
+    },
+    {
+      "comment": "Apple diagnostics are reached through the named lazy façade in packages/platform-apple/src/index.ts. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to wrappers present in that façade.",
+      "file": "packages/platform-apple/src/doctor.ts",
+      "exports": ["appleToolchainCheck", "appleRunnerWarmupCheck"]
+    },
+    {
+      "comment": "macOS helper mechanics are reached through the named lazy façade in packages/platform-apple/src/index.ts. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to wrappers present in that façade.",
+      "file": "packages/platform-apple/src/os/macos/helper.ts",
+      "exports": ["startMacOsAudioProbeProcess", "resolveFrontmostMacOsApp"]
+    },
+    {
+      "comment": "The Apple package root is a cold-start-preserving named façade: its production consumers load the value wrappers through dynamic imports. Fallow cannot connect those member reads, so this exact list records only the façade exports currently reported as unreachable; static consumers remain visible to the audit.",
+      "file": "packages/platform-apple/src/index.ts",
+      "exports": [
+        "openIosApp",
+        "openIosDevice",
+        "screenshotIos",
+        "pushIosNotification",
+        "readIosClipboardText",
+        "writeIosClipboardText",
+        "buildSimctlArgs",
+        "buildSimctlArgsForDevice",
+        "resolveAppleToolProvider",
+        "runAppleToolCommand",
+        "runXcrun",
+        "createLocalAppleToolProvider",
+        "readApplePlistJson",
+        "hasScopedAppleToolProvider",
+        "buildAppNotInstalledError",
+        "setIosSetting",
+        "readAppleAlert",
+        "awaitAppleAlert",
+        "actOnAppleAlert",
+        "createAppleInteractor",
+        "resolveAppleBackRunnerCommand",
+        "shutdownSimulator",
+        "cleanupAppleXctracePerfCapture",
+        "sampleAppleMemoryPerf",
+        "captureAppleMemorySnapshot",
+        "sampleAppleFramePerf",
+        "buildAppleFrameSamplingMetadata",
+        "buildAppleMemorySamplingMetadata",
+        "buildAppleMemorySnapshotSupport",
+        "isRetryableIosDeviceTraceRecordFailure",
+        "prepareAppleTraceRecordRetry",
+        "resolveAppleExecutable",
+        "resolveIosDevicePerfTarget",
+        "readAppleProcessSamples",
+        "resolveIosDevicePerfHint",
+        "startAppleXctracePerfCapture",
+        "stopAppleXctracePerfCapture",
+        "writeAppleXctracePerfReport",
+        "runApplePressSeries",
+        "AppleMacOsHelperProvider",
+        "AppleToolAvailabilityChecker",
+        "AppleToolCommandExecutor",
+        "AppleXcrunToolProvider",
+        "IosPhysicalDeviceBackend",
+        "IosPhysicalDeviceControl",
+        "IosPhysicalDeviceTunnel",
+        "PreparedIosInstallArtifact",
+        "AppleMemoryPerfSample",
+        "AppleMemorySnapshotResult",
+        "AppleProcessSample",
+        "AppleXctraceCpuProfileReport",
+        "AppleXctracePerfMode",
+        "AppleXctracePerfResult",
+        "MacOsPermissionTarget",
+        "MacOsSnapshotNode"
+      ]
     },
     {
       "comment": "Daemon route handlers are reached only through the dynamic `import()` table in request-handler-chain.ts, which --production analysis cannot follow to a consumer.",

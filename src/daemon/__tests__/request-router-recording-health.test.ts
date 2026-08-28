@@ -4,11 +4,12 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 
-vi.mock('../../platforms/apple/core/runner-client.ts', () => ({
+vi.mock('@agent-device/platform-apple', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/platform-apple')>()),
   getRunnerSessionSnapshot: vi.fn(),
 }));
 
-import { getRunnerSessionSnapshot } from '../../platforms/apple/core/runner-client.ts';
+import { getRunnerSessionSnapshot } from '@agent-device/platform-apple';
 import {
   createRequestHandler,
   gestureDeviceRuntimeGateway,
@@ -103,7 +104,7 @@ test('router allows canonical iOS simulator gestures during overlay recording af
     runnerSessionId: 'runner-before',
   });
   sessionStore.set('default', session);
-  mockGetRunnerSessionSnapshot.mockReturnValue({
+  mockGetRunnerSessionSnapshot.mockResolvedValue({
     alive: true,
     sessionId: 'runner-after',
   });

@@ -24,19 +24,12 @@ vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => 
     clearRuntimeHintValues: vi.fn(async () => {}),
   };
 });
-vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/runner-client.ts')>();
+vi.mock('@agent-device/platform-apple', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-apple')>();
   return {
     ...actual,
     prewarmIosRunnerSession: vi.fn(),
     stopIosRunnerSession: vi.fn(async () => {}),
-  };
-});
-vi.mock('../../../platforms/apple/core/apps.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/apple/core/apps.ts')>();
-  return {
-    ...actual,
     resolveIosApp: vi.fn(async () => 'com.example.demo'),
   };
 });
