@@ -14,8 +14,6 @@ export async function requestApprovedUrl(params: {
   family: 4 | 6;
   headers: Record<string, string>;
   signal: AbortSignal;
-  method: 'GET' | 'POST';
-  body?: string;
 }): Promise<InstallSourceNetworkResponse> {
   const proxy = resolveProxyForUrl(params.url);
   const dispatcher = proxy
@@ -29,9 +27,8 @@ export async function requestApprovedUrl(params: {
       dispatcher,
       headers: proxy ? { ...params.headers, host: params.url.host } : params.headers,
       maxRedirections: 0,
-      method: params.method,
+      method: 'GET' as const,
       signal: params.signal,
-      ...(params.body !== undefined ? { body: params.body } : {}),
     };
     const response = await request(dispatchUrl, requestOptions);
     return {

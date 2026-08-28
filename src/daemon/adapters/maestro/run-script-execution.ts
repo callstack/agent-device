@@ -5,8 +5,7 @@ import vm from 'node:vm';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { stripUndefined } from '@agent-device/kernel/record';
-import type { DaemonNetworkAccessPolicy } from '../../types.ts';
-import type { RunScriptHttpRequest, RunScriptHttpResponse } from './run-script-http-child.ts';
+import type { RunScriptHttpRequest, RunScriptHttpResponse } from './run-script-http.ts';
 
 const RUN_SCRIPT_TIMEOUT_MS = 30_000;
 const RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS = 1_000;
@@ -19,16 +18,16 @@ const RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS = 1_000;
 export function executeRunScriptFile(params: {
   scriptPath: string;
   env: Record<string, string>;
-  networkAccess?: DaemonNetworkAccessPolicy;
+  publicNetworkOnly: boolean;
 }): Record<string, string> {
-  const { scriptPath, env, networkAccess = 'unrestricted' } = params;
+  const { scriptPath, env, publicNetworkOnly } = params;
   const script = fs.readFileSync(scriptPath, 'utf8');
   const output: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
 
   try {
     // The synchronous script budget is independent from the child-process
     // budget used by http.post below.
-    vm.runInNewContext(script, buildScriptGlobals(env, output, networkAccess), {
+    vm.runInNewContext(script, buildScriptGlobals(env, output, publicNetworkOnly), {
       filename: scriptPath,
       timeout: RUN_SCRIPT_TIMEOUT_MS,
     });
@@ -62,7 +61,7 @@ export function executeRunScriptFile(params: {
 function buildScriptGlobals(
   env: Record<string, string>,
   output: Record<string, unknown>,
-  networkAccess: DaemonNetworkAccessPolicy,
+  publicNetworkOnly: boolean,
 ): vm.Context {
   return {
     ...env,
@@ -70,7 +69,7 @@ function buildScriptGlobals(
     json: parseRunScriptJson,
     http: {
       post: (url: string, options?: { headers?: Record<string, string>; body?: string }) =>
-        runHttpRequestSync('POST', url, options, networkAccess),
+        runHttpRequestSync('POST', url, publicNetworkOnly, options),
     },
   };
 }
@@ -106,11 +105,11 @@ function safeRunScriptJsonReviver(key: string, value: unknown): unknown {
 function runHttpRequestSync(
   method: RunScriptHttpRequest['method'],
   url: string,
+  publicNetworkOnly: boolean,
   options?: { headers?: Record<string, string>; body?: string },
-  networkAccess: DaemonNetworkAccessPolicy = 'unrestricted',
 ): RunScriptHttpResponse {
   const result = runCmdSync(process.execPath, resolveHttpChildArgs(), {
-    stdin: JSON.stringify(buildHttpChildInput(method, url, options, networkAccess)),
+    stdin: JSON.stringify(buildHttpChildInput(method, url, options, publicNetworkOnly)),
     timeoutMs: RUN_SCRIPT_TIMEOUT_MS,
     allowFailure: true,
   });
@@ -168,14 +167,14 @@ function buildHttpChildInput(
   method: RunScriptHttpRequest['method'],
   url: string,
   options: { headers?: Record<string, string>; body?: string } | undefined,
-  networkAccess: DaemonNetworkAccessPolicy,
+  publicNetworkOnly: boolean,
 ): RunScriptHttpRequest {
   return {
     method,
     url,
     headers: options?.headers ?? {},
     body: options?.body ?? '',
-    networkAccess,
+    publicNetworkOnly,
   };
 }
 

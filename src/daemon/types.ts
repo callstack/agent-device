@@ -49,10 +49,8 @@ export type DaemonOpenLifecycle = {
   beforeDispatch?: (session: SessionState) => Promise<DaemonResponse | undefined>;
 };
 
-export type DaemonNetworkAccessPolicy = 'unrestricted' | 'public-only';
-
 type DaemonRequestInternal = {
-  networkAccess?: DaemonNetworkAccessPolicy;
+  publicNetworkOnly?: true;
   openLifecycle?: DaemonOpenLifecycle;
   /**
    * Request-owned capability used when a fresh replay discovers its device

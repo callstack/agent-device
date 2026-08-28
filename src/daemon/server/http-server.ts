@@ -33,13 +33,16 @@ import {
   shouldStreamRequestProgress,
 } from '../request-progress-protocol.ts';
 import { buildDaemonHealthPayload } from '../http-health.ts';
-import { DAEMON_HTTP_NETWORK_ACCESS_HEADER, DAEMON_HTTP_TENANT_HEADER } from '../http-contract.ts';
+import {
+  DAEMON_HTTP_NETWORK_ACCESS_HEADER,
+  DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
+  DAEMON_HTTP_TENANT_HEADER,
+} from '../http-contract.ts';
 import { sendRestJsonError, statusCodeForNormalizedError } from '../http-errors.ts';
 import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
 import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-http.ts';
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
-import { applyHttpTrustPolicy, resolveHttpTrustPolicy } from './http-trust-policy.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
 
@@ -79,6 +82,8 @@ type HttpAuthDecision =
   | { ok: true; tenantId?: string }
   | { ok: false; statusCode: number; response: JsonRpcResponse };
 
+type HttpInstallSource = Exclude<DaemonInstallSource, { kind: 'path' }>;
+
 const MAX_HTTP_RPC_BODY_BYTES = 1024 * 1024;
 const COMMAND_RPC_METHODS = new Set(['agent_device.command', 'agent-device.command']);
 const INSTALL_FROM_SOURCE_RPC_METHODS = new Set([
@@ -100,6 +105,35 @@ const LEASE_RPC_METHOD_TO_COMMAND: Record<
   'agent_device.lease.release': 'lease_release',
   'agent-device.lease.release': 'lease_release',
 };
+
+function restrictRemoteHttpRequest(
+  request: DaemonRequest,
+  authHookConfigured: boolean,
+  networkAccessMarker: string | string[] | undefined,
+): DaemonRequest {
+  if (
+    networkAccessMarker !== undefined &&
+    networkAccessMarker !== DAEMON_HTTP_PUBLIC_NETWORK_ACCESS
+  ) {
+    throw new AppError('INVALID_ARGS', 'Invalid daemon HTTP network access marker');
+  }
+  if (!authHookConfigured && networkAccessMarker === undefined) return request;
+  const source = request.meta?.installSource;
+  const uploadedArtifactId = request.meta?.uploadedArtifactId;
+  if (
+    source?.kind === 'path' &&
+    !(typeof uploadedArtifactId === 'string' && uploadedArtifactId.length > 0)
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'Invalid params: path install sources are disabled on the remote HTTP surface',
+    );
+  }
+  return {
+    ...request,
+    internal: { ...request.internal, publicNetworkOnly: true },
+  };
+}
 const SUPPORTED_RPC_METHODS = new Set([
   ...COMMAND_RPC_METHODS,
   ...INSTALL_FROM_SOURCE_RPC_METHODS,
@@ -222,7 +256,7 @@ function readGitHubArtifactInteger(record: Record<string, unknown>, key: 'artifa
   return parsed;
 }
 
-function parseGitHubActionsArtifactSource(record: Record<string, unknown>): DaemonInstallSource {
+function parseGitHubActionsArtifactSource(record: Record<string, unknown>): HttpInstallSource {
   const owner = readRequiredGitHubArtifactText(record, 'owner');
   const repo = readRequiredGitHubArtifactText(record, 'repo');
   const hasArtifactId = record.artifactId !== undefined;
@@ -291,7 +325,7 @@ function toLeaseDaemonRequest(
   };
 }
 
-function parseInstallSource(params: Record<string, unknown>): DaemonInstallSource {
+function parseInstallSource(params: Record<string, unknown>): HttpInstallSource {
   const source = params.source;
   if (!source || typeof source !== 'object') {
     throw new AppError('INVALID_ARGS', 'Invalid params: source is required');
@@ -321,21 +355,18 @@ function parseInstallSource(params: Record<string, unknown>): DaemonInstallSourc
     return Object.keys(headers).length > 0 ? { kind: 'url', url, headers } : { kind: 'url', url };
   }
   if (record.kind === 'path') {
-    const artifactPath = typeof record.path === 'string' ? record.path.trim() : '';
-    if (!artifactPath) {
-      throw new AppError(
-        'INVALID_ARGS',
-        'Invalid params: source.path is required for path sources',
-      );
-    }
-    return { kind: 'path', path: artifactPath };
+    throw new AppError(
+      'INVALID_ARGS',
+      'Invalid params: source.kind "path" names a file on the daemon host and is not accepted over HTTP',
+      { hint: 'Use a "url" or "github-actions-artifact" source.' },
+    );
   }
   if (record.kind === 'github-actions-artifact') {
     return parseGitHubActionsArtifactSource(record);
   }
   throw new AppError(
     'INVALID_ARGS',
-    'Invalid params: source.kind must be "url", "path", or "github-actions-artifact"',
+    'Invalid params: source.kind must be "url" or "github-actions-artifact"',
   );
 }
 
@@ -709,12 +740,10 @@ export async function createDaemonHttpServer(options: {
         if (daemonRequest.flags?.tenant !== undefined) {
           daemonRequest.flags = { ...daemonRequest.flags, tenant: tenantTrust.tenantId };
         }
-        daemonRequest = applyHttpTrustPolicy(
+        daemonRequest = restrictRemoteHttpRequest(
           daemonRequest,
-          resolveHttpTrustPolicy({
-            authHookConfigured: authHook !== null,
-            networkAccessMarker: req.headers[DAEMON_HTTP_NETWORK_ACCESS_HEADER],
-          }),
+          authHook !== null,
+          req.headers[DAEMON_HTTP_NETWORK_ACCESS_HEADER],
         );
 
         let canceledInFlight = false;

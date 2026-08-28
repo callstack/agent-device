@@ -267,7 +267,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     runScript: async (input, context) => ({
       outputEnv: executeRunScriptFile({
         scriptPath: resolveScriptPath(input.file, context, options.sourcePath),
-        networkAccess: options.baseReq.internal?.networkAccess,
+        publicNetworkOnly: options.baseReq.internal?.publicNetworkOnly === true,
         env: {
           ...context.env,
           ...(input.env ? stringifyEnvironment(input.env) : {}),

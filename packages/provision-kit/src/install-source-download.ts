@@ -64,7 +64,6 @@ async function requestHop(
       family: approved.family,
       headers: { ...headers, 'accept-encoding': 'identity' },
       signal,
-      method: 'GET',
     });
   } catch (error) {
     if (error instanceof AppError) throw error;

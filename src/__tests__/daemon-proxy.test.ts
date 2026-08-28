@@ -1,11 +1,10 @@
-import { test, vi } from 'vitest';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import http from 'node:http';
-import { Readable } from 'node:stream';
 import { createDaemonProxyServer } from '../remote/daemon-proxy.ts';
 import { createDaemonHttpServer } from '../daemon/server/http-server.ts';
-import { executeRunScriptHttpRequest } from '../daemon/adapters/maestro/run-script-http-child.ts';
+import { executeRunScriptHttpRequest } from '../daemon/adapters/maestro/run-script-http.ts';
 import {
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
@@ -16,12 +15,6 @@ import {
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
 } from './test-utils/loopback.ts';
-
-const requestApprovedUrlMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@agent-device/provision-kit/install-source-network-transport', () => ({
-  requestApprovedUrl: requestApprovedUrlMock,
-}));
 
 const PROXY_ARTIFACT_INVENTORY_ENTRY = {
   id: 'shot-1',
@@ -134,7 +127,7 @@ test('proxy enforces public-only Maestro HTTP policy on a local daemon', async (
           method: 'GET',
           url,
           headers: {},
-          networkAccess: request.internal?.networkAccess ?? 'unrestricted',
+          publicNetworkOnly: request.internal?.publicNetworkOnly === true,
         }),
       };
     },
@@ -169,32 +162,11 @@ test('proxy enforces public-only Maestro HTTP policy on a local daemon', async (
     };
 
     const loopbackResponse = await post(`http://127.0.0.1:${targetPort}/secret`);
-    assert.equal(loopbackResponse.status, 400);
+    assert.equal(loopbackResponse.status, 400, JSON.stringify(loopbackResponse.body));
     assert.equal(loopbackResponse.body.error?.data?.code, 'INVALID_ARGS');
     assert.match(loopbackResponse.body.error?.message ?? '', /non-public address/);
     assert.equal(loopbackRequests, 0, 'the proxy path must never reach a loopback target');
-    assert.equal(requestApprovedUrlMock.mock.calls.length, 0);
-
-    requestApprovedUrlMock.mockResolvedValue({
-      statusCode: 200,
-      headers: {},
-      body: Readable.from(['public-response']),
-      close: async () => {},
-    });
-    const publicUrl = 'https://93.184.216.34/public';
-    const publicResponse = await post(publicUrl);
-    assert.equal(publicResponse.status, 200);
-    assert.deepEqual(publicResponse.body.result?.data, {
-      status: 200,
-      body: 'public-response',
-      headers: {},
-    });
-    assert.equal(requestApprovedUrlMock.mock.calls.length, 1);
-    assert.equal(requestApprovedUrlMock.mock.calls[0]?.[0].url.href, publicUrl);
-    assert.equal(requestApprovedUrlMock.mock.calls[0]?.[0].approvedAddress, '93.184.216.34');
-    assert.equal(requestApprovedUrlMock.mock.calls[0]?.[0].family, 4);
   } finally {
-    requestApprovedUrlMock.mockReset();
     await closeLoopbackServer(proxy);
     await closeLoopbackServer(daemon);
     await closeLoopbackServer(loopbackTarget);
