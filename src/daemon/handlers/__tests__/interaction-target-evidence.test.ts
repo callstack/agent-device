@@ -343,7 +343,7 @@ test('press on an identity-empty container: container-based daemon response, des
   // And the WRITTEN .ad line re-resolves the descendant, not the container.
   const script = writeSessionScript(recordedSession);
   expect(script).toContain(
-    'press "role=\\"textview\\" label=\\"Connected devices\\" || label=\\"Connected devices\\""',
+    String.raw`press "role=\"textview\" label=\"Connected devices\" || label=\"Connected devices\""`,
   );
   expect(script).toContain('"role":"textview","label":"Connected devices"');
 });

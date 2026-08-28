@@ -76,7 +76,7 @@ test('a foreign live claim refuses the command before it can reach device operat
 
   const admission = makeAdmission('transient-exclusive', stateDir, 'shutdown');
   const error = asAppError(
-    await admission.admit(ANDROID_EMULATOR, localAndroid).catch((thrown: unknown) => thrown),
+    await admission.admit(ANDROID_EMULATOR, localAndroid).catch((error: unknown) => error),
   );
 
   expect(error.code).toBe('DEVICE_IN_USE');

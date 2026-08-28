@@ -100,7 +100,7 @@ export async function captureAppleClockAnchor(
       result.currentUptimeMs > 0
       ? { wallClockAtMs, uptimeMs: result.currentUptimeMs }
       : undefined;
-  } catch (_error) {
+  } catch {
     signal?.throwIfAborted();
     return undefined;
   }

@@ -363,7 +363,7 @@ async function assertAndroidRuntimePackageName(packageName: string): Promise<voi
 }
 
 function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 function isAndroidRunAsDeniedOutput(stdout: string, stderr: string): boolean {

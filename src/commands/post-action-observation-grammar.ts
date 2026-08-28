@@ -45,7 +45,7 @@ export type PostActionObservationFields<TName extends string> =
     ? VerifyFieldMap & SettleFieldMap
     : PostActionObservationSupportFor<TName> extends 'settle'
       ? SettleFieldMap
-      : {};
+      : Record<never, never>;
 
 export function postActionObservationFields<const TName extends string>(
   command: TName,

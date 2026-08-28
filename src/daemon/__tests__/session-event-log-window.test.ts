@@ -143,7 +143,7 @@ test('a reader that lands between the window write and the rename still resolves
     version: number;
     generations: { firstLineIndex: number; lineCount: number; firstLineDigest: string }[];
   };
-  const newest = sidecar.generations[sidecar.generations.length - 1]!;
+  const newest = sidecar.generations.at(-1)!;
   const activeLines = fs.readFileSync(eventLogPath, 'utf8').split('\n').filter(Boolean);
   const activeStart = newest.firstLineIndex + newest.lineCount;
   fs.writeFileSync(

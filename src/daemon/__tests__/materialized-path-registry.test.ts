@@ -60,7 +60,7 @@ test('cleanupRetainedMaterializedPathsForSession removes retained paths bound to
 test('cleanup of unknown materialization reports expiry with a recovery hint', async () => {
   const error = await cleanupRetainedMaterializedPaths('missing-id').then(
     () => null,
-    (err: unknown) => err,
+    (error: unknown) => error,
   );
   assert.equal(error instanceof AppError, true);
   const appError = error as AppError;
@@ -83,7 +83,7 @@ test('cleanup of tenant-owned materialization rejects other tenants', async () =
 
   const error = await cleanupRetainedMaterializedPaths(retained.materializationId, 'tenant-b').then(
     () => null,
-    (err: unknown) => err,
+    (error: unknown) => error,
   );
   assert.equal(error instanceof AppError, true);
   assert.equal((error as AppError).code, 'UNAUTHORIZED');

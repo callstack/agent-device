@@ -296,7 +296,7 @@ export class SessionStore {
 
   defaultTracePath(session: SessionState): string {
     const safeName = safeSessionName(session.name);
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
     return path.join(this.sessionsDir, `${safeName}-${timestamp}.trace.log`);
   }
 

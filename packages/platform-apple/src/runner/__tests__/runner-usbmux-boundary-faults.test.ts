@@ -28,7 +28,7 @@ test('usbmux read timeout is bounded at the packet seam', async () => {
     await waitForClose(socket);
   });
 
-  const error = await post(socketPath, 60).catch((value: unknown) => value);
+  const error = await post(socketPath, 60).catch((error: unknown) => error);
   assert.ok(error instanceof AppError);
   assert.equal(error.code, 'COMMAND_FAILED');
   assert.match(error.message, /Timed out reading usbmuxd response/);
@@ -69,7 +69,7 @@ test('usbmux partial packets fail as a closed response, not as a successful devi
     socket.end(header);
   });
 
-  const error = await post(socketPath, 1_000).catch((value: unknown) => value);
+  const error = await post(socketPath, 1_000).catch((error: unknown) => error);
   assert.ok(error instanceof AppError);
   assert.equal(error.code, 'COMMAND_FAILED');
   assert.equal(error.message, 'usbmuxd closed the connection unexpectedly');
@@ -84,7 +84,7 @@ test('usbmux malformed packet lengths stay typed at the protocol seam', async ()
     socket.end(header);
   });
 
-  const error = await post(socketPath, 1_000).catch((value: unknown) => value);
+  const error = await post(socketPath, 1_000).catch((error: unknown) => error);
   assert.ok(error instanceof AppError);
   assert.equal(error.code, 'COMMAND_FAILED');
   assert.equal(error.message, 'Invalid usbmuxd response length');

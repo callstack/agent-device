@@ -60,7 +60,7 @@ export const NAVIGATION_COMMAND_PROJECTIONS = {
       required: ['action', 'mode', 'message'],
     },
   }),
-  home: defineNavigationCommandProjection<{}, HomeCommandResult, false, 'home'>({
+  home: defineNavigationCommandProjection<Record<never, never>, HomeCommandResult, false, 'home'>({
     clientMethod: 'home',
     outputSchema: {
       type: 'object',
@@ -89,7 +89,7 @@ export const NAVIGATION_COMMAND_PROJECTIONS = {
     },
   }),
   'app-switcher': defineNavigationCommandProjection<
-    {},
+    Record<never, never>,
     AppSwitcherCommandResult,
     false,
     'appSwitcher'

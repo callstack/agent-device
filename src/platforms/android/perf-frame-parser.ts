@@ -366,7 +366,7 @@ function computeFrameWindowMs(frames: AndroidFrameStatsRow[]): number | undefine
 }
 
 function matchSummaryInteger(text: string, label: string): number | undefined {
-  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedLabel = label.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
   const match = text.match(new RegExp(`^\\s*${escapedLabel}:\\s*([0-9][0-9,]*)`, 'im'));
   if (!match) return undefined;
   const token = match[1];

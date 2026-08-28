@@ -276,7 +276,7 @@ export function parseIosDeviceProcessesPayload(payload: unknown): IosDeviceProce
     const pid =
       typeof entry.processIdentifier === 'number' && Number.isFinite(entry.processIdentifier)
         ? entry.processIdentifier
-        : NaN;
+        : Number.NaN;
     if (!executable || !Number.isFinite(pid)) continue;
     parsed.push({ executable, pid });
   }

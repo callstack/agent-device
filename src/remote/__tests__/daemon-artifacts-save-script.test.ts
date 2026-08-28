@@ -20,7 +20,7 @@ function replayRequest(saveScript?: boolean | string) {
     session: 'default',
     command: 'replay',
     positionals: ['./flows/login.ad'],
-    flags: { ...(saveScript === undefined ? {} : { saveScript }) },
+    flags: saveScript === undefined ? {} : { saveScript },
     meta: { cwd: '/repo' },
   };
 }

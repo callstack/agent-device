@@ -70,7 +70,7 @@ test('download errors do not disclose URL credentials or query values', async ()
       url: 'https://private-user:private-pass@example.com/app?token=private-query',
       headers: { authorization: 'private-header' },
       signal: new AbortController().signal,
-    }).catch((caught: unknown) => caught);
+    }).catch((error: unknown) => error);
     assert.match((error as Error).message, /credentials are not allowed/i);
     const serialized = JSON.stringify(error);
     for (const secret of ['private-user', 'private-pass', 'private-query', 'private-header']) {
@@ -104,7 +104,7 @@ test('download identifies the daemon as the requester and preserves the network 
       tempDir: tempRoot,
       url: 'https://example.com/app.apk',
       signal: new AbortController().signal,
-    }).catch((caught: unknown) => caught);
+    }).catch((error: unknown) => error);
 
     assert.ok(error instanceof Error);
     assert.equal(error.message, 'The daemon failed to fetch the app source');

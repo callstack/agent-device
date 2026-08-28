@@ -422,14 +422,14 @@ async function sendHttpRequest(
               reject,
             });
           })
-          .catch((err: unknown) => {
+          .catch((error: unknown) => {
             if (timeoutHandle) clearTimeout(timeoutHandle);
             reject(
               new AppError(
                 'COMMAND_FAILED',
                 'Failed to read daemon response',
                 { requestId: req.meta?.requestId },
-                err instanceof Error ? err : undefined,
+                error instanceof Error ? error : undefined,
               ),
             );
           });

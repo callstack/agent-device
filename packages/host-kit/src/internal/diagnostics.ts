@@ -235,7 +235,7 @@ export function flushDiagnosticsToSessionFile(
     const dayDir = new Date().toISOString().slice(0, 10);
     const baseDir = path.join(os.homedir(), '.agent-device', 'logs', sessionDir, dayDir);
     fs.mkdirSync(baseDir, { recursive: true });
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
     const filePath = path.join(baseDir, `${timestamp}-${scope.diagnosticId}.ndjson`);
     // Same single-value-replacement re-pass as the logPath branch above.
     const lines = scope.events.map((entry) =>
@@ -282,7 +282,7 @@ function replaceSensitiveValues(value: unknown, sensitiveValues: readonly string
 }
 
 function sanitizePathPart(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]/g, '_');
+  return value.replaceAll(/[^a-zA-Z0-9._-]/g, '_');
 }
 
 function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: string): void {

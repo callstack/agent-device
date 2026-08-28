@@ -201,13 +201,13 @@ function replayTestProgressFailureFileLine(event: ReplayTestResult): string | un
 }
 
 function replayTestProgressMessageLine(event: ReplayTestResult): string | undefined {
-  const message = event.message?.replace(/\s+/g, ' ').trim();
+  const message = event.message?.replaceAll(/\s+/g, ' ').trim();
   if (!message) return undefined;
   return `    ${event.status === 'fail' ? `failed at: ${message}` : message}`;
 }
 
 function appendReplayTestProgressHintLine(lines: string[], event: ReplayTestResult): void {
-  const hint = event.hint?.replace(/\s+/g, ' ').trim();
+  const hint = event.hint?.replaceAll(/\s+/g, ' ').trim();
   if (event.status === 'fail' && hint) lines.push(`    hint: ${hint}`);
 }
 
@@ -300,9 +300,9 @@ function clearLiveProgressPrefix(
   const rows = terminalReflowsOnResize
     ? Math.max(1, Math.ceil(previousWidth / resolveColumns(columns)))
     : 1;
-  let output = '\r\x1B[2K';
+  let output = '\r\u001B[2K';
   for (let row = 1; row < rows; row += 1) {
-    output += '\x1B[1A\r\x1B[2K';
+    output += '\u001B[1A\r\u001B[2K';
   }
   return output;
 }

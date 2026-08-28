@@ -53,7 +53,7 @@ test('parseSelectorChain rejects unknown keys and malformed quotes', () => {
 });
 
 test('parseSelectorChain handles quoted values ending in escaped backslashes', () => {
-  const chain = parseSelectorChain('label="path\\\\" || id=auth_continue');
+  const chain = parseSelectorChain(String.raw`label="path\\" || id=auth_continue`);
   assert.equal(chain.selectors.length, 2);
   assert.equal(chain.selectors[0]!.terms[0]!.value, 'path\\');
 });
@@ -61,10 +61,10 @@ test('parseSelectorChain handles quoted values ending in escaped backslashes', (
 test('parseSelectorChain decodes escaped selector string values', () => {
   const chain = parseSelectorChain(
     [
-      'label="Switch\\nMy Community"',
-      'value="A\\tB\\rC\\bD\\fE\\/F"',
-      'id="item_\\u0031\\uD83D\\uDE00"',
-      "text='It\\'s OK'",
+      String.raw`label="Switch\nMy Community"`,
+      String.raw`value="A\tB\rC\bD\fE\/F"`,
+      String.raw`id="item_\u0031\uD83D\uDE00"`,
+      String.raw`text='It\'s OK'`,
     ].join(' '),
   );
 
@@ -75,14 +75,14 @@ test('parseSelectorChain decodes escaped selector string values', () => {
 });
 
 test('parseSelectorChain preserves malformed and unknown selector string escapes', () => {
-  const chain = parseSelectorChain('label="bad\\u12" value="keep\\q"');
+  const chain = parseSelectorChain(String.raw`label="bad\u12" value="keep\q"`);
 
-  assert.equal(chain.selectors[0]!.terms[0]!.value, 'bad\\u12');
-  assert.equal(chain.selectors[0]!.terms[1]!.value, 'keep\\q');
+  assert.equal(chain.selectors[0]!.terms[0]!.value, String.raw`bad\u12`);
+  assert.equal(chain.selectors[0]!.terms[1]!.value, String.raw`keep\q`);
 });
 
 test('parseSelectorChain preserves literal escaped control sequences when double escaped', () => {
-  const chain = parseSelectorChain('label="foo\\\\nbar"');
+  const chain = parseSelectorChain(String.raw`label="foo\\nbar"`);
 
-  assert.equal(chain.selectors[0]!.terms[0]!.value, 'foo\\nbar');
+  assert.equal(chain.selectors[0]!.terms[0]!.value, String.raw`foo\nbar`);
 });

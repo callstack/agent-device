@@ -85,7 +85,7 @@ test('createReplayTestProgressRenderer renders pass, retry, fail, and skip cases
         artifactsDir: '/tmp/replay-suite/payment',
       },
       expected:
-        /^⨯ Payment flow 9\.88s\n    file: 03-payment\.ad\n    failed at: assertVisible failed\n    hint: Stop the owning daemon and retry\n    session: maestro-test:test:suite:3:attempt-2\n    artifacts: \/tmp\/replay-suite\/payment$/,
+        /^⨯ Payment flow 9\.88s\n {4}file: 03-payment\.ad\n {4}failed at: assertVisible failed\n {4}hint: Stop the owning daemon and retry\n {4}session: maestro-test:test:suite:3:attempt-2\n {4}artifacts: \/tmp\/replay-suite\/payment$/,
     },
     {
       event: {
@@ -111,7 +111,7 @@ test('createReplayTestProgressRenderer renders pass, retry, fail, and skip cases
         total: 5,
         message: 'missing platform metadata for --platform ios',
       },
-      expected: /^- 04-skip\.ad\n    missing platform metadata for --platform ios$/,
+      expected: /^- 04-skip\.ad\n {4}missing platform metadata for --platform ios$/,
     },
   ];
 

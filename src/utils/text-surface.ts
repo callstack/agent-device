@@ -39,7 +39,7 @@ function isLargeTextSurface(node: TextSurfaceNode, displayType?: string): boolea
 }
 
 export function buildTextPreview(text: string): string {
-  const normalized = text.replace(/\s+/g, ' ').trim();
+  const normalized = text.replaceAll(/\s+/g, ' ').trim();
   if (normalized.length <= 48) {
     return normalized;
   }

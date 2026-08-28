@@ -503,7 +503,7 @@ test('closeIosApp on macOS uses helper quit for bundle identifiers', async () =>
   await withMockedMacOsHelper(
     [
       '#!/bin/sh',
-      'printf "%s\\n" "$@" > "$AGENT_DEVICE_TEST_ARGS_FILE"',
+      String.raw`printf "%s\n" "$@" > "$AGENT_DEVICE_TEST_ARGS_FILE"`,
       "cat <<'JSON'",
       '{"ok":true,"data":{"bundleId":"com.example.foobar","running":false,"terminated":false,"forceTerminated":false}}',
       'JSON',
@@ -896,7 +896,7 @@ test('setIosSetting permission grant accessibility uses macOS helper', async () 
   await withMockedMacOsHelper(
     [
       '#!/bin/sh',
-      'printf "%s\\n" "$@" > "$AGENT_DEVICE_TEST_ARGS_FILE"',
+      String.raw`printf "%s\n" "$@" > "$AGENT_DEVICE_TEST_ARGS_FILE"`,
       "cat <<'JSON'",
       '{"ok":true,"data":{"target":"accessibility","action":"grant","granted":true,"requested":true,"openedSettings":false}}',
       'JSON',

@@ -5,7 +5,7 @@ import { shellQuote, shellQuoteIfNeeded } from './shell-quote.ts';
 test('shellQuote single-quotes and escapes POSIX shell arguments', () => {
   assert.equal(shellQuote('plain'), "'plain'");
   assert.equal(shellQuote(''), "''");
-  assert.equal(shellQuote("qa ios; echo 'oops'"), "'qa ios; echo '\\''oops'\\'''");
+  assert.equal(shellQuote("qa ios; echo 'oops'"), String.raw`'qa ios; echo '\''oops'\'''`);
 });
 
 test('shellQuoteIfNeeded keeps safe command arguments readable', () => {
@@ -17,5 +17,5 @@ test('shellQuoteIfNeeded quotes unsafe command arguments', () => {
   assert.equal(shellQuoteIfNeeded('my session'), "'my session'");
   assert.equal(shellQuoteIfNeeded(''), "''");
   assert.equal(shellQuoteIfNeeded('café'), "'café'");
-  assert.equal(shellQuoteIfNeeded("qa ios; echo 'oops'"), "'qa ios; echo '\\''oops'\\'''");
+  assert.equal(shellQuoteIfNeeded("qa ios; echo 'oops'"), String.raw`'qa ios; echo '\''oops'\'''`);
 });

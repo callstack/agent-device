@@ -89,9 +89,7 @@ function buildIdentityActionDetails(action: SessionAction): Record<string, unkno
 function buildObservationActionDetails(action: SessionAction): Record<string, unknown> {
   const result = action.result ?? {};
   if (action.command === PUBLIC_COMMANDS.snapshot) {
-    return {
-      ...(Array.isArray(result.nodes) ? { nodeCount: result.nodes.length } : {}),
-    };
+    return Array.isArray(result.nodes) ? { nodeCount: result.nodes.length } : {};
   }
   if (
     action.command !== PUBLIC_COMMANDS.wait &&

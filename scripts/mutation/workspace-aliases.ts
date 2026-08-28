@@ -10,7 +10,7 @@ export type WorkspaceSourceAlias = {
 export type ManifestSource = 'tracked-manifests' | 'disk-manifests';
 
 function exactSpecifier(specifier: string): RegExp {
-  return new RegExp(`^${specifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+  return new RegExp(`^${specifier.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)}$`);
 }
 
 function specifierTargets(repoRoot: string, source: ManifestSource): ReadonlyMap<string, string> {

@@ -22,7 +22,7 @@ export function resolveRequestTrackingId(
   const normalizedSeed =
     rawSeed
       .trim()
-      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .replaceAll(/[^a-zA-Z0-9_-]/g, '_')
       .slice(0, 32) || 'generated';
   const nonce = Math.random().toString(36).slice(2, 10);
   return `req:${normalizedSeed}:${process.pid}:${Date.now()}:${nonce}`;

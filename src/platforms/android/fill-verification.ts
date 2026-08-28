@@ -369,7 +369,7 @@ function isAcceptableAndroidFillMatch(value: string, expected: string): boolean 
 }
 
 function normalizeFillVerificationText(value: string): string {
-  return value.replace(/\s+/g, ' ').trim();
+  return value.replaceAll(/\s+/g, ' ').trim();
 }
 
 function isSentenceAutocapitalizeMatch(actual: string, expected: string): boolean {

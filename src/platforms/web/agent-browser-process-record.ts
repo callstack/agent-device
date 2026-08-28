@@ -182,5 +182,5 @@ function isCommandUnderPath(processInfo: HostProcessInfo, rootPath: string): boo
 }
 
 function normalizePathSeparators(value: string): string {
-  return value.replace(/\\/g, '/');
+  return value.replaceAll('\\', '/');
 }

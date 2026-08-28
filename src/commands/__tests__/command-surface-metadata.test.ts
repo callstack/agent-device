@@ -97,11 +97,11 @@ test('every command states a summary that is shorter than its description', () =
     assert.notEqual(
       summary
         .toLowerCase()
-        .replace(/[^a-z0-9 ]/g, '')
+        .replaceAll(/[^a-z0-9 ]/g, '')
         .trim(),
       description
         .toLowerCase()
-        .replace(/[^a-z0-9 ]/g, '')
+        .replaceAll(/[^a-z0-9 ]/g, '')
         .trim(),
       `${name}: summary duplicates the description`,
     );

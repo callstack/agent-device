@@ -4,7 +4,7 @@ import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 export function normalizeType(type: string): string {
   let normalized = type
     .trim()
-    .replace(/XCUIElementType/gi, '')
+    .replaceAll(/XCUIElementType/gi, '')
     .replace(/^AX/, '')
     .toLowerCase();
   const lastSeparator = Math.max(normalized.lastIndexOf('.'), normalized.lastIndexOf('/'));

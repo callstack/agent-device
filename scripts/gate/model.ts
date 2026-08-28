@@ -42,7 +42,7 @@ function expandGlob(pattern: string): string[] {
   const dir = path.dirname(pattern);
   const rest = path.basename(pattern);
   const matcher = new RegExp(
-    `^${rest.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*')}$`,
+    `^${rest.replaceAll(/[.+^${}()|[\]\\]/g, String.raw`\$&`).replaceAll('*', '[^/]*')}$`,
   );
   if (!fs.existsSync(dir)) return [];
   return fs

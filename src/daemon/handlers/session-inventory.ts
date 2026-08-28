@@ -129,8 +129,8 @@ async function devicesInventoryResponse(req: DaemonRequest): Promise<DaemonRespo
       ok: true,
       data: { devices: (await resolveInventoryDevices(req)).map(publicDeviceInfo) },
     };
-  } catch (err) {
-    const appErr = asAppError(err);
+  } catch (error) {
+    const appErr = asAppError(error);
     return errorResponse(appErr.code, appErr.message, appErr.details);
   }
 }

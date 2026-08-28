@@ -87,9 +87,7 @@ export async function resolveBoundScrollRuntime(
 
   const target = parseScrollTarget(directionInput);
   const options = resolveScrollExecutionOptions({ amount, pixels, durationMs }, target.edge);
-  const plan = resolveScrollRuntimePlan({
-    ...(target.edge === undefined ? {} : { edge: target.edge }),
-  });
+  const plan = resolveScrollRuntimePlan(target.edge === undefined ? {} : { edge: target.edge });
   const admission = {
     command: 'scroll',
     device: params.device,

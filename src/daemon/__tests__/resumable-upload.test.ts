@@ -17,7 +17,7 @@ import { runCmdSync } from '@agent-device/host-kit/command';
 test('finalizing an unknown upload reports expiry with a recovery hint', async () => {
   const error = await finalizeResumableUpload('missing-upload-id').then(
     () => null,
-    (err: unknown) => err,
+    (error: unknown) => error,
   );
   assert.equal(error instanceof AppError, true);
   const appError = error as AppError;

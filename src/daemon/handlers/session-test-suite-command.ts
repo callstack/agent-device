@@ -201,8 +201,8 @@ export async function runReplayTestSuiteCommand(
   try {
     suiteRequest = toReplayTestSuiteRequest(req, sessionName);
     sourceBundles = requireReplayTestScriptSources(req);
-  } catch (err) {
-    const appErr = asAppError(err);
+  } catch (error) {
+    const appErr = asAppError(error);
     return errorResponse(appErr.code, appErr.message);
   }
   const sourceBundlesByPath = new Map(sourceBundles.map((bundle) => [bundle.entry, bundle]));

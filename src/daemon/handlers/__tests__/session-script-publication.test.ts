@@ -98,7 +98,7 @@ test('publishes without close, returns the path/count, and leaves a terminal liv
     ok: true,
     data: { session: 'authoring', savedScript: outputPath, actionCount: 3 },
   });
-  expect(fs.readFileSync(outputPath, 'utf8')).toContain('wait "id=\\"screen-x\\""');
+  expect(fs.readFileSync(outputPath, 'utf8')).toContain(String.raw`wait "id=\"screen-x\""`);
   expect(fs.readFileSync(outputPath, 'utf8')).not.toContain('\nclose');
   expect(store.get('authoring')).toBe(session);
   expect(session.scriptPublication).toMatchObject({ kind: 'authoring', status: 'published' });

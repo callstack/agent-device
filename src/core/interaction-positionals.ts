@@ -164,7 +164,7 @@ function mergeRestIntoSelectorValue(
 }
 
 function quoteSelectorValue(value: string): string {
-  return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+  return `"${value.replaceAll('\\', String.raw`\\`).replaceAll('"', String.raw`\"`)}"`;
 }
 
 function optionalTrimmedText(parts: string[]): string | undefined {

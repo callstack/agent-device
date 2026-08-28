@@ -348,5 +348,5 @@ function readAwsInteractionMode(
 }
 
 function dasherize(value: string): string {
-  return value.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
+  return value.replaceAll(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
 }

@@ -192,7 +192,7 @@ async function startAndroidSnapshotHelperSession(params: {
     outputPath: undefined,
     emitChunks: false,
   });
-  const runner = args[args.length - 1];
+  const runner = args.at(-1);
   if (!runner) {
     throw new AppError('INVALID_ARGS', 'Android snapshot helper runner was not resolved');
   }

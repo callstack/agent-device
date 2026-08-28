@@ -75,7 +75,7 @@ export function buildAndroidNativeRemotePath(
   fileName: string,
   remoteDir = ANDROID_NATIVE_REMOTE_DIR,
 ): string {
-  const safePackage = packageName.replace(/[^A-Za-z0-9_.-]/g, '_');
+  const safePackage = packageName.replaceAll(/[^A-Za-z0-9_.-]/g, '_');
   return `${remoteDir}/agent-device-${safePackage}-${Date.now()}-${fileName}`;
 }
 
@@ -115,7 +115,7 @@ export async function readFileSize(filePath: string): Promise<number> {
 }
 
 export function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
+  return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
 async function stopAndroidBackgroundTool(

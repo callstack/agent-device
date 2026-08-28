@@ -80,9 +80,9 @@ export function acquireDaemonLock(
     try {
       fs.writeFileSync(lockPath, payload, { flag: 'wx', mode: 0o600 });
       return true;
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'EEXIST') return false;
-      throw err;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+      throw error;
     }
   };
 

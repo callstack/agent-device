@@ -84,9 +84,10 @@ function waitReq(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
 
 async function runWait(options: { recording?: boolean; req?: DaemonRequest } = {}) {
   const sessionStore = makeSessionStore();
-  const session = makeAndroidSession('default', {
-    ...(options.recording ? { scriptPublication: authoringPublication('armed') } : {}),
-  });
+  const session = makeAndroidSession(
+    'default',
+    options.recording ? { scriptPublication: authoringPublication('armed') } : {},
+  );
   sessionStore.set('default', session);
   const response = await dispatchWaitViaRuntime({
     req: options.req ?? waitReq(),

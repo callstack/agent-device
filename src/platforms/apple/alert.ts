@@ -116,9 +116,9 @@ export async function actOnAppleAlert(
         : remainingBudgetMs(start, ALERT_ACTION_RETRY_MS);
       firstAttempt = false;
       return await runAlert(action, budgetMs);
-    } catch (err) {
-      lastError = err;
-      if (!isAlertNotFoundError(err)) break;
+    } catch (error) {
+      lastError = error;
+      if (!isAlertNotFoundError(error)) break;
     }
     await sleep(ALERT_POLL_INTERVAL_MS);
   }

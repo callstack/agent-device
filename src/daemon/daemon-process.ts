@@ -42,10 +42,10 @@ export function trySignalProcess(pid: number, signal: NodeJS.Signals): boolean {
   try {
     process.kill(pid, signal);
     return true;
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
     if (code === 'ESRCH' || code === 'EPERM') return false;
-    throw err;
+    throw error;
   }
 }
 

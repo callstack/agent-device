@@ -205,7 +205,7 @@ async function resolveAndroidAppPid(adb: AndroidAdbExecutor, packageName: string
   const pid = result.stdout
     .trim()
     .split(/\s+/)
-    .map((token) => Number(token))
+    .map(Number)
     .find((value) => Number.isInteger(value) && value > 0);
   if (result.exitCode === 0 && pid !== undefined) return pid;
   throw new AppError('COMMAND_FAILED', `No running Android process found for ${packageName}`, {
@@ -218,7 +218,7 @@ async function resolveAndroidAppPid(adb: AndroidAdbExecutor, packageName: string
 }
 
 function buildAndroidRemoteHeapPath(packageName: string): string {
-  const safePackage = packageName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const safePackage = packageName.replaceAll(/[^a-zA-Z0-9._-]/g, '_');
   return `${ANDROID_REMOTE_HEAP_DIR}/agent-device-${safePackage}-${Date.now()}.hprof`;
 }
 
@@ -297,7 +297,7 @@ function annotateAndroidPerfSamplingError(
 }
 
 function matchLabeledNumber(text: string, label: string): number | undefined {
-  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedLabel = label.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
   const match = text.match(new RegExp(`${escapedLabel}:\\s*([0-9][0-9,]*)`, 'i'));
   if (!match) return undefined;
   const token = match[1];

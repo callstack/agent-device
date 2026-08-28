@@ -640,7 +640,7 @@ test('writeSessionLog optimizes selector chains and scopes fallback snapshots', 
 
 test('writeSessionLog escapes device labels with quotes and backslashes', () => {
   const fixture = makeFixture('agent-device-session-log-device-label-');
-  fixture.session.device.name = 'QA "Lab" \\ Shelf';
+  fixture.session.device.name = String.raw`QA "Lab" \ Shelf`;
   recordOpen(fixture.store, fixture.session);
 
   const script = writeScript(fixture);
@@ -683,7 +683,7 @@ test('writeSessionLog preserves significant whitespace and empty string argument
 
   const script = writeScript(fixture);
   assertScriptMatches(script, [
-    /type "  leading\\ttrailing  "/,
+    /type " {2}leading\\ttrailing {2}"/,
     /fill @e5 "Search field" ""/,
     /screenshot " \.\/screens\/final\.png "/,
     /--metro-host " host\\t" --launch-url "myapp:\/\/dev "/,

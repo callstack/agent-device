@@ -428,22 +428,28 @@ test('replay --save-script help describes arming a repair transaction, not open/
   assert.doesNotMatch(help, /Arm evidence capture on open, publish the armed recording on close/);
 });
 
-test('open --save-script help keeps the shared open\\/close authoring description', async () => {
-  const help = await usageForCommand('open');
-  if (help === null) throw new Error('Expected open help text');
-  assert.match(
-    help,
-    /Arm evidence capture on open, publish the armed recording on close; close --save-script alone \(without an armed open\) is rejected/,
-  );
-  assert.doesNotMatch(help, /Arm a repair transaction from this replay/);
-});
+test(
+  String.raw`open --save-script help keeps the shared open\/close authoring description`,
+  async () => {
+    const help = await usageForCommand('open');
+    if (help === null) throw new Error('Expected open help text');
+    assert.match(
+      help,
+      /Arm evidence capture on open, publish the armed recording on close; close --save-script alone \(without an armed open\) is rejected/,
+    );
+    assert.doesNotMatch(help, /Arm a repair transaction from this replay/);
+  },
+);
 
-test('close --save-script help keeps the shared open\\/close authoring description', async () => {
-  const help = await usageForCommand('close');
-  if (help === null) throw new Error('Expected close help text');
-  assert.match(
-    help,
-    /Arm evidence capture on open, publish the armed recording on close; close --save-script alone \(without an armed open\) is rejected/,
-  );
-  assert.doesNotMatch(help, /Arm a repair transaction from this replay/);
-});
+test(
+  String.raw`close --save-script help keeps the shared open\/close authoring description`,
+  async () => {
+    const help = await usageForCommand('close');
+    if (help === null) throw new Error('Expected close help text');
+    assert.match(
+      help,
+      /Arm evidence capture on open, publish the armed recording on close; close --save-script alone \(without an armed open\) is rejected/,
+    );
+    assert.doesNotMatch(help, /Arm a repair transaction from this replay/);
+  },
+);

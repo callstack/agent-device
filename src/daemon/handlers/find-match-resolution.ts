@@ -85,7 +85,7 @@ function narrowMultipleMatches(
   flags: DaemonRequest['flags'],
 ): SnapshotState['nodes'] | null {
   if (flags?.findFirst) return [matches[0]!];
-  if (flags?.findLast) return [matches[matches.length - 1]!];
+  if (flags?.findLast) return [matches.at(-1)!];
   return null;
 }
 

@@ -31,7 +31,7 @@ test('Maestro help covers the supported subset and operational boundaries', asyn
 
 test('Maestro replay docs stay in sync with versioned compatibility help', () => {
   const docs = fs.readFileSync('website/docs/docs/replay-e2e.md', 'utf8');
-  const plainDocs = docs.replace(/`/g, '');
+  const plainDocs = docs.replaceAll('`', '');
   for (const statement of [
     ...MAESTRO_COMPAT_SUPPORTED_CAPABILITIES,
     ...MAESTRO_COMPAT_LIMITATIONS,

@@ -85,8 +85,8 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
               : undefined,
             async () => await handleRequest(req),
           );
-        } catch (err) {
-          response = { ok: false, error: normalizeError(err) };
+        } catch (error) {
+          response = { ok: false, error: normalizeError(error) };
         } finally {
           inFlightRequests -= 1;
           if (requestAbortRegistration) {

@@ -112,7 +112,7 @@ test('MCP command tool executor renders JSON text when requested', async () => {
 
   const result = await executor.execute('snapshot', { mcpOutputFormat: 'json' });
 
-  assert.match(result.content[0]?.text ?? '', /^\{\n  "nodes": \[/);
+  assert.match(result.content[0]?.text ?? '', /^\{\n {2}"nodes": \[/);
   assert.match(result.content[0]?.text ?? '', /"label": "Continue"/);
 });
 

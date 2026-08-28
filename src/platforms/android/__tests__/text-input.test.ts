@@ -197,7 +197,7 @@ test('fillAndroid tolerates delayed React Native text verification', async () =>
         return undefined;
       }
       if (isShellInput(args, 'text')) {
-        state += (args[3] ?? '').replace(/%s/g, ' ');
+        state += (args[3] ?? '').replaceAll('%s', ' ');
         return undefined;
       }
       return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
@@ -289,7 +289,7 @@ test('fillAndroid tolerates delayed React Native text verification', async () =>
         return undefined;
       }
       if (isShellInput(args, 'text')) {
-        state += (args[3] ?? '').replace(/%s/g, ' ');
+        state += (args[3] ?? '').replaceAll('%s', ' ');
         return undefined;
       }
       return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
@@ -345,7 +345,7 @@ test('fillAndroid tolerates delayed React Native text verification', async () =>
         return undefined;
       }
       if (isShellInput(args, 'text')) {
-        state += (args[3] ?? '').replace(/%s/g, ' ');
+        state += (args[3] ?? '').replaceAll('%s', ' ');
         return undefined;
       }
       return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };

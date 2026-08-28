@@ -444,7 +444,7 @@ test('the local adb executor attaches classified hints to thrown command failure
 
   const error = await adb(['shell', 'echo', 'hi']).then(
     () => assert.fail('expected the adb call to reject'),
-    (err: unknown) => err,
+    (error: unknown) => error,
   );
 
   assert.ok(error instanceof AppError);
@@ -473,7 +473,7 @@ test('the local adb executor flags transient transport failures retriable', asyn
 
   const error = await adb(['shell', 'echo', 'hi']).then(
     () => assert.fail('expected the adb call to reject'),
-    (err: unknown) => err,
+    (error: unknown) => error,
   );
 
   assert.ok(error instanceof AppError);
@@ -505,7 +505,7 @@ test('the local adb executor classifies exec-layer timeouts as a wedged adb serv
 
   const error = await adb(['devices', '-l']).then(
     () => assert.fail('expected the adb call to reject'),
-    (err: unknown) => err,
+    (error: unknown) => error,
   );
 
   assert.ok(error instanceof AppError);
@@ -568,7 +568,7 @@ test('port reverse removal failures surface as classified AppErrors, not bare Er
 
   const error = await provider.remove('tcp:8081').then(
     () => assert.fail('expected the removal to reject'),
-    (err: unknown) => err,
+    (error: unknown) => error,
   );
 
   assert.ok(error instanceof AppError);
@@ -649,7 +649,7 @@ test('semantic provider install failures carry classified hints', async () => {
     async () =>
       await installAndroidAdbPackage('/app.apk', { replace: true }).then(
         () => assert.fail('expected the provider install to reject'),
-        (err: unknown) => err,
+        (error: unknown) => error,
       ),
   );
 
@@ -672,7 +672,7 @@ test('explicitly passed provider pull failures carry classified hints', async ()
     },
   }).then(
     () => assert.fail('expected the provider pull to reject'),
-    (err: unknown) => err,
+    (error: unknown) => error,
   );
 
   assert.ok(error instanceof AppError);
@@ -702,7 +702,7 @@ test('provider-scoped adb failures get the same classified hints as local execut
     async () =>
       await resolveAndroidAdbExecutor(device)(['shell', 'echo', 'hi']).then(
         () => assert.fail('expected the provider-scoped call to reject'),
-        (err: unknown) => err,
+        (error: unknown) => error,
       ),
   );
 

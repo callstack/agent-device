@@ -335,7 +335,7 @@ async function runAndroidClipboardShellCommand(
 }
 
 function normalizeAndroidClipboardText(stdout: string): string {
-  const normalized = stdout.replace(/\r\n/g, '\n').replace(/\n$/, '');
+  const normalized = stdout.replaceAll('\r\n', '\n').replace(/\n$/, '');
   const prefixed = normalized.match(/^clipboard text:\s*(.*)$/i);
   if (prefixed) return prefixed[1] ?? '';
   if (normalized.trim().toLowerCase() === 'null') return '';

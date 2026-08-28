@@ -18,7 +18,7 @@ test('tar inspection rejects declared bytes before draining an over-budget entry
       budget,
     }).then(
       () => null,
-      (cause: unknown) => cause,
+      (error: unknown) => error,
     );
 
     assert.equal(error instanceof AppError, true);

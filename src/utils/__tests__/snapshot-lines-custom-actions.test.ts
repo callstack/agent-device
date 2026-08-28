@@ -49,7 +49,10 @@ test('formatSnapshotLine omits the actions list when there is nothing to name', 
 
 test('formatSnapshotLine escapes app-authored names so they cannot corrupt the line', () => {
   const line = formatSnapshotLine(
-    { ...mergedCard, actions: ['Say "hi"', 'C:\\path', 'Reply\nto post', 'Bell\u0007ring'] },
+    {
+      ...mergedCard,
+      actions: ['Say "hi"', String.raw`C:\path`, 'Reply\nto post', 'Bell\u0007ring'],
+    },
     0,
     false,
     undefined,
@@ -60,7 +63,7 @@ test('formatSnapshotLine escapes app-authored names so they cannot corrupt the l
   // character is dropped. The result stays exactly one line.
   assert.equal(
     line,
-    '@e72 [link] "feedItem-by-whiskers.test" actions: ["Say \\"hi\\"", "C:\\\\path", "Reply to post", "Bellring"]',
+    String.raw`@e72 [link] "feedItem-by-whiskers.test" actions: ["Say \"hi\"", "C:\\path", "Reply to post", "Bellring"]`,
   );
   assert.equal(line.includes('\n'), false);
 });

@@ -181,7 +181,7 @@ test('resolveAppleSimulatorSetPathForSelector ignores simulator scoping for desk
 test('resolveDevice throws DEVICE_NOT_FOUND with scoped set guidance when simulatorSetPath is set and no devices found', async () => {
   const setPath = '/path/to/sessions/abc/Simulators';
   const err = await resolveDevice([], { platform: 'ios' }, { simulatorSetPath: setPath }).catch(
-    (e) => e,
+    (error) => error,
   );
   assert.ok(err instanceof AppError);
   assert.equal(err.code, 'DEVICE_NOT_FOUND');
@@ -194,7 +194,7 @@ test('resolveDevice throws DEVICE_NOT_FOUND with scoped set guidance when simula
 });
 
 test('resolveDevice throws generic DEVICE_NOT_FOUND when no simulatorSetPath and no devices found', async () => {
-  const err = await resolveDevice([], { platform: 'ios' }).catch((e) => e);
+  const err = await resolveDevice([], { platform: 'ios' }).catch((error) => error);
   assert.ok(err instanceof AppError);
   assert.equal(err.code, 'DEVICE_NOT_FOUND');
   assert.equal(err.message, 'No devices found');
@@ -204,7 +204,7 @@ test('resolveDevice throws generic DEVICE_NOT_FOUND when no simulatorSetPath and
 test('resolveDevice does not apply scoped set guidance for non-iOS platform with simulatorSetPath', async () => {
   const setPath = '/path/to/sessions/abc/Simulators';
   const err = await resolveDevice([], { platform: 'android' }, { simulatorSetPath: setPath }).catch(
-    (e) => e,
+    (error) => error,
   );
   assert.ok(err instanceof AppError);
   assert.equal(err.code, 'DEVICE_NOT_FOUND');
@@ -230,7 +230,7 @@ test('resolveDevice treats Android AVD placeholders returned by inventory as sel
 
 test('resolveDevice applies scoped set guidance when no platform selector specified and simulatorSetPath is set', async () => {
   const setPath = '/path/to/sessions/abc/Simulators';
-  const err = await resolveDevice([], {}, { simulatorSetPath: setPath }).catch((e) => e);
+  const err = await resolveDevice([], {}, { simulatorSetPath: setPath }).catch((error) => error);
   assert.ok(err instanceof AppError);
   assert.equal(err.code, 'DEVICE_NOT_FOUND');
   assert.match(err.message, /scoped simulator set/);

@@ -90,7 +90,7 @@ test('installAndroidInstallablePath installs .aab via bundletool build-apks + in
     bundletoolPath,
     [
       '#!/bin/sh',
-      'printf "bundletool %s\\n" "$*" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
+      String.raw`printf "bundletool %s\n" "$*" >> "$AGENT_DEVICE_TEST_ARGS_FILE"`,
       'if [ "$1" = "build-apks" ]; then',
       '  out=""',
       '  while [ "$#" -gt 0 ]; do',

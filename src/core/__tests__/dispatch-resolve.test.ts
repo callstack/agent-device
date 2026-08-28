@@ -242,8 +242,8 @@ test('platform-less resolution refuses to pick between equally booted devices', 
     async () => {
       try {
         await resolveTargetDeviceInContext({}, { appleSimulatorAppTarget: 'com.example.demo' });
-      } catch (thrown) {
-        return thrown;
+      } catch (error) {
+        return error;
       }
       throw new assert.AssertionError({
         message: 'expected ambiguous device resolution to refuse',
@@ -284,7 +284,7 @@ test('resolveTargetDevice refuses booted simulator selection when the requested 
   const error = await resolveTargetDevice(
     { platform: 'ios' },
     { appleSimulatorAppTarget: 'com.example.demo' },
-  ).catch((cause) => cause);
+  ).catch((error) => error);
 
   assert.ok(error instanceof AppError);
   assert.equal(error.code, 'APP_NOT_INSTALLED');
@@ -305,7 +305,7 @@ test('resolveTargetDevice refuses ambiguous booted simulator app matches', async
   const error = await resolveTargetDevice(
     { platform: 'ios' },
     { appleSimulatorAppTarget: 'com.example.demo' },
-  ).catch((cause) => cause);
+  ).catch((error) => error);
 
   assert.ok(error instanceof AppError);
   assert.equal(error.code, 'AMBIGUOUS_MATCH');

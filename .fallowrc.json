@@ -54,6 +54,10 @@
     // @agent-device/provider-limrun owns the source import, while the published
     // root build externalizes @limrun/api and retains runtime imports in packed chunks.
     "@limrun/api",
+    // Oxlint resolves the shared config's JS plugins dynamically from their package names.
+    "@nkzw/eslint-plugin",
+    "eslint-plugin-no-only-tests",
+    "eslint-plugin-perfectionist",
     // Packaging linters with no importable API surface here: scripts/check-package.ts runs their
     // `node_modules/.bin` shims as subprocesses, which dependency analysis cannot follow to an import.
     "publint",
@@ -116,7 +120,7 @@
     },
     {
       "comment": "Tool config default exports, loaded by the tool rather than imported.",
-      "file": "{tsdown.config.ts,vitest.mutation.config.ts,website/rspress.config.ts}",
+      "file": "{oxlint.config.ts,tsdown.config.ts,vitest.mutation.config.ts,website/rspress.config.ts}",
       "exports": ["default"]
     },
     {

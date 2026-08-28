@@ -147,10 +147,10 @@ export function ToggleRow(props: {
         accessibilityRole="switch"
         accessibilityState={{ checked: props.value }}
         ios_backgroundColor={colors.lineStrong}
+        onValueChange={props.onValueChange}
         thumbColor={props.value ? colors.accent : colors.card}
         trackColor={{ false: colors.lineStrong, true: colors.accentSoft }}
         value={props.value}
-        onValueChange={props.onValueChange}
       />
     </View>
   );

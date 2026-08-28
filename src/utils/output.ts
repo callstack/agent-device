@@ -570,11 +570,7 @@ function renderSnapshotDisplayLines(lines: ReturnType<typeof buildSnapshotDispla
     while (
       pendingBelow.length > 0 &&
       (!nextLine ||
-        isOutsideHiddenContentContainer(
-          nextLine,
-          pendingBelow[pendingBelow.length - 1]!,
-          lineNodesByIndex,
-        ))
+        isOutsideHiddenContentContainer(nextLine, pendingBelow.at(-1)!, lineNodesByIndex))
     ) {
       output.push(...readHiddenContentHintLines(pendingBelow.pop()!, 'below'));
     }

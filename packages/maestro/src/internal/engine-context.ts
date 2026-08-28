@@ -108,7 +108,7 @@ function resolveValue(
   resolving = new Set<string>(),
   failOnUnresolved = true,
 ): string {
-  const resolved = value.replace(/\$\{([A-Za-z_][A-Za-z0-9_.]*)\}/g, (match, key: string) => {
+  const resolved = value.replaceAll(/\$\{([A-Za-z_][A-Za-z0-9_.]*)\}/g, (match, key: string) => {
     if (!Object.hasOwn(values, key)) {
       if (!failOnUnresolved) return match;
       throw new AppError('INVALID_ARGS', `Maestro variable "${key}" is not defined.`);

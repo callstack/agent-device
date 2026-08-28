@@ -104,9 +104,7 @@ export const traceCommand: RuntimeCommand<
       })
     : undefined;
   try {
-    const backendOptions: BackendTraceOptions = {
-      ...(output?.path ? { outPath: output.path } : {}),
-    };
+    const backendOptions: BackendTraceOptions = output?.path ? { outPath: output.path } : {};
     const result = await method.call(
       runtime.backend,
       toBackendContext(runtime, options),

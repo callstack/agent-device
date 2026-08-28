@@ -74,7 +74,7 @@ function getDescendantEndPositions(nodes: RawSnapshotNode[]): number[] {
   const stack: Array<{ depth: number; position: number }> = [];
   for (const [position, node] of nodes.entries()) {
     const depth = node?.depth ?? 0;
-    while (stack.length > 0 && depth <= stack[stack.length - 1]!.depth) {
+    while (stack.length > 0 && depth <= stack.at(-1)!.depth) {
       const previous = stack.pop()!;
       endPositions[previous.position] = position;
     }

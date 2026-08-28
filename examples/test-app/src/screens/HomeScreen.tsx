@@ -46,8 +46,8 @@ export function HomeScreen(props: HomeScreenProps) {
       <ScreenTitle
         badge={`${props.cartCount} in cart`}
         subtitle="An app for testing all the functionality of agent-device."
-        title="Agent Device Tester"
         testID="home-title"
+        title="Agent Device Tester"
       />
 
       <GestureLab />
@@ -55,9 +55,9 @@ export function HomeScreen(props: HomeScreenProps) {
       {props.noticeVisible ? (
         <SectionCard
           subtitle="Dismiss this to exercise nearby mutations and compact diff verification."
+          testID="release-notice"
           title="Release notice"
           tone="accent"
-          testID="release-notice"
         >
           <Text style={styles.noticeText}>
             The bakery list was refreshed this morning. Seasonal items moved to the bottom of the
@@ -105,8 +105,8 @@ export function HomeScreen(props: HomeScreenProps) {
 
       <SectionCard
         subtitle="Good for wait, get, and state assertions."
-        title="Live status"
         testID="home-status-card"
+        title="Live status"
       >
         <View style={styles.row}>
           <Text style={styles.label}>Session health</Text>

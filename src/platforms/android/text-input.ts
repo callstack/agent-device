@@ -386,7 +386,7 @@ function isAndroidShellTextSupported(text: string): boolean {
 
 function encodeAndroidInputText(text: string): string {
   // Android shell input uses `%s` as the escaped token for spaces.
-  return text.replace(/ /g, '%s');
+  return text.replaceAll(' ', '%s');
 }
 
 function isAndroidInputTextUnsupported(error: unknown): boolean {

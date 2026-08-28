@@ -163,7 +163,7 @@ export class SessionScriptWriter {
       return expandSessionPath(targetPath);
     }
     const safeName = safeSessionName(session.name);
-    const timestamp = new Date(session.createdAt).toISOString().replace(/[:.]/g, '-');
+    const timestamp = new Date(session.createdAt).toISOString().replaceAll(/[:.]/g, '-');
     return path.join(this.sessionsDir, `${safeName}-${timestamp}.ad`);
   }
 }

@@ -215,7 +215,7 @@ function readRequiredGitHubArtifactText(
 function readGitHubArtifactInteger(record: Record<string, unknown>, key: 'artifactId' | 'runId') {
   const value = record[key];
   const parsed =
-    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
   if (!Number.isInteger(parsed)) {
     throw new AppError('INVALID_ARGS', `Invalid params: source.${key} must be an integer`);
   }

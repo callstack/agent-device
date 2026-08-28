@@ -8,7 +8,7 @@ export { canonicalJson } from '@agent-device/kernel/collections';
 export { pointInsideRect } from '@agent-device/kernel/rect-center';
 
 export function normalizeText(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+  return value.trim().toLowerCase().replaceAll(/\s+/g, ' ');
 }
 
 export function extractNodeText(node: SnapshotNode): string {

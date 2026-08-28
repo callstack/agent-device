@@ -99,7 +99,7 @@ function readRequiredText(value: unknown, field: string): string {
 
 function readInteger(value: unknown, field: string): number {
   const parsed =
-    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
   if (!Number.isInteger(parsed)) {
     throw new AppError('INVALID_ARGS', `${field} must be an integer.`);
   }

@@ -168,7 +168,7 @@ function isShardDeviceCandidate(device: DeviceInfo, flags: CommandFlags | undefi
 }
 
 function normalizeDeviceName(value: string): string {
-  return value.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+  return value.toLowerCase().replaceAll('_', ' ').replaceAll(/\s+/g, ' ').trim();
 }
 
 function compareShardDevices(a: DeviceInfo, b: DeviceInfo): number {

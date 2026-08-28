@@ -139,7 +139,7 @@ function extractSurfaceText(node: SnapshotNode, options: { includeIdentifiers: b
   const value = candidates
     .map((candidate) => (typeof candidate === 'string' ? candidate.trim() : ''))
     .find((candidate) => candidate.length > 0);
-  return value ? value.replace(/\s+/g, ' ').slice(0, 80) : '';
+  return value ? value.replaceAll(/\s+/g, ' ').slice(0, 80) : '';
 }
 
 function isChromeLikeNode(node: SnapshotNode): boolean {

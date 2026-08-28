@@ -511,7 +511,7 @@ test('replay rejects malformed .ad lines with unclosed quotes', async () => {
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));
-  const filePath = writeReplayFile(root, ['click "id=\\"broken\\"']);
+  const filePath = writeReplayFile(root, [String.raw`click "id=\"broken\"`]);
 
   const response = await runReplayScriptSource({
     req: baseReq({ positionals: [filePath] }),

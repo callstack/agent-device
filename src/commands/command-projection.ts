@@ -31,13 +31,13 @@ async function prepareBatchDaemonCommandRequest(
       metadata,
       metadata.readInput(input) as CommandInput,
     );
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     throw new AppError(
       'INVALID_ARGS',
       `Batch step ${stepNumber} ${command} input is invalid: ${message}`,
       undefined,
-      err,
+      error,
     );
   }
 }

@@ -75,7 +75,7 @@ export function readNetworkBody(
 ): string | undefined {
   for (const key of keys) {
     if (json?.[key] !== undefined) return stringifyNetworkValue(json[key]);
-    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escaped = key.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
     const match = new RegExp(`\\b${escaped}["'=: ]+(.+)$`, 'i').exec(line);
     if (match?.[1]) return match[1].trim();
   }

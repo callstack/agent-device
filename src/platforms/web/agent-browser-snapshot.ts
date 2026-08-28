@@ -152,7 +152,9 @@ function extractBrowserRef(line: string): string | null {
 }
 
 function extractNodeAnnotation(line: string): string | undefined {
-  const structure = line.replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/'(?:[^'\\]|\\.)*'/g, "''");
+  const structure = line
+    .replaceAll(/"(?:[^"\\]|\\.)*"/g, '""')
+    .replaceAll(/'(?:[^'\\]|\\.)*'/g, "''");
   return structure.match(/\[([^\]]*\bref\s*=\s*['"]?@?e\d+[^\]]*)\]\s*(?=:|$)/i)?.[1];
 }
 
@@ -163,9 +165,9 @@ function normalizeBrowserRef(value: string | undefined): string | null {
 
 function extractRole(line: string): string | undefined {
   const cleaned = line
-    .replace(/\[[^\]]*ref[^\]]*\]/gi, '')
-    .replace(/@?e\d+\b/gi, '')
-    .replace(/^[\s|├└─>*-]+/g, '')
+    .replaceAll(/\[[^\]]*ref[^\]]*\]/gi, '')
+    .replaceAll(/@?e\d+\b/gi, '')
+    .replaceAll(/^[\s|├└─>*-]+/g, '')
     .trim();
   return cleaned.match(/^([A-Za-z][\w-]*)\b/)?.[1];
 }

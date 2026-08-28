@@ -22,8 +22,8 @@ import {
 
 const IOS_RUNNER_XCODEBUILD_KILL_PATTERNS = [
   'xcodebuild .*AgentDeviceRunnerUITests/RunnerTests/testCommand',
-  'xcodebuild .*AgentDeviceRunner\\.env\\.session-',
-  'xcodebuild build-for-testing .*apple/runner/AgentDeviceRunner/AgentDeviceRunner\\.xcodeproj',
+  String.raw`xcodebuild .*AgentDeviceRunner\.env\.session-`,
+  String.raw`xcodebuild build-for-testing .*apple/runner/AgentDeviceRunner/AgentDeviceRunner\.xcodeproj`,
 ];
 
 // `--platform` selectors that AFFIRMATIVELY name (or alias) an Apple device.

@@ -887,7 +887,7 @@ function summarizeIosDeviceMemorySnapshot(
 }
 
 async function resolveMacOsBundlePath(appBundleId: string): Promise<string> {
-  const query = `kMDItemCFBundleIdentifier == "${appBundleId.replaceAll('"', '\\"')}"`;
+  const query = `kMDItemCFBundleIdentifier == "${appBundleId.replaceAll('"', String.raw`\"`)}"`;
   const result = requireExecSuccess(
     await runAppleToolCommand('mdfind', [query], {
       allowFailure: true,

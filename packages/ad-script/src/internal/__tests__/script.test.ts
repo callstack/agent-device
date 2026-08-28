@@ -286,10 +286,10 @@ test('formatScriptStringLiteral escapes device labels with quotes and backslashe
   // Same assembly the live session-script-writer uses
   // (daemon/session-script-writer.ts's formatScript): `context platform=...
   // device=<literal> kind=... theme=...`.
-  const header = `context platform=android device=${formatScriptStringLiteral('Pixel "QA" \\ Lab')} kind=emulator theme=unknown`;
+  const header = `context platform=android device=${formatScriptStringLiteral(String.raw`Pixel "QA" \ Lab`)} kind=emulator theme=unknown`;
   assert.equal(
     header,
-    'context platform=android device="Pixel \\"QA\\" \\\\ Lab" kind=emulator theme=unknown',
+    String.raw`context platform=android device="Pixel \"QA\" \\ Lab" kind=emulator theme=unknown`,
   );
   // And it round-trips through the reader as ordinary context metadata.
   assert.equal(readReplayScriptMetadata(`${header}\nopen "Demo"\n`).platform, 'android');
@@ -318,7 +318,7 @@ test('a rewritten script preserves significant whitespace and empty string argum
     {
       ts: Date.now(),
       command: 'screenshot',
-      positionals: ['foo\\nbar.png'],
+      positionals: [String.raw`foo\nbar.png`],
       flags: {},
     },
     {
@@ -336,7 +336,7 @@ test('a rewritten script preserves significant whitespace and empty string argum
 
   const script = formatReplayScriptForTest(actions);
 
-  assert.match(script, /type "  leading\\ttrailing  "/);
+  assert.match(script, /type " {2}leading\\ttrailing {2}"/);
   assert.match(script, /fill @e2 ""/);
   assert.match(script, /screenshot " \.\/screens\/final\.png "/);
   assert.match(script, /screenshot "foo\\\\nbar\.png"/);
@@ -346,7 +346,7 @@ test('a rewritten script preserves significant whitespace and empty string argum
   assert.deepEqual(parsed[0]?.positionals, ['  leading\ttrailing  ']);
   assert.deepEqual(parsed[1]?.positionals, ['@e2', '']);
   assert.deepEqual(parsed[2]?.positionals, [' ./screens/final.png ']);
-  assert.deepEqual(parsed[3]?.positionals, ['foo\\nbar.png']);
+  assert.deepEqual(parsed[3]?.positionals, [String.raw`foo\nbar.png`]);
   assert.deepEqual(parsed[4]?.positionals, ['Demo']);
   assert.equal(parsed[4]?.runtime?.metroHost, ' host\t');
   assert.equal(parsed[4]?.runtime?.launchUrl, 'myapp://dev ');
@@ -589,7 +589,7 @@ test('a malformed target-v1 payload is rejected as INVALID_ARGS, not silently dr
 // Found by the nightly parser fuzz lane (#1414): the closing-quote scan accepted these
 // literals and the JSON decode behind it leaked a raw SyntaxError.
 test.each([
-  ['invalid escape', 'fill @e1 --text "hello wor\\ld"'],
+  ['invalid escape', String.raw`fill @e1 --text "hello wor\ld"`],
   ['raw control character', 'fill @e1 --text "hel\u0000lo"'],
   ['raw tab', 'fill @e1 --text "hello\tworld"'],
 ])('a quoted value with an %s is rejected as INVALID_ARGS with a hint', (_case, script) => {
@@ -656,7 +656,7 @@ test('formatDivergenceActionLabel categorically drops fill/type text but keeps t
   // fill selector text (selector token is script-quoted, text dropped)
   assert.equal(
     formatDivergenceActionLabel(mk('fill', ['label="Email"', secret])),
-    'fill "label=\\"Email\\"" <text>',
+    String.raw`fill "label=\"Email\"" <text>`,
   );
   // fill @ref text
   assert.equal(formatDivergenceActionLabel(mk('fill', ['@e5', secret])), 'fill @e5 <text>');
@@ -675,7 +675,7 @@ test('formatDivergenceActionLabel categorically drops fill/type text but keeps t
   // non-typing commands are unchanged (full summary, script-quoted).
   assert.equal(
     formatDivergenceActionLabel(mk('click', ['label="Save"'])),
-    'click "label=\\"Save\\""',
+    String.raw`click "label=\"Save\""`,
   );
 });
 

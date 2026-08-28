@@ -29,7 +29,7 @@ export function createLocalAppleMacOsHostProvider(
         await runCommand('pbpaste', [], { allowFailure: true }),
         'Failed to read macOS clipboard',
       );
-      return result.stdout.replace(/\r\n/g, '\n').replace(/\n$/, '');
+      return result.stdout.replaceAll('\r\n', '\n').replace(/\n$/, '');
     },
     writeClipboard: async (text) => {
       requireExecSuccess(

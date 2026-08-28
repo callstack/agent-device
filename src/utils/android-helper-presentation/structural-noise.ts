@@ -121,7 +121,7 @@ function collectPromotableRowContent(
     ) {
       continue;
     }
-    const label = visibleNodeLabel(descendant).trim().replace(/\s+/g, ' ');
+    const label = visibleNodeLabel(descendant).trim().replaceAll(/\s+/g, ' ');
     const normalized = normalizeStructuralNodeLabel(label);
     removableIndexes.push(descendant.index);
     if (!label || !normalized || seen.has(normalized)) continue;

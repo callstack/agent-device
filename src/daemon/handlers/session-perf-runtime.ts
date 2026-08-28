@@ -414,7 +414,7 @@ function validatePerfFlagPlacement(req: DaemonRequest): void {
 }
 
 function timestampToken(): string {
-  return new Date().toISOString().replace(/[:.]/g, '-');
+  return new Date().toISOString().replaceAll(/[:.]/g, '-');
 }
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;

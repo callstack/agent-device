@@ -24,13 +24,13 @@ export interface CatalogScreenProps {
   activeCategory: ProductCategory;
   cart: Record<string, number>;
   favorites: Set<string>;
-  products: LabProduct[];
-  searchDraft: string;
   onAddToCart: (productId: string) => void;
   onOpenDetails: (productId: string) => void;
   onSearchDraftChange: (value: string) => void;
   onSelectCategory: (value: ProductCategory) => void;
   onToggleFavorite: (productId: string) => void;
+  products: LabProduct[];
+  searchDraft: string;
 }
 
 export function CatalogScreen(props: CatalogScreenProps) {
@@ -70,8 +70,8 @@ export function CatalogScreen(props: CatalogScreenProps) {
       <ScreenTitle
         badge={`${props.products.length} results`}
         subtitle="Search, filter, scroll, favorite, and drill into detail without extra dependencies."
-        title="Catalog"
         testID="catalog-title"
+        title="Catalog"
       />
       <Text style={styles.scrollState} testID="catalog-scroll-state">
         Catalog scroll: {scrollState}
@@ -93,7 +93,7 @@ export function CatalogScreen(props: CatalogScreenProps) {
               label={category}
               onPress={() => props.onSelectCategory(category)}
               selected={props.activeCategory === category}
-              testID={`category-${category.toLowerCase().replace(/\s+/g, '-')}`}
+              testID={`category-${category.toLowerCase().replaceAll(/\s+/g, '-')}`}
             />
           ))}
         </View>
@@ -107,8 +107,8 @@ export function CatalogScreen(props: CatalogScreenProps) {
           <SectionCard
             key={product.id}
             subtitle={product.subtitle}
-            title={product.name}
             testID={`product-card-${product.id}`}
+            title={product.name}
           >
             <View style={styles.metaRow}>
               <InlineBadge label={product.badge} tone="info" />
@@ -146,12 +146,12 @@ export function CatalogScreen(props: CatalogScreenProps) {
 
       <SectionCard
         subtitle="This footer card sits at the end of the list to force scroll-into-view on smaller screens."
-        title="Seasonal footer target"
         testID="catalog-footer"
+        title="Seasonal footer target"
       >
         <Text style={styles.footerText}>
           If your run reaches this card, you already exercised long-list navigation. The durable
-          text here is "Seasonal footer target".
+          text here is &quot;Seasonal footer target&quot;.
         </Text>
       </SectionCard>
     </ScrollView>

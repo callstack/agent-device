@@ -186,7 +186,7 @@ function parseDialogFocus(segment: string, raw: string): AndroidBlockingDialogFo
       raw,
     };
   }
-  const responding = RESPONDING_TITLE.exec(segment)?.[1]?.trim().replace(/\s+/g, ' ');
+  const responding = RESPONDING_TITLE.exec(segment)?.[1]?.trim().replaceAll(/\s+/g, ' ');
   if (!responding) return null;
   const packageName = PACKAGE_NAME.exec(responding)?.[1];
   return {
@@ -201,5 +201,5 @@ function markerPattern(markers: readonly string[]): RegExp {
 }
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }

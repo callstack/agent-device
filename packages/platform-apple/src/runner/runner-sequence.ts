@@ -270,11 +270,12 @@ export function parseRunnerSequenceResult(
     typeof data.completedSteps === 'number' && Number.isFinite(data.completedSteps)
       ? data.completedSteps
       : results.filter((result) => result.ok).length;
+  const detectedFailedStepIndex = results.findIndex((result) => !result.ok);
   const failedStepIndex =
     typeof data.failedStepIndex === 'number' && Number.isFinite(data.failedStepIndex)
       ? data.failedStepIndex
-      : results.findIndex((result) => !result.ok) >= 0
-        ? results.findIndex((result) => !result.ok)
+      : detectedFailedStepIndex >= 0
+        ? detectedFailedStepIndex
         : undefined;
 
   if (failedStepIndex !== undefined) {

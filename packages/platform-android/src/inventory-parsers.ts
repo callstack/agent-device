@@ -5,7 +5,7 @@ export function isAndroidEmulatorSerial(serial: string): boolean {
 }
 
 export function normalizeAndroidDeviceName(value: string): string {
-  return value.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+  return value.toLowerCase().replaceAll('_', ' ').replaceAll(/\s+/g, ' ').trim();
 }
 
 export type AndroidDeviceEntry = Readonly<{

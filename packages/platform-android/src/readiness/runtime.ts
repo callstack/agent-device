@@ -161,5 +161,5 @@ function isRunningEmulator(device: DeviceInfo): boolean {
 }
 
 function normalizeName(value: string): string {
-  return value.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+  return value.toLowerCase().replaceAll('_', ' ').replaceAll(/\s+/g, ' ').trim();
 }

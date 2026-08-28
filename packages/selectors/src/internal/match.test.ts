@@ -18,7 +18,7 @@ test('resolveSelectorChain matches newline labels decoded from replay selectors'
       hittable: true,
     },
   ];
-  const chain = parseSelectorChain('label="Switch\\nMy Community"');
+  const chain = parseSelectorChain(String.raw`label="Switch\nMy Community"`);
   const resolved = resolveSelectorChain(newlineNodes, chain, {
     platform: 'ios',
     requireRect: true,

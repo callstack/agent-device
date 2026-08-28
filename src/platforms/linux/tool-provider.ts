@@ -142,11 +142,11 @@ function createLocalLinuxDesktopProvider(
       }
 
       if (await whichCommand(target)) {
-        runCommand(target, [], { allowFailure: true }).catch((err) => {
+        runCommand(target, [], { allowFailure: true }).catch((error) => {
           emitDiagnostic({
             level: 'warn',
             phase: 'linux_app_launch',
-            data: { app: target, error: String(err) },
+            data: { app: target, error: String(error) },
           });
         });
         await sleep(500);

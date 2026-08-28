@@ -377,7 +377,7 @@ export function resolveSimulatorRunnerScreenshotCandidatePaths(
   };
 
   const relativeFromRoot = rawRemotePath.replace(/^\/+/, '');
-  const remotePosixPath = relativeFromRoot.replace(/\\/g, '/');
+  const remotePosixPath = relativeFromRoot.replaceAll('\\', '/');
   if (relativeFromRoot) {
     pushUnique(path.join(normalizedContainerPath, relativeFromRoot));
   }

@@ -27,8 +27,8 @@ export function buildReplayTestArtifactSlug(filePath: string, cwd?: string): str
     trimEdgeDashes(
       value
         .toLowerCase()
-        .replace(/[\\/]+/g, '__')
-        .replace(/[^a-z0-9._-]+/g, '-'),
+        .replaceAll(/[\\/]+/g, '__')
+        .replaceAll(/[^a-z0-9._-]+/g, '-'),
     ) || 'test'
   );
 }

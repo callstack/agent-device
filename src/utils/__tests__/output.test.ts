@@ -54,10 +54,10 @@ test('formatSnapshotDiffText renders plain text when color is disabled', () => {
   try {
     const text = formatSnapshotDiffText({ ...DIFF_DATA });
     assert.match(text, /^@e2 \[window\]/m);
-    assert.match(text, /^-  @e3 \[text\] "67"$/m);
-    assert.match(text, /^\+  @e3 \[text\] "134"$/m);
+    assert.match(text, /^- {2}@e3 \[text\] "67"$/m);
+    assert.match(text, /^\+ {2}@e3 \[text\] "134"$/m);
     assert.match(text, /1 additions, 1 removals, 1 unchanged/);
-    assert.equal(text.includes('\x1b['), false);
+    assert.equal(text.includes('\u001b['), false);
   } finally {
     if (typeof originalForceColor === 'string') process.env.FORCE_COLOR = originalForceColor;
     else delete process.env.FORCE_COLOR;
@@ -76,8 +76,8 @@ test('formatSnapshotDiffText renders ANSI colors when forced', () => {
     const plainText = stripVTControlCharacters(text);
     assert.notEqual(text, plainText);
     assert.match(plainText, /^@e2 \[window\]/m);
-    assert.match(plainText, /^-  @e3 \[text\] "67"$/m);
-    assert.match(plainText, /^\+  @e3 \[text\] "134"$/m);
+    assert.match(plainText, /^- {2}@e3 \[text\] "67"$/m);
+    assert.match(plainText, /^\+ {2}@e3 \[text\] "134"$/m);
     assert.match(plainText, /1 additions, 1 removals, 1 unchanged/);
   } finally {
     if (typeof originalForceColor === 'string') process.env.FORCE_COLOR = originalForceColor;
@@ -256,9 +256,9 @@ test('formatSnapshotText omits unlabeled group wrappers while preserving labeled
   assert.doesNotMatch(text, /@e2 \[group\]/);
   assert.doesNotMatch(text, /@e3 \[group\]/);
   assert.match(text, /@e14 \[scroll-area\] \[scrollable\]/);
-  assert.match(text, /  @e17 \[group\] "HomePage"/);
-  assert.match(text, /    @e21 \[group\] "Home"/);
-  assert.match(text, /    @e22 \[button\] "Search"/);
+  assert.match(text, / {2}@e17 \[group\] "HomePage"/);
+  assert.match(text, / {4}@e21 \[group\] "Home"/);
+  assert.match(text, / {4}@e22 \[button\] "Search"/);
 });
 
 test('formatSnapshotText compresses visible indentation after hidden wrapper chains', () => {
@@ -283,8 +283,8 @@ test('formatSnapshotText compresses visible indentation after hidden wrapper cha
   );
 
   assert.match(text, /^@e2 \[scroll-area\] \[scrollable\]$/m);
-  assert.match(text, /^  @e3 \[button\] "Back"$/m);
-  assert.match(text, /^    @e5 \[image\]$/m);
+  assert.match(text, /^ {2}@e3 \[button\] "Back"$/m);
+  assert.match(text, /^ {4}@e5 \[image\]$/m);
 });
 
 test('formatSnapshotText hides off-screen refs and adds compact discovery summaries', () => {
@@ -335,7 +335,7 @@ test('formatSnapshotText hides off-screen refs and adds compact discovery summar
 
   assert.match(text, /Snapshot: 2 visible nodes \(4 total\)/);
   assert.match(text, /^@e1 \[window\]$/m);
-  assert.match(text, /^  @e2 \[button\] "Settings"$/m);
+  assert.match(text, /^ {2}@e2 \[button\] "Settings"$/m);
   assert.doesNotMatch(text, /@e3 \[button\] "Privacy"/);
   assert.doesNotMatch(text, /@e4 \[button\] "Battery"/);
   assert.match(text, /\[off-screen below\] 2 interactive items: "Privacy", "Battery"/);
@@ -385,7 +385,7 @@ test('formatSnapshotText keeps zero-height visible nodes out of off-screen summa
     }),
   );
 
-  assert.match(text, /^  @e3 \[button\] "View"$/m);
+  assert.match(text, /^ {2}@e3 \[button\] "View"$/m);
   assert.doesNotMatch(text, /\[off-screen above\].*"View"/);
   assert.match(text, /\[off-screen below\] 1 interactive item: "Later"/);
 });
@@ -1104,9 +1104,9 @@ test('formatSnapshotText renders explicit hidden scroll-area content hints', () 
   );
 
   assert.match(text, /Snapshot: 3 visible nodes/);
-  assert.match(text, /^  @e2 \[scroll-area\] "Messages" \[scrollable\]$/m);
-  assert.match(text, /^    \[content above scroll-area hidden\]$/m);
-  assert.match(text, /^    \[content below scroll-area hidden\]$/m);
+  assert.match(text, /^ {2}@e2 \[scroll-area\] "Messages" \[scrollable\]$/m);
+  assert.match(text, /^ {4}\[content above scroll-area hidden\]$/m);
+  assert.match(text, /^ {4}\[content below scroll-area hidden\]$/m);
   assert.ok(
     text.indexOf('[content above scroll-area hidden]') < text.indexOf('@e3 [button]'),
     'above hint should appear before visible scroll-area content',
@@ -1154,8 +1154,8 @@ test('formatSnapshotText keeps below scroll hints at the bottom when depth is fl
     }),
   );
 
-  assert.match(text, /^  @e2 \[scroll-area\] "Catalog" \[scrollable\]$/m);
-  assert.match(text, /^  @e3 \[button\] "Visible product"$/m);
+  assert.match(text, /^ {2}@e2 \[scroll-area\] "Catalog" \[scrollable\]$/m);
+  assert.match(text, /^ {2}@e3 \[button\] "Visible product"$/m);
   assert.ok(
     text.indexOf('[content above scroll-area hidden]') < text.indexOf('@e3 [button]'),
     'above hint should stay at the top of the scroll-area',
@@ -1232,8 +1232,8 @@ test('formatSnapshotText renders hidden scroll-area content hints in flattened o
   );
 
   assert.match(text, /^@e2 \[scroll-area\] "Messages" \[scrollable\]$/m);
-  assert.match(text, /^  \[content above scroll-area hidden\]$/m);
-  assert.match(text, /^  \[content below scroll-area hidden\]$/m);
+  assert.match(text, /^ {2}\[content above scroll-area hidden\]$/m);
+  assert.match(text, /^ {2}\[content below scroll-area hidden\]$/m);
 });
 
 test('formatSnapshotText normalizes RecyclerView containers to list', () => {
@@ -1255,7 +1255,7 @@ test('formatSnapshotText normalizes RecyclerView containers to list', () => {
   );
 
   assert.match(text, /^@e1 \[list\]$/m);
-  assert.match(text, /^  \[content below list hidden\]$/m);
+  assert.match(text, /^ {2}\[content below list hidden\]$/m);
 });
 
 test('formatSnapshotText renders hidden-below list hints after visible descendants', () => {
@@ -1302,9 +1302,9 @@ test('formatSnapshotText renders hidden-below list hints after visible descendan
   );
 
   assert.match(text, /^@e2 \[list\]$/m);
-  assert.match(text, /^  @e3 \[text\] "Text view"$/m);
-  assert.match(text, /^    @e4 \[text\] "loadJSBundleFromAssets"$/m);
-  assert.match(text, /^  \[content below list hidden\]$/m);
+  assert.match(text, /^ {2}@e3 \[text\] "Text view"$/m);
+  assert.match(text, /^ {4}@e4 \[text\] "loadJSBundleFromAssets"$/m);
+  assert.match(text, /^ {2}\[content below list hidden\]$/m);
   assert.ok(
     text.indexOf('@e4 [text] "loadJSBundleFromAssets"') <
       text.indexOf('[content below list hidden]'),
@@ -1366,10 +1366,10 @@ test('formatSnapshotText marks visible scroll areas with hidden content above an
     }),
   );
 
-  assert.match(text, /^  @e2 \[scroll-area\] "Messages" \[scrollable\]$/m);
-  assert.match(text, /^    \[content above scroll-area hidden\]$/m);
-  assert.match(text, /^    \[content below scroll-area hidden\]$/m);
-  assert.match(text, /^    @e4 \[button\] "Visible message"$/m);
+  assert.match(text, /^ {2}@e2 \[scroll-area\] "Messages" \[scrollable\]$/m);
+  assert.match(text, /^ {4}\[content above scroll-area hidden\]$/m);
+  assert.match(text, /^ {4}\[content below scroll-area hidden\]$/m);
+  assert.match(text, /^ {4}@e4 \[button\] "Visible message"$/m);
   assert.doesNotMatch(text, /\[off-screen above\].*"Earlier message"/);
   assert.doesNotMatch(text, /\[off-screen below\].*"Later message"/);
 });
@@ -1400,8 +1400,8 @@ test('formatSnapshotText suppresses noisy system scroll-container labels', () =>
     }),
   );
 
-  assert.match(text, /^  @e2 \[scroll-area\] \[scrollable\]$/m);
-  assert.match(text, /^    \[content below scroll-area hidden\]$/m);
+  assert.match(text, /^ {2}@e2 \[scroll-area\] \[scrollable\]$/m);
+  assert.match(text, /^ {4}\[content below scroll-area hidden\]$/m);
   assert.doesNotMatch(text, /Vertical scroll bar, 2 pages/);
 });
 
@@ -1589,7 +1589,7 @@ test('formatScreenshotDiffText renders match success without color', () => {
     }),
   );
   assert.match(text, /✓ Screenshots match\./);
-  assert.equal(text.includes('\x1b['), false);
+  assert.equal(text.includes('\u001b['), false);
 });
 
 test('formatScreenshotDiffText renders mismatch with pixel counts without color', () => {
@@ -1638,7 +1638,7 @@ test('formatScreenshotDiffText renders mismatch with pixel counts without color'
   assert.match(text, /Changed regions:/);
   assert.match(text, /1\. x=10 y=20 100x40, 70% of diff/);
   assert.match(text, /overlaps @e1 "Continue", 12% of region/);
-  assert.equal(text.includes('\x1b['), false);
+  assert.equal(text.includes('\u001b['), false);
 });
 
 test('formatScreenshotDiffText renders dimension mismatch', () => {
@@ -1689,7 +1689,7 @@ test('formatScreenshotDiffText keeps absolute diff path outside cwd', () => {
       diffPath,
     }),
   );
-  assert.match(text, new RegExp(diffPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(text, new RegExp(diffPath.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)));
   assert.equal(text.includes('./'), false);
 });
 
@@ -1703,9 +1703,9 @@ test('formatScreenshotDiffText uses ANSI colors when enabled', () => {
       diffPath: '/tmp/diff.png',
     }),
   );
-  assert.equal(text.includes('\x1b[31m'), true);
-  assert.equal(text.includes('\x1b[32m'), true);
-  assert.equal(text.includes('\x1b[2m'), true);
+  assert.equal(text.includes('\u001b[31m'), true);
+  assert.equal(text.includes('\u001b[32m'), true);
+  assert.equal(text.includes('\u001b[2m'), true);
 });
 
 test('formatScreenshotDiffText does not show diff path when images match', () => {

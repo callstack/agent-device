@@ -88,14 +88,14 @@ export function buildReplayTestSessionName(
   attemptIndex = 0,
 ): string {
   const baseName = path.basename(filePath, path.extname(filePath));
-  const slug = trimEdgeDashes(baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+  const slug = trimEdgeDashes(baseName.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-'));
   const testNumber = caseIndex + 1;
   return `${sessionName}:test:${suiteInvocationId}:${testNumber}${slug ? `-${slug}` : ''}:attempt-${attemptIndex + 1}`;
 }
 
 export function buildReplayTestInvocationId(requestId?: string): string {
   const raw = requestId?.trim() || `${process.pid}-${Date.now().toString(36)}`;
-  const normalized = trimEdgeDashes(raw.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+  const normalized = trimEdgeDashes(raw.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-'));
   return normalized || 'suite';
 }
 

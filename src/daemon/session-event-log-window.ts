@@ -112,7 +112,7 @@ function placeSessionEventLogWindow(eventLogPath: string): SessionEventLogWindow
   }
   if (sidecar === undefined) return placeNeverRotatedWindow(eventLogPath, rotatedPath);
 
-  const newest = sidecar[sidecar.length - 1];
+  const newest = sidecar.at(-1);
   if (!newest) throw unverifiedWindowError(eventLogPath, 'window file records no generation');
 
   const activeExists = fileExists(eventLogPath);
@@ -206,7 +206,7 @@ export async function rotateSessionEventLogIfNeeded(
   const measured = await measureEventLogFile(eventLogPath);
   if (measured.firstLineDigest !== undefined) {
     const generations = sidecar ?? [];
-    const newest = generations[generations.length - 1];
+    const newest = generations.at(-1);
     // A record whose digest already matches this exact file means a previous
     // rotation wrote the record but died before its rename; reuse it instead of
     // counting the same generation twice.

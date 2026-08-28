@@ -207,7 +207,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
 }
 
 function countFlagReferences(text, key) {
-  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escaped = key.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
   return text.match(new RegExp(`\\b${escaped}\\s*:`, 'g'))?.length ?? 0;
 }
 
@@ -621,7 +621,7 @@ function extractLiteralCommandReferences(text) {
 function extractClientCommandReferences(text, clientCommandMethods) {
   const commands = [];
   for (const [method, command] of clientCommandMethods) {
-    const escapedMethod = method.replace('.', '\\.');
+    const escapedMethod = method.replace('.', String.raw`\.`);
     const matches = countPatternReferences(text, new RegExp(`\\.${escapedMethod}\\s*\\(`, 'g'));
     for (let index = 0; index < matches; index += 1) commands.push(command);
   }

@@ -228,7 +228,7 @@ test('runtime wait fails closed at the deadline when only impostors matched the 
     })
     .then(
       () => undefined,
-      (thrown: unknown) => thrown,
+      (error: unknown) => error,
     );
 
   assert.ok(error instanceof AppError);

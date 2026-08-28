@@ -58,7 +58,7 @@ export type AndroidUiNodeMetadata = {
  */
 function createAndroidChromeSubtreeTracker() {
   const openElements: boolean[] = [];
-  const inChromeNow = (): boolean => openElements[openElements.length - 1] === true;
+  const inChromeNow = (): boolean => openElements.at(-1) === true;
   return {
     /** Enters an opening tag; returns whether that node is inside the chrome subtree. */
     open(resourceId: string | null | undefined, selfClosing: boolean): boolean {
@@ -117,23 +117,23 @@ function readNodeAttributes(node: string): Omit<AndroidUiNodeMetadata, 'rect'> {
   const optionalNumberAttr = <Key extends keyof AndroidUiNodeMetadata>(
     key: Key,
     name: string,
-  ): Pick<AndroidUiNodeMetadata, Key> | {} => {
+  ): Partial<Pick<AndroidUiNodeMetadata, Key>> => {
     const value = numberAttr(name);
-    return value === undefined ? {} : { [key]: value };
+    return value === undefined ? {} : ({ [key]: value } as Pick<AndroidUiNodeMetadata, Key>);
   };
   const optionalRectAttr = <Key extends keyof AndroidUiNodeMetadata>(
     key: Key,
     name: string,
-  ): Pick<AndroidUiNodeMetadata, Key> | {} => {
+  ): Partial<Pick<AndroidUiNodeMetadata, Key>> => {
     const value = parseBounds(getAttr(name));
-    return value === undefined ? {} : { [key]: value };
+    return value === undefined ? {} : ({ [key]: value } as Pick<AndroidUiNodeMetadata, Key>);
   };
   const optionalBoolAttr = <Key extends keyof AndroidUiNodeMetadata>(
     key: Key,
     name: string,
-  ): Pick<AndroidUiNodeMetadata, Key> | {} => {
+  ): Partial<Pick<AndroidUiNodeMetadata, Key>> => {
     const value = boolAttr(name);
-    return value === undefined ? {} : { [key]: value };
+    return value === undefined ? {} : ({ [key]: value } as Pick<AndroidUiNodeMetadata, Key>);
   };
   return {
     text: getAttr('text'),
@@ -269,7 +269,7 @@ export function parseUiHierarchyTree(xml: string): AndroidUiHierarchy {
       continue;
     }
     const attrs = readAndroidUiNodeMetadata(token);
-    const parent = stack[stack.length - 1]!;
+    const parent = stack.at(-1)!;
     const node = normalizeAndroidUiHierarchyNode(attrs, parent.depth + 1, parent);
     parent.children.push(node);
     if (!token.endsWith('/>')) {

@@ -75,15 +75,15 @@ export async function invokeReplayAction(params: {
       sourceAction: action,
       invoke,
     });
-  } catch (dispatchErr) {
+  } catch (error) {
     // Only an expected AppError dispatch failure (e.g. a selector-miss) gets
     // normalized into a `{ok:false}` response so the loop's `if
     // (!response.ok)` divergence wrapping applies. A plain TypeError/
     // ReferenceError or other programmer bug must propagate to the outer
     // internal-error path rather than being coerced into a repairable
     // REPLAY_DIVERGENCE that would mask a crash.
-    if (!(dispatchErr instanceof AppError)) throw dispatchErr;
-    response = { ok: false, error: normalizeError(dispatchErr) };
+    if (!(error instanceof AppError)) throw error;
+    response = { ok: false, error: normalizeError(error) };
   }
 
   const finishedAt = Date.now();

@@ -56,34 +56,34 @@ import type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contr
  * re-read of the handler's literal return; see the per-type docstrings.
  */
 export interface CommandResultMap {
-  press: PressCommandResponseData;
-  click: ClickCommandResponseData;
-  fill: FillCommandResponseData;
-  longpress: LongPressCommandResponseData;
-  hover: HoverCommandResponseData;
-  find: FindCommandResponseData;
-  boot: BootCommandResult;
-  shutdown: ShutdownCommandResult;
-  viewport: ViewportCommandResult;
-  home: HomeCommandResult;
-  back: BackCommandResult;
-  orientation: OrientationCommandResult;
   'app-switcher': AppSwitcherCommandResult;
-  clipboard: ClipboardCommandResult;
   appstate: AppStateCommandResult;
-  keyboard: KeyboardCommandResult;
-  'tv-remote': TvRemoteCommandResult;
-  wait: WaitCommandResult;
-  scroll: ScrollCommandResult;
-  prepare: PrepareCommandResult;
-  push: PushCommandResult;
-  'trigger-app-event': TriggerAppEventCommandResult;
-  doctor: DoctorCommandResult;
+  back: BackCommandResult;
+  boot: BootCommandResult;
+  click: ClickCommandResponseData;
+  clipboard: ClipboardCommandResult;
   diff: DiffSnapshotCommandResult;
-  replay: ReplayCommandResult;
-  test: ReplaySuiteResult;
+  doctor: DoctorCommandResult;
+  fill: FillCommandResponseData;
+  find: FindCommandResponseData;
+  home: HomeCommandResult;
+  hover: HoverCommandResponseData;
+  keyboard: KeyboardCommandResult;
+  longpress: LongPressCommandResponseData;
+  orientation: OrientationCommandResult;
+  prepare: PrepareCommandResult;
+  press: PressCommandResponseData;
+  push: PushCommandResult;
   record: RecordingCommandResult;
+  replay: ReplayCommandResult;
+  scroll: ScrollCommandResult;
+  shutdown: ShutdownCommandResult;
+  test: ReplaySuiteResult;
   trace: TraceCommandResult;
+  'trigger-app-event': TriggerAppEventCommandResult;
+  'tv-remote': TvRemoteCommandResult;
+  viewport: ViewportCommandResult;
+  wait: WaitCommandResult;
 }
 
 /**

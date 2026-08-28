@@ -260,7 +260,7 @@ function handleLogsPath(params: LogsHandlerParams, backend: LogBackend): DaemonR
       failureMessage: status.failureMessage,
       hint:
         status.hint ??
-        'Grep the file for token-efficient debugging, e.g. grep -n "Error\\|Exception" <path>',
+        String.raw`Grep the file for token-efficient debugging, e.g. grep -n "Error\|Exception" <path>`,
       notes: status.notes,
     },
   };

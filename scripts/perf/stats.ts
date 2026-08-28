@@ -17,6 +17,6 @@ export function summarize(values: number[]): Stat | null {
     min: sorted[0],
     median: percentile(sorted, 50),
     p95: percentile(sorted, 95),
-    max: sorted[sorted.length - 1],
+    max: sorted.at(-1),
   };
 }

@@ -20,7 +20,7 @@ test('zip inspection stops at the entry budget before inspecting later entries',
       budget,
     }).then(
       () => null,
-      (cause: unknown) => cause,
+      (error: unknown) => error,
     );
 
     assert.equal(error instanceof AppError, true);

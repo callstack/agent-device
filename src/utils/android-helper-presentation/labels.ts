@@ -24,7 +24,7 @@ export function visibleNodeLabel(node: SnapshotNode): string {
 }
 
 export function normalizeStructuralNodeLabel(label: string): string | null {
-  const normalized = label.trim().replace(/\s+/g, ' ').toLowerCase();
+  const normalized = label.trim().replaceAll(/\s+/g, ' ').toLowerCase();
   if (!normalized) return null;
   if (/^(true|false|\d+)$/.test(normalized)) return null;
   return normalized;

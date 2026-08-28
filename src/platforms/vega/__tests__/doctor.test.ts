@@ -42,15 +42,13 @@ test('Vega doctor reports CLI version and connected-device readiness through sem
 test('Vega doctor does not report an unvalidated physical TV as supported readiness', async () => {
   const check: DoctorCheck = await withVegaToolProvider(makeVegaProvider(), async () =>
     vegaToolchainCheck(
-      contextWith(async () =>
-        Promise.reject(
-          new AppError(
-            'DEVICE_NOT_FOUND',
-            'Vega CLI found devices, but no supported Vega Virtual Device is running.',
-            { listedSerials: ['G071R20720350DT6'] },
-          ),
-        ),
-      ),
+      contextWith(async () => {
+        throw new AppError(
+          'DEVICE_NOT_FOUND',
+          'Vega CLI found devices, but no supported Vega Virtual Device is running.',
+          { listedSerials: ['G071R20720350DT6'] },
+        );
+      }),
     ),
   );
 
@@ -66,7 +64,9 @@ test('Vega doctor propagates canonical request cancellation', async () => {
   await assert.rejects(
     withVegaToolProvider(makeVegaProvider(), async () =>
       vegaToolchainCheck(
-        contextWith(async () => Promise.reject(new AppError('COMMAND_FAILED', 'request canceled'))),
+        contextWith(async () => {
+          throw new AppError('COMMAND_FAILED', 'request canceled');
+        }),
       ),
     ),
     (error: unknown) => error instanceof AppError && error.message === 'request canceled',
@@ -77,13 +77,11 @@ test('Vega doctor propagates missing request inventory context', async () => {
   await assert.rejects(
     withVegaToolProvider(makeVegaProvider(), async () =>
       vegaToolchainCheck(
-        contextWith(async () =>
-          Promise.reject(
-            new AppError('COMMAND_FAILED', 'device inventory context unavailable', {
-              reason: 'device_inventory_context_unavailable',
-            }),
-          ),
-        ),
+        contextWith(async () => {
+          throw new AppError('COMMAND_FAILED', 'device inventory context unavailable', {
+            reason: 'device_inventory_context_unavailable',
+          });
+        }),
       ),
     ),
     (error: unknown) =>
@@ -119,7 +117,11 @@ test('Vega doctor keeps version failures diagnostic when neutral inventory fails
     version: async () => ({ exitCode: 1, stdout: '', stderr: 'version failed' }),
   };
   const check = await withVegaToolProvider(provider, async () =>
-    vegaToolchainCheck(contextWith(async () => Promise.reject(new Error('inventory failed')))),
+    vegaToolchainCheck(
+      contextWith(async () => {
+        throw new Error('inventory failed');
+      }),
+    ),
   );
 
   assert.deepEqual(check, {

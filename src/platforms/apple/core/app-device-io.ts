@@ -17,7 +17,7 @@ export async function readIosClipboardText(device: DeviceInfo): Promise<string> 
     await runSimctl(device, ['pbpaste', device.id], { allowFailure: true }),
     'Failed to read iOS simulator clipboard',
   );
-  return result.stdout.replace(/\r\n/g, '\n').replace(/\n$/, '');
+  return result.stdout.replaceAll('\r\n', '\n').replace(/\n$/, '');
 }
 
 export async function writeIosClipboardText(device: DeviceInfo, text: string): Promise<void> {

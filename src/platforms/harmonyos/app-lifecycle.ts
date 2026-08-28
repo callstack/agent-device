@@ -17,10 +17,10 @@ export interface HarmonyLaunchTarget {
 }
 
 interface HarmonyBundleDump {
-  applicationInfo?: {
+  appInfo?: {
     isSystemApp?: boolean;
   };
-  appInfo?: {
+  applicationInfo?: {
     isSystemApp?: boolean;
   };
   hapModuleInfos?: Array<{

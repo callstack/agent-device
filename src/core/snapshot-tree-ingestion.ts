@@ -16,7 +16,7 @@ export function normalizeSnapshotTree(nodes: RawSnapshotNode[]): RawSnapshotNode
 
   for (const [position, node] of nodes.entries()) {
     const depth = Math.max(0, node.depth ?? 0);
-    while (ancestorStack.length > 0 && depth <= ancestorStack[ancestorStack.length - 1]!.depth) {
+    while (ancestorStack.length > 0 && depth <= ancestorStack.at(-1)!.depth) {
       ancestorStack.pop();
     }
 
@@ -28,7 +28,7 @@ export function normalizeSnapshotTree(nodes: RawSnapshotNode[]): RawSnapshotNode
     const parentIndex =
       typeof explicitParentIndex === 'number' && explicitParentIndex < index
         ? explicitParentIndex
-        : ancestorStack[ancestorStack.length - 1]?.index;
+        : ancestorStack.at(-1)?.index;
     normalized.push({
       ...node,
       index,
@@ -46,7 +46,7 @@ export function pruneGroupNodes(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
   const result: RawSnapshotNode[] = [];
   for (const node of nodes) {
     const depth = node.depth ?? 0;
-    while (skippedDepths.length > 0 && depth <= skippedDepths[skippedDepths.length - 1]!) {
+    while (skippedDepths.length > 0 && depth <= skippedDepths.at(-1)!) {
       skippedDepths.pop();
     }
     const type = normalizeType(node.type ?? '');

@@ -216,7 +216,7 @@ function findCommonAncestorIndex(
       }
     }
   }
-  return common[common.length - 1];
+  return common.at(-1);
 }
 
 function ancestorIndexes(nodes: RawSnapshotNode[], index: number): number[] {

@@ -38,11 +38,11 @@ test('replay executes selector reads before reporting a covered-target divergenc
   sessionStore.set(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, [
     'open "Demo"',
-    'get text "id=\\"field-name\\""',
-    'get attrs "id=\\"field-name\\""',
-    'is visible "id=\\"field-name\\""',
+    String.raw`get text "id=\"field-name\""`,
+    String.raw`get attrs "id=\"field-name\""`,
+    String.raw`is visible "id=\"field-name\""`,
     'find id "field-name" get attrs',
-    'click "id=\\"field-name\\""',
+    String.raw`click "id=\"field-name\""`,
   ]);
   const invoked: string[] = [];
 

@@ -14,8 +14,8 @@ const BOOLEAN_FALSE_VALUES = new Set(['0', 'false', 'no', 'off']);
 
 export function buildPrimaryEnvVarName(key: string): string {
   return `AGENT_DEVICE_${key
-    .replace(/([A-Z])/g, '_$1')
-    .replace(/[^A-Za-z0-9_]/g, '_')
+    .replaceAll(/([A-Z])/g, '_$1')
+    .replaceAll(/[^A-Za-z0-9_]/g, '_')
     .toUpperCase()}`;
 }
 

@@ -17,9 +17,9 @@ const ACTION_SHELF_EDGE_TOLERANCE = 2;
 const ACTION_TOGGLE_EXPANSION_RATIO = 1.15;
 
 interface ActionShelfPresentation {
-  rect: Rect;
-  childActionsPresented: boolean;
   actionButtons: RawSnapshotNode[];
+  childActionsPresented: boolean;
+  rect: Rect;
 }
 
 export function collectIosReplacedActionShelves(

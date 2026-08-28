@@ -115,7 +115,7 @@ function normalizeLeaseBackend(raw: string | undefined): LeaseBackend {
 function normalizeDeviceKey(raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined;
   const value = raw.trim();
-  if (!value || value.length > 256 || !/^[\x20-\x7E]+$/.test(value)) {
+  if (!value || value.length > 256 || !/^[\u0020-\u007E]+$/.test(value)) {
     throw new AppError('INVALID_ARGS', 'Invalid device key. Use 1-256 printable characters.');
   }
   return value;

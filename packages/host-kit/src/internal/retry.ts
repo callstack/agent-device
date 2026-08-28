@@ -120,9 +120,9 @@ export async function retryWithPolicy<T>(
         remainingMs: options.deadline?.remainingMs(),
       });
       return result;
-    } catch (err) {
-      lastError = err;
-      const reason = options.classifyReason?.(err);
+    } catch (error) {
+      lastError = error;
+      const reason = options.classifyReason?.(error);
       const failedEvent: RetryTelemetryEvent = {
         phase: options.phase,
         event: 'attempt_failed',
@@ -135,7 +135,7 @@ export async function retryWithPolicy<T>(
       options.onEvent?.(failedEvent);
       publishRetryEvent(failedEvent);
       if (attempt >= merged.maxAttempts) break;
-      if (merged.shouldRetry && !merged.shouldRetry(err, attempt)) break;
+      if (merged.shouldRetry && !merged.shouldRetry(error, attempt)) break;
       const delay = computeDelay(merged.baseDelayMs, merged.maxDelayMs, merged.jitter, attempt);
       const boundedDelay = options.deadline
         ? Math.min(delay, options.deadline.remainingMs())

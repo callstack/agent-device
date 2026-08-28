@@ -29,7 +29,7 @@ test('archive paths reject absolute, escaping, drive, UNC, NUL, and backslash fo
     'safe/../../escape',
     'C:/drive',
     '//server/share',
-    'safe\\windows',
+    String.raw`safe\windows`,
     'nul\0entry',
     '.',
   ]) {

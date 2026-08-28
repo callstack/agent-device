@@ -180,8 +180,8 @@ export async function runReplayScriptSource(
       coordinator,
       keepSession,
     });
-  } catch (err) {
-    const appErr = asAppError(err);
+  } catch (error) {
+    const appErr = asAppError(error);
     return errorResponse(
       appErr.code,
       appErr.message,

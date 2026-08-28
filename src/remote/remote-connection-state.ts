@@ -261,7 +261,7 @@ function sanitizeDaemonBaseUrl(value: string | undefined): string | undefined {
   const url = new URL(value);
   url.username = '';
   url.password = '';
-  for (const key of [...url.searchParams.keys()]) {
+  for (const key of Array.from(url.searchParams.keys())) {
     if (/(auth|key|password|secret|token)/i.test(key)) {
       url.searchParams.delete(key);
     }

@@ -111,7 +111,7 @@ function parseAndroidBlockingDialogFromSegment(
 
   const focusedWindowTitle = respondingMatch[1];
   if (focusedWindowTitle === undefined) return null;
-  const focusedWindow = focusedWindowTitle.trim().replace(/\s+/g, ' ');
+  const focusedWindow = focusedWindowTitle.trim().replaceAll(/\s+/g, ' ');
   const packageName = ANDROID_PACKAGE_PATTERN.exec(focusedWindow)?.[1];
   return {
     ...(packageName ? { package: packageName } : {}),

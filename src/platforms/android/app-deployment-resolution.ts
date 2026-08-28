@@ -96,7 +96,7 @@ export function inferAndroidAppName(packageName: string): string {
     .flatMap((segment) => segment.split(/[_-]+/))
     .map((token) => token.trim().toLowerCase())
     .filter((token) => token.length > 0);
-  let chosen = tokens[tokens.length - 1] ?? packageName;
+  let chosen = tokens.at(-1) ?? packageName;
   for (let index = tokens.length - 1; index >= 0; index -= 1) {
     const token = tokens[index];
     if (token && !ignoredTokens.has(token)) {

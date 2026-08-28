@@ -218,9 +218,9 @@ async function recoverBadCachedRunnerArtifact(params: {
       },
     });
     return recordPrepareResult(device, recovered);
-  } catch (retryErr) {
+  } catch (error) {
     await invalidateRunnerSessionBestEffort(rebuiltSession, 'prepare_rebuilt_runner_health_failed');
-    const wrapped = wrapPrepareHealthFailure(retryErr, rebuiltSession, reason);
+    const wrapped = wrapPrepareHealthFailure(error, rebuiltSession, reason);
     emitPrepareDiagnostic(device, {
       cache: rebuiltSession.xctestrunArtifact?.cache,
       artifact: rebuiltSession.xctestrunArtifact?.artifact,
@@ -290,12 +290,12 @@ export async function executeRunnerCommand(
       timeoutMs,
       signal,
     );
-  } catch (err) {
-    if (options.expectedRunnerSessionId !== undefined) throw err;
-    const appErr = asAppError(err, 'COMMAND_FAILED');
+  } catch (error) {
+    if (options.expectedRunnerSessionId !== undefined) throw error;
+    const appErr = asAppError(error, 'COMMAND_FAILED');
     if (session && !session.ready && isRequestCanceledError(appErr)) {
       await invalidateRunnerSessionBestEffort(session, 'runner_startup_request_canceled');
-      throw err;
+      throw error;
     }
     if (shouldRestartRunnerBeforeCommandSend(appErr) && session) {
       assertRunnerRequestActive(options.requestId);
@@ -332,7 +332,7 @@ export async function executeRunnerCommand(
         invalidateSession: invalidateRunnerSession,
       });
     }
-    throw err;
+    throw error;
   }
 }
 
@@ -385,8 +385,8 @@ async function restartSessionAndRunCommand(params: {
       });
     }
     return recovered;
-  } catch (retryErr) {
-    const retryAppErr = asAppError(retryErr, 'COMMAND_FAILED');
+  } catch (error) {
+    const retryAppErr = asAppError(error, 'COMMAND_FAILED');
     if (isRetryableRunnerError(retryAppErr)) {
       try {
         return await handleRunnerTransportErrorAfterCommandSend({
@@ -399,11 +399,11 @@ async function restartSessionAndRunCommand(params: {
           invalidationReason: 'transport_error_after_retry_command_send',
           invalidateSession: invalidateRunnerSession,
         });
-      } catch (recoveryErr) {
-        throw markRunnerRestartError(recoveryErr, params, restartedSession);
+      } catch (error) {
+        throw markRunnerRestartError(error, params, restartedSession);
       }
     }
-    throw markRunnerRestartError(retryErr, params, restartedSession);
+    throw markRunnerRestartError(error, params, restartedSession);
   }
 }
 

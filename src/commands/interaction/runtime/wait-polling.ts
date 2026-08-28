@@ -195,7 +195,7 @@ function runnerRestartTimeoutEvidence(error: unknown): Partial<WaitFailureEviden
 function copyStringDetail<Key extends keyof WaitFailureEvidence>(
   details: AppErrorDetails | undefined,
   key: Key,
-): Pick<WaitFailureEvidence, Key> | {} {
+): Partial<Pick<WaitFailureEvidence, Key>> {
   const value = details?.[key];
   return typeof value === 'string' ? ({ [key]: value } as Pick<WaitFailureEvidence, Key>) : {};
 }

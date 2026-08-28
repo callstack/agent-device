@@ -99,12 +99,12 @@ async function computeFileHash(localPath: string): Promise<string> {
       callback();
     },
   });
-  await pipeline(fs.createReadStream(localPath), sink).catch((err: unknown) => {
+  await pipeline(fs.createReadStream(localPath), sink).catch((error: unknown) => {
     throw new AppError(
       'COMMAND_FAILED',
       'Failed to read local artifact',
       {},
-      err instanceof Error ? err : undefined,
+      error instanceof Error ? error : undefined,
     );
   });
   return hash.digest('hex');

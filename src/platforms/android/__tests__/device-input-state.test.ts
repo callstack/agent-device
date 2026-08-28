@@ -57,7 +57,7 @@ test('getAndroidKeyboardStatusWithAdb classifies tolerated adb failures with act
 
   const error = await getAndroidKeyboardStatusWithAdb(adb).then(
     () => assert.fail('expected the keyboard query to reject'),
-    (err: unknown) => err,
+    (error: unknown) => error,
   );
 
   assert.ok(error instanceof AppError);

@@ -11,24 +11,24 @@ import {
 import { useAppColors, type AppColors } from '../theme';
 
 export interface CheckoutFormState {
-  name: string;
-  email: string;
-  phone: string;
-  imeCaptureTarget: string;
-  notes: string;
-  shipping: 'Delivery' | 'Pickup';
-  payment: 'Card' | 'Cash';
-  subscribe: boolean;
   agree: boolean;
+  email: string;
+  imeCaptureTarget: string;
+  name: string;
+  notes: string;
+  payment: 'Card' | 'Cash';
+  phone: string;
+  shipping: 'Delivery' | 'Pickup';
+  subscribe: boolean;
 }
 
 export interface FormScreenProps {
   errors: string[];
   form: CheckoutFormState;
-  submittedSummary: string | null;
   onChange: <K extends keyof CheckoutFormState>(field: K, value: CheckoutFormState[K]) => void;
   onReset: () => void;
   onSubmit: () => void;
+  submittedSummary: string | null;
 }
 
 function CheckboxRow(props: {
@@ -70,16 +70,16 @@ export function FormScreen(props: FormScreenProps) {
       <ScreenTitle
         badge="Validation"
         subtitle="Text inputs, choice groups, checkbox state, multiline notes, and submit feedback."
-        title="Checkout form"
         testID="form-title"
+        title="Checkout form"
       />
 
       {props.errors.length > 0 ? (
         <SectionCard
           subtitle="These messages should disappear after a valid submit."
+          testID="form-errors"
           title="Validation errors"
           tone="danger"
-          testID="form-errors"
         >
           {props.errors.map((error) => (
             <Text key={error} style={styles.errorText}>
@@ -92,8 +92,8 @@ export function FormScreen(props: FormScreenProps) {
       {props.submittedSummary ? (
         <SectionCard
           subtitle="This card appears only after a valid submit."
-          title="Order summary"
           testID="form-success"
+          title="Order summary"
         >
           <InlineBadge label="Submitted" tone="success" />
           <Text style={styles.summaryText}>{props.submittedSummary}</Text>
@@ -137,8 +137,8 @@ export function FormScreen(props: FormScreenProps) {
 
       <SectionCard
         subtitle="A fixture for Android cases where Gboard handwriting owns the focused input."
-        title="Android IME capture"
         testID="android-ime-capture-fixture"
+        title="Android IME capture"
       >
         {/* Fixture: static diagnostic copy, not live state. */}
         <TextField
@@ -154,9 +154,12 @@ export function FormScreen(props: FormScreenProps) {
           <Text style={styles.diagnosticText}>
             Android fill input was captured by the active keyboard instead of the app field
           </Text>
-          <Text style={styles.diagnosticMeta}>targetInput id="field-ime-capture-target"</Text>
           <Text style={styles.diagnosticMeta}>
-            actualInput packageName="com.google.android.inputmethod.latin" inputMethodOwned=true
+            targetInput id=&quot;field-ime-capture-target&quot;
+          </Text>
+          <Text style={styles.diagnosticMeta}>
+            actualInput packageName=&quot;com.google.android.inputmethod.latin&quot;
+            inputMethodOwned=true
           </Text>
         </View>
       </SectionCard>

@@ -1,7 +1,7 @@
 const SAFE_SHELL_ARG = /^[A-Za-z0-9_@%+=:,./-]+$/;
 
 export function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
+  return `'${value.replaceAll("'", String.raw`'\''`)}'`;
 }
 
 export function shellQuoteIfNeeded(value: string): string {

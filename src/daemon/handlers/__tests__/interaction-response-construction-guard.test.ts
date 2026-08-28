@@ -39,7 +39,7 @@ const ALLOWED_RHS = [
 
 function findHandRolledResponseData(source: string): string[] {
   // Collapse whitespace so multi-line hand-rolled literals cannot hide.
-  const collapsed = source.replace(/\s+/g, ' ');
+  const collapsed = source.replaceAll(/\s+/g, ' ');
   const offenders: string[] = [];
   const assignment = /\bresponseData\s*[:=]\s*/g;
   for (let match = assignment.exec(collapsed); match; match = assignment.exec(collapsed)) {

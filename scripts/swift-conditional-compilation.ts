@@ -118,7 +118,7 @@ function applyDirective(
     frames.push({ parentActive: outer, active: outer && taken, taken });
     return;
   }
-  const frame = frames[frames.length - 1];
+  const frame = frames.at(-1);
   if (!frame) throw new UnsupportedConditionError(`#${keyword} without a matching #if`);
   if (keyword === 'endif') {
     frames.pop();

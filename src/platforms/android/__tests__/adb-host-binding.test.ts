@@ -22,7 +22,7 @@ test.skipIf(process.platform === 'win32')(
     try {
       const error = await runAndroidHostAdb(['devices']).then(
         () => assert.fail('expected local adb to reject'),
-        (cause: unknown) => cause,
+        (error: unknown) => error,
       );
 
       assert.ok(error instanceof AppError);

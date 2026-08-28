@@ -168,8 +168,8 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
           }),
         });
         await dispatchCliCommand(ctx, client, replayTestReporterRuntime);
-      } catch (err) {
-        await handleRunCliFailure(err, ctx, logTailStopper);
+      } catch (error) {
+        await handleRunCliFailure(error, ctx, logTailStopper);
       } finally {
         if (logTailStopper) logTailStopper();
       }
@@ -318,8 +318,8 @@ async function resolveRunContextOrExit(
       connectionMetadata: connectionDefaults?.connection,
       parsedBatchSteps: undefined,
     };
-  } catch (err) {
-    const appErr = asAppError(err);
+  } catch (error) {
+    const appErr = asAppError(error);
     const normalized = normalizeError(appErr, {
       diagnosticId: getDiagnosticsMeta().diagnosticId,
       logPath: flushDiagnosticsToSessionFile({ force: true })?.path,
@@ -841,8 +841,8 @@ function guessSessionFromArgv(argv: string[]): string | null {
 
 const isDirectRun = pathToFileURL(process.argv[1] ?? '').href === import.meta.url;
 if (isDirectRun) {
-  runCli(process.argv.slice(2)).catch(async (err) => {
-    const appErr = asAppError(err);
+  runCli(process.argv.slice(2)).catch(async (error) => {
+    const appErr = asAppError(error);
     printHumanError(normalizeError(appErr), { showDetails: true });
     await exitAfterFlush(1);
   });

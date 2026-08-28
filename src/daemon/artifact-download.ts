@@ -117,6 +117,6 @@ async function removePartialFile(output: fs.WriteStream, destPath: string): Prom
 function sanitizeRequestId(raw: string | undefined): string {
   const trimmed = raw?.trim();
   if (!trimmed) return 'request';
-  const normalized = trimmed.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  const normalized = trimmed.replaceAll(/[^a-zA-Z0-9._-]+/g, '-').replaceAll(/^-+|-+$/g, '');
   return normalized.length > 0 ? normalized.slice(0, 48) : 'request';
 }

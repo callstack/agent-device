@@ -255,7 +255,7 @@ function formatEnvAssignment(name: string, value: string): string {
 }
 
 function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
+  return `'${value.replaceAll("'", String.raw`'\''`)}'`;
 }
 
 // A lease whose owner process is gone but whose runner may still be running:

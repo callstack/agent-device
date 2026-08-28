@@ -163,10 +163,10 @@ function runSpawnedCommand(
     if (!options.binaryStdout) child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
 
-    void writeChildStdin(child, options.stdin).catch((err: unknown) => {
+    void writeChildStdin(child, options.stdin).catch((error: unknown) => {
       if (abort.didAbort || didTimeout) return;
-      if (isEpipeError(err)) return;
-      reject(createStdinError(executable, cmd, args, err));
+      if (isEpipeError(error)) return;
+      reject(createStdinError(executable, cmd, args, error));
       killProcessTree(child, options.detached);
     });
 

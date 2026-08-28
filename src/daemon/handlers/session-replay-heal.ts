@@ -18,7 +18,7 @@ function parseSelectorWaitPositionals(positionals: string[]): {
   selectorTimeout: string | null;
 } {
   if (positionals.length === 0) return { selectorExpression: null, selectorTimeout: null };
-  const maybeTimeout = positionals[positionals.length - 1];
+  const maybeTimeout = positionals.at(-1);
   const selectorTimeout =
     maybeTimeout !== undefined && /^\d+$/.test(maybeTimeout) ? maybeTimeout : null;
   const hasTimeout = selectorTimeout !== null;

@@ -172,7 +172,7 @@ test('Android APK locator emits an exact APK path and package id, and rejects co
       '#!/bin/sh',
       'if [ "${TEST_AAPT_FAIL:-}" = 1 ]; then exit 23; fi',
       'if [ -n "$TEST_AAPT_PACKAGE" ]; then',
-      '  printf "package: name=\'%s\' versionCode=1 versionName=1\\n" "$TEST_AAPT_PACKAGE"',
+      String.raw`  printf "package: name='%s' versionCode=1 versionName=1\n" "$TEST_AAPT_PACKAGE"`,
       'fi',
       '',
     ].join('\n'),
@@ -230,7 +230,7 @@ test('Android APK repack signs the output and preserves its package id', (t) => 
     path.join(buildTools, 'aapt'),
     [
       '#!/bin/sh',
-      'printf "package: name=\'com.example.fixture\' versionCode=1 versionName=1\\n"',
+      String.raw`printf "package: name='com.example.fixture' versionCode=1 versionName=1\n"`,
       '',
     ].join('\n'),
   );
@@ -242,7 +242,7 @@ test('Android APK repack signs the output and preserves its package id', (t) => 
       'if [ "${2:-}" = --print-certs ]; then',
       '  digest="$TEST_SOURCE_DIGEST"',
       '  if [ "$3" = "$TEST_REPACK_OUTPUT" ]; then digest="$TEST_OUTPUT_DIGEST"; fi',
-      '  printf "Signer #1 certificate SHA-256 digest: %s\\n" "$digest"',
+      String.raw`  printf "Signer #1 certificate SHA-256 digest: %s\n" "$digest"`,
       'fi',
       '',
     ].join('\n'),
@@ -251,7 +251,7 @@ test('Android APK repack signs the output and preserves its package id', (t) => 
     path.join(binDir, 'pnpm'),
     [
       '#!/bin/sh',
-      'printf "%s\\n" "$*" >> "$TEST_COMMAND_LOG"',
+      String.raw`printf "%s\n" "$*" >> "$TEST_COMMAND_LOG"`,
       'while [ "$#" -gt 0 ]; do',
       '  case "$1" in',
       '    --source-app) source="$2"; shift 2 ;;',
@@ -329,8 +329,8 @@ test('producer maps each platform to its resolved lookup and matrix artifact nam
     path.join(actionDir, 'resolve-artifact-name.sh'),
     [
       '#!/bin/sh',
-      'printf "%s\\n" "$1" >> "$TEST_RESOLVER_LOG"',
-      'printf "fingerprint.%s-hash.%s\\n" "$1" "$1"',
+      String.raw`printf "%s\n" "$1" >> "$TEST_RESOLVER_LOG"`,
+      String.raw`printf "fingerprint.%s-hash.%s\n" "$1" "$1"`,
       '',
     ].join('\n'),
   );
@@ -341,7 +341,7 @@ test('producer maps each platform to its resolved lookup and matrix artifact nam
       path.join(binDir, 'node'),
       [
         '#!/bin/sh',
-        'printf "%s\\n" "$*" >> "$TEST_NODE_LOG"',
+        String.raw`printf "%s\n" "$*" >> "$TEST_NODE_LOG"`,
         'case "$4" in',
         ...cachedPlatforms.map((platform) => `  *.${platform}) printf "111" ;;`),
         '  *) true ;;',
@@ -418,12 +418,12 @@ test('artifact name resolver scopes both platforms and rejects invalid output', 
     pnpmStub,
     [
       '#!/bin/sh',
-      'printf "%s\\n" "$*" >> "$TEST_CALL_LOG"',
+      String.raw`printf "%s\n" "$*" >> "$TEST_CALL_LOG"`,
       'if [ "$TEST_PNPM_EXIT" -ne 0 ]; then exit "$TEST_PNPM_EXIT"; fi',
       'if [ -n "$TEST_RAW_OUTPUT" ]; then',
-      '  printf "%s\\n" "$TEST_RAW_OUTPUT"',
+      String.raw`  printf "%s\n" "$TEST_RAW_OUTPUT"`,
       'else',
-      '  printf \'{"hash":"%s"}\\n\' "$TEST_HASH"',
+      String.raw`  printf '{"hash":"%s"}\n' "$TEST_HASH"`,
       'fi',
       '',
     ].join('\n'),
@@ -468,7 +468,7 @@ test('artifact name resolver scopes both platforms and rejects invalid output', 
   assert.equal(runResolver('windows', 'unused').status, 2);
   assert.equal(runResolver('ios', 'null').status, 1);
   assert.equal(runResolver('ios', 'bad/hash').status, 1);
-  assert.equal(runResolver('ios', 'unused', 0, '{"hash":"bad\\nhash"}').status, 1);
+  assert.equal(runResolver('ios', 'unused', 0, String.raw`{"hash":"bad\nhash"}`).status, 1);
   assert.equal(runResolver('ios', 'unused', 0, '{"hash":"first"}\n{"hash":"second"}').status, 1);
   assert.equal(runResolver('ios', 'unused', 17).status, 17);
 });
