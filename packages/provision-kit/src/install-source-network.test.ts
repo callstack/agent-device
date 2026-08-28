@@ -27,6 +27,7 @@ test('blocks loopback, private, link-local, shared, and reserved address classes
   ]) {
     assert.equal(isBlockedIpAddress(address), true, address);
   }
+  assert.equal(isBlockedIpAddress('not-an-ip'), true);
   assert.equal(isBlockedIpAddress('93.184.216.34'), false);
   assert.equal(isBlockedIpAddress('2001:4860:4860::8888'), false);
 });
