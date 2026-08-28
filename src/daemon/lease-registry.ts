@@ -1,207 +1,49 @@
 import type { DeviceLease } from '@agent-device/contracts/device';
-import crypto from 'node:crypto';
+import type { HumanControlHold, HumanControlHoldScope } from '@agent-device/contracts/client';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
-import { deviceIdentityAliases } from '../core/lease-scope.ts';
-import { normalizeTenantId } from './config.ts';
 import {
   ProviderSessionOwnershipRegistry,
   type ProviderSessionOwnership,
 } from './provider-session-ownership.ts';
+import {
+  type AdmissionRequest,
+  type AllocateLeaseRequest,
+  type HeartbeatLeaseRequest,
+  type ReleaseLeaseRequest,
+  type LeaseRegistryOptions,
+  type NormalizedAllocateLeaseRequest,
+  DEFAULT_LEASE_TTL_MS,
+  MIN_LEASE_TTL_MS,
+  MAX_LEASE_TTL_MS,
+  normalizeAllocateLeaseRequest,
+  createDeviceLease,
+  deviceLeaseBusyError,
+  normalizeLeaseId,
+  normalizeRequiredLeaseId,
+  normalizeLeaseAdmissionRequest,
+  assertLeaseOwnerScope,
+  assertLeaseScopeMatch,
+  leaseDeviceBindingKey,
+  leaseRunBindingKey,
+} from './lease-registry-scope.ts';
+import { DeviceMutationDrain } from './device-mutation-drain.ts';
+import {
+  type HumanControlAuthority,
+  type HumanControlHoldInput,
+  normalizeHumanControlHoldId,
+  parseHumanControlHoldInput,
+  cloneHumanControlHold,
+  humanControlActiveError,
+} from './human-control-contract.ts';
 
 export type SimulatorLease = DeviceLease;
 
-export type LeaseRegistryOptions = {
-  maxActiveSimulatorLeases?: number;
-  defaultLeaseTtlMs?: number;
-  minLeaseTtlMs?: number;
-  maxLeaseTtlMs?: number;
-  providerSessionRetentionMs?: number;
-  now?: () => number;
-  onLeaseExpired?: (lease: DeviceLease) => void;
-  isDeviceLeaseProtected?: (lease: DeviceLease) => boolean;
-};
-
-export type AllocateLeaseRequest = {
-  tenantId: string;
-  runId: string;
-  leaseBackend?: LeaseBackend;
-  leaseProvider?: string;
-  deviceKey?: string;
-  clientId?: string;
-  ttlMs?: number;
-};
-
-export type HeartbeatLeaseRequest = {
-  leaseId: string;
-  tenantId?: string;
-  runId?: string;
-  leaseBackend?: LeaseBackend;
-  leaseProvider?: string;
-  deviceKey?: string;
-  clientId?: string;
-  ttlMs?: number;
-};
-
-export type ReleaseLeaseRequest = {
-  leaseId: string;
-  tenantId?: string;
-  runId?: string;
-  leaseBackend?: LeaseBackend;
-  leaseProvider?: string;
-  deviceKey?: string;
-  clientId?: string;
-};
-
-export type AdmissionRequest = {
-  tenantId?: string;
-  runId?: string;
-  leaseId?: string;
-  leaseBackend?: LeaseBackend;
-  leaseProvider?: string;
-  deviceKey?: string;
-  clientId?: string;
-};
-
-type LeaseScopeMatchRequest = {
-  tenantId?: string;
-  runId?: string;
-  leaseBackend?: LeaseBackend;
-  leaseProvider?: string;
-  deviceKey?: string;
-  clientId?: string;
-};
-
-type NormalizedLeaseScopeMatchRequest = {
-  tenantId?: string;
-  runId?: string;
-  leaseBackend?: LeaseBackend;
-  leaseProvider?: string;
-  deviceKey?: string;
-  clientId?: string;
-};
-
-type NormalizedAllocateLeaseRequest = {
-  tenantId: string;
-  runId: string;
-  backend: LeaseBackend;
-  leaseProvider?: string;
-  deviceKey?: string;
-  clientId?: string;
-  ttlMs?: number;
-};
-
-const DEFAULT_LEASE_TTL_MS = 60_000;
-const MIN_LEASE_TTL_MS = 5_000;
-const MAX_LEASE_TTL_MS = 10 * 60_000;
-const DEFAULT_LEASE_PROVIDER = 'default';
-
-function normalizeRunId(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  const value = raw.trim();
-  if (!value) return undefined;
-  if (!/^[a-zA-Z0-9._-]{1,128}$/.test(value)) return undefined;
-  return value;
-}
-
-function normalizeLeaseId(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  const value = raw.trim();
-  if (!value) return undefined;
-  if (!/^[a-f0-9]{16,128}$/i.test(value)) return undefined;
-  return value.toLowerCase();
-}
-
-function normalizeLeaseBackend(raw: string | undefined): LeaseBackend {
-  const value = (raw ?? '').trim().toLowerCase();
-  if (!value || value === 'ios-simulator') return 'ios-simulator';
-  if (value === 'ios-instance' || value === 'android-instance') return value;
-  throw new AppError('INVALID_ARGS', `Unsupported lease backend: ${raw ?? ''}`);
-}
-
-function normalizeDeviceKey(raw: string | undefined): string | undefined {
-  if (raw === undefined) return undefined;
-  const value = raw.trim();
-  if (!value || value.length > 256 || !/^[\u0020-\u007E]+$/.test(value)) {
-    throw new AppError('INVALID_ARGS', 'Invalid device key. Use 1-256 printable characters.');
-  }
-  return value;
-}
-
-function normalizeClientId(raw: string | undefined): string | undefined {
-  return normalizeAgentIdentifier(raw, 'client id', 128);
-}
-
-function normalizeLeaseProvider(raw: string | undefined): string | undefined {
-  return normalizeAgentIdentifier(raw, 'lease provider', 64);
-}
-
-function normalizeAgentIdentifier(
-  raw: string | undefined,
-  label: string,
-  maxLength: number,
-): string | undefined {
-  if (raw === undefined) return undefined;
-  const value = raw.trim();
-  if (!value || value.length > maxLength || !/^[a-zA-Z0-9._-]+$/.test(value)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Invalid ${label}. Use 1-${String(maxLength)} chars: letters, numbers, dot, underscore, hyphen.`,
-    );
-  }
-  return value;
-}
-
-function normalizeRequiredTenantId(raw: string): string {
-  const tenantId = normalizeTenantId(raw);
-  if (!tenantId) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Invalid tenant id. Use 1-128 chars: letters, numbers, dot, underscore, hyphen.',
-    );
-  }
-  return tenantId;
-}
-
-function normalizeRequiredRunId(raw: string): string {
-  const runId = normalizeRunId(raw);
-  if (!runId) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Invalid run id. Use 1-128 chars: letters, numbers, dot, underscore, hyphen.',
-    );
-  }
-  return runId;
-}
-
-function normalizeAllocateLeaseRequest(
-  request: AllocateLeaseRequest,
-): NormalizedAllocateLeaseRequest {
-  return {
-    backend: normalizeLeaseBackend(request.leaseBackend),
-    leaseProvider: normalizeLeaseProvider(request.leaseProvider),
-    deviceKey: normalizeDeviceKey(request.deviceKey),
-    clientId: normalizeClientId(request.clientId),
-    tenantId: normalizeRequiredTenantId(request.tenantId),
-    runId: normalizeRequiredRunId(request.runId),
-    ttlMs: request.ttlMs,
-  };
-}
-
-function leaseRequiresOwnerScope(lease: DeviceLease): boolean {
-  return Boolean(lease.leaseProvider ?? lease.deviceKey ?? lease.clientId);
-}
-
-function hasRequiredOwnerScope(lease: DeviceLease, request: LeaseScopeMatchRequest): boolean {
-  if (!request.tenantId || !request.runId) return false;
-  return [
-    [lease.leaseProvider, request.leaseProvider],
-    [lease.deviceKey, request.deviceKey],
-    [lease.clientId, request.clientId],
-  ].every(([leaseValue, requestValue]) => !leaseValue || Boolean(requestValue));
-}
+type OwnedHumanControlHold = { hold: HumanControlHold; ownerLeaseId?: string };
 
 export class LeaseRegistry {
+  private readonly holdsByDevice = new Map<string, Map<string, OwnedHumanControlHold>>();
+  private readonly mutations = new DeviceMutationDrain();
   private readonly leases = new Map<string, DeviceLease>();
   private readonly runBindings = new Map<string, string>();
   private readonly deviceBindings = new Map<string, string>();
@@ -212,7 +54,6 @@ export class LeaseRegistry {
   private readonly now: () => number;
   private readonly onLeaseExpired?: (lease: DeviceLease) => void;
   private readonly providerSessionOwnership: ProviderSessionOwnershipRegistry;
-  private readonly isDeviceLeaseProtected: (lease: DeviceLease) => boolean;
 
   constructor(options: LeaseRegistryOptions = {}) {
     this.maxActiveSimulatorLeases = Number.isInteger(options.maxActiveSimulatorLeases)
@@ -233,18 +74,18 @@ export class LeaseRegistry {
       now: this.now,
       retentionMs: options.providerSessionRetentionMs,
     });
-    this.isDeviceLeaseProtected = options.isDeviceLeaseProtected ?? (() => false);
   }
 
   allocateLease(request: AllocateLeaseRequest): DeviceLease {
     const normalized = normalizeAllocateLeaseRequest(request);
     this.cleanupExpiredLeases();
     const leaseTtlMs = this.resolveLeaseTtlMs(normalized.ttlMs);
+    this.assertHumanControlAdmission(normalized);
     const existingLease = this.refreshExistingRunBinding(normalized, leaseTtlMs);
     if (existingLease) return existingLease;
     this.assertDeviceAvailable(normalized);
     this.enforceCapacity(normalized.backend);
-    const lease = this.createLease(normalized, leaseTtlMs);
+    const lease = createDeviceLease(normalized, leaseTtlMs, this.now());
     this.leases.set(lease.leaseId, lease);
     this.bindLease(lease);
     return { ...lease };
@@ -254,7 +95,7 @@ export class LeaseRegistry {
     request: NormalizedAllocateLeaseRequest,
     leaseTtlMs: number,
   ): DeviceLease | undefined {
-    const bindingKey = this.bindingKey(request);
+    const bindingKey = leaseRunBindingKey(request);
     const existingId = this.runBindings.get(bindingKey);
     if (!existingId) return undefined;
     const existingLease = this.leases.get(existingId);
@@ -262,38 +103,22 @@ export class LeaseRegistry {
       this.runBindings.delete(bindingKey);
       return undefined;
     }
-    if (this.canReuseRunBinding(existingLease, request)) {
+    if (existingLease.clientId === request.clientId) {
       return this.refreshLease(existingLease, leaseTtlMs);
     }
     if (existingLease.deviceKey) {
-      this.throwDeviceBusy(existingLease);
+      throw deviceLeaseBusyError(existingLease);
     }
-    this.assertOptionalLeaseIdentityMatch(existingLease, request);
+    assertLeaseScopeMatch(existingLease, request);
     return this.refreshLease(existingLease, leaseTtlMs);
   }
 
-  private createLease(request: NormalizedAllocateLeaseRequest, leaseTtlMs: number): DeviceLease {
-    const now = this.now();
-    return {
-      leaseId: crypto.randomBytes(16).toString('hex'),
-      tenantId: request.tenantId,
-      runId: request.runId,
-      backend: request.backend,
-      ...(request.leaseProvider ? { leaseProvider: request.leaseProvider } : {}),
-      ...(request.deviceKey ? { deviceKey: request.deviceKey } : {}),
-      ...(request.clientId ? { clientId: request.clientId } : {}),
-      createdAt: now,
-      heartbeatAt: now,
-      expiresAt: now + leaseTtlMs,
-    };
-  }
-
   heartbeatLease(request: HeartbeatLeaseRequest): DeviceLease {
-    const leaseId = this.normalizeRequiredLeaseId(request.leaseId);
+    const leaseId = normalizeRequiredLeaseId(request.leaseId);
     this.cleanupExpiredLeases();
     const lease = this.getActiveLease(leaseId);
-    this.assertRequiredScopeForDeviceAwareLease(lease, request);
-    this.assertOptionalScopeMatch(lease, request);
+    assertLeaseOwnerScope(lease, request);
+    assertLeaseScopeMatch(lease, request);
     const leaseTtlMs = this.resolveLeaseTtlMs(request.ttlMs);
     return this.refreshLease(lease, leaseTtlMs);
   }
@@ -314,39 +139,19 @@ export class LeaseRegistry {
    * transient provider failure leaves the local lease available for retry.
    */
   getLease(request: ReleaseLeaseRequest): DeviceLease | undefined {
-    const leaseId = this.normalizeRequiredLeaseId(request.leaseId);
+    const leaseId = normalizeRequiredLeaseId(request.leaseId);
     this.cleanupExpiredLeases();
     const lease = this.leases.get(leaseId);
     if (!lease) return undefined;
-    this.assertRequiredScopeForDeviceAwareLease(lease, request);
-    this.assertOptionalScopeMatch(lease, request);
+    assertLeaseOwnerScope(lease, request);
+    assertLeaseScopeMatch(lease, request);
     return { ...lease };
   }
 
   assertLeaseAdmission(request: AdmissionRequest): void {
-    const backend = normalizeLeaseBackend(request.leaseBackend);
-    const tenantId = normalizeTenantId(request.tenantId);
-    if (!tenantId) {
-      throw new AppError('INVALID_ARGS', 'tenant isolation requires tenant id.');
-    }
-    const runId = normalizeRunId(request.runId);
-    if (!runId) {
-      throw new AppError('INVALID_ARGS', 'tenant isolation requires run id.');
-    }
-    const leaseId = normalizeLeaseId(request.leaseId);
-    if (!leaseId) {
-      throw new AppError('INVALID_ARGS', 'tenant isolation requires lease id.');
-    }
+    const scope = normalizeLeaseAdmissionRequest(request);
     this.cleanupExpiredLeases();
-    const lease = this.getActiveLease(leaseId);
-    this.assertOptionalScopeMatch(lease, {
-      tenantId,
-      runId,
-      leaseBackend: backend,
-      leaseProvider: request.leaseProvider,
-      deviceKey: request.deviceKey,
-      clientId: request.clientId,
-    });
+    assertLeaseScopeMatch(this.getActiveLease(scope.leaseId), scope);
   }
 
   listActiveLeases(): DeviceLease[] {
@@ -375,25 +180,208 @@ export class LeaseRegistry {
     return this.providerSessionOwnership.resolve(params);
   }
 
-  refreshLeasesForDeviceKey(deviceKey: string): DeviceLease[] {
-    const normalizedDeviceKey = normalizeDeviceKey(deviceKey);
-    if (!normalizedDeviceKey) return [];
-    const comparisonKeys = normalizedDeviceAliases([normalizedDeviceKey]);
-    const refreshed: DeviceLease[] = [];
-    for (const lease of this.leases.values()) {
-      if (!lease.deviceKey) continue;
-      const leaseKeys = normalizedDeviceAliases([lease.deviceKey]);
-      if (!leaseKeys.some((key) => comparisonKeys.includes(key))) continue;
-      refreshed.push(this.refreshLease(lease, this.defaultLeaseTtlMs));
+  listHumanControlHolds(authority: HumanControlAuthority): HumanControlHold[] {
+    this.cleanupExpiredLeases();
+    const key =
+      authority.kind === 'lease'
+        ? leaseDeviceBindingKey(this.requireHumanControlLease(authority.leaseId))
+        : undefined;
+    const holds = [...this.holdsByDevice.entries()]
+      .filter(([deviceKey]) => key === undefined || key === deviceKey)
+      .flatMap(([, entries]) =>
+        [...entries.values()].map(({ hold }) => cloneHumanControlHold(hold)),
+      );
+    return holds.sort((left, right) => left.id.localeCompare(right.id));
+  }
+
+  async putHumanControlHold(
+    authority: HumanControlAuthority,
+    rawId: string,
+    rawInput: HumanControlHoldInput,
+  ): Promise<HumanControlHold> {
+    const id = normalizeHumanControlHoldId(rawId);
+    const input = parseHumanControlHoldInput(rawInput);
+    this.cleanupExpiredLeases();
+    const scope = this.resolveHumanControlScope(authority, input);
+    const key = leaseDeviceBindingKey(scope)!;
+    const existing = this.findHumanControlHold(id);
+    if (existing) {
+      this.assertHoldAuthority(authority, existing);
+      if (leaseDeviceBindingKey(existing.hold.scope) !== key) {
+        throw new AppError('INVALID_ARGS', 'Release a hold before changing its device scope.');
+      }
     }
-    return refreshed;
+    const now = this.now();
+    const pending: OwnedHumanControlHold = {
+      ...(authority.kind === 'lease' ? { ownerLeaseId: authority.leaseId } : {}),
+      hold: {
+        id,
+        scope,
+        state: 'activating',
+        ...(input.reason ? { reason: input.reason } : {}),
+        createdAt: existing?.hold.createdAt ?? now,
+        updatedAt: now,
+      },
+    };
+    const holds = this.holdsByDevice.get(key) ?? new Map<string, OwnedHumanControlHold>();
+    this.holdsByDevice.set(key, holds);
+    holds.set(id, pending);
+    await this.mutations.wait(key);
+    if (holds.get(id) !== pending) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Human-control hold changed before activation completed.',
+        { holdId: id },
+      );
+    }
+    const activatedAt = this.now();
+    pending.hold = {
+      ...pending.hold,
+      state: 'active',
+      updatedAt: activatedAt,
+      ...(input.ttlMs === undefined ? {} : { expiresAt: activatedAt + input.ttlMs }),
+    };
+    this.refreshHeldLease(key, activatedAt);
+    return cloneHumanControlHold(pending.hold);
+  }
+
+  removeHumanControlHold(
+    authority: HumanControlAuthority,
+    rawId: string,
+  ): HumanControlHold | undefined {
+    const id = normalizeHumanControlHoldId(rawId);
+    this.cleanupExpiredLeases();
+    const existing = this.findHumanControlHold(id);
+    if (!existing) return undefined;
+    this.assertHoldAuthority(authority, existing);
+    const key = leaseDeviceBindingKey(existing.hold.scope)!;
+    const holds = this.holdsByDevice.get(key)!;
+    holds.delete(id);
+    if (holds.size === 0) {
+      this.holdsByDevice.delete(key);
+      this.refreshHeldLease(key, this.now());
+    }
+    return cloneHumanControlHold(existing.hold);
+  }
+
+  assertHumanControlAdmission(
+    scope: Pick<DeviceLease, 'backend' | 'leaseProvider' | 'deviceKey'>,
+  ): void {
+    this.expireHumanControlHolds();
+    const key = leaseDeviceBindingKey(scope);
+    const entry =
+      key === undefined ? undefined : this.holdsByDevice.get(key)?.values().next().value;
+    if (entry) throw humanControlActiveError(entry.hold);
+  }
+
+  async runDeviceMutation<T>(lease: DeviceLease | undefined, task: () => Promise<T>): Promise<T> {
+    if (!lease) return await task();
+    this.cleanupExpiredLeases();
+    const activeLease = this.getActiveLease(lease.leaseId);
+    this.assertHumanControlAdmission(activeLease);
+    const key = leaseDeviceBindingKey(activeLease);
+    return key === undefined ? await task() : await this.mutations.run(key, task);
+  }
+
+  private requireHumanControlLease(leaseId: string): DeviceLease & { deviceKey: string } {
+    const lease = this.getActiveLease(leaseId);
+    if (!lease.deviceKey) {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        'Human control requires a device-scoped remote lease.',
+      );
+    }
+    return { ...lease, deviceKey: lease.deviceKey };
+  }
+
+  private resolveHumanControlScope(
+    authority: HumanControlAuthority,
+    input: HumanControlHoldInput,
+  ): HumanControlHoldScope {
+    if (authority.kind === 'host') {
+      if (!input.scope)
+        throw new AppError('INVALID_ARGS', 'Host human control requires a lease device scope.');
+      return input.scope;
+    }
+    if (input.scope) {
+      throw new AppError(
+        'INVALID_ARGS',
+        'Lease-owner human control uses the admitted lease device; do not supply scope.',
+      );
+    }
+    const lease = this.requireHumanControlLease(authority.leaseId);
+    return {
+      backend: lease.backend,
+      leaseProvider: lease.leaseProvider,
+      deviceKey: lease.deviceKey,
+    };
+  }
+
+  private assertHoldAuthority(
+    authority: HumanControlAuthority,
+    entry: OwnedHumanControlHold,
+  ): void {
+    if (authority.kind === 'host') return;
+    const lease = this.requireHumanControlLease(authority.leaseId);
+    if (
+      entry.ownerLeaseId !== lease.leaseId ||
+      leaseDeviceBindingKey(lease) !== leaseDeviceBindingKey(entry.hold.scope)
+    ) {
+      throw new AppError(
+        'UNAUTHORIZED',
+        'Human-control hold does not belong to the admitted lease.',
+        { reason: 'LEASE_SCOPE_MISMATCH' },
+      );
+    }
+  }
+
+  private findHumanControlHold(id: string): OwnedHumanControlHold | undefined {
+    for (const holds of this.holdsByDevice.values()) {
+      const entry = holds.get(id);
+      if (entry) return entry;
+    }
+    return undefined;
+  }
+
+  private hasHumanControl(lease: DeviceLease): boolean {
+    const key = leaseDeviceBindingKey(lease);
+    return key !== undefined && this.holdsByDevice.has(key);
+  }
+
+  private expireHumanControlHolds(): void {
+    const now = this.now();
+    for (const [key, holds] of this.holdsByDevice) {
+      let releasedAt = 0;
+      for (const [id, { hold }] of holds) {
+        if (hold.expiresAt === undefined || hold.expiresAt > now) continue;
+        releasedAt = Math.max(releasedAt, hold.expiresAt);
+        holds.delete(id);
+      }
+      if (holds.size === 0) {
+        this.holdsByDevice.delete(key);
+        this.refreshHeldLease(key, releasedAt);
+      }
+    }
+  }
+
+  private refreshHeldLease(key: string, at: number): void {
+    const leaseId = this.deviceBindings.get(key);
+    const lease = leaseId ? this.leases.get(leaseId) : undefined;
+    if (lease) {
+      this.refreshLease(
+        lease,
+        lease.expiresAt - lease.heartbeatAt,
+        Math.max(at, lease.heartbeatAt),
+      );
+    }
   }
 
   consumeExpiredLeases(): DeviceLease[] {
+    this.expireHumanControlHolds();
     const now = this.now();
     const expired: DeviceLease[] = [];
     for (const lease of this.leases.values()) {
-      if (lease.expiresAt > now || this.isDeviceLeaseProtected(lease)) continue;
+      if (lease.expiresAt > now || this.hasHumanControl(lease)) continue;
       this.leases.delete(lease.leaseId);
       this.unbindLease(lease, lease.expiresAt);
       const expiredLease = { ...lease };
@@ -404,10 +392,11 @@ export class LeaseRegistry {
   }
 
   consumeExpiredLease(leaseId: string): DeviceLease | undefined {
+    this.expireHumanControlHolds();
     const normalizedLeaseId = normalizeLeaseId(leaseId);
     if (!normalizedLeaseId) return undefined;
     const lease = this.leases.get(normalizedLeaseId);
-    if (!lease || lease.expiresAt > this.now() || this.isDeviceLeaseProtected(lease)) {
+    if (!lease || lease.expiresAt > this.now() || this.hasHumanControl(lease)) {
       return undefined;
     }
     this.leases.delete(lease.leaseId);
@@ -449,14 +438,6 @@ export class LeaseRegistry {
     return value;
   }
 
-  private normalizeRequiredLeaseId(raw: string | undefined): string {
-    const leaseId = normalizeLeaseId(raw);
-    if (!leaseId) {
-      throw new AppError('INVALID_ARGS', 'Invalid lease id.');
-    }
-    return leaseId;
-  }
-
   private getActiveLease(leaseId: string): DeviceLease {
     const lease = this.leases.get(leaseId);
     if (lease) return lease;
@@ -465,8 +446,7 @@ export class LeaseRegistry {
     });
   }
 
-  private refreshLease(lease: DeviceLease, ttlMs: number): DeviceLease {
-    const now = this.now();
+  private refreshLease(lease: DeviceLease, ttlMs: number, now = this.now()): DeviceLease {
     const updated: DeviceLease = {
       ...lease,
       heartbeatAt: now,
@@ -478,64 +458,20 @@ export class LeaseRegistry {
   }
 
   private bindLease(lease: DeviceLease): void {
-    this.runBindings.set(
-      this.bindingKey({
-        tenantId: lease.tenantId,
-        runId: lease.runId,
-        backend: lease.backend,
-        leaseProvider: lease.leaseProvider,
-        deviceKey: lease.deviceKey,
-      }),
-      lease.leaseId,
-    );
-    const deviceBindingKey = this.deviceBindingKey(lease);
+    this.runBindings.set(leaseRunBindingKey(lease), lease.leaseId);
+    const deviceBindingKey = leaseDeviceBindingKey(lease);
     if (deviceBindingKey) {
       this.deviceBindings.set(deviceBindingKey, lease.leaseId);
     }
   }
 
   private unbindLease(lease: DeviceLease, releasedAt = this.now()): void {
-    this.runBindings.delete(
-      this.bindingKey({
-        tenantId: lease.tenantId,
-        runId: lease.runId,
-        backend: lease.backend,
-        leaseProvider: lease.leaseProvider,
-        deviceKey: lease.deviceKey,
-      }),
-    );
-    const deviceBindingKey = this.deviceBindingKey(lease);
+    this.runBindings.delete(leaseRunBindingKey(lease));
+    const deviceBindingKey = leaseDeviceBindingKey(lease);
     if (deviceBindingKey) {
       this.deviceBindings.delete(deviceBindingKey);
     }
     this.providerSessionOwnership.markLeaseReleased(lease, releasedAt);
-  }
-
-  private bindingKey(params: {
-    tenantId: string;
-    runId: string;
-    backend: LeaseBackend;
-    leaseProvider?: string;
-    deviceKey?: string;
-  }): string {
-    return JSON.stringify([
-      params.tenantId,
-      params.runId,
-      params.backend,
-      params.leaseProvider ?? DEFAULT_LEASE_PROVIDER,
-      params.deviceKey ?? '*',
-    ]);
-  }
-
-  private deviceBindingKey(
-    lease: Pick<DeviceLease, 'backend' | 'leaseProvider' | 'deviceKey'>,
-  ): string | undefined {
-    if (!lease.deviceKey) return undefined;
-    return JSON.stringify([
-      lease.backend,
-      lease.leaseProvider ?? DEFAULT_LEASE_PROVIDER,
-      lease.deviceKey,
-    ]);
   }
 
   private assertDeviceAvailable(params: {
@@ -543,7 +479,7 @@ export class LeaseRegistry {
     leaseProvider?: string;
     deviceKey?: string;
   }): void {
-    const deviceBindingKey = this.deviceBindingKey({
+    const deviceBindingKey = leaseDeviceBindingKey({
       backend: params.backend,
       leaseProvider: params.leaseProvider,
       deviceKey: params.deviceKey,
@@ -556,110 +492,6 @@ export class LeaseRegistry {
       this.deviceBindings.delete(deviceBindingKey);
       return;
     }
-    this.throwDeviceBusy(activeLease);
+    throw deviceLeaseBusyError(activeLease);
   }
-
-  private canReuseRunBinding(
-    lease: DeviceLease,
-    request: {
-      clientId?: string;
-    },
-  ): boolean {
-    return lease.clientId === request.clientId;
-  }
-
-  private throwDeviceBusy(activeLease: DeviceLease): never {
-    throw new AppError('DEVICE_IN_USE', 'Device is already leased', {
-      reason: 'DEVICE_LEASE_BUSY',
-      deviceKey: activeLease.deviceKey,
-      backend: activeLease.backend,
-      leaseProvider: activeLease.leaseProvider,
-      expiresAt: activeLease.expiresAt,
-      hint: 'Retry after the lease expires or close the owning session.',
-    });
-  }
-
-  private assertRequiredScopeForDeviceAwareLease(
-    lease: DeviceLease,
-    request: LeaseScopeMatchRequest,
-  ): void {
-    if (!leaseRequiresOwnerScope(lease)) return;
-    if (!hasRequiredOwnerScope(lease, request)) {
-      this.throwScopeRequired();
-    }
-  }
-
-  private assertOptionalScopeMatch(lease: DeviceLease, request: LeaseScopeMatchRequest): void {
-    const normalized = this.normalizeOptionalScopeMatchRequest(request);
-    if (
-      (normalized.tenantId && lease.tenantId !== normalized.tenantId) ||
-      (normalized.runId && lease.runId !== normalized.runId) ||
-      (normalized.leaseBackend && lease.backend !== normalized.leaseBackend)
-    ) {
-      this.throwScopeMismatch();
-    }
-    this.assertOptionalLeaseIdentityMatch(lease, normalized);
-  }
-
-  private normalizeOptionalScopeMatchRequest(
-    request: LeaseScopeMatchRequest,
-  ): NormalizedLeaseScopeMatchRequest {
-    const tenantId = normalizeTenantId(request.tenantId);
-    const runId = normalizeRunId(request.runId);
-    if (request.tenantId && !tenantId) {
-      throw new AppError(
-        'INVALID_ARGS',
-        'Invalid tenant id. Use 1-128 chars: letters, numbers, dot, underscore, hyphen.',
-      );
-    }
-    if (request.runId && !runId) {
-      throw new AppError(
-        'INVALID_ARGS',
-        'Invalid run id. Use 1-128 chars: letters, numbers, dot, underscore, hyphen.',
-      );
-    }
-    return {
-      tenantId,
-      runId,
-      leaseBackend: request.leaseBackend ? normalizeLeaseBackend(request.leaseBackend) : undefined,
-      leaseProvider: normalizeLeaseProvider(request.leaseProvider),
-      deviceKey: normalizeDeviceKey(request.deviceKey),
-      clientId: normalizeClientId(request.clientId),
-    };
-  }
-
-  private assertOptionalLeaseIdentityMatch(
-    lease: DeviceLease,
-    request: {
-      leaseProvider?: string;
-      deviceKey?: string;
-      clientId?: string;
-    },
-  ): void {
-    if (request.leaseProvider && lease.leaseProvider !== request.leaseProvider) {
-      this.throwScopeMismatch();
-    }
-    if (request.deviceKey && lease.deviceKey !== request.deviceKey) {
-      this.throwScopeMismatch();
-    }
-    if (request.clientId && lease.clientId !== request.clientId) {
-      this.throwScopeMismatch();
-    }
-  }
-
-  private throwScopeMismatch(): never {
-    throw new AppError('UNAUTHORIZED', 'Lease does not match tenant/run scope', {
-      reason: 'LEASE_SCOPE_MISMATCH',
-    });
-  }
-
-  private throwScopeRequired(): never {
-    throw new AppError('UNAUTHORIZED', 'Lease owner scope is required', {
-      reason: 'LEASE_SCOPE_REQUIRED',
-    });
-  }
-}
-
-function normalizedDeviceAliases(deviceKeys: readonly string[]): string[] {
-  return deviceIdentityAliases(deviceKeys).map((key) => key.toLocaleLowerCase('en-US'));
 }

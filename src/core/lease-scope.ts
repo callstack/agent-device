@@ -1,37 +1,8 @@
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import { stripUndefined } from '@agent-device/kernel/record';
-import {
-  DEVICE_TARGETS,
-  isPublicPlatform,
-  publicPlatformString,
-  type DeviceInfo,
-} from '@agent-device/kernel/device';
 
 const PROXY_LEASE_PROVIDER = 'proxy';
 export const DEFAULT_PROXY_LEASE_TTL_MS = 300_000;
-
-export function proxyLeaseDeviceKey(device: DeviceInfo): string {
-  return `${publicPlatformString(device)}:${device.target ?? 'mobile'}:${device.id}`;
-}
-
-export function deviceIdentityAliases(deviceKeys: readonly string[]): string[] {
-  const aliases = new Set<string>();
-  for (const rawKey of deviceKeys) {
-    const deviceKey = rawKey.trim();
-    if (!deviceKey) continue;
-    aliases.add(deviceKey);
-    const [platform, target, ...identityParts] = deviceKey.split(':');
-    if (
-      isPublicPlatform(platform) &&
-      (DEVICE_TARGETS as readonly string[]).includes(target ?? '') &&
-      identityParts.length > 0
-    ) {
-      const identity = identityParts.join(':').trim();
-      if (identity) aliases.add(identity);
-    }
-  }
-  return [...aliases];
-}
 
 const REQUIRED_PROXY_LEASE_FIELDS = [
   'leaseId',

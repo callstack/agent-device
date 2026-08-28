@@ -146,21 +146,23 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     text: {
       summary: 'Pause agent interactions while a person controls a device',
       description:
-        'Temporarily hand control of a locally attached simulator or device to a person. Run this on the host that owns the target. The foreground command pauses state-changing agent commands, renews the hold until Ctrl+C, and then releases it. Read-only diagnostics remain available. status and release inspect or recover local holds. HTTP-mode daemons also expose an authenticated loopback API under /admin/human-control/holds for host-side automation; the external proxy does not forward this route. This command always targets the local daemon, even when a remote connection is active.',
+        'Temporarily hand control of the active remote lease device to a person. The foreground command pauses state-changing agent commands, renews the hold until Ctrl+C, and then releases it. Read-only diagnostics remain available. Uses the active connection and --session, with normal tenant and lease admission. status lists holds on that device; release removes a hold owned by the admitted lease. The host-only /admin/human-control/holds API uses the separate local daemon token. Holds do not survive daemon restart. Local takeover without a remote device lease is not supported.',
     },
-    usageOverride:
-      'takeover [status | release <hold-id>] [--platform <platform>] [--device <name>] [--udid <udid>] [--serial <serial>]',
+    usageOverride: 'takeover [status | release <hold-id>] [--session <name>]',
     listUsageOverride: 'takeover [status|release]',
     positionalArgs: ['status|release?', 'hold-id?'],
     supportedFlags: [
       'stateDir',
-      'platform',
-      'target',
-      'device',
-      'udid',
-      'serial',
-      'iosSimulatorDeviceSet',
-      'androidDeviceAllowlist',
+      'session',
+      'remoteConfig',
+      'daemonBaseUrl',
+      'daemonAuthToken',
+      'daemonTransport',
+      'tenant',
+      'runId',
+      'leaseId',
+      'leaseBackend',
+      'sessionIsolation',
     ],
   },
   'react-devtools': {

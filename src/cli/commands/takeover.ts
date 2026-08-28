@@ -1,15 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceClient } from '../../agent-device-client.ts';
-import { resolvePublicInventoryDevice } from '../../core/device-selection-resolver.ts';
-import type {
-  HumanControlHold,
-  HumanControlHoldInput,
-} from '../../daemon/human-control-contract.ts';
+import type { HumanControlHold } from '@agent-device/contracts/client';
 import { writeCommandOutput } from './shared.ts';
-import { createLocalHumanControlClient } from './takeover-client.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
 const FOREGROUND_HOLD_TTL_MS = 15_000;
@@ -20,14 +14,14 @@ export const takeoverCommand: ClientCommandHandler = async ({ positionals, flags
     if (positionals.length !== 1) {
       throw new AppError('INVALID_ARGS', 'takeover status does not accept additional arguments.');
     }
-    await showTakeoverStatus(flags);
+    await showTakeoverStatus(flags, client);
     return true;
   }
   if (action === 'release') {
     if (positionals.length !== 2 || !positionals[1]) {
       throw new AppError('INVALID_ARGS', 'takeover release requires a hold id.');
     }
-    await releaseTakeover(flags, positionals[1]);
+    await releaseTakeover(flags, client, positionals[1]);
     return true;
   }
   if (positionals.length > 0) {
@@ -42,10 +36,12 @@ async function runForegroundTakeover(
   flags: CliFlags,
   agentDeviceClient: AgentDeviceClient,
 ): Promise<void> {
-  const device = await resolveTakeoverDevice(agentDeviceClient, flags);
   const holdId = `takeover-${randomUUID()}`;
-  const input = buildForegroundHoldInput(device);
-  const client = await createLocalHumanControlClient(flags);
+  const input = {
+    reason: 'Human is interacting with the simulator or device.',
+    ttlMs: FOREGROUND_HOLD_TTL_MS,
+  };
+  const client = agentDeviceClient.leases.humanControl;
   const hold = await client.put(holdId, input);
   writeCommandOutput(flags, { hold, state: 'active' }, () => renderTakeoverStarted(hold));
 
@@ -92,42 +88,24 @@ async function runForegroundTakeover(
   }
 }
 
-async function resolveTakeoverDevice(
-  client: AgentDeviceClient,
-  flags: CliFlags,
-): Promise<DeviceInfo> {
-  return await resolvePublicInventoryDevice(client.devices, flags);
-}
-
-async function showTakeoverStatus(flags: CliFlags): Promise<void> {
-  const holds = await (await createLocalHumanControlClient(flags)).list();
+async function showTakeoverStatus(flags: CliFlags, client: AgentDeviceClient): Promise<void> {
+  const holds = await client.leases.humanControl.list();
   writeCommandOutput(flags, { holds }, () => renderTakeoverStatus(holds));
 }
 
-async function releaseTakeover(flags: CliFlags, holdId: string): Promise<void> {
-  const released = await (await createLocalHumanControlClient(flags)).remove(holdId);
+async function releaseTakeover(
+  flags: CliFlags,
+  client: AgentDeviceClient,
+  holdId: string,
+): Promise<void> {
+  const released = await client.leases.humanControl.remove(holdId);
   writeCommandOutput(flags, { holdId, released }, () =>
     released ? `Released human-control hold ${holdId}.` : `No active hold found for ${holdId}.`,
   );
 }
 
-function buildForegroundHoldInput(device: DeviceInfo): HumanControlHoldInput {
-  return {
-    scope: {
-      deviceKey: device.id,
-      deviceName: device.name,
-      platform: publicPlatformString(device),
-      kind: device.kind,
-    },
-    reason: 'Human is interacting with the simulator or device.',
-    ttlMs: FOREGROUND_HOLD_TTL_MS,
-  };
-}
-
 export function renderTakeoverStarted(hold: HumanControlHold): string {
-  const target = hold.scope.deviceName
-    ? `${hold.scope.deviceName} (${hold.scope.deviceKey})`
-    : hold.scope.deviceKey;
+  const target = hold.scope.deviceKey;
   return [
     `Human control active for ${target}.`,
     'Agent interactions are paused. Press Ctrl+C to return control.',
@@ -140,9 +118,7 @@ export function renderTakeoverStatus(holds: HumanControlHold[]): string {
   return [
     'Active human-control holds:',
     ...holds.map((hold) => {
-      const target = hold.scope.deviceName
-        ? `${hold.scope.deviceName} (${hold.scope.deviceKey})`
-        : hold.scope.deviceKey;
+      const target = hold.scope.deviceKey;
       return `  ${hold.id}: ${target}`;
     }),
   ].join('\n');

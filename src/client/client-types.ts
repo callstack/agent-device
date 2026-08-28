@@ -98,6 +98,8 @@ import type {
   Lease,
   LeaseAllocateOptions,
   LeaseScopedOptions,
+  HumanControlHold,
+  HumanControlHoldOptions,
   LogsOptions,
   LongPressOptions,
   MaterializationReleaseOptions,
@@ -239,6 +241,15 @@ export type AgentDeviceClient = {
     release: (
       options: LeaseScopedOptions,
     ) => Promise<{ released: boolean; provider?: CloudProviderSessionResult }>;
+    humanControl: {
+      list: (options?: AgentDeviceRequestOverrides) => Promise<HumanControlHold[]>;
+      put: (
+        id: string,
+        input?: HumanControlHoldOptions,
+        options?: AgentDeviceRequestOverrides,
+      ) => Promise<HumanControlHold>;
+      remove: (id: string, options?: AgentDeviceRequestOverrides) => Promise<boolean>;
+    };
   };
   metro: {
     prepare: (options: MetroPrepareOptions) => Promise<MetroPrepareResult>;

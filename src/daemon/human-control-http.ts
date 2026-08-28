@@ -4,15 +4,11 @@ import { readNodeHttpRequestBody } from '../utils/node-http.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
 import { sendRestJsonError } from './http-errors.ts';
 import {
+  HUMAN_CONTROL_HTTP_PREFIX,
   parseHumanControlHoldInput,
-  type HumanControlHold,
   type HumanControlHoldInput,
 } from './human-control-contract.ts';
-import {
-  HUMAN_CONTROL_HTTP_PREFIX,
-  releaseHumanControlHold,
-  type HumanControlRegistry,
-} from './human-control.ts';
+import type { LeaseRegistry } from './lease-registry.ts';
 
 const MAX_HUMAN_CONTROL_BODY_BYTES = 16 * 1024;
 
@@ -27,8 +23,7 @@ type HumanControlHttpParams = {
   req: http.IncomingMessage;
   res: http.ServerResponse;
   expectedToken: string;
-  registry: HumanControlRegistry;
-  onHoldReleased?: (hold: HumanControlHold) => void;
+  registry: LeaseRegistry;
 };
 
 export function tryHandleHumanControlHttpRoute(params: HumanControlHttpParams): boolean {
@@ -57,7 +52,10 @@ async function executeHumanControlRoute(
 ): Promise<void> {
   switch (route.kind) {
     case 'list':
-      sendJson(params.res, { ok: true, holds: params.registry.list() });
+      sendJson(params.res, {
+        ok: true,
+        holds: params.registry.listHumanControlHolds({ kind: 'host' }),
+      });
       return;
     case 'upsert':
       await upsertHumanControlHold(route.holdId, params);
@@ -78,13 +76,12 @@ async function upsertHumanControlHold(
   params: HumanControlHttpParams,
 ): Promise<void> {
   const input = await readHoldInput(params.req);
-  const hold = await params.registry.upsert(holdId, input);
+  const hold = await params.registry.putHumanControlHold({ kind: 'host' }, holdId, input);
   sendJson(params.res, { ok: true, hold, state: 'active' });
 }
 
 function removeHumanControlHold(holdId: string, params: HumanControlHttpParams): void {
-  const hold = releaseHumanControlHold(params.registry, holdId);
-  if (hold) params.onHoldReleased?.(hold);
+  const hold = params.registry.removeHumanControlHold({ kind: 'host' }, holdId);
   sendJson(params.res, { ok: true, released: Boolean(hold), ...(hold ? { hold } : {}) });
 }
 

@@ -2,10 +2,13 @@ import {
   type DaemonCommandDescriptor,
   type DaemonCommandRoute,
   type SessionCommandKind,
-  type HumanControlEffect,
 } from '../core/command-descriptor/daemon-command-descriptor.ts';
 import { deriveDaemonCommandDescriptors } from '../core/command-descriptor/derive.ts';
-import { commandDescriptors } from '../core/command-descriptor/registry.ts';
+import {
+  commandDescriptors,
+  resolveCommandRecordingEffect,
+  resolveCommandDeviceClaimPolicy,
+} from '../core/command-descriptor/registry.ts';
 import type { RefFrameEffect } from '@agent-device/contracts/replay';
 import type { DaemonRequest } from './types.ts';
 
@@ -75,9 +78,12 @@ export function shouldGuardAndroidBlockingDialog(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.androidBlockingDialogGuard === true;
 }
 
-export function humanControlEffectForRequest(req: DaemonRequest): HumanControlEffect {
-  const effect = getDaemonCommandDescriptor(req.command)?.humanControlEffect;
-  return typeof effect === 'function' ? effect(req) : (effect ?? 'mutate');
+export function isHumanControlMutation(req: DaemonRequest): boolean {
+  if (req.command === 'human_control' || req.command === 'lease_heartbeat') return false;
+  const recordingEffect = resolveCommandRecordingEffect(req);
+  if (recordingEffect !== undefined) return recordingEffect !== 'observes-app';
+  if (getSessionCommandKind(req.command) === 'observability') return false;
+  return resolveCommandDeviceClaimPolicy(req.command) !== 'observe';
 }
 
 export function shouldPreferExplicitDeviceOverExistingSession(req: DaemonRequest): boolean {

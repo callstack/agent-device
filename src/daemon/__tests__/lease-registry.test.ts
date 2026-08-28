@@ -1,7 +1,12 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { HumanControlRegistry } from '../human-control.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
+import {
+  HUMAN_CONTROL_LEASE_REQUEST,
+  HUMAN_CONTROL_SCOPE,
+  isHumanControlError,
+  createControlLatch,
+} from './human-control-fixtures.ts';
 
 test('allocateLease creates lease and enforces tenant/run validation', () => {
   const registry = new LeaseRegistry();
@@ -87,63 +92,6 @@ test('expired leases are cleaned before admission checks', () => {
       }),
     /Lease is not active/,
   );
-});
-
-test('human-controlled device leases survive expiry and refresh when control is released', () => {
-  let now = 1_000;
-  let protectedByHumanControl = true;
-  const registry = new LeaseRegistry({
-    now: () => now,
-    defaultLeaseTtlMs: 5_000,
-    isDeviceLeaseProtected: (lease) => protectedByHumanControl && lease.deviceKey === 'device-1',
-  });
-  const lease = registry.allocateLease({
-    tenantId: 'tenant-a',
-    runId: 'run-1',
-    leaseBackend: 'ios-instance',
-    leaseProvider: 'proxy',
-    deviceKey: 'device-1',
-  });
-
-  now = 7_000;
-  assert.deepEqual(registry.consumeExpiredLeases(), []);
-  assert.equal(registry.listActiveLeases()[0]?.leaseId, lease.leaseId);
-
-  now = 8_000;
-  const [refreshed] = registry.refreshLeasesForDeviceKey('DEVICE-1');
-  assert.equal(refreshed?.expiresAt, 13_000);
-  protectedByHumanControl = false;
-  now = 12_000;
-  assert.equal(registry.listActiveLeases()[0]?.leaseId, lease.leaseId);
-  now = 14_000;
-  assert.deepEqual(registry.listActiveLeases(), []);
-});
-
-test('bare takeover identity protects and refreshes a composite proxy lease key', async () => {
-  let now = 1_000;
-  const humanControl = new HumanControlRegistry({ now: () => now });
-  const registry = new LeaseRegistry({
-    now: () => now,
-    defaultLeaseTtlMs: 5_000,
-    isDeviceLeaseProtected: (lease) => humanControl.isDeviceControlled(lease.deviceKey),
-  });
-  const lease = registry.allocateLease({
-    tenantId: 'tenant-a',
-    runId: 'run-1',
-    leaseBackend: 'ios-instance',
-    leaseProvider: 'proxy',
-    deviceKey: 'ios:mobile:SIM-1',
-  });
-  const hold = await humanControl.upsert('operator-1', {
-    scope: { deviceKey: 'SIM-1' },
-  });
-
-  now = 7_000;
-  assert.deepEqual(registry.consumeExpiredLeases(), []);
-  humanControl.remove(hold.id);
-  const [refreshed] = registry.refreshLeasesForDeviceKey(hold.scope.deviceKey);
-  assert.equal(refreshed?.leaseId, lease.leaseId);
-  assert.equal(refreshed?.expiresAt, 12_000);
 });
 
 test('capacity limits reject additional simulator leases', () => {
@@ -413,3 +361,153 @@ function captureThrown(task: () => unknown): unknown {
     return error;
   }
 }
+
+test('human holds protect leases and release refreshes the original lease TTL atomically', async () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 5_000 });
+  const lease = registry.allocateLease({ ...HUMAN_CONTROL_LEASE_REQUEST, ttlMs: 10_000 });
+  const authority = { kind: 'lease', leaseId: lease.leaseId } as const;
+  await registry.putHumanControlHold(authority, 'console', {});
+  now = 25_000;
+  assert.deepEqual(registry.consumeExpiredLeases(), []);
+  assert.equal(registry.consumeExpiredLease(lease.leaseId), undefined);
+  assert.equal(registry.listActiveLeases()[0]?.leaseId, lease.leaseId);
+  assert.throws(
+    () => registry.allocateLease({ ...HUMAN_CONTROL_LEASE_REQUEST, runId: 'run-b' }),
+    isHumanControlError,
+  );
+  registry.removeHumanControlHold(authority, 'console');
+  assert.equal(registry.listActiveLeases()[0]?.expiresAt, 35_000);
+  now = 35_000;
+  assert.equal(registry.consumeExpiredLeases()[0]?.leaseId, lease.leaseId);
+});
+
+test('hold expiry refreshes from the expiry instant, without reviving abandoned leases', async () => {
+  let now = 0;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 5_000 });
+  const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
+  const authority = { kind: 'lease', leaseId: lease.leaseId } as const;
+  await registry.putHumanControlHold(authority, 'console', { ttlMs: 10_000 });
+  now = 9_000;
+  assert.equal(registry.listActiveLeases().length, 1);
+  now = 10_000;
+  assert.deepEqual(registry.listHumanControlHolds(authority), []);
+  assert.equal(registry.listActiveLeases()[0]?.expiresAt, 15_000);
+  now = 15_000;
+  assert.deepEqual(registry.listActiveLeases(), []);
+});
+
+test('heartbeat and overlapping holds preserve the lease until the final hold ends', async () => {
+  let now = 0;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 5_000 });
+  const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
+  const authority = { kind: 'lease', leaseId: lease.leaseId } as const;
+  await registry.putHumanControlHold(authority, 'first', { ttlMs: 10_000 });
+  await registry.putHumanControlHold(authority, 'second', { ttlMs: 10_000 });
+  now = 7_000;
+  const renewed = await registry.putHumanControlHold(authority, 'second', { ttlMs: 10_000 });
+  assert.equal(renewed.createdAt, 0);
+  assert.equal(renewed.expiresAt, 17_000);
+  registry.removeHumanControlHold(authority, 'first');
+  now = 12_000;
+  assert.throws(() => registry.assertHumanControlAdmission(lease), isHumanControlError);
+  assert.equal(registry.consumeExpiredLease(lease.leaseId), undefined);
+  now = 17_000;
+  assert.doesNotThrow(() => registry.assertHumanControlAdmission(lease));
+  assert.equal(registry.listActiveLeases()[0]?.expiresAt, 22_000);
+});
+
+test('human control uses the lease backend/provider/device key, never aliases', async () => {
+  const registry = new LeaseRegistry();
+  const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
+  await registry.putHumanControlHold({ kind: 'host' }, 'console', { scope: HUMAN_CONTROL_SCOPE });
+  assert.throws(() => registry.assertHumanControlAdmission(lease), isHumanControlError);
+  for (const scope of [
+    { ...HUMAN_CONTROL_SCOPE, deviceKey: 'sim-1' },
+    { ...HUMAN_CONTROL_SCOPE, deviceKey: 'ios:mobile:SIM-1' },
+    { ...HUMAN_CONTROL_SCOPE, leaseProvider: 'another-provider' },
+    { ...HUMAN_CONTROL_SCOPE, backend: 'ios-simulator' as const },
+  ]) {
+    assert.doesNotThrow(() => registry.assertHumanControlAdmission(scope));
+  }
+});
+
+test('lease owners cannot select another device or alter host/other-lease holds', async () => {
+  const registry = new LeaseRegistry();
+  const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
+  const other = registry.allocateLease({
+    ...HUMAN_CONTROL_LEASE_REQUEST,
+    deviceKey: 'other',
+    runId: 'run-b',
+  });
+  const authority = { kind: 'lease', leaseId: lease.leaseId } as const;
+  await registry.putHumanControlHold({ kind: 'host' }, 'host', { scope: HUMAN_CONTROL_SCOPE });
+  await registry.putHumanControlHold({ kind: 'lease', leaseId: other.leaseId }, 'other', {});
+  await assert.rejects(
+    registry.putHumanControlHold(authority, 'spoofed', { scope: HUMAN_CONTROL_SCOPE }),
+    { code: 'INVALID_ARGS' },
+  );
+  for (const id of ['host', 'other']) {
+    await assert.rejects(registry.putHumanControlHold(authority, id, {}), { code: 'UNAUTHORIZED' });
+    assert.throws(() => registry.removeHumanControlHold(authority, id), { code: 'UNAUTHORIZED' });
+  }
+  assert.deepEqual(
+    registry.listHumanControlHolds(authority).map((hold) => hold.id),
+    ['host'],
+  );
+});
+
+test('activation drains admitted mutations, fences new ones, and starts TTL after draining', async () => {
+  let now = 0;
+  const registry = new LeaseRegistry({ now: () => now });
+  const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
+  const authority = { kind: 'lease', leaseId: lease.leaseId } as const;
+  const finished = createControlLatch();
+  const mutation = registry.runDeviceMutation(lease, () => finished.promise);
+  let active = false;
+  const activation = registry
+    .putHumanControlHold(authority, 'console', { ttlMs: 1_000 })
+    .then((hold) => {
+      active = true;
+      return hold;
+    });
+  await Promise.resolve();
+  assert.equal(active, false);
+  assert.equal(registry.listHumanControlHolds(authority)[0]?.state, 'activating');
+  await assert.rejects(
+    registry.runDeviceMutation(lease, async () => 'late mutation'),
+    isHumanControlError,
+  );
+  now = 20_000;
+  finished.resolve();
+  await mutation;
+  const hold = await activation;
+  assert.equal(active, true);
+  assert.equal(hold.expiresAt, 21_000);
+  registry.removeHumanControlHold(authority, 'console');
+  assert.equal(await registry.runDeviceMutation(lease, async () => 'resumed'), 'resumed');
+});
+
+test('release during activation cannot report a removed hold as active', async () => {
+  const registry = new LeaseRegistry();
+  const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
+  const authority = { kind: 'lease', leaseId: lease.leaseId } as const;
+  const finished = createControlLatch();
+  const mutation = registry.runDeviceMutation(lease, () => finished.promise);
+  const activation = registry.putHumanControlHold(authority, 'console', {});
+  registry.removeHumanControlHold(authority, 'console');
+  const rejected = assert.rejects(activation, { code: 'COMMAND_FAILED' });
+  finished.resolve();
+  await mutation;
+  await rejected;
+  assert.deepEqual(registry.listHumanControlHolds(authority), []);
+});
+
+test('holds do not survive registry restart, including host holds created without a lease', async () => {
+  const registry = new LeaseRegistry();
+  await registry.putHumanControlHold({ kind: 'host' }, 'console', { scope: HUMAN_CONTROL_SCOPE });
+  assert.throws(() => registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST), isHumanControlError);
+  const restarted = new LeaseRegistry();
+  assert.deepEqual(restarted.listHumanControlHolds({ kind: 'host' }), []);
+  assert.doesNotThrow(() => restarted.allocateLease(HUMAN_CONTROL_LEASE_REQUEST));
+});

@@ -24,9 +24,11 @@ CLI commands run through a per-user background daemon:
 
 For remote or cloud deployments, the daemon supports a custom auth hook for remotely consumable HTTP routes: `AGENT_DEVICE_HTTP_AUTH_HOOK` names a module path that is dynamically imported (with `AGENT_DEVICE_HTTP_AUTH_EXPORT` selecting the export). The host-local `/admin/human-control/*` route uses the daemon token instead. The hook runs with the daemon's full privileges, so treat it as part of your trusted computing base: point it only at a read-only path you control, never at a location writable by less-trusted users or processes. Whoever controls the daemon's environment controls the hook.
 
-Human-control administration is host-local. The daemon accepts it only on its loopback listener with
-the local daemon token, and `agent-device proxy` does not forward `/admin/*`. Persistent holds are
-stored as `human-control.json` in the daemon state directory with `0600` permissions.
+Lease-owner human-control RPCs pass normal authentication and tenant/lease admission. They can
+target only the admitted lease's device and cannot alter a host administrator's hold. Host
+administration is a separate capability: the daemon accepts `/admin/human-control/*` only on its
+loopback listener with the local daemon token, and `agent-device proxy` does not forward `/admin/*`.
+Holds and leases are in-memory; neither survives daemon restart.
 
 If a hook is configured and its result does not attest a `tenantId`, the daemon refuses the request (401) outright — it never falls back to a tenant the client declares itself (RPC body `meta.tenantId` or `flags.tenant`, or the `x-agent-device-tenant` header on the upload/artifact-download/diagnostics routes), and it never admits the request unscoped either: a shared token must not let one caller claim another tenant's identity, nor read a tenant-owned session or artifact by simply declaring none. A hook must attest `tenantId` on every request it wants admitted; a deployment with no hook configured is unaffected.
 

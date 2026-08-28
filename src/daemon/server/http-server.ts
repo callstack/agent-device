@@ -44,9 +44,7 @@ import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact
 import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-http.ts';
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
 import { tryHandleHumanControlHttpRoute } from '../human-control-http.ts';
-import type { HumanControlHold } from '../human-control-contract.ts';
-import type { HumanControlRegistry } from '../human-control.ts';
-import { INTERNAL_COMMANDS } from '../../command-catalog.ts';
+import type { LeaseRegistry } from '../lease-registry.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
 
@@ -556,11 +554,10 @@ async function loadHttpAuthHook(
 
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
+  leaseRegistry?: LeaseRegistry;
   token?: string;
   retainArtifacts?: boolean;
   env?: NodeJS.ProcessEnv;
-  humanControlRegistry?: HumanControlRegistry;
-  onHumanControlHoldReleased?: (hold: HumanControlHold) => void;
   /**
    * Resolves a request diagnostics record path for the `/sessions/.../requests/...`
    * route (#1801). Omitted by embedded servers with no session store; the route
@@ -582,13 +579,12 @@ export async function createDaemonHttpServer(options: {
 
     if (
       token &&
-      options.humanControlRegistry &&
+      options.leaseRegistry &&
       tryHandleHumanControlHttpRoute({
         req,
         res,
         expectedToken: token,
-        registry: options.humanControlRegistry,
-        onHoldReleased: options.onHumanControlHoldReleased,
+        registry: options.leaseRegistry,
       })
     ) {
       return;
@@ -765,14 +761,6 @@ export async function createDaemonHttpServer(options: {
           authHook !== null,
           req.headers[DAEMON_HTTP_NETWORK_ACCESS_HEADER],
         );
-        if (daemonRequest.command === INTERNAL_COMMANDS.humanControl) {
-          sendJson(
-            res,
-            createRpcError(rpcRequest.id ?? null, -32601, 'Human-control RPC is socket-only'),
-            404,
-          );
-          return;
-        }
 
         let canceledInFlight = false;
         // Request-scoped cancellation: mark this request canceled whenever its client

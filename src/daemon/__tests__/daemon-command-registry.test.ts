@@ -6,7 +6,7 @@ import {
   canRunReplayScopedAction,
   getDaemonCommandRoute,
   getSessionCommandKind,
-  humanControlEffectForRequest,
+  isHumanControlMutation,
   isLeaseAdmissionExempt,
   shouldBlockForInvalidRecording,
   shouldGuardAndroidBlockingDialog,
@@ -252,44 +252,52 @@ test('every lease-route command skips sessionless provider-device resolution', (
   }
 });
 
-test('daemon command registry owns human-control effects and fails closed', () => {
-  for (const command of [
-    PUBLIC_COMMANDS.snapshot,
-    PUBLIC_COMMANDS.screenshot,
-    PUBLIC_COMMANDS.get,
-    PUBLIC_COMMANDS.is,
-    PUBLIC_COMMANDS.logs,
-    PUBLIC_COMMANDS.devices,
-    PUBLIC_COMMANDS.trace,
-  ]) {
-    assert.equal(humanControlEffectForRequest(makeRequest(command)), 'read', `${command} effect`);
-  }
+test('takeover passes lease admission and uses the normal execution lock', () => {
+  assert.equal(isLeaseAdmissionExempt(INTERNAL_COMMANDS.humanControl), false);
+  assert.equal(shouldLockSessionExecution(INTERNAL_COMMANDS.humanControl), true);
+});
 
-  assert.equal(
-    humanControlEffectForRequest(makeRequest(PUBLIC_COMMANDS.clipboard, ['read'])),
-    'read',
-  );
-  assert.equal(
-    humanControlEffectForRequest(makeRequest(PUBLIC_COMMANDS.clipboard, ['write', 'value'])),
-    'mutate',
-  );
-  assert.equal(
-    humanControlEffectForRequest(
-      makeRequest(PUBLIC_COMMANDS.find, ['text', 'Save', 'get', 'text']),
-    ),
-    'read',
-  );
-  assert.equal(
-    humanControlEffectForRequest(makeRequest(PUBLIC_COMMANDS.find, ['text', 'Save', 'click'])),
-    'mutate',
-  );
-  assert.equal(humanControlEffectForRequest(makeRequest(PUBLIC_COMMANDS.click)), 'mutate');
-  assert.equal(humanControlEffectForRequest(makeRequest(PUBLIC_COMMANDS.viewport)), 'mutate');
-  assert.equal(humanControlEffectForRequest(makeRequest('future-command')), 'mutate');
-  assert.equal(
-    humanControlEffectForRequest(makeRequest(INTERNAL_COMMANDS.leaseHeartbeat)),
-    'control',
-  );
+test('human-control admission derives existing semantics and treats unclassified requests as mutations', () => {
+  for (const command of [
+    'snapshot',
+    'screenshot',
+    'get',
+    'is',
+    'logs',
+    'network',
+    'events',
+    'audio',
+    'trace',
+    'devices',
+    'apps',
+    'appstate',
+    'doctor',
+    'human_control',
+    'lease_heartbeat',
+  ]) {
+    assert.equal(isHumanControlMutation(makeRequest(command)), false, command);
+  }
+  for (const [command, positionals] of [
+    ['clipboard', ['read']],
+    ['keyboard', ['status']],
+    ['alert', ['get']],
+    ['find', ['text', 'Save', 'get', 'text']],
+  ] as const) {
+    assert.equal(isHumanControlMutation(makeRequest(command, [...positionals])), false, command);
+  }
+  for (const [command, positionals] of [
+    ['clipboard', ['write', 'value']],
+    ['clipboard', []],
+    ['keyboard', ['dismiss']],
+    ['alert', ['accept']],
+    ['find', ['text', 'Save', 'click']],
+    ['click', []],
+    ['viewport', []],
+    ['lease_release', []],
+    ['future-command', []],
+  ] as const) {
+    assert.equal(isHumanControlMutation(makeRequest(command, [...positionals])), true, command);
+  }
 });
 
 function makeRequest(command: string, positionals: string[] = []): DaemonRequest {

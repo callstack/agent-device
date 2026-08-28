@@ -254,6 +254,18 @@ test('recordsSessionAction is explicit on every raw descriptor and drives daemon
 
 test('recordingEffect resolves request-sensitive observation and mutation subcommands', () => {
   assert.equal(
+    resolveCommandRecordingEffect({ command: 'clipboard', positionals: ['read'], flags: {} }),
+    'observes-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({
+      command: 'clipboard',
+      positionals: ['write', 'text'],
+      flags: {},
+    }),
+    'mutates-app',
+  );
+  assert.equal(
     resolveCommandRecordingEffect({ command: 'keyboard', positionals: ['status'], flags: {} }),
     'observes-app',
   );

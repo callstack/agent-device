@@ -9,7 +9,8 @@ import type {
   CloudArtifactProvider,
 } from '@agent-device/contracts/observability';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
-import type { LeaseRegistry, ReleaseLeaseRequest } from '../lease-registry.ts';
+import type { LeaseRegistry } from '../lease-registry.ts';
+import type { ReleaseLeaseRequest } from '../lease-registry-scope.ts';
 import type { SessionStore } from '../session-store.ts';
 import {
   isProxyLeaseScope,
@@ -70,27 +71,33 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         providerRuntimeRequiredIds,
       );
       const lease = leaseRegistry.allocateLease(leaseScopeToAllocateRequest(leaseScope));
-      let providerData: Record<string, unknown> | undefined;
-      try {
-        providerData = await leaseLifecycleProvider?.allocate?.(lease, {
-          ...leaseLifecycleContext(req),
-          signal: getRequestSignal(req.meta?.requestId),
-          deadline: Date.now() + LEASE_ALLOCATION_BUDGET_MS,
-        });
-        recordProviderSession(leaseRegistry, lease, providerData);
-      } catch (error) {
-        leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
-        throw error;
-      }
-      if (isRequestCanceled(req.meta?.requestId)) {
-        // The requester left while the provider was allocating; the lease it
-        // produced is real (and billed) and nobody will ever release it.
-        throw await releaseAllocationForGoneRequester(lease, leaseLifecycleProvider, leaseRegistry);
-      }
-      return {
-        ok: true,
-        data: { lease, ...(providerData ? { provider: providerData } : {}) },
-      };
+      return await leaseRegistry.runDeviceMutation(lease, async () => {
+        let providerData: Record<string, unknown> | undefined;
+        try {
+          providerData = await leaseLifecycleProvider?.allocate?.(lease, {
+            ...leaseLifecycleContext(req),
+            signal: getRequestSignal(req.meta?.requestId),
+            deadline: Date.now() + LEASE_ALLOCATION_BUDGET_MS,
+          });
+          recordProviderSession(leaseRegistry, lease, providerData);
+        } catch (error) {
+          leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
+          throw error;
+        }
+        if (isRequestCanceled(req.meta?.requestId)) {
+          // The requester left while the provider was allocating; the lease it
+          // produced is real (and billed) and nobody will ever release it.
+          throw await releaseAllocationForGoneRequester(
+            lease,
+            leaseLifecycleProvider,
+            leaseRegistry,
+          );
+        }
+        return {
+          ok: true,
+          data: { lease, ...(providerData ? { provider: providerData } : {}) },
+        };
+      });
     }
     case 'lease_heartbeat': {
       const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
@@ -105,12 +112,17 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     }
     case 'lease_release': {
       const releaseRequest = leaseScopeToReleaseRequest(leaseScope);
-      const outcome = await releaseLease(
-        leaseRegistry,
-        leaseLifecycleProvider,
-        leaseRegistry.getLease(releaseRequest),
-        releaseRequest,
-        leaseLifecycleContext(req),
+      const lease = leaseRegistry.getLease(releaseRequest);
+      const outcome = await leaseRegistry.runDeviceMutation(
+        lease,
+        async () =>
+          await releaseLease(
+            leaseRegistry,
+            leaseLifecycleProvider,
+            lease,
+            releaseRequest,
+            leaseLifecycleContext(req),
+          ),
       );
       return {
         ok: true,

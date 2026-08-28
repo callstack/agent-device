@@ -1,52 +1,43 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { parseHumanControlHoldInput, type HumanControlHold } from '../human-control-contract.ts';
-import { releaseHumanControlHold, type HumanControlRegistry } from '../human-control.ts';
+import { parseHumanControlHoldInput } from '../human-control-contract.ts';
+import type { LeaseRegistry } from '../lease-registry.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 
 export async function handleHumanControlCommand(params: {
   req: DaemonRequest;
-  registry: HumanControlRegistry | undefined;
-  onHoldReleased?: (hold: HumanControlHold) => void;
+  registry: LeaseRegistry;
 }): Promise<DaemonResponse> {
-  const { req, registry, onHoldReleased } = params;
-  if (!registry) {
-    throw new AppError('COMMAND_FAILED', 'Human-control registry is unavailable.');
+  const { req, registry } = params;
+  const lease = req.internal?.admittedLease;
+  if (!lease) {
+    throw new AppError('UNAUTHORIZED', 'Human control requires an admitted remote lease.');
   }
-  const [action, holdId, rawInput] = req.positionals ?? [];
-  if (action === 'list') return { ok: true, data: { holds: registry.list() } };
-  if (action === 'put') return await putHold(registry, holdId, rawInput);
-  if (action === 'remove') return removeHold(registry, holdId, onHoldReleased);
-  throw new AppError('INVALID_ARGS', 'human_control requires list, put, or remove.');
+  const authority = { kind: 'lease', leaseId: lease.leaseId } as const;
+  const positionals = req.positionals ?? [];
+  const [action, holdId = '', rawInput = ''] = positionals;
+  switch (action) {
+    case 'list':
+      assertArgumentCount(positionals, 1);
+      return { ok: true, data: { holds: registry.listHumanControlHolds(authority) } };
+    case 'put': {
+      assertArgumentCount(positionals, 3);
+      const hold = await registry.putHumanControlHold(authority, holdId, readHoldInput(rawInput));
+      return { ok: true, data: { hold, state: 'active' } };
+    }
+    case 'remove': {
+      assertArgumentCount(positionals, 2);
+      const hold = registry.removeHumanControlHold(authority, holdId);
+      return { ok: true, data: { released: Boolean(hold), ...(hold ? { hold } : {}) } };
+    }
+    default:
+      throw invalidArguments();
+  }
 }
 
-async function putHold(
-  registry: HumanControlRegistry,
-  holdId: string | undefined,
-  rawInput: string | undefined,
-): Promise<DaemonResponse> {
-  if (!holdId || rawInput === undefined) {
-    throw new AppError('INVALID_ARGS', 'human_control put requires a hold id and payload.');
-  }
-  const hold = await registry.upsert(holdId, parseHumanControlHoldInput(parsePayload(rawInput)));
-  return { ok: true, data: { hold, state: 'active' } };
-}
-
-function removeHold(
-  registry: HumanControlRegistry,
-  holdId: string | undefined,
-  onHoldReleased: ((hold: HumanControlHold) => void) | undefined,
-): DaemonResponse {
-  if (!holdId) {
-    throw new AppError('INVALID_ARGS', 'human_control remove requires a hold id.');
-  }
-  const hold = releaseHumanControlHold(registry, holdId);
-  if (hold) onHoldReleased?.(hold);
-  return { ok: true, data: { released: Boolean(hold), ...(hold ? { hold } : {}) } };
-}
-
-function parsePayload(rawInput: string): unknown {
+function readHoldInput(raw: string) {
+  let input: unknown;
   try {
-    return JSON.parse(rawInput) as unknown;
+    input = JSON.parse(raw);
   } catch (error) {
     throw new AppError(
       'INVALID_ARGS',
@@ -55,4 +46,16 @@ function parsePayload(rawInput: string): unknown {
       error,
     );
   }
+  return parseHumanControlHoldInput(input);
+}
+
+function assertArgumentCount(positionals: string[], expected: number): void {
+  if (positionals.length !== expected) throw invalidArguments();
+}
+
+function invalidArguments(): AppError {
+  return new AppError(
+    'INVALID_ARGS',
+    'human_control requires list, put <id> <payload>, or remove <id>.',
+  );
 }

@@ -703,8 +703,7 @@ function resolveActiveConnectionDefaults(options: {
     options.command === 'connect' ||
     options.command === 'connection' ||
     options.command === 'daemon' ||
-    options.command === 'proxy' ||
-    options.command === 'takeover'
+    options.command === 'proxy'
   ) {
     return null;
   }
@@ -732,8 +731,7 @@ function shouldResolveRemoteAuth(command: string): boolean {
     command !== 'connection' &&
     command !== 'daemon' &&
     command !== 'device' &&
-    command !== 'proxy' &&
-    command !== 'takeover'
+    command !== 'proxy'
   );
 }
 

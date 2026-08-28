@@ -118,16 +118,18 @@ test('artifacts refuses an expired provider session after retention before lazy 
 });
 
 test('artifacts refuses a provider session returned after allocation expiry retention', async () => {
-  const clockValues = [1_000, 1_000, 1_099, 1_151] as const;
-  let clockIndex = 0;
+  let now = 1_000;
   const world = createWorld({
-    now: () => clockValues[Math.min(clockIndex++, clockValues.length - 1)] ?? 1_151,
+    now: () => now,
     defaultLeaseTtlMs: 100,
     minLeaseTtlMs: 1,
     maxLeaseTtlMs: 100,
     providerSessionRetentionMs: 50,
   });
-  world.lifecycle.allocate = async () => ({ providerSessionId: 'late-allocation-session' });
+  world.lifecycle.allocate = async (lease) => {
+    now = lease.expiresAt + 51;
+    return { providerSessionId: 'late-allocation-session' };
+  };
 
   await allocateLease(world, 'tenant-a', 'run-a');
   await assertProviderSessionNotOwned(world, {

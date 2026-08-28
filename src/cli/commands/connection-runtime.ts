@@ -7,8 +7,13 @@ import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 // see resolvePreviousOwnDaemonAuthToken below for why this must not be
 // resolveRemoteConfigProfile.
 import { readRemoteConfigFile } from '../../remote/remote-config-core.ts';
-import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import { proxyLeaseDeviceKey } from '../../core/lease-scope.ts';
+import {
+  deviceFieldsFromPublicPlatform,
+  isIosFamily,
+  publicPlatformString,
+  resolveDevice,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
 import {
   buildRemoteConnectionDaemonState,
@@ -841,7 +846,7 @@ async function resolveProxyLeaseState(options: {
     );
   }
   const device = await resolveSelectedDevice(options.client, options.flags);
-  const deviceKey = proxyLeaseDeviceKey(device);
+  const deviceKey = buildProxyDeviceKey(device);
   return {
     state: {
       ...options.state,
@@ -872,8 +877,36 @@ async function resolveSelectedDevice(
   client: AgentDeviceClient,
   flags: CliFlags,
 ): Promise<DeviceInfo> {
-  const { resolvePublicInventoryDevice } = await import('../../core/device-selection-resolver.ts');
-  return await resolvePublicInventoryDevice(client.devices, flags);
+  const devices = await client.devices.list({
+    platform: flags.platform,
+    target: flags.target,
+    device: flags.device,
+    udid: flags.udid,
+    serial: flags.serial,
+    iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
+    androidDeviceAllowlist: flags.androidDeviceAllowlist,
+  });
+  return await resolveDevice(
+    devices.map((device) => ({
+      ...deviceFieldsFromPublicPlatform(device.platform),
+      id: device.id,
+      name: device.name,
+      kind: device.kind,
+      target: device.target,
+      booted: device.booted,
+    })),
+    {
+      platform: flags.platform,
+      target: flags.target,
+      deviceName: flags.device,
+      udid: flags.udid,
+      serial: flags.serial,
+    },
+  );
+}
+
+function buildProxyDeviceKey(device: DeviceInfo): string {
+  return `${publicPlatformString(device)}:${device.target ?? 'mobile'}:${device.id}`;
 }
 
 function leaseBackendForDevice(device: DeviceInfo): LeaseBackend | undefined {

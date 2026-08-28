@@ -16,6 +16,7 @@ import type { SettingsUpdateOptions } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveCliOptions } from '../cli/resolve-cli-options.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { createStubClientLeases } from './test-utils/client-lease-fixtures.ts';
 
 // #1802: the replay client reads the script it names, so CLI-level replay cases need a real file.
 const REPLAY_SCRIPT_ROOT = mkdtempForTestSync('agent-device-cli-replay-scripts-');
@@ -1214,21 +1215,7 @@ function createStubClient(params: {
         identifiers: { session: options.session ?? 'default' },
       }),
     },
-    leases: {
-      allocate: async (options) => ({
-        leaseId: 'lease-1',
-        tenantId: options.tenant,
-        runId: options.runId,
-        backend: options.leaseBackend ?? 'ios-simulator',
-      }),
-      heartbeat: async (options) => ({
-        leaseId: options.leaseId,
-        tenantId: options.tenant ?? 'tenant',
-        runId: options.runId ?? 'run',
-        backend: options.leaseBackend ?? 'ios-simulator',
-      }),
-      release: async () => ({ released: true }),
-    },
+    leases: createStubClientLeases(),
     metro: {
       prepare:
         params.prepareMetro ??

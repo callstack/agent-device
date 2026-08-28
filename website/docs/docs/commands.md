@@ -110,25 +110,31 @@ agent-device metro reload
 
 ## Human Takeover
 
-Use `takeover` on the machine or VM that owns the simulator/device when a person needs to interact
-with it without racing the agent:
+Use `takeover` with an active remote connection when a person needs to interact with its leased
+device without racing the agent:
 
 ```bash
-agent-device takeover --platform ios
-agent-device takeover --platform android --serial emulator-5554
+agent-device takeover --session remote-session
+agent-device takeover status --session remote-session
+agent-device takeover release <hold-id> --session remote-session
 ```
 
-The command resolves the local target, installs a short-lived device-scoped hold, keeps it alive in
-the foreground, and releases it on Ctrl+C. While held, state-changing commands fail with
+The command uses the device from the admitted remote lease, installs a short-lived hold, keeps it
+alive in the foreground, and releases it on Ctrl+C. Activation waits for admitted mutations to finish
+before reporting active. While held, state-changing commands fail with
 `DEVICE_IN_USE` and `details.reason: "human_control_active"`, explaining that agent interactions are
 temporarily disabled. Snapshots, screenshots, selector reads, logs, and other read-only diagnostics
 remain available. The hold also
 protects an existing remote device lease from inactivity expiry so the human does not accidentally
 hand the simulator to a different agent.
 
-Use `agent-device takeover status` to list holds. A foreground hold expires automatically if its
-process disappears; `agent-device takeover release <hold-id>` is available for explicit recovery.
-`takeover` always controls the local daemon, even when the CLI has an active remote connection.
+A foreground hold expires automatically if its process disappears. Releasing or expiring the final
+hold refreshes the existing lease's inactivity window. Tenant commands can modify only holds owned
+by their admitted lease, not provider-host administrative holds.
+
+Holds do not survive daemon restart; reconnect and re-establish them before continuing human
+interaction. Local takeover without a device-scoped remote lease is not supported in this version.
+See [remote takeover and host administration](./remote-proxy.md#human-takeover) for the VM-side API.
 
 ## Web Automation
 

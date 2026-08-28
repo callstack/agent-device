@@ -46,7 +46,7 @@ const PINNED_TEST_FILE_LINES: Readonly<Record<string, number>> = Object.freeze({
   'test/integration/provider-scenarios/android-lifecycle.test.ts': 1556,
   'src/utils/__tests__/daemon-client-lifecycle.test.ts': 1413,
   'packages/platform-apple/src/runner/__tests__/runner-command-retry.test.ts': 1325,
-  'src/__tests__/cli-client-commands.test.ts': 1317,
+  'src/__tests__/cli-client-commands.test.ts': 1304,
   'src/__tests__/cli-config.test.ts': 1282,
   'src/daemon/handlers/__tests__/find.test.ts': 1199,
   'packages/platform-apple/src/core/__tests__/perf.test.ts': 1222,

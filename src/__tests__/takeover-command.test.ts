@@ -1,126 +1,115 @@
 import assert from 'node:assert/strict';
-import { beforeEach, test, vi } from 'vitest';
-import type { AgentDeviceClient } from '../agent-device-client.ts';
+import { afterEach, beforeEach, test, vi } from 'vitest';
+import { createAgentDeviceClient } from '../agent-device-client.ts';
 import {
   renderTakeoverStarted,
   renderTakeoverStatus,
   takeoverCommand,
 } from '../cli/commands/takeover.ts';
-import type { HumanControlHold } from '../daemon/human-control-contract.ts';
+import {
+  HUMAN_CONTROL_HOLD,
+  createControlLatch,
+} from '../daemon/__tests__/human-control-fixtures.ts';
+import type { DaemonRequest } from '@agent-device/kernel/contracts';
+import { TAKEOVER_CLI_FLAGS } from './test-utils/client-lease-fixtures.ts';
 
-const mocks = vi.hoisted(() => ({
-  sendRequest: vi.fn(),
-  writeCommandOutput: vi.fn(),
-}));
+const mocks = vi.hoisted(() => ({ writeCommandOutput: vi.fn() }));
+vi.mock('../cli/commands/shared.ts', () => ({ writeCommandOutput: mocks.writeCommandOutput }));
+beforeEach(() => mocks.writeCommandOutput.mockReset());
+afterEach(() => vi.useRealTimers());
 
-vi.mock('../daemon/client/daemon-client-lifecycle.ts', () => ({
-  ensureDaemon: async () => ({ info: { port: 1234, token: 'daemon-token' } }),
-  resolveClientSettings: () => ({ paths: { socketPath: '/tmp/daemon.sock' } }),
-}));
-
-vi.mock('../daemon/client/daemon-client-transport.ts', () => ({
-  sendRequest: mocks.sendRequest,
-}));
-
-vi.mock('../cli/commands/shared.ts', () => ({
-  writeCommandOutput: mocks.writeCommandOutput,
-}));
-
-const HOLD: HumanControlHold = {
-  id: 'takeover-1',
-  scope: { deviceKey: 'sim-1', deviceName: 'iPhone 17 Pro', platform: 'ios' },
-  reason: 'Human is interacting with the simulator.',
-  createdAt: 1_000,
-  updatedAt: 1_000,
-  expiresAt: 16_000,
-};
-
-beforeEach(() => {
-  mocks.sendRequest.mockReset();
-  mocks.writeCommandOutput.mockReset();
-});
-
-test('takeover output explains the active hold and release gesture', () => {
-  assert.equal(
-    renderTakeoverStarted(HOLD),
-    [
-      'Human control active for iPhone 17 Pro (sim-1).',
-      'Agent interactions are paused. Press Ctrl+C to return control.',
-      'Hold: takeover-1',
-    ].join('\n'),
+function clientForTest() {
+  const transport = vi.fn(async (req: Omit<DaemonRequest, 'token'>) => ({
+    ok: true as const,
+    data:
+      req.positionals?.[0] === 'list'
+        ? { holds: [HUMAN_CONTROL_HOLD] }
+        : req.positionals?.[0] === 'remove'
+          ? { released: true }
+          : { hold: { ...HUMAN_CONTROL_HOLD, id: req.positionals?.[1] } },
+  }));
+  const client = createAgentDeviceClient(
+    { session: 'remote-session', leaseId: 'lease-1', tenant: 'tenant-a', runId: 'run-a' },
+    { transport },
   );
-  assert.equal(renderTakeoverStatus([]), 'No active human-control holds.');
-  assert.match(renderTakeoverStatus([HOLD]), /takeover-1: iPhone 17 Pro \(sim-1\)/);
-});
-
-test('takeover status lists holds through the local daemon command', async () => {
-  mocks.sendRequest.mockResolvedValue({ ok: true, data: { holds: [HOLD] } });
-
-  assert.equal(await runTakeover(['status']), true);
-  assert.deepEqual(mocks.sendRequest.mock.calls[0]?.[1].positionals, ['list']);
-  assert.deepEqual(mocks.writeCommandOutput.mock.calls[0]?.[1], { holds: [HOLD] });
-});
-
-test('takeover release removes the named hold through the local daemon command', async () => {
-  mocks.sendRequest.mockResolvedValue({ ok: true, data: { released: true } });
-
-  assert.equal(await runTakeover(['release', 'takeover-1']), true);
-  assert.deepEqual(mocks.sendRequest.mock.calls[0]?.[1].positionals, ['remove', 'takeover-1']);
-  assert.deepEqual(mocks.writeCommandOutput.mock.calls[0]?.[1], {
-    holdId: 'takeover-1',
-    released: true,
-  });
-});
-
-test('takeover rejects malformed actions before contacting the daemon', async () => {
-  await assert.rejects(runTakeover(['status', 'extra']), /does not accept additional arguments/);
-  await assert.rejects(runTakeover(['release']), /requires a hold id/);
-  await assert.rejects(runTakeover(['unknown']), /accepts only/);
-  assert.equal(mocks.sendRequest.mock.calls.length, 0);
-});
-
-test('foreground takeover resolves the device through the public client inventory', async () => {
-  const list = vi.fn().mockResolvedValue([
-    {
-      platform: 'ios',
-      target: 'mobile',
-      kind: 'simulator',
-      id: 'sim-1',
-      name: 'iPhone 17 Pro',
-      booted: true,
-      identifiers: { udid: 'sim-1' },
-    },
-  ]);
-  mocks.sendRequest.mockImplementation(async (_daemon, request) => {
-    if (request.positionals[0] === 'put') {
-      setTimeout(() => process.emit('SIGINT'), 0);
-      return { ok: true, data: { hold: HOLD } };
-    }
-    return { ok: true, data: { released: true } };
-  });
-
-  await takeoverCommand({
-    positionals: [],
-    flags: { json: true, help: false, version: false, platform: 'ios', udid: 'sim-1' },
-    client: { devices: { list } } as unknown as AgentDeviceClient,
-  });
-
-  assert.equal(list.mock.calls[0]?.[0].platform, 'ios');
-  assert.equal(list.mock.calls[0]?.[0].udid, 'sim-1');
-  const putRequest = mocks.sendRequest.mock.calls.find(
-    (call) => call[1].positionals[0] === 'put',
-  )?.[1];
-  assert.equal(JSON.parse(putRequest.positionals[2]).scope.deviceKey, 'sim-1');
-  assert.equal(
-    mocks.sendRequest.mock.calls.some((call) => call[1].positionals[0] === 'remove'),
-    true,
-  );
-});
-
-async function runTakeover(positionals: string[]): Promise<boolean> {
-  return await takeoverCommand({
-    positionals,
-    flags: { json: false, help: false, version: false },
-    client: {} as AgentDeviceClient,
-  });
+  return { client, transport };
 }
+
+test('takeover output explains the hold and release gesture', () => {
+  assert.match(
+    renderTakeoverStarted(HUMAN_CONTROL_HOLD),
+    /Human control active for ios:mobile:sim-1/,
+  );
+  assert.match(renderTakeoverStarted(HUMAN_CONTROL_HOLD), /Press Ctrl\+C/);
+  assert.equal(renderTakeoverStatus([]), 'No active human-control holds.');
+  assert.match(renderTakeoverStatus([HUMAN_CONTROL_HOLD]), /operator-1: ios:mobile:sim-1/);
+});
+
+test('takeover status and release use the configured lease client', async () => {
+  const { client, transport } = clientForTest();
+  await takeoverCommand({ client, flags: TAKEOVER_CLI_FLAGS, positionals: ['status'] });
+  await takeoverCommand({
+    client,
+    flags: TAKEOVER_CLI_FLAGS,
+    positionals: ['release', 'operator-1'],
+  });
+  assert.deepEqual(
+    transport.mock.calls.map(([req]) => req.positionals),
+    [['list'], ['remove', 'operator-1']],
+  );
+  for (const [req] of transport.mock.calls) {
+    assert.equal(req.command, 'human_control');
+    assert.equal(req.session, 'remote-session');
+    assert.equal(req.meta?.leaseId, 'lease-1');
+  }
+});
+
+test('takeover rejects malformed actions without contacting the daemon', async () => {
+  const { client, transport } = clientForTest();
+  for (const positionals of [['release'], ['status', 'extra'], ['unknown']]) {
+    await assert.rejects(takeoverCommand({ client, flags: TAKEOVER_CLI_FLAGS, positionals }), {
+      code: 'INVALID_ARGS',
+    });
+  }
+  assert.equal(transport.mock.calls.length, 0);
+});
+
+test('foreground takeover renews its admitted lease hold and releases it on Ctrl+C', async () => {
+  vi.useFakeTimers();
+  const { client, transport } = clientForTest();
+  const started = createControlLatch();
+  mocks.writeCommandOutput.mockImplementationOnce(() => started.resolve());
+  const pending = takeoverCommand({ client, flags: TAKEOVER_CLI_FLAGS, positionals: [] });
+  await started.promise;
+  await vi.advanceTimersByTimeAsync(5_000);
+  process.emit('SIGINT');
+  assert.equal(await pending, true);
+  assert.deepEqual(
+    transport.mock.calls.map(([req]) => req.positionals?.[0]),
+    ['put', 'put', 'remove'],
+  );
+  assert.equal(
+    transport.mock.calls[0]?.[0].positionals?.[1],
+    transport.mock.calls[2]?.[0].positionals?.[1],
+  );
+  const input = JSON.parse(transport.mock.calls[0]?.[0].positionals?.[2] ?? '{}') as Record<
+    string,
+    unknown
+  >;
+  assert.equal(input.ttlMs, 15_000);
+  assert.equal(input.scope, undefined);
+});
+
+test('a failed heartbeat stops foreground takeover and attempts release', async () => {
+  vi.useFakeTimers();
+  const { client, transport } = clientForTest();
+  const started = createControlLatch();
+  mocks.writeCommandOutput.mockImplementationOnce(() => started.resolve());
+  const pending = takeoverCommand({ client, flags: TAKEOVER_CLI_FLAGS, positionals: [] });
+  const rejected = assert.rejects(pending, /heartbeat failed/);
+  await started.promise;
+  transport.mockRejectedValueOnce(new Error('heartbeat failed'));
+  await vi.advanceTimersByTimeAsync(5_000);
+  await rejected;
+  assert.equal(transport.mock.calls.at(-1)?.[0].positionals?.[0], 'remove');
+});

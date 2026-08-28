@@ -286,32 +286,7 @@ struct AgentDeviceMacOSHelper {
     let bundleId = optionValue(arguments: Array(arguments.dropFirst()), name: "--bundle-id")
     let surface = optionValue(arguments: Array(arguments.dropFirst()), name: "--surface")
     let app = try resolveTargetApplication(bundleId: bundleId, surface: surface)
-    let normalizedSurface = surface?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    let alertElement =
-      normalizedSurface == "frontmost-app"
-      ? findFocusedAlertElement()
-        ?? findAlertElement(appElement: AXUIElementCreateApplication(app.processIdentifier))
-      : findAlertElement(appElement: AXUIElementCreateApplication(app.processIdentifier))
-    if alertElement == nil,
-       action == "dismiss",
-       normalizedSurface == "frontmost-app",
-       let screenshotPath = optionValue(arguments: Array(arguments.dropFirst()), name: "--screenshot"),
-       let visualMatch = try dismissLocalNetworkPermissionAlertVisually(
-         screenshotPath: screenshotPath,
-         app: app
-       )
-    {
-      return SuccessEnvelope(
-        data: AlertResponse(
-          title: "Local Network",
-          role: "visual",
-          buttons: [visualMatch.buttonLabel],
-          action: action,
-          bundleId: app.bundleIdentifier
-        )
-      )
-    }
-    guard let alertElement else {
+    guard let alertElement = findAlertElement(appElement: AXUIElementCreateApplication(app.processIdentifier)) else {
       // `reason` is the typed channel the host retries on; the message is for humans only.
       throw HelperError.commandFailed(
         "alert not found",
@@ -610,9 +585,6 @@ func resolveTargetApplication(bundleId: String?, surface: String?) throws -> NSR
     )
   }
   if normalizedSurface == "frontmost-app" {
-    if let focused = focusedApplication() {
-      return focused
-    }
     if let frontmost = NSWorkspace.shared.frontmostApplication {
       return frontmost
     }
@@ -629,20 +601,6 @@ func resolveTargetApplication(bundleId: String?, surface: String?) throws -> NSR
     return frontmost
   }
   throw HelperError.commandFailed("unable to resolve target app")
-}
-
-private func focusedApplication() -> NSRunningApplication? {
-  guard let appElement = elementAttribute(
-    AXUIElementCreateSystemWide(),
-    attribute: kAXFocusedApplicationAttribute as String
-  ) else {
-    return nil
-  }
-  var processIdentifier: pid_t = 0
-  guard AXUIElementGetPid(appElement, &processIdentifier) == .success else {
-    return nil
-  }
-  return NSRunningApplication(processIdentifier: processIdentifier)
 }
 
 private func validatedBundleId(_ rawBundleId: String) throws -> String {
@@ -664,27 +622,6 @@ private func findAlertElement(appElement: AXUIElement) -> AXUIElement? {
     if let nested = findAlertElementRecursively(root: window, depth: 0) {
       return nested
     }
-  }
-  return nil
-}
-
-private func findFocusedAlertElement() -> AXUIElement? {
-  guard var element = elementAttribute(
-    AXUIElementCreateSystemWide(),
-    attribute: kAXFocusedUIElementAttribute as String
-  ) else {
-    return nil
-  }
-  for _ in 0..<8 {
-    if let role = stringAttribute(element, attribute: kAXRoleAttribute as String),
-       role == "AXSheet" || role == "AXDialog"
-    {
-      return element
-    }
-    guard let parent = elementAttribute(element, attribute: kAXParentAttribute as String) else {
-      return nil
-    }
-    element = parent
   }
   return nil
 }
@@ -748,7 +685,7 @@ private func resolveAlertActionButton(root: AXUIElement, buttons: [AXUIElement],
   let preferredLabels =
     action == "accept"
     ? ["allow", "ok", "open", "continue", "yes", "save", "install", "trust", "enable"]
-    : ["don't allow", "don’t allow", "deny", "cancel", "not now", "no", "close", "later", "ignore"]
+    : ["don't allow", "deny", "cancel", "not now", "no", "close", "later", "ignore"]
 
   for preferredLabel in preferredLabels {
     if let match = buttonEntries.first(where: { $0.label.contains(preferredLabel) }) {

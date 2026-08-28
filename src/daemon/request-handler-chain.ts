@@ -24,8 +24,6 @@ import type { PlatformRequestScope } from '@agent-device/contracts/platform-runt
 import type { RequestPlatformProviderScope } from '@agent-device/contracts/platform-providers';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
-import type { HumanControlHold } from './human-control-contract.ts';
-import type { HumanControlRegistry } from './human-control.ts';
 
 type RequestHandlerChainParams = {
   req: DaemonRequest;
@@ -37,8 +35,6 @@ type RequestHandlerChainParams = {
   providerRuntimeRequiredIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
-  humanControlRegistry?: HumanControlRegistry;
-  onHumanControlHoldReleased?: (hold: HumanControlHold) => void;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
   /**
@@ -135,8 +131,7 @@ async function runHumanControlHandler(
 ): Promise<DaemonResponse> {
   return await handleHumanControlCommand({
     req: params.req,
-    registry: params.humanControlRegistry,
-    onHoldReleased: params.onHumanControlHoldReleased,
+    registry: params.leaseRegistry,
   });
 }
 

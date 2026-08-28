@@ -136,9 +136,6 @@ jobs:
           xcodebuild test-without-building \
             -xctestrun "$XCTESTRUN_PATH" \
             -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.simulator-udid }}" \
-            -retry-tests-on-failure \
-            -test-iterations 2 \
-            -test-repetition-relaunch-enabled YES \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSinglePointerFlingFallsBackToXCTestCoordinateDragWhenPrivateSynthesisFails \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTypeWithoutResolvedInputReturnsTypedFailureBeforeDispatchingText \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden \

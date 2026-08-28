@@ -6,7 +6,10 @@ import {
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
 } from '../../__tests__/test-utils/loopback.ts';
-import { HUMAN_CONTROL_HTTP_PREFIX, HumanControlRegistry } from '../human-control.ts';
+import { HUMAN_CONTROL_HTTP_PREFIX } from '../human-control-contract.ts';
+import { LeaseRegistry } from '../lease-registry.ts';
+import { HUMAN_CONTROL_SCOPE, humanControlRequest } from './human-control-fixtures.ts';
+import { createHumanControlHarness } from './human-control-router-fixture.ts';
 import { tryHandleHumanControlHttpRoute } from '../human-control-http.ts';
 import { createDaemonHttpServer } from '../server/http-server.ts';
 
@@ -35,7 +38,7 @@ test('malformed request URLs return a normalized error', async () => {
       req,
       res,
       expectedToken: 'daemon-secret',
-      registry: new HumanControlRegistry(),
+      registry: new LeaseRegistry(),
     }),
     true,
   );
@@ -44,134 +47,65 @@ test('malformed request URLs return a normalized error', async () => {
   assert.equal((JSON.parse(responseBody) as { code?: string }).code, 'INVALID_ARGS');
 });
 
-test('daemon human-control API authenticates and manages persistent holds', async (t) => {
+test('host administration and tenant RPC use the same lease registry with distinct authority', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
-
-  const registry = new HumanControlRegistry();
-  let releasedHoldId: string | undefined;
-  let handlerCalls = 0;
+  const { registry, lease, handleRequest } = createHumanControlHarness();
   const server = await createDaemonHttpServer({
-    token: 'daemon-secret',
-    humanControlRegistry: registry,
-    onHumanControlHoldReleased: (hold) => {
-      releasedHoldId = hold.id;
-    },
-    handleRequest: async (request) => {
-      handlerCalls += 1;
-      if (request.command === 'click') {
-        return {
-          ok: false,
-          error: {
-            code: 'DEVICE_IN_USE',
-            message:
-              'A human is interacting with this simulator or device; agent interactions are temporarily disabled.',
-            details: { reason: 'human_control_active' },
-          },
-        };
-      }
-      return { ok: true, data: {} };
-    },
+    token: 'test-token',
+    leaseRegistry: registry,
+    handleRequest,
   });
-
   try {
     const port = await listenOnLoopback(server);
-    const baseUrl = `http://127.0.0.1:${String(port)}${HUMAN_CONTROL_HTTP_PREFIX}`;
-    const unauthorized = await fetch(baseUrl);
-    assert.equal(unauthorized.status, 401);
-    assert.deepEqual(await unauthorized.json(), {
-      ok: false,
-      error: 'Invalid token',
-      code: 'UNAUTHORIZED',
-    });
-
-    const malformedHoldId = await fetch(`${baseUrl}/%`, {
+    const origin = `http://127.0.0.1:${String(port)}`;
+    const baseUrl = origin + HUMAN_CONTROL_HTTP_PREFIX;
+    const headers = { authorization: 'Bearer test-token', 'content-type': 'application/json' };
+    const denied = await fetch(baseUrl, { headers: { authorization: 'Bearer tenant-credential' } });
+    assert.equal(denied.status, 401);
+    const invalid = await fetch(baseUrl + '/console', {
       method: 'PUT',
-      headers: {
-        authorization: 'Bearer daemon-secret',
-        'content-type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({ scope: { deviceKey: 'sim-1' } }),
     });
-    assert.equal(malformedHoldId.status, 400);
-    assert.equal(((await malformedHoldId.json()) as { code?: string }).code, 'INVALID_ARGS');
-
-    const socketOnlyRpc = await fetch(`http://127.0.0.1:${String(port)}/rpc`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 'human-control-rpc',
-        method: 'agent_device.command',
-        params: {
-          token: 'daemon-secret',
-          command: 'human_control',
-          positionals: ['list'],
-        },
-      }),
-    });
-    assert.equal(socketOnlyRpc.status, 404);
-    assert.match(JSON.stringify(await socketOnlyRpc.json()), /socket-only/);
-
-    const created = await fetch(`${baseUrl}/vm-console`, {
+    assert.equal(invalid.status, 400);
+    const created = await fetch(baseUrl + '/host', {
       method: 'PUT',
-      headers: {
-        authorization: 'Bearer daemon-secret',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        scope: {
-          deviceKey: 'sim-1',
-          deviceName: 'iPhone 17 Pro',
-          platform: 'ios',
-          kind: 'simulator',
-        },
-        reason: 'Human is using the VM console.',
-      }),
+      headers,
+      body: JSON.stringify({ scope: HUMAN_CONTROL_SCOPE }),
     });
     assert.equal(created.status, 200);
-    const createdBody = (await created.json()) as {
-      hold?: { id?: string; expiresAt?: number };
-      state?: string;
+    const body = (await created.json()) as { state: string; hold: { scope: unknown } };
+    assert.equal(body.state, 'active');
+    assert.deepEqual(body.hold.scope, HUMAN_CONTROL_SCOPE);
+
+    const rpc = async (command: string, positionals: string[]) => {
+      const request = humanControlRequest(lease, command, positionals);
+      return await fetch(origin + '/rpc', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'takeover-rpc',
+          method: 'agent_device.command',
+          params: request,
+        }),
+      });
     };
-    assert.equal(createdBody.hold?.id, 'vm-console');
-    assert.equal(createdBody.hold?.expiresAt, undefined);
-    assert.equal(createdBody.state, 'active');
+    assert.equal((await rpc('human_control', ['put', 'tenant', '{}'])).status, 200);
+    const blocked = await rpc('click', ['10', '10']);
+    assert.equal(blocked.status, 423);
+    assert.match(JSON.stringify(await blocked.json()), /human_control_active/);
+    assert.equal((await rpc('snapshot', [])).status, 200);
+    assert.equal((await rpc('human_control', ['remove', 'host'])).status, 401);
+    assert.equal((await rpc('human_control', ['remove', 'tenant'])).status, 200);
+    assert.equal((await rpc('click', ['10', '10'])).status, 423);
 
-    const blockedRpc = await fetch(`http://127.0.0.1:${String(port)}/rpc`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 'blocked-click',
-        method: 'agent_device.command',
-        params: {
-          token: 'daemon-secret',
-          command: 'click',
-          positionals: ['10', '10'],
-        },
-      }),
-    });
-    assert.equal(blockedRpc.status, 423);
-    assert.match(JSON.stringify(await blockedRpc.json()), /DEVICE_IN_USE/);
-
-    const listed = await fetch(baseUrl, {
-      headers: { 'x-agent-device-token': 'daemon-secret' },
-    });
+    const listed = await fetch(baseUrl, { headers });
     assert.equal(listed.status, 200);
-    const listedBody = (await listed.json()) as { holds?: Array<{ id?: string }> };
-    assert.deepEqual(
-      listedBody.holds?.map((hold) => hold.id),
-      ['vm-console'],
-    );
-
-    const removed = await fetch(`${baseUrl}/vm-console`, {
-      method: 'DELETE',
-      headers: { authorization: 'Bearer daemon-secret' },
-    });
-    assert.equal(removed.status, 200);
-    assert.equal(((await removed.json()) as { released?: boolean }).released, true);
-    assert.equal(releasedHoldId, 'vm-console');
-    assert.equal(handlerCalls, 1);
+    assert.equal(((await listed.json()) as { holds: unknown[] }).holds.length, 1);
+    const released = await fetch(baseUrl + '/host', { method: 'DELETE', headers });
+    assert.equal(released.status, 200);
+    assert.deepEqual(registry.listHumanControlHolds({ kind: 'host' }), []);
   } finally {
     await closeLoopbackServer(server);
   }

@@ -19,7 +19,6 @@ import type {
   DragOptions,
   FlingOptions,
   InternalRequestOptions,
-  Lease,
   MaterializationReleaseOptions,
   PanOptions,
   PinchOptions,
@@ -79,6 +78,7 @@ import {
   type MetroSessionHints,
 } from './metro/metro-session-hints.ts';
 import { isRecord } from '@agent-device/kernel/record';
+import { createLeaseClient } from './client/lease-client.ts';
 import { readScreenshotResultData } from './utils/screenshot-result.ts';
 
 type ProjectedSystemCommandClient = ProjectedNavigationCommandClient<InternalRequestOptions> &
@@ -316,21 +316,7 @@ export function createAgentDeviceClient(
           }),
         ),
     },
-    leases: {
-      allocate: async (options) =>
-        normalizeLease(
-          await execute(INTERNAL_COMMANDS.leaseAllocate, [], {
-            ...options,
-            leaseId: undefined,
-          }),
-        ),
-      heartbeat: async (options) =>
-        normalizeLease(await execute(INTERNAL_COMMANDS.leaseHeartbeat, [], options)),
-      release: async (options) => {
-        const data = await execute(INTERNAL_COMMANDS.leaseRelease, [], options);
-        return { released: data.released === true, provider: readObject(data.provider) };
-      },
-    },
+    leases: createLeaseClient(execute),
     metro: {
       prepare: async (options: MetroPrepareOptions) => {
         const result = await prepareMetroRuntime({
@@ -675,25 +661,6 @@ function clearMetroSessionHintsQuietly(
   } catch {
     // Session-hint cleanup is best-effort; close must not fail on local file state.
   }
-}
-
-function normalizeLease(data: Record<string, unknown>): Lease {
-  const rawLease = data.lease;
-  if (!isRecord(rawLease)) {
-    throw new Error('Invalid lease response from daemon');
-  }
-  return {
-    leaseId: readRequiredString(rawLease, 'leaseId'),
-    tenantId: readRequiredString(rawLease, 'tenantId'),
-    runId: readRequiredString(rawLease, 'runId'),
-    backend: readRequiredString(rawLease, 'backend') as Lease['backend'],
-    leaseProvider: readOptionalString(rawLease, 'leaseProvider'),
-    clientId: readOptionalString(rawLease, 'clientId'),
-    deviceKey: readOptionalString(rawLease, 'deviceKey'),
-    createdAt: typeof rawLease.createdAt === 'number' ? rawLease.createdAt : undefined,
-    heartbeatAt: typeof rawLease.heartbeatAt === 'number' ? rawLease.heartbeatAt : undefined,
-    expiresAt: typeof rawLease.expiresAt === 'number' ? rawLease.expiresAt : undefined,
-  };
 }
 
 export type * from './client/client-types.ts';

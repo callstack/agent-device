@@ -167,10 +167,10 @@ test('usageForCommand resolves Maestro compatibility help topic', async () => {
   assert.doesNotMatch(help, /issues\/558/);
 });
 
-test('remote help documents host-local takeover controls', async () => {
+test('remote help documents lease-bound takeover and distinct host administration', async () => {
   const help = await usageForCommand('remote');
   if (help === null) throw new Error('Expected remote help text');
-  assert.match(help, /agent-device takeover --platform ios/);
+  assert.match(help, /agent-device takeover --session remote-session/);
   assert.match(help, /authenticated GET\/PUT\/DELETE requests/);
   assert.match(help, /not forwarded by agent-device proxy/);
 });

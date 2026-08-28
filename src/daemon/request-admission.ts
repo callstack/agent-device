@@ -3,6 +3,7 @@ import { normalizeTenantId, resolveSessionIsolationMode } from './config.ts';
 import { isTenantOwnedSessionName, tenantScopedSessionName } from './session-tenant-scope.ts';
 import {
   isLeaseAdmissionExempt,
+  isHumanControlMutation,
   isSessionlessPlainCloseAdmissionExempt,
 } from './daemon-command-registry.ts';
 import {
@@ -91,7 +92,13 @@ export function assertRequestLeaseAdmission(
   ) {
     return undefined;
   }
-  if (!sessionLease && req.meta?.sessionIsolation !== 'tenant') {
+  if (req.command === 'human_control' && !sessionLease && !requestLeaseScope.leaseId) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'Takeover requires an active remote device lease. Local takeover is not supported.',
+    );
+  }
+  if (req.command !== 'human_control' && !sessionLease && req.meta?.sessionIsolation !== 'tenant') {
     if (!requestLeaseScope.leaseId) return undefined;
     if (!requestLeaseScope.tenantId && !requestLeaseScope.runId) return undefined;
   }
@@ -104,7 +111,9 @@ export function assertRequestLeaseAdmission(
       (isProxyLeaseScope(leaseScope) ? DEFAULT_PROXY_LEASE_TTL_MS : undefined),
   };
   leaseRegistry.assertLeaseAdmission(leaseScopeToHeartbeatRequest(leaseScope));
-  return leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(heartbeatLeaseScope));
+  const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(heartbeatLeaseScope));
+  if (isHumanControlMutation(req)) leaseRegistry.assertHumanControlAdmission(lease);
+  return lease;
 }
 
 export function assertRequestLeaseAdmissionPreflight(req: DaemonRequest): void {

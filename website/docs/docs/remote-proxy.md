@@ -53,24 +53,31 @@ Do not put proxy endpoint, token, tenant, or provider fields in `./agent-device.
 configuration is intentionally limited to project-safe automation defaults. Use `connect proxy`, user
 config, an explicit `--config` file, or protected CI environment variables for the endpoint and token.
 
-## Human Takeover on the Host
+## Human Takeover
 
-If a person needs the simulator or device, run this on the host—not on the remote agent client:
+With a remote device already leased by `open`, pause mutations through the same connection:
 
 ```bash
-agent-device takeover --platform ios
+agent-device takeover --session remote-session
 ```
 
-The local daemon pauses state-changing agent commands for the selected device until Ctrl+C. Read-only
-diagnostics remain available, and an existing remote lease is preserved during the hold.
+The foreground command renews its hold until Ctrl+C. Read-only diagnostics remain available, the
+agent session stays open, and its lease is protected from inactivity expiry. Activation waits for
+already-admitted mutations to finish. Status and recovery use `takeover status` and
+`takeover release <hold-id>` with the same session.
 
-VM-side automation can use the same feature without a foreground CLI process. Read the local
-daemon's `httpPort` and `token` from `daemon.json` in the effective state directory, then call the
-loopback-only API with either `Authorization: Bearer <daemon-token>` or
-`X-Agent-Device-Token: <daemon-token>`:
+Lease-owner operations use ordinary `agent_device.command` RPCs at `POST /rpc`, with command
+`human_control` and positionals `["list"]`, `["put", "<hold-id>", "{\"ttlMs\":15000}"]`, or
+`["remove", "<hold-id>"]`. Supply the same tenant, run, client, lease, backend, provider, and device
+metadata as other requests. The PUT payload contains only `reason` and `ttlMs`; the server derives
+the target from the admitted lease. It rejects caller-supplied `scope`.
 
-The API is available when the daemon runs with an HTTP listener, including remote-mode daemons. A
-default socket-only local daemon should use the `takeover` CLI command instead.
+### Host administration
+
+VM-side automation can manage holds independently of a tenant. Read the daemon's `httpPort` and
+`token` from `daemon.json` in its effective state directory, then use the loopback listener with
+`Authorization: Bearer <daemon-token>` or `X-Agent-Device-Token: <daemon-token>`. An HTTP listener
+is required. A tenant credential does not grant this capability.
 
 ```text
 PUT    /admin/human-control/holds/<hold-id>
@@ -78,21 +85,28 @@ GET    /admin/human-control/holds
 DELETE /admin/human-control/holds/<hold-id>
 ```
 
-A PUT body has the shape below. Omitting `ttlMs` creates a persistent hold that must be deleted;
-including it creates an expiring hold.
+The host PUT body names the exact lease contention identity, including its backend and provider.
+Use the lease's `deviceKey`, not a bare device ID or a display name:
 
 ```json
 {
   "scope": {
-    "deviceKey": "<simulator-udid>",
-    "deviceName": "iPhone 17 Pro",
-    "platform": "ios",
-    "kind": "simulator"
+    "backend": "ios-instance",
+    "leaseProvider": "proxy",
+    "deviceKey": "ios:mobile:<simulator-udid>"
   },
   "reason": "Human is using the VM console.",
   "ttlMs": 15000
 }
 ```
+
+Repeated PUT renews the hold. Omitting `ttlMs` keeps it until explicit release or daemon shutdown.
+Tenant RPCs cannot modify host holds. Multiple holds can coexist; mutations resume only when all
+holds on the device end.
+
+Holds do not survive daemon restart, matching lease state. Reconnect and re-establish the hold
+before continuing human interaction. Local takeover without a device-scoped remote lease is
+deferred; this does not provide a host-global fence across local daemons.
 
 ## What Is Exposed
 
