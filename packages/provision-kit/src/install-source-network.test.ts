@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import dns from 'node:dns/promises';
 import { afterEach, test, vi } from 'vitest';
-import { approvePublicNetworkUrl, isBlockedIpAddress } from './install-source-network.ts';
+import {
+  approvePublicNetworkUrl,
+  isBlockedIpAddress,
+  isBlockedSourceHostname,
+} from './install-source-network.ts';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -27,6 +31,32 @@ test('blocks loopback, private, link-local, shared, and reserved address classes
   assert.equal(isBlockedIpAddress('2001:4860:4860::8888'), false);
 });
 
+test('rejects credentials and malformed hosts before DNS lookup', async () => {
+  const lookupMock = vi.spyOn(dns, 'lookup');
+
+  await assert.rejects(
+    approvePublicNetworkUrl(new URL('https://user:pass@example.test/artifact'), {
+      label: 'source URL',
+    }),
+    /credentials are not allowed/,
+  );
+  await assert.rejects(
+    approvePublicNetworkUrl(
+      {
+        protocol: 'https:',
+        username: '',
+        password: '',
+        hostname: 'bad%host',
+      } as URL,
+      { label: 'source URL' },
+    ),
+    /host is not allowed/,
+  );
+
+  assert.equal(isBlockedSourceHostname('bad%host'), true);
+  assert.equal(lookupMock.mock.calls.length, 0);
+});
+
 test('rejects a hostname when any DNS answer is non-public', async () => {
   vi.spyOn(dns, 'lookup').mockResolvedValue([
     { address: '93.184.216.34', family: 4 },
@@ -39,6 +69,27 @@ test('rejects a hostname when any DNS answer is non-public', async () => {
     }),
     /non-public address/,
   );
+});
+
+test('fails closed when DNS resolution fails or returns no answers', async () => {
+  const lookupMock = vi
+    .spyOn(dns, 'lookup')
+    .mockRejectedValueOnce(new Error('DNS unavailable'))
+    .mockResolvedValueOnce([] as never);
+
+  await assert.rejects(
+    approvePublicNetworkUrl(new URL('https://unavailable.example/artifact'), {
+      label: 'source URL',
+    }),
+    /host could not be resolved/,
+  );
+  await assert.rejects(
+    approvePublicNetworkUrl(new URL('https://empty.example/artifact'), {
+      label: 'source URL',
+    }),
+    /host could not be resolved/,
+  );
+  assert.equal(lookupMock.mock.calls.length, 2);
 });
 
 test('returns the approved address and family for a public literal', async () => {

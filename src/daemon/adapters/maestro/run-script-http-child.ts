@@ -188,7 +188,7 @@ function readInput(): unknown {
   return JSON.parse(readFileSync(0, 'utf8')) as unknown;
 }
 
-function parseInput(value: unknown): RunScriptHttpRequest {
+export function parseRunScriptHttpRequest(value: unknown): RunScriptHttpRequest {
   const record = parseInputRecord(value);
   return {
     method: parseMethod(record.method),
@@ -244,7 +244,7 @@ function parseNetworkAccess(value: unknown): DaemonNetworkAccessPolicy {
 }
 
 async function runChild(): Promise<void> {
-  const response = await executeRunScriptHttpRequest(parseInput(readInput()));
+  const response = await executeRunScriptHttpRequest(parseRunScriptHttpRequest(readInput()));
   process.stdout.write(JSON.stringify(response));
 }
 
