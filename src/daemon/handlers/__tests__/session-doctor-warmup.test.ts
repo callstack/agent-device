@@ -10,8 +10,8 @@ const { mockAppleRunnerWarmupCheck } = vi.hoisted(() => ({
   mockAppleRunnerWarmupCheck: vi.fn(),
 }));
 
-vi.mock('@agent-device/platform-apple', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/platform-apple')>()),
+vi.mock('@agent-device/platform-apple/doctor', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/platform-apple/doctor')>()),
   appleRunnerWarmupCheck: mockAppleRunnerWarmupCheck,
 }));
 vi.mock('../session-doctor-device.ts', async (importOriginal) => {

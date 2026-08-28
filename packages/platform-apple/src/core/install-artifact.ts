@@ -1,4 +1,3 @@
-import { fs } from '@agent-device/host-kit/filesystem';
 import path from 'node:path';
 import type { LocalInstallSource } from '@agent-device/kernel/contracts';
 import { readIosBundleInfo } from './bundle-info.ts';
@@ -15,7 +14,11 @@ import {
   isTrustedInstallSourceUrl,
   materializeInstallablePath,
 } from '@agent-device/provision-kit/install-source';
-import { hostTemporaryDirectory } from '@agent-device/host-kit/environment';
+import {
+  makeHostTemporaryDirectory,
+  readHostDirectory,
+  removeHostPath,
+} from '@agent-device/host-kit/host-file';
 
 type InstallIosArtifactOptions = {
   appIdentifierHint?: string;
@@ -114,9 +117,9 @@ async function resolveIosIpaInstallablePath(
   appPath: string,
   options?: InstallIosArtifactOptions,
 ): Promise<{ installPath: string; cleanup: () => Promise<void> }> {
-  const tempDir = await fs.mkdtemp(path.join(hostTemporaryDirectory(), 'agent-device-ios-ipa-'));
+  const tempDir = await makeHostTemporaryDirectory('agent-device-ios-ipa-');
   const cleanup = async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await removeHostPath(tempDir);
   };
   try {
     const outputRoot = path.join(tempDir, 'extracted');
@@ -132,9 +135,11 @@ async function resolveIosIpaInstallablePath(
     });
     noteInstallArtifactArchiveDepth(depth);
     const payloadDir = path.join(outputRoot, 'Payload');
-    const payloadEntries = await fs.readdir(payloadDir, { withFileTypes: true }).catch(() => {
-      throw new AppError('INVALID_ARGS', 'Invalid IPA: missing Payload directory');
-    });
+    const payloadEntries = await readHostDirectory(payloadDir, { withFileTypes: true }).catch(
+      () => {
+        throw new AppError('INVALID_ARGS', 'Invalid IPA: missing Payload directory');
+      },
+    );
     const appBundles: IosPayloadAppBundle[] = payloadEntries
       .filter((entry) => entry.isDirectory() && entry.name.toLowerCase().endsWith('.app'))
       .map((entry) => ({

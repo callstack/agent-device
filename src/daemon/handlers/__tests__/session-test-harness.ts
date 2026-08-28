@@ -34,8 +34,9 @@ vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => 
     clearRuntimeHintValues: vi.fn(async () => {}),
   };
 });
-vi.mock('@agent-device/platform-apple', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-apple')>();
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
   return {
     ...actual,
     prepareIosRunner: vi.fn(async () => ({
@@ -48,7 +49,20 @@ vi.mock('@agent-device/platform-apple', async (importOriginal) => {
     notifyIosRunnerAppRelaunched: vi.fn(async () => {}),
     scheduleIosRunnerIdleStop: vi.fn(),
     stopIosRunnerSession: vi.fn(async () => {}),
+  };
+});
+vi.mock('@agent-device/platform-apple/macos', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-apple/macos')>();
+  return {
+    ...actual,
     runMacOsAlertAction: vi.fn(async () => {}),
+  };
+});
+vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/platform-apple/app-resolution')>();
+  return {
+    ...actual,
     resolveIosApp: vi.fn(async () => undefined),
     resolveIosSimulatorDeepLinkBundleId: vi.fn(async () => undefined),
   };
@@ -89,12 +103,14 @@ import {
   prewarmAppleRunnerCache,
   prewarmIosRunnerSession,
   notifyIosRunnerAppRelaunched,
-  runMacOsAlertAction,
-  resolveIosApp,
-  resolveIosSimulatorDeepLinkBundleId,
   scheduleIosRunnerIdleStop,
   stopIosRunnerSession,
-} from '@agent-device/platform-apple';
+} from '@agent-device/platform-apple/runner/operations';
+import { runMacOsAlertAction } from '@agent-device/platform-apple/macos';
+import {
+  resolveIosApp,
+  resolveIosSimulatorDeepLinkBundleId,
+} from '@agent-device/platform-apple/app-resolution';
 import { resolveAndroidPackageForOpen } from '../../../platform-runtime-open-target.ts';
 import { runCmd } from '@agent-device/host-kit/command';
 import { dispatchApplicationLifecycleEffect } from '../../__tests__/application-lifecycle-runtime-fixture.ts';

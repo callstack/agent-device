@@ -1,5 +1,5 @@
-import { fs } from '@agent-device/host-kit/filesystem';
 import path from 'node:path';
+import { hostFileStat, readHostDirectory } from '@agent-device/host-kit/host-file';
 import type { AppleImage, DsymMatch, DsymSlice } from './types.ts';
 import { normalizeUuid, unique } from './utils.ts';
 import { requireExecSuccess, runCmd } from '@agent-device/host-kit/command';
@@ -48,7 +48,7 @@ async function findDsymBundles(root: string): Promise<string[]> {
       found.push(current);
       return;
     }
-    const entries = await fs.readdir(current, { withFileTypes: true });
+    const entries = await readHostDirectory(current, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       await walk(path.join(current, entry.name));
@@ -61,9 +61,9 @@ async function findDsymBundles(root: string): Promise<string[]> {
 async function readSearchPathStat(
   current: string,
   root: string,
-): Promise<Awaited<ReturnType<typeof fs.stat>>> {
+): Promise<Awaited<ReturnType<typeof hostFileStat>>> {
   try {
-    return await fs.stat(current);
+    return await hostFileStat(current);
   } catch {
     throw new AppError('INVALID_ARGS', `debug symbols search path does not exist: ${root}`, {
       hint: 'Pass an existing build products directory to --search-path, or pass --dsym <App.dSYM> directly.',
@@ -104,7 +104,7 @@ async function readDsymBundleSlices(dsymPath: string, dwarfdump: string): Promis
 }
 
 async function assertDsymBundlePath(dsymPath: string): Promise<void> {
-  const stat = await fs.stat(dsymPath).catch(() => null);
+  const stat = await hostFileStat(dsymPath).catch(() => null);
   if (stat?.isDirectory() && dsymPath.endsWith('.dSYM')) return;
   throw new AppError('INVALID_ARGS', `Not a .dSYM bundle: ${dsymPath}`, {
     hint: 'Pass the .dSYM bundle path, not the DWARF executable inside it.',

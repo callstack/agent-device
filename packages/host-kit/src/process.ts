@@ -12,6 +12,7 @@ export {
   isProcessGroupAlive,
   isProcessZombie,
   listHostProcesses,
+  readHostEnvironmentVariable,
   readHostProcessIdentityObservations,
   readProcessCommand,
   readProcessStartTime,
@@ -20,6 +21,7 @@ export {
   stopPidsWithEscalation,
   uniquePositivePids,
   waitForProcessExit,
+  writeHostStderr,
 } from './internal/host-process.ts';
 export { reapOwnedProcessRecordsAtStartup } from './internal/owned-process-reaper.ts';
 export {

@@ -10,7 +10,7 @@ export function createAppInventoryRuntimeHost(): AppInventoryRuntimeHost {
   return Object.freeze({
     apple: Object.freeze({
       listApps: async (device: DeviceInfo, filter: AppsFilter) => {
-        const { listIosApps } = await import('@agent-device/platform-apple');
+        const { listIosApps } = await import('@agent-device/platform-apple/app-resolution');
         return mapAppleApps(await listIosApps(device, filter));
       },
     }),

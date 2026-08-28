@@ -43,7 +43,7 @@ export function createAudioProbeRuntimeHost(
         bucketMs: number;
         statusPath: string;
       }): Promise<HostAudioCaptureProcess> => {
-        const { startMacOsAudioProbeProcess } = await import('@agent-device/platform-apple');
+        const { startMacOsAudioProbeProcess } = await import('@agent-device/platform-apple/macos');
         const probe = await startMacOsAudioProbeProcess(input);
         const marker = await resolveManagedProcessIdentity(probe.child.pid ?? undefined);
         return Object.freeze({

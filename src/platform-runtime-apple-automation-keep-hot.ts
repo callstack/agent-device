@@ -3,7 +3,7 @@ import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-
 export function createAppleAutomationKeepHotHost(): DeviceReadinessRuntimeHost['appleAutomation'] {
   return Object.freeze({
     keepHot: (device) => {
-      void import('@agent-device/platform-apple')
+      void import('@agent-device/platform-apple/runner/operations')
         .then(({ prewarmAppleRunnerCache }) => prewarmAppleRunnerCache(device, {}))
         .catch(() => {});
     },

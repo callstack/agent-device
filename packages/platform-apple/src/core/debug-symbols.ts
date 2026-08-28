@@ -1,6 +1,11 @@
-import { fs } from '@agent-device/host-kit/filesystem';
 import path from 'node:path';
-import { hostWorkingDirectory } from '@agent-device/host-kit/environment';
+import {
+  ensureHostDirectory,
+  hostFileStat,
+  readHostTextFile,
+  writeHostTextFile,
+} from '@agent-device/host-kit/host-file';
+import { hostCurrentWorkingDirectory } from '@agent-device/host-kit/process';
 import { readAppleCrashArtifact } from './debug-symbols/crash-artifact.ts';
 import { matchImagesToDsyms, readDsymPaths, readDsymSlices } from './debug-symbols/dsym.ts';
 import { summarizeCrashArtifact } from './debug-symbols/report.ts';
@@ -21,7 +26,7 @@ export async function symbolicateCrashArtifact(
       hint: 'Use debug symbols --artifact <crash.ips|crash.log> --dsym <App.dSYM> or --search-path <dir> --out <path>.',
     });
   }
-  const cwd = options.cwd ?? hostWorkingDirectory();
+  const cwd = options.cwd ?? hostCurrentWorkingDirectory();
   const artifactPath = resolvePath(cwd, options.artifact);
   const outPath = resolvePath(cwd, options.out ?? defaultOutPath(artifactPath));
   const artifactText = await readTextFile(artifactPath, 'crash artifact');
@@ -45,8 +50,8 @@ export async function symbolicateCrashArtifact(
   const addressMap = await symbolicateAddresses(crash.addresses, matched, tools.atos);
   const output = crash.write(addressMap);
 
-  await fs.mkdir(path.dirname(outPath), { recursive: true });
-  await fs.writeFile(outPath, output, 'utf8');
+  await ensureHostDirectory(path.dirname(outPath));
+  await writeHostTextFile(outPath, output);
 
   const matchedImages = [...matched.values()].map(({ image, dsym }) => ({
     name: image.name,
@@ -91,7 +96,7 @@ function throwUnsupportedArtifact(): never {
 async function readTextFile(filePath: string, label: string): Promise<string> {
   await assertTextFileWithinLimit(filePath, label);
   try {
-    return await fs.readFile(filePath, 'utf8');
+    return await readHostTextFile(filePath);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new AppError('INVALID_ARGS', `Failed to read ${label}: ${filePath}`, { message });
@@ -100,7 +105,7 @@ async function readTextFile(filePath: string, label: string): Promise<string> {
 
 async function assertTextFileWithinLimit(filePath: string, label: string): Promise<void> {
   try {
-    const stats = await fs.stat(filePath);
+    const stats = await hostFileStat(filePath);
     if (stats.size <= MAX_CRASH_ARTIFACT_BYTES) return;
     throw new AppError('INVALID_ARGS', `${label} is too large: ${filePath}`, {
       actualBytes: stats.size,

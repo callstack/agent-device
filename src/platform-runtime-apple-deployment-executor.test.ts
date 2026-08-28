@@ -6,7 +6,7 @@ const { invalidateIosAppResolutionCache, resolveIosApp } = vi.hoisted(() => ({
   resolveIosApp: vi.fn(),
 }));
 
-vi.mock('@agent-device/platform-apple', () => ({
+vi.mock('@agent-device/platform-apple/app-resolution', () => ({
   invalidateIosAppResolutionCache,
   resolveIosApp,
 }));

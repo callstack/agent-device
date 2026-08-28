@@ -89,7 +89,8 @@ export async function captureAppleClockAnchor(
     ) {
       return undefined;
     }
-    const { runAppleRunnerCommand } = await import('@agent-device/platform-apple');
+    const { runAppleRunnerCommand } =
+      await import('@agent-device/platform-apple/runner/operations');
     const result = await runAppleRunnerCommand(
       device,
       { command: 'snapshot', appBundleId, interactiveOnly: true, depth: 1 },

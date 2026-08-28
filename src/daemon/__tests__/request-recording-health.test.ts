@@ -2,11 +2,11 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../types.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 
-vi.mock('@agent-device/platform-apple', () => ({
+vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   getRunnerSessionSnapshot: vi.fn(),
 }));
 
-import { getRunnerSessionSnapshot } from '@agent-device/platform-apple';
+import { getRunnerSessionSnapshot } from '@agent-device/platform-apple/runner/operations';
 import { refreshRecordingHealth } from '../request-recording-health.ts';
 
 const mockGetRunnerSessionSnapshot = vi.mocked(getRunnerSessionSnapshot);

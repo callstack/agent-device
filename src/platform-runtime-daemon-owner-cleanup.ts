@@ -7,7 +7,8 @@ import type { DaemonOwnerCleanup } from '@agent-device/contracts/daemon-owner-cl
 export function createDaemonOwnerCleanup(): DaemonOwnerCleanup {
   return Object.freeze({
     cleanup: async (owner) => {
-      const { cleanupRunnerLeasesForOwner } = await import('@agent-device/platform-apple');
+      const { cleanupRunnerLeasesForOwner } =
+        await import('@agent-device/platform-apple/runner/operations');
       await cleanupRunnerLeasesForOwner(owner);
     },
   });

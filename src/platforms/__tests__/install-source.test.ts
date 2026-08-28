@@ -17,7 +17,6 @@ import {
   isBlockedIpAddress,
   isBlockedSourceHostname,
 } from '@agent-device/provision-kit/install-source-network';
-import * as androidManifest from '../android/manifest.ts';
 import { prepareAndroidInstallArtifact } from '@agent-device/platform-android/mechanics';
 import {
   createLocalAppleToolProvider,

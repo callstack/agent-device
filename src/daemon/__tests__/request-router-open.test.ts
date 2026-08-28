@@ -13,11 +13,37 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
 });
-vi.mock('@agent-device/platform-apple', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-apple')>();
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
   return {
     ...actual,
+    detachIosSimulatorRunnerSessionsForShutdown: vi.fn(async () => {}),
+    notifyIosRunnerAppRelaunched: vi.fn(async () => {}),
+    prewarmAppleRunnerCache: vi.fn(async () => {}),
+    prewarmIosRunnerSession: vi.fn(async () => {}),
+    prepareIosRunner: vi.fn(async () => ({
+      runner: { currentUptimeMs: 42 },
+      connectMs: 0,
+      healthCheckMs: 0,
+    })),
+    resolveRunnerAppBundleId: vi.fn(() => 'com.callstack.agentdevice.runner'),
+    scheduleIosRunnerIdleStop: vi.fn(),
     stopIosRunnerSession: vi.fn(async () => {}),
+    stopAllIosRunnerSessions: vi.fn(async () => {}),
+  };
+});
+vi.mock('@agent-device/platform-apple/app-lifecycle', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/platform-apple/app-lifecycle')>();
+  return { ...actual, closeIosApp: vi.fn(async () => {}) };
+});
+vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/platform-apple/app-resolution')>();
+  return {
+    ...actual,
+    resolveIosApp: vi.fn(async (_device, app) => app),
   };
 });
 

@@ -1,4 +1,3 @@
-import { fs } from '@agent-device/host-kit/filesystem';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -17,7 +16,14 @@ import {
 } from '@agent-device/host-kit/command';
 import { splitNonEmptyTrimmedLines } from '@agent-device/kernel/record';
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import { hostTemporaryDirectory } from '@agent-device/host-kit/environment';
+import {
+  ensureHostDirectory,
+  hostFileStat,
+  makeHostTemporaryDirectory,
+  readHostDirectory,
+  readHostTextFile,
+  removeHostPath,
+} from '@agent-device/host-kit/host-file';
 import { IOS_DEVICECTL_DEFAULT_HINT, resolveIosDevicectlHint } from './devicectl.ts';
 import type { IosDeviceProcessInfo } from './app-info.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
@@ -161,7 +167,7 @@ export async function captureAppleMemorySnapshot(
   const target = await resolveAppleMemorySnapshotTarget(device, appBundleId, support);
   if (target.available === false) return target;
   const { process: processInfo } = target;
-  await fs.mkdir(path.dirname(outPath), { recursive: true });
+  await ensureHostDirectory(path.dirname(outPath));
   const hadLocalArtifact = await fileExists(outPath);
   let result: ExecResult;
   try {
@@ -187,7 +193,7 @@ export async function captureAppleMemorySnapshot(
     );
   }
 
-  const stat = await fs.stat(outPath).catch(() => null);
+  const stat = await hostFileStat(outPath).catch(() => null);
   if (!stat?.isFile() || stat.size <= 0) {
     await cleanupLocalArtifact(outPath, hadLocalArtifact);
     throw new AppError('COMMAND_FAILED', 'Apple memgraph artifact is missing or empty', {
@@ -283,15 +289,14 @@ function annotateAppleMemorySnapshotToolError(
 
 // fallow-ignore-next-line code-duplication
 async function fileExists(filePath: string): Promise<boolean> {
-  return await fs
-    .stat(filePath)
+  return await hostFileStat(filePath)
     .then((stat) => stat.isFile())
     .catch(() => false);
 }
 
 async function cleanupLocalArtifact(filePath: string, existedBefore: boolean): Promise<void> {
   if (existedBefore) return;
-  await fs.rm(filePath, { force: true }).catch(() => {});
+  await removeHostPath(filePath).catch(() => {});
 }
 
 export async function sampleAppleFramePerf(
@@ -420,9 +425,7 @@ async function captureIosDeviceFramePerf(
   appBundleId: string,
   processes: IosDeviceProcessInfo[],
 ): Promise<IosDeviceFramePerfCapture> {
-  const tempDir = await fs.mkdtemp(
-    path.join(hostTemporaryDirectory(), 'agent-device-ios-frame-perf-'),
-  );
+  const tempDir = await makeHostTemporaryDirectory('agent-device-ios-frame-perf-');
   const tracePath = path.join(tempDir, 'animation-hitches.trace');
   const hitchesPath = path.join(tempDir, 'hitches.xml');
   const frameLifetimesPath = path.join(tempDir, 'frame-lifetimes.xml');
@@ -456,12 +459,12 @@ async function captureIosDeviceFramePerf(
     return {
       windowStartedAt: record.startedAt,
       windowEndedAt: record.endedAt,
-      hitchesXml: await fs.readFile(hitchesPath, 'utf8'),
-      frameLifetimesXml: await fs.readFile(frameLifetimesPath, 'utf8'),
-      displayInfoXml: hasDisplayInfo ? await fs.readFile(displayInfoPath, 'utf8') : undefined,
+      hitchesXml: await readHostTextFile(hitchesPath),
+      frameLifetimesXml: await readHostTextFile(frameLifetimesPath),
+      displayInfoXml: hasDisplayInfo ? await readHostTextFile(displayInfoPath) : undefined,
     };
   } finally {
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    await removeHostPath(tempDir).catch(() => {});
   }
 }
 
@@ -562,7 +565,7 @@ export async function prepareAppleTraceRecordRetry(
   retryDelayMs: number,
 ): Promise<void> {
   if (attempt <= 1) return;
-  await fs.rm(tracePath, { recursive: true, force: true }).catch(() => {});
+  await removeHostPath(tracePath).catch(() => {});
   await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
 }
 
@@ -576,10 +579,10 @@ async function assertUsableTraceOutput(
   stdout: string,
   stderr: string,
 ): Promise<void> {
-  const stat = await fs.stat(params.tracePath).catch(() => null);
+  const stat = await hostFileStat(params.tracePath).catch(() => null);
   const hasTrace =
     stat?.isDirectory() === true
-      ? (await fs.readdir(params.tracePath).catch(() => [])).length > 0
+      ? (await readHostDirectory(params.tracePath).catch(() => [])).length > 0
       : (stat?.size ?? 0) > 0;
   if (hasTrace) return;
   throw new AppError('COMMAND_FAILED', `${params.failureMessage}: xctrace produced no trace data`, {
@@ -805,7 +808,7 @@ async function captureIosDevicePerfTable(
   device: DeviceInfo,
   appBundleId: string,
 ): Promise<IosDevicePerfCapture> {
-  const tempDir = await fs.mkdtemp(path.join(hostTemporaryDirectory(), 'agent-device-ios-perf-'));
+  const tempDir = await makeHostTemporaryDirectory('agent-device-ios-perf-');
   const tracePath = path.join(tempDir, 'sample.trace');
   const exportPath = path.join(tempDir, 'activity-monitor-process-live.xml');
   try {
@@ -827,10 +830,10 @@ async function captureIosDevicePerfTable(
     );
     return {
       capturedAtMs: record.capturedAtMs,
-      xml: await fs.readFile(exportPath, 'utf8'),
+      xml: await readHostTextFile(exportPath),
     };
   } finally {
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    await removeHostPath(tempDir).catch(() => {});
   }
 }
 

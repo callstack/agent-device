@@ -42,8 +42,7 @@ export async function loadMacOsSurfaceSnapshot(
   options: CaptureSnapshotInput['options'],
   signal?: AbortSignal,
 ): Promise<SnapshotResult> {
-  const { captureMacOsSurfaceSnapshot } =
-    await import('./platforms/apple/os/macos/surface-snapshot.ts');
+  const { captureMacOsSurfaceSnapshot } = await import('@agent-device/platform-apple/macos');
   return await captureMacOsSurfaceSnapshot(options ?? {}, signal);
 }
 

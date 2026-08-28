@@ -1,10 +1,14 @@
-import { fs } from '@agent-device/host-kit/filesystem';
 import path from 'node:path';
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
-import { hostProcessId, hostTemporaryDirectory } from '@agent-device/host-kit/environment';
+import {
+  hostTemporaryDirectory,
+  readHostTextFile,
+  unlinkHostFile,
+} from '@agent-device/host-kit/host-file';
+import { hostProcessId } from '@agent-device/host-kit/process';
 
 import { IOS_DEVICECTL_TIMEOUT_MS } from './config.ts';
 import { runXcrun } from './tool-provider.ts';
@@ -221,12 +225,12 @@ async function runIosDevicectlJsonCommand(
       cause: String(error),
     });
   } finally {
-    await fs.unlink(jsonPath).catch(() => {});
+    await unlinkHostFile(jsonPath).catch(() => {});
   }
 }
 
 async function readJsonFile(jsonPath: string): Promise<unknown> {
-  return JSON.parse(await fs.readFile(jsonPath, 'utf8'));
+  return JSON.parse(await readHostTextFile(jsonPath));
 }
 
 function processPathDepth(processInfo: IosDeviceProcessInfo, appBundleUrl: string): number {

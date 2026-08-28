@@ -1,8 +1,11 @@
-import { fs } from '@agent-device/host-kit/filesystem';
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
-import { hostTemporaryDirectory } from '@agent-device/host-kit/environment';
+import {
+  makeHostTemporaryDirectory,
+  removeHostPath,
+  writeHostTextFile,
+} from '@agent-device/host-kit/host-file';
 import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
 import { readMacOsClipboardText, writeMacOsClipboardText } from '../os/macos/apps.ts';
 import { runSimctl } from './apps-simctl.ts';
@@ -45,14 +48,14 @@ export async function pushIosNotification(
   requireSimulatorDevice(device, 'push');
   options.signal?.throwIfAborted();
   await ensureBootedSimulator(device, { signal: options.signal });
-  const tempDir = await fs.mkdtemp(path.join(hostTemporaryDirectory(), 'agent-device-ios-push-'));
+  const tempDir = await makeHostTemporaryDirectory('agent-device-ios-push-');
   const payloadPath = path.join(tempDir, 'payload.apns');
   try {
-    await fs.writeFile(payloadPath, `${JSON.stringify(payload)}\n`, 'utf8');
+    await writeHostTextFile(payloadPath, `${JSON.stringify(payload)}\n`);
     await runSimctl(device, ['push', device.id, bundleId, payloadPath], {
       signal: options.signal,
     });
   } finally {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await removeHostPath(tempDir);
   }
 }

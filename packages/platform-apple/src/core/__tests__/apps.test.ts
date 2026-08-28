@@ -25,21 +25,15 @@ const retryActual = await vi.importActual<typeof import('@agent-device/host-kit/
 );
 const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>('../simulator.ts');
 
-import {
-  closeIosApp,
-  installIosInstallablePath,
-  openIosApp,
-  pushIosNotification,
-  readIosClipboardText,
-  resolveIosApp,
-  resolveIosSimulatorDeepLinkBundleId,
-  screenshotIos,
-  setIosSetting,
-} from '../apps.ts';
+import { closeIosApp, openIosApp } from '../app-launch.ts';
+import { pushIosNotification, readIosClipboardText } from '../app-device-io.ts';
+import { resolveIosApp, resolveIosSimulatorDeepLinkBundleId } from '../app-resolution.ts';
+import { screenshotIos } from '../screenshot.ts';
+import { setIosSetting } from '../app-settings.ts';
 import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
 import { quitMacOsApp, resolveMacOsHelperPackageRootFrom } from '../../os/macos/helper.ts';
 import { ensureBootedSimulator } from '../simulator.ts';
-import { IOS_DEVICE_INSTALL_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
+import { IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
@@ -546,26 +540,6 @@ test('quitMacOsApp rejects invalid bundle identifiers before invoking helper', a
   await assert.rejects(() => quitMacOsApp('not a bundle id'), /reverse-DNS form/i);
 });
 
-test('installIosInstallablePath on iOS physical device uses extended devicectl install timeout', async () => {
-  mockRunCmd.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
-
-  await installIosInstallablePath(IOS_TEST_DEVICE, '/tmp/Sample.app');
-
-  assert.equal(mockRunCmd.mock.calls.length, 1);
-  assert.equal(mockRunCmd.mock.calls[0]?.[0], 'xcrun');
-  assert.deepEqual(mockRunCmd.mock.calls[0]?.[1], [
-    'devicectl',
-    'device',
-    'install',
-    'app',
-    '--device',
-    'ios-device-1',
-    '/tmp/Sample.app',
-  ]);
-  assert.equal(mockRunCmd.mock.calls[0]?.[2]?.allowFailure, true);
-  assert.equal(mockRunCmd.mock.calls[0]?.[2]?.timeoutMs, IOS_DEVICE_INSTALL_TIMEOUT_MS);
-});
-
 test('openIosApp with app and URL on iOS device launches app bundle with payload URL', async () => {
   const device: DeviceInfo = {
     platform: 'apple',
@@ -728,41 +702,6 @@ test('resolveIosSimulatorDeepLinkBundleId maps custom URL scheme to installed us
         'rne://navigator-layout',
       );
       assert.equal(bundleId, 'org.reactnavigation.playground');
-    },
-  );
-});
-
-test('installIosInstallablePath invalidates cached display-name bundle matches', async () => {
-  const device: DeviceInfo = {
-    platform: 'apple',
-    id: 'sim-cache-install-1',
-    name: 'iPhone Cache',
-    kind: 'simulator',
-    booted: true,
-  };
-  mockEnsureBootedSimulator.mockResolvedValue(undefined);
-
-  let installed = false;
-  await withFakeAppleTool(
-    (args) => {
-      if (args[0] === 'simctl' && args[1] === 'listapps') {
-        return installed
-          ? '{"com.example.installedcachemaps":{"CFBundleDisplayName":"Cache Maps"}}'
-          : '{"com.example.cachemaps":{"CFBundleDisplayName":"Cache Maps"}}';
-      }
-      if (args[0] === 'simctl' && args[1] === 'install') {
-        installed = true;
-        return '';
-      }
-      return unexpectedArgs(args);
-    },
-    async () => {
-      const before = await resolveIosApp(device, 'Cache Maps');
-      await installIosInstallablePath(device, '/fake/Cache.app');
-      const after = await resolveIosApp(device, 'Cache Maps');
-
-      assert.equal(before, 'com.example.cachemaps');
-      assert.equal(after, 'com.example.installedcachemaps');
     },
   );
 });

@@ -6,7 +6,6 @@ import { IOS_DEVICE as SHARED_IOS_DEVICE } from '../../__tests__/device-fixtures
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppError } from '@agent-device/kernel/errors';
 import { createAppleInteractor } from '../../interactor.ts';
-import { installIosInstallablePath } from '../app-install.ts';
 import { closeIosApp, openIosApp } from '../app-launch.ts';
 import { listIosApps } from '../app-resolution.ts';
 import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
@@ -127,13 +126,9 @@ test('default interactor screenshots stay in-band without invoking devicectl', a
   }
 });
 
-test('CoreDevice-only app inventory and install fail with targeted XCTest guidance', async () => {
+test('CoreDevice-only app inventory fails with targeted XCTest guidance', async () => {
   await assert.rejects(
     () => listIosApps(XCTEST_IOS_DEVICE, 'all'),
     /App inventory is unavailable on this XCTest-backed physical iOS device/,
-  );
-  await assert.rejects(
-    () => installIosInstallablePath(XCTEST_IOS_DEVICE, '/missing/example.app'),
-    /Installing apps is unavailable on this XCTest-backed physical iOS device/,
   );
 });

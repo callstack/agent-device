@@ -15,9 +15,9 @@ import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 const loadAndroidPerf = loadAndroidMechanics;
 const loadAndroidFramePerf = loadAndroidMechanics;
 const loadAndroidNativePerf = loadAndroidMechanics;
-const loadApplePerf = async () => await import('@agent-device/platform-apple');
+const loadApplePerf = async () => await import('@agent-device/platform-apple/perf');
 const loadApplePerfMechanics = async () => await import('@agent-device/platform-apple/perf');
-const loadAppleXctrace = async () => await import('@agent-device/platform-apple');
+const loadAppleXctrace = async () => await import('@agent-device/platform-apple/perf');
 const loadHarmonyPerf = async () => await import('@agent-device/platform-harmonyos');
 
 /** Lazy host-only mechanics. Platform packages own facts, policy, and operation construction. */

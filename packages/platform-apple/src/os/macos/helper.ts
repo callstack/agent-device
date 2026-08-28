@@ -1,14 +1,25 @@
-import { existsSync, fs } from '@agent-device/host-kit/filesystem';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  accessHostFile,
+  chmodHostFile,
+  copyHostFile,
+  ensureHostDirectory,
+  hostFileExistsSync,
   hostHomeDirectory,
+  readHostBinaryFile,
+  readHostDirectory,
+  readHostTextFile,
+  renameHostPath,
+  writeHostTextFile,
+} from '@agent-device/host-kit/host-file';
+import {
   hostPlatform,
   readHostEnvironmentVariable,
   writeHostStderr,
-} from '@agent-device/host-kit/environment';
+} from '@agent-device/host-kit/process';
 import {
   resolveExecutableOverridePath,
   runCmdBackground,
@@ -105,7 +116,7 @@ export function resolveMacOsHelperPackageRootFrom(modulePath: string): string {
   let currentDir = path.dirname(modulePath);
   while (true) {
     const candidate = path.join(currentDir, 'apple', 'macos-helper');
-    if (existsSync(path.join(candidate, 'Package.swift'))) {
+    if (hostFileExistsSync(path.join(candidate, 'Package.swift'))) {
       return candidate;
     }
     const parentDir = path.dirname(currentDir);
@@ -132,7 +143,7 @@ function resolveInstalledMacOsHelperPath(): string {
 }
 
 async function listMacOsHelperSourceFiles(root: string): Promise<string[]> {
-  const entries = await fs.readdir(root, { withFileTypes: true });
+  const entries = await readHostDirectory(root, { withFileTypes: true });
   const files = await Promise.all(
     entries.map(async (entry) => {
       const entryPath = path.join(root, entry.name);
@@ -154,7 +165,7 @@ async function computeMacOsHelperFingerprint(packageRoot: string): Promise<strin
   for (const filePath of files) {
     hash.update(path.relative(packageRoot, filePath));
     hash.update('\0');
-    hash.update(await fs.readFile(filePath));
+    hash.update(await readHostBinaryFile(filePath));
     hash.update('\0');
   }
   const swiftVersion = await runAppleToolCommand('swift', ['--version'], {
@@ -171,7 +182,7 @@ async function computeMacOsHelperFingerprint(packageRoot: string): Promise<strin
 
 async function readInstalledMacOsHelperFingerprint(): Promise<string | null> {
   try {
-    const data = JSON.parse(await fs.readFile(MACOS_HELPER_MANIFEST_PATH, 'utf8')) as {
+    const data = JSON.parse(await readHostTextFile(MACOS_HELPER_MANIFEST_PATH)) as {
       fingerprint?: unknown;
     };
     return typeof data.fingerprint === 'string' ? data.fingerprint : null;
@@ -195,7 +206,7 @@ async function ensureMacOsHelperBinary(): Promise<string> {
   try {
     const installedFingerprint = await readInstalledMacOsHelperFingerprint();
     if (installedFingerprint === sourceFingerprint) {
-      await fs.access(installedPath);
+      await accessHostFile(installedPath);
       return installedPath;
     }
   } catch {
@@ -208,15 +219,14 @@ async function ensureMacOsHelperBinary(): Promise<string> {
     cwd: packageRoot,
     timeoutMs: 120_000,
   });
-  await fs.mkdir(MACOS_HELPER_INSTALL_ROOT, { recursive: true });
+  await ensureHostDirectory(MACOS_HELPER_INSTALL_ROOT);
   const tempInstalledPath = `${installedPath}.tmp`;
-  await fs.copyFile(sourceBinary, tempInstalledPath);
-  await fs.rename(tempInstalledPath, installedPath);
-  await fs.chmod(installedPath, 0o755);
-  await fs.writeFile(
+  await copyHostFile(sourceBinary, tempInstalledPath);
+  await renameHostPath(tempInstalledPath, installedPath);
+  await chmodHostFile(installedPath, 0o755);
+  await writeHostTextFile(
     MACOS_HELPER_MANIFEST_PATH,
     `${JSON.stringify({ fingerprint: sourceFingerprint }, null, 2)}\n`,
-    'utf8',
   );
   return installedPath;
 }

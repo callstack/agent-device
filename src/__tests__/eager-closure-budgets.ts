@@ -298,11 +298,16 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
 
   // --- @agent-device/platform-apple ---
   'packages/platform-apple/src/index.ts': 1,
-  'packages/platform-apple/src/app-resolution-facade.ts': 55,
+  'packages/platform-apple/src/app-lifecycle-facade.ts': 120,
+  'packages/platform-apple/src/app-resolution-facade.ts': 61,
+  'packages/platform-apple/src/debug-symbols-facade.ts': 24,
+  'packages/platform-apple/src/doctor-facade.ts': 101,
   'packages/platform-apple/src/interactions-facade.ts': 117,
-  'packages/platform-apple/src/install-artifact-facade.ts': 20,
-  'packages/platform-apple/src/perf-facade.ts': 52,
-  'packages/platform-apple/src/physical-device-facade.ts': 41,
+  'packages/platform-apple/src/install-artifact-facade.ts': 41,
+  'packages/platform-apple/src/macos-facade.ts': 25,
+  'packages/platform-apple/src/perf-facade.ts': 60,
+  'packages/platform-apple/src/physical-device-facade.ts': 47,
+  'packages/platform-apple/src/runner-operations-facade.ts': 100,
   'packages/platform-apple/src/runner-owner-facade.ts': 2,
   'packages/platform-apple/src/simctl-facade.ts': 18,
   'packages/platform-apple/src/simulator-facade.ts': 26,
@@ -410,11 +415,16 @@ const PLATFORM_MECHANICS_ENTRY_PREFIXES = [
 ] as const;
 
 const APPLE_DOMAIN_MECHANICS_ENTRY_FILES: ReadonlySet<string> = new Set([
+  'packages/platform-apple/src/app-lifecycle-facade.ts',
   'packages/platform-apple/src/app-resolution-facade.ts',
+  'packages/platform-apple/src/debug-symbols-facade.ts',
+  'packages/platform-apple/src/doctor-facade.ts',
   'packages/platform-apple/src/interactions-facade.ts',
   'packages/platform-apple/src/install-artifact-facade.ts',
+  'packages/platform-apple/src/macos-facade.ts',
   'packages/platform-apple/src/perf-facade.ts',
   'packages/platform-apple/src/physical-device-facade.ts',
+  'packages/platform-apple/src/runner-operations-facade.ts',
   'packages/platform-apple/src/runner-owner-facade.ts',
   'packages/platform-apple/src/simctl-facade.ts',
   'packages/platform-apple/src/simulator-facade.ts',
@@ -434,7 +444,7 @@ function toRows(
       kind === 'facade' &&
       !PLATFORM_MECHANICS_ENTRY_PREFIXES.some((prefix) =>
         prefix.endsWith('/') ? entryFile.startsWith(prefix) : entryFile === prefix,
-      ),
+      ) &&
       !APPLE_DOMAIN_MECHANICS_ENTRY_FILES.has(entryFile),
   }));
 }

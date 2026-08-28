@@ -6,8 +6,8 @@ import {
 } from '@agent-device/contracts/settings';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { fs } from '@agent-device/host-kit/filesystem';
-import { readHostEnvironmentVariable } from '@agent-device/host-kit/environment';
+import { readHostDirectory, removeHostPath } from '@agent-device/host-kit/host-file';
+import { readHostEnvironmentVariable } from '@agent-device/host-kit/process';
 import path from 'node:path';
 import { resolveIosSimulatorDeviceSetPath } from '@agent-device/kernel/device-isolation';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
@@ -184,15 +184,8 @@ async function clearIosSimulatorAppState(
     );
   }
 
-  const entries = await fs.readdir(containerPath);
-  await Promise.all(
-    entries.map((entry) =>
-      fs.rm(path.join(containerPath, entry), {
-        recursive: true,
-        force: true,
-      }),
-    ),
-  );
+  const entries = await readHostDirectory(containerPath);
+  await Promise.all(entries.map((entry) => removeHostPath(path.join(containerPath, entry))));
 
   return { bundleId, containerPath };
 }

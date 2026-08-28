@@ -17,7 +17,7 @@ export async function ensureLocalPlatformDeviceReady(
 ): Promise<boolean> {
   if (isIosFamily(device)) {
     if (device.kind === 'simulator') {
-      const { ensureBootedSimulator } = await import('@agent-device/platform-apple');
+      const { ensureBootedSimulator } = await import('@agent-device/platform-apple/simulator');
       await ensureBootedSimulator(device, {
         deviceHub: options.deviceHub,
         focusExisting: options.focusExisting,

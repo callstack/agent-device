@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { fs } from '@agent-device/host-kit/filesystem';
+import { hostFileStat } from '@agent-device/host-kit/host-file';
 import { fileURLToPath } from 'node:url';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -325,7 +325,7 @@ const iosSimulatorAppUrlSchemeMemo = createTtlMemo<string, Set<string>>({
 async function readIosSimulatorAppUrlSchemes(infoPlistPath: string): Promise<Set<string>> {
   let cacheKey: string | undefined;
   try {
-    cacheKey = `${infoPlistPath}:${(await fs.stat(infoPlistPath)).mtimeMs}`;
+    cacheKey = `${infoPlistPath}:${(await hostFileStat(infoPlistPath)).mtimeMs}`;
   } catch {
     cacheKey = undefined;
   }

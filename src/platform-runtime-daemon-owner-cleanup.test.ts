@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   cleanupRunnerLeasesForOwner: vi.fn(async () => undefined),
 }));
 
-vi.mock('@agent-device/platform-apple', () => ({
+vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   cleanupRunnerLeasesForOwner: mocks.cleanupRunnerLeasesForOwner,
 }));
 

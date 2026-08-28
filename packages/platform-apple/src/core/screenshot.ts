@@ -1,8 +1,8 @@
-import { fs } from '@agent-device/host-kit/filesystem';
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { type ExecOptions } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { copyHostFile } from '@agent-device/host-kit/host-file';
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -229,7 +229,7 @@ export async function captureScreenshotViaRunner(
   }
 
   if (isMacOs(device)) {
-    await fs.copyFile(remoteFileName, outPath);
+    await copyHostFile(remoteFileName, outPath);
     return;
   }
 
@@ -304,7 +304,7 @@ async function tryCopySimulatorRunnerScreenshot(
     remoteFileName,
   )) {
     try {
-      await fs.copyFile(sourcePath, outPath);
+      await copyHostFile(sourcePath, outPath);
       return { copied: true };
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);

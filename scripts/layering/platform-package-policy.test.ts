@@ -27,14 +27,19 @@ function declarations(): PlatformPackageDeclaration[] {
       family === 'apple'
         ? [
             '@agent-device/platform-apple',
+            '@agent-device/platform-apple/app-lifecycle',
             '@agent-device/platform-apple/app-resolution',
+            '@agent-device/platform-apple/debug-symbols',
+            '@agent-device/platform-apple/doctor',
             '@agent-device/platform-apple/interactions',
             '@agent-device/platform-apple/install-artifact',
+            '@agent-device/platform-apple/macos',
             '@agent-device/platform-apple/perf',
             '@agent-device/platform-apple/physical-device',
             '@agent-device/platform-apple/runner',
             '@agent-device/platform-apple/runner/client',
             '@agent-device/platform-apple/runner/test-host',
+            '@agent-device/platform-apple/runner/operations',
             '@agent-device/platform-apple/runner-owner',
             '@agent-device/platform-apple/simctl',
             '@agent-device/platform-apple/simulator',
@@ -599,10 +604,7 @@ test('Node resolves only each platform package root facade', () => {
 
 test('the src/platforms root holds only the shared __tests__ directory', () => {
   const clean = ['src/platforms/__tests__/install-source.test.ts'];
-  assert.deepEqual(
-    checkPlatformsRootShape(clean),
-    [],
-  );
+  assert.deepEqual(checkPlatformsRootShape(clean), []);
 });
 
 test('a moved Android family cannot leave production or test files under the old root', () => {

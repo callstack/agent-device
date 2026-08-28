@@ -1,4 +1,3 @@
-import { fs } from '@agent-device/host-kit/filesystem';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -18,7 +17,17 @@ import {
   type ExecResult,
 } from '@agent-device/host-kit/command';
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import { hostTemporaryDirectory } from '@agent-device/host-kit/environment';
+import {
+  copyHostPath,
+  ensureHostDirectory,
+  hostFileStat,
+  makeHostTemporaryDirectory,
+  readHostDirectory,
+  readHostTextFile,
+  removeHostPath,
+  renameHostPath,
+  writeHostTextFile,
+} from '@agent-device/host-kit/host-file';
 import { findAllXmlNodes } from './perf-xml.ts';
 import {
   parseAppleTimeProfileSummary,
@@ -99,7 +108,7 @@ export async function startAppleXctracePerfCapture(params: {
   outPath: string;
 }): Promise<AppleXctracePerfCapture> {
   const target = await resolveAppleXctracePerfTarget(params.device, params.appBundleId);
-  await fs.mkdir(path.dirname(params.outPath), { recursive: true });
+  await ensureHostDirectory(path.dirname(params.outPath));
   const args = buildAppleXctraceRecordArgs({
     device: params.device,
     template: params.template,
@@ -133,7 +142,7 @@ export async function stopAppleXctracePerfCapture(
   outPath = capture.outPath,
 ): Promise<AppleXctracePerfResult> {
   if (outPath !== capture.outPath) {
-    await fs.mkdir(path.dirname(outPath), { recursive: true });
+    await ensureHostDirectory(path.dirname(outPath));
   }
   const result = requireExecSuccess(
     await stopAppleXctraceProcess(capture, { failOnForcedKill: true }),
@@ -145,9 +154,9 @@ export async function stopAppleXctracePerfCapture(
     }),
   );
   if (outPath !== capture.outPath) {
-    await fs.rename(capture.outPath, outPath).catch(async () => {
-      await fs.cp(capture.outPath, outPath, { recursive: true });
-      await fs.rm(capture.outPath, { recursive: true, force: true });
+    await renameHostPath(capture.outPath, outPath).catch(async () => {
+      await copyHostPath(capture.outPath, outPath);
+      await removeHostPath(capture.outPath);
     });
   }
   await assertTracePathHasData(outPath, {
@@ -183,9 +192,7 @@ export async function writeAppleXctracePerfReport(params: {
   template?: string;
   appBundleId?: string;
 }): Promise<AppleXctraceCpuProfileReport> {
-  const tempDir = await fs.mkdtemp(
-    path.join(hostTemporaryDirectory(), 'agent-device-xctrace-report-'),
-  );
+  const tempDir = await makeHostTemporaryDirectory('agent-device-xctrace-report-');
   const tocPath = path.join(tempDir, 'trace-toc.xml');
   const timeProfilePath = path.join(tempDir, 'time-profile.xml');
   try {
@@ -211,7 +218,7 @@ export async function writeAppleXctracePerfReport(params: {
         hint: resolveIosDevicePerfHint(exportResult.stdout, exportResult.stderr),
       }),
     );
-    const tocXml = await fs.readFile(tocPath, 'utf8');
+    const tocXml = await readHostTextFile(tocPath);
     const timeProfileXml = await exportAppleTimeProfile(params.tracePath, timeProfilePath);
     const report = buildAppleXctracePerfReport({
       ...params,
@@ -225,11 +232,11 @@ export async function writeAppleXctracePerfReport(params: {
         hint: 'Keep the app active while recording, then retry. Open the raw trace in Instruments if it still contains no Time Profiler samples.',
       });
     }
-    await fs.mkdir(path.dirname(params.outPath), { recursive: true });
-    await fs.writeFile(params.outPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+    await ensureHostDirectory(path.dirname(params.outPath));
+    await writeHostTextFile(params.outPath, `${JSON.stringify(report, null, 2)}\n`);
     return report;
   } finally {
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    await removeHostPath(tempDir).catch(() => {});
   }
 }
 
@@ -257,7 +264,7 @@ async function exportAppleTimeProfile(tracePath: string, outPath: string): Promi
       hint: resolveIosDevicePerfHint(exportResult.stdout, exportResult.stderr),
     }),
   );
-  return await fs.readFile(outPath, 'utf8');
+  return await readHostTextFile(outPath);
 }
 
 async function resolveAppleXctracePerfTarget(
@@ -414,10 +421,10 @@ async function assertTracePathHasData(
     stderr: string;
   },
 ): Promise<void> {
-  const stat = await fs.stat(tracePath).catch(() => null);
+  const stat = await hostFileStat(tracePath).catch(() => null);
   const hasTrace =
     stat?.isDirectory() === true
-      ? (await fs.readdir(tracePath).catch(() => [])).length > 0
+      ? (await readHostDirectory(tracePath).catch(() => [])).length > 0
       : (stat?.size ?? 0) > 0;
   if (hasTrace) return;
   throw new AppError('COMMAND_FAILED', 'xctrace produced no trace data', {

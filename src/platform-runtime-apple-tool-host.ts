@@ -16,7 +16,7 @@ export function createAppleToolHost(): AppleToolHost {
     },
     run: async (request, signal) => {
       const { runXcrun } = await awaitPreservingAbortReason(
-        async () => await import('@agent-device/platform-apple'),
+        async () => await import('@agent-device/platform-apple/tool-provider'),
         signal,
       );
       const result = await awaitPreservingAbortReason(

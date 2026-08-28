@@ -20,15 +20,15 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('@agent-device/platform-apple', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-apple')>();
-  return {
-    ...actual,
-    shutdownSimulator: vi.fn(),
-    stopIosRunnerSession: vi.fn(async () => {}),
-    cleanupAppleXctracePerfCapture: vi.fn(async () => ({})),
-  };
-});
+vi.mock('@agent-device/platform-apple/runner/operations', () => ({
+  resolveRunnerAppBundleId: vi.fn(),
+  scheduleIosRunnerIdleStop: vi.fn(),
+  stopIosRunnerSession: vi.fn(),
+}));
+vi.mock('@agent-device/platform-apple/simulator', () => ({ shutdownSimulator: vi.fn() }));
+vi.mock('@agent-device/platform-apple/perf', () => ({
+  cleanupAppleXctracePerfCapture: vi.fn(async () => ({})),
+}));
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn() };

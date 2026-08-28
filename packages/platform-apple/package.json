@@ -17,9 +17,21 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./app-lifecycle": {
+      "types": "./src/app-lifecycle-facade.ts",
+      "default": "./src/app-lifecycle-facade.ts"
+    },
     "./app-resolution": {
       "types": "./src/app-resolution-facade.ts",
       "default": "./src/app-resolution-facade.ts"
+    },
+    "./debug-symbols": {
+      "types": "./src/debug-symbols-facade.ts",
+      "default": "./src/debug-symbols-facade.ts"
+    },
+    "./doctor": {
+      "types": "./src/doctor-facade.ts",
+      "default": "./src/doctor-facade.ts"
     },
     "./interactions": {
       "types": "./src/interactions-facade.ts",
@@ -28,6 +40,10 @@
     "./install-artifact": {
       "types": "./src/install-artifact-facade.ts",
       "default": "./src/install-artifact-facade.ts"
+    },
+    "./macos": {
+      "types": "./src/macos-facade.ts",
+      "default": "./src/macos-facade.ts"
     },
     "./perf": {
       "types": "./src/perf-facade.ts",
@@ -40,6 +56,10 @@
     "./runner": {
       "types": "./src/runner/index.ts",
       "default": "./src/runner/index.ts"
+    },
+    "./runner/operations": {
+      "types": "./src/runner-operations-facade.ts",
+      "default": "./src/runner-operations-facade.ts"
     },
     "./runner/client": {
       "types": "./src/runner/client.ts",

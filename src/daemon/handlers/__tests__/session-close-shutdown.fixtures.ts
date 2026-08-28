@@ -7,13 +7,32 @@ import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts
 import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('@agent-device/platform-apple', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-apple')>();
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
+  return {
+    ...actual,
+    stopIosRunnerSession: vi.fn(async () => {}),
+  };
+});
+vi.mock('@agent-device/platform-apple/simulator', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-apple/simulator')>();
   return {
     ...actual,
     shutdownSimulator: vi.fn(),
-    stopIosRunnerSession: vi.fn(async () => {}),
+  };
+});
+vi.mock('@agent-device/platform-apple/perf', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-apple/perf')>();
+  return {
+    ...actual,
     cleanupAppleXctracePerfCapture: vi.fn(async () => ({})),
+  };
+});
+vi.mock('@agent-device/platform-apple/macos', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-apple/macos')>();
+  return {
+    ...actual,
     runMacOsAlertAction: vi.fn(async () => {}),
   };
 });
@@ -51,11 +70,9 @@ import {
   cleanupAndroidNativePerfSession,
   stopAndroidSnapshotHelperSessionForDevice,
 } from '@agent-device/platform-android/mechanics';
-import {
-  cleanupAppleXctracePerfCapture,
-  shutdownSimulator,
-  stopIosRunnerSession,
-} from '@agent-device/platform-apple';
+import { stopIosRunnerSession } from '@agent-device/platform-apple/runner/operations';
+import { shutdownSimulator } from '@agent-device/platform-apple/simulator';
+import { cleanupAppleXctracePerfCapture } from '@agent-device/platform-apple/perf';
 import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { acquireDeviceClaim } from '../../device-claims.ts';
 import { inspectDeviceClaims } from '../../device-claim-inspection.ts';

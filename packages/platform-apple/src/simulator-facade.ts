@@ -1,1 +1,6 @@
-export { markSimulatorBooted, wasSimulatorRecentlyObservedBooted } from './core/simulator.ts';
+export {
+  ensureBootedSimulator,
+  markSimulatorBooted,
+  shutdownSimulator,
+  wasSimulatorRecentlyObservedBooted,
+} from './core/simulator.ts';

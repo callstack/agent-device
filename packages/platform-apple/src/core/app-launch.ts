@@ -1,9 +1,9 @@
-import { fs } from '@agent-device/host-kit/filesystem';
 import path from 'node:path';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { ensureHostDirectory, writeHostTextFile } from '@agent-device/host-kit/host-file';
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 
 import {
@@ -282,7 +282,7 @@ async function runIosSimulatorConsoleLaunch(
   launchArgs: string[],
   logPath: string,
 ): Promise<Awaited<ReturnType<typeof runXcrun>>> {
-  await fs.mkdir(path.dirname(logPath), { recursive: true });
+  await ensureHostDirectory(path.dirname(logPath));
   try {
     const result = await runXcrun(launchArgs, {
       allowFailure: true,
@@ -318,7 +318,7 @@ async function writeIosSimulatorConsoleLog(
   stdout: string,
   stderr: string,
 ): Promise<void> {
-  await fs.writeFile(logPath, joinProcessOutput(stdout, stderr), 'utf8');
+  await writeHostTextFile(logPath, joinProcessOutput(stdout, stderr));
 }
 
 function joinProcessOutput(stdout: string, stderr: string): string {

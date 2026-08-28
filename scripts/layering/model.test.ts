@@ -75,7 +75,7 @@ test('value cycles fail while type-only and dynamic cycles stay outside the grap
 test('back-edge identities follow the documented target spine', () => {
   const edges = resolveImportEdges(
     new Map([
-      ['src/platforms/apple.ts', "import '../core/platform-plugin.ts';"],
+      ['src/contracts/result.ts', "import '../core/platform-plugin.ts';"],
       ['src/core/platform-plugin.ts', 'export const plugin = true;'],
       ['src/commands/help.ts', "import '../cli/parser.ts';"],
       ['src/cli/parser.ts', 'export const parser = true;'],
@@ -85,7 +85,7 @@ test('back-edge identities follow the documented target spine', () => {
   const actual = collectBackEdges(edges);
   assert.deepEqual(actual, {
     'commands -> cli': ['src/commands/help.ts -> src/cli/parser.ts'],
-    'platforms -> core': ['src/platforms/apple.ts -> src/core/platform-plugin.ts'],
+    'contracts -> core': ['src/contracts/result.ts -> src/core/platform-plugin.ts'],
   });
 });
 
@@ -197,7 +197,8 @@ test('every production zone is deliberately classified as ranked or unranked', (
   // deliberate ranked-vs-peripheral decision here instead of silently escaping
   // spine back-edge detection. If this fails, add the new zone to TARGET_DAG_RANK
   // (ranked spine) or UNRANKED_ZONES (root/peripheral) in model.ts.
-  assert.deepEqual(unclassifiedZones(listSourceFiles()), []);
+  const productionFiles = listSourceFiles();
+  assert.deepEqual(unclassifiedZones(productionFiles), []);
 
   // The classification must also stay honest to the tree: every zone the model
   // names is a real production zone, so the docs cannot list a spine or peripheral

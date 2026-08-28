@@ -6,7 +6,7 @@ const { mockFindIosSimulatorInstalledApp, mockListAppleDevices } = vi.hoisted(()
   mockListAppleDevices: vi.fn(),
 }));
 
-vi.mock('@agent-device/platform-apple', () => {
+vi.mock('@agent-device/platform-apple/app-resolution', () => {
   return {
     findIosSimulatorInstalledApp: mockFindIosSimulatorInstalledApp,
   };

@@ -1,9 +1,13 @@
-import { fs } from '@agent-device/host-kit/filesystem';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
-import { hostProcessId, hostTemporaryDirectory } from '@agent-device/host-kit/environment';
+import {
+  hostTemporaryDirectory,
+  readHostTextFile,
+  removeHostPath,
+} from '@agent-device/host-kit/host-file';
+import { hostProcessId } from '@agent-device/host-kit/process';
 import {
   IOS_DEVICECTL_DEFAULT_HINT,
   resolveIosDevicectlHint,
@@ -182,7 +186,7 @@ async function runCoreDeviceDetails(
     );
     return { result, parsed: await readCoreDeviceDetails(jsonPath) };
   } finally {
-    await fs.rm(jsonPath, { force: true }).catch(() => {});
+    await removeHostPath(jsonPath).catch(() => {});
   }
 }
 
@@ -190,7 +194,7 @@ async function readCoreDeviceDetails(
   jsonPath: string,
 ): Promise<{ parsed: boolean; outcome?: string; tunnelState?: string; tunnelIp?: string }> {
   try {
-    const payload = JSON.parse(await fs.readFile(jsonPath, 'utf8')) as unknown;
+    const payload = JSON.parse(await readHostTextFile(jsonPath)) as unknown;
     const details = parseIosDeviceDetailsPayload(payload);
     return { parsed: true, ...details };
   } catch {

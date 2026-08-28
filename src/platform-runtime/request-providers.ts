@@ -13,7 +13,7 @@ import type {
   AppleRunnerProvider,
 } from '@agent-device/platform-apple/runner';
 import type { WebProvider } from '@agent-device/platform-web';
-import type { AppleToolProvider } from '@agent-device/platform-apple';
+import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import type { LinuxToolProvider } from '@agent-device/platform-linux';
 import type { VegaToolProvider } from '@agent-device/platform-vega';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -224,7 +224,7 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     },
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.appleTool?.provider) return;
-      const { withAppleToolProvider } = await import('@agent-device/platform-apple');
+      const { withAppleToolProvider } = await import('@agent-device/platform-apple/tool-provider');
       appendRequestProviderWrapper(wrappers, scopedProviders.appleTool, withAppleToolProvider);
     },
   },

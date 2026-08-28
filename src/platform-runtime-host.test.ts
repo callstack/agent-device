@@ -15,15 +15,12 @@ vi.mock('@agent-device/platform-apple/tool-provider', () => {
         return true;
       },
     }),
+    runXcrun: async (args: string[], options: { signal?: AbortSignal }) => {
+      toolchains.appleRuns.push({ args, signal: options.signal });
+      return { stdout: 'ok', stderr: '', exitCode: 0 };
+    },
   };
 });
-
-vi.mock('@agent-device/platform-apple', () => ({
-  runXcrun: async (args: string[], options: { signal?: AbortSignal }) => {
-    toolchains.appleRuns.push({ args, signal: options.signal });
-    return { stdout: 'ok', stderr: '', exitCode: 0 };
-  },
-}));
 
 import { createDeviceInventoryHost } from './platform-runtime-host.ts';
 

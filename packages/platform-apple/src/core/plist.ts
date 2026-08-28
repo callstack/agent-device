@@ -1,4 +1,4 @@
-import { fs } from '@agent-device/host-kit/filesystem';
+import { readHostTextFile } from '@agent-device/host-kit/host-file';
 import { parseXmlDocumentSync } from '@agent-device/xml';
 import { readApplePlistJson, runAppleToolCommand } from './tool-provider.ts';
 import { visitXmlPlistEntries } from './plist-xml.ts';
@@ -40,7 +40,7 @@ export async function readInfoPlistString(
   }
 
   try {
-    const plist = await fs.readFile(infoPlistPath, { encoding: 'utf8', signal });
+    const plist = await readHostTextFile(infoPlistPath, { signal });
     return readXmlPlistString(plist, key);
   } catch {
     signal?.throwIfAborted();

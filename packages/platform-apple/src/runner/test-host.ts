@@ -13,6 +13,10 @@ let defaults: AppleRunnerHost | undefined;
 let overrides: Partial<AppleRunnerHost> = {};
 let bound = false;
 
+export async function loadAppleRunnerHost(): Promise<AppleRunnerHost> {
+  return (await import('../core/runner-host.ts')).appleRunnerHost;
+}
+
 export function installAppleRunnerTestHost(realHost: AppleRunnerHost): void {
   defaults = realHost;
   overrides = {};

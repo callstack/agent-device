@@ -1,13 +1,7 @@
-import {
-  closeIosApp,
-  openIosApp,
-  openIosDevice,
-  readIosClipboardText,
-  screenshotIos,
-  setIosSetting,
-  writeIosClipboardText,
-} from './core/apps.ts';
-import { captureScreenshotViaRunner } from './core/screenshot.ts';
+import { closeIosApp, openIosApp, openIosDevice } from './core/app-launch.ts';
+import { readIosClipboardText, writeIosClipboardText } from './core/app-device-io.ts';
+import { setIosSetting } from './core/app-settings.ts';
+import { captureScreenshotViaRunner, screenshotIos } from './core/screenshot.ts';
 import { iosRunnerOverrides, resolveAppleBackRunnerCommand } from './interactions.ts';
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
 import { runMacOsScreenshotAction } from './os/macos/helper.ts';

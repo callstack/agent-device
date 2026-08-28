@@ -1,7 +1,7 @@
-import { fs } from '@agent-device/host-kit/filesystem';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { writeHostBinaryFile } from '@agent-device/host-kit/host-file';
 import { runIosDevicectl } from './devicectl.ts';
 import { copyCoreDeviceRunnerFile } from './physical-device-files.ts';
 import type { AppleRunnerCommandExecutor, AppleRunnerCommandOptions } from '../runner/index.ts';
@@ -83,7 +83,7 @@ async function writeInlineRunnerScreenshot(
 ): Promise<boolean> {
   const inlineImage = result['imageBase64'];
   if (typeof inlineImage !== 'string' || inlineImage.length === 0) return false;
-  await fs.writeFile(outPath, Buffer.from(inlineImage, 'base64'));
+  await writeHostBinaryFile(outPath, Buffer.from(inlineImage, 'base64'));
   return true;
 }
 

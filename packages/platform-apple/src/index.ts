@@ -403,5 +403,3 @@ export const applyXctestRunnerAppIconFromDerivedPath = async (
     (typeof import('./core/runner-client.ts'))['applyXctestRunnerAppIconFromDerivedPath']
   >
 ) => (await import('./core/runner-client.ts')).applyXctestRunnerAppIconFromDerivedPath(...args);
-export const loadAppleRunnerHost = async () =>
-  (await import('./core/runner-host.ts')).appleRunnerHost;

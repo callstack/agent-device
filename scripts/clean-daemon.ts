@@ -27,7 +27,8 @@ if (daemonPid !== null) {
     killTimeoutMs: DAEMON_KILL_TIMEOUT_MS,
     expectedStartTime: info?.processStartTime,
   });
-  const { cleanupRunnerLeasesForOwner } = await import('@agent-device/platform-apple');
+  const { cleanupRunnerLeasesForOwner } =
+    await import('@agent-device/platform-apple/runner/operations');
   await cleanupRunnerLeasesForOwner({ pid: daemonPid, startTime: info?.processStartTime });
 }
 

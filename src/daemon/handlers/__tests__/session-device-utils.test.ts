@@ -6,11 +6,11 @@ import {
   refreshSessionDeviceIfNeeded,
   selectorTargetsSessionDevice,
 } from '../session-device-utils.ts';
-import { getRunnerSessionSnapshot } from '@agent-device/platform-apple';
+import { getRunnerSessionSnapshot } from '@agent-device/platform-apple/runner/operations';
 import { resolveTargetDevice } from '../../../core/dispatch-resolve.ts';
 import { isActiveProviderDevice } from '../../../provider-device-runtime.ts';
 
-vi.mock('@agent-device/platform-apple', () => ({
+vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   getRunnerSessionSnapshot: vi.fn(async () => null),
 }));
 vi.mock('../../../core/dispatch-resolve.ts', () => ({

@@ -10,15 +10,17 @@ import type {
 export function createAppleAppDeploymentExecutor(): AppleAppDeploymentExecutor {
   return Object.freeze({
     withInvalidatedAppResolutionCache: async (device, operation) => {
-      const { invalidateIosAppResolutionCache } = await import('@agent-device/platform-apple');
+      const { invalidateIosAppResolutionCache } =
+        await import('@agent-device/platform-apple/app-resolution');
       return await invalidateIosAppResolutionCache(device, operation);
     },
     prepareArtifact: async (input: MaterializeAppSourceInput, options) => {
-      const { prepareIosInstallArtifact } = await import('@agent-device/platform-apple');
+      const { prepareIosInstallArtifact } =
+        await import('@agent-device/platform-apple/install-artifact');
       return await prepareIosInstallArtifact(input.source, options);
     },
     resolveAppBundleId: async (device, app) => {
-      const { resolveIosApp } = await import('@agent-device/platform-apple');
+      const { resolveIosApp } = await import('@agent-device/platform-apple/app-resolution');
       return await resolveIosApp(device, app);
     },
   });

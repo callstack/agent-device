@@ -53,7 +53,7 @@ export type SampleProducer = {
   producer: string;
   sample: CapturedSample;
   /** The sample's text rebuilt from production code, ready to compare. */
-  render: () => string | Promise<string>;
+  render: () => string;
 };
 
 const formatPress = (result: Record<string, unknown>) =>

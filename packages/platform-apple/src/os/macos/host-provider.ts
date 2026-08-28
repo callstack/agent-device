@@ -1,5 +1,4 @@
-import { fs } from '@agent-device/host-kit/filesystem';
-import { hostHomeDirectory } from '@agent-device/host-kit/environment';
+import { hostFileStat, hostHomeDirectory } from '@agent-device/host-kit/host-file';
 import path from 'node:path';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -87,7 +86,7 @@ async function listLocalMacApps(
   const appPaths = new Set<string>();
 
   for (const root of appRoots) {
-    const stat = await fs.stat(root).catch(() => null);
+    const stat = await hostFileStat(root).catch(() => null);
     if (!stat?.isDirectory()) continue;
     const result = await runCommand(
       'find',

@@ -21,9 +21,9 @@ function lanes(file: string): CheckId[] {
 
 test('a TypeScript-only Apple change selects the iOS and macOS lanes without a Swift build', () => {
   for (const file of [
-    'packages/platform-apple/src/core/apps.ts',
+    'packages/platform-apple/src/core/app-resolution.ts',
     'packages/platform-apple/src/runtime.ts',
-    'packages/platform-apple/src/os/macos/desktop.ts',
+    'packages/platform-apple/src/os/macos/desktop-scroll.ts',
   ]) {
     assert.deepEqual(lanes(file), ['replay-ios', 'replay-ios-device', 'replay-macos'], file);
     assert.ok(
@@ -129,7 +129,7 @@ test('unit tests under src/ and packages/*/src own no lane', () => {
   for (const file of [
     'src/daemon/selectors.test.ts',
     'src/__tests__/contracts/interaction-guarantees.test.ts',
-    'packages/platform-apple/src/__tests__/apps.test.ts',
+    'packages/platform-apple/src/core/__tests__/apps.test.ts',
     'packages/platform-apple/src/runtime.test.ts',
   ]) {
     assert.ok(isUnitTest(file), file);

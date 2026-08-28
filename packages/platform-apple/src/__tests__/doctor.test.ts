@@ -13,8 +13,8 @@ vi.mock('../core/runner-client.ts', () => ({
   hasCachedAppleRunnerArtifact: mockHasCachedRunnerArtifact,
   prewarmAppleRunnerCache: mockPrewarmRunnerCache,
 }));
-vi.mock('@agent-device/host-kit/environment', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/host-kit/environment')>()),
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/process')>()),
   hostPlatform: mockHostPlatform,
 }));
 
