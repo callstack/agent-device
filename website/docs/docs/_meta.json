@@ -117,6 +117,11 @@
         "type": "custom-link",
         "label": "Limrun",
         "link": "/docs/limrun"
+      },
+      {
+        "type": "custom-link",
+        "label": "Doublespeed",
+        "link": "/docs/doublespeed"
       }
     ]
   },

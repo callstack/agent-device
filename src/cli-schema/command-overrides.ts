@@ -64,7 +64,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
         'Configure remote access without allocating a device. Direct providers validate credentials/resources before saving state and print the exact device/app preparation needed before open. AGENT_DEVICE_CLOUD_BASE_URL is the bridge/control-plane API origin; use AGENT_DEVICE_DAEMON_AUTH_TOKEN=adc_live_... for CI/service-token automation.',
     },
     usageOverride:
-      'connect [cloud|proxy|limrun|browserstack|aws-device-farm] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
+      'connect [cloud|proxy|limrun|doublespeed|browserstack|aws-device-farm] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
     listUsageOverride: 'connect',
     positionalArgs: ['provider?'],
     allowedFlags: [

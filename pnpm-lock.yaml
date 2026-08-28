@@ -72,6 +72,9 @@ importers:
       '@agent-device/platform-web':
         specifier: workspace:*
         version: link:packages/platform-web
+      '@agent-device/provider-doublespeed':
+        specifier: workspace:*
+        version: link:packages/provider-doublespeed
       '@agent-device/provider-limrun':
         specifier: workspace:*
         version: link:packages/provider-limrun
@@ -272,6 +275,18 @@ importers:
         version: link:../kernel
 
   packages/platform-web:
+    dependencies:
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+
+  packages/provider-doublespeed:
     dependencies:
       '@agent-device/capture-kit':
         specifier: workspace:*

@@ -632,6 +632,20 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/contracts',
     '@agent-device/kernel',
   ]);
+  const providerDoublespeedPackage = packages.find(
+    (pkg) => pkg.name === '@agent-device/provider-doublespeed',
+  );
+  assert.ok(providerDoublespeedPackage, 'provider-doublespeed package must exist');
+  assert.deepEqual(
+    [...providerDoublespeedPackage.exportTargets.keys()],
+    ['@agent-device/provider-doublespeed'],
+  );
+  assert.deepEqual([...providerDoublespeedPackage.workspaceDependencies].sort(), [
+    '@agent-device/capture-kit',
+    '@agent-device/contracts',
+    '@agent-device/kernel',
+  ]);
+  assert.equal(providerDoublespeedPackage.externalDependencies.size, 0);
   const rootExternalDependencies = rootExternalDependencyRanges(repoRoot);
   for (const pkg of packages) {
     for (const [name, range] of pkg.externalDependencies) {
@@ -681,6 +695,10 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/provider-limrun'),
     'root must declare the provider-limrun workspace dependency',
+  );
+  assert.ok(
+    rootWorkspaceDependencyNames(repoRoot).has('@agent-device/provider-doublespeed'),
+    'root must declare the provider-doublespeed workspace dependency',
   );
   assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/xml'),
@@ -764,6 +782,11 @@ test('Node resolution enforces the exports map at runtime', () => {
   assert.ok(
     providerLimrunResolved.endsWith('packages/provider-limrun/src/index.ts'),
     providerLimrunResolved,
+  );
+  const providerDoublespeedResolved = import.meta.resolve('@agent-device/provider-doublespeed');
+  assert.ok(
+    providerDoublespeedResolved.endsWith('packages/provider-doublespeed/src/index.ts'),
+    providerDoublespeedResolved,
   );
   const xmlResolved = import.meta.resolve('@agent-device/xml');
   assert.ok(xmlResolved.endsWith('packages/xml/src/index.ts'), xmlResolved);
