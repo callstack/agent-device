@@ -13,6 +13,7 @@
 export const WAIT_REASONS = {
   captureStalled: 'wait_capture_stalled',
   deadlineExceeded: 'wait_deadline_exceeded',
+  runnerRestartExhausted: 'wait_runner_restart_exhausted',
   targetAbsent: 'wait_target_absent',
   stableTimeout: 'wait_stable_timeout',
   landmarkIdentityMismatch: 'wait_landmark_identity_mismatch',

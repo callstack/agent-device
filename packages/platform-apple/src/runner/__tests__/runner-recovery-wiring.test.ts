@@ -27,7 +27,10 @@ import { startFakeRunnerServer, type FakeRunnerServer } from './fake-runner-serv
 
 let server: FakeRunnerServer | undefined;
 
-const ensureRunnerSessionMock = vi.hoisted(() => vi.fn());
+const { ensureRunnerSessionMock, invalidateRunnerSessionMock } = vi.hoisted(() => ({
+  ensureRunnerSessionMock: vi.fn(),
+  invalidateRunnerSessionMock: vi.fn(async () => {}),
+}));
 
 vi.mock('../runner-session.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../runner-session.ts')>();
@@ -36,6 +39,7 @@ vi.mock('../runner-session.ts', async (importOriginal) => {
     // Session creation only. executeRunnerCommandWithSession stays REAL, so
     // the send → classify → recover path under test is production code.
     ensureRunnerSession: ensureRunnerSessionMock,
+    invalidateRunnerSession: invalidateRunnerSessionMock,
   };
 });
 
@@ -67,11 +71,12 @@ afterEach(async () => {
   await server?.close();
   server = undefined;
   ensureRunnerSessionMock.mockReset();
+  invalidateRunnerSessionMock.mockReset();
 });
 
-function seedSession(port: number): RunnerSession {
+function makeRunnerSession(port: number, sessionId = `wiring:${port}`): RunnerSession {
   const session: RunnerSession = {
-    sessionId: `wiring:${port}`,
+    sessionId,
     device: IOS_SIMULATOR,
     deviceId: IOS_SIMULATOR.id,
     port,
@@ -81,6 +86,11 @@ function seedSession(port: number): RunnerSession {
     child: { pid: process.pid, exitCode: null },
     ready: true,
   };
+  return session;
+}
+
+function seedSession(port: number): RunnerSession {
+  const session = makeRunnerSession(port);
   ensureRunnerSessionMock.mockResolvedValue(session);
   return session;
 }
@@ -153,6 +163,42 @@ test('an unrecoverable lifecycle state still reaches recovery and reports the in
     runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 5, y: 5 }),
   ).rejects.toThrow(/invalidated the runner session/);
   assert.ok(server.requests.some((request) => request.command === 'status'));
+});
+
+test('a failed restart preserves the invalidated runner evidence', async () => {
+  const restartedServer = await startFakeRunnerServer({
+    tap: [{ kind: 'hangUp' }],
+    status: [{ kind: 'ok', data: { lifecycleState: 'zombie' } }],
+  });
+  try {
+    server = await startFakeRunnerServer({
+      uptime: [{ kind: 'runnerError', code: 'COMMAND_FAILED', message: 'fetch failed' }],
+    });
+    const staleSession = makeRunnerSession(server.port, 'session-stale');
+    const restartedSession = makeRunnerSession(restartedServer.port, 'session-restarted');
+    ensureRunnerSessionMock
+      .mockResolvedValueOnce(staleSession)
+      .mockResolvedValueOnce(restartedSession);
+
+    await expect(
+      runAppleRunnerCommand(
+        IOS_SIMULATOR,
+        { command: 'tap', x: 5, y: 5 },
+        { logPath: '/tmp/restart.ndjson' },
+      ),
+    ).rejects.toMatchObject({
+      details: {
+        runnerRestarted: true,
+        runnerRestartReason: 'runner_readiness_preflight_failed_before_command_send',
+        runnerRestartCommand: 'tap',
+        runnerInvalidatedSessionId: staleSession.sessionId,
+        runnerRestartSessionId: restartedSession.sessionId,
+        logPath: '/tmp/restart.ndjson',
+      },
+    });
+  } finally {
+    await restartedServer.close();
+  }
 });
 
 test('an exact-session command never dispatches to a replacement runner', async () => {

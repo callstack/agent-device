@@ -359,6 +359,8 @@ async function restartSessionAndRunCommand(params: {
   const restartedSession = await ensureRunnerSession(device, {
     ...options,
     cleanStaleBundles: true,
+  }).catch((error: unknown) => {
+    throw markRunnerRestartError(error, params);
   });
   commitRunnerRecycle(recycleKey);
   try {
@@ -386,19 +388,51 @@ async function restartSessionAndRunCommand(params: {
   } catch (retryErr) {
     const retryAppErr = asAppError(retryErr, 'COMMAND_FAILED');
     if (isRetryableRunnerError(retryAppErr)) {
-      return await handleRunnerTransportErrorAfterCommandSend({
-        device,
-        session: restartedSession,
-        command,
-        transportError: retryAppErr,
-        options,
-        signal,
-        invalidationReason: 'transport_error_after_retry_command_send',
-        invalidateSession: invalidateRunnerSession,
-      });
+      try {
+        return await handleRunnerTransportErrorAfterCommandSend({
+          device,
+          session: restartedSession,
+          command,
+          transportError: retryAppErr,
+          options,
+          signal,
+          invalidationReason: 'transport_error_after_retry_command_send',
+          invalidateSession: invalidateRunnerSession,
+        });
+      } catch (recoveryErr) {
+        throw markRunnerRestartError(recoveryErr, params, restartedSession);
+      }
     }
-    throw retryErr;
+    throw markRunnerRestartError(retryErr, params, restartedSession);
   }
+}
+
+function markRunnerRestartError(
+  error: unknown,
+  params: Pick<
+    Parameters<typeof restartSessionAndRunCommand>[0],
+    'session' | 'command' | 'options' | 'restartReason'
+  >,
+  restartedSession?: RunnerSession,
+): unknown {
+  if (!(error instanceof AppError)) return error;
+  return new AppError(
+    error.code,
+    error.message,
+    {
+      ...(error.details ?? {}),
+      runnerRestarted: true,
+      runnerRestartReason: params.restartReason,
+      runnerRestartCommand: params.command.command,
+      ...(params.command.commandId ? { runnerRestartCommandId: params.command.commandId } : {}),
+      runnerInvalidatedSessionId: params.session.sessionId,
+      ...(restartedSession ? { runnerRestartSessionId: restartedSession.sessionId } : {}),
+      ...(error.details?.logPath === undefined && params.options.logPath
+        ? { logPath: params.options.logPath }
+        : {}),
+    },
+    error.cause ?? error,
+  );
 }
 
 async function runPrepareHealthCheck(

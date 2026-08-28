@@ -1,5 +1,5 @@
-import { AppError } from '@agent-device/kernel/errors';
-import { WAIT_REASONS } from '@agent-device/contracts/wait';
+import { AppError, type AppErrorDetails } from '@agent-device/kernel/errors';
+import { WAIT_REASONS, type WaitReason } from '@agent-device/contracts/wait';
 import { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
 import { selectorPollBudget } from '../../../core/selector-pipeline.ts';
 import {
@@ -15,12 +15,20 @@ import { runWithinWaitDeadline } from './wait-deadline.ts';
  */
 export const DEFAULT_WAIT_TIMEOUT_MS = SELECTOR_PIPELINE_POLICIES.wait.poll.defaultTimeoutMs;
 
-export type WaitPollDeadline = 'capture-stalled' | 'capture-truncated';
+export type WaitPollDeadline = 'capture-stalled' | 'capture-truncated' | 'runner-restart-exhausted';
 
 export type WaitFailureEvidence = {
   timeoutMs: number;
   readableCaptures: number;
   waitedMs: number;
+  runnerRestarted?: true;
+  runnerRestartReason?: string;
+  runnerRestartCommand?: string;
+  runnerRestartCommandId?: string;
+  runnerInvalidatedSessionId?: string;
+  runnerRestartSessionId?: string;
+  logPath?: string;
+  diagnosticId?: string;
 };
 
 type WaitPollingRuntime = {
@@ -62,6 +70,7 @@ export function createWaitPolling(
   const timeoutMs = requestedTimeoutMs ?? budget.defaultTimeoutMs;
   const startedAtMs = now(runtime);
   const unreadable = createUnreadablePollTracker();
+  let timeoutEvidence: Partial<WaitFailureEvidence> = {};
   const remainingMs = () => Math.max(0, timeoutMs - (now(runtime) - startedAtMs));
 
   return {
@@ -82,6 +91,8 @@ export function createWaitPolling(
         if (captureWasReadable) unreadable.recordReadableCapture();
         return result;
       }
+      const runnerRestart = runnerRestartTimeoutEvidence(result.error);
+      timeoutEvidence = runnerRestart ?? {};
       // A capture that only becomes readable after its deadline is not evidence for this wait.
       // Count only captures that completed before runWithinWaitDeadline returned a timeout.
       return {
@@ -90,9 +101,11 @@ export function createWaitPolling(
         // the poll index is not evidence. This remains true after one or more unreadable content
         // verdicts followed by a capture that consumes the remaining budget.
         deadline:
-          unreadable.readableCaptures() === 0
-            ? ('capture-stalled' as const)
-            : ('capture-truncated' as const),
+          runnerRestart !== undefined
+            ? ('runner-restart-exhausted' as const)
+            : unreadable.readableCaptures() === 0
+              ? ('capture-stalled' as const)
+              : ('capture-truncated' as const),
       };
     },
     hasTimeRemaining: () => remainingMs() > 0,
@@ -100,6 +113,7 @@ export function createWaitPolling(
       timeoutMs,
       readableCaptures: unreadable.readableCaptures(),
       waitedMs: now(runtime) - startedAtMs,
+      ...timeoutEvidence,
     }),
     rethrowIfNeverReadable: unreadable.rethrowIfNeverReadable,
     sleepUntilNextPoll: async () =>
@@ -116,6 +130,16 @@ function waitCaptureStalledError(message: string, evidence: WaitFailureEvidence)
     ...evidence,
     retriable: true,
     hint: 'No readable snapshot capture completed before the wait timeout. Retry, or use screenshot to inspect the current surface.',
+  });
+}
+
+function waitRunnerRestartExhaustedError(message: string, evidence: WaitFailureEvidence): AppError {
+  return new AppError('COMMAND_FAILED', message, {
+    reason: WAIT_REASONS.runnerRestartExhausted satisfies WaitReason,
+    waitRunnerRestartExhausted: true,
+    ...evidence,
+    retriable: true,
+    hint: 'An iOS runner restart consumed the wait timeout before a readable snapshot completed. Inspect the diagnostics log for the runner invalidation/restart sequence, then retry.',
   });
 }
 
@@ -140,6 +164,9 @@ export function waitTimeoutError(
   deadline: WaitPollDeadline | undefined,
 ): AppError {
   const evidence = polling.failureEvidence();
+  if (deadline === 'runner-restart-exhausted') {
+    return waitRunnerRestartExhaustedError(message, evidence);
+  }
   if (deadline === 'capture-stalled') return waitCaptureStalledError(message, evidence);
   if (deadline === 'capture-truncated') return waitDeadlineExceededError(message, evidence);
 
@@ -147,6 +174,30 @@ export function waitTimeoutError(
   return evidence.readableCaptures === 0
     ? waitCaptureStalledError(message, evidence)
     : waitTargetAbsentError(message, evidence);
+}
+
+function runnerRestartTimeoutEvidence(error: unknown): Partial<WaitFailureEvidence> | undefined {
+  if (!(error instanceof AppError)) return undefined;
+  const details = error.details;
+  if (details?.runnerRestarted !== true) return undefined;
+  return {
+    runnerRestarted: true,
+    ...copyStringDetail(details, 'runnerRestartReason'),
+    ...copyStringDetail(details, 'runnerRestartCommand'),
+    ...copyStringDetail(details, 'runnerRestartCommandId'),
+    ...copyStringDetail(details, 'runnerInvalidatedSessionId'),
+    ...copyStringDetail(details, 'runnerRestartSessionId'),
+    ...copyStringDetail(details, 'logPath'),
+    ...copyStringDetail(details, 'diagnosticId'),
+  };
+}
+
+function copyStringDetail<Key extends keyof WaitFailureEvidence>(
+  details: AppErrorDetails | undefined,
+  key: Key,
+): Pick<WaitFailureEvidence, Key> | {} {
+  const value = details?.[key];
+  return typeof value === 'string' ? ({ [key]: value } as Pick<WaitFailureEvidence, Key>) : {};
 }
 
 function createUnreadablePollTracker(): UnreadablePollTracker {
