@@ -1,7 +1,7 @@
 import { fs } from '@agent-device/host-kit/filesystem';
 import path from 'node:path';
 import type { LocalInstallSource } from '@agent-device/kernel/contracts';
-import { readInfoPlistString } from './plist.ts';
+import { readIosBundleInfo } from './bundle-info.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { extractArchiveSafely, ArchiveBudget } from '@agent-device/host-kit/archive';
 
@@ -97,21 +97,7 @@ async function prepareIosInstallArtifactInScope(
   }
 }
 
-export async function readIosBundleInfo(
-  appBundlePath: string,
-  signal?: AbortSignal,
-): Promise<{ bundleId?: string; appName?: string }> {
-  const infoPlistPath = path.join(appBundlePath, 'Info.plist');
-  const [bundleId, displayName, bundleName] = await Promise.all([
-    readInfoPlistString(infoPlistPath, 'CFBundleIdentifier', signal),
-    readInfoPlistString(infoPlistPath, 'CFBundleDisplayName', signal),
-    readInfoPlistString(infoPlistPath, 'CFBundleName', signal),
-  ]);
-  return {
-    bundleId,
-    appName: displayName ?? bundleName,
-  };
-}
+export { readIosBundleInfo } from './bundle-info.ts';
 
 async function resolveIosInstallablePath(
   appPath: string,

@@ -26,13 +26,13 @@ const localTransport: AppleSimulatorScreenRecordingTransport = Object.freeze({
   mode: 'local',
   async start({ device, outputPath, signal }) {
     const [{ buildSimctlArgsForDevice }, { runCmdBackground }] = await Promise.all([
-      import('@agent-device/platform-apple'),
+      import('@agent-device/platform-apple/simctl'),
       import('@agent-device/host-kit/command'),
     ]);
     signal?.throwIfAborted();
     return runCmdBackground(
       'xcrun',
-      await buildSimctlArgsForDevice(device, ['io', device.id, 'recordVideo', outputPath]),
+      buildSimctlArgsForDevice(device, ['io', device.id, 'recordVideo', outputPath]),
       { allowFailure: true },
     );
   },

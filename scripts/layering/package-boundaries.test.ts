@@ -524,14 +524,23 @@ test('the real tree parses, declares, and passes R11', () => {
   ]);
   const platformApplePackage = packages.find((pkg) => pkg.name === '@agent-device/platform-apple');
   assert.ok(platformApplePackage, 'platform-apple package must exist');
-  // The root façade plus the runner mechanics facet's enumerated subpaths
-  // (#2040); any further subpath widens this key list and fails the
-  // assertion. R13 pins the same list from the manifest side.
+  // The root façade plus the named Apple domain/mechanics subpaths; any further
+  // subpath widens this key list and fails the assertion. R13 pins the same
+  // list from the manifest side.
   assert.deepEqual([...platformApplePackage.exportTargets.keys()].sort(), [
     '@agent-device/platform-apple',
+    '@agent-device/platform-apple/app-resolution',
+    '@agent-device/platform-apple/install-artifact',
+    '@agent-device/platform-apple/interactions',
+    '@agent-device/platform-apple/perf',
+    '@agent-device/platform-apple/physical-device',
     '@agent-device/platform-apple/runner',
+    '@agent-device/platform-apple/runner-owner',
     '@agent-device/platform-apple/runner/client',
     '@agent-device/platform-apple/runner/test-host',
+    '@agent-device/platform-apple/simctl',
+    '@agent-device/platform-apple/simulator',
+    '@agent-device/platform-apple/tool-provider',
   ]);
   assert.deepEqual([...platformApplePackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',

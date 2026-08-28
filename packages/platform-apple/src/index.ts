@@ -87,11 +87,6 @@ type AppleToolProvider = import('./core/tool-provider.ts').AppleToolProvider;
 type AppleInteractor = import('@agent-device/contracts/interactor-types').Interactor;
 type AppleInteractorFactory = (typeof import('./interactor.ts'))['createAppleInteractor'];
 
-export const buildAppNotInstalledError = async (
-  ...args: Parameters<
-    (typeof import('./core/app-resolution-error.ts'))['buildAppNotInstalledError']
-  >
-) => (await import('./core/app-resolution-error.ts')).buildAppNotInstalledError(...args);
 export const detectSoleRunningIosSimulatorApp = async (
   ...args: Parameters<
     (typeof import('./core/app-resolution.ts'))['detectSoleRunningIosSimulatorApp']
@@ -115,9 +110,6 @@ export const listIosApps = async (
 export const resolveIosApp = async (
   ...args: Parameters<(typeof import('./core/app-resolution.ts'))['resolveIosApp']>
 ) => (await import('./core/app-resolution.ts')).resolveIosApp(...args);
-export const resolveIosAppAlias = async (
-  ...args: Parameters<(typeof import('./core/app-resolution.ts'))['resolveIosAppAlias']>
-) => (await import('./core/app-resolution.ts')).resolveIosAppAlias(...args);
 export const resolveIosSimulatorDeepLinkBundleId = async (
   ...args: Parameters<
     (typeof import('./core/app-resolution.ts'))['resolveIosSimulatorDeepLinkBundleId']
@@ -213,9 +205,6 @@ export function createAppleInteractor(
     dismissAlert: method('dismissAlert'),
   };
 }
-export const resolveAppleBackRunnerCommand = async (
-  ...args: Parameters<(typeof import('./interactions.ts'))['resolveAppleBackRunnerCommand']>
-) => (await import('./interactions.ts')).resolveAppleBackRunnerCommand(...args);
 
 export const ensureBootedSimulator = async (
   ...args: Parameters<(typeof import('./core/simulator.ts'))['ensureBootedSimulator']>
@@ -223,18 +212,6 @@ export const ensureBootedSimulator = async (
 export const shutdownSimulator = async (
   ...args: Parameters<(typeof import('./core/simulator.ts'))['shutdownSimulator']>
 ) => (await import('./core/simulator.ts')).shutdownSimulator(...args);
-export const wasSimulatorRecentlyObservedBooted = async (
-  ...args: Parameters<(typeof import('./core/simulator.ts'))['wasSimulatorRecentlyObservedBooted']>
-) => (await import('./core/simulator.ts')).wasSimulatorRecentlyObservedBooted(...args);
-export const markSimulatorBooted = async (
-  ...args: Parameters<(typeof import('./core/simulator.ts'))['markSimulatorBooted']>
-) => (await import('./core/simulator.ts')).markSimulatorBooted(...args);
-export const buildSimctlArgs = async (
-  ...args: Parameters<(typeof import('./core/simctl.ts'))['buildSimctlArgs']>
-) => (await import('./core/simctl.ts')).buildSimctlArgs(...args);
-export const buildSimctlArgsForDevice = async (
-  ...args: Parameters<(typeof import('./core/simctl.ts'))['buildSimctlArgsForDevice']>
-) => (await import('./core/simctl.ts')).buildSimctlArgsForDevice(...args);
 
 export function createLocalAppleToolProvider(
   provider: Partial<AppleToolProvider> = {},
@@ -290,9 +267,6 @@ export function createLocalAppleToolProvider(
     macosHost,
   };
 }
-export const resolveAppleToolProvider = async (
-  ...args: Parameters<(typeof import('./core/tool-provider.ts'))['resolveAppleToolProvider']>
-) => (await import('./core/tool-provider.ts')).resolveAppleToolProvider(...args);
 export const runAppleToolCommand = async (
   ...args: Parameters<(typeof import('./core/tool-provider.ts'))['runAppleToolCommand']>
 ) => (await import('./core/tool-provider.ts')).runAppleToolCommand(...args);
@@ -302,9 +276,6 @@ export const runXcrun = async (
 export const readApplePlistJson = async (
   ...args: Parameters<(typeof import('./core/tool-provider.ts'))['readApplePlistJson']>
 ) => (await import('./core/tool-provider.ts')).readApplePlistJson(...args);
-export const hasScopedAppleToolProvider = async (
-  ...args: Parameters<(typeof import('./core/tool-provider.ts'))['hasScopedAppleToolProvider']>
-) => (await import('./core/tool-provider.ts')).hasScopedAppleToolProvider(...args);
 export async function withAppleToolProvider<T>(
   provider: Parameters<(typeof import('./core/tool-provider.ts'))['withAppleToolProvider']>[0],
   task: () => Promise<T>,
@@ -314,17 +285,9 @@ export async function withAppleToolProvider<T>(
   return await runWithAppleToolProvider(provider, task);
 }
 
-export const resolveIosPhysicalDeviceControl = async (
-  ...args: Parameters<
-    (typeof import('./core/physical-device-control.ts'))['resolveIosPhysicalDeviceControl']
-  >
-) => (await import('./core/physical-device-control.ts')).resolveIosPhysicalDeviceControl(...args);
 export const prepareIosInstallArtifact = async (
   ...args: Parameters<(typeof import('./core/install-artifact.ts'))['prepareIosInstallArtifact']>
 ) => (await import('./core/install-artifact.ts')).prepareIosInstallArtifact(...args);
-export const readIosBundleInfo = async (
-  ...args: Parameters<(typeof import('./core/install-artifact.ts'))['readIosBundleInfo']>
-) => (await import('./core/install-artifact.ts')).readIosBundleInfo(...args);
 export const symbolicateCrashArtifact = async (
   ...args: Parameters<(typeof import('./core/debug-symbols.ts'))['symbolicateCrashArtifact']>
 ) => (await import('./core/debug-symbols.ts')).symbolicateCrashArtifact(...args);
@@ -333,11 +296,6 @@ export const queryAppleRunnerSelector = async (
     (typeof import('./core/runner-selector-query.ts'))['queryAppleRunnerSelector']
   >
 ) => (await import('./core/runner-selector-query.ts')).queryAppleRunnerSelector(...args);
-export const setRunnerLeaseOwnerStateDir = async (
-  ...args: Parameters<
-    (typeof import('./core/runner-owner-state.ts'))['setRunnerLeaseOwnerStateDir']
-  >
-) => (await import('./core/runner-owner-state.ts')).setRunnerLeaseOwnerStateDir(...args);
 
 export const resolveFrontmostMacOsApp = async (
   ...args: Parameters<(typeof import('./os/macos/helper.ts'))['resolveFrontmostMacOsApp']>
@@ -363,18 +321,6 @@ export const captureAppleMemorySnapshot = async (
 export const sampleAppleFramePerf = async (
   ...args: Parameters<(typeof import('./core/perf.ts'))['sampleAppleFramePerf']>
 ) => (await import('./core/perf.ts')).sampleAppleFramePerf(...args);
-export const buildAppleFrameSamplingMetadata = async (
-  ...args: Parameters<(typeof import('./core/perf.ts'))['buildAppleFrameSamplingMetadata']>
-) => (await import('./core/perf.ts')).buildAppleFrameSamplingMetadata(...args);
-export const buildAppleMemorySamplingMetadata = async (
-  ...args: Parameters<(typeof import('./core/perf.ts'))['buildAppleMemorySamplingMetadata']>
-) => (await import('./core/perf.ts')).buildAppleMemorySamplingMetadata(...args);
-export const buildAppleMemorySnapshotSupport = async (
-  ...args: Parameters<(typeof import('./core/perf.ts'))['buildAppleMemorySnapshotSupport']>
-) => (await import('./core/perf.ts')).buildAppleMemorySnapshotSupport(...args);
-export const isRetryableIosDeviceTraceRecordFailure = async (
-  ...args: Parameters<(typeof import('./core/perf.ts'))['isRetryableIosDeviceTraceRecordFailure']>
-) => (await import('./core/perf.ts')).isRetryableIosDeviceTraceRecordFailure(...args);
 export const prepareAppleTraceRecordRetry = async (
   ...args: Parameters<(typeof import('./core/perf.ts'))['prepareAppleTraceRecordRetry']>
 ) => (await import('./core/perf.ts')).prepareAppleTraceRecordRetry(...args);
@@ -387,9 +333,6 @@ export const resolveIosDevicePerfTarget = async (
 export const readAppleProcessSamples = async (
   ...args: Parameters<(typeof import('./core/perf.ts'))['readAppleProcessSamples']>
 ) => (await import('./core/perf.ts')).readAppleProcessSamples(...args);
-export const resolveIosDevicePerfHint = async (
-  ...args: Parameters<(typeof import('./core/perf.ts'))['resolveIosDevicePerfHint']>
-) => (await import('./core/perf.ts')).resolveIosDevicePerfHint(...args);
 
 export const startAppleXctracePerfCapture = async (
   ...args: Parameters<(typeof import('./core/perf-xctrace.ts'))['startAppleXctracePerfCapture']>

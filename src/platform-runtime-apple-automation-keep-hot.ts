@@ -8,11 +8,12 @@ export function createAppleAutomationKeepHotHost(): DeviceReadinessRuntimeHost['
         .catch(() => {});
     },
     wasRecentlyObservedBooted: async (device) => {
-      const { wasSimulatorRecentlyObservedBooted } = await import('@agent-device/platform-apple');
+      const { wasSimulatorRecentlyObservedBooted } =
+        await import('@agent-device/platform-apple/simulator');
       return wasSimulatorRecentlyObservedBooted(device);
     },
     markBooted: (device) => {
-      void import('@agent-device/platform-apple')
+      void import('@agent-device/platform-apple/simulator')
         .then(({ markSimulatorBooted }) => markSimulatorBooted(device))
         .catch(() => {});
     },

@@ -75,14 +75,40 @@
       "exports": ["buildAppleFrameSamplingMetadata", "buildAppleMemorySamplingMetadata"]
     },
     {
-      "comment": "Apple mechanics are reached through the named lazy façade in packages/platform-apple/src/index.ts. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to wrappers present in that façade.",
+      "comment": "Apple app-resolution helpers are reached through the named lazy façade in packages/platform-apple/src/app-resolution-facade.ts. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to the facade's re-exports.",
       "file": "packages/platform-apple/src/core/app-resolution.ts",
       "exports": ["buildAppNotInstalledError", "resolveIosAppAlias"]
     },
     {
-      "comment": "Apple mechanics are reached through the named lazy façade in packages/platform-apple/src/index.ts. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to wrappers present in that façade.",
+      "comment": "Apple install mechanics are reached through the root lazy façade, while bundle-info consumers use the named install-artifact façade. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to the actual facade re-exports.",
       "file": "packages/platform-apple/src/core/install-artifact.ts",
       "exports": ["prepareIosInstallArtifact", "readIosBundleInfo"]
+    },
+    {
+      "comment": "Apple perf mechanics are reached through the named lazy perf façade. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to the facade's re-exports.",
+      "file": "packages/platform-apple/src/perf-facade.ts",
+      "exports": [
+        "buildAppleFrameSamplingMetadata",
+        "buildAppleMemorySamplingMetadata",
+        "buildAppleMemorySnapshotSupport",
+        "isRetryableIosDeviceTraceRecordFailure",
+        "resolveIosDevicePerfHint"
+      ]
+    },
+    {
+      "comment": "Apple tool-provider mechanics are reached through the named lazy tool-provider façade. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to the facade's re-exports.",
+      "file": "packages/platform-apple/src/tool-provider-facade.ts",
+      "exports": ["hasScopedAppleToolProvider", "resolveAppleToolProvider"]
+    },
+    {
+      "comment": "The device-aware simctl argument builder is reached through the named lazy simctl façade. Fallow cannot connect the dynamic member read to this source export; keep the suppression limited to that re-export.",
+      "file": "packages/platform-apple/src/core/simctl.ts",
+      "exports": ["buildSimctlArgsForDevice"]
+    },
+    {
+      "comment": "The device-aware simctl argument builder is a named package entrypoint reached through dynamic platform-runtime imports. Fallow cannot connect those member reads to the re-export; keep the suppression limited to this one facade symbol.",
+      "file": "packages/platform-apple/src/simctl-facade.ts",
+      "exports": ["buildSimctlArgsForDevice"]
     },
     {
       "comment": "Apple mechanics are reached through the named lazy façade in packages/platform-apple/src/index.ts. Fallow cannot connect dynamic import member reads to this source export; keep this list limited to wrappers present in that façade.",
@@ -132,35 +158,24 @@
         "pushIosNotification",
         "readIosClipboardText",
         "writeIosClipboardText",
-        "buildSimctlArgs",
-        "buildSimctlArgsForDevice",
-        "resolveAppleToolProvider",
         "runAppleToolCommand",
         "runXcrun",
         "createLocalAppleToolProvider",
         "readApplePlistJson",
-        "hasScopedAppleToolProvider",
-        "buildAppNotInstalledError",
         "setIosSetting",
         "readAppleAlert",
         "awaitAppleAlert",
         "actOnAppleAlert",
         "createAppleInteractor",
-        "resolveAppleBackRunnerCommand",
         "shutdownSimulator",
         "cleanupAppleXctracePerfCapture",
         "sampleAppleMemoryPerf",
         "captureAppleMemorySnapshot",
         "sampleAppleFramePerf",
-        "buildAppleFrameSamplingMetadata",
-        "buildAppleMemorySamplingMetadata",
-        "buildAppleMemorySnapshotSupport",
-        "isRetryableIosDeviceTraceRecordFailure",
         "prepareAppleTraceRecordRetry",
         "resolveAppleExecutable",
         "resolveIosDevicePerfTarget",
         "readAppleProcessSamples",
-        "resolveIosDevicePerfHint",
         "startAppleXctracePerfCapture",
         "stopAppleXctracePerfCapture",
         "writeAppleXctracePerfReport",
@@ -182,6 +197,11 @@
         "MacOsPermissionTarget",
         "MacOsSnapshotNode"
       ]
+    },
+    {
+      "comment": "The legacy Maestro fallback wording remains contracts vocabulary for wire/fixture compatibility, but has no in-repo production consumer. The Apple migration changes this file's documentation path, so keep the existing declaration explicit without treating it as a new W4 export leak.",
+      "file": "packages/contracts/src/interactor-types.ts",
+      "exports": ["MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE"]
     },
     {
       "comment": "Daemon route handlers are reached only through the dynamic `import()` table in request-handler-chain.ts, which --production analysis cannot follow to a consumer.",

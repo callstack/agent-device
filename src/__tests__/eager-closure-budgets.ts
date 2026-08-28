@@ -64,9 +64,9 @@ export type EagerClosureBudget = {
    * excluding just the entry turns the assertion into "this façade evaluates none of its own
    * mechanics", which is the actual ADR-0019 property.
    *
-   * Every package entry surface sets this true except the runner mechanics
-   * facet entries (see PLATFORM_MECHANICS_ENTRY_PREFIX below), whose closure
-   * IS the implementation.
+   * Every package entry surface sets this true except the runner mechanics and named Apple
+   * domain/mechanics facet entries (see the exceptions below), whose closure IS the implementation
+   * intentionally exposed through that subpath.
    * Hub rows set it false -- a hub is a CONSUMER of façades, not neutral vocabulary, and three of
    * them legitimately hold the R3-permitted static platform seam that has not migrated yet.
    */
@@ -298,6 +298,15 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
 
   // --- @agent-device/platform-apple ---
   'packages/platform-apple/src/index.ts': 1,
+  'packages/platform-apple/src/app-resolution-facade.ts': 55,
+  'packages/platform-apple/src/interactions-facade.ts': 117,
+  'packages/platform-apple/src/install-artifact-facade.ts': 20,
+  'packages/platform-apple/src/perf-facade.ts': 52,
+  'packages/platform-apple/src/physical-device-facade.ts': 41,
+  'packages/platform-apple/src/runner-owner-facade.ts': 2,
+  'packages/platform-apple/src/simctl-facade.ts': 18,
+  'packages/platform-apple/src/simulator-facade.ts': 26,
+  'packages/platform-apple/src/tool-provider-facade.ts': 14,
 
   // --- @agent-device/platform-harmonyos ---
   'packages/platform-harmonyos/src/index.ts': 1,
@@ -400,6 +409,18 @@ const PLATFORM_MECHANICS_ENTRY_PREFIXES = [
   'packages/platform-android/src/mechanics.ts',
 ] as const;
 
+const APPLE_DOMAIN_MECHANICS_ENTRY_FILES: ReadonlySet<string> = new Set([
+  'packages/platform-apple/src/app-resolution-facade.ts',
+  'packages/platform-apple/src/interactions-facade.ts',
+  'packages/platform-apple/src/install-artifact-facade.ts',
+  'packages/platform-apple/src/perf-facade.ts',
+  'packages/platform-apple/src/physical-device-facade.ts',
+  'packages/platform-apple/src/runner-owner-facade.ts',
+  'packages/platform-apple/src/simctl-facade.ts',
+  'packages/platform-apple/src/simulator-facade.ts',
+  'packages/platform-apple/src/tool-provider-facade.ts',
+]);
+
 function toRows(
   budgets: Readonly<Record<string, number>>,
   kind: 'facade' | 'hub',
@@ -414,6 +435,7 @@ function toRows(
       !PLATFORM_MECHANICS_ENTRY_PREFIXES.some((prefix) =>
         prefix.endsWith('/') ? entryFile.startsWith(prefix) : entryFile === prefix,
       ),
+      !APPLE_DOMAIN_MECHANICS_ENTRY_FILES.has(entryFile),
   }));
 }
 

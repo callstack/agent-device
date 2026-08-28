@@ -91,11 +91,11 @@ export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
     },
     ios: {
       resolveAppAlias: async (app) => {
-        const { resolveIosAppAlias } = await import('@agent-device/platform-apple');
+        const { resolveIosAppAlias } = await import('@agent-device/platform-apple/app-resolution');
         return resolveIosAppAlias(app);
       },
       readBundleAppName: async (appPath) => {
-        const { readIosBundleInfo } = await import('@agent-device/platform-apple');
+        const { readIosBundleInfo } = await import('@agent-device/platform-apple/install-artifact');
         return (await readIosBundleInfo(appPath)).appName;
       },
     },

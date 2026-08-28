@@ -8,7 +8,7 @@ import { setActiveProviderDeviceRuntimes } from '../../provider-device-runtime.t
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 
 import { getInteractor, getLocalInteractor } from '../../core/interactors.ts';
-import { resolveAppleBackRunnerCommand } from '@agent-device/platform-apple';
+import { resolveAppleBackRunnerCommand } from '@agent-device/platform-apple/interactions';
 
 const iosSimulator: DeviceInfo = {
   platform: 'apple',
@@ -51,13 +51,13 @@ afterEach(() => {
   setActiveProviderDeviceRuntimes([]);
 });
 
-test('resolveAppleBackRunnerCommand defaults plain back to in-app navigation', async () => {
-  assert.equal(await resolveAppleBackRunnerCommand(), 'backInApp');
+test('resolveAppleBackRunnerCommand defaults plain back to in-app navigation', () => {
+  assert.equal(resolveAppleBackRunnerCommand(), 'backInApp');
 });
 
-test('resolveAppleBackRunnerCommand maps explicit back modes to runner commands', async () => {
-  assert.equal(await resolveAppleBackRunnerCommand('in-app'), 'backInApp');
-  assert.equal(await resolveAppleBackRunnerCommand('system'), 'backSystem');
+test('resolveAppleBackRunnerCommand maps explicit back modes to runner commands', () => {
+  assert.equal(resolveAppleBackRunnerCommand('in-app'), 'backInApp');
+  assert.equal(resolveAppleBackRunnerCommand('system'), 'backSystem');
 });
 
 test('provider device interactor receives runner context from core resolution', async () => {

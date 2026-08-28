@@ -25,7 +25,7 @@ import { buildDeviceInUseBySessionError } from '../../src/daemon/handlers/sessio
 import { buildDeviceClaimConflictError } from '../../src/daemon/device-claim-conflict.ts';
 import { resolveRefStalenessWarning } from '../../src/daemon/session-snapshot.ts';
 import type { SessionState } from '../../src/daemon/types.ts';
-import { buildAppNotInstalledError } from '@agent-device/platform-apple';
+import { buildAppNotInstalledError } from '@agent-device/platform-apple/app-resolution';
 import {
   presentConnectReadiness,
   renderConnectSuccess,
@@ -450,7 +450,7 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     name: 'APP_NOT_INSTALLED_SAMPLE',
     producer: 'the real app-resolution producer and the default hint',
     sample: APP_NOT_INSTALLED_SAMPLE,
-    render: async () => renderHumanError(await buildAppNotInstalledError('Shoply')),
+    render: () => renderHumanError(buildAppNotInstalledError('Shoply')),
   },
   {
     name: 'BROWSERSTACK_CONNECT_SAMPLE',

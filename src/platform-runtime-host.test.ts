@@ -6,7 +6,7 @@ const toolchains = vi.hoisted(() => ({
   appleRuns: [] as Array<{ args: string[]; signal?: AbortSignal }>,
 }));
 
-vi.mock('@agent-device/platform-apple', () => {
+vi.mock('@agent-device/platform-apple/tool-provider', () => {
   toolchains.appleEvaluations += 1;
   return {
     resolveAppleToolProvider: () => ({
@@ -15,12 +15,15 @@ vi.mock('@agent-device/platform-apple', () => {
         return true;
       },
     }),
-    runXcrun: async (args: string[], options: { signal?: AbortSignal }) => {
-      toolchains.appleRuns.push({ args, signal: options.signal });
-      return { stdout: 'ok', stderr: '', exitCode: 0 };
-    },
   };
 });
+
+vi.mock('@agent-device/platform-apple', () => ({
+  runXcrun: async (args: string[], options: { signal?: AbortSignal }) => {
+    toolchains.appleRuns.push({ args, signal: options.signal });
+    return { stdout: 'ok', stderr: '', exitCode: 0 };
+  },
+}));
 
 import { createDeviceInventoryHost } from './platform-runtime-host.ts';
 

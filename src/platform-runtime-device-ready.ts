@@ -26,8 +26,9 @@ export async function ensureLocalPlatformDeviceReady(
       return true;
     }
     if (device.kind === 'device') {
-      const { resolveIosPhysicalDeviceControl } = await import('@agent-device/platform-apple');
-      const control = await resolveIosPhysicalDeviceControl(device);
+      const { resolveIosPhysicalDeviceControl } =
+        await import('@agent-device/platform-apple/physical-device');
+      const control = resolveIosPhysicalDeviceControl(device);
       await control.ensureReady(device);
       return true;
     }

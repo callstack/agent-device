@@ -27,12 +27,16 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-vi.mock('@agent-device/platform-apple', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/platform-apple')>()),
+vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/platform-apple/app-resolution')>()),
   resolveIosAppAlias: vi.fn((app: string) => {
     moduleLoads.appleAppResolution += 1;
     return `resolved:${app}`;
   }),
+}));
+
+vi.mock('@agent-device/platform-apple/install-artifact', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/platform-apple/install-artifact')>()),
   readIosBundleInfo: vi.fn(async () => {
     moduleLoads.appleInstallArtifact += 1;
     return { appName: 'Example' };

@@ -62,8 +62,9 @@ export async function retrieveAppleRunnerRecording(
   signal?: AbortSignal,
 ): Promise<void> {
   signal?.throwIfAborted();
-  const { resolveIosPhysicalDeviceControl } = await import('@agent-device/platform-apple');
-  const control = await resolveIosPhysicalDeviceControl(device);
+  const { resolveIosPhysicalDeviceControl } =
+    await import('@agent-device/platform-apple/physical-device');
+  const control = resolveIosPhysicalDeviceControl(device);
   await control.copyRunnerFile(device, remotePath, outputPath);
   signal?.throwIfAborted();
 }

@@ -27,14 +27,14 @@ function declarations(): PlatformPackageDeclaration[] {
       family === 'apple'
         ? [
             '@agent-device/platform-apple',
-            '@agent-device/platform-apple/runner',
-            '@agent-device/platform-apple/runner/client',
-            '@agent-device/platform-apple/runner/test-host',
             '@agent-device/platform-apple/app-resolution',
             '@agent-device/platform-apple/interactions',
             '@agent-device/platform-apple/install-artifact',
             '@agent-device/platform-apple/perf',
             '@agent-device/platform-apple/physical-device',
+            '@agent-device/platform-apple/runner',
+            '@agent-device/platform-apple/runner/client',
+            '@agent-device/platform-apple/runner/test-host',
             '@agent-device/platform-apple/runner-owner',
             '@agent-device/platform-apple/simctl',
             '@agent-device/platform-apple/simulator',
@@ -307,6 +307,36 @@ test('the apple runner mechanics facet subpaths are the enumerated exception', (
   );
 
   // A NEW unenumerated subpath widens the export list and fails declarations.
+  const widened = declarations();
+  const apple = widened.find((pkg) => pkg.family === 'apple')!;
+  widened[widened.indexOf(apple)] = {
+    ...apple,
+    exportedSubpaths: [...apple.exportedSubpaths, '@agent-device/platform-apple/internal'],
+  };
+  assert.match(
+    messages(validSources(), widened).join('\n'),
+    /platform-apple must export exactly its root façade/,
+  );
+});
+
+test('the Apple domain facades preserve synchronous helpers without widening the root facade', () => {
+  const sources = validSources();
+  for (const specifier of [
+    '@agent-device/platform-apple/app-resolution',
+    '@agent-device/platform-apple/interactions',
+    '@agent-device/platform-apple/install-artifact',
+    '@agent-device/platform-apple/perf',
+    '@agent-device/platform-apple/physical-device',
+    '@agent-device/platform-apple/runner-owner',
+    '@agent-device/platform-apple/simctl',
+    '@agent-device/platform-apple/simulator',
+    '@agent-device/platform-apple/tool-provider',
+  ]) {
+    sources.set('src/platform-runtime-domain-facade.ts', `import '${specifier}';`);
+    assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+    sources.delete('src/platform-runtime-domain-facade.ts');
+  }
+
   const widened = declarations();
   const apple = widened.find((pkg) => pkg.family === 'apple')!;
   widened[widened.indexOf(apple)] = {
