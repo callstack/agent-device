@@ -40,7 +40,7 @@ export type DeviceClaim = {
   ownerToken: string;
   createdAtMs: number;
   updatedAtMs: number;
-  /** Set by {@link abandonDeviceClaim}; absent while a session owns the claim. */
+  /** Set by {@link abandonDeviceClaim}; absent while the claim still holds the device for its owner. */
   abandonedAtMs?: number;
 };
 
@@ -104,10 +104,11 @@ export async function acquireDeviceClaim(params: {
 /**
  * #1320 `transient-exclusive`: exclusive ownership for the duration of one
  * sessionless device mutation. Identical to a session claim except that a claim
- * already held by this daemon process covers the command instead of colliding
- * with it — the claim file itself, not the in-memory session table, is the
- * authority for that, so a claim acquired earlier in the same request (`open`'s,
- * for instance) can never lock the daemon out of its own device.
+ * this daemon still holds covers the command instead of colliding with it — the
+ * claim file itself, not the in-memory session table, is the authority for that,
+ * so a claim acquired earlier in the same request (`open`'s, for instance) can
+ * never lock the daemon out of its own device. An abandoned claim holds nothing,
+ * so it is superseded into this command's own transient claim instead.
  */
 export async function acquireTransientDeviceClaim(params: {
   device: DeviceInfo;
@@ -122,6 +123,7 @@ export async function acquireTransientDeviceClaim(params: {
     const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey));
     if (
       existing?.claim &&
+      !isAbandonedDeviceClaim(existing.claim) &&
       isClaimOwnedByThisDaemon(existing.claim, params.stateDir, readCurrentOwnerIdentity())
     ) {
       return { status: 'covered-by-owned-claim' };
@@ -191,17 +193,16 @@ function isClaimOwnedByThisDaemon(
   );
 }
 
-/**
- * An abandoned claim binds no session, so the daemon that abandoned it takes the device back
- * instead of colliding with a record only it can account for. Every other owner still reads a
- * live claim.
- */
+function isAbandonedDeviceClaim(claim: DeviceClaim): boolean {
+  return claim.abandonedAtMs !== undefined;
+}
+
 function isAbandonedClaimOfThisDaemon(
   claim: DeviceClaim,
   stateDir: string,
   owner: ReturnType<typeof readCurrentOwnerIdentity>,
 ): boolean {
-  return claim.abandonedAtMs !== undefined && isClaimOwnedByThisDaemon(claim, stateDir, owner);
+  return isAbandonedDeviceClaim(claim) && isClaimOwnedByThisDaemon(claim, stateDir, owner);
 }
 
 function deviceClaimIdentity(device: DeviceInfo): DeviceIdentity {
@@ -292,19 +293,17 @@ export async function clearDeviceClaim(
 }
 
 /**
- * What abandoning a claim did, in the same terms {@link DeviceClaimClearOutcome} reports:
+ * What abandoning a claim did, in the terms {@link DeviceClaimClearOutcome} uses:
  *
- *  - `abandoned`        — the claim we acquired now binds no session.
+ *  - `abandoned`        — the claim we acquired now holds the device for nobody.
  *  - `absent`           — no claim remains for the device; nothing to mark.
  *  - `ownership-changed`— a claim remains, but it is not the one we acquired.
  */
 export type DeviceClaimAbandonOutcome = 'abandoned' | 'absent' | 'ownership-changed';
 
 /**
- * Keeps a device fenced while recording that no session can release the claim any more, for an
- * owner whose command ended without establishing one. Releasing instead would hand a device whose
- * effects are unproven to any process on the host; the claim stays live to everyone except this
- * daemon, which supersedes it on its next acquire.
+ * Keeps the device fenced against every other owner while recording that this claim holds it for
+ * nobody. Only the daemon that abandoned it may take it back.
  */
 export async function abandonDeviceClaim(
   ownership: DeviceClaimSessionOwnership | undefined,

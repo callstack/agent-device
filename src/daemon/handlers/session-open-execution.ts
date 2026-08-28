@@ -500,12 +500,6 @@ export async function openNewSessionWithDeviceClaim(params: {
   }
 }
 
-/**
- * A claim outlives its request only while a session owns it. An open that proved no device effect
- * releases the device outright; one that may have started effects keeps the fence, but a claim no
- * session holds is abandoned so this daemon's next open supersedes it instead of inheriting a
- * device nothing left alive can release.
- */
 async function rollbackNewSessionClaim(params: {
   ownership: DeviceClaimSessionOwnership | undefined;
   effects: NewSessionOpenEffects;
