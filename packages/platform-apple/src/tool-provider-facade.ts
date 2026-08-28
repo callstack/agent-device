@@ -7,4 +7,9 @@ export {
   runXcrun,
   withAppleToolProvider,
 } from './core/tool-provider.ts';
-export type { AppleToolProvider } from './core/tool-provider.ts';
+export type {
+  AppleMacOsHostProvider,
+  ApplePlistProvider,
+  AppleToolProvider,
+  AppleToolSubcommandExecutor,
+} from './core/tool-provider.ts';

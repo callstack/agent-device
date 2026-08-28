@@ -90,17 +90,7 @@
       "exports": ["buildAppNotInstalledError"]
     },
     {
-      "comment": "The legacy push helper remains a package-root operation reached through a dynamic import; Fallow cannot connect that root wrapper to this source export.",
-      "file": "packages/platform-apple/src/core/app-device-io.ts",
-      "exports": ["pushIosNotification"]
-    },
-    {
-      "comment": "The lifecycle package facade is consumed through workspace package exports. Fallow does not follow that package boundary, so keep only the two root lifecycle helpers without visible production edges here.",
-      "file": "packages/platform-apple/src/app-lifecycle-facade.ts",
-      "exports": ["openIosApp", "openIosDevice"]
-    },
-    {
-      "comment": "Apple install mechanics are reached through the root lazy façade, while bundle-info consumers use the named install-artifact façade. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to the actual facade re-exports.",
+      "comment": "Apple install mechanics are reached through the named install-artifact façade. Fallow cannot connect workspace package exports to these source exports; keep this list limited to the actual facade re-exports.",
       "file": "packages/platform-apple/src/core/install-artifact.ts",
       "exports": ["prepareIosInstallArtifact", "readIosBundleInfo"]
     },
@@ -141,11 +131,6 @@
       ]
     },
     {
-      "comment": "The runner-operations package facade is consumed through workspace package exports. Fallow does not follow that package boundary, so keep the two operations without visible production edges here explicitly accounted for.",
-      "file": "packages/platform-apple/src/runner-operations-facade.ts",
-      "exports": ["hasCachedAppleRunnerArtifact", "runApplePressSeries"]
-    },
-    {
       "comment": "The device-aware simctl argument builder is reached through the named lazy simctl façade. Fallow cannot connect the dynamic member read to this source export; keep the suppression limited to that re-export.",
       "file": "packages/platform-apple/src/core/simctl.ts",
       "exports": ["buildSimctlArgsForDevice"]
@@ -153,20 +138,10 @@
     {
       "comment": "The device-aware simctl argument builder is a named package entrypoint reached through dynamic platform-runtime imports. Fallow cannot connect those member reads to the re-export; keep the suppression limited to this one facade symbol.",
       "file": "packages/platform-apple/src/simctl-facade.ts",
-      "exports": ["buildSimctlArgs", "buildSimctlArgsForDevice"]
+      "exports": ["buildSimctlArgsForDevice"]
     },
     {
-      "comment": "The simulator package facade is consumed through workspace package exports. Fallow does not follow that package boundary, so keep the legacy shutdown operation explicitly accounted for.",
-      "file": "packages/platform-apple/src/simulator-facade.ts",
-      "exports": ["shutdownSimulator"]
-    },
-    {
-      "comment": "Apple mechanics are reached through the named lazy façade in packages/platform-apple/src/index.ts. Fallow cannot connect dynamic import member reads to this source export; keep this list limited to wrappers present in that façade.",
-      "file": "packages/platform-apple/src/core/perf-xctrace.ts",
-      "exports": ["cleanupAppleXctracePerfCapture"]
-    },
-    {
-      "comment": "Apple runner mechanics are reached through the named lazy façade in packages/platform-apple/src/index.ts. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to wrappers present in that façade or its cleanup composition.",
+      "comment": "Apple runner mechanics are reached through the named runner operations façade. Fallow cannot connect workspace package exports to these source exports; keep this list limited to the façade and its cleanup composition.",
       "file": "packages/platform-apple/src/core/runner-client.ts",
       "exports": [
         "notifyIosRunnerAppRelaunched",
@@ -184,103 +159,19 @@
       ]
     },
     {
-      "comment": "The Apple root façade owns the lazy runner-owner mutator; Fallow cannot connect its dynamic import member read to the moved source export.",
+      "comment": "The named runner-owner façade owns this mutator; Fallow cannot connect the workspace package export to the moved source export.",
       "file": "packages/platform-apple/src/core/runner-owner-state.ts",
       "exports": ["setRunnerLeaseOwnerStateDir"]
     },
     {
-      "comment": "Apple diagnostics are reached through the named lazy façade in packages/platform-apple/src/index.ts. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to wrappers present in that façade.",
+      "comment": "Apple diagnostics are reached through the named doctor façade. Fallow cannot connect workspace package exports to these source exports.",
       "file": "packages/platform-apple/src/doctor.ts",
       "exports": ["appleToolchainCheck", "appleRunnerWarmupCheck"]
     },
     {
-      "comment": "macOS helper mechanics are reached through the named lazy façade in packages/platform-apple/src/index.ts. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to wrappers present in that façade.",
+      "comment": "macOS helper mechanics are reached through the named macOS façade. Fallow cannot connect workspace package exports to these source exports.",
       "file": "packages/platform-apple/src/os/macos/helper.ts",
       "exports": ["startMacOsAudioProbeProcess", "resolveFrontmostMacOsApp"]
-    },
-    {
-      "comment": "The Apple package root is a cold-start-preserving named façade: its production consumers load the value wrappers through dynamic imports. Fallow cannot connect those member reads, so this exact list records only the façade exports currently reported as unreachable; static consumers remain visible to the audit.",
-      "file": "packages/platform-apple/src/index.ts",
-      "exports": [
-        "appleToolchainCheck",
-        "appleRunnerWarmupCheck",
-        "detectSoleRunningIosSimulatorApp",
-        "findIosSimulatorInstalledApp",
-        "invalidateIosAppResolutionCache",
-        "listIosApps",
-        "resolveIosApp",
-        "resolveIosSimulatorDeepLinkBundleId",
-        "closeIosApp",
-        "openIosApp",
-        "openIosDevice",
-        "screenshotIos",
-        "pushIosNotification",
-        "readIosClipboardText",
-        "writeIosClipboardText",
-        "runAppleToolCommand",
-        "runXcrun",
-        "createLocalAppleToolProvider",
-        "readApplePlistJson",
-        "setIosSetting",
-        "readAppleAlert",
-        "awaitAppleAlert",
-        "actOnAppleAlert",
-        "createAppleInteractor",
-        "ensureBootedSimulator",
-        "shutdownSimulator",
-        "withAppleToolProvider",
-        "prepareIosInstallArtifact",
-        "symbolicateCrashArtifact",
-        "queryAppleRunnerSelector",
-        "resolveFrontmostMacOsApp",
-        "runMacOsAlertAction",
-        "startMacOsAudioProbeProcess",
-        "captureMacOsSurfaceSnapshot",
-        "cleanupAppleXctracePerfCapture",
-        "sampleAppleMemoryPerf",
-        "captureAppleMemorySnapshot",
-        "sampleAppleFramePerf",
-        "prepareAppleTraceRecordRetry",
-        "resolveAppleExecutable",
-        "resolveIosDevicePerfTarget",
-        "readAppleProcessSamples",
-        "startAppleXctracePerfCapture",
-        "stopAppleXctracePerfCapture",
-        "writeAppleXctracePerfReport",
-        "runApplePressSeries",
-        "runAppleRunnerCommand",
-        "notifyIosRunnerAppRelaunched",
-        "prewarmAppleRunnerCache",
-        "prewarmIosRunnerSession",
-        "prepareIosRunner",
-        "resolveRunnerAppBundleId",
-        "detachIosSimulatorRunnerSessionsForShutdown",
-        "getRunnerSessionSnapshot",
-        "scheduleIosRunnerIdleStop",
-        "stopIosRunnerSession",
-        "stopAllIosRunnerSessions",
-        "cleanupRunnerLeasesForOwner",
-        "readStaleRunnerLease",
-        "verifyLeaseRunnerPidIdentity",
-        "applyXctestRunnerAppIconFromDerivedPath",
-        "AppleMacOsHelperProvider",
-        "AppleToolAvailabilityChecker",
-        "AppleToolCommandExecutor",
-        "AppleXcrunToolProvider",
-        "IosPhysicalDeviceBackend",
-        "IosPhysicalDeviceControl",
-        "IosPhysicalDeviceTunnel",
-        "PreparedIosInstallArtifact",
-        "AppleMemoryPerfSample",
-        "AppleMemorySnapshotResult",
-        "AppleProcessSample",
-        "AppleXctraceCpuProfileReport",
-        "AppleXctracePerfCapture",
-        "AppleXctracePerfMode",
-        "AppleXctracePerfResult",
-        "MacOsPermissionTarget",
-        "MacOsSnapshotNode"
-      ]
     },
     {
       "comment": "The legacy Maestro fallback wording remains contracts vocabulary for wire/fixture compatibility, but has no in-repo production consumer. The Apple migration changes this file's documentation path, so keep the existing declaration explicit without treating it as a new W4 export leak.",

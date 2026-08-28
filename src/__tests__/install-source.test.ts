@@ -20,9 +20,9 @@ import {
 import { prepareAndroidInstallArtifact } from '@agent-device/platform-android/mechanics';
 import {
   createLocalAppleToolProvider,
-  prepareIosInstallArtifact,
   withAppleToolProvider,
-} from '@agent-device/platform-apple';
+} from '@agent-device/platform-apple/tool-provider';
+import { prepareIosInstallArtifact } from '@agent-device/platform-apple/install-artifact';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from './install-source.coverage.ts';
 import { mkdtempForTest } from './test-utils/tmp-dir.ts';
 import * as networkTransport from '@agent-device/provision-kit/install-source-network-transport';

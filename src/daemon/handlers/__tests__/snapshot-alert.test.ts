@@ -5,12 +5,13 @@ import { SessionStore } from '../../session-store.ts';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../snapshot.ts';
 import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';
 import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
-import { runAppleRunnerCommand } from '@agent-device/platform-apple';
+import { runAppleRunnerCommand } from '@agent-device/platform-apple/runner/operations';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import path from 'node:path';
 
-vi.mock('@agent-device/platform-apple', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-apple')>();
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
   return { ...actual, runAppleRunnerCommand: vi.fn(async () => ({})) };
 });
 

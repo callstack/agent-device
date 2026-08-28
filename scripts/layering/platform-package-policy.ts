@@ -1,16 +1,10 @@
 import path from 'node:path';
+import { PLATFORMS } from '@agent-device/kernel/device';
 import { parseImports, type LayeringViolation } from './model.ts';
 import { checkPlatformComposition } from './platform-composition-policy.ts';
 import { checkPlatformPackageSourcePolicy } from './platform-package-source-policy.ts';
 
-export const CANONICAL_PLATFORM_FAMILIES = [
-  'apple',
-  'android',
-  'harmonyos',
-  'vega',
-  'linux',
-  'web',
-] as const;
+export const CANONICAL_PLATFORM_FAMILIES = PLATFORMS;
 type PlatformFamily = (typeof CANONICAL_PLATFORM_FAMILIES)[number];
 export type PlatformPackageDeclaration = {
   dir: string;
@@ -74,6 +68,7 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
     '@agent-device/platform-apple/debug-symbols',
     '@agent-device/platform-apple/doctor',
     '@agent-device/platform-apple/install-artifact',
+    '@agent-device/platform-apple/interactor',
     '@agent-device/platform-apple/macos',
     '@agent-device/platform-apple/perf',
     '@agent-device/platform-apple/physical-device',

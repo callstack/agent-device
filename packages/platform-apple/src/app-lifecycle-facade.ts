@@ -1,1 +1,1 @@
-export { closeIosApp, openIosApp, openIosDevice } from './core/app-launch.ts';
+export { closeIosApp } from './core/app-launch.ts';

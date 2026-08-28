@@ -25,7 +25,6 @@ vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   scheduleIosRunnerIdleStop: vi.fn(),
   stopIosRunnerSession: vi.fn(),
 }));
-vi.mock('@agent-device/platform-apple/simulator', () => ({ shutdownSimulator: vi.fn() }));
 vi.mock('@agent-device/platform-apple/perf', () => ({
   cleanupAppleXctracePerfCapture: vi.fn(async () => ({})),
 }));

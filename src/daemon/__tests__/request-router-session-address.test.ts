@@ -13,8 +13,9 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
 });
 // Opening a session runs owned-lease cleanup, which pattern-kills stale xcodebuild runners with a
 // real `pkill -f`; the session ids here are fabricated, so stub the tool seam (#1824).
-vi.mock('@agent-device/platform-apple', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-apple')>();
+vi.mock('@agent-device/platform-apple/tool-provider', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/platform-apple/tool-provider')>();
   return {
     ...actual,
     runAppleToolCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),

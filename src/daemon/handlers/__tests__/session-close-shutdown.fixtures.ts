@@ -15,13 +15,6 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
     stopIosRunnerSession: vi.fn(async () => {}),
   };
 });
-vi.mock('@agent-device/platform-apple/simulator', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-apple/simulator')>();
-  return {
-    ...actual,
-    shutdownSimulator: vi.fn(),
-  };
-});
 vi.mock('@agent-device/platform-apple/perf', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/platform-apple/perf')>();
   return {
@@ -71,7 +64,6 @@ import {
   stopAndroidSnapshotHelperSessionForDevice,
 } from '@agent-device/platform-android/mechanics';
 import { stopIosRunnerSession } from '@agent-device/platform-apple/runner/operations';
-import { shutdownSimulator } from '@agent-device/platform-apple/simulator';
 import { cleanupAppleXctracePerfCapture } from '@agent-device/platform-apple/perf';
 import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { acquireDeviceClaim } from '../../device-claims.ts';
@@ -92,7 +84,6 @@ import { dispatchApplicationLifecycleEffect } from '../../__tests__/application-
 
 export type { DeviceBinding, PlatformRuntimeOperations, SessionState };
 
-const mockShutdownSimulator = vi.mocked(shutdownSimulator);
 const mockRunCmd = vi.mocked(runCmd);
 const mockDispatchCommand = vi.mocked(dispatchApplicationLifecycleEffect);
 const mockCleanupAppleXctracePerfCapture = vi.mocked(cleanupAppleXctracePerfCapture);
@@ -260,7 +251,6 @@ export const sessionCloseShutdownFixture = Object.freeze({
   mockInspectDeviceRuntimeFacts,
   mockShutdownTargetRuntime,
   mockRunCmd,
-  mockShutdownSimulator,
   mockStopAndroidSnapshotHelperSessionForDevice,
   mockStopIosRunnerSession,
   narrowDeviceBinding,

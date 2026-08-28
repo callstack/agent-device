@@ -34,8 +34,9 @@ vi.mock('../snapshot-interactor-capture.ts', async () => {
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
-vi.mock('@agent-device/platform-apple', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-apple')>();
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
   return {
     ...actual,
     runAppleRunnerCommand: vi.fn(async () => ({})),
@@ -50,7 +51,7 @@ vi.mock('../../ios-app-session-hint.ts', () => ({
   buildIosOpenCommandHint: vi.fn(async () => undefined),
 }));
 
-import { runAppleRunnerCommand } from '@agent-device/platform-apple';
+import { runAppleRunnerCommand } from '@agent-device/platform-apple/runner/operations';
 import { buildIosOpenCommandHint } from '../../ios-app-session-hint.ts';
 
 const mockRunnerCommand = vi.mocked(runAppleRunnerCommand);

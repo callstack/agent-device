@@ -7,8 +7,10 @@ import { withAppleRunnerScreenRecordingTransport } from './platform-runtime-scre
 import { withAppleSimulatorScreenRecordingTransport } from './platform-runtime-screen-recording-apple-transport.ts';
 
 const runnerClient = vi.hoisted(() => ({ run: vi.fn() }));
-vi.mock('@agent-device/platform-apple', () => ({
+vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   runAppleRunnerCommand: runnerClient.run,
+}));
+vi.mock('@agent-device/platform-apple/runner', () => ({
   IOS_RUNNER_CONTAINER_BUNDLE_IDS: ['com.callstack.agentdevice.runner'],
 }));
 

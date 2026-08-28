@@ -13,12 +13,8 @@ import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../..
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createTestAppLogLiveHandle } from '../../../src/__tests__/test-utils/app-log-live-handle.ts';
-import {
-  actOnAppleAlert,
-  awaitAppleAlert,
-  readAppleAlert,
-  setIosSetting,
-} from '@agent-device/platform-apple';
+import { createAppleInteractor, setIosSetting } from '@agent-device/platform-apple/interactor';
+import type { AppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import type { AlertRuntimeInput } from '@agent-device/contracts/alert-runtime';
 import { assertFlatToolCall } from './assertions.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
@@ -105,6 +101,7 @@ test('Provider-backed integration iOS Settings permission and alert flow uses pr
   const appLogStarts: Array<{ appBundleId: string; outPath: string }> = [];
   const deviceRuntimeGateway = createRecordingPlatformRuntimeGateway({
     starts: appLogStarts,
+    runnerProvider: appleRunnerProvider,
     stopped: () => {
       appLogStopCount += 1;
     },
@@ -206,6 +203,7 @@ test('Provider-backed integration iOS Settings permission and alert flow uses pr
 
 function createRecordingPlatformRuntimeGateway(params: {
   starts: Array<{ appBundleId: string; outPath: string }>;
+  runnerProvider: AppleRunnerProvider;
   stopped(): void;
 }): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   const owner = providerRuntimeOwner('provider-scenario', 'ios-settings');
@@ -216,6 +214,7 @@ function createRecordingPlatformRuntimeGateway(params: {
         throw new TypeError('The iOS provider scenario requires an explicit Apple leaf');
       }
       const appleOs = device.appleOs;
+      const interactor = createAppleInteractor(device, {}, params.runnerProvider);
       return {
         device,
         owner,
@@ -301,12 +300,10 @@ function createRecordingPlatformRuntimeGateway(params: {
           // R59 does the same for `alert`: the scenario's gateway states and serves the four
           // legs, reusing the Apple family's own module so the runner transcript this scenario
           // scripts — including its retry and poll windows — is what actually runs.
-          readAlert: async (input) => await readAppleAlert(device, {}, alertOptions(input)),
-          awaitAlert: async (input) => await awaitAppleAlert(device, {}, alertOptions(input)),
-          acceptAlert: async (input) =>
-            await actOnAppleAlert(device, {}, 'accept', alertOptions(input)),
-          dismissAlert: async (input) =>
-            await actOnAppleAlert(device, {}, 'dismiss', alertOptions(input)),
+          readAlert: async (input) => await interactor.readAlert(alertOptions(input)),
+          awaitAlert: async (input) => await interactor.awaitAlert(alertOptions(input)),
+          acceptAlert: async (input) => await interactor.acceptAlert(alertOptions(input)),
+          dismissAlert: async (input) => await interactor.dismissAlert(alertOptions(input)),
           appLogReattach: async () => ({ status: 'missing' }),
           appLogCleanup: async () => ({ status: 'already-missing' }),
           resolveOpenTarget: async (input) => ({

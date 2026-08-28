@@ -4,12 +4,12 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 
-vi.mock('@agent-device/platform-apple', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/platform-apple')>()),
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>()),
   getRunnerSessionSnapshot: vi.fn(),
 }));
 
-import { getRunnerSessionSnapshot } from '@agent-device/platform-apple';
+import { getRunnerSessionSnapshot } from '@agent-device/platform-apple/runner/operations';
 import {
   createRequestHandler,
   gestureDeviceRuntimeGateway,

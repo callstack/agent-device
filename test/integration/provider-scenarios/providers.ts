@@ -5,7 +5,7 @@ import type {
   ApplePlistProvider,
   AppleToolProvider,
   AppleToolSubcommandExecutor,
-} from '@agent-device/platform-apple';
+} from '@agent-device/platform-apple/tool-provider';
 import { type ExecResult } from '@agent-device/host-kit/command';
 import type { ProviderScenarioTranscript } from './transcript.ts';
 

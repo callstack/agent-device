@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { PLATFORMS } from '@agent-device/kernel/device';
 
 export type ImportEdge = {
   spec: string;
@@ -89,12 +90,7 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   'host-kit',
   'capture-kit',
   'provision-kit',
-  'platform-apple',
-  'platform-android',
-  'platform-harmonyos',
-  'platform-vega',
-  'platform-linux',
-  'platform-web',
+  ...PLATFORMS.map((family) => `platform-${family}`),
   'provider-webdriver',
   'provider-limrun',
   'xml',

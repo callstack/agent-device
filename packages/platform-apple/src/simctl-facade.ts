@@ -1,1 +1,1 @@
-export { buildSimctlArgs, buildSimctlArgsForDevice } from './core/simctl.ts';
+export { buildSimctlArgsForDevice } from './core/simctl.ts';

@@ -13,7 +13,7 @@ import {
   makeSession,
 } from '../../__tests__/test-utils/session-factories.ts';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../__tests__/test-utils/device-inventory-gateways.ts';
-import { createLocalAppleToolProvider, runXcrun } from '@agent-device/platform-apple';
+import { createLocalAppleToolProvider, runXcrun } from '@agent-device/platform-apple/tool-provider';
 import type { AndroidAdbExecutor } from '@agent-device/platform-android/mechanics';
 import { resolveWebProvider, type WebProvider } from '@agent-device/platform-web';
 import {
