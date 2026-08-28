@@ -354,7 +354,7 @@ test('local HTTP keeps path install sources available without an auth hook', asy
 
 function writeAllowingAuthHook(root: string): string {
   const hookPath = path.join(root, 'auth-hook.mjs');
-  fs.writeFileSync(hookPath, 'export default () => true;\n');
+  fs.writeFileSync(hookPath, "export default () => ({ tenantId: 'tenant-test' });\n");
   return hookPath;
 }
 
