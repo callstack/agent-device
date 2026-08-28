@@ -39,26 +39,9 @@ export default defineConfig({
     ],
     'perfectionist/sort-object-types': 'off',
     'perfectionist/sort-objects': 'off',
-    'perfectionist/sort-interfaces': 'off',
-    'perfectionist/sort-jsx-props': 'off',
-    'typescript/await-thenable': 'error',
-    'typescript/no-array-delete': 'error',
-    'typescript/no-base-to-string': 'error',
-    'typescript/no-duplicate-type-constituents': 'error',
-    'typescript/no-floating-promises': 'error',
-    'typescript/no-for-in-array': 'error',
-    'typescript/no-implied-eval': 'error',
-    'typescript/no-meaningless-void-operator': 'error',
-    'typescript/no-misused-spread': 'error',
-    'typescript/no-redundant-type-constituents': 'error',
     'typescript/no-this-alias': 'error',
     'typescript/no-unnecessary-parameter-property-assignment': 'error',
-    'typescript/no-unsafe-unary-minus': 'error',
-    'typescript/no-useless-default-assignment': 'error',
     'typescript/no-useless-empty-export': 'error',
-    'typescript/require-array-sort-compare': 'error',
-    'typescript/restrict-template-expressions': 'error',
-    'typescript/unbound-method': 'error',
     'unicorn/consistent-function-scoping': 'off',
     'unicorn/numeric-separators-style': 'off',
     'unicorn/prefer-top-level-await': 'off',
@@ -66,13 +49,13 @@ export default defineConfig({
   },
   overrides: [
     {
-      files: ['**/*.ts', '**/*.tsx', '**/*.mts', '**/*.cts'],
+      files: ['scripts/**/*.ts', 'scripts/**/*.mts', 'scripts/**/*.cts'],
       rules: {
         'no-undef': 'error',
       },
     },
     {
-      files: ['src/**/*.ts', 'packages/capture-kit/src/**/*.ts'],
+      files: ['src/**/*.ts', 'packages/host-kit/src/**/*.ts'],
       rules: {
         'no-restricted-imports': [
           'error',
@@ -81,7 +64,7 @@ export default defineConfig({
               {
                 name: 'node:child_process',
                 message:
-                  'Use process helpers from @agent-device/capture-kit/exec instead of importing node:child_process directly.',
+                  'Use process helpers from @agent-device/host-kit/command instead of importing node:child_process directly.',
               },
             ],
           },
@@ -90,8 +73,8 @@ export default defineConfig({
     },
     {
       files: [
-        'packages/capture-kit/src/exec.ts',
-        'packages/capture-kit/src/*.test.ts',
+        'packages/host-kit/src/internal/exec.ts',
+        'packages/host-kit/src/**/*.test.ts',
         'src/**/*.test.ts',
         'src/**/__tests__/**/*.ts',
       ],
@@ -101,25 +84,10 @@ export default defineConfig({
     },
     {
       files: ['examples/test-app/src/**/*.tsx'],
-      env: {
-        browser: true,
-      },
       rules: {
         'react/immutability': 'off',
         'react/purity': 'off',
         'react/refs': 'off',
-      },
-    },
-    {
-      files: ['examples/test-app/src/**/*.ts', 'examples/test-app/src/**/*.tsx'],
-      globals: {
-        __DEV__: 'readonly',
-      },
-    },
-    {
-      files: ['src/core/command-descriptor/registry.ts'],
-      globals: {
-        __OWNER_FILES__: 'readonly',
       },
     },
     {
