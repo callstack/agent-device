@@ -141,7 +141,7 @@ test('an unowned path under an ignored root asks for an owner, not for the entry
   };
   const found = routing(model, ROUTED_LANES).map((failure) => failure.message);
   assert.equal(found.length, 1, found.join('\n'));
-  assert.match(found[0] ?? '', /fails open on it \(ambiguous-path\)/);
+  assert.match(found[0] ?? '', /fails open on it \(unknown-path\)/);
   assert.match(found[0] ?? '', /Give it an owning check in scripts\/check-affected\//);
   assert.ok(!/Remove the ignore entry/.test(found[0] ?? ''));
 });
