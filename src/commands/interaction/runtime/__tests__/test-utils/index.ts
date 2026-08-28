@@ -295,7 +295,8 @@ export function nonTouchableGroupSnapshot(): SnapshotState {
   return makeSnapshotState([
     {
       index: 0,
-      depth: 0,
+      depth: 1,
+      parentIndex: 2,
       type: 'XCUIElementTypeOther',
       label: 'Clickable group',
       rect: { x: 10, y: 20, width: 300, height: 80 },
@@ -303,12 +304,19 @@ export function nonTouchableGroupSnapshot(): SnapshotState {
     },
     {
       index: 1,
-      depth: 1,
+      depth: 2,
       parentIndex: 0,
       type: 'XCUIElementTypeOther',
       label: 'Decorative group',
       rect: { x: 30, y: 40, width: 60, height: 20 },
       hittable: false,
+    },
+    {
+      index: 2,
+      depth: 0,
+      type: 'XCUIElementTypeApplication',
+      rect: { x: 0, y: 0, width: 390, height: 844 },
+      hittable: true,
     },
   ]);
 }

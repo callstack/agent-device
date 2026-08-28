@@ -137,6 +137,7 @@ test('press @ref promotes a non-hittable node to its hittable ancestor before ta
     nodes: attachRefs([
       {
         index: 0,
+        parentIndex: 2,
         type: 'XCUIElementTypeCell',
         label: 'Settings row',
         rect: { x: 20, y: 100, width: 320, height: 72 },
@@ -151,6 +152,12 @@ test('press @ref promotes a non-hittable node to its hittable ancestor before ta
         rect: { x: 44, y: 124, width: 84, height: 20 },
         enabled: false,
         hittable: false,
+      },
+      {
+        index: 2,
+        type: 'XCUIElementTypeApplication',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+        hittable: true,
       },
     ]),
     createdAt: Date.now(),
