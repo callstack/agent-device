@@ -262,7 +262,7 @@ export type DirectApplicationLifecycleParams = Readonly<{
   openTargetIdentity: DirectOpenTargetIdentity;
   /** Owners whose native open does not replace a running application close it first. */
   closeBeforeRelaunch?: boolean;
-  resolveAppAlias?(app: string): string;
+  resolveAppReference?(app: string): string;
   /** Port reverse is the one non-direct operation a provider owner may still implement. */
   configureProviderPortReverse?: ApplicationLifecycleRuntimeOperations['configureProviderPortReverse'];
 }>;
@@ -284,7 +284,7 @@ export function bindDirectApplicationLifecycle(
   };
   return Object.freeze({
     resolveOpenTarget: async (input) =>
-      resolveDirectOpenTarget(params.openTargetIdentity, resolveOpenTargetAlias(params, input)),
+      resolveDirectOpenTarget(params.openTargetIdentity, resolveOpenTargetReference(params, input)),
     prepareApplicationOpen: async () => undefined,
     openApplication: async (input) => await openDirectApplication(params, input),
     applyRuntimeHints: unavailable,
@@ -306,7 +306,7 @@ async function openDirectApplication(
   params: DirectApplicationLifecycleParams,
   input: OpenApplicationInput,
 ): Promise<OpenApplicationOutcome> {
-  const resolvedInput = resolveOpenApplicationAliases(params, input);
+  const resolvedInput = resolveOpenApplicationReferences(params, input);
   const { binding } = params;
   const interactor = await binding.resolveInteractor(
     resolvedInput.execution,
@@ -344,19 +344,19 @@ async function openDirectApplication(
   return { appBundleId: resolvedInput.appBundleId, timing: {} };
 }
 
-function resolveOpenTargetAlias(
+function resolveOpenTargetReference(
   params: DirectApplicationLifecycleParams,
   input: OpenTargetResolutionInput,
 ): OpenTargetResolutionInput {
-  if (!input.target || !params.resolveAppAlias) return input;
-  return { ...input, target: params.resolveAppAlias(input.target) };
+  if (!input.target || !params.resolveAppReference) return input;
+  return { ...input, target: params.resolveAppReference(input.target) };
 }
 
-function resolveOpenApplicationAliases(
+function resolveOpenApplicationReferences(
   params: DirectApplicationLifecycleParams,
   input: OpenApplicationInput,
 ): OpenApplicationInput {
-  const resolve = params.resolveAppAlias;
+  const resolve = params.resolveAppReference;
   if (!resolve) return input;
   return {
     ...input,

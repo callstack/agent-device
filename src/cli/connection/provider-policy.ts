@@ -7,6 +7,8 @@ import {
 export type DirectDeviceConnectProvider = CloudWebDriverKnownProviderName | 'limrun';
 export type ConnectProvider = 'cloud' | 'proxy' | DirectDeviceConnectProvider;
 
+const DEFERRED_APP_SELECTION_PROVIDERS = new Set<DirectDeviceConnectProvider>(['limrun']);
+
 export function isConnectProviderName(value: string | undefined): value is ConnectProvider {
   return value === 'cloud' || value === 'proxy' || isDirectDeviceConnectProvider(value);
 }
@@ -29,6 +31,12 @@ export function connectProviderNamesForError(): string {
 
 export function connectionProviderRequiresRemoteDaemon(provider: string | undefined): boolean {
   return !isDirectDeviceConnectProvider(provider);
+}
+
+export function connectionProviderSupportsDeferredAppSelection(
+  provider: string | undefined,
+): boolean {
+  return isDirectDeviceConnectProvider(provider) && DEFERRED_APP_SELECTION_PROVIDERS.has(provider);
 }
 
 export function connectionProviderLeaseKind(

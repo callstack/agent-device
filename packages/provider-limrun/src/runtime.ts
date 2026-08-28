@@ -331,7 +331,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     return session?.platform === parsed.platform ? session : undefined;
   }
 
-  resolveAppAlias(device: DeviceInfo, app: string): string {
+  resolveAppReference(device: DeviceInfo, app: string): string {
     const parsed = parseLimrunDeviceId(device.id);
     if (!parsed) return app;
     const alias = this.appAliases.get(parsed.leaseId);
@@ -386,7 +386,7 @@ async function loadLimrunPlatformRuntime(
     ownsDevice: (device) => runtime.ownsDevice(device),
     hasLiveSession: (device) => runtime.hasLiveSession(device),
     getInteractor: (device, runner) => runtime.getInteractor(device, runner),
-    resolveAppAlias: (device, app) => runtime.resolveAppAlias(device, app),
+    resolveAppReference: (device, app) => runtime.resolveAppReference(device, app),
     openCurrent: async (device) => runtime.currentAppLogReader(device),
     reconnect: async (descriptor, signal) =>
       await runtime.reconnectAppLogReader(descriptor, signal),

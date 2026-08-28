@@ -91,7 +91,7 @@ test('direct lifecycle owners preserve the daemon runtime launch URL follow-up',
   expect(calls[1]?.options).toHaveProperty('launchArgs', undefined);
 });
 
-test('direct lifecycle owners resolve app aliases once before target dispatch', async () => {
+test('direct lifecycle owners resolve provider app references before target dispatch', async () => {
   const open = vi.fn(async () => undefined);
   const binding = bindLocalApplicationLifecycleInteractor({
     device: WEB_DEVICE,
@@ -102,7 +102,7 @@ test('direct lifecycle owners resolve app aliases once before target dispatch', 
     binding,
     owner: 'Provider',
     openTargetIdentity: 'bundle-id',
-    resolveAppAlias: (app) => (app === 'Example.app.zip' ? 'com.example.app' : app),
+    resolveAppReference: (app) => (app === 'Example.app.zip' ? 'com.example.app' : app),
   });
 
   await expect(

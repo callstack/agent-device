@@ -33,7 +33,10 @@ import type { AgentDeviceClient, Lease } from '../../agent-device-client.ts';
 import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { readMetroPrepareKind } from '../../commands/metro/prepare-kind.ts';
-import { connectionProviderRequiresRemoteDaemon } from '../connection/provider-policy.ts';
+import {
+  connectionProviderRequiresRemoteDaemon,
+  connectionProviderSupportsDeferredAppSelection,
+} from '../connection/provider-policy.ts';
 import { readCloudDeviceFeatureProfileFields } from '../connection/profile-fields.ts';
 import { isCloudWebDriverProviderName } from '@agent-device/provider-webdriver';
 import type { PreviousLeaseReleaseNotice } from './connection-presentation.ts';
@@ -112,7 +115,7 @@ export async function materializeRemoteConnectionForCommand(options: {
     );
   const nextFlags = { ...mergedFlags, session: state.session };
   if (
-    state.leaseProvider === 'limrun' &&
+    connectionProviderSupportsDeferredAppSelection(state.leaseProvider) &&
     command === PUBLIC_COMMANDS.open &&
     typeof options.positionals?.[0] === 'string'
   ) {
@@ -385,14 +388,16 @@ type ConnectionLeasePolicy = {
 
 function connectionLeasePolicyForState(state: RemoteConnectionState): ConnectionLeasePolicy {
   if (state.leaseProvider === 'proxy') return PROXY_CONNECTION_LEASE_POLICY;
-  if (state.leaseProvider === 'limrun') return LIMRUN_CONNECTION_LEASE_POLICY;
+  if (connectionProviderSupportsDeferredAppSelection(state.leaseProvider)) {
+    return DEFERRED_APP_SELECTION_CONNECTION_LEASE_POLICY;
+  }
   if (isCloudWebDriverProviderName(state.leaseProvider)) {
     return CLOUD_WEBDRIVER_CONNECTION_LEASE_POLICY;
   }
   return DEFAULT_CONNECTION_LEASE_POLICY;
 }
 
-const LIMRUN_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
+const DEFERRED_APP_SELECTION_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
   shouldAllocate: (command) =>
     command !== PUBLIC_COMMANDS.apps && !leaseDeferredCommands.has(command),
   ttlMs: () => undefined,
