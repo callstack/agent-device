@@ -73,30 +73,39 @@ export async function confineHttpInstallSourcePath(rawPath: string, root: string
   return resolved;
 }
 
-export async function applyHttpInstallSourceTrustPolicy(
+export async function applyHttpTrustPolicy(
   request: DaemonRequest,
   policy: HttpTrustPolicy,
 ): Promise<DaemonRequest> {
   if (policy.networkAccess !== 'public-only') return request;
   const source = request.meta?.installSource;
-  if (!source || source.kind !== 'path') return request;
-
   const uploadedArtifactId = request.meta?.uploadedArtifactId;
-  if (typeof uploadedArtifactId === 'string' && uploadedArtifactId.length > 0) return request;
-  if (!policy.hostPathInstallRoot) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Invalid params: path install sources are disabled on the remote HTTP surface; set ${HTTP_ALLOW_HOST_PATH_INSTALL_ENV}=true and ${HTTP_HOST_PATH_INSTALL_ROOT_ENV} to opt in`,
-    );
+  let confinedSource = source;
+  if (
+    source?.kind === 'path' &&
+    !(typeof uploadedArtifactId === 'string' && uploadedArtifactId.length > 0)
+  ) {
+    const root = policy.hostPathInstallRoot;
+    if (!root) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `Invalid params: path install sources are disabled on the remote HTTP surface; set ${HTTP_ALLOW_HOST_PATH_INSTALL_ENV}=true and ${HTTP_HOST_PATH_INSTALL_ROOT_ENV} to opt in`,
+      );
+    }
+    confinedSource = {
+      ...source,
+      path: await confineHttpInstallSourcePath(source.path, root),
+    };
   }
+
   return {
     ...request,
-    meta: {
-      ...request.meta,
-      installSource: {
-        kind: 'path',
-        path: await confineHttpInstallSourcePath(source.path, policy.hostPathInstallRoot),
-      },
+    ...(confinedSource === source
+      ? {}
+      : { meta: { ...request.meta, installSource: confinedSource } }),
+    internal: {
+      ...request.internal,
+      networkAccess: policy.networkAccess,
     },
   };
 }

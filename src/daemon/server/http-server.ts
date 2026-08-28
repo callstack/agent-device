@@ -39,7 +39,7 @@ import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
 import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-http.ts';
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
-import { applyHttpInstallSourceTrustPolicy, resolveHttpTrustPolicy } from './http-trust-policy.ts';
+import { applyHttpTrustPolicy, resolveHttpTrustPolicy } from './http-trust-policy.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
 
@@ -534,10 +534,7 @@ export async function createDaemonHttpServer(options: {
 }): Promise<http.Server> {
   const environment = options.env ?? process.env;
   const authHook = await loadHttpAuthHook(environment);
-  const trustPolicy = await resolveHttpTrustPolicy({
-    authHookConfigured: authHook !== null,
-    env: environment,
-  });
+  const trustPolicy = resolveHttpTrustPolicy({ authHookConfigured: authHook !== null });
   const { handleRequest, token, retainArtifacts = false, resolveRequestDiagnosticsPath } = options;
   return http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
@@ -713,13 +710,7 @@ export async function createDaemonHttpServer(options: {
         if (daemonRequest.flags?.tenant !== undefined) {
           daemonRequest.flags = { ...daemonRequest.flags, tenant: tenantTrust.tenantId };
         }
-        daemonRequest = await applyHttpInstallSourceTrustPolicy(daemonRequest, trustPolicy);
-        if (trustPolicy.networkAccess === 'public-only') {
-          daemonRequest.internal = {
-            ...daemonRequest.internal,
-            networkAccess: trustPolicy.networkAccess,
-          };
-        }
+        daemonRequest = applyHttpTrustPolicy(daemonRequest, trustPolicy);
 
         let canceledInFlight = false;
         // Request-scoped cancellation: mark this request canceled whenever its client

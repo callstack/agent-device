@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import dns from 'node:dns/promises';
 import { afterEach, test, vi } from 'vitest';
-import { approvePublicNetworkUrl, isBlockedIpAddress } from './network-trust-policy.ts';
+import { approvePublicNetworkUrl, isBlockedIpAddress } from './install-source-network.ts';
 
 afterEach(() => {
   vi.restoreAllMocks();

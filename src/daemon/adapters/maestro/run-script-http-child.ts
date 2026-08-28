@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import type { DaemonNetworkAccessPolicy } from '../../types.ts';
 import {
@@ -34,10 +35,6 @@ type PublicRequestState = {
   body?: string;
 };
 
-type PublicResponseOutcome =
-  | { response: RunScriptHttpResponse }
-  | { nextRequest: PublicRequestState };
-
 export async function executeRunScriptHttpRequest(
   input: RunScriptHttpRequest,
 ): Promise<RunScriptHttpResponse> {
@@ -64,24 +61,9 @@ async function executeUnrestrictedRequest(
 }
 
 async function executePublicRequest(input: RunScriptHttpRequest): Promise<RunScriptHttpResponse> {
-  let request = createPublicRequest(input);
-  const signal = AbortSignal.timeout(30_000);
-
-  for (let redirectCount = 0; ; redirectCount += 1) {
-    const response = await requestPublicHop(request, signal);
-    try {
-      const outcome = await processPublicResponse(response, request, redirectCount);
-      if ('response' in outcome) return outcome.response;
-      request = outcome.nextRequest;
-    } finally {
-      await response.close();
-    }
-  }
-}
-
-function createPublicRequest(input: RunScriptHttpRequest): PublicRequestState {
+  let request: PublicRequestState;
   try {
-    return {
+    request = {
       url: new URL(input.url),
       headers: { ...input.headers },
       method: input.method,
@@ -90,45 +72,37 @@ function createPublicRequest(input: RunScriptHttpRequest): PublicRequestState {
   } catch {
     throw new AppError('INVALID_ARGS', 'Invalid Maestro runScript HTTP URL');
   }
-}
+  const signal = AbortSignal.timeout(30_000);
 
-async function requestPublicHop(
-  request: PublicRequestState,
-  signal: AbortSignal,
-): Promise<InstallSourceNetworkResponse> {
-  const approved = await approvePublicNetworkUrl(request.url, {
-    signal,
-    label: 'Maestro runScript URL',
-    hint: 'Use a public URL.',
-  });
-  return await requestApprovedUrl({
-    url: request.url,
-    approvedAddress: approved.address,
-    family: approved.family,
-    headers: request.headers,
-    signal,
-    method: request.method,
-    ...(request.body !== undefined ? { body: request.body } : {}),
-  });
-}
-
-async function processPublicResponse(
-  response: InstallSourceNetworkResponse,
-  request: PublicRequestState,
-  redirectCount: number,
-): Promise<PublicResponseOutcome> {
-  if (REDIRECT_STATUSES.has(response.statusCode)) {
-    response.body.resume?.();
-    return { nextRequest: createRedirectRequest(response, request, redirectCount) };
+  for (let redirectCount = 0; ; redirectCount += 1) {
+    const approved = await approvePublicNetworkUrl(request.url, {
+      signal,
+      label: 'Maestro runScript URL',
+      hint: 'Use a public URL.',
+    });
+    const response = await requestApprovedUrl({
+      url: request.url,
+      approvedAddress: approved.address,
+      family: approved.family,
+      headers: request.headers,
+      signal,
+      method: request.method,
+      ...(request.body !== undefined ? { body: request.body } : {}),
+    });
+    try {
+      if (!REDIRECT_STATUSES.has(response.statusCode)) {
+        return {
+          status: response.statusCode,
+          body: await readResponseBody(response),
+          headers: responseHeadersToRecord(response.headers),
+        };
+      }
+      response.body.resume?.();
+      request = createRedirectRequest(response, request, redirectCount);
+    } finally {
+      await response.close();
+    }
   }
-  const responseBody = await readResponseBody(response);
-  return {
-    response: {
-      status: response.statusCode,
-      body: responseBody,
-      headers: responseHeadersToRecord(response.headers),
-    },
-  };
 }
 
 function createRedirectRequest(
@@ -169,8 +143,8 @@ async function readResponseBody(response: InstallSourceNetworkResponse): Promise
   const chunks: Buffer[] = [];
   let bytesSeen = 0;
   for await (const chunk of response.body as AsyncIterable<Buffer | string>) {
-    const chunkBytes = typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.byteLength;
-    const nextBytesSeen = bytesSeen + chunkBytes;
+    const buffer = Buffer.from(chunk);
+    const nextBytesSeen = bytesSeen + buffer.byteLength;
     if (nextBytesSeen > MAX_RUN_SCRIPT_HTTP_RESPONSE_BYTES) {
       throw new AppError(
         'COMMAND_FAILED',
@@ -179,7 +153,7 @@ async function readResponseBody(response: InstallSourceNetworkResponse): Promise
       );
     }
     bytesSeen = nextBytesSeen;
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : Buffer.from(chunk));
+    chunks.push(buffer);
   }
   return Buffer.concat(chunks, bytesSeen).toString('utf8');
 }
@@ -210,19 +184,15 @@ function crossOriginHeaders(headers: Record<string, string>): Record<string, str
   );
 }
 
-async function readInput(): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : Buffer.from(chunk));
-  }
-  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+function readInput(): unknown {
+  return JSON.parse(readFileSync(0, 'utf8')) as unknown;
 }
 
 function parseInput(value: unknown): RunScriptHttpRequest {
   const record = parseInputRecord(value);
   return {
     method: parseMethod(record.method),
-    url: parseInputUrl(record.url),
+    url: parseUrl(record.url),
     headers: parseHeaders(record.headers),
     ...parseBody(record.body),
     networkAccess: parseNetworkAccess(record.networkAccess),
@@ -230,7 +200,9 @@ function parseInput(value: unknown): RunScriptHttpRequest {
 }
 
 function parseInputRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object') throw new Error('invalid Maestro runScript HTTP input');
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('invalid Maestro runScript HTTP input');
+  }
   return value as Record<string, unknown>;
 }
 
@@ -241,7 +213,7 @@ function parseMethod(value: unknown): 'GET' | 'POST' {
   return value;
 }
 
-function parseInputUrl(value: unknown): string {
+function parseUrl(value: unknown): string {
   if (typeof value !== 'string') throw new Error('invalid Maestro runScript HTTP input');
   return value;
 }
@@ -265,7 +237,6 @@ function parseBody(value: unknown): { body?: string } {
 }
 
 function parseNetworkAccess(value: unknown): DaemonNetworkAccessPolicy {
-  if (typeof value !== 'string') throw new Error('invalid Maestro runScript HTTP input');
   if (value !== 'unrestricted' && value !== 'public-only') {
     throw new Error('invalid Maestro runScript HTTP network policy');
   }
@@ -273,7 +244,7 @@ function parseNetworkAccess(value: unknown): DaemonNetworkAccessPolicy {
 }
 
 async function runChild(): Promise<void> {
-  const response = await executeRunScriptHttpRequest(parseInput(await readInput()));
+  const response = await executeRunScriptHttpRequest(parseInput(readInput()));
   process.stdout.write(JSON.stringify(response));
 }
 

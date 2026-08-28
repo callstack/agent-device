@@ -6,15 +6,10 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { stripUndefined } from '@agent-device/kernel/record';
 import type { DaemonNetworkAccessPolicy } from '../../types.ts';
+import type { RunScriptHttpRequest, RunScriptHttpResponse } from './run-script-http-child.ts';
 
 const RUN_SCRIPT_TIMEOUT_MS = 30_000;
 const RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS = 1_000;
-
-type HttpResponse = {
-  status: number;
-  body: string;
-  headers: Record<string, string>;
-};
 
 /**
  * Executes a trusted flow-local script with the compatibility helpers Maestro
@@ -109,20 +104,39 @@ function safeRunScriptJsonReviver(key: string, value: unknown): unknown {
 }
 
 function runHttpRequestSync(
-  method: string,
+  method: RunScriptHttpRequest['method'],
   url: string,
   options?: { headers?: Record<string, string>; body?: string },
   networkAccess: DaemonNetworkAccessPolicy = 'unrestricted',
-): HttpResponse {
+): RunScriptHttpResponse {
   const result = runCmdSync(process.execPath, resolveHttpChildArgs(), {
     stdin: JSON.stringify(buildHttpChildInput(method, url, options, networkAccess)),
     timeoutMs: RUN_SCRIPT_TIMEOUT_MS,
     allowFailure: true,
   });
   if (result.exitCode !== 0) {
-    throwHttpChildFailure(method, url, result.exitCode, result.stderr);
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Maestro runScript http.${method.toLowerCase()} failed for ${url}: ${trimHttpErrorOutput(result.stderr)}`,
+      {
+        exitCode: result.exitCode,
+        stderr: result.stderr,
+      },
+    );
   }
-  return parseHttpChildResponse(method, url, result.stdout, result.stderr);
+  try {
+    return JSON.parse(result.stdout) as RunScriptHttpResponse;
+  } catch (error) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Maestro runScript http.${method.toLowerCase()} returned invalid JSON for ${url}`,
+      {
+        stdout: result.stdout.slice(0, RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS),
+        stderr: result.stderr.slice(0, RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS),
+      },
+      error instanceof Error ? error : undefined,
+    );
+  }
 }
 
 function resolveHttpChildArgs(): string[] {
@@ -151,11 +165,11 @@ function resolveHttpChildModulePath(importMetaUrl: string): string | null {
 }
 
 function buildHttpChildInput(
-  method: string,
+  method: RunScriptHttpRequest['method'],
   url: string,
   options: { headers?: Record<string, string>; body?: string } | undefined,
   networkAccess: DaemonNetworkAccessPolicy,
-): Record<string, unknown> {
+): RunScriptHttpRequest {
   return {
     method,
     url,
@@ -163,43 +177,6 @@ function buildHttpChildInput(
     body: options?.body ?? '',
     networkAccess,
   };
-}
-
-function throwHttpChildFailure(
-  method: string,
-  url: string,
-  exitCode: number | null,
-  stderr: string,
-): never {
-  throw new AppError(
-    'COMMAND_FAILED',
-    `Maestro runScript http.${method.toLowerCase()} failed for ${url}: ${trimHttpErrorOutput(stderr)}`,
-    {
-      exitCode,
-      stderr,
-    },
-  );
-}
-
-function parseHttpChildResponse(
-  method: string,
-  url: string,
-  stdout: string,
-  stderr: string,
-): HttpResponse {
-  try {
-    return JSON.parse(stdout) as HttpResponse;
-  } catch (error) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Maestro runScript http.${method.toLowerCase()} returned invalid JSON for ${url}`,
-      {
-        stdout: stdout.slice(0, RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS),
-        stderr: stderr.slice(0, RUN_SCRIPT_DIAGNOSTIC_PREVIEW_CHARS),
-      },
-      error instanceof Error ? error : undefined,
-    );
-  }
 }
 
 function validateOutputKeys(output: Record<string, unknown>, scriptPath: string): void {
