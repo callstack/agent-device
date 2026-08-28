@@ -12,11 +12,6 @@ import type {
   AndroidAdbSpawnOptions,
 } from './adb-transport.ts';
 
-// R13 bars platform packages from raw process, fs, and ambient host authority; the adb/IME
-// cluster reaches those primitives only through this explicitly injected host port. The root
-// composition wiring (src/platform-runtime-android-adb-host.ts) binds it before any consumer
-// can call into the cluster.
-
 export type AndroidAdbCommandExecutorOverride = (
   cmd: string,
   args: string[],

@@ -60,10 +60,9 @@ export function checkPlatformsRootShape(files: readonly string[]): LayeringViola
       rule: 'platforms-root-shape',
       file,
       line: 1,
-      message:
-        file.startsWith('src/platforms/android/')
-          ? 'the Android family has moved to packages/platform-android; remove the superseded src/platforms/android path'
-          : 'src/platforms may hold only the remaining apple family directory and __tests__; retired family code belongs in its platform package and shared code belongs in a substrate package',
+      message: file.startsWith('src/platforms/android/')
+        ? 'the Android family has moved to packages/platform-android; remove the superseded src/platforms/android path'
+        : 'src/platforms may hold only the remaining apple family directory and __tests__; retired family code belongs in its platform package and shared code belongs in a substrate package',
     }));
 }
 const APPLE_RUNNER_FACADE = '@agent-device/platform-apple/runner';

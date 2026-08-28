@@ -123,6 +123,25 @@ test('Android helper change selects the android-helpers build', () => {
   ]);
 });
 
+test('Android package test fixture selects the unit suite instead of failing open', () => {
+  const fixture =
+    'packages/platform-android/src/__tests__/test-utils/fixtures/android-helper-apk.fixture';
+  const result = plan([fixture]);
+  assert.equal(result.failOpen, false);
+  assert.deepEqual(result.checks, ['unit']);
+  assert.deepEqual(
+    result.reasons.filter((reason) => reason.rule === 'own:android-package-test-fixture'),
+    [
+      {
+        check: 'unit',
+        path: fixture,
+        rule: 'own:android-package-test-fixture',
+        detail: 'the Android package test fixture is consumed by the unit suite',
+      },
+    ],
+  );
+});
+
 test('MCP metadata change selects the mcp-metadata check', () => {
   assert.deepEqual(ids(['server.json']), ['mcp-metadata']);
 });

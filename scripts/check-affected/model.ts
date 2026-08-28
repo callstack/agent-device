@@ -483,6 +483,14 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
       file.startsWith('android/snapshot-helper/') || file.startsWith('android/ime-helper/'),
   },
   {
+    check: 'unit',
+    rule: 'own:android-package-test-fixture',
+    detail: 'the Android package test fixture is consumed by the unit suite',
+    owns: (file) =>
+      file ===
+      'packages/platform-android/src/__tests__/test-utils/fixtures/android-helper-apk.fixture',
+  },
+  {
     check: 'macos-helper',
     rule: 'own:macos-helper',
     detail: 'macOS helper is a separate Swift package build',

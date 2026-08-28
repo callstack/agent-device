@@ -25,8 +25,6 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 
-// Composition wiring for the extracted Android family: the package owns transport and IME
-// semantics; this file injects the raw host primitives R13 bars from platform packages.
 bindAndroidAdbHost({
   environment: process.env,
   files: {
@@ -70,7 +68,6 @@ bindAndroidAdbHost({
           directoryHandle = await open(directory, 'r');
           await directoryHandle.sync();
         } catch {
-          // Atomic rename remains the correctness boundary where directory sync is unavailable.
         } finally {
           if (directoryHandle) await directoryHandle.close().catch(() => {});
         }
@@ -82,15 +79,10 @@ bindAndroidAdbHost({
     writeBytes: async (filePath, value) => await writeFile(filePath, value),
   },
   execSerialAdb: async (serial, args, options) =>
-    // Local adb execution must escape any active provider scope to avoid routing
-    // tunnel-backed providers back into themselves when they shell out to adb.
     await withoutCommandExecutorOverride(
       async () =>
         await runCmd('adb', ['-s', serial, ...args], {
           ...options,
-          // Some `adb shell` children can survive killing the adb parent and keep
-          // requests open past timeout. Give each adb call its own process group
-          // so timeout/abort cleanup can tear down the whole local command tree.
           detached: process.platform !== 'win32',
         }),
     ),
