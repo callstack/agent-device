@@ -106,8 +106,28 @@ private func bestMatchingWindowRect(
     return nil
   }
   let screenshotAspectRatio = Double(screenshotWidth) / Double(screenshotHeight)
-  return windows(of: AXUIElementCreateApplication(app.processIdentifier))
-    .compactMap(rectAttribute)
+  guard let windowInfoList = CGWindowListCopyWindowInfo(
+    [.optionOnScreenOnly, .excludeDesktopElements],
+    kCGNullWindowID
+  ) as? [[String: Any]] else {
+    return nil
+  }
+  return windowInfoList
+    .compactMap { windowInfo -> RectResponse? in
+      guard (windowInfo[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value
+        == app.processIdentifier,
+        let boundsDictionary = windowInfo[kCGWindowBounds as String] as? NSDictionary,
+        let bounds = CGRect(dictionaryRepresentation: boundsDictionary)
+      else {
+        return nil
+      }
+      return RectResponse(
+        x: Double(bounds.origin.x),
+        y: Double(bounds.origin.y),
+        width: Double(bounds.width),
+        height: Double(bounds.height)
+      )
+    }
     .filter { $0.width > 0 && $0.height > 0 }
     .min { left, right in
       abs(left.width / left.height - screenshotAspectRatio)
