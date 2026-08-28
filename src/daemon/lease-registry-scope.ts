@@ -83,10 +83,30 @@ export type NormalizedAllocateLeaseRequest = {
   ttlMs?: number;
 };
 
-export const DEFAULT_LEASE_TTL_MS = 60_000;
-export const MIN_LEASE_TTL_MS = 5_000;
-export const MAX_LEASE_TTL_MS = 10 * 60_000;
+const DEFAULT_LEASE_TTL_MS = 60_000;
+const MIN_LEASE_TTL_MS = 5_000;
+const MAX_LEASE_TTL_MS = 10 * 60_000;
 const DEFAULT_LEASE_PROVIDER = 'default';
+
+export function createLeaseTtlResolver(options: LeaseRegistryOptions) {
+  const defaultTtl = Number.isInteger(options.defaultLeaseTtlMs)
+    ? Math.max(1, Number(options.defaultLeaseTtlMs))
+    : DEFAULT_LEASE_TTL_MS;
+  const minTtl = Number.isInteger(options.minLeaseTtlMs)
+    ? Math.max(1, Number(options.minLeaseTtlMs))
+    : MIN_LEASE_TTL_MS;
+  const maxTtl = Number.isInteger(options.maxLeaseTtlMs)
+    ? Math.max(minTtl, Number(options.maxLeaseTtlMs))
+    : MAX_LEASE_TTL_MS;
+  return (raw: number | undefined): number => {
+    if (!Number.isInteger(raw)) return defaultTtl;
+    const value = Number(raw);
+    if (value < minTtl || value > maxTtl) {
+      throw new AppError('INVALID_ARGS', `Lease ttlMs must be between ${minTtl} and ${maxTtl}.`);
+    }
+    return value;
+  };
+}
 
 function normalizeRunId(raw: string | undefined): string | undefined {
   if (!raw) return undefined;

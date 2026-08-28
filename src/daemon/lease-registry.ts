@@ -13,9 +13,7 @@ import {
   type ReleaseLeaseRequest,
   type LeaseRegistryOptions,
   type NormalizedAllocateLeaseRequest,
-  DEFAULT_LEASE_TTL_MS,
-  MIN_LEASE_TTL_MS,
-  MAX_LEASE_TTL_MS,
+  createLeaseTtlResolver,
   normalizeAllocateLeaseRequest,
   createDeviceLease,
   deviceLeaseBusyError,
@@ -48,9 +46,7 @@ export class LeaseRegistry {
   private readonly runBindings = new Map<string, string>();
   private readonly deviceBindings = new Map<string, string>();
   private readonly maxActiveSimulatorLeases: number;
-  private readonly defaultLeaseTtlMs: number;
-  private readonly minLeaseTtlMs: number;
-  private readonly maxLeaseTtlMs: number;
+  private readonly resolveLeaseTtlMs: ReturnType<typeof createLeaseTtlResolver>;
   private readonly now: () => number;
   private readonly onLeaseExpired?: (lease: DeviceLease) => void;
   private readonly providerSessionOwnership: ProviderSessionOwnershipRegistry;
@@ -59,15 +55,7 @@ export class LeaseRegistry {
     this.maxActiveSimulatorLeases = Number.isInteger(options.maxActiveSimulatorLeases)
       ? Math.max(0, Number(options.maxActiveSimulatorLeases))
       : 0;
-    this.defaultLeaseTtlMs = Number.isInteger(options.defaultLeaseTtlMs)
-      ? Math.max(1, Number(options.defaultLeaseTtlMs))
-      : DEFAULT_LEASE_TTL_MS;
-    this.minLeaseTtlMs = Number.isInteger(options.minLeaseTtlMs)
-      ? Math.max(1, Number(options.minLeaseTtlMs))
-      : MIN_LEASE_TTL_MS;
-    this.maxLeaseTtlMs = Number.isInteger(options.maxLeaseTtlMs)
-      ? Math.max(this.minLeaseTtlMs, Number(options.maxLeaseTtlMs))
-      : MAX_LEASE_TTL_MS;
+    this.resolveLeaseTtlMs = createLeaseTtlResolver(options);
     this.now = options.now ?? (() => Date.now());
     this.onLeaseExpired = options.onLeaseExpired;
     this.providerSessionOwnership = new ProviderSessionOwnershipRegistry({
@@ -198,7 +186,9 @@ export class LeaseRegistry {
     authority: HumanControlAuthority,
     rawId: string,
     rawInput: HumanControlHoldInput,
+    signal?: AbortSignal,
   ): Promise<HumanControlHold> {
+    signal?.throwIfAborted();
     const id = normalizeHumanControlHoldId(rawId);
     const input = parseHumanControlHoldInput(rawInput);
     this.cleanupExpiredLeases();
@@ -226,23 +216,40 @@ export class LeaseRegistry {
     const holds = this.holdsByDevice.get(key) ?? new Map<string, OwnedHumanControlHold>();
     this.holdsByDevice.set(key, holds);
     holds.set(id, pending);
-    await this.mutations.wait(key);
-    if (holds.get(id) !== pending) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        'Human-control hold changed before activation completed.',
-        { holdId: id },
-      );
+    return await this.activateHumanControlHold(key, pending, input.ttlMs, signal);
+  }
+
+  private async activateHumanControlHold(
+    key: string,
+    pending: OwnedHumanControlHold,
+    ttlMs: number | undefined,
+    signal?: AbortSignal,
+  ): Promise<HumanControlHold> {
+    const holds = this.holdsByDevice.get(key)!;
+    const { id } = pending.hold;
+    try {
+      await this.mutations.wait(key, signal);
+      signal?.throwIfAborted();
+      if (holds.get(id) !== pending) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          'Human-control hold changed before activation completed.',
+          { holdId: id },
+        );
+      }
+      const activatedAt = this.now();
+      pending.hold = {
+        ...pending.hold,
+        state: 'active',
+        updatedAt: activatedAt,
+        ...(ttlMs === undefined ? {} : { expiresAt: activatedAt + ttlMs }),
+      };
+      this.refreshHeldLease(key, activatedAt);
+      return cloneHumanControlHold(pending.hold);
+    } catch (error) {
+      if (holds.get(id) === pending) this.deleteHumanControlHold(key, id);
+      throw error;
     }
-    const activatedAt = this.now();
-    pending.hold = {
-      ...pending.hold,
-      state: 'active',
-      updatedAt: activatedAt,
-      ...(input.ttlMs === undefined ? {} : { expiresAt: activatedAt + input.ttlMs }),
-    };
-    this.refreshHeldLease(key, activatedAt);
-    return cloneHumanControlHold(pending.hold);
   }
 
   removeHumanControlHold(
@@ -255,13 +262,17 @@ export class LeaseRegistry {
     if (!existing) return undefined;
     this.assertHoldAuthority(authority, existing);
     const key = leaseDeviceBindingKey(existing.hold.scope)!;
+    this.deleteHumanControlHold(key, id);
+    return cloneHumanControlHold(existing.hold);
+  }
+
+  private deleteHumanControlHold(key: string, id: string): void {
     const holds = this.holdsByDevice.get(key)!;
     holds.delete(id);
     if (holds.size === 0) {
       this.holdsByDevice.delete(key);
       this.refreshHeldLease(key, this.now());
     }
-    return cloneHumanControlHold(existing.hold);
   }
 
   assertHumanControlAdmission(
@@ -424,18 +435,6 @@ export class LeaseRegistry {
       backend,
       hint: 'Retry after releasing another simulator lease.',
     });
-  }
-
-  private resolveLeaseTtlMs(raw: number | undefined): number {
-    if (!Number.isInteger(raw)) return this.defaultLeaseTtlMs;
-    const value = Number(raw);
-    if (value < this.minLeaseTtlMs || value > this.maxLeaseTtlMs) {
-      throw new AppError(
-        'INVALID_ARGS',
-        `Lease ttlMs must be between ${this.minLeaseTtlMs} and ${this.maxLeaseTtlMs}.`,
-      );
-    }
-    return value;
   }
 
   private getActiveLease(leaseId: string): DeviceLease {

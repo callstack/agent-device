@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import type http from 'node:http';
-import { test } from 'vitest';
+import http from 'node:http';
+import { test, vi } from 'vitest';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -8,7 +8,11 @@ import {
 } from '../../__tests__/test-utils/loopback.ts';
 import { HUMAN_CONTROL_HTTP_PREFIX } from '../human-control-contract.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { HUMAN_CONTROL_SCOPE, humanControlRequest } from './human-control-fixtures.ts';
+import {
+  HUMAN_CONTROL_SCOPE,
+  humanControlRequest,
+  createControlLatch,
+} from './human-control-fixtures.ts';
 import { createHumanControlHarness } from './human-control-router-fixture.ts';
 import { tryHandleHumanControlHttpRoute } from '../human-control-http.ts';
 import { createDaemonHttpServer } from '../server/http-server.ts';
@@ -46,6 +50,76 @@ test('malformed request URLs return a normalized error', async () => {
   assert.equal(res.statusCode, 400);
   assert.equal((JSON.parse(responseBody) as { code?: string }).code, 'INVALID_ARGS');
 });
+
+for (const transport of ['tenant RPC', 'host PUT'] as const) {
+  test(`${transport} disconnect during drain removes its pending hold before the mutation ends`, async (t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    const { registry, lease, handleRequest } = createHumanControlHarness();
+    const finish = createControlLatch();
+    const disconnected = createControlLatch();
+    let mutationFinished = false;
+    const mutation = registry.runDeviceMutation(lease, async () => {
+      await finish.promise;
+      mutationFinished = true;
+    });
+    const server = await createDaemonHttpServer({
+      token: 'test-token',
+      leaseRegistry: registry,
+      handleRequest,
+    });
+    server.on('request', (_req, res) => {
+      res.once('close', () => {
+        if (!res.writableFinished) disconnected.resolve();
+      });
+    });
+    let request: http.ClientRequest | undefined;
+    try {
+      const port = await listenOnLoopback(server);
+      const isRpc = transport === 'tenant RPC';
+      const body = JSON.stringify(
+        isRpc
+          ? {
+              jsonrpc: '2.0',
+              id: 'disconnected-takeover',
+              method: 'agent_device.command',
+              params: humanControlRequest(lease, 'human_control', ['put', 'disconnected', '{}']),
+            }
+          : { scope: HUMAN_CONTROL_SCOPE },
+      );
+      request = http.request({
+        host: '127.0.0.1',
+        port,
+        path: isRpc ? '/rpc' : `${HUMAN_CONTROL_HTTP_PREFIX}/disconnected`,
+        method: isRpc ? 'POST' : 'PUT',
+        headers: {
+          authorization: 'Bearer test-token',
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(body),
+        },
+      });
+      request.on('error', () => undefined);
+      request.end(body);
+      await vi.waitFor(() => {
+        assert.equal(registry.listHumanControlHolds({ kind: 'host' })[0]?.state, 'activating');
+      });
+      request.destroy();
+      await disconnected.promise;
+      await vi.waitFor(() => {
+        assert.deepEqual(registry.listHumanControlHolds({ kind: 'host' }), []);
+      });
+      assert.equal(mutationFinished, false);
+      finish.resolve();
+      await mutation;
+      assert.deepEqual(registry.listHumanControlHolds({ kind: 'host' }), []);
+      assert.equal(await registry.runDeviceMutation(lease, async () => 'resumed'), 'resumed');
+    } finally {
+      request?.destroy();
+      finish.resolve();
+      await mutation;
+      await closeLoopbackServer(server);
+    }
+  });
+}
 
 test('host administration and tenant RPC use the same lease registry with distinct authority', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;

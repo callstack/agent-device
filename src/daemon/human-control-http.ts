@@ -1,5 +1,5 @@
 import type http from 'node:http';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError, normalizeError } from '@agent-device/kernel/errors';
 import { readNodeHttpRequestBody } from '../utils/node-http.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
 import { sendRestJsonError } from './http-errors.ts';
@@ -75,9 +75,27 @@ async function upsertHumanControlHold(
   holdId: string,
   params: HumanControlHttpParams,
 ): Promise<void> {
-  const input = await readHoldInput(params.req);
-  const hold = await params.registry.putHumanControlHold({ kind: 'host' }, holdId, input);
-  sendJson(params.res, { ok: true, hold, state: 'active' });
+  const { req, res } = params;
+  const controller = new AbortController();
+  const cancelIfDisconnected = () => {
+    if (!res.writableFinished) controller.abort(createRequestCanceledError());
+  };
+  req.once('aborted', cancelIfDisconnected);
+  res.once('close', cancelIfDisconnected);
+  if (req.aborted || res.destroyed) cancelIfDisconnected();
+  try {
+    const input = await readHoldInput(req);
+    const hold = await params.registry.putHumanControlHold(
+      { kind: 'host' },
+      holdId,
+      input,
+      controller.signal,
+    );
+    sendJson(res, { ok: true, hold, state: 'active' });
+  } finally {
+    req.off('aborted', cancelIfDisconnected);
+    res.off('close', cancelIfDisconnected);
+  }
 }
 
 function removeHumanControlHold(holdId: string, params: HumanControlHttpParams): void {

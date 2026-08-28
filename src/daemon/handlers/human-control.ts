@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 import { parseHumanControlHoldInput } from '../human-control-contract.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
@@ -21,7 +22,12 @@ export async function handleHumanControlCommand(params: {
       return { ok: true, data: { holds: registry.listHumanControlHolds(authority) } };
     case 'put': {
       assertArgumentCount(positionals, 3);
-      const hold = await registry.putHumanControlHold(authority, holdId, readHoldInput(rawInput));
+      const hold = await registry.putHumanControlHold(
+        authority,
+        holdId,
+        readHoldInput(rawInput),
+        getRequestSignal(req.meta?.requestId),
+      );
       return { ok: true, data: { hold, state: 'active' } };
     }
     case 'remove': {

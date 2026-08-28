@@ -19,12 +19,24 @@ export class DeviceMutationDrain {
     }
   }
 
-  async wait(key: string): Promise<void> {
+  async wait(key: string, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     if (!this.active.has(key)) return;
-    await new Promise<void>((resolve) => {
-      const waiters = this.waiters.get(key) ?? new Set<() => void>();
-      waiters.add(resolve);
-      this.waiters.set(key, waiters);
-    });
+    const waiters = this.waiters.get(key) ?? new Set<() => void>();
+    let drained: () => void = () => {};
+    let aborted: () => void = () => {};
+    try {
+      await new Promise<void>((resolve, reject) => {
+        drained = resolve;
+        aborted = () => reject(signal?.reason);
+        waiters.add(drained);
+        this.waiters.set(key, waiters);
+        signal?.addEventListener('abort', aborted, { once: true });
+      });
+    } finally {
+      signal?.removeEventListener('abort', aborted);
+      waiters.delete(drained);
+      if (waiters.size === 0 && this.waiters.get(key) === waiters) this.waiters.delete(key);
+    }
   }
 }

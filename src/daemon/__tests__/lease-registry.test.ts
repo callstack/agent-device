@@ -1,5 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { createRequestCanceledError } from '@agent-device/kernel/errors';
 import { LeaseRegistry } from '../lease-registry.ts';
 import {
   HUMAN_CONTROL_LEASE_REQUEST,
@@ -510,4 +511,56 @@ test('holds do not survive registry restart, including host holds created withou
   const restarted = new LeaseRegistry();
   assert.deepEqual(restarted.listHumanControlHolds({ kind: 'host' }), []);
   assert.doesNotThrow(() => restarted.allocateLease(HUMAN_CONTROL_LEASE_REQUEST));
+});
+
+test('canceled activation refreshes the protected lease without waiting for the mutation', async () => {
+  let now = 0;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 5_000 });
+  const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
+  const authority = { kind: 'lease', leaseId: lease.leaseId } as const;
+  const finish = createControlLatch();
+  const mutation = registry.runDeviceMutation(lease, () => finish.promise);
+  const controller = new AbortController();
+  const activation = registry.putHumanControlHold(authority, 'console', {}, controller.signal);
+  const canceled = createRequestCanceledError();
+  const rejected = assert.rejects(activation, (error) => error === canceled);
+  now = 20_000;
+  controller.abort(canceled);
+  await rejected;
+  assert.deepEqual(registry.listHumanControlHolds(authority), []);
+  assert.equal(registry.listActiveLeases()[0]?.expiresAt, 25_000);
+  finish.resolve();
+  await mutation;
+  assert.deepEqual(registry.listHumanControlHolds(authority), []);
+});
+
+test('canceling a superseded activation cannot remove its successor or another hold', async () => {
+  const registry = new LeaseRegistry();
+  const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
+  const authority = { kind: 'lease', leaseId: lease.leaseId } as const;
+  const finish = createControlLatch();
+  const mutation = registry.runDeviceMutation(lease, () => finish.promise);
+  const controller = new AbortController();
+  const canceled = createRequestCanceledError();
+  const rejected = assert.rejects(
+    registry.putHumanControlHold(authority, 'console', {}, controller.signal),
+    (error) => error === canceled,
+  );
+  const successor = registry.putHumanControlHold(authority, 'console', { reason: 'successor' });
+  const other = registry.putHumanControlHold(authority, 'other', {});
+  controller.abort(canceled);
+  await rejected;
+  assert.deepEqual(
+    registry.listHumanControlHolds(authority).map((hold) => hold.id),
+    ['console', 'other'],
+  );
+  finish.resolve();
+  await mutation;
+  assert.equal((await successor).reason, 'successor');
+  assert.equal((await other).state, 'active');
+  await assert.rejects(
+    registry.putHumanControlHold(authority, 'console', {}, controller.signal),
+    (error) => error === canceled,
+  );
+  assert.equal(registry.listHumanControlHolds(authority)[0]?.reason, 'successor');
 });

@@ -66,6 +66,10 @@ agent session stays open, and its lease is protected from inactivity expiry. Act
 already-admitted mutations to finish. Status and recovery use `takeover status` and
 `takeover release <hold-id>` with the same session.
 
+If the requesting connection disconnects while activation is waiting for mutations to finish, its
+pending hold is removed and cannot activate later. This applies to both tenant RPCs and host PUTs.
+Once active, holds follow their configured TTL or explicit release lifecycle.
+
 Lease-owner operations use ordinary `agent_device.command` RPCs at `POST /rpc`, with command
 `human_control` and positionals `["list"]`, `["put", "<hold-id>", "{\"ttlMs\":15000}"]`, or
 `["remove", "<hold-id>"]`. Supply the same tenant, run, client, lease, backend, provider, and device
