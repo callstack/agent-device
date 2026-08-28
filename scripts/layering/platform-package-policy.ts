@@ -11,6 +11,7 @@ export const CANONICAL_PLATFORM_FAMILIES = [
   'linux',
   'web',
 ] as const;
+const RETIRED_PLATFORM_FAMILIES = ['harmonyos', 'linux', 'vega', 'web'] as const;
 type PlatformFamily = (typeof CANONICAL_PLATFORM_FAMILIES)[number];
 export type PlatformPackageDeclaration = {
   dir: string;
@@ -35,17 +36,19 @@ const RAW_PROCESS_SPECIFIERS = new Set(['child_process', 'node:child_process']);
 export const APPLE_RUNNER_SUBTREE = 'packages/platform-apple/src/runner/';
 
 export function checkPlatformsRootShape(files: readonly string[]): LayeringViolation[] {
-  const allowedChild = new RegExp(
-    `^src/platforms/(?:${[...CANONICAL_PLATFORM_FAMILIES, '__tests__'].join('|')})/`,
-  );
+  const allowedChild = new RegExp(`^src/platforms/(?:apple|android|__tests__)/`);
+  const retiredFamily = new RegExp(`^src/platforms/(?:${RETIRED_PLATFORM_FAMILIES.join('|')})/`);
   return files
-    .filter((file) => file.startsWith('src/platforms/') && !allowedChild.test(file))
+    .filter(
+      (file) =>
+        file.startsWith('src/platforms/') && (retiredFamily.test(file) || !allowedChild.test(file)),
+    )
     .map((file) => ({
       rule: 'platforms-root-shape',
       file,
       line: 1,
       message:
-        'src/platforms may hold only the family directories and __tests__; shared code belongs in a substrate package',
+        'src/platforms may hold only the remaining apple/android family directories and __tests__; retired family code belongs in its platform package and shared code belongs in a substrate package',
     }));
 }
 const APPLE_RUNNER_FACADE = '@agent-device/platform-apple/runner';
@@ -116,6 +119,10 @@ function isProductionSource(file: string): boolean {
   return !file.endsWith('.test.ts') && !file.includes('/__tests__/');
 }
 
+function isNonProductionConsumer(file: string): boolean {
+  return !isProductionSource(file) || file.startsWith('test/');
+}
+
 function concretePlatformFamily(specifier: string): string | undefined {
   return /^@agent-device\/platform-([^/]+)(?:\/|$)/.exec(specifier)?.[1];
 }
@@ -137,6 +144,15 @@ function isPackageOwnedFacadeTest(file: string, family: string, specifier: strin
     file.startsWith(`packages/platform-${family}/`) &&
     (file.endsWith('.test.ts') || file.includes('/__tests__/')) &&
     specifier === `@agent-device/platform-${family}`
+  );
+}
+
+function isWebPackageTestSelectorImport(file: string, family: string, specifier: string): boolean {
+  return (
+    family === 'web' &&
+    file.startsWith('packages/platform-web/') &&
+    (file.endsWith('.test.ts') || file.includes('/__tests__/')) &&
+    specifier === '@agent-device/selectors'
   );
 }
 
@@ -235,6 +251,15 @@ function checkSource(file: string, source: string): LayeringViolation[] {
         ),
       );
     }
+    if (file.startsWith('packages/provision-kit/') && importedFamily) {
+      violations.push(
+        violation(
+          file,
+          site.line,
+          `only ${COMPOSITION_FILE} or its governed request-provider composition submodule may import '${site.spec}' outside its package-owned tests`,
+        ),
+      );
+    }
     if (site.spec === APPLE_RUNNER_CLIENT && file !== APPLE_RUNNER_CLIENT_COMPOSITION) {
       violations.push(
         violation(
@@ -261,6 +286,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
       site.spec !== APPLE_RUNNER_FACADE &&
       site.spec !== APPLE_RUNNER_CLIENT &&
       site.spec !== APPLE_RUNNER_TEST_HOST &&
+      !isAllowedPlatformRootImport(file, site, importedFamily) &&
       !isPackageOwnedFacadeTest(file, importedFamily, site.spec) &&
       !isTransitionalAndroidAdbShimImport(file, site.spec)
     ) {
@@ -268,7 +294,9 @@ function checkSource(file: string, source: string): LayeringViolation[] {
         violation(
           file,
           site.line,
-          `only ${COMPOSITION_FILE} or its governed request-provider composition submodule may import '${site.spec}' outside its package-owned tests`,
+          site.spec === `@agent-device/platform-${importedFamily}`
+            ? `production static imports of '${site.spec}' are limited to ${COMPOSITION_FILE} and src/core/interactors/; use the named root façade through a deferred import or type-only edge elsewhere`
+            : `only ${COMPOSITION_FILE} or its governed request-provider composition submodule may import '${site.spec}' outside its package-owned tests`,
         ),
       );
     }
@@ -282,7 +310,8 @@ function checkSource(file: string, source: string): LayeringViolation[] {
       !site.spec.startsWith('@agent-device/provision-kit/') &&
       !site.spec.startsWith('@agent-device/kernel/') &&
       site.spec !== '@agent-device/xml' &&
-      !isPackageOwnedFacadeTest(file, ownerFamily, site.spec)
+      !isPackageOwnedFacadeTest(file, ownerFamily, site.spec) &&
+      !isWebPackageTestSelectorImport(file, ownerFamily, site.spec)
     ) {
       violations.push(
         violation(
@@ -335,6 +364,20 @@ function checkSource(file: string, source: string): LayeringViolation[] {
   return violations;
 }
 
+function isAllowedPlatformRootImport(
+  file: string,
+  site: { spec: string; dynamic: boolean; typeOnly: boolean },
+  family: string,
+): boolean {
+  if (site.spec !== `@agent-device/platform-${family}`) return false;
+  return (
+    site.dynamic ||
+    site.typeOnly ||
+    isNonProductionConsumer(file) ||
+    file.startsWith('src/core/interactors/')
+  );
+}
+
 export function checkPlatformPackagePolicy(
   sources: ReadonlyMap<string, string>,
   packages: readonly PlatformPackageDeclaration[],
@@ -355,5 +398,5 @@ export function checkPlatformPackagePolicy(
 }
 
 export function platformPackagePolicySummary(): string {
-  return 'R13 holds six private implementation-lazy platform packages above capture-kit behind one canonical composition root and its single private provider-composition submodule, with the apple runner mechanics facet behind its enumerated seam';
+  return 'R13 holds six private implementation-lazy platform packages above capture-kit behind named root façades; production static value imports stop at the canonical composition and core interactor seams, while other consumers use deferred or type-only edges, with the apple runner mechanics facet behind its enumerated seam';
 }

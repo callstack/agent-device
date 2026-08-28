@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { AppError } from '@agent-device/kernel/errors';
 import { createUnsupportedInteractor } from '../unsupported-interactor.ts';
-import { assertRejectsAppError } from '../../../__tests__/test-utils/app-error.ts';
 
 const OPERATIONS = [
   'open',
@@ -35,10 +35,7 @@ test('every operation rejects as unsupported and names the platform', async () =
 
   for (const operation of OPERATIONS) {
     const call = interactor[operation] as () => Promise<unknown>;
-    await assertRejectsAppError(async () => await call(), {
-      code: 'UNSUPPORTED_OPERATION',
-      message: new RegExp(`^${operation} is not supported on Vega OS$`),
-    });
+    await expectUnsupported(call, operation, 'Vega OS');
   }
 });
 
@@ -46,14 +43,8 @@ test('the label is per-instance, so two platforms reject with their own wording'
   const web = createUnsupportedInteractor('web').home as () => Promise<unknown>;
   const vega = createUnsupportedInteractor('Vega OS').home as () => Promise<unknown>;
 
-  await assertRejectsAppError(async () => await web(), {
-    code: 'UNSUPPORTED_OPERATION',
-    message: /not supported on web$/,
-  });
-  await assertRejectsAppError(async () => await vega(), {
-    code: 'UNSUPPORTED_OPERATION',
-    message: /not supported on Vega OS$/,
-  });
+  await expectUnsupported(web, 'home', 'web');
+  await expectUnsupported(vega, 'home', 'Vega OS');
 });
 
 test('the factory covers the whole interactor surface', () => {
@@ -61,3 +52,17 @@ test('the factory covers the whole interactor surface', () => {
 
   assert.deepEqual(Object.keys(interactor).sort(), [...OPERATIONS].sort());
 });
+
+async function expectUnsupported(
+  call: () => Promise<unknown>,
+  operation: string,
+  platform: string,
+): Promise<void> {
+  await assert.rejects(
+    call,
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'UNSUPPORTED_OPERATION' &&
+      error.message === `${operation} is not supported on ${platform}`,
+  );
+}

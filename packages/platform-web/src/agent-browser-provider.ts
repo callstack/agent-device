@@ -1,6 +1,6 @@
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
+import { hostPlatform, type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -29,9 +29,7 @@ import {
 } from './agent-browser-lifecycle.ts';
 
 const AGENT_BROWSER = 'agent-browser';
-// Exported so daemon shutdown can pin its web-close budget to the ceiling enforced for one
-// `agent-browser` CLI call instead of copying a number that can drift.
-export const AGENT_BROWSER_TIMEOUT_MS = 30_000;
+const AGENT_BROWSER_TIMEOUT_MS = 30_000;
 const AGENT_BROWSER_DOCTOR_HINT =
   'Run `agent-device web setup` to install the managed web backend.';
 
@@ -488,7 +486,7 @@ function browserRefSelector(ref: string): string {
 }
 
 function selectAllShortcut(): string {
-  return process.platform === 'darwin' ? 'Meta+a' : 'Control+a';
+  return hostPlatform() === 'darwin' ? 'Meta+a' : 'Control+a';
 }
 
 function parseRect(data: unknown): Rect | undefined {

@@ -2,7 +2,7 @@ import { expect, test, vi } from 'vitest';
 import { createHarmonyScreenRecordingHost } from './platform-runtime-screen-recording-harmony-host.ts';
 
 const hdc = vi.hoisted(() => vi.fn());
-vi.mock('./platforms/harmonyos/hdc.ts', () => ({ runHarmonyHdc: hdc }));
+vi.mock('@agent-device/platform-harmonyos', () => ({ runHarmonyHdc: hdc }));
 
 const device = {
   platform: 'harmonyos' as const,

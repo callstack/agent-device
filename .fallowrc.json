@@ -199,6 +199,154 @@
         "truncateUtf8Field",
         "isRecordingExportQuality"
       ]
+    },
+    {
+      "comment": "HarmonyOS package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its selected host route explicit here.",
+      "file": "packages/platform-harmonyos/src/hdc.ts",
+      "exports": ["ensureHarmonyToolchainPathConfigured"]
+    },
+    {
+      "comment": "HarmonyOS package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its selected lifecycle route explicit here.",
+      "file": "packages/platform-harmonyos/src/app-lifecycle.ts",
+      "exports": ["listHarmonyApps", "openHarmonyApp", "closeHarmonyApp"]
+    },
+    {
+      "comment": "HarmonyOS archive metadata parsing is exercised by package-owned tests but has no production caller; keep the direct test seam explicit while the implementation remains colocated with app lifecycle mechanics.",
+      "file": "packages/platform-harmonyos/src/app-lifecycle.ts",
+      "exports": ["resolveHarmonyArchiveBundleName"]
+    },
+    {
+      "comment": "HarmonyOS package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its selected diagnostics route explicit here.",
+      "file": "packages/platform-harmonyos/src/doctor.ts",
+      "exports": ["harmonyToolchainCheck"]
+    },
+    {
+      "comment": "HarmonyOS package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its selected interaction route explicit here.",
+      "file": "packages/platform-harmonyos/src/input-actions.ts",
+      "exports": [
+        "pressHarmony",
+        "doubleClickHarmony",
+        "longPressHarmony",
+        "typeHarmony",
+        "fillHarmony",
+        "scrollHarmony",
+        "performHarmonyGesture",
+        "homeHarmony",
+        "appSwitcherHarmony",
+        "pressHarmonyKeyboardKey",
+        "setHarmonyOrientation"
+      ]
+    },
+    {
+      "comment": "HarmonyOS package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.",
+      "file": "packages/platform-harmonyos/src/perf.ts",
+      "exports": ["sampleHarmonyMemoryPerf"]
+    },
+    {
+      "comment": "HarmonyOS package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.",
+      "file": "packages/platform-harmonyos/src/screenshot.ts",
+      "exports": ["screenshotHarmony"]
+    },
+    {
+      "comment": "HarmonyOS package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.",
+      "file": "packages/platform-harmonyos/src/settings.ts",
+      "exports": ["setHarmonySetting"]
+    },
+    {
+      "comment": "HarmonyOS package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its selected host route explicit here.",
+      "file": "packages/platform-harmonyos/src/index.ts",
+      "exports": ["sampleHarmonyMemoryPerf"]
+    },
+    {
+      "comment": "Linux package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its selected interactor/snapshot routes explicit here.",
+      "file": "packages/platform-linux/src/app-lifecycle.ts",
+      "exports": ["openLinuxApp", "closeLinuxApp", "backLinux", "homeLinux"]
+    },
+    {
+      "comment": "Linux package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its selected interactor route explicit here.",
+      "file": "packages/platform-linux/src/input-actions.ts",
+      "exports": [
+        "rightClickLinux",
+        "middleClickLinux",
+        "doubleClickLinux",
+        "longPressLinux",
+        "focusLinux",
+        "swipeLinux"
+      ]
+    },
+    {
+      "comment": "Linux package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.",
+      "file": "packages/platform-linux/src/screenshot.ts",
+      "exports": ["screenshotLinux"]
+    },
+    {
+      "comment": "Linux package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.",
+      "file": "packages/platform-linux/src/snapshot.ts",
+      "exports": ["readLinuxTextAtPoint"]
+    },
+    {
+      "comment": "Linux package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis.",
+      "file": "packages/platform-linux/src/clipboard.ts",
+      "exports": ["readLinuxClipboard", "writeLinuxClipboard"]
+    },
+    {
+      "comment": "Linux package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis.",
+      "file": "packages/platform-linux/src/input-actions.ts",
+      "exports": ["scrollLinux", "fillLinux"]
+    },
+    {
+      "comment": "Linux package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.",
+      "file": "packages/platform-linux/src/surface-snapshot.ts",
+      "exports": ["captureLinuxSurfaceSnapshot"]
+    },
+    {
+      "comment": "Linux package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.",
+      "file": "packages/platform-linux/src/index.ts",
+      "exports": ["createLocalLinuxToolProvider"]
+    },
+    {
+      "comment": "Vega package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.",
+      "file": "packages/platform-vega/src/doctor.ts",
+      "exports": ["vegaToolchainCheck"]
+    },
+    {
+      "comment": "Web package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its managed-backend/provider routes explicit here.",
+      "file": "packages/platform-web/src/agent-browser-tool.ts",
+      "exports": ["doctorManagedAgentBrowser"]
+    },
+    {
+      "comment": "Web package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.",
+      "file": "packages/platform-web/src/agent-browser-tool.ts",
+      "exports": ["setupManagedAgentBrowser"]
+    },
+    {
+      "comment": "Web package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.",
+      "file": "packages/platform-web/src/doctor.ts",
+      "exports": ["webBrowserLifecycleCheck"]
+    },
+    {
+      "comment": "Web package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its request-scoped provider routes explicit here.",
+      "file": "packages/platform-web/src/provider.ts",
+      "exports": ["resolveWebProvider", "hasScopedWebProvider"]
+    },
+    {
+      "comment": "Web package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, and the timeout is pinned by the daemon teardown test.",
+      "file": "packages/platform-web/src/index.ts",
+      "exports": [
+        "AGENT_BROWSER_TIMEOUT_MS",
+        "inspectManagedAgentBrowserProcesses",
+        "summarizeAgentBrowserProcesses"
+      ]
+    },
+    {
+      "comment": "Web process matching helpers are retained for package-owned lifecycle tests; production export analysis does not traverse those test consumers.",
+      "file": "packages/platform-web/src/agent-browser-lifecycle.ts",
+      "exports": [
+        "agentBrowserChromeLaunchMarker",
+        "matchAgentBrowserChromeProcess",
+        "summarizeAgentBrowserProcesses",
+        "summarizeManagedAgentBrowserProcesses"
+      ]
     }
   ],
   "usedClassMembers": [

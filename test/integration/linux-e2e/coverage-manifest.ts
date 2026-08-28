@@ -129,7 +129,7 @@ export const LINUX_PLATFORM_COVERAGE = {
     'the command-evidence lane runs a dedicated Linux script as a test suite',
   ),
   [C.clipboard]: contract(
-    'src/platforms/linux/__tests__/clipboard.test.ts',
+    'packages/platform-linux/src/__tests__/clipboard.test.ts',
     'writeLinuxClipboard uses xclip with stdin on X11',
     'Linux clipboard writes through the supported X11 host-tool seam',
   ),
@@ -246,7 +246,7 @@ export const LINUX_PLATFORM_COVERAGE = {
     'the exact-owner runtime fact rejects native orientation changes on every Linux leaf',
   ),
   [C.scroll]: contract(
-    'src/platforms/linux/__tests__/input-actions.test.ts',
+    'packages/platform-linux/src/__tests__/input-actions.test.ts',
     'scrollLinux uses ydotool mousemove --wheel for vertical scroll',
     'Linux scroll dispatch uses the Wayland ydotool wheel primitive',
   ),

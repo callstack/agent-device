@@ -81,7 +81,7 @@ export const WEB_PLATFORM_COVERAGE = {
     'web capability projection reflects runtime-owned unsupported operations',
   ),
   [C.doctor]: contract(
-    'src/platforms/web/__tests__/doctor.test.ts',
+    'packages/platform-web/src/__tests__/doctor.test.ts',
     'web doctor lifecycle check reports live managed Chrome process count',
     'web doctor reports managed browser lifecycle evidence',
   ),

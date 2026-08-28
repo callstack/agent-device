@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { installFakeManagedAgentBrowser, mkdtempForTestSync } from './__tests__/test-utils.ts';
 
 const { runCmdMock } = vi.hoisted(() => ({
   runCmdMock: vi.fn(),
@@ -37,7 +37,6 @@ import {
   summarizeAgentBrowserProcesses,
 } from './agent-browser-lifecycle.ts';
 import { getManagedAgentBrowserStatus } from './agent-browser-tool.ts';
-import { installFakeManagedAgentBrowser } from './__tests__/test-utils.ts';
 
 const mockRunCmd = vi.mocked(runCmdMock);
 

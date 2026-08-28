@@ -2,9 +2,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { runHarmonyHdc } from './hdc.ts';
 
-export const HARMONYOS_MEMORY_SAMPLE_METHOD = 'hdc-shell-proc-status';
-export const HARMONYOS_MEMORY_SAMPLE_DESCRIPTION =
-  'Resident memory snapshot from HarmonyOS /proc/<pid>/status. Values are reported in kilobytes.';
+const HARMONYOS_MEMORY_SAMPLE_METHOD = 'hdc-shell-proc-status';
 
 export type HarmonyMemoryPerfSample = {
   totalRssKb: number;

@@ -7,7 +7,7 @@ export function createSnapshotRuntimeHost(): SnapshotRuntimeHost {
 
 const captureSurface: SnapshotRuntimeHost['captureSurface'] = async (device, options, signal) => {
   if (device.platform === 'linux') {
-    const { captureLinuxSurfaceSnapshot } = await import('../platforms/linux/surface-snapshot.ts');
+    const { captureLinuxSurfaceSnapshot } = await import('@agent-device/platform-linux');
     return await captureLinuxSurfaceSnapshot(options, signal);
   }
   requireMacOsSurfaceDevice(device);

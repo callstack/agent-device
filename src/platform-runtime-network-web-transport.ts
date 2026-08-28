@@ -3,10 +3,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 
 export async function resolveWebNetworkTransport(device: DeviceInfo): Promise<NetworkTransport> {
   if (device.platform !== 'web') return Object.freeze({ mode: 'local' });
-  const { hasScopedWebProvider, resolveWebProvider } = await import('./platforms/web/provider.ts');
-  const provider = resolveWebProvider();
+  const { hasScopedWebProvider, resolveWebProvider } = await import('@agent-device/platform-web');
+  const provider = await resolveWebProvider();
   const dumpNetwork = provider.dumpNetwork;
-  const mode = hasScopedWebProvider() ? 'transport-composed' : 'local';
+  const mode = (await hasScopedWebProvider()) ? 'transport-composed' : 'local';
   if (!dumpNetwork) return Object.freeze({ mode });
   return Object.freeze({
     mode,

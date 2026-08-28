@@ -1,17 +1,33 @@
-import fs from 'node:fs';
 import crypto from 'node:crypto';
-import os from 'node:os';
 import path from 'node:path';
 import { runCmd, type ExecResult } from '@agent-device/host-kit/command';
-import { readProcessStartTime } from '@agent-device/host-kit/process';
+import {
+  createHostDirectoryLinkSync,
+  ensureHostDirectorySync,
+  hostFileExistsSync,
+  hostFileLstatSync,
+  hostFileStatSync,
+  hostTemporaryDirectory,
+  readHostSymbolicLinkSync,
+  readHostTextFileSync,
+  removeHostFileSync,
+  acquireProcessLock,
+} from '@agent-device/host-kit/file';
+import {
+  hostCurrentWorkingDirectory,
+  hostEnvironment,
+  hostNodeExecutablePath,
+  hostNodeVersion,
+  hostPlatform,
+  hostProcessId,
+  readProcessStartTime,
+} from '@agent-device/host-kit/process';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { ManagedWebBackendStatus } from '@agent-device/contracts/managed-web-backend';
 import {
   installManagedAgentBrowserPackage,
   writeManagedAgentBrowserManifest,
 } from './agent-browser-install.ts';
-import { acquireProcessLock } from '@agent-device/host-kit/file';
-
 import {
   appendAgentDeviceChromeArgs,
   resolveAgentBrowserIdleTimeoutMs,
@@ -52,12 +68,13 @@ export async function setupManagedAgentBrowser(options: {
 }): Promise<AgentBrowserToolStatus> {
   const status = getManagedAgentBrowserStatus(options);
   assertWebNodeSupported(status.nodeMajor);
+  const processId = hostProcessId();
 
   const release = await acquireProcessLock({
     lockDirPath: path.join(status.installDir, '..', '.agent-browser-install.lock'),
     owner: {
-      pid: process.pid,
-      startTime: readProcessStartTime(process.pid),
+      pid: processId,
+      startTime: readProcessStartTime(processId),
       acquiredAtMs: Date.now(),
     },
     timeoutMs: SETUP_TIMEOUT_MS,
@@ -66,7 +83,7 @@ export async function setupManagedAgentBrowser(options: {
   try {
     const freshStatus = getManagedAgentBrowserStatus(options);
     if (freshStatus.installed) return freshStatus;
-    fs.mkdirSync(freshStatus.installDir, { recursive: true });
+    ensureHostDirectorySync(freshStatus.installDir);
     await installManagedAgentBrowserPackage({
       packageRoot: path.join(freshStatus.installDir, 'package'),
       packageSpec: `${AGENT_BROWSER}@${MANAGED_AGENT_BROWSER_VERSION}`,
@@ -107,7 +124,8 @@ export async function doctorManagedAgentBrowser(options: {
 export function getManagedAgentBrowserStatus(options: {
   stateDir?: string;
 }): AgentBrowserToolStatus {
-  const stateDir = options.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR ?? defaultStateDir();
+  const stateDir =
+    options.stateDir ?? hostEnvironment().AGENT_DEVICE_STATE_DIR ?? defaultStateDir();
   const installDir = path.join(stateDir, 'tools', 'agent-browser', MANAGED_AGENT_BROWSER_VERSION);
   const packageDir = resolveManagedPackageDir(installDir);
   const binaryPath = resolveManagedBinaryPath(installDir);
@@ -116,7 +134,7 @@ export function getManagedAgentBrowserStatus(options: {
   const runtimeHomeDir = resolveManagedRuntimeHomeDir(installDir);
   const socketDir = resolveManagedSocketDir(installDir);
   const installed = entryScript !== undefined && hasManifest(installDir);
-  const nodeMajor = Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10);
+  const nodeMajor = Number.parseInt(hostNodeVersion().replace(/^v/, '').split('.')[0] ?? '0', 10);
   return {
     version: MANAGED_AGENT_BROWSER_VERSION,
     stateDir,
@@ -141,9 +159,9 @@ async function spawnManagedAgentBrowser(
   options: Omit<ManagedAgentBrowserRunOptions, 'stateDir'>,
 ): Promise<ExecResult> {
   if (!status.entryScript) throw missingManagedToolError(status);
-  return await runCmd(process.execPath, [status.entryScript, ...args], {
+  return await runCmd(hostNodeExecutablePath(), [status.entryScript, ...args], {
     allowFailure: options.allowFailure,
-    env: managedAgentBrowserEnv(status, process.env),
+    env: managedAgentBrowserEnv(status, hostEnvironment()),
     timeoutMs: options.timeoutMs,
     signal: options.signal,
   });
@@ -153,9 +171,9 @@ function managedAgentBrowserEnv(
   status: AgentBrowserToolStatus,
   env: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
-  fs.mkdirSync(status.homeDir, { recursive: true });
+  ensureHostDirectorySync(status.homeDir);
   ensureRuntimeHomeDir(status);
-  fs.mkdirSync(status.socketDir, { recursive: true });
+  ensureHostDirectorySync(status.socketDir);
   return {
     ...env,
     HOME: status.runtimeHomeDir,
@@ -167,24 +185,28 @@ function managedAgentBrowserEnv(
 
 function ensureRuntimeHomeDir(status: AgentBrowserToolStatus): void {
   if (status.runtimeHomeDir === status.homeDir) return;
-  fs.mkdirSync(path.dirname(status.runtimeHomeDir), { recursive: true });
+  ensureHostDirectorySync(path.dirname(status.runtimeHomeDir));
   try {
-    const stats = fs.lstatSync(status.runtimeHomeDir);
-    if (stats.isSymbolicLink() && fs.readlinkSync(status.runtimeHomeDir) === status.homeDir) return;
+    const stats = hostFileLstatSync(status.runtimeHomeDir);
+    if (
+      stats.isSymbolicLink() &&
+      readHostSymbolicLinkSync(status.runtimeHomeDir) === status.homeDir
+    )
+      return;
     if (stats.isDirectory()) return;
-    if (stats.isSymbolicLink()) fs.unlinkSync(status.runtimeHomeDir);
+    if (stats.isSymbolicLink()) removeHostFileSync(status.runtimeHomeDir);
   } catch (error) {
     if (!isNoEntryError(error)) throw error;
   }
   try {
-    fs.symlinkSync(status.homeDir, status.runtimeHomeDir, 'dir');
+    createHostDirectoryLinkSync(status.homeDir, status.runtimeHomeDir);
   } catch {
-    fs.mkdirSync(status.runtimeHomeDir, { recursive: true });
+    ensureHostDirectorySync(status.runtimeHomeDir);
   }
 }
 
 function hasManifest(installDir: string): boolean {
-  return fs.existsSync(path.join(installDir, 'manifest.json'));
+  return hostFileExistsSync(path.join(installDir, 'manifest.json'));
 }
 
 /**
@@ -196,7 +218,7 @@ function resolveManagedEntryScript(packageDir: string): string | undefined {
   let bin: unknown;
   try {
     const manifest: unknown = JSON.parse(
-      fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'),
+      readHostTextFileSync(path.join(packageDir, 'package.json')),
     );
     bin =
       typeof manifest === 'object' && manifest !== null
@@ -218,7 +240,7 @@ function resolveManagedEntryScript(packageDir: string): string | undefined {
 
 function isFile(filePath: string): boolean {
   try {
-    return fs.statSync(filePath).isFile();
+    return hostFileStatSync(filePath).isFile();
   } catch {
     return false;
   }
@@ -229,7 +251,7 @@ function resolveManagedPackageDir(installDir: string): string {
 }
 
 function resolveManagedBinaryPath(installDir: string): string {
-  const shim = process.platform === 'win32' ? `${AGENT_BROWSER}.cmd` : AGENT_BROWSER;
+  const shim = hostPlatform() === 'win32' ? `${AGENT_BROWSER}.cmd` : AGENT_BROWSER;
   return path.join(installDir, 'package', 'node_modules', '.bin', shim);
 }
 
@@ -239,7 +261,7 @@ function missingManagedToolError(status: AgentBrowserToolStatus): AppError {
     installDir: status.installDir,
     hint:
       status.nodeSupported === false
-        ? `Web automation requires Node ${MINIMUM_WEB_NODE_MAJOR}+; current Node is ${process.version}.`
+        ? `Web automation requires Node ${MINIMUM_WEB_NODE_MAJOR}+; current Node is ${hostNodeVersion()}.`
         : 'Run `agent-device web setup` to install the managed web backend.',
   });
 }
@@ -258,21 +280,21 @@ function unusableInstallError(status: AgentBrowserToolStatus): AppError {
 function assertWebNodeSupported(nodeMajor: number): void {
   if (nodeMajor >= MINIMUM_WEB_NODE_MAJOR) return;
   throw new AppError('UNSUPPORTED_OPERATION', 'Web automation requires Node 24 or newer.', {
-    currentNode: process.version,
+    currentNode: hostNodeVersion(),
     requiredNodeMajor: MINIMUM_WEB_NODE_MAJOR,
     hint: 'Run agent-device with Node 24+ for web setup and web automation.',
   });
 }
 
 function resolveManagedRuntimeHomeDir(installDir: string): string {
-  if (process.platform === 'win32') return path.join(installDir, 'home');
+  if (hostPlatform() === 'win32') return path.join(installDir, 'home');
   const hash = crypto.createHash('sha1').update(installDir).digest('hex').slice(0, 12);
-  return path.join(os.tmpdir(), 'agent-device-web', hash);
+  return path.join(hostTemporaryDirectory(), 'agent-device-web', hash);
 }
 
 function resolveManagedSocketDir(installDir: string): string {
   const hash = crypto.createHash('sha1').update(installDir).digest('hex').slice(0, 12);
-  return path.join(os.tmpdir(), 'adw', hash);
+  return path.join(hostTemporaryDirectory(), 'adw', hash);
 }
 
 function isNoEntryError(error: unknown): boolean {
@@ -280,7 +302,7 @@ function isNoEntryError(error: unknown): boolean {
 }
 
 function defaultStateDir(): string {
-  return path.join(process.env.HOME ?? process.cwd(), '.agent-device');
+  return path.join(hostEnvironment().HOME ?? hostCurrentWorkingDirectory(), '.agent-device');
 }
 
 export function mapManagedAgentBrowserError(error: unknown): AppError {

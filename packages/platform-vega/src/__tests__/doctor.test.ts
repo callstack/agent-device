@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
-import { shouldPropagateDeviceInventoryProbeError } from '../../../request/device-inventory-context.ts';
 import type { VegaToolProvider } from '../tool-provider.ts';
 import { withVegaToolProvider } from '../tool-provider.ts';
 import { vegaToolchainCheck } from '../doctor.ts';
@@ -17,9 +16,21 @@ function contextWith(local: () => Promise<readonly DeviceInfo[]>): HostDiagnosti
     isProviderDevice: () => false,
     emitProgress: () => {},
     listLocalDeviceInventory: local,
-    shouldPropagateInventoryProbeError: shouldPropagateDeviceInventoryProbeError,
+    shouldPropagateInventoryProbeError: shouldPropagateInventoryProbeError,
     transportOverrides: Object.freeze({}),
   });
+}
+
+function shouldPropagateInventoryProbeError(error: unknown): boolean {
+  if (isRequestCanceledError(error)) return true;
+  if (
+    error instanceof AppError &&
+    error.code === 'COMMAND_FAILED' &&
+    error.details?.reason === 'device_inventory_context_unavailable'
+  ) {
+    return true;
+  }
+  return error instanceof Error && error.name === 'AbortError';
 }
 
 test('Vega doctor reports CLI version and connected-device readiness through semantic provider', async () => {

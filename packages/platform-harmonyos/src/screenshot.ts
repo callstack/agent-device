@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { promises as fs } from 'node:fs';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { readHostBinaryFile } from '@agent-device/host-kit/file';
 import { runHarmonyHdc } from './hdc.ts';
 
 export async function screenshotHarmony(device: DeviceInfo, outPath: string): Promise<void> {
@@ -11,7 +11,7 @@ export async function screenshotHarmony(device: DeviceInfo, outPath: string): Pr
       timeoutMs: 15_000,
     });
     await runHarmonyHdc(device, ['file', 'recv', remotePath, outPath], { timeoutMs: 15_000 });
-    const data = await fs.readFile(outPath);
+    const data = await readHostBinaryFile(outPath);
     if (data.length < 3 || data[0] !== 0xff || data[1] !== 0xd8 || data[2] !== 0xff) {
       throw new AppError('COMMAND_FAILED', 'HarmonyOS screenshot is not a JPEG file');
     }

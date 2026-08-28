@@ -8,6 +8,7 @@ import {
   type ExecResult,
 } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { hostEnvironment } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
@@ -306,5 +307,6 @@ async function resolveLocalLinuxTool<T extends string>(
 }
 
 function isLinuxWayland(): boolean {
-  return Boolean(process.env['WAYLAND_DISPLAY']) || process.env['XDG_SESSION_TYPE'] === 'wayland';
+  const environment = hostEnvironment();
+  return Boolean(environment['WAYLAND_DISPLAY']) || environment['XDG_SESSION_TYPE'] === 'wayland';
 }

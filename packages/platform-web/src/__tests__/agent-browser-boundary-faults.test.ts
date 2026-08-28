@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
-import { createFailNthCommandExecutor } from '../../../__tests__/test-utils/exec-faults.ts';
+import {
+  createFailNthCommandExecutor,
+  installFakeManagedAgentBrowser,
+  mkdtempForTestSync,
+} from './test-utils.ts';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
-import { installFakeManagedAgentBrowser } from './test-utils.ts';
 
 const COMMAND_CLASS_OPERATIONS = {
   mutation: (provider: ReturnType<typeof createAgentBrowserWebProvider>) => provider.click(10, 20),

@@ -13,10 +13,7 @@ import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { dispatchSwipeViaRuntime } from '../handlers/interaction-gesture.ts';
 import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
 import { createRequestRuntimeBindings } from '../request-runtime-binding.ts';
-import {
-  createLocalLinuxToolProvider,
-  withLinuxToolProvider,
-} from '../../platforms/linux/tool-provider.ts';
+import { createLocalLinuxToolProvider, withLinuxToolProvider } from '@agent-device/platform-linux';
 import {
   unavailableBindDevice,
   unavailableBindExactDevice,
@@ -193,7 +190,7 @@ test('duration-less public coordinate swipe retains Linux drag behavior', async 
   sessionStore.set('linux-swipe', makeSession('linux-swipe', { device: LINUX_DEVICE }));
   const drags: number[][] = [];
   let captureCount = 0;
-  const provider = createLocalLinuxToolProvider({
+  const provider = await createLocalLinuxToolProvider({
     accessibility: {
       captureTree: async () => {
         captureCount += 1;

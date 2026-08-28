@@ -21,11 +21,11 @@ export function createHostDiagnostics(): HostDiagnostics {
         return await androidToolchainCheck();
       }
       if (platform === 'vega') {
-        const { vegaToolchainCheck } = await import('./platforms/vega/doctor.ts');
+        const { vegaToolchainCheck } = await import('@agent-device/platform-vega');
         return await vegaToolchainCheck(context);
       }
       if (platform === 'harmonyos') {
-        const { harmonyToolchainCheck } = await import('./platforms/harmonyos/doctor.ts');
+        const { harmonyToolchainCheck } = await import('@agent-device/platform-harmonyos');
         return await harmonyToolchainCheck();
       }
       if (platform === 'ios' || platform === 'macos' || platform === 'apple') {
@@ -43,7 +43,7 @@ export function createHostDiagnostics(): HostDiagnostics {
       return await androidDeviceChecks(device, context);
     },
     ambientChecks: async (context: HostDiagnosticsContext): Promise<readonly DoctorCheck[]> => {
-      const { webBrowserLifecycleCheck } = await import('./platforms/web/doctor.ts');
+      const { webBrowserLifecycleCheck } = await import('@agent-device/platform-web');
       return [await webBrowserLifecycleCheck(context.stateDir)];
     },
     warmupCheck: async (

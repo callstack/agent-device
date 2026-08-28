@@ -7,7 +7,10 @@ const { readFile, runHarmonyHdc } = vi.hoisted(() => ({
   runHarmonyHdc: vi.fn(),
 }));
 
-vi.mock('node:fs', () => ({ promises: { readFile } }));
+vi.mock('@agent-device/host-kit/file', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/file')>()),
+  readHostBinaryFile: readFile,
+}));
 vi.mock('../hdc.ts', () => ({ runHarmonyHdc }));
 
 import { screenshotHarmony } from '../screenshot.ts';

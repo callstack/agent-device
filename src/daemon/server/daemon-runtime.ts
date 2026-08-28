@@ -79,7 +79,7 @@ import { createScreenRecordingAdmissionLedger } from '../screen-recording-admiss
 
 const DAEMON_SESSION_TEARDOWN_TIMEOUT_MS = 5_000;
 export const SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS = 11_000;
-// Mirrors AGENT_BROWSER_TIMEOUT_MS in platforms/web/agent-browser-provider.ts: the ceiling that
+// Mirrors AGENT_BROWSER_TIMEOUT_MS in @agent-device/platform-web: the ceiling that
 // module already places on one `agent-browser` CLI call, so the race below never gives up on the
 // web-close step while the close it started is still running within its own enforced limit.
 export const WEB_BROWSER_SESSION_TEARDOWN_BUDGET_MS = 30_000;

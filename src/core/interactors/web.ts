@@ -2,20 +2,21 @@ import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
 import { stripAtPrefix } from '../interaction-positionals.ts';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
+import { resolveWebProvider, type WebProvider } from '@agent-device/platform-web';
 import { createUnsupportedInteractor } from './unsupported-interactor.ts';
 
-export function createWebInteractor(provider: WebProvider = resolveWebProvider()): Interactor {
-  const clickRef = provider.clickRef;
-  const hover = provider.hover;
-  const hoverRef = provider.hoverRef;
-  const fillRef = provider.fillRef;
+export async function createWebInteractor(provider?: WebProvider): Promise<Interactor> {
+  const resolvedProvider = provider ?? (await resolveWebProvider());
+  const clickRef = resolvedProvider.clickRef;
+  const hover = resolvedProvider.hover;
+  const hoverRef = resolvedProvider.hoverRef;
+  const fillRef = resolvedProvider.fillRef;
   return {
     ...createUnsupportedInteractor('web'),
-    open: (target, options) => provider.open(options?.url ?? target, { url: options?.url }),
-    openDevice: () => provider.open('about:blank'),
-    close: (target) => provider.close(target),
-    tap: (x, y) => provider.click(x, y),
+    open: (target, options) => resolvedProvider.open(options?.url ?? target, { url: options?.url }),
+    openDevice: () => resolvedProvider.open('about:blank'),
+    close: (target) => resolvedProvider.close(target),
+    tap: (x, y) => resolvedProvider.click(x, y),
     ...(clickRef
       ? {
           tapRef: async (ref: string) => {
@@ -33,9 +34,9 @@ export function createWebInteractor(provider: WebProvider = resolveWebProvider()
           },
         }
       : {}),
-    focus: (x, y) => provider.click(x, y),
-    type: (text, delayMs) => provider.typeText(text, { delayMs }),
-    fill: (x, y, text, delayMs) => provider.fill(x, y, text, { delayMs }),
+    focus: (x, y) => resolvedProvider.click(x, y),
+    type: (text, delayMs) => resolvedProvider.typeText(text, { delayMs }),
+    fill: (x, y, text, delayMs) => resolvedProvider.fill(x, y, text, { delayMs }),
     ...(fillRef
       ? {
           fillRef: async (ref: string, text: string, delayMs?: number) => {
@@ -44,13 +45,13 @@ export function createWebInteractor(provider: WebProvider = resolveWebProvider()
           },
         }
       : {}),
-    scroll: (direction, options) => provider.scroll(direction, options),
-    screenshot: (outPath, options) => provider.screenshot(outPath, options),
-    setViewport: (width, height) => provider.setViewport(width, height),
+    scroll: (direction, options) => resolvedProvider.scroll(direction, options),
+    screenshot: (outPath, options) => resolvedProvider.screenshot(outPath, options),
+    setViewport: (width, height) => resolvedProvider.setViewport(width, height),
     snapshot: async (options) => {
       const result = await withDiagnosticTimer(
         'snapshot_capture',
-        async () => await provider.snapshot(options),
+        async () => await resolvedProvider.snapshot(options),
         { backend: 'web' },
       );
       return {

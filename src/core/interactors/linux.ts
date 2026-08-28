@@ -2,26 +2,26 @@ import { AppError } from '@agent-device/kernel/errors';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import {
   backLinux,
+  captureLinuxSurfaceSnapshot,
   closeLinuxApp,
-  homeLinux,
-  openLinuxApp,
-} from '../../platforms/linux/app-lifecycle.ts';
-import { readLinuxClipboard, writeLinuxClipboard } from '../../platforms/linux/clipboard.ts';
-import {
   doubleClickLinux,
   fillLinux,
   focusLinux,
+  homeLinux,
   longPressLinux,
+  middleClickLinux,
+  openLinuxApp,
   pressLinux,
   rightClickLinux,
-  middleClickLinux,
+  readLinuxClipboard,
+  readLinuxTextAtPoint,
   scrollLinux,
+  screenshotLinux,
   swipeLinux,
   typeLinux,
-} from '../../platforms/linux/input-actions.ts';
+  writeLinuxClipboard,
+} from '@agent-device/platform-linux';
 import { singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
-import { screenshotLinux } from '../../platforms/linux/screenshot.ts';
-import { captureLinuxSurfaceSnapshot } from '../../platforms/linux/surface-snapshot.ts';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 
 function unsupportedLinuxAlert(): Promise<never> {
@@ -58,7 +58,6 @@ export function createLinuxInteractor(): Interactor {
     // The Linux read is value-first (AXValue/title/description) where the captured tree is
     // label-first, so this genuinely reads differently from its snapshot text.
     readTextAtPoint: async (point, options) => {
-      const { readLinuxTextAtPoint } = await import('../../platforms/linux/snapshot.ts');
       return await readLinuxTextAtPoint(point.x, point.y, options?.surface);
     },
     snapshot: async (options) => {

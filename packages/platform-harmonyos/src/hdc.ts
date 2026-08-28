@@ -1,7 +1,12 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { runCmd, type ExecOptions, type ExecResult } from '@agent-device/host-kit/command';
+import {
+  isExecutablePath,
+  runCmd,
+  type ExecOptions,
+  type ExecResult,
+} from '@agent-device/host-kit/command';
+import { hostEnvironment } from '@agent-device/host-kit/process';
 
 export type HarmonyHdcOptions = Pick<
   ExecOptions,
@@ -27,7 +32,7 @@ export async function runHarmonyHdc(
  * Honor the documented roots so the daemon sees the same HDC binary as a shell.
  */
 export async function ensureHarmonyToolchainPathConfigured(
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = hostEnvironment(),
 ): Promise<void> {
   const toolchainRoots = [
     env.HDC_SDK_PATH,
@@ -40,11 +45,8 @@ export async function ensureHarmonyToolchainPathConfigured(
   ].filter((value): value is string => Boolean(value?.trim()));
   const executableRoots: string[] = [];
   for (const root of toolchainRoots) {
-    try {
-      await fs.access(path.join(root, 'hdc'), fs.constants.X_OK);
+    if (await isExecutablePath(path.join(root, 'hdc'))) {
       executableRoots.push(root);
-    } catch {
-      // Continue through explicit alternatives; the final missing-tool error names recovery.
     }
   }
   if (executableRoots.length === 0) return;

@@ -1,8 +1,9 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { hostFileStatSync, readHostDirectorySync } from '@agent-device/host-kit/file';
 import {
+  hostEnvironment,
   type OwnedProcessRecordStore,
   reapOwnedProcessRecordsAtStartup,
 } from '@agent-device/host-kit/process';
@@ -64,7 +65,7 @@ export async function cleanupManagedAgentBrowserOrphans(
     return skippedCleanupResult('open-web-session', { openWebSessionNames });
   }
 
-  const idleTimeoutMs = resolveAgentBrowserIdleTimeoutMs(process.env);
+  const idleTimeoutMs = resolveAgentBrowserIdleTimeoutMs(hostEnvironment());
   const latestActivityMs = readLatestManagedBrowserActivityMs(status);
   if (latestActivityMs !== undefined && Date.now() - latestActivityMs < idleTimeoutMs) {
     return skippedCleanupResult('recent-browser-activity', { idleTimeoutMs, latestActivityMs });
@@ -147,7 +148,7 @@ function readLatestManagedBrowserActivityMs(status: AgentBrowserToolStatus): num
 
 function readDirectoryEntries(dirPath: string): string[] {
   try {
-    return fs.readdirSync(dirPath).map((entry) => path.join(dirPath, entry));
+    return readHostDirectorySync(dirPath).map((entry) => path.join(dirPath, entry));
   } catch {
     return [];
   }
@@ -155,7 +156,7 @@ function readDirectoryEntries(dirPath: string): string[] {
 
 function readPathMtimeMs(filePath: string): number | undefined {
   try {
-    return fs.statSync(filePath).mtimeMs;
+    return hostFileStatSync(filePath).mtimeMs;
   } catch {
     return undefined;
   }

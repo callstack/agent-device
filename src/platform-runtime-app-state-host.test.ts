@@ -9,7 +9,7 @@ vi.mock('./platforms/android/adb.ts', () => ({
   runAndroidAdb: executors.android,
 }));
 
-vi.mock('./platforms/harmonyos/hdc.ts', () => ({
+vi.mock('@agent-device/platform-harmonyos', () => ({
   runHarmonyHdc: executors.harmonyos,
 }));
 

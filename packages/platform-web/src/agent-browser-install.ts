@@ -1,7 +1,17 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
+import {
+  ensureHostDirectorySync,
+  hostFileStatSync,
+  writeHostTextFileSync,
+} from '@agent-device/host-kit/file';
+import {
+  hostEnvironment,
+  hostNodeExecutablePath,
+  hostNodeVersion,
+  hostPlatform,
+} from '@agent-device/host-kit/process';
 
 /**
  * How the managed backend gets onto disk. Kept apart from the tool module,
@@ -12,7 +22,7 @@ export async function installManagedAgentBrowserPackage(params: {
   packageSpec: string;
   timeoutMs: number;
 }): Promise<void> {
-  fs.mkdirSync(params.packageRoot, { recursive: true });
+  ensureHostDirectorySync(params.packageRoot);
   // `--no-global` keeps an ambient `npm_config_global` from redirecting the
   // install out of the managed prefix, where the backend entry would be missed.
   const npm = npmCommand([
@@ -25,7 +35,7 @@ export async function installManagedAgentBrowserPackage(params: {
     '--no-save',
     params.packageSpec,
   ]);
-  await runCmd(npm.command, npm.args, { env: process.env, timeoutMs: params.timeoutMs });
+  await runCmd(npm.command, npm.args, { env: hostEnvironment(), timeoutMs: params.timeoutMs });
 }
 
 export function writeManagedAgentBrowserManifest(params: {
@@ -33,19 +43,18 @@ export function writeManagedAgentBrowserManifest(params: {
   packageName: string;
   version: string;
 }): void {
-  fs.writeFileSync(
+  writeHostTextFileSync(
     path.join(params.installDir, 'manifest.json'),
     JSON.stringify(
       {
         package: params.packageName,
         version: params.version,
-        node: process.version,
+        node: hostNodeVersion(),
         installedAt: new Date().toISOString(),
       },
       null,
       2,
     ),
-    'utf8',
   );
 }
 
@@ -56,15 +65,15 @@ export function writeManagedAgentBrowserManifest(params: {
  * current Node runtime instead (#2022).
  */
 function npmCommand(args: string[]): { command: string; args: string[] } {
-  if (process.platform !== 'win32') return { command: 'npm', args };
-  const npmCliScript = resolveWindowsNpmCliScript(process.env);
+  if (hostPlatform() !== 'win32') return { command: 'npm', args };
+  const npmCliScript = resolveWindowsNpmCliScript(hostEnvironment());
   if (!npmCliScript) {
     throw new AppError('TOOL_MISSING', 'npm not found in PATH', {
-      nodeExecPath: process.execPath,
+      nodeExecPath: hostNodeExecutablePath(),
       hint: 'Install Node.js with npm, or add npm to PATH, and run `agent-device web setup` again.',
     });
   }
-  return { command: process.execPath, args: [npmCliScript, ...args] };
+  return { command: hostNodeExecutablePath(), args: [npmCliScript, ...args] };
 }
 
 function resolveWindowsNpmCliScript(env: NodeJS.ProcessEnv): string | undefined {
@@ -75,7 +84,7 @@ function resolveWindowsNpmCliScript(env: NodeJS.ProcessEnv): string | undefined 
     if (path.basename(scriptPath) === 'npm-cli.js' && isFile(scriptPath)) return scriptPath;
   }
   const bundled = path.join(
-    path.dirname(process.execPath),
+    path.dirname(hostNodeExecutablePath()),
     'node_modules',
     'npm',
     'bin',
@@ -86,7 +95,7 @@ function resolveWindowsNpmCliScript(env: NodeJS.ProcessEnv): string | undefined 
 
 function isFile(filePath: string): boolean {
   try {
-    return fs.statSync(filePath).isFile();
+    return hostFileStatSync(filePath).isFile();
   } catch {
     return false;
   }

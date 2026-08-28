@@ -22,7 +22,7 @@ export function createAppStateRuntimeHost(): AppStateRuntimeHost {
     harmonyos: Object.freeze({
       run: async (device: DeviceInfo, command: AppStateRuntimeCommand, signal: AbortSignal) => {
         signal.throwIfAborted();
-        const { runHarmonyHdc } = await import('./platforms/harmonyos/hdc.ts');
+        const { runHarmonyHdc } = await import('@agent-device/platform-harmonyos');
         const result = await runHarmonyHdc(device, [...command.args], {
           allowFailure: command.allowFailure,
           timeoutMs: command.timeoutMs,

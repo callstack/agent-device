@@ -9,10 +9,11 @@
  */
 
 import path from 'node:path';
-import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
+import { hostFileExistsSync } from '@agent-device/host-kit/file';
+import { hostPlatform } from '@agent-device/host-kit/process';
 import { normalizeAtspiRole } from './role-map.ts';
 import { resolveLinuxToolProvider, runLinuxToolCommand } from './tool-provider.ts';
 import type {
@@ -36,12 +37,12 @@ function resolveScriptPath(): string {
   const thisDir = path.dirname(fileURLToPath(import.meta.url));
 
   // Walk upward looking for linux/atspi-dump.py — handles both:
-  //   <repo root>/linux/     (source; this module lives at src/platforms/linux/)
+  //   <repo root>/linux/     (source; this module lives in platform-linux)
   //   <package root>/linux/  (bundled; this module lives under dist/src/)
   let dir = thisDir;
   for (let i = 0; i < 6; i++) {
     const candidate = path.join(dir, 'linux', SCRIPT_NAME);
-    if (fs.existsSync(candidate)) {
+    if (hostFileExistsSync(candidate)) {
       cachedScriptPath = candidate;
       return candidate;
     }
@@ -91,7 +92,7 @@ export async function captureAccessibilityTree(
   const provider = resolveLinuxToolProvider().accessibility;
   if (provider) return await provider.captureTree(surface, options);
 
-  if (process.platform !== 'linux') {
+  if (hostPlatform() !== 'linux') {
     throw new AppError('UNSUPPORTED_PLATFORM', 'AT-SPI2 bridge is only available on Linux');
   }
 

@@ -3,12 +3,12 @@ import fs from 'node:fs';
 import { test } from 'vitest';
 import { runCliCapture } from './cli-capture.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
-import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import {
   installFakeManagedAgentBrowser,
   withNodeRuntime,
   writeFakeManagedAgentBrowserPackage,
-} from '../platforms/web/__tests__/test-utils.ts';
+} from './test-utils/web-managed-agent-browser.ts';
+import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 
 type SpawnedCommand = { cmd: string; args: string[] };
 
@@ -18,7 +18,7 @@ type SpawnedCommand = { cmd: string; args: string[] };
 test('web doctor --json keeps the published status fields and spawns the JS entry', async () => {
   const stateDir = mkdtempForTestSync('agent device cli web doctor ');
   try {
-    const install = installFakeManagedAgentBrowser(stateDir);
+    const install = await installFakeManagedAgentBrowser(stateDir);
     const spawned: SpawnedCommand[] = [];
 
     const result = await withCommandExecutorOverride(
@@ -51,14 +51,16 @@ test('web doctor --json keeps the published status fields and spawns the JS entr
 test('web setup --json keeps the published status fields after installing', async () => {
   const stateDir = mkdtempForTestSync('agent device cli web setup ');
   try {
-    let install: ReturnType<typeof writeFakeManagedAgentBrowserPackage> | undefined;
+    let install: Awaited<ReturnType<typeof writeFakeManagedAgentBrowserPackage>> | undefined;
     let stdout = '';
 
     await withNodeRuntime({ version: '24.13.0' }, async () => {
       const result = await withCommandExecutorOverride(
         async (_cmd, args) => {
           // Stand in for the npm run that writes the managed package tree.
-          if (args.includes('--prefix')) install = writeFakeManagedAgentBrowserPackage(stateDir);
+          if (args.includes('--prefix')) {
+            install = await writeFakeManagedAgentBrowserPackage(stateDir);
+          }
           return { stdout: '', stderr: '', exitCode: 0 };
         },
         async () =>

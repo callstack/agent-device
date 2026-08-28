@@ -104,15 +104,15 @@ test('another family owns only its own lanes, so an Android-only change carries 
   assert.deepEqual(lanes('test/integration/android-emulator-e2e/live-runner.ts'), [
     'replay-android',
   ]);
-  assert.deepEqual(lanes('src/platforms/linux/snapshot.ts'), [
+  assert.deepEqual(lanes('packages/platform-linux/src/snapshot.ts'), [
     'replay-linux',
     'linux-command-evidence',
   ]);
   assert.deepEqual(lanes('linux/atspi-dump.py'), ['replay-linux', 'linux-command-evidence']);
-  assert.deepEqual(lanes('src/platforms/web/provider.ts'), ['web-smoke']);
+  assert.deepEqual(lanes('packages/platform-web/src/provider.ts'), ['web-smoke']);
   assert.deepEqual(lanes('test/integration/smoke-web-platform.test.ts'), ['web-smoke']);
   // Families with no CI lane fall through to the static gates only.
-  assert.deepEqual(lanes('src/platforms/harmonyos/hdc.ts'), []);
+  assert.deepEqual(lanes('packages/platform-harmonyos/src/hdc.ts'), []);
   assert.deepEqual(lanes('packages/platform-vega/src/index.ts'), []);
 });
 

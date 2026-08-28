@@ -400,12 +400,12 @@
         "count": 1
       }
     },
-    "src/platforms/linux/atspi-bridge.ts": {
+    "packages/platform-linux/src/atspi-bridge.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/platforms/linux/input-actions.ts": {
+    "packages/platform-linux/src/input-actions.ts": {
       "complexity_moderate": {
         "count": 1
       }
@@ -591,13 +591,13 @@
     "src/platforms/apple/core/perf-xml.ts:high impact",
     "src/daemon/daemon-process.ts:high impact",
     "src/utils/screenshot-result.ts:high impact",
-    "src/platforms/web/json-utils.ts:high impact",
+    "packages/platform-web/src/json-utils.ts:high impact",
     "src/platforms/android/settings.ts:complexity",
     "src/utils/text-surface.ts:high impact",
     "src/daemon/handlers/session-test-sharding.ts:high impact",
     "src/daemon/handlers/session-replay-runtime.ts:complexity",
     "src/platforms/apple/core/debug-symbols/utils.ts:high impact",
-    "src/platforms/linux/snapshot.ts:high impact",
+    "packages/platform-linux/src/snapshot.ts:high impact",
     "src/core/interaction-targeting.ts:high impact",
     "packages/maestro/src/internal/runtime-targets.ts:high impact",
     "src/utils/source-value.ts:high impact",

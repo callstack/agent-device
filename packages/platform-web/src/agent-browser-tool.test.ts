@@ -9,13 +9,13 @@ import {
 } from './agent-browser-tool.ts';
 import {
   installFakeManagedAgentBrowser,
+  mkdtempForTestSync,
   withNodeRuntime,
   writeFakeManagedAgentBrowserPackage,
   writeFakeNpmCliScript,
 } from './__tests__/test-utils.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 type SpawnedCommand = { cmd: string; args: string[] };
 

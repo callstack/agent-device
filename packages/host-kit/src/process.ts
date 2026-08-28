@@ -1,5 +1,11 @@
 export {
   expandProcessTree,
+  hostCurrentWorkingDirectory,
+  hostEnvironment,
+  hostNodeExecutablePath,
+  hostNodeVersion,
+  hostPlatform,
+  hostProcessId,
   type HostProcessIdentityObservation,
   type HostProcessInfo,
   isProcessAlive,

@@ -9,10 +9,10 @@ import type {
   AppleRunnerCommandExecutor,
   AppleRunnerProvider,
 } from '@agent-device/platform-apple/runner';
-import type { WebProvider } from '../platforms/web/provider.ts';
+import type { WebProvider } from '@agent-device/platform-web';
 import type { AppleToolProvider } from '../platforms/apple/core/tool-provider.ts';
-import type { LinuxToolProvider } from '../platforms/linux/tool-provider.ts';
-import type { VegaToolProvider } from '../platforms/vega/tool-provider.ts';
+import type { LinuxToolProvider } from '@agent-device/platform-linux';
+import type { VegaToolProvider } from '@agent-device/platform-vega';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppleSimulatorScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-transport.ts';
 import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-runner-transport.ts';
@@ -142,17 +142,16 @@ async function providersForContext(
   if (providers.webProvider || !context.useDefaultWebProvider || !defaultWebProvider) {
     return providers;
   }
-  const { createAgentBrowserWebProvider } =
-    await import('../platforms/web/agent-browser-provider.ts');
+  const { createAgentBrowserWebProvider } = await import('@agent-device/platform-web');
+  const defaultProvider = await createAgentBrowserWebProvider({
+    session: context.session?.name ?? context.requestedSession,
+    stateDir: defaultWebProvider.stateDir,
+    openWebSessionNames: defaultWebProvider.openWebSessionNames,
+    ownedProcessRecords: defaultWebProvider.ownedProcessRecords,
+  });
   return {
     ...providers,
-    webProvider: ({ requestedSession, session }) =>
-      createAgentBrowserWebProvider({
-        session: session?.name ?? requestedSession,
-        stateDir: defaultWebProvider.stateDir,
-        openWebSessionNames: defaultWebProvider.openWebSessionNames,
-        ownedProcessRecords: defaultWebProvider.ownedProcessRecords,
-      }),
+    webProvider: () => defaultProvider,
   };
 }
 
@@ -234,7 +233,7 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     },
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.vegaTool?.provider) return;
-      const { withVegaToolProvider } = await import('../platforms/vega/tool-provider.ts');
+      const { withVegaToolProvider } = await import('@agent-device/platform-vega');
       appendRequestProviderWrapper(wrappers, scopedProviders.vegaTool, withVegaToolProvider);
     },
   },
@@ -248,7 +247,7 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     },
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.linuxTool?.provider) return;
-      const { withLinuxToolProvider } = await import('../platforms/linux/tool-provider.ts');
+      const { withLinuxToolProvider } = await import('@agent-device/platform-linux');
       appendRequestProviderWrapper(wrappers, scopedProviders.linuxTool, withLinuxToolProvider);
     },
   },
@@ -261,7 +260,7 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     },
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.web?.provider) return;
-      const { withWebProvider } = await import('../platforms/web/provider.ts');
+      const { withWebProvider } = await import('@agent-device/platform-web');
       appendRequestProviderWrapper(wrappers, scopedProviders.web, withWebProvider);
     },
   },

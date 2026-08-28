@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import {
+  installFakeManagedAgentBrowser,
+  mkdtempForTestSync,
+  withNodeRuntime,
+} from './__tests__/test-utils.ts';
 
 const { providerStartupCleanupMock } = vi.hoisted(() => ({
   providerStartupCleanupMock: vi.fn(),
@@ -22,7 +26,6 @@ import { type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { installFakeManagedAgentBrowser, withNodeRuntime } from './__tests__/test-utils.ts';
 
 type AgentBrowserCall = {
   cmd: string;

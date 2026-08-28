@@ -3,7 +3,7 @@ import {
   sessionCloseShutdownFixture,
   type SessionState,
 } from './session-close-shutdown.fixtures.ts';
-import { installFakeManagedAgentBrowser } from '../../../platforms/web/__tests__/test-utils.ts';
+import { installFakeManagedAgentBrowser } from '../../../__tests__/test-utils/web-managed-agent-browser.ts';
 
 const {
   AppError,
@@ -277,7 +277,7 @@ function attachPerfCapture(
 test('daemon session teardown closes an open web session immediately, not on agent-browser idle timeout', async () => {
   const sessionName = 'web-active-session-teardown-session';
   const sessionStore = makeSessionStore();
-  installFakeManagedAgentBrowser(sessionStore.resolveDaemonStateDir());
+  await installFakeManagedAgentBrowser(sessionStore.resolveDaemonStateDir());
   const session = makeSession(sessionName, WEB_DESKTOP_DEVICE);
   // Teardown always runs while the session it is tearing down is still in the store (session
   // deletion happens after), which is what keeps the provider-startup orphan sweep from treating
@@ -300,7 +300,7 @@ test('daemon session teardown closes an open web session immediately, not on age
 test('daemon session teardown surfaces a web close failure through the cleanup-failure channel', async () => {
   const sessionName = 'web-close-failure-teardown-session';
   const sessionStore = makeSessionStore();
-  installFakeManagedAgentBrowser(sessionStore.resolveDaemonStateDir());
+  await installFakeManagedAgentBrowser(sessionStore.resolveDaemonStateDir());
   const session = makeSession(sessionName, WEB_DESKTOP_DEVICE);
   sessionStore.set(sessionName, session);
   mockRunCmd.mockResolvedValue(

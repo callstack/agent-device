@@ -89,6 +89,25 @@ test('the inventory substrate has six private lazy packages and one exact compos
   assert.deepEqual(checkPlatformPackagePolicy(validSources(), declarations()), []);
 });
 
+test('the W6 family implementations are retired from src/platforms', () => {
+  const violations = checkPlatformsRootShape([
+    'src/platforms/harmonyos/app-lifecycle.ts',
+    'src/platforms/linux/snapshot.ts',
+    'src/platforms/vega/interactor.ts',
+    'src/platforms/web/provider.ts',
+  ]);
+
+  assert.deepEqual(
+    violations.map(({ file, rule }) => ({ file, rule })),
+    [
+      { file: 'src/platforms/harmonyos/app-lifecycle.ts', rule: 'platforms-root-shape' },
+      { file: 'src/platforms/linux/snapshot.ts', rule: 'platforms-root-shape' },
+      { file: 'src/platforms/vega/interactor.ts', rule: 'platforms-root-shape' },
+      { file: 'src/platforms/web/provider.ts', rule: 'platforms-root-shape' },
+    ],
+  );
+});
+
 test('capture-kit and platform workspace packages are R11-owned unranked zones', () => {
   assert.equal(classifyZone('capture-kit'), 'unranked');
   for (const family of CANONICAL_PLATFORM_FAMILIES) {
@@ -129,20 +148,59 @@ test('composition policy does not pin local platform-module identifier spelling'
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 });
 
-test('only the canonical composition root and its governed provider submodule may import a concrete platform package', () => {
-  for (const statement of [
+test('external consumers use root facades with static imports only at the interactor seam', () => {
+  const staticImport = validSources();
+  staticImport.set(
+    'src/daemon/not-the-root.ts',
     "import { applePlatformMetadata } from '@agent-device/platform-apple';",
+  );
+  assert.match(
+    messages(staticImport).join('\n'),
+    /production static imports of '@agent-device\/platform-apple' are limited to src\/platform-runtime\.ts and src\/core\/interactors\//,
+  );
+
+  for (const statement of [
     "import type { AppleThing } from '@agent-device/platform-apple';",
     "void import('@agent-device/platform-apple');",
-    "export { applePlatformMetadata } from '@agent-device/platform-apple';",
   ]) {
     const sources = validSources();
-    sources.set('src/daemon/not-the-root.test.ts', statement);
-    assert.match(
-      messages(sources).join('\n'),
-      /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import/,
-    );
+    sources.set('src/daemon/not-the-root.ts', statement);
+    assert.deepEqual(messages(sources), []);
   }
+
+  const interactor = validSources();
+  interactor.set(
+    'src/core/interactors/apple.ts',
+    "import { applePlatformMetadata } from '@agent-device/platform-apple';",
+  );
+  assert.deepEqual(messages(interactor), []);
+
+  const testConsumer = validSources();
+  testConsumer.set(
+    'test/integration/platform-fixture.ts',
+    "import { applePlatformMetadata } from '@agent-device/platform-apple';",
+  );
+  assert.deepEqual(messages(testConsumer), []);
+
+  const reExport = validSources();
+  reExport.set(
+    'src/daemon/not-the-root.ts',
+    "export { applePlatformMetadata } from '@agent-device/platform-apple';",
+  );
+  assert.match(
+    messages(reExport).join('\n'),
+    /production static imports of '@agent-device\/platform-apple' are limited to src\/platform-runtime\.ts and src\/core\/interactors\//,
+  );
+
+  const deep = validSources();
+  deep.set(
+    'src/daemon/not-the-root.ts',
+    "import { implementation } from '@agent-device/platform-apple/internal';",
+  );
+  assert.match(
+    messages(deep).join('\n'),
+    /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import/,
+  );
 
   const governed = validSources();
   governed.set(
@@ -492,8 +550,8 @@ test('Node resolves only each platform package root facade', () => {
   }
 });
 
-test('the src/platforms root holds only family directories and __tests__', () => {
-  const clean = CANONICAL_PLATFORM_FAMILIES.map((family) => `src/platforms/${family}/doctor.ts`);
+test('the src/platforms root holds only the remaining family directories and __tests__', () => {
+  const clean = ['apple', 'android'].map((family) => `src/platforms/${family}/doctor.ts`);
   assert.deepEqual(
     checkPlatformsRootShape([...clean, 'src/platforms/__tests__/install-source.test.ts']),
     [],

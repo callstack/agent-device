@@ -1,13 +1,13 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-const { runMacOsSnapshotAction, snapshotLinux } = vi.hoisted(() => ({
+const { runMacOsSnapshotAction, captureLinuxSurfaceSnapshot } = vi.hoisted(() => ({
   runMacOsSnapshotAction: vi.fn(),
-  snapshotLinux: vi.fn(),
+  captureLinuxSurfaceSnapshot: vi.fn(),
 }));
 
 vi.mock('../platforms/apple/os/macos/helper.ts', () => ({ runMacOsSnapshotAction }));
-vi.mock('../platforms/linux/snapshot.ts', () => ({ snapshotLinux }));
+vi.mock('@agent-device/platform-linux', () => ({ captureLinuxSurfaceSnapshot }));
 
 import { createSnapshotRuntimeHost } from './snapshot-desktop-surface.ts';
 
@@ -28,7 +28,7 @@ const linuxDevice = {
 
 beforeEach(() => {
   runMacOsSnapshotAction.mockReset();
-  snapshotLinux.mockReset();
+  captureLinuxSurfaceSnapshot.mockReset();
 });
 
 test('Apple snapshot host preserves non-app macOS surface capture and menubar identity', async () => {
@@ -58,13 +58,13 @@ test('Apple snapshot host preserves non-app macOS surface capture and menubar id
 });
 
 test('Linux snapshot host preserves interactive ancestor projection before depth filtering', async () => {
-  snapshotLinux.mockResolvedValue({
+  captureLinuxSurfaceSnapshot.mockResolvedValue({
+    backend: 'linux-atspi',
+    producer: 'linux-atspi',
     truncated: false,
     nodes: [
-      { index: 0, depth: 0, type: 'Application', label: 'App' },
+      { index: 0, depth: 0, type: 'Application', label: 'App', parentIndex: undefined },
       { index: 1, parentIndex: 0, depth: 1, type: 'Group', label: 'Panel' },
-      { index: 2, parentIndex: 1, depth: 2, type: 'Button', label: 'Continue', hittable: true },
-      { index: 3, parentIndex: 1, depth: 2, type: 'StaticText', label: 'Details' },
     ],
   });
   const signal = new AbortController().signal;
@@ -75,7 +75,10 @@ test('Linux snapshot host preserves interactive ancestor projection before depth
     signal,
   );
 
-  expect(snapshotLinux).toHaveBeenCalledWith('desktop', signal);
+  expect(captureLinuxSurfaceSnapshot).toHaveBeenCalledWith(
+    { surface: 'desktop', interactiveOnly: true, depth: 1 },
+    signal,
+  );
   expect(result).toEqual({
     backend: 'linux-atspi',
     producer: 'linux-atspi',

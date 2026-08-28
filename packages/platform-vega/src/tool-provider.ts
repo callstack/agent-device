@@ -1,14 +1,13 @@
-import { constants } from 'node:fs';
-import { access } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import type { VegaTvRemoteKey } from '@agent-device/contracts/tv-remote';
 import {
+  isExecutablePath,
   runCmd,
   whichCmd,
   type ExecOptions,
   type ExecResult,
 } from '@agent-device/host-kit/command';
+import { hostHomeDirectory } from '@agent-device/host-kit/file';
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
 
 export type VegaToolProvider = {
@@ -98,12 +97,9 @@ async function resolveVegaCliExecutable(): Promise<string | undefined> {
     cachedVegaCliExecutable = 'vega';
     return cachedVegaCliExecutable;
   }
-  const defaultInstall = path.join(os.homedir(), 'vega', 'bin', 'vega');
-  try {
-    await access(defaultInstall, constants.X_OK);
+  const defaultInstall = path.join(hostHomeDirectory(), 'vega', 'bin', 'vega');
+  if (await isExecutablePath(defaultInstall)) {
     cachedVegaCliExecutable = defaultInstall;
-  } catch {
-    return undefined;
   }
   return cachedVegaCliExecutable;
 }

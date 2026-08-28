@@ -2,7 +2,7 @@ import type { RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
 import { registerPlatformPlugin } from '../platform-plugin-registry.ts';
 import { applePlugin } from '../../platforms/apple/plugin.ts';
-import { vegaPlugin } from '../../platforms/vega/plugin.ts';
+import { vegaPlugin } from '@agent-device/platform-vega';
 import type { Platform, DeviceInfo } from '@agent-device/kernel/device';
 
 const androidPlugin = {
@@ -46,7 +46,7 @@ const webPlugin = {
   providers: { platformGatedResolvers: ['webProvider'] },
   createInteractor: async () => {
     const { createWebInteractor } = await import('./web.ts');
-    return createWebInteractor();
+    return await createWebInteractor();
   },
 } as const satisfies PlatformPlugin;
 

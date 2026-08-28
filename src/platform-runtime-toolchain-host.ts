@@ -10,7 +10,7 @@ export function createHostToolchainPreparer(): HostToolchainPreparer {
       }
       if (family === 'harmonyos') {
         const { ensureHarmonyToolchainPathConfigured } =
-          await import('./platforms/harmonyos/hdc.ts');
+          await import('@agent-device/platform-harmonyos');
         await ensureHarmonyToolchainPathConfigured();
       }
     },

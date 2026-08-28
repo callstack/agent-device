@@ -299,15 +299,27 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@agent-device/provision-kit':
+        specifier: workspace:*
+        version: link:../provision-kit
 
   packages/platform-linux:
     dependencies:
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -317,9 +329,15 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@agent-device/provision-kit':
+        specifier: workspace:*
+        version: link:../provision-kit
 
   packages/platform-web:
     dependencies:
@@ -329,9 +347,15 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@agent-device/selectors':
+        specifier: workspace:*
+        version: link:../selectors
 
   packages/provider-limrun:
     dependencies:

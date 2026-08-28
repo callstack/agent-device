@@ -6,14 +6,16 @@
  */
 
 import { AppError } from '@agent-device/kernel/errors';
+import { hostEnvironment } from '@agent-device/host-kit/process';
 import { resolveLinuxToolProvider, type LinuxToolProvider } from './tool-provider.ts';
 
 export type DisplayServer = 'wayland' | 'x11';
 export type InputTool = 'xdotool' | 'ydotool';
 
 function detectDisplayServer(): DisplayServer {
-  if (process.env['WAYLAND_DISPLAY']) return 'wayland';
-  if (process.env['XDG_SESSION_TYPE'] === 'wayland') return 'wayland';
+  const environment = hostEnvironment();
+  if (environment['WAYLAND_DISPLAY']) return 'wayland';
+  if (environment['XDG_SESSION_TYPE'] === 'wayland') return 'wayland';
   return 'x11';
 }
 

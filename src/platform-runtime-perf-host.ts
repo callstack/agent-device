@@ -16,7 +16,7 @@ const loadAndroidFramePerf = async () => await import('./platforms/android/perf-
 const loadAndroidNativePerf = async () => await import('./platforms/android/perf-native.ts');
 const loadApplePerf = async () => await import('./platforms/apple/core/perf.ts');
 const loadAppleXctrace = async () => await import('./platforms/apple/core/perf-xctrace.ts');
-const loadHarmonyPerf = async () => await import('./platforms/harmonyos/perf.ts');
+const loadHarmonyPerf = async () => await import('@agent-device/platform-harmonyos');
 
 /** Lazy host-only mechanics. Platform packages own facts, policy, and operation construction. */
 export function createPerfRuntimeHost(): PerfRuntimeHost {

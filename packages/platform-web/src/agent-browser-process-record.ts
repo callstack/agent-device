@@ -5,6 +5,7 @@ import { uniqueStrings } from '@agent-device/kernel/collections';
 import { withoutCommandExecutorOverride } from '@agent-device/host-kit/command';
 import {
   expandProcessTree,
+  hostProcessId,
   listHostProcesses,
   readProcessCommand,
   readProcessStartTime,
@@ -51,7 +52,7 @@ export function matchAgentBrowserChromeProcess(
   processInfo: HostProcessInfo,
   status: AgentBrowserToolStatus,
 ): AgentBrowserProcessMatch | undefined {
-  if (processInfo.pid === process.pid || !isChromeLikeCommand(processInfo.command))
+  if (processInfo.pid === hostProcessId() || !isChromeLikeCommand(processInfo.command))
     return undefined;
   if (processInfo.command.includes(agentBrowserChromeLaunchMarker(status))) {
     return { process: processInfo, reason: 'launch-marker' };
@@ -111,11 +112,11 @@ export async function recordManagedAgentBrowserProcesses(
       reason: matchManagedAgentBrowserProcess(process, status)?.reason ?? 'descendant',
     })),
   };
-  const records: OwnedProcessRecord[] = summary.processes.flatMap(({ process }) => {
-    const startTime = readProcessStartTime(process.pid);
-    const command = readProcessCommand(process.pid);
+  const records: OwnedProcessRecord[] = summary.processes.flatMap(({ process: processInfo }) => {
+    const startTime = readProcessStartTime(processInfo.pid);
+    const command = readProcessCommand(processInfo.pid);
     return startTime && command
-      ? [{ pid: process.pid, startTime, command, purpose: 'managed-web-browser' }]
+      ? [{ pid: processInfo.pid, startTime, command, purpose: 'managed-web-browser' }]
       : [];
   });
   if (records.length > 0) store.replace({ kind: 'daemon' }, records);
@@ -160,7 +161,8 @@ function matchAgentBrowserDaemonProcess(
   processInfo: HostProcessInfo,
   status: AgentBrowserToolStatus,
 ): AgentBrowserProcessMatch | undefined {
-  if (processInfo.pid === process.pid || isChromeLikeCommand(processInfo.command)) return undefined;
+  if (processInfo.pid === hostProcessId() || isChromeLikeCommand(processInfo.command))
+    return undefined;
   const command = normalizePathSeparators(processInfo.command);
   const installDir = normalizePathSeparators(path.resolve(status.installDir));
   return command.includes(`${installDir}/`)

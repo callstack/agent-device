@@ -208,7 +208,7 @@ export const BOUNDARY_FAULT_MATRIX = {
     },
     'session-lifecycle': {
       kind: 'covered',
-      evidence: ['src/platforms/web/agent-browser-provider.test.ts'],
+      evidence: ['packages/platform-web/src/agent-browser-provider.test.ts'],
       invariants: ['best-effort-degradation'],
     },
   },

@@ -22,11 +22,10 @@ export async function cleanupManagedWebRuntimeOrphans(params: {
   openWebSessionNames: readonly string[];
   ownedProcessRecords?: OwnedProcessRecordStore;
 }): Promise<void> {
-  const { getManagedAgentBrowserStatus } = await import('./platforms/web/agent-browser-tool.ts');
-  const status = getManagedAgentBrowserStatus({ stateDir: params.stateDir });
+  const { getManagedAgentBrowserStatus } = await import('@agent-device/platform-web');
+  const status = await getManagedAgentBrowserStatus({ stateDir: params.stateDir });
   if (!status.installed) return;
-  const { cleanupManagedAgentBrowserOrphans } =
-    await import('./platforms/web/agent-browser-lifecycle.ts');
+  const { cleanupManagedAgentBrowserOrphans } = await import('@agent-device/platform-web');
   await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
     openWebSessionNames: params.openWebSessionNames,
     ...(params.ownedProcessRecords === undefined
@@ -40,13 +39,13 @@ async function closeManagedWebRuntimeSession(params: {
   stateDir: string;
   openWebSessionNames: () => readonly string[];
 }): Promise<void> {
-  const { createAgentBrowserWebProvider } =
-    await import('./platforms/web/agent-browser-provider.ts');
-  await createAgentBrowserWebProvider({
+  const { createAgentBrowserWebProvider } = await import('@agent-device/platform-web');
+  const provider = await createAgentBrowserWebProvider({
     session: params.sessionName,
     stateDir: params.stateDir,
     openWebSessionNames: params.openWebSessionNames,
-  }).close();
+  });
+  await provider.close();
 }
 
 export const platformResourceCleanup: PlatformResourceCleanup = Object.freeze({

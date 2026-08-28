@@ -8,8 +8,8 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
-import { AGENT_BROWSER_TIMEOUT_MS } from '../../platforms/web/agent-browser-provider.ts';
-import { installFakeManagedAgentBrowser } from '../../platforms/web/__tests__/test-utils.ts';
+import { installFakeManagedAgentBrowser } from '../../__tests__/test-utils/web-managed-agent-browser.ts';
+import { AGENT_BROWSER_TIMEOUT_MS } from '@agent-device/platform-web';
 import { runCmd } from '@agent-device/host-kit/command';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
@@ -66,7 +66,7 @@ test('the web-close teardown budget stays pinned to one agent-browser CLI call t
 test('daemon shutdown awaits a slow web close inside its extended budget', async () => {
   vi.useFakeTimers();
   const root = mkdtempForTestSync('agent-device-shutdown-web-close-slow-');
-  installFakeManagedAgentBrowser(root);
+  await installFakeManagedAgentBrowser(root);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const session = makeWebSession('shutdown-slow-web-session');
   sessionStore.set(session.name, session);
@@ -92,6 +92,7 @@ test('daemon shutdown awaits a slow web close inside its extended budget', async
     stateDir: root,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
   });
+  await vi.dynamicImportSettled();
   await vi.advanceTimersByTimeAsync(20_000);
   await teardown;
 
@@ -105,7 +106,7 @@ test('daemon shutdown awaits a slow web close inside its extended budget', async
 // daemon-runtime-recording-teardown.test.ts's coverage of the #1325 recording step.
 test('daemon shutdown closes an open web session immediately, without waiting for close', async () => {
   const root = mkdtempForTestSync('agent-device-shutdown-web-close-');
-  installFakeManagedAgentBrowser(root);
+  await installFakeManagedAgentBrowser(root);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const session = makeWebSession('shutdown-web-session');
   // Teardown runs while the session it is tearing down is still in the store (session deletion
@@ -141,7 +142,7 @@ test('daemon shutdown closes an open web session immediately, without waiting fo
 
 test('daemon shutdown reports a web close failure on stderr instead of losing it silently', async () => {
   const root = mkdtempForTestSync('agent-device-shutdown-web-close-failure-');
-  installFakeManagedAgentBrowser(root);
+  await installFakeManagedAgentBrowser(root);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const session = makeWebSession('shutdown-web-close-failure-session');
   sessionStore.set(session.name, session);

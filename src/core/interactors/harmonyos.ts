@@ -2,24 +2,26 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { closeHarmonyApp, openHarmonyApp } from '../../platforms/harmonyos/app-lifecycle.ts';
 import {
   appSwitcherHarmony,
   backHarmony,
+  closeHarmonyApp,
   doubleClickHarmony,
   fillHarmony,
   homeHarmony,
   longPressHarmony,
+  openHarmonyApp,
   performHarmonyGesture,
   pressHarmony,
   pressHarmonyKeyboardKey,
+  readHarmonyGestureViewport,
+  screenshotHarmony,
   scrollHarmony,
   setHarmonyOrientation,
+  setHarmonySetting,
+  snapshotHarmony,
   typeHarmony,
-} from '../../platforms/harmonyos/input-actions.ts';
-import { screenshotHarmony } from '../../platforms/harmonyos/screenshot.ts';
-import { setHarmonySetting } from '../../platforms/harmonyos/settings.ts';
-import { readHarmonyGestureViewport, snapshotHarmony } from '../../platforms/harmonyos/snapshot.ts';
+} from '@agent-device/platform-harmonyos';
 
 export function createHarmonyInteractor(device: DeviceInfo, _runner?: RunnerContext): Interactor {
   const unsupported = (name: string) => async (): Promise<never> => {

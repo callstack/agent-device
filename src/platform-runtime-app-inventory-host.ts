@@ -24,7 +24,7 @@ export function createAppInventoryRuntimeHost(): AppInventoryRuntimeHost {
     }),
     harmonyos: Object.freeze({
       listApps: async (device: DeviceInfo, filter: AppsFilter, signal: AbortSignal) => {
-        const { listHarmonyApps } = await import('./platforms/harmonyos/app-lifecycle.ts');
+        const { listHarmonyApps } = await import('@agent-device/platform-harmonyos');
         return (await listHarmonyApps(device, filter, { signal })).map((app) => ({
           id: app.package,
           name: app.name,

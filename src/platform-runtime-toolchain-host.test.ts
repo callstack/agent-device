@@ -16,7 +16,7 @@ vi.mock('./platforms/android/sdk.ts', () => {
   };
 });
 
-vi.mock('./platforms/harmonyos/hdc.ts', () => {
+vi.mock('@agent-device/platform-harmonyos', () => {
   toolchains.harmonyEvaluations += 1;
   return {
     ensureHarmonyToolchainPathConfigured: async () => {

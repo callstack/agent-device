@@ -22,6 +22,30 @@ type HostProcessRunCommand = (
   options: ExecOptions,
 ) => Promise<ExecResult>;
 
+export function hostEnvironment(): NodeJS.ProcessEnv {
+  return process.env;
+}
+
+export function hostCurrentWorkingDirectory(): string {
+  return process.cwd();
+}
+
+export function hostNodeExecutablePath(): string {
+  return process.execPath;
+}
+
+export function hostNodeVersion(): string {
+  return process.version;
+}
+
+export function hostPlatform(): NodeJS.Platform {
+  return process.platform;
+}
+
+export function hostProcessId(): number {
+  return process.pid;
+}
+
 export type ListHostProcessesOptions = {
   timeoutMs: number;
   runCommand?: HostProcessRunCommand;

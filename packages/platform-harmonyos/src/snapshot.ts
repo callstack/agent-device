@@ -1,12 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotOptions } from '@agent-device/contracts/interactor-types';
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
+import {
+  makeHostTemporaryDirectory,
+  readHostTextFile,
+  removeHostDirectory,
+} from '@agent-device/host-kit/file';
 import { runHarmonyHdc } from './hdc.ts';
 
 const MAX_NODES = 5_000;
@@ -42,20 +45,20 @@ export async function snapshotHarmony(
 }> {
   const token = randomUUID();
   const remotePath = `/data/local/tmp/agent-device-layout-${token}.json`;
-  const localDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-harmony-layout-'));
+  const localDirectory = await makeHostTemporaryDirectory('agent-device-harmony-layout-');
   const localPath = path.join(localDirectory, 'layout.json');
   try {
     await runHarmonyHdc(device, ['shell', 'uitest', 'dumpLayout', '-p', remotePath], {
       timeoutMs: 30_000,
     });
     await runHarmonyHdc(device, ['file', 'recv', remotePath, localPath], { timeoutMs: 15_000 });
-    const raw = await fs.readFile(localPath, 'utf8');
+    const raw = await readHostTextFile(localPath);
     return buildHarmonySnapshot(parseHarmonyLayout(raw), options);
   } finally {
     await runHarmonyHdc(device, ['shell', 'rm', '-f', remotePath], { allowFailure: true }).catch(
       () => {},
     );
-    await fs.rm(localDirectory, { recursive: true, force: true });
+    await removeHostDirectory(localDirectory);
   }
 }
 

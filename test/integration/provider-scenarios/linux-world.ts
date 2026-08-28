@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
-import { inventoryModule as linuxInventoryModule } from '@agent-device/platform-linux';
 import { createDeviceInventoryHost } from '../../../src/platform-runtime-host.ts';
-import { createLocalLinuxToolProvider } from '../../../src/platforms/linux/tool-provider.ts';
+import {
+  createLocalLinuxToolProvider,
+  inventoryModule as linuxInventoryModule,
+} from '@agent-device/platform-linux';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { validPng } from './assertions.ts';
 import { PROVIDER_SCENARIO_LINUX } from './fixtures.ts';
@@ -42,7 +44,7 @@ export async function createLinuxDesktopWorld(): Promise<LinuxDesktopWorld> {
   const semanticCalls: FlatToolCall[] = [];
   let clipboardText = '';
 
-  const linuxToolProvider = createLocalLinuxToolProvider({
+  const linuxToolProvider = await createLocalLinuxToolProvider({
     whichCommand: async (cmd) =>
       cmd === 'gnome-calculator' || cmd === 'xdotool' || cmd === 'wmctrl',
     runCommand: async (cmd, args) => {
