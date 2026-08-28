@@ -14,7 +14,7 @@
 // imports are `import type` (erased), and every implementation loads through a function-scoped
 // `await import`. That is precisely ADR-0019's "metadata-eager and implementation-lazy" property,
 // and a single static value import would silently destroy it while every other gate stayed green:
-// R3/R13 govern import DIRECTION (may this file reach that one at all), never evaluation WEIGHT.
+// R13 governs import DIRECTION (may this file reach that one at all), never evaluation WEIGHT.
 //
 // Entry files are repo-root-relative, and are the KEYS of the two records below. Keying by path
 // is what makes a duplicate row unwritable rather than merely discouraged: a repeated key in an
@@ -68,15 +68,15 @@ export type EagerClosureBudget = {
    * domain/mechanics facet entries (see the exceptions below), whose closure IS the implementation
    * intentionally exposed through that subpath.
    * Hub rows set it false -- a hub is a CONSUMER of façades, not neutral vocabulary, and three of
-   * them legitimately hold the R3-permitted static platform seam that has not migrated yet.
+   * them legitimately hold R13-permitted static platform-package seams.
    */
   denyPlatformImplementations: boolean;
 };
 
 /**
- * A concrete platform implementation: the legacy daemon-owned `src/platforms/<family>/` tree, or
- * a private `@agent-device/platform-<family>` workspace package. ADR-0019 names both as "concrete
- * device mechanics" that platform-neutral code reaches only through contracts.
+ * A concrete platform implementation lives in a private `@agent-device/platform-<family>`
+ * workspace package. The retired `src/platforms/<family>/` spelling remains matched so a
+ * reintroduced legacy path cannot launder an eager edge past this guard.
  */
 export const PLATFORM_IMPLEMENTATION_PATTERNS: RegExp[] = [
   /[/\\]platforms[/\\](apple|android|harmonyos|vega|linux|web)[/\\]/,

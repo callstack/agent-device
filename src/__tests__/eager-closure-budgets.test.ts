@@ -28,7 +28,7 @@ import {
  *
  * - Catches: an entry surface or vocabulary module silently going eager -- the regression class
  *   #1950 fixed once and #1959/#1969 fixed at five more sites. Nothing else prevents the next
- *   instance: layering R3/R13 govern import DIRECTION (may this file reach that one at all),
+ *   instance: layering R13 governs import DIRECTION (may this file reach that one at all),
  *   never evaluation WEIGHT (how much of the repo an importer drags along).
  * - Evidence: planted red re-verified against this gate itself, not merely cited from #1950 --
  *   see the PR description. Every rule the real-tree assertions rest on (the equality ratchet,

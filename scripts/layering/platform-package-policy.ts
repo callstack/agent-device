@@ -11,14 +11,6 @@ export const CANONICAL_PLATFORM_FAMILIES = [
   'linux',
   'web',
 ] as const;
-const RETIRED_PLATFORM_FAMILIES = [
-  'apple',
-  'android',
-  'harmonyos',
-  'linux',
-  'vega',
-  'web',
-] as const;
 type PlatformFamily = (typeof CANONICAL_PLATFORM_FAMILIES)[number];
 export type PlatformPackageDeclaration = {
   dir: string;
@@ -56,21 +48,15 @@ const PLATFORM_RUNTIME_HOST_FILES = new Set([
 // temporary exception).
 export const APPLE_RUNNER_SUBTREE = 'packages/platform-apple/src/runner/';
 
-export function checkPlatformsRootShape(files: readonly string[]): LayeringViolation[] {
-  const allowedChild = new RegExp(`^src/platforms/__tests__/`);
-  const retiredFamily = new RegExp(`^src/platforms/(?:${RETIRED_PLATFORM_FAMILIES.join('|')})/`);
+export function checkRetiredPlatformsZone(files: readonly string[]): LayeringViolation[] {
   return files
-    .filter(
-      (file) =>
-        file.startsWith('src/platforms/') && (retiredFamily.test(file) || !allowedChild.test(file)),
-    )
+    .filter((file) => file.startsWith('src/platforms/'))
     .map((file) => ({
-      rule: 'platforms-root-shape',
+      rule: 'retired-platforms-zone',
       file,
       line: 1,
-      message: file.startsWith('src/platforms/android/')
-        ? 'the Android family has moved to packages/platform-android; remove the superseded src/platforms/android path'
-        : 'src/platforms may hold only the shared __tests__ directory; retired family code belongs in its platform package and shared code belongs in a substrate package',
+      message:
+        'src/platforms is retired; family code belongs in its platform package, shared mechanics in an owning substrate package, and cross-family tests in their root or package test owner',
     }));
 }
 const APPLE_RUNNER_FACADE = '@agent-device/platform-apple/runner';

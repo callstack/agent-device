@@ -39,7 +39,7 @@ test('production source selects static/build gates and delegates tests to Vitest
   }
 });
 
-test('platform source additionally selects provider-integration', () => {
+test('platform package source additionally selects provider-integration', () => {
   const result = ids(['packages/platform-apple/src/core/app-resolution.ts']);
   assert.ok(result.includes('provider-integration'));
   assert.ok(result.includes('coverage'));

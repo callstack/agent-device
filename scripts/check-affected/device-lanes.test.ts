@@ -75,7 +75,7 @@ test('shared runtime surface owns every device lane', () => {
     'packages/kernel/src/errors.ts',
     'src/daemon/android-system-dialog.ts', // naming convention in a shared dir, not a boundary
     'test/integration/smoke-daemon-clean.test.ts',
-    'src/platforms/install-source.ts',
+    'packages/provision-kit/src/install-source.ts',
   ]) {
     assert.equal(deviceLaneLeaf(file), 'shared', file);
     assert.deepEqual(lanes(file), [

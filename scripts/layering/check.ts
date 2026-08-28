@@ -3,13 +3,13 @@
 //
 // Ranked target spine, as rank groups lowest to highest. `A ◄ B` means B may not
 // be outranked by A (the back-edge order the gate rejects), NOT that every displayed import exists:
-//   { contracts, request, selectors, platforms } ◄ core ◄ { commands, cli-schema }
+//   { contracts, request, selectors } ◄ core ◄ { commands, cli-schema }
 //         ◄ { client, daemon-server } ◄ daemon-client ◄ cli
 // (authoritative ranks: `TARGET_DAG_RANK` in model.ts. The former rank-0 kernel
 // zone lives in packages/kernel since #1490 W0; R11 owns its boundary.)
 //
 // This gate enforces five things, across four scopes:
-//   - GLOBALLY, across every production source file: the R2-R3 move rules and
+//   - GLOBALLY, across every production source file: the remaining R2 move rule and
 //     rejection of all production static value-import cycles (R4). R1 kernel-sink
 //     retired with the kernel's move to packages/kernel (#1490 W0); R8
 //     zero-dep-job-closure retired with the last `install-deps: false` job
@@ -20,8 +20,8 @@
 //     same inversion measured over TYPE-ONLY edges (R6).
 //   - Over the DAEMON only: SessionState field ownership (R7), because the session
 //     record is store-owned mutable state that any daemon module can write; and the terminal
-//     concrete-platform boundary (R65), which rejects every import form into src/platforms or a
-//     platform package.
+//     concrete-platform boundary (R65), which rejects every import form into the retired
+//     src/platforms path or a platform package.
 //   - Over the TYPE GRAPH: the largest type-level import cycle is pinned by
 //     equality (R9). R4 keeps the value graph acyclic, so these cycles are free at
 //     runtime but bound what can be read in isolation; growth fails, and so does a
@@ -82,7 +82,7 @@ import {
 } from './package-boundaries.ts';
 import {
   checkPlatformPackagePolicy,
-  checkPlatformsRootShape,
+  checkRetiredPlatformsZone,
   platformPackagePolicySummary,
 } from './platform-package-policy.ts';
 import {
@@ -96,7 +96,11 @@ import { selectorPipelineOwnershipViolations } from './selector-pipeline-ownersh
 import { recordRuntimeRegistryJoinViolations } from './record-runtime-registry-policy.ts';
 import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechanics-policy.ts';
 import { checkDaemonPlatformBoundary } from './daemon-platform-boundary.ts';
-import { listTrackedProductionSources, listTrackedTypeScriptFiles } from './tracked-sources.ts';
+import {
+  listTrackedPlatformZoneFiles,
+  listTrackedProductionSources,
+  listTrackedTypeScriptFiles,
+} from './tracked-sources.ts';
 import { runtimeExecutionIntegrityViolations } from './runtime-execution-policy.ts';
 import { sourceExecutionCompatibilityViolations } from './source-execution-policy.ts';
 import { sessionResourceOwnershipViolations } from './session-resource-ownership.ts';
@@ -469,7 +473,7 @@ function report(
 ): number {
   if (violations.length === 0) {
     process.stdout.write(
-      `Layering guard: OK — ${files.length} source files satisfy R2-R3 and contain no ` +
+      `Layering guard: OK — ${files.length} source files satisfy R2 and contain no ` +
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
         `back-edges (only the composition root is unranked among src zones), and its type-only ` +
         `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
@@ -546,7 +550,7 @@ export const LAYERING_RULE_IDS = [
   'bin-alias-fast-path',
   'package-boundaries',
   'platform-package-policy',
-  'platforms-root-shape',
+  'retired-platforms-zone',
 ] as const;
 
 export type LayeringRuleId = (typeof LAYERING_RULE_IDS)[number];
@@ -584,8 +588,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
       readTrackedPlatformPackageDeclarations(repoRoot),
       { untrackedProductionFiles: listUntrackedProductionTypeScriptFiles(repoRoot) },
     ),
-  'platforms-root-shape': (context) =>
-    checkPlatformsRootShape([...context.allTypeScriptSources.keys()]),
+  'retired-platforms-zone': () => checkRetiredPlatformsZone(listTrackedPlatformZoneFiles(repoRoot)),
 };
 
 export function main(): number {

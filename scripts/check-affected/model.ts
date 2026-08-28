@@ -259,27 +259,10 @@ const staticTsGates: OwnershipRule = ({ file, isTs, underSrc, underTest }) =>
 
 const srcProdGate: OwnershipRule = ({ file, isSrcProd }) => {
   if (!isSrcProd) return [];
-  const selections = [
+  return [
     reason('layering', file, 'gate:layering', 'layering guard reads production src/ modules'),
     reason('build', file, 'src-prod', 'production source is compiled by the build'),
   ];
-  if (file.startsWith('src/platforms/')) {
-    selections.push(
-      reason(
-        'provider-integration',
-        file,
-        'platform-src',
-        'platform source shapes device/provider wire behavior',
-      ),
-      reason(
-        'coverage',
-        file,
-        'platform-src',
-        'Testing Matrix requires coverage for platform/device-response changes',
-      ),
-    );
-  }
-  return selections;
 };
 
 function isNodeIntegrationPath(file: string): boolean {

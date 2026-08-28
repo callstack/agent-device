@@ -19,11 +19,19 @@ R65. The per-command cutover table was retired after completion as required by s
 enforces the permanent facts-only admission and runtime-proof invariants without naming historical
 routes or handler functions.
 
+The #2082 extraction completes the physical ownership boundary: all six platform-family
+implementations and their family-owned tests live behind private package exports, `src/platforms`
+is retired, and the former R3 folder seam is gone. R13 now owns concrete platform-package import
+direction and implementation laziness; the `retired-platforms-zone` gate rejects any attempt to
+recreate the old root path.
+
 ## Rules at a glance
 
-- Daemon device-execution code depends on platform-neutral contracts. Concrete device mechanics
-  live in private `@agent-device/platform-*` packages and are value-imported only by the root
-  composition module.
+- Daemon device-execution code depends on platform-neutral contracts. Concrete device mechanics for
+  the six canonical families live in private `@agent-device/platform-*` packages; each family owns
+  its implementation and family-specific tests, while shared install-source tests are root-owned
+  under `src/__tests__/`. The root composition module and R13-governed named consumer facades are
+  the only production static value-import sites.
 - The platform registry is **metadata-eager and implementation-lazy**. Cheap family identity,
   inventory entrypoints, and static fact declarations may load at composition time; platform
   mechanics and process-lived helper managers load only when discovery or the first binding for that
@@ -105,9 +113,11 @@ provider resolver table and wrapper ordering; only the canonical root may load i
 lazy until a request enters a provider scope. Daemon device-execution modules import the canonical
 root interface or runtime contracts only.
 Shared runtime interfaces and neutral data types live in `@agent-device/contracts`. In production,
-only that composition module or its one R13-governed private implementation submodule may import a
-concrete platform package; reusable types do not leak through type-only platform imports. Platform
-packages may import contracts, kernel/domain packages,
+only that composition module, its one R13-governed private implementation submodule, or the
+R13-governed consumer seams under `src/core/interactors/` may statically import concrete platform
+package roots; approved runtime hosts use deferred or type-only root imports, and named Apple
+facades expose only their governed domain seam. Reusable types do not leak through type-only
+platform imports. Platform packages may import contracts, kernel/domain packages,
 and explicitly injected host capabilities; they may not import daemon requests or responses, mutable
 session state, command catalogs/grammar, root implementation files, sibling platform packages, or raw
 process primitives outside the shared host-command port. R13 applies these rules to static, type-only,
@@ -167,22 +177,27 @@ selection, R11/R13 package enumeration, and the composite typecheck project list
 >
 > Enforcement: each substrate package's exported subpaths are pinned in
 > `package-boundaries.test.ts` (widening fails the gate), the contracts mechanics gate stays
-> planted red, and the `platforms-root-shape` rule rejects any new shared file or directory
-> appearing directly under `src/platforms`.
+> planted red, and the `retired-platforms-zone` rule rejects every production, test, or fixture
+> file under the former `src/platforms` path.
 
 The Apple XCUITest runner client is a durable platform-owned implementation facet colocated
 inside `packages/platform-apple` as the `src/runner/` subtree (#2040) — Apple mechanics belong to
-the Apple package. R13 models the facet by enumeration rather than by exception sprawl: the family
-exports its root façade plus exactly the `./runner`, `./runner/client`, and `./runner/test-host`
-subpaths; the `./runner` façade subpath is the seam through which daemon and root consumers reach
-runner mechanics directly today; the host-bound `./runner/client` factory has one composition root
-and `./runner/test-host` one vitest installer; the facet owns its cache files and usbmux sockets
-(the ambient-host rule exempts exactly that subtree), while raw process primitives stay banned —
-host authority still enters through one focused injected port (`AppleRunnerHost`: process
-execution, diagnostics, retry, probes, locks, foreground Apple tooling, physical-device control)
-constructed by exactly one composition root. No current issue owns migrating the runner's direct
-consumers behind the composition gateway; if such a migration retires them, the `./runner` seam
-narrows with it, but the facet itself is the intended ownership model, not a temporary exception.
+the Apple package. R13 models the package by enumeration rather than by exception sprawl: the family
+exports its root façade plus fourteen named domain/mechanics facades — `./app-lifecycle`,
+`./app-resolution`, `./debug-symbols`, `./doctor`, `./interactions`, `./install-artifact`, `./macos`,
+`./perf`, `./physical-device`, `./runner-owner`, `./runner/operations`, `./simctl`, `./simulator`, and
+`./tool-provider` — as well as exactly the `./runner`, `./runner/client`, and `./runner/test-host`
+subpaths. The named facades replace root-only access for synchronous domain consumers without a
+broad compatibility barrel; R13 pins the exact export set and allowed consumer seams. The
+`./runner` façade subpath is the seam through which daemon and root consumers reach runner mechanics
+directly today; the host-bound `./runner/client` factory has one composition root and
+`./runner/test-host` one vitest installer; the facet owns its cache files and usbmux sockets (the
+ambient-host rule exempts exactly that subtree), while raw process primitives stay banned — host
+authority still enters through one focused injected port (`AppleRunnerHost`: process execution,
+diagnostics, retry, probes, locks, foreground Apple tooling, physical-device control) constructed by
+exactly one composition root. No current issue owns migrating the runner's direct consumers behind
+the composition gateway; if such a migration retires them, the `./runner` seam narrows with it, but
+the facet itself is the intended ownership model, not a temporary exception.
 Mechanics-facet declarations are explicit per family: the Apple runner and Android mechanics/host
 facets are enumerated above, and a new family adds its own named facet only with an owning consumer
 and evidence.
@@ -770,11 +785,12 @@ belongs to its domain: test-IME restoration is durable device state with marker-
 helper stops follow the owning platform module's lifecycle policy, and close-time cleanup consumes
 neutral owner services.
 
-R65 is the end-state enforcement: its planted-red AST tests reject every dependency edge — static,
+R65 is the daemon-side end-state enforcement: its planted-red AST tests reject every dependency edge — static,
 dynamic, re-export, and type-only — from production `src/daemon/**` modules (test files excluded,
 matching the layering scanner's scope) to `src/platforms/**` and concrete
-`@agent-device/platform-*` packages. The daemon has been removed from the R3 seam, so platform
-freedom is structurally enforced rather than periodically measured.
+`@agent-device/platform-*` packages. R13 governs concrete package imports across the whole tree,
+while `retired-platforms-zone` prevents the old root seam from being recreated; platform freedom is
+therefore structurally enforced rather than periodically measured.
 
 ## Relationship to prior decisions
 

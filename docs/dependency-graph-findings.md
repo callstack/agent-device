@@ -443,6 +443,16 @@ declarative syntax gains, and `ZONE_POLICIES` gets that syntax anyway:
 Worth re-evaluating if the monorepo migration happens — per-package ESLint configs change the
 calculus — or once `jsPlugins` is stable and the ratchet gap is addressable.
 
+## Terminal current-state note
+
+The measurements and R3 experiment above are historical audit evidence, not the current layering
+contract. After #2082, `src/platforms/` is retired: family implementations and family-owned tests
+live in their workspace packages, while the shared install-source tests live under
+`src/__tests__/`. Package-level R13 owns platform exports and consumer seams, R65 owns the daemon's
+complete concrete-platform ban, and `retired-platforms-zone` rejects every tracked file under the
+old path. Legacy `src/platforms` spellings remain only in deliberate negative fixtures and
+implementation-pattern checks so reintroduction fails closed.
+
 ## Suggested order from here
 
 1. ~~**Move the 10 outward-facing `daemon/types.ts` types into `contracts/`** (§2).~~ Mostly

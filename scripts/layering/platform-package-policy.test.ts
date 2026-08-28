@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import {
   CANONICAL_PLATFORM_FAMILIES,
   checkPlatformPackagePolicy,
-  checkPlatformsRootShape,
+  checkRetiredPlatformsZone,
   type PlatformPackageDeclaration,
 } from './platform-package-policy.ts';
 import { classifyZone } from './model.ts';
@@ -102,7 +102,7 @@ test('the inventory substrate has six private lazy packages and one exact compos
 });
 
 test('retired platform family implementations are rejected from src/platforms', () => {
-  const violations = checkPlatformsRootShape([
+  const violations = checkRetiredPlatformsZone([
     'src/platforms/apple/core/apps.ts',
     'src/platforms/harmonyos/app-lifecycle.ts',
     'src/platforms/linux/snapshot.ts',
@@ -113,11 +113,11 @@ test('retired platform family implementations are rejected from src/platforms', 
   assert.deepEqual(
     violations.map(({ file, rule }) => ({ file, rule })),
     [
-      { file: 'src/platforms/apple/core/apps.ts', rule: 'platforms-root-shape' },
-      { file: 'src/platforms/harmonyos/app-lifecycle.ts', rule: 'platforms-root-shape' },
-      { file: 'src/platforms/linux/snapshot.ts', rule: 'platforms-root-shape' },
-      { file: 'src/platforms/vega/interactor.ts', rule: 'platforms-root-shape' },
-      { file: 'src/platforms/web/provider.ts', rule: 'platforms-root-shape' },
+      { file: 'src/platforms/apple/core/apps.ts', rule: 'retired-platforms-zone' },
+      { file: 'src/platforms/harmonyos/app-lifecycle.ts', rule: 'retired-platforms-zone' },
+      { file: 'src/platforms/linux/snapshot.ts', rule: 'retired-platforms-zone' },
+      { file: 'src/platforms/vega/interactor.ts', rule: 'retired-platforms-zone' },
+      { file: 'src/platforms/web/provider.ts', rule: 'retired-platforms-zone' },
     ],
   );
 });
@@ -602,9 +602,17 @@ test('Node resolves only each platform package root facade', () => {
   }
 });
 
-test('the src/platforms root holds only the shared __tests__ directory', () => {
-  const clean = ['src/platforms/__tests__/install-source.test.ts'];
-  assert.deepEqual(checkPlatformsRootShape(clean), []);
+test('the retired src/platforms zone rejects every production, test, and fixture file', () => {
+  const planted = [
+    'src/platforms/__tests__/install-source.test.ts',
+    'src/platforms/__fixtures__/snapshot.json',
+    'src/platforms/helper.mjs',
+  ];
+  const found = checkRetiredPlatformsZone(planted);
+  assert.deepEqual(
+    found.map(({ file, rule }) => ({ file, rule })),
+    planted.map((file) => ({ file, rule: 'retired-platforms-zone' })),
+  );
 });
 
 test('a moved Android family cannot leave production or test files under the old root', () => {
@@ -612,13 +620,13 @@ test('a moved Android family cannot leave production or test files under the old
     'src/platforms/android/adb.ts',
     'src/platforms/android/__tests__/snapshot.test.ts',
   ];
-  const found = checkPlatformsRootShape(planted);
+  const found = checkRetiredPlatformsZone(planted);
   assert.deepEqual(
     found.map(({ file, message }) => ({ file, message })),
     planted.map((file) => ({
       file,
       message:
-        'the Android family has moved to packages/platform-android; remove the superseded src/platforms/android path',
+        'src/platforms is retired; family code belongs in its platform package, shared mechanics in an owning substrate package, and cross-family tests in their root or package test owner',
     })),
   );
 });
@@ -629,14 +637,14 @@ test('a new direct production file or sibling directory under src/platforms fail
     'src/platforms/common/util.ts',
     'src/platforms/perf-utils.ts',
   ];
-  const found = checkPlatformsRootShape(planted);
+  const found = checkRetiredPlatformsZone(planted);
   assert.deepEqual(
     found.map(({ file }) => file),
     planted,
   );
   for (const violation of found) {
-    assert.equal(violation.rule, 'platforms-root-shape');
-    assert.match(violation.message, /substrate package/);
+    assert.equal(violation.rule, 'retired-platforms-zone');
+    assert.match(violation.message, /src\/platforms is retired/);
   }
 });
 

@@ -182,6 +182,7 @@ test('classifyZone separates the ranked spine from intentionally-unranked zones'
   assert.equal(classifyZone('daemon-server'), 'ranked');
   assert.equal(classifyZone('(root)'), 'unranked');
   assert.equal(classifyZone('platform-runtime'), 'unranked');
+  assert.equal(classifyZone('platforms'), 'unclassified');
   assert.equal(classifyZone('utils'), 'ranked');
   // Every satellite zone joined the spine; only the composition root stays out, because R2
   // forbids daemon/ from importing commands/ so the files that wire them cannot be ranked.
@@ -416,7 +417,7 @@ test('largestTypeCycleSize counts type-only cycles and ignores dynamic ones', ()
   ]);
 
   // A loop closed through a DYNAMIC import is excluded on purpose: a lazy seam is not a
-  // comprehension barrier, and R3 relies on dynamic imports existing. With no non-dynamic edge at
+  // comprehension barrier. With no non-dynamic edge at
   // all no file enters the walk, so the floor here is 0 rather than 1 — specified, not incidental.
   const dynamicCycle = resolveImportEdges(
     new Map(
