@@ -54,7 +54,7 @@ function writeGenericCliOutput(
 ): Promise<number> | number {
   if (command === 'test') {
     // Lazy: keeps the replay test reporting runtime off every other command's path.
-    return import('../../replay/test/reporting.ts').then(({ renderReplayTestResponse }) =>
+    return import('../replay-test/reporting.ts').then(({ renderReplayTestResponse }) =>
       renderReplayTestResponse({
         suite: data as ReplaySuiteResult,
         debug: options.debug,

@@ -21,7 +21,7 @@ import {
 import {
   readReplayScriptSourceFile,
   REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE,
-} from '../../replay/script-source-bundle.ts';
+} from '../replay-script-source.ts';
 import { prepareReplaySession } from './session-replay-runtime-session.ts';
 
 /**

@@ -4,8 +4,8 @@ import type { DaemonRequest } from '../../daemon/types.ts';
 import {
   loadReplayScriptSourceBundle,
   readAdScriptSourceBundle,
-} from '../../replay/script-source-bundle.ts';
-import { discoverReplaySourcePaths } from '../../replay/source-discovery.ts';
+} from '../../commands/replay/script-source-bundle.ts';
+import { discoverReplaySourcePaths } from '../../commands/replay/source-discovery.ts';
 
 /**
  * A native `.ad` script's bundle, built from a file on disk through the client's own reader

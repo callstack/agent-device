@@ -1,7 +1,7 @@
 import { inspectMaestroFlow } from '@agent-device/maestro';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import { readReplayScriptMetadata, resolveReplayFormat } from '@agent-device/ad-script';
-import { readReplayScriptSourceFile } from '../../replay/script-source-bundle.ts';
+import { readReplayScriptSourceFile } from '../replay-script-source.ts';
 import type {
   ReplayTestDiscoverSources,
   ReplayTestManifest,

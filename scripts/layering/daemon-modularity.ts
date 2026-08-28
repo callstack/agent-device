@@ -37,7 +37,6 @@ export const TYPE_CYCLE_BASELINE = Object.values(LARGEST_TYPE_CYCLE_ZONE_CEILING
 const ENGINE_FILE_PREFIXES = [
   'packages/ad-replay/src/',
   'packages/maestro/src/',
-  'src/replay/',
   'src/daemon/handlers/session-replay',
   'packages/replay-test/src/',
 ] as const;
@@ -193,8 +192,7 @@ function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): Layeri
     }
 
     if (!sourceModule) continue;
-    // A module's own files are never a forbidden target: `replay-test` sits inside the wider
-    // `src/replay/` engine root it may not import from.
+    // A module's own files are never a forbidden target.
     if (sourceModule.roots.some((root) => matchesDeclaredRoot(edge.target, root))) continue;
     if (!sourceModule.forbiddenTargetRoots.some((root) => matchesDeclaredRoot(edge.target, root)))
       continue;

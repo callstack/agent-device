@@ -39,19 +39,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
-import { handleSessionCommands } from './session-command-harness.ts';
-import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../types.ts';
+import { handleSessionCommands } from '../../../daemon/handlers/__tests__/session-command-harness.ts';
+import { SessionStore } from '../../../daemon/session-store.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../daemon/types.ts';
 import { withRequestProgressSink } from '@agent-device/host-kit/request';
 import {
   getReplayTestReporterExitCode,
   runReplayTestReporterProgress,
   runReplayTestReporters,
-} from '../../../replay/test/reporters/registry.ts';
-import type {
-  ReplayTestReporter,
-  ReplayTestReporterContext,
-} from '../../../replay/test/reporters/types.ts';
+} from '../reporters/registry.ts';
+import type { ReplayTestReporter, ReplayTestReporterContext } from '../reporters/types.ts';
 
 type RecordedHook = {
   hook: 'onSuiteStart' | 'onTestStart' | 'onTestStep' | 'onTestResult' | 'onSuiteEnd';

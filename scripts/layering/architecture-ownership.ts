@@ -22,7 +22,6 @@ export const LOGICAL_MODULE_POLICIES = [
       'src/daemon/',
       'src/providers/',
       'src/request/',
-      'src/replay/',
       'src/compat/',
       'packages/maestro/',
       'packages/ad-replay/',

@@ -1,12 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
 import {
   loadReplayScriptSourceBundle,
-  readReplayScriptSourceFile,
   REPLAY_SCRIPT_SOURCE_BUNDLE_MAX_BYTES,
-} from '../script-source-bundle.ts';
+} from './script-source-bundle.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 // #1802: the caller reads every script file a replay run needs and sends the text. These pin the
@@ -77,18 +75,4 @@ test('an oversized bundle is refused with the limit named', async () => {
       message: expect.stringContaining(`over the ${REPLAY_SCRIPT_SOURCE_BUNDLE_MAX_BYTES}-byte`),
     }),
   );
-});
-
-test('reading a file the bundle does not carry names the file and the entry', () => {
-  const bundle = { entry: '/flows/login.yaml', files: { '/flows/login.yaml': '---\n- back\n' } };
-
-  try {
-    readReplayScriptSourceFile(bundle, '/flows/missing.yaml');
-    expect.unreachable('expected a missing bundled source to throw');
-  } catch (error) {
-    expect(error).toBeInstanceOf(AppError);
-    expect((error as AppError).code).toBe('INVALID_ARGS');
-    expect((error as AppError).message).toContain('/flows/missing.yaml');
-    expect((error as AppError).details).toMatchObject({ entry: '/flows/login.yaml' });
-  }
 });

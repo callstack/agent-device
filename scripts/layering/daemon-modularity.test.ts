@@ -118,12 +118,15 @@ test('replay-test rejects request-global and engine-internal imports', () => {
         'packages/replay-test/src/internal/scheduler.ts',
         [
           "import { emitRequestProgress } from '../../../../src/request/progress.ts';",
-          "import { readReplayScriptMetadata } from '../../../../src/replay/script.ts';",
+          "import { readReplayScriptMetadata } from '../../../../src/daemon/handlers/session-replay-runtime.ts';",
           "import { parseMaestroProgram } from '../../../../src/compat/maestro/program-ir-parser.ts';",
         ].join('\n'),
       ],
       ['src/request/progress.ts', 'export function emitRequestProgress() {}'],
-      ['src/replay/script.ts', 'export function readReplayScriptMetadata() {}'],
+      [
+        'src/daemon/handlers/session-replay-runtime.ts',
+        'export function readReplayScriptMetadata() {}',
+      ],
       ['src/compat/maestro/program-ir-parser.ts', 'export function parseMaestroProgram() {}'],
     ]),
   );
@@ -136,7 +139,7 @@ test('replay-test rejects request-global and engine-internal imports', () => {
     violations.map(({ message }) => message.replace(/;.*/, '')),
     [
       'replay-test must not import src/request/progress.ts',
-      'replay-test must not import src/replay/script.ts',
+      'replay-test must not import src/daemon/handlers/session-replay-runtime.ts',
       'replay-test must not import src/compat/maestro/program-ir-parser.ts',
     ],
   );

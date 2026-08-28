@@ -334,8 +334,7 @@ type ReplayLinePlan = fc.Arbitrary<string> | { waived: string };
  * Commands whose `.ad` line is a bare `<command> <token>…` handled by the
  * generic parse/print branch (`appendGenericActionScriptArgs`), whose shape the
  * `wait`/`longpress` templates already exercise. A command that grows its own
- * branch in src/replay/script.ts or src/replay/script-formatting.ts must move
- * to a template.
+ * branch in the replay command's script formatting must move to a template.
  */
 const GENERIC_REPLAY_LINE = {
   waived: 'generic line shape, covered by the wait/longpress templates',

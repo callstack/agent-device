@@ -18,7 +18,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../../replay/script-source-bundle.ts';
+import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../replay-script-source.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { SessionStore } from '../session-store.ts';
 import { createDaemonHttpServer } from '../server/http-server.ts';

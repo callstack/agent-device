@@ -3,9 +3,8 @@
  * prefix matching over versioned `.ad` target-binding evidence, plus the
  * bounded diagnostic diffs built on top of it. Both the writer (over
  * `SnapshotNode`-derived values, `src/daemon/session-target-evidence.ts`) and
- * replay-time verification (`src/daemon/handlers/session-replay-target-classification.ts`,
- * `src/commands/interaction/runtime/selector-wait.ts`, and the shared
- * replay-zone tree helpers in `src/replay/`) share this verbatim so both
+ * replay-time verification (`src/daemon/handlers/session-replay-target-classification.ts` and
+ * `src/commands/interaction/runtime/selector-wait.ts`) share this verbatim so both
  * sides compute the SAME identity/ancestry match by construction (#1478 P5
  * review, "genuinely shared recording vocabulary" relocated to its owner).
  *

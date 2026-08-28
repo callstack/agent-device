@@ -13,8 +13,7 @@
  * evidence, or a sparse/unavailable capture — so `repairHint` is always
  * defined.
  *
- * Lives in the daemon zone (not `src/replay/`, which stays tree-agnostic per
- * the replay package contract) because the container-presence test
+ * Lives in the daemon zone because the container-presence test
  * below is a genuine structural containment check over `parentIndex` — the
  * same tree-walking machinery decision 3's own identity-set filter uses
  * (`buildAncestryChain`/`computeScrollRegionKey`, `session-target-evidence.ts`)

@@ -72,7 +72,7 @@ redaction discipline, and sink (inventoried 2026-07-24):
    request via `meta.requestProgress`; disabled under `--json`. Events are written to the wire
    **unredacted** today.
 4. **Replay timing trace** (`src/daemon/handlers/session-replay-trace.ts`,
-   `session-test-runtime.ts`, read by `src/replay/test/trace.ts`). Per-**attempt**
+   `session-test-runtime.ts`, read by `src/cli/replay-test/trace.ts`). Per-**attempt**
    `replay-timing.ndjson` files whose paths are created dynamically inside each attempt — written
    by **two different helpers, one of which redacts and one of which does not**
    (`appendReplayTraceEvent` vs `appendReplayTestTimingEvent`).

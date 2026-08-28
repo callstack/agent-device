@@ -37,7 +37,6 @@ const TARGET_DAG_RANK = new Map([
   ['contracts', 1],
   ['maestro', 1],
   ['recording', 1],
-  ['replay', 1],
   ['replay-test', 1],
   ['request', 1],
   ['screenshot-diff', 1],

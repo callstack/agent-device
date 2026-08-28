@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { discoverReplaySourcePaths } from '../source-discovery.ts';
+import { discoverReplaySourcePaths } from './source-discovery.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 // #1802: path expansion, traversal ordering and file-type routing are CALLER work — `test`

@@ -104,6 +104,7 @@ import {
 import { runtimeExecutionIntegrityViolations } from './runtime-execution-policy.ts';
 import { sourceExecutionCompatibilityViolations } from './source-execution-policy.ts';
 import { sessionResourceOwnershipViolations } from './session-resource-ownership.ts';
+import { replayOwnershipViolations } from './replay-ownership.ts';
 import { applicationLifecycleOwnershipViolations } from './application-lifecycle-policy.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
@@ -551,6 +552,7 @@ export const LAYERING_RULE_IDS = [
   'package-boundaries',
   'platform-package-policy',
   'retired-platforms-zone',
+  'replay-ownership',
 ] as const;
 
 export type LayeringRuleId = (typeof LAYERING_RULE_IDS)[number];
@@ -589,6 +591,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
       { untrackedProductionFiles: listUntrackedProductionTypeScriptFiles(repoRoot) },
     ),
   'retired-platforms-zone': () => checkRetiredPlatformsZone(listTrackedPlatformZoneFiles(repoRoot)),
+  'replay-ownership': (context) => replayOwnershipViolations(context.sourceFiles),
 };
 
 export function main(): number {

@@ -8,7 +8,7 @@
 
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
-import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../../replay/script-source-bundle.ts';
+import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../replay-script-source.ts';
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';

@@ -680,7 +680,7 @@ test('formatDivergenceActionLabel categorically drops fill/type text but keeps t
 });
 
 // The property test asserting "serializing a parsed script is a fixed point
-// for generated scripts" stays at `src/replay/__tests__/ad-script-round-trip.test.ts`:
+// for generated scripts" stays at `src/commands/replay/ad-script-round-trip.test.ts`:
 // its script generator (`replayScriptArb`) is derived from the root command
 // catalog and selector grammar (`src/__tests__/test-utils/property-arbitraries.ts`),
 // which this package cannot import without an R11 package→root-src escape

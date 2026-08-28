@@ -34,7 +34,7 @@ import { buildMaestroReplayTargetDeviceResolutionOptions } from '../replay-devic
 import {
   readReplayScriptSourceFile,
   REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE,
-} from '../../replay/script-source-bundle.ts';
+} from '../replay-script-source.ts';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 
 type TypedMaestroReplayParams = {

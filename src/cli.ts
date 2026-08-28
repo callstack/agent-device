@@ -15,7 +15,7 @@ import { pathToFileURL } from 'node:url';
 import { sendToDaemon } from './daemon/client/daemon-client.ts';
 import fs from 'node:fs';
 import type { BatchStep } from '@agent-device/contracts/client';
-import type { ReplayTestReporterRuntime } from './replay/test/reporting.ts';
+import type { ReplayTestReporterRuntime } from './cli/replay-test/reporting.ts';
 import {
   createAgentDeviceClient,
   type AgentDeviceClientConfig,
@@ -478,7 +478,7 @@ async function createReplayReporterForTest(
   if (ctx.command !== 'test') return undefined;
   // Lazy: the replay test reporter is only needed by `test`, and its
   // static import would put the reporting runtime on every command's path.
-  const { createReplayTestReporterRuntime } = await import('./replay/test/reporting.ts');
+  const { createReplayTestReporterRuntime } = await import('./cli/replay-test/reporting.ts');
   return createReplayTestReporterRuntime({
     debug: ctx.debugOutputEnabled,
     verbose: ctx.effectiveFlags.verbose,

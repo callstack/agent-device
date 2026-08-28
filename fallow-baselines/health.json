@@ -604,7 +604,7 @@
     "packages/provider-webdriver/src/webdriver-utils.ts:high impact",
     "src/utils/keyed-lock.ts:high impact",
     "src/daemon/request-progress-protocol.ts:high impact",
-    "src/replay/test/reporters/format.ts:high impact",
+    "src/cli/replay-test/reporters/format.ts:high impact",
     "src/daemon/handlers/session-test-infrastructure.ts:high impact",
     "src/daemon/handlers/session-test-artifacts.ts:high impact",
     "packages/platform-android/src/app-parsers.ts:high impact",
