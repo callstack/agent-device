@@ -13,33 +13,28 @@ export type ReplayScriptSourceRequest = {
   env?: Readonly<Record<string, string>>;
 };
 
-export async function loadReplayScriptSourceBundle(
+export function loadReplayScriptSourceBundle(
   params: ReplayScriptSourceRequest,
-): Promise<ReplayScriptSourceBundle> {
-  const entry = resolveUserPath(params.inputPath, { cwd: params.cwd });
-  const entrySource = readReplayEntryScript(entry, params.inputPath);
-  if (resolveReplayFormat(entry, params.replayBackend) !== 'maestro') {
-    return finishBundle(entry, { [entry]: entrySource }, params.inputPath);
+): ReplayScriptSourceBundle | Promise<ReplayScriptSourceBundle> {
+  try {
+    const entry = resolveUserPath(params.inputPath, { cwd: params.cwd });
+    const entrySource = readReplayEntryScript(entry, params.inputPath);
+    if (resolveReplayFormat(entry, params.replayBackend) !== 'maestro') {
+      return finishBundle(entry, { [entry]: entrySource }, params.inputPath);
+    }
+    return (async () => {
+      const { collectMaestroFlowSources } = await import('@agent-device/maestro');
+      const files = collectMaestroFlowSources({
+        entryPath: entry,
+        entrySource,
+        env: params.env,
+        readSource: tryReadScriptFile,
+      });
+      return finishBundle(entry, files, params.inputPath);
+    })();
+  } catch (error) {
+    return Promise.reject(error);
   }
-  const { collectMaestroFlowSources } = await import('@agent-device/maestro');
-  const files = collectMaestroFlowSources({
-    entryPath: entry,
-    entrySource,
-    env: params.env,
-    readSource: tryReadScriptFile,
-  });
-  return finishBundle(entry, files, params.inputPath);
-}
-
-export function readAdScriptSourceBundle(
-  params: Pick<ReplayScriptSourceRequest, 'inputPath' | 'cwd'>,
-): ReplayScriptSourceBundle {
-  const entry = resolveUserPath(params.inputPath, { cwd: params.cwd });
-  return finishBundle(
-    entry,
-    { [entry]: readReplayEntryScript(entry, params.inputPath) },
-    params.inputPath,
-  );
 }
 
 function finishBundle(
