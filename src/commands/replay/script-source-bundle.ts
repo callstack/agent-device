@@ -13,28 +13,22 @@ export type ReplayScriptSourceRequest = {
   env?: Readonly<Record<string, string>>;
 };
 
-export function loadReplayScriptSourceBundle(
+export async function loadReplayScriptSourceBundle(
   params: ReplayScriptSourceRequest,
-): ReplayScriptSourceBundle | Promise<ReplayScriptSourceBundle> {
-  try {
-    const entry = resolveUserPath(params.inputPath, { cwd: params.cwd });
-    const entrySource = readReplayEntryScript(entry, params.inputPath);
-    if (resolveReplayFormat(entry, params.replayBackend) !== 'maestro') {
-      return finishBundle(entry, { [entry]: entrySource }, params.inputPath);
-    }
-    return (async () => {
-      const { collectMaestroFlowSources } = await import('@agent-device/maestro');
-      const files = collectMaestroFlowSources({
-        entryPath: entry,
-        entrySource,
-        env: params.env,
-        readSource: tryReadScriptFile,
-      });
-      return finishBundle(entry, files, params.inputPath);
-    })();
-  } catch (error) {
-    return Promise.reject(error);
+): Promise<ReplayScriptSourceBundle> {
+  const entry = resolveUserPath(params.inputPath, { cwd: params.cwd });
+  const entrySource = readReplayEntryScript(entry, params.inputPath);
+  if (resolveReplayFormat(entry, params.replayBackend) !== 'maestro') {
+    return finishBundle(entry, { [entry]: entrySource }, params.inputPath);
   }
+  const { collectMaestroFlowSources } = await import('@agent-device/maestro');
+  const files = collectMaestroFlowSources({
+    entryPath: entry,
+    entrySource,
+    env: params.env,
+    readSource: tryReadScriptFile,
+  });
+  return finishBundle(entry, files, params.inputPath);
 }
 
 function finishBundle(
