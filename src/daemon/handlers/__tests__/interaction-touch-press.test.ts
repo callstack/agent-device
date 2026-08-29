@@ -137,6 +137,16 @@ test('press @ref promotes a non-hittable node to its hittable ancestor before ta
     nodes: attachRefs([
       {
         index: 0,
+        depth: 0,
+        type: 'XCUIElementTypeApplication',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+        enabled: true,
+        hittable: true,
+      },
+      {
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
         type: 'XCUIElementTypeCell',
         label: 'Settings row',
         rect: { x: 20, y: 100, width: 320, height: 72 },
@@ -144,8 +154,9 @@ test('press @ref promotes a non-hittable node to its hittable ancestor before ta
         hittable: true,
       },
       {
-        index: 1,
-        parentIndex: 0,
+        index: 2,
+        depth: 2,
+        parentIndex: 1,
         type: 'XCUIElementTypeStaticText',
         label: 'Settings',
         rect: { x: 44, y: 124, width: 84, height: 20 },
@@ -165,7 +176,7 @@ test('press @ref promotes a non-hittable node to its hittable ancestor before ta
       token: 't',
       session: sessionName,
       command: 'press',
-      positionals: ['@e2'],
+      positionals: ['@e3'],
       flags: {},
     },
     sessionName,
@@ -177,7 +188,7 @@ test('press @ref promotes a non-hittable node to its hittable ancestor before ta
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
   if (response?.ok) {
-    expect(response.data?.ref).toBe('e2');
+    expect(response.data?.ref).toBe('e3');
     expect(response.data?.x).toBe(180);
     expect(response.data?.y).toBe(136);
     // Promotion landed on a hittable ancestor, so there is nothing to flag.
@@ -188,7 +199,7 @@ test('press @ref promotes a non-hittable node to its hittable ancestor before ta
 
   const stored = sessionStore.get(sessionName);
   const result = (stored?.actions[0]?.result ?? {}) as Record<string, unknown>;
-  expect(result.ref).toBe('e2');
+  expect(result.ref).toBe('e3');
   expect(Array.isArray(result.selectorChain)).toBe(true);
 });
 

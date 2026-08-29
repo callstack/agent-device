@@ -18,7 +18,7 @@ test('mutating selector collapses a wrapper chain that resolves to one actionabl
     SELECTOR_PIPELINE_POLICIES.promotedTarget,
   );
 
-  assert.equal(result?.node.index, 1);
+  assert.equal(result?.node.index, 2);
   assert.equal(result?.matches, 3);
   assert.equal(result?.disambiguation?.tiebreak, 'structural-equivalence');
 });

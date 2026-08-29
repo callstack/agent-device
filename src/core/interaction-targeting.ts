@@ -1,11 +1,10 @@
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
-import { centerOfRect } from '@agent-device/kernel/snapshot';
-import { containsPoint, pickLargestRect } from '@agent-device/kernel/rect';
 import {
   findNearestAncestor,
   findSnapshotAncestor,
   normalizeType,
   isViewportRootNode,
+  resolveViewportRect,
 } from '@agent-device/contracts/snapshot';
 import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
 import {
@@ -248,19 +247,7 @@ function resolveRootViewportRect(
   targetRect: Rect,
   index: ActionableTouchIndex | undefined,
 ): Rect | null {
-  const targetCenter = centerOfRect(targetRect);
-  const viewportRects =
-    index?.viewportRootRects ??
-    nodes
-      .filter(isViewportRootNode)
-      .map((node) => normalizeRect(node.rect))
-      .filter((rect): rect is Rect => rect !== null);
-  if (viewportRects.length === 0) return null;
-
-  const containingRects = viewportRects.filter((rect) =>
-    containsPoint(rect, targetCenter.x, targetCenter.y),
-  );
-  return pickLargestRect(containingRects.length > 0 ? containingRects : viewportRects);
+  return resolveViewportRect(nodes, targetRect, index?.viewportRootRects);
 }
 
 function buildActionableTouchIndex(nodes: readonly SnapshotNode[]): ActionableTouchIndex {

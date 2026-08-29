@@ -21,10 +21,10 @@ import {
 test('collapses one same-label wrapper chain to its shared actionable node', () => {
   const snapshot = makeSnapshotState(EQUIVALENT_WRAPPER_CHAIN_NODES);
 
-  const result = classifyActionableTouchCandidates(snapshot.nodes, snapshot.nodes);
+  const result = classifyActionableTouchCandidates(snapshot.nodes, snapshot.nodes.slice(1));
 
   assert.equal(result.kind, 'equivalent');
-  if (result.kind === 'equivalent') assert.equal(result.node.index, 1);
+  if (result.kind === 'equivalent') assert.equal(result.node.index, 2);
 });
 
 test('rejects same-label candidates in distinct subtrees even when geometry ranks one winner', () => {
@@ -47,15 +47,23 @@ test('promotes static text inside a hittable row to the row', () => {
     {
       index: 0,
       depth: 0,
-      type: 'XCUIElementTypeCell',
-      label: 'Account row',
-      rect: { x: 10, y: 20, width: 300, height: 60 },
+      type: 'XCUIElementTypeApplication',
+      rect: { x: 0, y: 0, width: 390, height: 844 },
       hittable: true,
     },
     {
       index: 1,
       depth: 1,
       parentIndex: 0,
+      type: 'XCUIElementTypeCell',
+      label: 'Account row',
+      rect: { x: 10, y: 20, width: 300, height: 60 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 2,
+      parentIndex: 1,
       type: 'XCUIElementTypeStaticText',
       label: 'Account',
       rect: { x: 24, y: 32, width: 80, height: 20 },
@@ -63,7 +71,7 @@ test('promotes static text inside a hittable row to the row', () => {
     },
   ]);
 
-  const resolution = resolveActionableTouchResolution(snapshot.nodes, snapshot.nodes[1]!);
+  const resolution = resolveActionableTouchResolution(snapshot.nodes, snapshot.nodes[2]!);
 
   assert.equal(resolution.reason, 'hittable-ancestor');
   assert.equal(resolution.node.label, 'Account row');
@@ -185,6 +193,62 @@ test('prevents full-screen window-like ancestors from stealing taps', () => {
 
   assert.equal(resolution.reason, 'overly-broad-ancestor');
   assert.equal(resolution.node.label, 'Status');
+});
+
+test.each(['android.widget.FrameLayout', 'NeutralContainer'])(
+  'prevents a rootless %s ancestor from stealing taps',
+  (ancestorType) => {
+    const snapshot = makeSnapshotState([
+      {
+        index: 0,
+        depth: 0,
+        type: ancestorType,
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+        hittable: true,
+      },
+      {
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
+        type: 'StaticText',
+        label: 'Status',
+        rect: { x: 24, y: 72, width: 80, height: 24 },
+        hittable: false,
+      },
+    ]);
+
+    const resolution = resolveActionableTouchResolution(snapshot.nodes, snapshot.nodes[1]!);
+
+    assert.equal(resolution.reason, 'overly-broad-ancestor');
+    assert.equal(resolution.node.label, 'Status');
+  },
+);
+
+test('keeps a rootless hittable ancestor whose rectangle matches the target', () => {
+  const rect = { x: 24, y: 72, width: 80, height: 24 };
+  const snapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'NeutralContainer',
+      rect,
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'StaticText',
+      label: 'Status',
+      rect,
+      hittable: false,
+    },
+  ]);
+
+  const resolution = resolveActionableTouchResolution(snapshot.nodes, snapshot.nodes[1]!);
+
+  assert.equal(resolution.reason, 'hittable-ancestor');
+  assert.equal(resolution.node.index, 0);
 });
 
 test('falls back to the original node when no usable touch target exists', () => {

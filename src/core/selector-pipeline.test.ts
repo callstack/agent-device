@@ -64,15 +64,23 @@ const PROMOTABLE_TREE: RawSnapshotNode[] = [
   {
     index: 0,
     depth: 0,
-    type: 'XCUIElementTypeCell',
-    label: 'Account row',
-    rect: { x: 10, y: 20, width: 300, height: 60 },
+    type: 'XCUIElementTypeApplication',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
     hittable: true,
   },
   {
     index: 1,
     depth: 1,
     parentIndex: 0,
+    type: 'XCUIElementTypeCell',
+    label: 'Account row',
+    rect: { x: 10, y: 20, width: 300, height: 60 },
+    hittable: true,
+  },
+  {
+    index: 2,
+    depth: 2,
+    parentIndex: 1,
     type: 'XCUIElementTypeStaticText',
     label: 'Account',
     rect: { x: 24, y: 32, width: 80, height: 20 },
@@ -169,10 +177,10 @@ test('the occlusion stage decides refusal: every row that refuses a covered targ
 
 test('the promotion stage retargets only for the rows that declare it', async () => {
   // Same tree, same node: the row is the whole difference.
-  assert.equal((await stagedIndex('promotedTarget', PROMOTABLE_TREE, 1)).node.index, 0);
-  assert.equal((await stagedIndex('findAct', PROMOTABLE_TREE, 1)).node.index, 0);
+  assert.equal((await stagedIndex('promotedTarget', PROMOTABLE_TREE, 2)).node.index, 1);
+  assert.equal((await stagedIndex('findAct', PROMOTABLE_TREE, 2)).node.index, 1);
   for (const row of ['resolvedTarget', 'readText', 'readUnique', 'readAny', 'wait'] as const) {
-    assert.equal((await stagedIndex(row, PROMOTABLE_TREE, 1)).node.index, 1, row);
+    assert.equal((await stagedIndex(row, PROMOTABLE_TREE, 2)).node.index, 2, row);
   }
 });
 
@@ -187,7 +195,7 @@ test('the off-screen stage runs the refusal shape only for the rows that refuse'
   const nodes = nodesOf(PROMOTABLE_TREE);
   for (const row of NODE_STAGE_ROWS) {
     let consulted = false;
-    await runNodePipelineStages(SELECTOR_PIPELINE_POLICIES[row], nodes, nodes[0]!, {
+    await runNodePipelineStages(SELECTOR_PIPELINE_POLICIES[row], nodes, nodes[1]!, {
       offscreen: async (node) => {
         consulted = true;
         return node;
@@ -204,7 +212,7 @@ test('a row that refuses off-screen without a refusal shape fails loudly', async
   // silently skipped stage.
   const nodes = nodesOf(PROMOTABLE_TREE);
   await assert.rejects(
-    () => runNodePipelineStages(SELECTOR_PIPELINE_POLICIES.promotedTarget, nodes, nodes[0]!),
+    () => runNodePipelineStages(SELECTOR_PIPELINE_POLICIES.promotedTarget, nodes, nodes[1]!),
     /supplies no refusal shape/,
   );
 });

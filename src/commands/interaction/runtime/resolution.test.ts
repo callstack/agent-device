@@ -428,7 +428,7 @@ test('runtime click still promotes non-touchable nodes to hittable ancestors', a
     },
   });
 
-  const result = await clickRefE2(device);
+  const result = await device.interactions.click(ref('@e3'), { session: 'default' });
 
   assert.deepEqual(calls, [{ x: 160, y: 60 }]);
   assert.equal(result.kind, 'ref');
