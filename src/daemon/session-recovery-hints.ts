@@ -1,5 +1,7 @@
-import type { SessionRef, SessionState } from './types.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
+import type { DaemonResponse, SessionRef, SessionState } from './types.ts';
+import { errorResponse } from './response.ts';
 
 export type SessionRecoveryContext = 'device-in-use' | 'selector-conflict';
 
@@ -22,6 +24,18 @@ export function buildSessionRecoveryHint(ref: SessionRef, context: SessionRecove
     return buildRecordingSessionRecoveryHint(ref.address, context);
   }
   return buildOpenSessionRecoveryHint(ref.address, context);
+}
+
+export function buildDeviceInUseBySessionError(
+  inUse: SessionRef,
+  device: DeviceInfo,
+): DaemonResponse {
+  return errorResponse('DEVICE_IN_USE', `Device is already in use by session "${inUse.address}".`, {
+    session: inUse.address,
+    deviceId: device.id,
+    deviceName: device.name,
+    hint: buildSessionRecoveryHint(inUse, 'device-in-use'),
+  });
 }
 
 function buildRecordingSessionRecoveryHint(

@@ -11,7 +11,7 @@ import { preferOnscreenMatches } from './find-match-ranking.ts';
 import { formatSnapshotLine } from '../../snapshot/snapshot-lines.ts';
 import type { ElementMatchCandidateDetails } from '../../utils/error-candidates.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '../response.ts';
 
 export type FindMatchResult =
   | { ok: true; node: SnapshotState['nodes'][number] }

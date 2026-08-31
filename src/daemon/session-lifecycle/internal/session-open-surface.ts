@@ -5,10 +5,10 @@ import {
   publicPlatformString,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import type { SessionRuntimeHints, SessionScope, SessionState } from '../types.ts';
+import type { SessionRuntimeHints, SessionScope, SessionState } from '../../types.ts';
 import { successText } from '@agent-device/kernel/success-text';
 import type { StartupPerfSample } from './session-startup-metrics.ts';
-import type { DeviceSelectionResult } from '../../core/device-selection-resolver.ts';
+import type { DeviceSelectionResult } from '../../../core/device-selection-resolver.ts';
 
 export function buildOpenResult(params: {
   sessionName: string;
@@ -58,9 +58,7 @@ export function buildOpenResult(params: {
   if (appBundleId) result.appBundleId = appBundleId;
   if (startup) result.startup = startup;
   if (timing) result.timing = timing;
-  if (runtime && runtimeHintCount(runtime) > 0) {
-    result.runtime = runtime;
-  }
+  if (runtime && runtimeHintCount(runtime) > 0) result.runtime = runtime;
   if (device) {
     result.platform = publicPlatformString(device);
     result.target = device.target ?? 'mobile';

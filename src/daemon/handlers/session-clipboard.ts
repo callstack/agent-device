@@ -17,7 +17,7 @@ import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-ru
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from '../runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../snapshot-runtime-capture-input.ts';
 import { successText } from '@agent-device/kernel/success-text';
-import { errorResponse, type DaemonFailureResponse } from './response.ts';
+import { errorResponse, type DaemonFailureResponse } from '../response.ts';
 import { recordSessionAction } from './handler-utils.ts';
 import {
   requireSessionOrExplicitSelector,

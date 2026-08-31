@@ -6,7 +6,7 @@ import {
 } from '../ref-frame.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonResponse, SessionState } from '../types.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '../response.ts';
 
 /**
  * ADR 0014 mutation-admission enforcement. A ref-targeting mutation is admitted

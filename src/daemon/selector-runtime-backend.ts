@@ -6,7 +6,7 @@ import type {
 import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
 import { createAgentDevice } from '../runtime.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
-import { noActiveSessionError } from './handlers/response.ts';
+import { noActiveSessionError } from './response.ts';
 import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';

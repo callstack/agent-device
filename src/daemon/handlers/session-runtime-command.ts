@@ -2,7 +2,7 @@ import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { clearRuntimeHintsRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import { SessionStore } from '../session-store.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '../response.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { admitRuntimeUse } from '../runtime-admission.ts';
 import {
@@ -12,7 +12,7 @@ import {
   mergeRuntimeHints,
   runtimeHintValues,
   toRuntimePlatform,
-} from './session-runtime.ts';
+} from '../session-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { handlePortReverseCommand } from './session-runtime-port-reverse.ts';
 import { contextFromFlags } from '../context.ts';

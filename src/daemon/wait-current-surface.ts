@@ -2,7 +2,7 @@ import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { captureSnapshot } from './handlers/snapshot-capture.ts';
-import { errorResponse } from './handlers/response.ts';
+import { errorResponse } from './response.ts';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 import type { BoundSelectorCapture } from './selector-capture-binding.ts';

@@ -79,7 +79,7 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { screenRecordingResourceStore } from '../../screen-recording-resource-store.ts';
-import { lifecycleRuntimeFacts } from './application-lifecycle-runtime-harness.ts';
+import { lifecycleRuntimeFacts } from '../../__tests__/application-lifecycle-runtime-harness.ts';
 import { dispatchApplicationLifecycleEffect } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
 
 export type { DeviceBinding, PlatformRuntimeOperations, SessionState };

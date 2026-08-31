@@ -3,22 +3,27 @@ import type { RuntimeHintsApplicationInput } from '@agent-device/contracts/appli
 import { openApplicationRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonRequest, DaemonResponse, SessionRuntimeHints, SessionState } from '../types.ts';
-import { SessionStore } from '../session-store.ts';
+import type {
+  DaemonRequest,
+  DaemonResponse,
+  SessionRuntimeHints,
+  SessionState,
+} from '../../types.ts';
+import { SessionStore } from '../../session-store.ts';
 import {
   resolveRequestedOpenSurface,
   validateOpenRelaunchTarget,
-} from '../../platform-runtime-open-target.ts';
+} from '../../../platform-runtime-open-target.ts';
 import {
   hasRuntimeTransportHints,
   maybeClearRemovedRuntimeTransportHints,
   shouldClearRemovedRuntimeTransportHints,
   tryResolveOpenRuntimeHints,
-} from './session-runtime.ts';
+} from '../../session-runtime.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '../../response.ts';
 import type { SessionSurface } from '@agent-device/contracts/session';
-import { resolveRunnerLogicalLeaseContext } from '../lease-context.ts';
+import { resolveRunnerLogicalLeaseContext } from '../../lease-context.ts';
 
 type OpenCommandDetails = {
   appBundleId?: string;

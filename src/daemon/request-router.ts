@@ -20,7 +20,7 @@ import type {
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
 import { RESPONSE_VIEWS } from './response-views.ts';
 import { SessionStore } from './session-store.ts';
-import { errorResponse, noActiveSessionError } from './handlers/response.ts';
+import { errorResponse, noActiveSessionError } from './response.ts';
 import { resolvePlatformProviderRequestContext } from './request-platform-provider-context.ts';
 import {
   countDiagnosticEventsByPhase,

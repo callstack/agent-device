@@ -13,7 +13,7 @@ import type {
   SnapshotRuntimeOperations,
 } from '@agent-device/contracts/snapshot-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { errorResponse } from './handlers/response.ts';
+import { errorResponse } from './response.ts';
 import {
   admitRuntimePlan,
   requireRuntimeBinding,

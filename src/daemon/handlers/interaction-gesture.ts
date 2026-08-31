@@ -32,7 +32,7 @@ import type { InteractionHandlerParams } from './interaction-common.ts';
 import { finalizeTouchInteraction } from './interaction-common.ts';
 import { createInteractionRuntime } from './interaction-runtime.ts';
 import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
-import { noActiveSessionError } from './response.ts';
+import { noActiveSessionError } from '../response.ts';
 import { assertRefMutationAdmitted } from './interaction-ref-policy.ts';
 import type { RecordedTargetCapture } from '../session-target-evidence.ts';
 import { gestureResponseData } from './interaction-gesture-response.ts';

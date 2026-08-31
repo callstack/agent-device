@@ -7,7 +7,7 @@ import {
   requireSessionOrExplicitSelector,
   resolveCommandDevice,
 } from '../session-device-resolution.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '../response.ts';
 import { recordSessionAction } from './handler-utils.ts';
 import { resolveBoundAppEventRuntime } from '../app-event-runtime.ts';
 import { resolveBoundKeyboardRuntime } from '../keyboard-runtime.ts';

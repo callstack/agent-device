@@ -22,7 +22,7 @@ import { clearDaemonShutdownReport, writeDaemonShutdownReport } from '../daemon-
 import { createRequestHandler } from '../request-router.ts';
 import { stopSessionAppLog, teardownSessionResources } from '../session-teardown.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
-import { runtimeHintValues } from '../handlers/session-runtime.ts';
+import { runtimeHintValues } from '../session-runtime.ts';
 import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn, SessionState } from '../types.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';

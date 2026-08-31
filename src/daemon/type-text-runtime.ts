@@ -9,7 +9,7 @@ import { successText } from '@agent-device/kernel/success-text';
 import { findMistargetedTypeRefToken } from '../utils/type-target-warning.ts';
 import { requireIntInRange } from '../utils/validation.ts';
 import type { DaemonCommandContext } from './context.ts';
-import type { DaemonFailureResponse } from './handlers/response.ts';
+import type { DaemonFailureResponse } from './response.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
 

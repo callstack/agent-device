@@ -7,7 +7,7 @@ import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { hasDeviceSelectionInput, hasExplicitDeviceSelector } from './device-selector-intent.ts';
 import { listSessionSelectorConflicts } from './session-selector.ts';
-import { errorResponse } from './handlers/response.ts';
+import { errorResponse } from './response.ts';
 
 export function requireSessionOrExplicitSelector(
   command: string,

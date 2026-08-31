@@ -17,12 +17,23 @@ const DAEMON_REPLAY_FACADE = {
 
 const DAEMON_SESSION_LIFECYCLE_FACADE = {
   root: 'src/daemon/session-lifecycle/index.ts',
-  exports: ['SessionInventoryCommandInput', 'handleSessionInventoryCommands'],
+  exports: [
+    'SessionInventoryCommandInput',
+    'SessionOpenCommandInput',
+    'handleSessionInventoryCommands',
+    'handleSessionOpenCommands',
+  ],
 } as const;
 
 export const SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS = [
   'src/daemon/handlers/session-device-utils.ts',
   'src/daemon/handlers/session-runtime-admission.ts',
+  'src/daemon/handlers/session-open.ts',
+  'src/daemon/handlers/session-open-prepare.ts',
+  'src/daemon/handlers/session-open-execution.ts',
+  'src/daemon/handlers/session-open-foreground.ts',
+  'src/daemon/handlers/session-open-surface.ts',
+  'src/daemon/handlers/session-startup-metrics.ts',
 ] as const;
 
 export const LOGICAL_MODULE_POLICIES = [

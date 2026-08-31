@@ -15,7 +15,7 @@ import {
 } from '@agent-device/replay-test';
 import { runReplayCommand } from './native-command.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
-import { errorResponse } from '../../handlers/response.ts';
+import { errorResponse } from '../../response.ts';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import {
   emitRequestProgress,

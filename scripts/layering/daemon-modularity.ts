@@ -57,16 +57,19 @@ export function checkDaemonModularityRatchets(
 export function checkRetiredSessionLifecyclePaths(
   sourceFiles: readonly string[],
 ): LayeringViolation[] {
-  return SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS.filter((file) => sourceFiles.includes(file)).map(
-    (file) => ({
-      rule: 'R10 daemon-modularity',
-      file,
-      line: 1,
-      message:
-        `retired session lifecycle helper path was restored: ${file}. ` +
-        'Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
-    }),
+  const restoredPaths = sourceFiles.filter(
+    (file) =>
+      SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS.some((retiredPath) => retiredPath === file) ||
+      /^src\/daemon\/handlers\/session-open(?:-[^/]+)?\.ts$/.test(file),
   );
+  return restoredPaths.map((file) => ({
+    rule: 'R10 daemon-modularity',
+    file,
+    line: 1,
+    message:
+      `retired session lifecycle path was restored: ${file}. ` +
+      'Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+  }));
 }
 
 function checkSessionStateBaseline(): LayeringViolation[] {

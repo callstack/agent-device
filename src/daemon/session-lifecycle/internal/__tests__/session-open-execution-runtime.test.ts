@@ -1,25 +1,25 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
-import type { DaemonRequest } from '../../types.ts';
+import type { DaemonRequest } from '../../../types.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
 const mockResolveTargetDevice = vi.hoisted(() => vi.fn());
 
-vi.mock('../../../core/dispatch-resolve.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch-resolve.ts')>();
+vi.mock('../../../../core/dispatch-resolve.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../core/dispatch-resolve.ts')>();
   const { selectionFromResolveTargetDevice } =
-    await import('../../__tests__/device-selection-stub.ts');
+    await import('../../../__tests__/device-selection-stub.ts');
   return {
     ...actual,
     resolveTargetDevice: mockResolveTargetDevice,
     resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(mockResolveTargetDevice)),
   };
 });
-vi.mock('../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
-vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
+vi.mock('../../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../platform-runtime-runtime-hints.ts')>();
+    await importOriginal<typeof import('../../../../platform-runtime-runtime-hints.ts')>();
   return {
     ...actual,
     applyRuntimeHintValues: vi.fn(async () => {}),
@@ -40,8 +40,9 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
     await importOriginal<typeof import('@agent-device/platform-apple/app-resolution')>();
   return { ...actual, resolveIosApp: vi.fn(async () => 'com.example.demo') };
 });
-vi.mock('../../../platform-runtime-open-target.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platform-runtime-open-target.ts')>();
+vi.mock('../../../../platform-runtime-open-target.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../../platform-runtime-open-target.ts')>();
   return { ...actual, resolveAndroidPackageForOpen: vi.fn(async () => undefined) };
 });
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
@@ -57,13 +58,13 @@ import {
   handleSessionCommands,
   mockBindDeviceRuntime,
   mockInspectDeviceRuntimeFacts,
-} from './session-command-harness.ts';
+} from '../../../handlers/__tests__/session-command-harness.ts';
 import {
   applyRuntimeHintValues,
   clearRuntimeHintValues,
-} from '../../../platform-runtime-runtime-hints.ts';
-import { resolveAndroidPackageForOpen } from '../../../platform-runtime-open-target.ts';
-import { dispatchApplicationLifecycleEffect } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
+} from '../../../../platform-runtime-runtime-hints.ts';
+import { resolveAndroidPackageForOpen } from '../../../../platform-runtime-open-target.ts';
+import { dispatchApplicationLifecycleEffect } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
 import {
   makeAndroidEmulator,
   makeSession,

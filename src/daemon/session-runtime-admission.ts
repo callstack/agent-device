@@ -8,7 +8,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse } from './types.ts';
-import { errorResponse } from './handlers/response.ts';
+import { errorResponse } from './response.ts';
 
 export type RuntimeCommandHandlerParams = Readonly<{
   req: DaemonRequest;

@@ -64,7 +64,7 @@ import { freshEvidence, makeRecordingReplayInvoke } from './session-replay-repai
 import {
   bindLifecycleRuntime,
   inspectLifecycleRuntimeFacts,
-} from '../../../handlers/__tests__/application-lifecycle-runtime-harness.ts';
+} from '../../../__tests__/application-lifecycle-runtime-harness.ts';
 import { platformResourceCleanup } from '../../../../platform-runtime-resource-cleanup.ts';
 import {
   captureSnapshotThroughLegacyDispatchFixture,

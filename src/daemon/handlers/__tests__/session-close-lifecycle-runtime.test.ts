@@ -20,7 +20,7 @@ import {
   mockBindDeviceRuntime,
   mockInspectDeviceRuntimeFacts,
 } from './session-command-harness.ts';
-import { lifecycleRuntimeFacts } from './application-lifecycle-runtime-harness.ts';
+import { lifecycleRuntimeFacts } from '../../__tests__/application-lifecycle-runtime-harness.ts';
 import { dispatchApplicationLifecycleEffect } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);

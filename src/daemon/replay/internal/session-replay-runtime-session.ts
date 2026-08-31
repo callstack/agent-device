@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import type { ReplaySessionStore } from './command-types.ts';
 import { expandSessionPath } from '../../session-paths.ts';
-import { errorResponse, noActiveSessionError } from '../../handlers/response.ts';
+import { errorResponse, noActiveSessionError } from '../../response.ts';
 import {
   NO_SCRIPT_PUBLICATION,
   scriptTargetForce,

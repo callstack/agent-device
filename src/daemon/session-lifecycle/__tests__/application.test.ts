@@ -13,16 +13,19 @@ vi.mock('../index.ts', async (importOriginal) => {
   return {
     ...actual,
     handleSessionInventoryCommands: vi.fn(actual.handleSessionInventoryCommands),
+    handleSessionOpenCommands: vi.fn(actual.handleSessionOpenCommands),
   };
 });
 
 import { handleSessionCommands } from '../../handlers/session.ts';
-import { handleSessionInventoryCommands } from '../index.ts';
+import { handleSessionInventoryCommands, handleSessionOpenCommands } from '../index.ts';
 
 const mockHandleSessionInventoryCommands = vi.mocked(handleSessionInventoryCommands);
+const mockHandleSessionOpenCommands = vi.mocked(handleSessionOpenCommands);
 
 beforeEach(() => {
   mockHandleSessionInventoryCommands.mockClear();
+  mockHandleSessionOpenCommands.mockClear();
 });
 
 function request(command: DaemonRequest['command']): DaemonRequest {
@@ -80,4 +83,29 @@ test('inventory commands retain their route responses and typed failures', async
       }),
     );
   }
+});
+
+test('open routes only its lifecycle input through the public facade', async () => {
+  const expected: DaemonResponse = { ok: true, data: { session: 'default' } };
+  mockHandleSessionOpenCommands.mockImplementationOnce(async () => expected);
+
+  await expect(run('open')).resolves.toEqual(expected);
+
+  const forwarded = mockHandleSessionOpenCommands.mock.calls.at(-1)?.[0];
+  expect(Object.keys(forwarded ?? {}).sort()).toEqual(
+    [
+      'bindDevice',
+      'inspectFacts',
+      'logPath',
+      'reconcileOrphanedDeviceClaim',
+      'req',
+      'sessionName',
+      'sessionStore',
+    ].sort(),
+  );
+  expect(forwarded).toMatchObject({
+    req: expect.objectContaining({ command: 'open' }),
+    sessionName: 'default',
+    logPath: '/tmp/agent-device-session-lifecycle-route.log',
+  });
 });

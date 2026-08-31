@@ -24,7 +24,7 @@ import { successText } from '@agent-device/kernel/success-text';
 import { requireIntInRange } from '../utils/validation.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { DirectIosSelectorTarget } from './direct-ios-selector.ts';
-import type { DaemonFailureResponse } from './handlers/response.ts';
+import type { DaemonFailureResponse } from './response.ts';
 import {
   admitRuntimeOperations,
   type RuntimeAdmissionBindings,

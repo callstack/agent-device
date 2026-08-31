@@ -1,4 +1,4 @@
-import { resolveTargetDeviceSelection } from '../../core/dispatch-resolve.ts';
+import { resolveTargetDeviceSelection } from '../../../core/dispatch-resolve.ts';
 import {
   openApplicationRuntimeUse,
   openApplicationWithRuntimeHintApplyAndClearUse,
@@ -7,11 +7,11 @@ import {
   resolveOpenApplicationRuntimePlan,
 } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { SessionStore } from '../session-store.ts';
-import { refreshSessionDeviceIfNeeded } from '../session-device-resolution.ts';
+import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import { SessionStore } from '../../session-store.ts';
+import { refreshSessionDeviceIfNeeded } from '../../session-device-resolution.ts';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
-import { buildOpenTargetDeviceResolutionOptions } from '../open-device-selection.ts';
+import { buildOpenTargetDeviceResolutionOptions } from '../../open-device-selection.ts';
 import {
   invalidOpenArgs,
   prepareOpenCommandDetails,
@@ -21,13 +21,20 @@ import {
   validatePreResolvedOpenRequest,
   validateResolvedOpenRequest,
 } from './session-open-prepare.ts';
-import { resolveForegroundOpenRequest } from './session-open-foreground.ts';
-import { errorResponse } from './response.ts';
-import { expireRefFrame } from '../ref-frame.ts';
-import type { DeviceClaimReconciler } from '../device-claims.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import { admitRuntimeOperations } from '../runtime-admission.ts';
-import { resolveExistingSessionDeviceSelection } from '../../core/device-selection-resolver.ts';
+import {
+  composeOpenWithInitialSnapshot,
+  resolveForegroundOpenRequest,
+} from './session-open-foreground.ts';
+import { errorResponse } from '../../response.ts';
+import { expireRefFrame } from '../../ref-frame.ts';
+import type { DeviceClaimReconciler } from '../../device-claims.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../request-runtime-binding.ts';
+import { admitRuntimeOperations } from '../../runtime-admission.ts';
+import { resolveExistingSessionDeviceSelection } from '../../../core/device-selection-resolver.ts';
+import { requireRuntimeBinding, requireRuntimeFacts } from '../../session-runtime-admission.ts';
 import {
   completeOpenCommand,
   openNewSessionWithDeviceClaim,
@@ -36,7 +43,15 @@ import {
   type RuntimeHintClearOperation,
 } from './session-open-execution.ts';
 
-export { buildDeviceInUseBySessionError } from './session-open-execution.ts';
+export type SessionOpenCommandInput = Readonly<{
+  req: DaemonRequest;
+  sessionName: string;
+  logPath: string;
+  sessionStore: SessionStore;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  bindDevice?: BindDeviceRuntime;
+  reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+}>;
 
 const firstSessionOpenLocks = new Map<string, Promise<unknown>>();
 
@@ -132,15 +147,7 @@ async function resolveOpenRuntimePlanAdmission(params: {
 }
 
 // fallow-ignore-next-line complexity
-export async function handleOpenCommand(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath: string;
-  sessionStore: SessionStore;
-  inspectFacts?: InspectDeviceRuntimeFacts;
-  bindDevice?: BindDeviceRuntime;
-  reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
-}): Promise<DaemonResponse> {
+async function handleOpenCommand(params: SessionOpenCommandInput): Promise<DaemonResponse> {
   const { sessionName, logPath, sessionStore } = params;
 
   const session = sessionStore.get(sessionName);
@@ -167,9 +174,7 @@ export async function handleOpenCommand(params: {
       openTarget,
       session.surface,
     );
-    if (typeof surfaceResult !== 'string') {
-      return surfaceResult;
-    }
+    if (typeof surfaceResult !== 'string') return surfaceResult;
     if (!openTarget && surfaceResult === 'app') {
       return shouldRelaunch
         ? invalidOpenArgs('open --relaunch requires an app name or an active session app.')
@@ -182,9 +187,7 @@ export async function handleOpenCommand(params: {
       surface: surfaceResult,
       device: session.device,
     });
-    if (validation) {
-      return validation;
-    }
+    if (validation) return validation;
 
     const device = await refreshSessionDeviceIfNeeded(session.device);
     const selection = resolveExistingSessionDeviceSelection(device);
@@ -214,9 +217,7 @@ export async function handleOpenCommand(params: {
       clearRuntimeHints: admission.clearRuntimeHints,
       foreground: false,
     });
-    if (details.type === 'response') {
-      return details.response;
-    }
+    if (details.type === 'response') return details.response;
 
     return await completeOpenCommand({
       req,
@@ -243,18 +244,15 @@ export async function handleOpenCommand(params: {
 
   const shouldRelaunch = req.flags?.relaunch === true;
   const openTarget = req.positionals?.[0];
-  if (shouldRelaunch && !openTarget) {
+  if (shouldRelaunch && !openTarget)
     return invalidOpenArgs('open --relaunch requires an app argument.');
-  }
 
   const preResolvedValidation = await validatePreResolvedOpenRequest({
     shouldRelaunch,
     openTarget,
     platform: req.flags?.platform === 'android' ? 'android' : undefined,
   });
-  if (preResolvedValidation) {
-    return preResolvedValidation;
-  }
+  if (preResolvedValidation) return preResolvedValidation;
 
   const selection = await resolveTargetDeviceSelection(
     req.flags ?? {},
@@ -263,9 +261,7 @@ export async function handleOpenCommand(params: {
   const device = selection.device;
   await req.internal?.retainDeviceExecutionLock?.(device.id);
   const surfaceResult = resolveOpenSurfaceResponse(device, req.flags?.surface, openTarget);
-  if (typeof surfaceResult !== 'string') {
-    return surfaceResult;
-  }
+  if (typeof surfaceResult !== 'string') return surfaceResult;
 
   const validation = await validateResolvedOpenRequest({
     shouldRelaunch,
@@ -273,9 +269,7 @@ export async function handleOpenCommand(params: {
     surface: surfaceResult,
     device,
   });
-  if (validation) {
-    return validation;
-  }
+  if (validation) return validation;
 
   const runtimePlanAdmission = await resolveOpenRuntimePlanAdmission({
     req,
@@ -308,4 +302,17 @@ export async function handleOpenCommand(params: {
         selection,
       }),
   );
+}
+
+export async function handleSessionOpenCommands(
+  params: SessionOpenCommandInput,
+): Promise<DaemonResponse> {
+  const openResponse = await handleOpenCommand(params);
+  if (!openResponse.ok || params.req.flags?.foreground !== true) return openResponse;
+  return await composeOpenWithInitialSnapshot({
+    ...params,
+    inspectFacts: requireRuntimeFacts(params.inspectFacts),
+    bindDevice: requireRuntimeBinding(params.bindDevice),
+    openResponse,
+  });
 }

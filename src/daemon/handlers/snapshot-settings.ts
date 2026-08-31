@@ -12,7 +12,7 @@ import { contextFromFlags } from '../context.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { recordIfSession } from './snapshot-session.ts';
-import { errorResponse, type DaemonFailureResponse } from './response.ts';
+import { errorResponse, type DaemonFailureResponse } from '../response.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { readLocationCoordinate } from '@agent-device/kernel/location-coordinates';

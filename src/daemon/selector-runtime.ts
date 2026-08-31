@@ -6,7 +6,7 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { queryAppleRuntimeSelector } from '../platform-runtime-apple-resources.ts';
 import type { AppleRunnerRequestOptions } from './apple-runner-options.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
-import { errorResponse } from './handlers/response.ts';
+import { errorResponse } from './response.ts';
 import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from './session-snapshot.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
 import {

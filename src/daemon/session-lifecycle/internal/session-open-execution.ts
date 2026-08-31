@@ -6,51 +6,45 @@ import {
 import {
   markSelectionBootOccurred,
   type DeviceSelectionResult,
-} from '../../core/device-selection-resolver.ts';
+} from '../../../core/device-selection-resolver.ts';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type {
-  DaemonRequest,
-  DaemonResponse,
-  SessionRef,
-  SessionScope,
-  SessionState,
-} from '../types.ts';
+import type { DaemonRequest, DaemonResponse, SessionScope, SessionState } from '../../types.ts';
 import {
   abortAuthoringOnSecondOpen,
   armAuthoringOnOpen,
   isAuthoringArmedSession,
-} from '../session-script-publication-capability.ts';
+} from '../../session-script-publication-capability.ts';
 import { isRequestCanceled } from '@agent-device/host-kit/request';
 import { createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   resolveSessionRequestLogPath,
   resolveSessionRunnerLogPath,
   SessionStore,
-} from '../session-store.ts';
+} from '../../session-store.ts';
 import {
   countConfiguredRuntimeHints,
   runtimeHintValues,
   setSessionRuntimeHintsForOpen,
-} from './session-runtime.ts';
+} from '../../session-runtime.ts';
 import { STARTUP_SAMPLE_METHOD, type StartupPerfSample } from './session-startup-metrics.ts';
 import { buildNextOpenSession, buildOpenResult } from './session-open-surface.ts';
-import { markDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
+import { markDeferredInteractionOutcome } from '../../deferred-interaction-outcome.ts';
 import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
 import {
   prepareOpenCommandDetails,
   type ResolvedOpenRuntimeHintPlan,
 } from './session-open-prepare.ts';
-import { errorResponse } from './response.ts';
-import { buildSessionRecoveryHint } from '../session-recovery-hints.ts';
+import { errorResponse } from '../../response.ts';
+import { buildDeviceInUseBySessionError } from '../../session-recovery-hints.ts';
 import {
   isImplicitSessionScopeConflict,
   resolveSessionScope,
   resolvePublicSessionName,
-} from '../session-routing.ts';
-import { resolveSessionLeaseForRequest } from '../lease-lifecycle.ts';
-import { applicationLifecycleExecutionFromRequest } from '../application-lifecycle-execution.ts';
+} from '../../session-routing.ts';
+import { resolveSessionLeaseForRequest } from '../../lease-lifecycle.ts';
+import { applicationLifecycleExecutionFromRequest } from '../../application-lifecycle-execution.ts';
 import {
   abandonDeviceClaim,
   acquireDeviceClaim,
@@ -59,8 +53,8 @@ import {
   type DeviceClaimAcquireResult,
   type DeviceClaimSessionOwnership,
   type DeviceClaimReconciler,
-} from '../device-claims.ts';
-import { buildDeviceClaimConflictError } from '../device-claim-conflict.ts';
+} from '../../device-claims.ts';
+import { buildDeviceClaimConflictError } from '../../device-claim-conflict.ts';
 
 type OpenTiming = {
   totalDurationMs?: number;
@@ -244,9 +238,8 @@ export async function completeOpenCommand(params: {
     existingLease: existingSession?.lease,
   });
   if (deviceClaim) nextSession.deviceClaim = deviceClaim;
-  if (req.runtime !== undefined) {
+  if (req.runtime !== undefined)
     setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints);
-  }
   const sessionStateDir = sessionStore.ensureSessionDir(sessionName);
   const requestLogPath = resolveSessionRequestLogPath(
     sessionStateDir,
@@ -311,9 +304,8 @@ async function prepareOpenDispatchSession(params: {
   const provisionalSession = createProvisionalOpenDispatchSession(params);
   sessionStore.set(sessionName, provisionalSession);
   const lifecycleResponse = await beforeDispatch(provisionalSession);
-  if (lifecycleResponse && !lifecycleResponse.ok) {
+  if (lifecycleResponse && !lifecycleResponse.ok)
     return { type: 'response', response: lifecycleResponse };
-  }
   return { type: 'session', session: sessionStore.get(sessionName) ?? provisionalSession };
 }
 
@@ -363,21 +355,6 @@ function findNewSessionDeviceConflict(params: {
     );
   }
   return buildDeviceInUseBySessionError(inUse, device);
-}
-
-// Exported as the single by-session DEVICE_IN_USE producer so the help-benchmark sample parity
-// test renders the exact error this handler returns; a message or hint change here fails that
-// gate instead of drifting past it.
-export function buildDeviceInUseBySessionError(
-  inUse: SessionRef,
-  device: DeviceInfo,
-): DaemonResponse {
-  return errorResponse('DEVICE_IN_USE', `Device is already in use by session "${inUse.address}".`, {
-    session: inUse.address,
-    deviceId: device.id,
-    deviceName: device.name,
-    hint: buildSessionRecoveryHint(inUse, 'device-in-use'),
-  });
 }
 
 async function acquireLocalDeviceClaim(params: {
@@ -440,9 +417,8 @@ export async function openNewSessionWithDeviceClaim(params: {
     sessionStore,
     reconcileOrphanedDeviceClaim,
   });
-  if (localClaim.status === 'conflict') {
+  if (localClaim.status === 'conflict')
     return buildDeviceClaimConflictError(device, localClaim.conflict);
-  }
   const deviceClaim = localClaim.status === 'acquired' ? localClaim.ownership : undefined;
   const effects: NewSessionOpenEffects = { mayHaveStarted: false };
   const rollbackClaim = async () =>

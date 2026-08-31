@@ -27,7 +27,7 @@ import {
   pointPositionals,
   type InteractionResponsePayloads,
 } from './interaction-touch-response.ts';
-import { noActiveSessionError } from './response.ts';
+import { noActiveSessionError } from '../response.ts';
 import type { BoundTouchExecutor } from '../touch-runtime.ts';
 
 /**

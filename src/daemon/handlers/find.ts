@@ -13,7 +13,7 @@ import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from
 import { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
 import { readCommandMessage, successText } from '@agent-device/kernel/success-text';
-import { errorResponse, noActiveSessionError } from './response.ts';
+import { errorResponse, noActiveSessionError } from '../response.ts';
 import { withSystemSurfaceDisclosure } from './system-surface-disclosure.ts';
 import { recordSessionAction } from './handler-utils.ts';
 import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts';

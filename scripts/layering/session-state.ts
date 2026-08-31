@@ -80,8 +80,8 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   // Open execution owns the paired lease/claim transition after the handler has admitted one
   // lifecycle binding. Keeping the records together prevents request-policy routing from gaining
   // a second durable owner as the execution seam stays package-bound.
-  lease: ['src/daemon/handlers/session-open-execution.ts'],
-  deviceClaim: ['src/daemon/handlers/session-open-execution.ts'],
+  lease: ['src/daemon/session-lifecycle/internal/session-open-execution.ts'],
+  deviceClaim: ['src/daemon/session-lifecycle/internal/session-open-execution.ts'],
 
   // #1398 (ADR 0017 session-scoped echo protection amendment): the ephemeral
   // literal->placeholder registry is populated and consulted only at the

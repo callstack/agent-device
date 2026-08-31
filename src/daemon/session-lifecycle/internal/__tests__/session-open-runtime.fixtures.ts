@@ -1,7 +1,7 @@
 import path from 'node:path';
-import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { SessionStore } from '../../../session-store.ts';
+import type { DaemonRequest, DaemonResponse, SessionState } from '../../../types.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 export const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({
   ok: true,

@@ -12,7 +12,7 @@ import {
 import type { DaemonResponse } from '../types.ts';
 import { REF_GRAMMAR_HINT, splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
 import { parseCoordinateTarget } from './interaction-targeting.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '../response.ts';
 
 export type ParsedTouchTarget =
   | { ok: true; target: InteractionTarget; refGeneration?: number; durationMs?: never }

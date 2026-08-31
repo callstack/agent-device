@@ -20,14 +20,14 @@ import { createDaemonMaestroRuntimePort } from '../../adapters/maestro/daemon-ru
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../types.ts';
 import { assertSessionSelectorMatches } from '../../session-selector.ts';
-import { errorResponse } from '../../handlers/response.ts';
+import { errorResponse } from '../../response.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
 import { createMaestroReplayObserver } from './session-replay-maestro-observer.ts';
 import {
   buildTypedMaestroReplayErrorResponse,
   buildTypedMaestroSuccessResponse,
 } from './session-replay-maestro-response.ts';
-import { resolveEffectiveOpenRuntimeHints } from '../../handlers/session-runtime.ts';
+import { resolveEffectiveOpenRuntimeHints } from '../../session-runtime.ts';
 import { buildMaestroReplayTargetDeviceResolutionOptions } from '../../replay-device-selection.ts';
 import {
   readReplayScriptSourceFile,

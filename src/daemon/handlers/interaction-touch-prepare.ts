@@ -6,7 +6,7 @@ import {
   type TouchRuntimeCommand,
 } from '../touch-runtime.ts';
 import type { InteractionHandlerParams } from './interaction-common.ts';
-import type { DaemonFailureResponse } from './response.ts';
+import type { DaemonFailureResponse } from '../response.ts';
 
 export type PreparedTouchDispatch =
   | Readonly<{ ok: false; response: DaemonFailureResponse }>

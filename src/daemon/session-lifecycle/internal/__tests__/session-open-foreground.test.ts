@@ -2,10 +2,10 @@ import { beforeEach, expect, test, vi } from 'vitest';
 
 const dispatchSnapshotViaRuntime = vi.hoisted(() => vi.fn());
 
-vi.mock('../../snapshot-runtime.ts', () => ({ dispatchSnapshotViaRuntime }));
+vi.mock('../../../snapshot-runtime.ts', () => ({ dispatchSnapshotViaRuntime }));
 
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonRequest, DaemonResponse } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../types.ts';
 import {
   composeOpenWithInitialSnapshot,
   resolveForegroundOpenRequest,

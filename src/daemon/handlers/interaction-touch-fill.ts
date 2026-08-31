@@ -22,7 +22,7 @@ import {
 } from './interaction-touch-response.ts';
 import { dispatchRuntimeInteraction } from './interaction-touch-runtime.ts';
 import { parseFillTarget } from './interaction-touch-targets.ts';
-import { noActiveSessionError } from './response.ts';
+import { noActiveSessionError } from '../response.ts';
 import { prepareTouchDispatch } from './interaction-touch-prepare.ts';
 
 /**

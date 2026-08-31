@@ -3,7 +3,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
 import type { ReplayCoordinator } from '../../session-replay-coordinator.ts';
 import type { ReplayCommand, ReplaySessionStore } from './command-types.ts';
-import { errorResponse } from '../../handlers/response.ts';
+import { errorResponse } from '../../response.ts';
 import { buildReplayScriptPlatformFlags } from '../../replay-device-selection.ts';
 import {
   inspectAdReplay,

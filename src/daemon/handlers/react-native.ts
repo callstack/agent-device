@@ -15,7 +15,7 @@ import { successText } from '@agent-device/kernel/success-text';
 import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { DaemonResponse, SessionState } from '../types.ts';
-import { errorResponse, noActiveSessionError } from './response.ts';
+import { errorResponse, noActiveSessionError } from '../response.ts';
 import { captureSnapshotForSession } from './interaction-snapshot.ts';
 import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
 import { expireRefFrame } from '../ref-frame.ts';

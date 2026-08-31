@@ -199,7 +199,7 @@
         "count": 1
       }
     },
-    "src/daemon/handlers/__tests__/session-open-runtime.test.ts": {
+    "src/daemon/session-lifecycle/internal/__tests__/session-open-runtime.test.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -240,12 +240,12 @@
         "count": 2
       }
     },
-    "src/daemon/handlers/session-open-surface.ts": {
+    "src/daemon/session-lifecycle/internal/session-open-surface.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/daemon/handlers/session-open.ts": {
+    "src/daemon/session-lifecycle/internal/session-open.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -255,7 +255,7 @@
         "count": 1
       }
     },
-    "src/daemon/handlers/session-runtime.ts": {
+    "src/daemon/session-runtime.ts": {
       "crap_moderate": {
         "count": 1
       }

@@ -5,7 +5,7 @@ import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
 import { resolveCommandDevice } from '../session-device-resolution.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '../response.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import { releaseSessionLease } from '../lease-lifecycle.ts';
@@ -19,7 +19,7 @@ import type { SessionCleanupFailure } from '../session-teardown.ts';
 import { isWebSession } from '../web-session-names.ts';
 import { clearDeviceClaim } from '../device-claims.ts';
 import { applicationLifecycleExecutionFromRequest } from '../application-lifecycle-execution.ts';
-import { hasRuntimeTransportHints } from './session-runtime.ts';
+import { hasRuntimeTransportHints } from '../session-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import {
   buildRetriableRepairCloseFailureResponse,

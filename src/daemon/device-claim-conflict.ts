@@ -12,7 +12,7 @@ import {
   type InspectedDeviceClaim,
 } from './device-claim-inspection.ts';
 import type { DaemonResponse } from './types.ts';
-import { errorResponse } from './handlers/response.ts';
+import { errorResponse } from './response.ts';
 
 export type DeviceClaimConflictReason =
   | 'DEVICE_CLAIM_LIVE_OWNER'

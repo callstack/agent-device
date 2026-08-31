@@ -22,7 +22,7 @@ import {
   unwrapAdmittedRuntimePlan,
   type AdmittedRuntimePlan,
 } from './session-runtime-admission.ts';
-import { errorResponse } from './handlers/response.ts';
+import { errorResponse } from './response.ts';
 import { resolveSnapshotScope } from './handlers/snapshot-capture.ts';
 import { resolveSessionDevice } from './handlers/snapshot-session.ts';
 import {

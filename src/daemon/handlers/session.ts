@@ -1,14 +1,14 @@
 import type { DaemonResponse } from '../types.ts';
 import { handleReleaseMaterializedPathsCommand } from './session-app-source-deployment.ts';
 import { handleRuntimeCommand } from './session-runtime-command.ts';
-import { requireRuntimeBinding, requireRuntimeFacts } from '../session-runtime-admission.ts';
-import { handleOpenCommand } from './session-open.ts';
-import { composeOpenWithInitialSnapshot } from './session-open-foreground.ts';
 import { handleKeyboardCommand, handleAppEventCommand } from './session-selector-dispatch.ts';
 import { handleCloseCommand } from './session-close.ts';
 import { handleSessionAppDeploymentCommand } from './session-app-deployment-route.ts';
 import { runBatchCommands } from './session-batch.ts';
-import { handleSessionInventoryCommands } from '../session-lifecycle/index.ts';
+import {
+  handleSessionInventoryCommands,
+  handleSessionOpenCommands,
+} from '../session-lifecycle/index.ts';
 import { handleSessionStateCommands } from './session-state.ts';
 import { handleSessionObservabilityCommands } from './session-observability.ts';
 import { handleReplayCommand, handleReplayTestCommand } from './session-replay-command.ts';
@@ -21,13 +21,27 @@ import type {
   SessionCommandInput,
   SessionCommandParams,
 } from './session-command-input.ts';
-import type { SessionInventoryCommandInput } from '../session-lifecycle/index.ts';
+import type {
+  SessionInventoryCommandInput,
+  SessionOpenCommandInput,
+} from '../session-lifecycle/index.ts';
 import type { DescriptorSessionRouteCommandName } from '../../core/command-descriptor/registry.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 
 const handleSessionInventoryCommandGroup: SessionCommandHandler = (
   params: SessionCommandParams & SessionInventoryCommandInput,
 ) => handleSessionInventoryCommands(params);
+
+const handleSessionOpenCommandGroup: SessionCommandHandler = (params) =>
+  handleSessionOpenCommands({
+    req: params.req,
+    sessionName: params.sessionName,
+    logPath: params.logPath,
+    sessionStore: params.sessionStore,
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
+    reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
+  } satisfies SessionOpenCommandInput);
 
 const handleSessionStateCommandGroup: SessionCommandHandler = async ({
   req,
@@ -145,35 +159,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
     await handleReleaseMaterializedPathsCommand({ req }),
   push: handleSessionAppDeploymentCommand,
   'trigger-app-event': handleAppEventCommand,
-  open: async ({
-    req,
-    sessionName,
-    logPath,
-    sessionStore,
-    inspectFacts,
-    bindDevice,
-    reconcileOrphanedDeviceClaim,
-  }) => {
-    const openResponse = await handleOpenCommand({
-      req,
-      sessionName,
-      logPath,
-      sessionStore,
-      inspectFacts,
-      bindDevice,
-      reconcileOrphanedDeviceClaim,
-    });
-    if (!openResponse.ok || req.flags?.foreground !== true) return openResponse;
-    return await composeOpenWithInitialSnapshot({
-      req,
-      sessionName,
-      logPath,
-      sessionStore,
-      inspectFacts: requireRuntimeFacts(inspectFacts),
-      bindDevice: requireRuntimeBinding(bindDevice),
-      openResponse,
-    });
-  },
+  open: handleSessionOpenCommandGroup,
   replay: handleReplayCommand,
   test: handleReplayTestCommand,
   batch: async ({ req, sessionName, invoke }) => await runBatchCommands(req, sessionName, invoke),

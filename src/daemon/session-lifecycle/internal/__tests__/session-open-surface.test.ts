@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildNextOpenSession, buildOpenResult } from '../session-open-surface.ts';
-import { resolveRequestedOpenSurface } from '../../../platform-runtime-open-target.ts';
+import { resolveRequestedOpenSurface } from '../../../../platform-runtime-open-target.ts';
 import {
   authoringPublication,
   makeIosSession,
-} from '../../../__tests__/test-utils/session-factories.ts';
-import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
-import { isSessionRecording } from '../../session-script-publication-capability.ts';
+} from '../../../../__tests__/test-utils/session-factories.ts';
+import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
+import { isSessionRecording } from '../../../session-script-publication-capability.ts';
 
 test('resolveRequestedOpenSurface rejects surface flag on iOS', () => {
   assert.throws(

@@ -262,10 +262,26 @@ test('session lifecycle rejects restored neutral helper paths', () => {
   assert.deepEqual(
     violations.map(({ message }) => message),
     [
-      'retired session lifecycle helper path was restored: src/daemon/handlers/session-device-utils.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
-      'retired session lifecycle helper path was restored: src/daemon/handlers/session-runtime-admission.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      'retired session lifecycle path was restored: src/daemon/handlers/session-device-utils.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      'retired session lifecycle path was restored: src/daemon/handlers/session-runtime-admission.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
     ],
   );
+});
+
+test('session lifecycle rejects any restored open handler path', () => {
+  const violations = checkRetiredSessionLifecyclePaths([
+    'src/daemon/handlers/session-open-regressed.ts',
+  ]);
+
+  assert.deepEqual(violations, [
+    {
+      rule: 'R10 daemon-modularity',
+      file: 'src/daemon/handlers/session-open-regressed.ts',
+      line: 1,
+      message:
+        'retired session lifecycle path was restored: src/daemon/handlers/session-open-regressed.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+    },
+  ]);
 });
 
 test('R9 records zone ceilings and keeps engine files outside the largest component', () => {

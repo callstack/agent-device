@@ -12,7 +12,7 @@ import type {
   InspectDeviceRuntimeFacts,
   RuntimeAdmissionBindings,
 } from './request-runtime-binding.ts';
-import { errorResponse, type DaemonFailureResponse } from './handlers/response.ts';
+import { errorResponse, type DaemonFailureResponse } from './response.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
 

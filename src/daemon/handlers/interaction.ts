@@ -6,7 +6,7 @@ import { refSnapshotFlagGuardResponse } from './interaction-flags.ts';
 import { dispatchGetViaRuntime, dispatchIsViaRuntime } from '../selector-runtime.ts';
 import { finalizeTouchInteraction } from './interaction-common.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import { errorResponse, noActiveSessionError } from './response.ts';
+import { errorResponse, noActiveSessionError } from '../response.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { normalizeError } from '@agent-device/kernel/errors';
 import {

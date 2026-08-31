@@ -4,7 +4,7 @@ import { getAndroidAppState } from '@agent-device/platform-android/mechanics';
 import {
   inferAndroidPackageAfterOpen,
   resolveSessionAppBundleIdForTarget,
-} from '../../../platform-runtime-open-target.ts';
+} from '../../../../platform-runtime-open-target.ts';
 
 vi.mock('@agent-device/platform-android/mechanics', () => ({
   getAndroidAppState: vi.fn(),

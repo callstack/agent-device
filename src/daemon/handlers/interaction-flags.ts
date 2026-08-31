@@ -1,7 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SettleParams } from '@agent-device/contracts/interaction';
 import type { DaemonResponse } from '../types.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '../response.ts';
 
 const REF_UNSUPPORTED_FLAG_MAP: ReadonlyArray<[keyof CommandFlags, string]> = [
   ['snapshotDepth', '--depth'],

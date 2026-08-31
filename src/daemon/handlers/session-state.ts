@@ -22,7 +22,7 @@ import {
   resolveCommandDevice,
   selectorTargetsSessionDevice,
 } from '../session-device-resolution.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '../response.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import {
   admitRuntimeOperations,

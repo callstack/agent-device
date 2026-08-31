@@ -18,7 +18,7 @@ import { recordIfSession } from './snapshot-session.ts';
 import { parseTimeout } from '../../utils/parse-timeout.ts';
 import { resolveRefFrameEffect } from '../daemon-command-registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import type { DaemonFailureResponse } from './response.ts';
+import type { DaemonFailureResponse } from '../response.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from '../runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../snapshot-runtime-capture-input.ts';

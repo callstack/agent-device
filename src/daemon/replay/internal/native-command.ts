@@ -1,6 +1,6 @@
 import { asAppError } from '@agent-device/kernel/errors';
 import type { DaemonResponse, SessionState } from '../../types.ts';
-import { errorResponse } from '../../handlers/response.ts';
+import { errorResponse } from '../../response.ts';
 import { runAdReplay } from '@agent-device/ad-replay';
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
 import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture';

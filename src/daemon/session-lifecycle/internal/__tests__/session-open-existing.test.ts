@@ -1,7 +1,7 @@
 import { test, expect } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { buildSnapshotSignatures } from '../../../snapshot/snapshot-freshness/index.ts';
+import { buildSnapshotSignatures } from '../../../../snapshot/snapshot-freshness/index.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   mockLifecycleDispatch as mockDispatch,
@@ -13,9 +13,9 @@ import {
   noopInvoke,
   assertInvalidArgsMessage,
   withMockedPlatform,
-} from './session-test-harness.ts';
-import type { SessionState } from '../../types.ts';
-import { handleSessionCommands } from './session-command-harness.ts';
+} from '../../../handlers/__tests__/session-test-harness.ts';
+import type { SessionState } from '../../../types.ts';
+import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
 
 test('open web URL on iOS device session without active app falls back to Safari', async () => {
   const sessionStore = makeSessionStore();

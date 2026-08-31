@@ -45,7 +45,7 @@ import {
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { teardownSessionResources } from './session-teardown.ts';
 import { finalizeBoundSessionApplicationLifecycle } from './application-lifecycle-recovery.ts';
-import { runtimeHintValues } from './handlers/session-runtime.ts';
+import { runtimeHintValues } from './session-runtime.ts';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';

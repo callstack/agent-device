@@ -12,17 +12,14 @@ import {
   providerRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import { vi } from 'vitest';
-import type {
-  BindDeviceRuntime,
-  InspectDeviceRuntimeFacts,
-} from '../../request-runtime-binding.ts';
+import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import {
   applicationLifecycleFixtureInteractor,
   applicationLifecycleRuntimeFixture,
-} from '../../__tests__/application-lifecycle-runtime-fixture.ts';
+} from './application-lifecycle-runtime-fixture.ts';
 
 vi.mock('node:timers/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:timers/promises')>();

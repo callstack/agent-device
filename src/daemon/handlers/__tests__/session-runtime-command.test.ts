@@ -13,7 +13,7 @@ import {
   mockBindDeviceRuntime,
   mockInspectDeviceRuntimeFacts,
 } from './session-command-harness.ts';
-import { lifecycleRuntimeFacts } from './application-lifecycle-runtime-harness.ts';
+import { lifecycleRuntimeFacts } from '../../__tests__/application-lifecycle-runtime-harness.ts';
 import {
   gestureBindDevice,
   gestureInspectFacts,

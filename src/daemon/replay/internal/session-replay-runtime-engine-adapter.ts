@@ -1,6 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../types.ts';
-import { errorResponse } from '../../handlers/response.ts';
+import { errorResponse } from '../../response.ts';
 import { readReplaySelectorDisplayValue } from '@agent-device/selectors';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';

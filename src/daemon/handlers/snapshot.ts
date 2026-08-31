@@ -1,6 +1,6 @@
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '../response.ts';
 import { handleAlertCommand } from './snapshot-alert.ts';
 import { handleSettingsCommand, parseSettingsArgs } from './snapshot-settings.ts';
 import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';

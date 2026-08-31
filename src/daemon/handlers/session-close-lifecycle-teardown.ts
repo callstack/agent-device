@@ -13,7 +13,7 @@ import {
   type SessionCleanupFailure,
 } from '../session-teardown.ts';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
-import { hasRuntimeTransportHints, runtimeHintValues } from './session-runtime.ts';
+import { hasRuntimeTransportHints, runtimeHintValues } from '../session-runtime.ts';
 import type {
   CloseRuntime,
   CloseRuntimeWithRuntimeHintClear,

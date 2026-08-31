@@ -83,8 +83,7 @@ Detected an overly complex or slow accessibility tree. Fell back to the private-
 };
 
 // DEVICE_IN_USE from buildDeviceInUseBySessionError
-// (src/daemon/handlers/session-open.ts) — the parity test drives that exact
-// producer.
+// (src/daemon/session-recovery-hints.ts) — the parity test drives that exact producer.
 export const DEVICE_IN_USE_SAMPLE = {
   command: `agent-device press 'label="Place order"' --settle`,
   output: `Error (DEVICE_IN_USE): Device is already in use by session "checkout".

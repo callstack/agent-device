@@ -20,7 +20,7 @@ import {
   type ParsedLongPressTarget,
   type ParsedTouchTarget,
 } from './interaction-touch-targets.ts';
-import { errorResponse, noActiveSessionError } from './response.ts';
+import { errorResponse, noActiveSessionError } from '../response.ts';
 
 /**
  * Whether a targeted `press`/`click`/`longpress`/`hover` may act, and on what: macOS

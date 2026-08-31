@@ -14,13 +14,13 @@ import {
   makeSessionStore,
   makeSession,
   noopInvoke,
-} from './session-test-harness.ts';
-import type { SessionState } from '../../types.ts';
+} from '../../../handlers/__tests__/session-test-harness.ts';
+import type { SessionState } from '../../../types.ts';
 import {
   handleSessionCommands,
   mockBindDeviceRuntime,
   mockInspectDeviceRuntimeFacts,
-} from './session-command-harness.ts';
+} from '../../../handlers/__tests__/session-command-harness.ts';
 
 test('open URL on existing iOS session clears stale app bundle id', async () => {
   const sessionStore = makeSessionStore();

@@ -7,7 +7,7 @@ import { successText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
-import type { DaemonFailureResponse } from './handlers/response.ts';
+import type { DaemonFailureResponse } from './response.ts';
 
 /**
  * What the admit-then-bind step reports: either the refusal an unadmitted cell produced, or the

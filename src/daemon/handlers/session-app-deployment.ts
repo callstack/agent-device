@@ -15,7 +15,7 @@ import { resolvePayloadInput } from '../../utils/payload-input.ts';
 import { resolveDeployResultTarget } from '../../utils/result-serialization.ts';
 import { withSuccessText } from '@agent-device/kernel/success-text';
 import { recordSessionAction } from './handler-utils.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '../response.ts';
 import {
   requireSessionOrExplicitSelector,
   resolveCommandDevice,

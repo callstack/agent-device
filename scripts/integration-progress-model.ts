@@ -342,7 +342,7 @@ function summarizeProviderScenarioFlagExclusions() {
     },
     {
       name: 'open foreground auto-resolution (RFC prototype)',
-      owner: 'daemon session-open-foreground handler unit tests',
+      owner: 'daemon session-open-foreground lifecycle unit tests',
       keys: ['foreground'],
     },
     {

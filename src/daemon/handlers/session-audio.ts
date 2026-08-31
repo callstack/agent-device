@@ -17,7 +17,7 @@ import {
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { errorResponse, type DaemonFailureResponse } from './response.ts';
+import { errorResponse, type DaemonFailureResponse } from '../response.ts';
 
 type AudioParams = {
   req: DaemonRequest;
