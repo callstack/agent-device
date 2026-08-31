@@ -1,7 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import type { Point, RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
-import { analyzeScrollEdgeState } from './scroll-edge-state/selection.ts';
 
 export type ScrollEdge = 'top' | 'bottom';
 
@@ -27,6 +26,7 @@ export async function captureScrollEdgeState(params: {
   const { edge, target = {}, scope, captureNodes } = params;
   try {
     const nodes = await captureNodes(scope);
+    const { analyzeScrollEdgeState } = await import('./scroll-edge-state/selection.ts');
     const state = analyzeScrollEdgeState(nodes, edge, target);
     if (scope && state.emptySnapshot) {
       return await captureScrollEdgeState({ edge, target, captureNodes });
