@@ -1,5 +1,3 @@
-export { formatDoctorCheckDetailLines, formatDoctorCheckSummaryLine } from './doctor-output.ts';
-
 let renderedDoctorProgress = false;
 
 export function markDoctorProgressRendered(): void {

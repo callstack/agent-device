@@ -47,8 +47,8 @@ describe('capture command interface', () => {
     });
   });
 
-  test('routes snapshot diagnostics warning to stderr output', () => {
-    const output = snapshotCliOutput({
+  test('routes snapshot diagnostics warning to stderr output', async () => {
+    const output = await snapshotCliOutput({
       result: {
         nodes: [],
         truncated: false,

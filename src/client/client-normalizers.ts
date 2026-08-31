@@ -34,7 +34,7 @@ import {
   readRequiredString,
   stripUndefined,
 } from '@agent-device/kernel/record';
-import { buildAppIdentifiers, buildDeviceIdentifiers } from '../utils/result-serialization.ts';
+import { buildAppIdentifiers, buildDeviceIdentifiers } from './client-identifiers.ts';
 
 export { readOptionalString, readRequiredString } from '@agent-device/kernel/record';
 

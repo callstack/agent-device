@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
-import { formatDurationSeconds } from '../../utils/duration-format.ts';
+import { formatDurationSeconds } from './duration-format.ts';
 
 type ReplayActionStartTrace = {
   type: 'replay_action_start';

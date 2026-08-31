@@ -13,7 +13,7 @@ if (cliPayloadMarker) {
   installCliTransportFixture(cliPayloadMarker);
 } else if (process.argv.includes('--success')) {
   const { runCliProcess } = await import('../../../src/cli/process-entry.ts');
-  const { printJson } = await import('../../../src/utils/output.ts');
+  const { printJson } = await import('../../../src/commands/output/json.ts');
   await runCliProcess([], async () => ({
     runCli: async () => {
       printJson({ success: true, data: { payload: `${'x'.repeat(256_000)}${PAYLOAD_MARKER}` } });

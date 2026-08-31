@@ -810,7 +810,7 @@ test('snapshot annotations survive pending interaction capture into CLI JSON', a
   expect(response.data?.snapshotQuality).toEqual(snapshotQuality);
   expect(response.data?.warnings).toEqual(['backend warning from interaction capture']);
 
-  const cliOutput = snapshotCliOutput({
+  const cliOutput = await snapshotCliOutput({
     result: response.data as unknown as CaptureSnapshotResult,
   });
   expect(cliOutput.jsonData).toMatchObject({

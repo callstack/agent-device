@@ -30,7 +30,7 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags }
     });
   }
   const data = { ...result, clean: shouldClean };
-  writeCommandOutput(flags, data, () => renderDaemonStop(data));
+  await writeCommandOutput(flags, data, () => renderDaemonStop(data));
   return true;
 };
 

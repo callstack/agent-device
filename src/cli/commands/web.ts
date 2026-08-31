@@ -1,7 +1,7 @@
 import type { ManagedWebBackendStatus } from '@agent-device/contracts/managed-web-backend';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { printJson } from '../../utils/output.ts';
+import { printJson } from '../../commands/output/json.ts';
 import { createManagedWebBackend } from '../../platform-runtime-managed-web-backend.ts';
 
 const managedWebBackend = createManagedWebBackend();

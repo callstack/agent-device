@@ -173,7 +173,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
         findInadmissibleInput(name, metadata, input) ??
         findInadmissibleNestedCommandInput(metadata.inputSchema, input, name);
       if (rejection) {
-        return buildErrorToolResult(
+        return await buildErrorToolResult(
           new AppError('INVALID_ARGS', rejection),
           refPins,
           undefined,
@@ -191,13 +191,13 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
         refPins.mergeCommandResult(name, result, config.client.stateDir, commandInput.session);
         return {
           isError: false,
-          structuredContent: projectStructuredContent(name, result),
+          structuredContent: await projectStructuredContent(name, result),
           content: [
             {
               type: 'text',
               // Render from the UNPINNED input: the model typed plain refs and
               // must never see generation suffixes (zero token cost).
-              text: renderToolText({
+              text: await renderToolText({
                 name,
                 input: commandInput,
                 result,
@@ -208,7 +208,12 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
           ],
         };
       } catch (error) {
-        return buildErrorToolResult(error, refPins, config.client.stateDir, commandInput.session);
+        return await buildErrorToolResult(
+          error,
+          refPins,
+          config.client.stateDir,
+          commandInput.session,
+        );
       }
     },
   };
@@ -220,18 +225,18 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
  * `divergence.screen`'s refs merged/pinned at `refsGeneration` like any
  * ref-issuing success. Merge-only; never clears existing pins.
  */
-function buildErrorToolResult(
+async function buildErrorToolResult(
   error: unknown,
   refPins: ToolRefPinStore,
   stateDir: string | undefined,
   session: unknown,
-): ToolResult {
+): Promise<ToolResult> {
   const normalized = normalizeToolError(error);
-  refPins.mergeErrorDetails(normalized.details, stateDir, session);
+  await refPins.mergeErrorDetails(normalized.details, stateDir, session);
   return {
     isError: true,
     structuredContent: normalized,
-    content: [{ type: 'text', text: formatToolErrorText(normalized) }],
+    content: [{ type: 'text', text: await formatToolErrorText(normalized) }],
   };
 }
 
@@ -482,13 +487,13 @@ function withMcpConfigSchema(
   };
 }
 
-function renderToolText(params: {
+async function renderToolText(params: {
   name: CommandName;
   input: Record<string, unknown>;
   result: CommandExecutionResult;
   outputFormat: McpOutputFormat;
   responseLevel?: ResponseLevel;
-}): string {
+}): Promise<string> {
   // A non-default responseLevel (digest/full) hands back a leveled payload whose
   // shape the optimized CLI formatters do not understand (e.g. the snapshot
   // formatter expects `nodes`, which the digest drops) — rendering it through
@@ -500,7 +505,7 @@ function renderToolText(params: {
   ) {
     return renderJsonText(params.result);
   }
-  const cliOutput = formatCliOutput({
+  const cliOutput = await formatCliOutput({
     name: params.name,
     input: params.input,
     result: params.result,

@@ -396,7 +396,9 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // readers), `input-audience.ts` (who may write a key), and `common-input-fields.ts` (the table
   // itself). Every command schema already evaluated all three concerns; the growth is three more
   // module records for the same code, with no new subtree behind any of them.
-  'src/cli.ts': 383,
+  // #2148 moves output-only CLI dependencies behind call-time imports and reduces the entry
+  // closure by two modules.
+  'src/cli.ts': 378,
   'src/platform-runtime.ts': 47,
   'src/core/command-descriptor/registry.ts': 71,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,

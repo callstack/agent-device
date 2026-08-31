@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { doctorCliOutput, managementCliOutputFormatters, openCliOutput } from './output.ts';
-import { markDoctorProgressRendered } from '../../utils/doctor-progress.ts';
-import { withNoColor } from '../../__tests__/test-utils/color.ts';
+import { withNoColorAsync } from '../../__tests__/test-utils/color.ts';
 import type { AppOpenResult } from '@agent-device/contracts/client';
+import { markDoctorProgressRendered } from '../../daemon/client/doctor-progress.ts';
 
 describe('openCliOutput', () => {
-  test('prints session state directory on a second line', () => {
-    const output = openCliOutput({
+  test('prints session state directory on a second line', async () => {
+    const output = await openCliOutput({
       session: 'default',
       sessionStateDir: '/tmp/agent-device/sessions/cwd_123_default',
       identifiers: { session: 'default' },
@@ -21,22 +21,22 @@ describe('openCliOutput', () => {
     });
   });
 
-  test('keeps internal open timing out of public output data', () => {
+  test('keeps internal open timing out of public output data', async () => {
     const result: AppOpenResult & { timing: { totalDurationMs: number } } = {
       session: 'default',
       sessionStateDir: '/tmp/agent-device/sessions/cwd_123_default',
       identifiers: { session: 'default' },
       timing: { totalDurationMs: 42 },
     };
-    const output = openCliOutput(result);
+    const output = await openCliOutput(result);
 
     expect(output.data).not.toHaveProperty('timing');
   });
 
-  test('preserves open warnings in JSON data and renders them immediately', () => {
+  test('preserves open warnings in JSON data and renders them immediately', async () => {
     const warning =
       'Script publication was aborted by a second successful open; start a fresh session.';
-    const output = openCliOutput({
+    const output = await openCliOutput({
       session: 'authoring',
       warnings: [warning],
       identifiers: { session: 'authoring' },
@@ -46,8 +46,8 @@ describe('openCliOutput', () => {
     expect(output.text).toBe(`Opened: authoring\nWarning: ${warning}`);
   });
 
-  test('preserves device-selection evidence in the CLI payload', () => {
-    const output = openCliOutput({
+  test('preserves device-selection evidence in the CLI payload', async () => {
+    const output = await openCliOutput({
       session: 'selected',
       selection: {
         reason: 'single-booted-local',
@@ -87,10 +87,10 @@ describe('openCliOutput', () => {
       identifiers: { session: 'default' },
     };
 
-    const openOutput = withNoColor(() =>
+    const openOutput = await withNoColorAsync(() =>
       formatCliOutput({ name: 'open', input: {}, result: openResult }),
     );
-    const snapshotOutput = withNoColor(() =>
+    const snapshotOutput = await withNoColorAsync(() =>
       formatCliOutput({
         name: 'snapshot',
         input: { interactiveOnly: true },
@@ -117,10 +117,10 @@ describe('openCliOutput', () => {
     expect(openJsonSnapshot).toEqual(snapshotOutput.jsonData ?? snapshotOutput.data);
   });
 
-  test('renders the initialSnapshotError warning without a tree when the composed capture failed', () => {
+  test('renders the initialSnapshotError warning without a tree when the composed capture failed', async () => {
     const warning =
       'The session is open, but the initial interactive snapshot failed (COMMAND_FAILED: capture failed). Run: agent-device snapshot -i';
-    const output = openCliOutput({
+    const output = await openCliOutput({
       session: 'default',
       warnings: [warning],
       initialSnapshotError: {
@@ -227,8 +227,8 @@ describe('artifactsCliOutput', () => {
 });
 
 describe('doctorCliOutput', () => {
-  test('prints passing checks by default using test-style status markers', () => {
-    const output = withNoColor(() =>
+  test('prints passing checks by default using test-style status markers', async () => {
+    const output = await withNoColorAsync(() =>
       doctorCliOutput({
         status: 'pass',
         summary: 'No blockers found.',
@@ -262,8 +262,8 @@ describe('doctorCliOutput', () => {
     );
   });
 
-  test('keeps warning and failure recovery details under the relevant row', () => {
-    const output = withNoColor(() =>
+  test('keeps warning and failure recovery details under the relevant row', async () => {
+    const output = await withNoColorAsync(() =>
       doctorCliOutput({
         status: 'fail',
         checks: [
@@ -294,10 +294,9 @@ describe('doctorCliOutput', () => {
     );
   });
 
-  test('prints only the summary after streamed progress rendered the checks', () => {
-    const output = withNoColor(() => {
-      markDoctorProgressRendered();
-      return doctorCliOutput({
+  test('prints only the summary after streamed progress rendered the checks', async () => {
+    const output = await withNoColorAsync(async () => {
+      const result = {
         status: 'pass',
         summary: 'No blockers found.',
         checks: [
@@ -307,7 +306,9 @@ describe('doctorCliOutput', () => {
             summary: 'Selected Pixel (android)',
           },
         ],
-      });
+      };
+      markDoctorProgressRendered();
+      return await doctorCliOutput(result);
     });
 
     expect(output.text).toBe(['Doctor: pass', 'No blockers found.'].join('\n'));
@@ -315,8 +316,8 @@ describe('doctorCliOutput', () => {
 });
 
 describe('devices output', () => {
-  test('carries the projected claim owner through JSON data and the text line', () => {
-    const output = managementCliOutputFormatters.devices({
+  test('carries the projected claim owner through JSON data and the text line', async () => {
+    const output = await managementCliOutputFormatters.devices({
       input: {},
       result: [
         {

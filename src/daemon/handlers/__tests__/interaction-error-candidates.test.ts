@@ -1,6 +1,20 @@
-import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { formatErrorCandidateLines } from '../error-candidates.ts';
+import { test } from 'vitest';
+import { formatErrorCandidateLines, readElementMatchCandidateRefs } from '../error-candidates.ts';
+
+test('readElementMatchCandidateRefs extracts refs from candidate lines', () => {
+  assert.deepEqual(
+    readElementMatchCandidateRefs({
+      candidates: ['@e2 [button] "Follow"', '@e5~s42 [button] "Follow"', 'not a ref'],
+    }),
+    ['e2', 'e5'],
+  );
+});
+
+test('readElementMatchCandidateRefs ignores non-string candidate details', () => {
+  assert.deepEqual(readElementMatchCandidateRefs({ candidates: [{ ref: 'e2' }, 4] }), []);
+  assert.deepEqual(readElementMatchCandidateRefs(undefined), []);
+});
 
 // #1597: the element-match block. `candidates` are already-rendered snapshot
 // lines capped by buildAmbiguousMatchError; `matches` is the true total the

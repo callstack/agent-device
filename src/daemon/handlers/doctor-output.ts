@@ -1,12 +1,6 @@
 import { formatCliStatusMarker, type CliStatusMarkerStatus } from './status-markers.ts';
 
-export type DoctorLineCheck = {
-  id?: unknown;
-  status?: unknown;
-  summary?: unknown;
-  command?: unknown;
-  hint?: unknown;
-};
+type DoctorLineCheck = Partial<Record<'id' | 'status' | 'summary' | 'command' | 'hint', unknown>>;
 
 export function formatDoctorCheckSummaryLine(check: DoctorLineCheck): string {
   const statusMarker = formatCliStatusMarker(doctorStatusMarker(check.status));

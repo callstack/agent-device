@@ -3,7 +3,7 @@
 // exact text the CLI would print for it. Every `output` is pinned to the real
 // renderer by scripts/__tests__/help-conformance-sample-outputs.test.ts, which
 // rebuilds it through src/commands/interaction/output.ts or
-// src/utils/output.ts printHumanError — a rendering change fails that test
+// src/commands/output/error.ts printHumanError — a rendering change fails that test
 // instead of silently leaving the benchmark grading against stale output.
 
 export function sampleText(sample) {
@@ -73,7 +73,7 @@ hint: The UI kept changing for the whole settle budget (animation, carousel, or 
 // Recovered snapshot: the private-ax fallback fired but still exposed
 // actionable refs. Warning wording is renderSnapshotQualityWarnings
 // (src/snapshot/snapshot-presentation/quality-warnings.ts); lines are the structured snapshot
-// renderer (src/utils/output.ts formatSnapshotText).
+// renderer (src/commands/output/snapshot.ts formatSnapshotText).
 export const PRIVATE_AX_RECOVERY_SAMPLE = {
   command: 'agent-device snapshot -i',
   output: `Snapshot: 2 nodes
@@ -115,7 +115,7 @@ Hint: Ref @e12 was minted from snapshot s5 but the session's ref frame is now s7
 // instead of silent disambiguation: #1597 made the candidate refs (ref, role,
 // label/identifier — the same compact rendering as snapshot -i) print
 // unconditionally via formatErrorCandidateLines
-// (src/utils/error-candidates.ts), capped at AMBIGUOUS_MATCH_CANDIDATE_LIMIT (5) with a
+// (src/daemon/handlers/error-candidates.ts), capped at AMBIGUOUS_MATCH_CANDIDATE_LIMIT (5) with a
 // "+N more" marker. Here all 3 candidates share the identical "Follow" label,
 // so the printed refs still cannot be told apart from this output alone —
 // the agent must re-observe or narrow, not guess which @ref is the right row.

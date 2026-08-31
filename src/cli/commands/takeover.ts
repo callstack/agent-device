@@ -43,7 +43,7 @@ async function runForegroundTakeover(
   };
   const client = agentDeviceClient.leases.humanControl;
   const hold = await client.put(holdId, input);
-  writeCommandOutput(flags, { hold, state: 'active' }, () => renderTakeoverStarted(hold));
+  await writeCommandOutput(flags, { hold, state: 'active' }, () => renderTakeoverStarted(hold));
 
   let heartbeatError: unknown;
   let heartbeatRequest: Promise<void> | undefined;
@@ -90,7 +90,7 @@ async function runForegroundTakeover(
 
 async function showTakeoverStatus(flags: CliFlags, client: AgentDeviceClient): Promise<void> {
   const holds = await client.leases.humanControl.list();
-  writeCommandOutput(flags, { holds }, () => renderTakeoverStatus(holds));
+  await writeCommandOutput(flags, { holds }, () => renderTakeoverStatus(holds));
 }
 
 async function releaseTakeover(
@@ -99,7 +99,7 @@ async function releaseTakeover(
   holdId: string,
 ): Promise<void> {
   const released = await client.leases.humanControl.remove(holdId);
-  writeCommandOutput(flags, { holdId, released }, () =>
+  await writeCommandOutput(flags, { holdId, released }, () =>
     released ? `Released human-control hold ${holdId}.` : `No active hold found for ${holdId}.`,
   );
 }

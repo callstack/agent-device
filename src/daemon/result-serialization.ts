@@ -1,10 +1,5 @@
-import {
-  publicSnapshotCaptureAnnotations,
-  type SnapshotCaptureAnnotations,
-} from '@agent-device/contracts/capture';
 import type {
   AgentDeviceDevice,
-  AgentDeviceIdentifiers,
   AgentDeviceSession,
   AgentDeviceSessionDevice,
   AppCloseResult,
@@ -14,39 +9,9 @@ import type {
   CaptureSnapshotResult,
   SessionCloseResult,
 } from '@agent-device/contracts/client';
-import { isSerialAddressablePlatform, type PublicPlatform } from '@agent-device/kernel/device';
+import { publicSnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
+import { isSerialAddressablePlatform } from '@agent-device/kernel/device';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
-
-export function buildAppIdentifiers(params: {
-  session?: string;
-  bundleId?: string;
-  packageName?: string;
-  appId?: string;
-}): AgentDeviceIdentifiers {
-  const appId = params.appId ?? params.bundleId ?? params.packageName;
-  return {
-    session: params.session,
-    appId,
-    appBundleId: params.bundleId,
-    package: params.packageName,
-  };
-}
-
-export function buildDeviceIdentifiers(
-  platform: PublicPlatform,
-  id: string,
-  name: string,
-): AgentDeviceIdentifiers {
-  return {
-    deviceId: id,
-    deviceName: name,
-    ...(isSerialAddressablePlatform(platform)
-      ? { serial: id }
-      : platform === 'ios'
-        ? { udid: id }
-        : {}),
-  };
-}
 
 function serializeSessionDevice(
   device: AgentDeviceSessionDevice,
@@ -96,6 +61,28 @@ export function serializeDevice(device: AgentDeviceDevice): Record<string, unkno
     target: device.target,
     ...(typeof device.booted === 'boolean' ? { booted: device.booted } : {}),
     ...(device.claimedBy ? { claimedBy: device.claimedBy } : {}),
+  };
+}
+
+export function serializeSnapshotResult(result: CaptureSnapshotResult): Record<string, unknown> {
+  return {
+    nodes: result.nodes,
+    truncated: result.truncated,
+    ...(result.appName ? { appName: result.appName } : {}),
+    ...(result.appBundleId ? { appBundleId: result.appBundleId } : {}),
+    ...(result.visibility ? { visibility: result.visibility } : {}),
+    ...publicSnapshotCaptureAnnotations({
+      ...result,
+      ...(result.snapshotQuality ? { quality: result.snapshotQuality } : {}),
+    }),
+    ...(result.unchanged ? { unchanged: result.unchanged } : {}),
+    ...(result.snapshotDiagnostics ? { snapshotDiagnostics: result.snapshotDiagnostics } : {}),
+    ...(result.fallbackScreenshotPath
+      ? { fallbackScreenshotPath: result.fallbackScreenshotPath }
+      : {}),
+    // ADR 0014: a ref-issuing snapshot retains its response-level generation so
+    // JSON callers can pair a plain `@e12` with `~s<refsGeneration>` before a mutation.
+    ...(result.refsGeneration !== undefined ? { refsGeneration: result.refsGeneration } : {}),
   };
 }
 
@@ -182,34 +169,5 @@ export function serializeCloseResult(
     ...(result.shutdown ? { shutdown: result.shutdown } : {}),
     ...('provider' in result && result.provider ? { provider: result.provider } : {}),
     ...successText(result.session ? `Closed: ${result.session}` : 'Closed'),
-  };
-}
-
-export function serializeSnapshotResult(result: CaptureSnapshotResult): Record<string, unknown> {
-  return {
-    nodes: result.nodes,
-    truncated: result.truncated,
-    ...(result.appName ? { appName: result.appName } : {}),
-    ...(result.appBundleId ? { appBundleId: result.appBundleId } : {}),
-    ...(result.visibility ? { visibility: result.visibility } : {}),
-    ...publicSnapshotCaptureAnnotations(snapshotResultAnnotations(result)),
-    ...(result.unchanged ? { unchanged: result.unchanged } : {}),
-    ...(result.snapshotDiagnostics ? { snapshotDiagnostics: result.snapshotDiagnostics } : {}),
-    ...(result.fallbackScreenshotPath
-      ? { fallbackScreenshotPath: result.fallbackScreenshotPath }
-      : {}),
-    // ADR 0014: a ref-issuing snapshot retains its response-level generation so
-    // JSON callers can pair a plain `@e12` with `~s<refsGeneration>` before a mutation.
-    ...(result.refsGeneration !== undefined ? { refsGeneration: result.refsGeneration } : {}),
-  };
-}
-
-function snapshotResultAnnotations(
-  result: CaptureSnapshotResult,
-): Partial<SnapshotCaptureAnnotations> {
-  const annotations = result as CaptureSnapshotResult & Partial<SnapshotCaptureAnnotations>;
-  return {
-    ...annotations,
-    ...(result.snapshotQuality ? { quality: result.snapshotQuality } : {}),
   };
 }

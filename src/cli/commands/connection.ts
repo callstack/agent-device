@@ -91,7 +91,7 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
   const runtimePreparation = buildRuntimePreparationNotice(connectFlags, state);
   const readiness = presentConnectReadiness(state, verification);
 
-  writeCommandOutput(
+  await writeCommandOutput(
     connectFlags,
     serializeConnectionState({ state, runtimePreparation, readiness, previousLeaseNotice }),
     () => renderConnectSuccess({ state, runtimePreparation, readiness, previousLeaseNotice }),
@@ -246,7 +246,7 @@ function readRemoteConfigConnectionMetadata(
 export const disconnectCommand: ClientCommandHandler = async ({ flags, client }) => {
   const { session, stateDir, state } = readRequestedConnectionState(flags);
   if (!state) {
-    writeNoRemoteConnectionOutput(flags, session);
+    await writeNoRemoteConnectionOutput(flags, session);
     return true;
   }
   const connectedSession = state.session;
@@ -274,7 +274,7 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
     }
   }
   removeRemoteConnectionState({ stateDir, session: connectedSession });
-  writeCommandOutput(
+  await writeCommandOutput(
     flags,
     {
       connected: false,
@@ -293,12 +293,12 @@ export const connectionCommand: ClientCommandHandler = async ({ positionals, fla
   }
   const { session, state } = readRequestedConnectionState(flags);
   if (!state) {
-    writeNoRemoteConnectionOutput(flags, session);
+    await writeNoRemoteConnectionOutput(flags, session);
     return true;
   }
   const leasePreparation = buildLeasePreparationNotice(state);
   const runtimePreparation = buildRuntimePreparationNoticeFromState(state);
-  writeCommandOutput(flags, serializeConnectionState({ state, runtimePreparation }), () =>
+  await writeCommandOutput(flags, serializeConnectionState({ state, runtimePreparation }), () =>
     [
       `Configured remote session "${state.session}".`,
       `tenant=${state.tenant} runId=${state.runId} leaseId=${state.leaseId ?? 'pending'} backend=${state.leaseBackend ?? 'pending'}`,
@@ -380,8 +380,8 @@ function readRequestedConnectionState(flags: CliFlags): {
   };
 }
 
-function writeNoRemoteConnectionOutput(flags: CliFlags, session: string): void {
-  writeCommandOutput(
+async function writeNoRemoteConnectionOutput(flags: CliFlags, session: string): Promise<void> {
+  await writeCommandOutput(
     flags,
     { connected: false, session },
     () => `No remote connection for "${session}".`,

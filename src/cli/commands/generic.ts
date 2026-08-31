@@ -29,11 +29,11 @@ export async function runGenericClientBackedCommand({
   // they serialize the default shape and drop the digest fields. Emit the leveled
   // payload verbatim instead.
   if (isNonDefaultResponseLevel(flags.responseLevel)) {
-    writeCommandOutput(flags, result, () => JSON.stringify(result, null, 2));
+    await writeCommandOutput(flags, result, () => JSON.stringify(result, null, 2));
     return true;
   }
   if (cliOutput) {
-    writeCliOutput(flags, cliOutput);
+    await writeCliOutput(flags, cliOutput);
   } else {
     const exitCode = await writeGenericCliOutput(command, flags, result, {
       debug,
@@ -46,12 +46,12 @@ export async function runGenericClientBackedCommand({
   return true;
 }
 
-function writeGenericCliOutput(
+async function writeGenericCliOutput(
   command: ClientBackedCliCommandName,
   flags: CliFlags,
   data: CommandRequestResult,
   options: Pick<ClientCommandParams, 'debug' | 'replayTestReporterRuntime'> = {},
-): Promise<number> | number {
+): Promise<number> {
   if (command === 'test') {
     // Lazy: keeps the replay test reporting runtime off every other command's path.
     return import('../replay-test/reporting.ts').then(({ renderReplayTestResponse }) =>
@@ -66,17 +66,17 @@ function writeGenericCliOutput(
       }),
     );
   }
-  writeCommandOutput(flags, data, () =>
+  await writeCommandOutput(flags, data, () =>
     readCommandMessage(data as Record<string, unknown> | undefined),
   );
   return 0;
 }
 
-function writeCliOutput(flags: CliFlags, output: CliOutput): void {
+async function writeCliOutput(flags: CliFlags, output: CliOutput): Promise<void> {
   if (!flags.json && output.stderr) {
     process.stderr.write(output.stderr);
   }
-  writeCommandOutput(
+  await writeCommandOutput(
     flags,
     flags.json ? (output.jsonData ?? output.data) : output.data,
     () => output.text,

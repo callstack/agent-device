@@ -1,4 +1,5 @@
 import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
+import type { CliOutput } from './command-contract.ts';
 import { pinnedRefText, type CliOutputFormatter } from './output-common.ts';
 
 /**
@@ -29,10 +30,14 @@ type SettleTextView = {
 function messageWithSettledNotes(formatter: CliOutputFormatter): CliOutputFormatter {
   return ({ input, result }) => {
     const output = formatter({ input, result });
-    return {
-      data: output.data,
-      text: appendResponseNotes(output.text, output.data as Record<string, unknown>),
-    };
+    return output instanceof Promise ? output.then(withSettledNotes) : withSettledNotes(output);
+  };
+}
+
+function withSettledNotes(output: CliOutput): CliOutput {
+  return {
+    data: output.data,
+    text: appendResponseNotes(output.text, output.data as Record<string, unknown>),
   };
 }
 

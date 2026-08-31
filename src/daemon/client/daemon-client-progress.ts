@@ -6,7 +6,7 @@ import type { Socket } from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { consumeTextLines } from '../../utils/line-stream.ts';
-import { markDoctorProgressRendered } from '../../utils/doctor-progress.ts';
+import { markDoctorProgressRendered } from './doctor-progress.ts';
 import {
   isDaemonProgressEnvelope,
   isDaemonResponseEnvelope,

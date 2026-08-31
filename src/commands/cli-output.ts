@@ -7,12 +7,12 @@ const cliOutputFormatters = listCommandFamilyCliOutputFormatters() as Partial<
   Record<CommandName, CliOutputFormatter>
 >;
 
-export function formatCliOutput(params: {
+export async function formatCliOutput(params: {
   name: CommandName;
   input: unknown;
   result: unknown;
-}): CliOutput | undefined {
-  return cliOutputFormatters[params.name]?.({
+}): Promise<CliOutput | undefined> {
+  return await cliOutputFormatters[params.name]?.({
     input: (params.input ?? {}) as Record<string, unknown>,
     result: params.result,
   });

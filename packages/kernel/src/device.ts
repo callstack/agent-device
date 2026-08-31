@@ -421,7 +421,7 @@ function throwAmbiguousDeviceSelection(candidates: DeviceInfo[]): never {
     'AMBIGUOUS_MATCH',
     `${candidates.length} devices match this request equally; select one explicitly.`,
     {
-      // The declared device-candidate details domain (src/utils/error-candidates.ts), so the CLI
+      // The declared device-candidate details domain (src/daemon/handlers/error-candidates.ts), so the CLI
       // and MCP renderers print these candidates without a new shape to learn.
       devices: listed.map((device) => ({ id: device.id, name: device.name })),
       matches: candidates.length,

@@ -6,7 +6,7 @@ import {
   resolveClientSettings,
 } from '../../daemon/client/daemon-client-lifecycle.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { colorize, supportsColor } from '../../utils/output.ts';
+import { colorize, supportsColor } from '../../commands/output/color.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
@@ -24,7 +24,7 @@ export const proxyCommand: ClientCommandHandler = async ({ positionals, flags })
     throw new AppError('INVALID_ARGS', 'proxy does not accept positional arguments.');
   }
   const startup = await startProxy(flags);
-  writeCommandOutput(flags, startup, () => renderProxyStartup(startup));
+  await writeCommandOutput(flags, startup, () => renderProxyStartup(startup));
   await waitForever();
   return true;
 };

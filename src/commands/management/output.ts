@@ -15,35 +15,24 @@ import type {
   CloudArtifactsResult,
   DaemonArtifactsResult,
 } from '@agent-device/contracts/observability';
-import {
-  consumeDoctorProgressRendered,
-  formatDoctorCheckDetailLines,
-  formatDoctorCheckSummaryLine,
-} from '../../utils/doctor-progress.ts';
-import {
-  serializeCloseResult,
-  serializeDeployResult,
-  serializeDevice,
-  serializeInstallFromSourceResult,
-  serializeOpenResult,
-  serializeSessionListEntry,
-} from '../../utils/result-serialization.ts';
 import { readCommandMessage } from '@agent-device/kernel/success-text';
 import { snapshotCliOutput } from '../capture/output.ts';
 import type { CliOutput } from '../command-contract.ts';
 import {
+  type CliOutputFormatter,
   messageCliOutput,
   messageOutput,
   resultOutput,
-  type CliOutputFormatter,
 } from '../output-common.ts';
 
-function devicesCliOutput(result: AgentDeviceDevice[]): CliOutput {
+async function devicesCliOutput(result: AgentDeviceDevice[]): Promise<CliOutput> {
+  const { serializeDevice } = await import('../../daemon/result-serialization.ts');
   const data = { devices: result.map(serializeDevice) };
   return { data, text: result.map(formatDeviceLine).join('\n') };
 }
 
-function capabilitiesCliOutput(result: AgentDeviceCapabilitiesResult): CliOutput {
+async function capabilitiesCliOutput(result: AgentDeviceCapabilitiesResult): Promise<CliOutput> {
+  const { serializeDevice } = await import('../../daemon/result-serialization.ts');
   const data = {
     device: serializeDevice(result.device),
     availableCommands: result.availableCommands,
@@ -77,9 +66,9 @@ function appsCliOutput(params: {
   };
 }
 
-function sessionCliOutput(
+async function sessionCliOutput(
   result: { sessions: AgentDeviceSession[] } | { stateDir: string } | SessionSaveScriptResult,
-): CliOutput {
+): Promise<CliOutput> {
   if ('savedScript' in result) {
     return {
       data: result,
@@ -89,11 +78,13 @@ function sessionCliOutput(
   if ('stateDir' in result) {
     return { data: result, text: result.stateDir };
   }
+  const { serializeSessionListEntry } = await import('../../daemon/result-serialization.ts');
   const data = { sessions: result.sessions.map(serializeSessionListEntry) };
   return { data, text: JSON.stringify(data, null, 2) };
 }
 
-export function openCliOutput(result: AppOpenResult): CliOutput {
+export async function openCliOutput(result: AppOpenResult): Promise<CliOutput> {
+  const { serializeOpenResult } = await import('../../daemon/result-serialization.ts');
   const data = serializeOpenResult(result);
   const lines = [readCommandMessage(data)].filter((line): line is string => Boolean(line));
   if (typeof data.sessionStateDir === 'string') {
@@ -106,7 +97,7 @@ export function openCliOutput(result: AppOpenResult): CliOutput {
   // path `snapshot -i` uses (label dedupe + interactive tree text), after the
   // open confirmation — the one-call promise holds on default stdout, not just
   // --json. The composed capture is interactive-only by construction.
-  const snapshotOutput = buildOpenInitialSnapshotOutput(result.snapshot);
+  const snapshotOutput = await buildOpenInitialSnapshotOutput(result.snapshot);
   if (snapshotOutput) {
     data.snapshot = snapshotOutput.jsonData ?? snapshotOutput.data;
     if (snapshotOutput.text) lines.push(snapshotOutput.text);
@@ -118,15 +109,18 @@ export function openCliOutput(result: AppOpenResult): CliOutput {
   };
 }
 
-function buildOpenInitialSnapshotOutput(snapshot: AppOpenResult['snapshot']): CliOutput | null {
+async function buildOpenInitialSnapshotOutput(
+  snapshot: AppOpenResult['snapshot'],
+): Promise<CliOutput | null> {
   if (!snapshot || !Array.isArray(snapshot.nodes)) return null;
-  return snapshotCliOutput({
+  return await snapshotCliOutput({
     result: snapshot as unknown as Parameters<typeof snapshotCliOutput>[0]['result'],
     interactiveOnly: true,
   });
 }
 
-function closeCliOutput(result: AppCloseResult | SessionCloseResult): CliOutput {
+async function closeCliOutput(result: AppCloseResult | SessionCloseResult): Promise<CliOutput> {
+  const { serializeCloseResult } = await import('../../daemon/result-serialization.ts');
   return messageCliOutput(serializeCloseResult(result));
 }
 
@@ -157,11 +151,13 @@ function isDaemonArtifactsResult(result: AgentArtifactsResult): result is Daemon
   return 'source' in result && result.source === 'daemon';
 }
 
-function deployCliOutput(result: AppDeployResult): CliOutput {
+async function deployCliOutput(result: AppDeployResult): Promise<CliOutput> {
+  const { serializeDeployResult } = await import('../../daemon/result-serialization.ts');
   return messageCliOutput(serializeDeployResult(result));
 }
 
-function installFromSourceCliOutput(result: AppInstallFromSourceResult): CliOutput {
+async function installFromSourceCliOutput(result: AppInstallFromSourceResult): Promise<CliOutput> {
+  const { serializeInstallFromSourceResult } = await import('../../daemon/result-serialization.ts');
   return messageCliOutput(serializeInstallFromSourceResult(result));
 }
 
@@ -185,7 +181,10 @@ function shutdownCliOutput(result: CommandRequestResult): CliOutput {
   return { data, text: `${status}: ${device} (${platform})` };
 }
 
-export function doctorCliOutput(result: CommandRequestResult): CliOutput {
+export async function doctorCliOutput(result: CommandRequestResult): Promise<CliOutput> {
+  const { consumeDoctorProgressRendered } = await import('../../daemon/client/doctor-progress.ts');
+  const { formatDoctorCheckDetailLines, formatDoctorCheckSummaryLine } =
+    await import('../../daemon/handlers/doctor-output.ts');
   const data = result as Record<string, unknown>;
   const status = typeof data.status === 'string' ? data.status : 'unknown';
   const lines = [`Doctor: ${status}`];

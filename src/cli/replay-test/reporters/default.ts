@@ -4,8 +4,8 @@ import {
   createReplayTestProgressRenderer,
   REPLAY_TEST_PROGRESS_SPINNER_INTERVAL_MS,
 } from '../progress.ts';
-import { formatDurationSeconds } from '../../../utils/duration-format.ts';
-import { colorize, supportsColor } from '../../../utils/output.ts';
+import { formatDurationSeconds } from '../duration-format.ts';
+import { colorize, supportsColor } from '../../../commands/output/color.ts';
 import { formatReplayDivergenceReport } from '@agent-device/contracts/divergence';
 import type {
   ReplayTestReporter,

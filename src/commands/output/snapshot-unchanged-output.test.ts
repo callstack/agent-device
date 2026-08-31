@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { formatSnapshotText } from '../output.ts';
+import { formatSnapshotText } from './snapshot.ts';
 
 const oneButtonSnapshot = {
   nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Button', label: 'Create' }],

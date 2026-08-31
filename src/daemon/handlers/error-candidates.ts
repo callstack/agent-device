@@ -1,6 +1,6 @@
 /**
  * The candidate lists an error's `details` may carry, and the text rendering
- * shared by the CLI (`printHumanError`, src/utils/output.ts) and MCP
+ * shared by the CLI (`printHumanError`, src/commands/output/error.ts) and MCP
  * (`formatToolErrorText`, src/mcp/tool-error.ts) so an agent sees them on every
  * surface, never only in `--json`/`--debug` (#1597).
  *
@@ -38,6 +38,15 @@ export function formatErrorCandidateLines(details: Record<string, unknown> | und
   return [...formatElementMatchLines(details), ...formatDeviceLines(details)];
 }
 
+export function readElementMatchCandidateRefs(
+  details: Record<string, unknown> | undefined,
+): string[] {
+  return readStringArray(details?.candidates).flatMap((candidate) => {
+    const match = /^@(e\d+)(?:~s\d+)?(?:\s|$)/.exec(candidate);
+    return match?.[1] ? [match[1]] : [];
+  });
+}
+
 function formatElementMatchLines(details: Record<string, unknown> | undefined): string[] {
   const candidates = readStringArray(details?.candidates);
   if (candidates.length === 0) return [];
@@ -50,15 +59,6 @@ function formatElementMatchLines(details: Record<string, unknown> | undefined): 
     ...candidates.map((candidate) => `  ${pinCandidateLine(candidate, generation)}`),
     ...(remaining > 0 ? [`  +${remaining} more`] : []),
   ];
-}
-
-export function readElementMatchCandidateRefs(
-  details: Record<string, unknown> | undefined,
-): string[] {
-  return readStringArray(details?.candidates).flatMap((candidate) => {
-    const match = /^@(e\d+)(?:~s\d+)?(?:\s|$)/.exec(candidate);
-    return match?.[1] ? [match[1]] : [];
-  });
 }
 
 function pinCandidateLine(candidate: string, generation: number | undefined): string {

@@ -36,7 +36,7 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags }
     claims,
     ...(flags.stale ? {} : { hiddenStaleClaims: staleClaims.length }),
   };
-  writeCommandOutput(flags, data, () =>
+  await writeCommandOutput(flags, data, () =>
     renderDeviceStatus(claims, {
       staleOnly: flags.stale === true,
       hiddenStaleClaims: staleClaims.length,
@@ -78,7 +78,7 @@ async function runDeviceRelease(flags: CliFlags): Promise<boolean> {
     refused: outcomes.filter((outcome) => outcome.status === 'refused').map(serializeOutcome),
     changed: outcomes.filter((outcome) => outcome.status === 'changed').map(serializeOutcome),
   };
-  writeCommandOutput(flags, data, () => renderDeviceRelease(outcomes));
+  await writeCommandOutput(flags, data, () => renderDeviceRelease(outcomes));
   return true;
 }
 

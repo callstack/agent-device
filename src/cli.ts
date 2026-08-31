@@ -8,7 +8,6 @@ import {
   type NormalizedError,
 } from '@agent-device/kernel/errors';
 import { resolveRemoteRequestDiagnosticsPath } from './daemon/session-store.ts';
-import { printHumanError, printJson } from './utils/output.ts';
 import { exitAfterFlush } from './cli/process-exit.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import { pathToFileURL } from 'node:url';
@@ -25,7 +24,6 @@ import { materializeRemoteConnectionForCommand } from './cli/commands/connection
 import { tryRunClientBackedCommand } from './cli/commands/router.ts';
 import { runAgentCdpCommand } from './cli/commands/agent-cdp.ts';
 import { runReactDevtoolsCommand } from './cli/commands/react-devtools.ts';
-import { runWebCommand } from './cli/commands/web.ts';
 import { readCliBatchStepsJson } from './cli/batch-steps.ts';
 import {
   createRequestId,
@@ -58,6 +56,17 @@ type CliDaemonTransport = typeof sendToDaemon;
 type CliDaemonRequest = Parameters<CliDaemonTransport>[0];
 type CliDaemonTransportOptions = Parameters<CliDaemonTransport>[1];
 type ClientDaemonRequest = Parameters<AgentDeviceDaemonTransport>[0];
+
+const printHumanError = (
+  err: AppError | NormalizedError,
+  options: { showDetails?: boolean } = {},
+): Promise<void> =>
+  import('./commands/output/error.ts').then(({ printHumanError: write }) => write(err, options));
+
+const printJson = (
+  result: { success: true; data?: unknown } | { success: false; error: NormalizedError },
+): Promise<void> =>
+  import('./commands/output/json.ts').then(({ printJson: write }) => write(result));
 
 const DEFAULT_CLI_DEPS: CliDeps = {
   sendToDaemon,
@@ -131,6 +140,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
           return;
         }
         if (command === 'web') {
+          const { runWebCommand } = await import('./cli/commands/web.ts');
           await exitAfterFlush(
             await runWebCommand(positionals, {
               flags: ctx.effectiveFlags,
@@ -208,9 +218,9 @@ async function parseCliInputOrExit(
       logPath: flushDiagnosticsToSessionFile({ force: true })?.path,
     });
     if (options.jsonRequested) {
-      printJson({ success: false, error: normalized });
+      await printJson({ success: false, error: normalized });
     } else {
-      printHumanError(normalized, { showDetails: options.debugEnabled });
+      await printHumanError(normalized, { showDetails: options.debugEnabled });
     }
     return exitAfterFlush(1);
   }
@@ -228,7 +238,7 @@ async function parseCliInputOrExit(
   const isHelpFlag = parsed.flags.help;
   if (isHelpAlias || isHelpFlag) {
     if (isHelpAlias && parsed.positionals.length > 1) {
-      printHumanError(new AppError('INVALID_ARGS', 'help accepts at most one command.'));
+      await printHumanError(new AppError('INVALID_ARGS', 'help accepts at most one command.'));
       return exitAfterFlush(1);
     }
     const helpTarget = isHelpAlias ? parsed.positionals[0] : parsed.command;
@@ -241,7 +251,7 @@ async function parseCliInputOrExit(
       process.stdout.write(commandHelp);
       return exitAfterFlush(0);
     }
-    printHumanError(new AppError('INVALID_ARGS', formatUnknownHelpTargetMessage(helpTarget)));
+    await printHumanError(new AppError('INVALID_ARGS', formatUnknownHelpTargetMessage(helpTarget)));
     process.stdout.write(`${await usage()}\n`);
     return exitAfterFlush(1);
   }
@@ -326,9 +336,9 @@ async function resolveRunContextOrExit(
       logPath: flushDiagnosticsToSessionFile({ force: true })?.path,
     });
     if (parsed.flags.json) {
-      printJson({ success: false, error: normalized });
+      await printJson({ success: false, error: normalized });
     } else {
-      printHumanError(normalized, { showDetails: base.debugOutputEnabled });
+      await printHumanError(normalized, { showDetails: base.debugOutputEnabled });
     }
     return exitAfterFlush(1);
   }
@@ -555,17 +565,17 @@ async function handleRunCliFailure(
   });
   if (ctx.command === 'close' && isDaemonStartupFailure(appErr)) {
     if (ctx.effectiveFlags.json) {
-      printJson({ success: true, data: { closed: 'session', source: 'no-daemon' } });
+      await printJson({ success: true, data: { closed: 'session', source: 'no-daemon' } });
     }
     return;
   }
   if (ctx.effectiveFlags.json) {
-    printJson({
+    await printJson({
       success: false,
       error: normalized,
     });
   } else {
-    printHumanError(normalized, { showDetails: ctx.debugOutputEnabled });
+    await printHumanError(normalized, { showDetails: ctx.debugOutputEnabled });
     if (ctx.debugOutputEnabled) {
       printFailureLogTail(ctx, normalized);
     }
@@ -844,7 +854,7 @@ const isDirectRun = pathToFileURL(process.argv[1] ?? '').href === import.meta.ur
 if (isDirectRun) {
   runCli(process.argv.slice(2)).catch(async (error) => {
     const appErr = asAppError(error);
-    printHumanError(normalizeError(appErr), { showDetails: true });
+    await printHumanError(normalizeError(appErr), { showDetails: true });
     await exitAfterFlush(1);
   });
 }

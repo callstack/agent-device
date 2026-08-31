@@ -1,4 +1,4 @@
-import { formatScreenshotDiffText, formatSnapshotDiffText } from '../../utils/output.ts';
+import { formatScreenshotDiffText, formatSnapshotDiffText } from '../../commands/output/diff.ts';
 import type { ScreenshotDiffResult } from '../../screenshot-diff/screenshot-diff.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
@@ -6,7 +6,7 @@ import { resolveUserPath } from '@agent-device/host-kit/file';
 import type { AgentDeviceBackend } from '../../backend.ts';
 import type { AgentDeviceClient, CaptureScreenshotResult } from '../../agent-device-client.ts';
 import { runCliCommand } from '../../commands/cli-runner.ts';
-import { pickScreenshotResultData } from '../../utils/screenshot-result.ts';
+import { pickScreenshotResultData } from '../../client/screenshot-result.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
@@ -22,11 +22,11 @@ export const screenshotCommand: ClientCommandHandler = async ({ positionals, fla
   // artifacts, leveled overlayRefs. Rebuilding the default { path, overlayRefs }
   // shape would drop those, so emit the leveled payload verbatim.
   if (isNonDefaultResponseLevel(flags.responseLevel)) {
-    writeCommandOutput(flags, result, () => JSON.stringify(result, null, 2));
+    await writeCommandOutput(flags, result, () => JSON.stringify(result, null, 2));
     return true;
   }
   const data = pickScreenshotResultData(result);
-  writeCommandOutput(flags, data, () =>
+  await writeCommandOutput(flags, data, () =>
     result.overlayRefs
       ? `Annotated ${result.overlayRefs.length} refs onto ${result.path}`
       : formatScreenshotSummary(result),
@@ -37,7 +37,7 @@ export const screenshotCommand: ClientCommandHandler = async ({ positionals, fla
 export const diffCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
   if (positionals[0] === 'snapshot') {
     const result = await runCliCommand({ client, command: 'diff', positionals, flags });
-    writeCommandOutput(flags, result, () => formatSnapshotDiffText(result));
+    await writeCommandOutput(flags, result, () => formatSnapshotDiffText(result));
     return true;
   }
 
@@ -83,7 +83,9 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
     surface: flags.surface,
   });
 
-  writeCommandOutput(flags, result, () => formatScreenshotDiffText(result as ScreenshotDiffResult));
+  await writeCommandOutput(flags, result, () =>
+    formatScreenshotDiffText(result as ScreenshotDiffResult),
+  );
   return true;
 };
 

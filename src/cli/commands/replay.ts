@@ -56,7 +56,7 @@ async function handleReplayExportCommand({
     process.stderr.write(`Warning: line ${warning.line}: ${warning.message}\n`);
   }
 
-  writeCommandOutput(
+  await writeCommandOutput(
     flags,
     {
       format: 'maestro',

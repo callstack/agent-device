@@ -24,7 +24,7 @@ export async function runCliCommandWithOutput(options: CliRunOptions): Promise<{
   const result = (await runCommand(options.client, options.command, input)) as CommandRequestResult;
   return {
     result,
-    cliOutput: formatCliOutput({
+    cliOutput: await formatCliOutput({
       name: options.command,
       input,
       result,

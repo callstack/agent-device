@@ -11,7 +11,6 @@ import type {
   ReplayTestReporterContext,
   ReplayTestReporterStream,
 } from './reporters/types.ts';
-import { printJson } from '../../utils/output.ts';
 
 export type ReplayTestReporterRuntime = {
   reporters: ReplayTestReporter[];
@@ -40,6 +39,7 @@ export async function renderReplayTestResponse(options: {
     (await createReplayTestReporterRuntime({ debug, verbose, reporter, reportJunit, json }));
   await runReplayTestReporters(runtime.reporters, suite, runtime.context);
   if (json) {
+    const { printJson } = await import('../../commands/output/json.ts');
     printJson({ success: true, data: suite });
   }
   return getReplayTestReporterExitCode(runtime.reporters, suite);

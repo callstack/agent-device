@@ -1,6 +1,5 @@
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { formatReplayDivergenceReport } from '@agent-device/contracts/divergence';
-import { formatErrorCandidateLines } from '../utils/error-candidates.ts';
 
 /**
  * Shared MCP error normalization + text rendering (executor and router
@@ -10,7 +9,8 @@ export function normalizeToolError(error: unknown): NormalizedError {
   return normalizeError(error);
 }
 
-export function formatToolErrorText(normalized: NormalizedError): string {
+export async function formatToolErrorText(normalized: NormalizedError): Promise<string> {
+  const { formatErrorCandidateLines } = await import('../daemon/handlers/error-candidates.ts');
   const lines = [`Error (${normalized.code}): ${normalized.message}`];
   if (normalized.cause) {
     const code = normalized.cause.code ? `${normalized.cause.code} ` : '';
@@ -18,7 +18,7 @@ export function formatToolErrorText(normalized: NormalizedError): string {
   }
   if (normalized.hint) lines.push(`Hint: ${normalized.hint}`);
   // #1597: printed unconditionally, same as the CLI text path
-  // (src/utils/output.ts printHumanError) — an MCP-connected agent must see
+  // (src/commands/output/error.ts printHumanError) — an MCP-connected agent must see
   // the candidate refs directly in the tool result text.
   lines.push(...formatErrorCandidateLines(normalized.details));
   if (normalized.supportedOn) lines.push(`Supported on: ${normalized.supportedOn}`);
