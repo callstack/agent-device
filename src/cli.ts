@@ -9,7 +9,7 @@ import {
 } from '@agent-device/kernel/errors';
 import { resolveRemoteRequestDiagnosticsPath } from './daemon/session-store.ts';
 import { printHumanError, printJson } from './utils/output.ts';
-import { exitAfterFlush } from './utils/process-exit.ts';
+import { exitAfterFlush } from './cli/process-exit.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import { pathToFileURL } from 'node:url';
 import { sendToDaemon } from './daemon/client/daemon-client.ts';

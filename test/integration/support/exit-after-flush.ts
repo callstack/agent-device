@@ -3,7 +3,7 @@
 import https, { type RequestOptions } from 'node:https';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
-import { exitAfterFlush } from '../../../src/utils/process-exit.ts';
+import { exitAfterFlush } from '../../../src/cli/process-exit.ts';
 import { buildPayload, PAYLOAD_MARKER } from './exit-payload.ts';
 
 const DAEMON_BASE_URL = 'https://agent-device-exit-flush.test/agent-device';

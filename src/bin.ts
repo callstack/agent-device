@@ -39,7 +39,7 @@ function runNoCommandFastPath(argv: string[]): boolean {
       process.stdout.write(`${buildUsageText()}\n`);
       // #1596: exitAfterFlush (not a bare process.exit) so the full usage
       // text reaches a piped caller before the process terminates.
-      const { exitAfterFlush } = await import('./utils/process-exit.ts');
+      const { exitAfterFlush } = await import('./cli/process-exit.ts');
       await exitAfterFlush(1);
     })
     .catch(handleStartupError);
@@ -120,7 +120,7 @@ function runCli(argv: string[]): void {
 function handleStartupError(error: unknown): void {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
   // #1596: exitAfterFlush so the message above isn't dropped on a piped stderr.
-  import('./utils/process-exit.ts')
+  import('./cli/process-exit.ts')
     .then(({ exitAfterFlush }) => exitAfterFlush(1))
     .catch(() => process.exit(1));
 }

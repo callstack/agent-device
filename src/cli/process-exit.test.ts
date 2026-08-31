@@ -6,7 +6,7 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => {
   return { ...actual, sleep: vi.fn(async () => {}) };
 });
 
-import { exitAfterFlush } from '../process-exit.ts';
+import { exitAfterFlush } from './process-exit.ts';
 import { sleep } from '@agent-device/host-kit/retry';
 
 type FakeWriteStream = {
