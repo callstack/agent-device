@@ -88,5 +88,5 @@ export const appleRunnerHost: AppleRunnerHost = {
   resolveIosPhysicalDeviceControl,
   visitXmlPlistEntries,
   leaseOwnerStateDir: getRunnerLeaseOwnerStateDir,
-  hasDeviceClaimAuthority: (deviceId) => getRunnerDeviceClaimAuthorityProbe()?.(deviceId) ?? false,
+  hasDeviceClaimAuthority: (device) => getRunnerDeviceClaimAuthorityProbe()?.(device) ?? false,
 };

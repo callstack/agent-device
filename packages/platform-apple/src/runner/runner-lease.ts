@@ -14,6 +14,7 @@ import {
   leaseOwnerStateDir,
 } from './host.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 
 const RUNNER_LEASE_SCHEMA_VERSION = 1;
@@ -155,10 +156,11 @@ function classifyRunnerLease(lease: RunnerLease | null): RunnerLeaseState {
 }
 
 export async function prepareRunnerLeaseForStartup(
-  deviceId: string,
+  device: DeviceInfo,
   cleanup: RunnerLeaseCleanupAdapter,
   logicalLeaseContext?: RunnerLogicalLeaseContext,
 ): Promise<void> {
+  const deviceId = device.id;
   const state = classifyRunnerLease(readRunnerLease(deviceId));
   if (state.type === 'empty') {
     await cleanup.cleanupRunnerXcodebuildProcesses(deviceId, undefined);
@@ -169,7 +171,7 @@ export async function prepareRunnerLeaseForStartup(
       await cleanupLeasedRunnerProcesses(state.lease, 'same-state-dir', cleanup);
       return;
     }
-    if (canDeviceClaimReclaimRunner(state.lease)) {
+    if (canDeviceClaimReclaimRunner(state.lease, device)) {
       await cleanupLeasedRunnerProcesses(state.lease, 'device-claim-takeover', cleanup);
       return;
     }
@@ -211,10 +213,17 @@ function isSameStateDirRunnerLease(lease: RunnerLease): boolean {
  * retained warm runner, not an active one. Stop-and-recreate is safe because
  * every owner-side cleanup path no-ops once the lease token changes. Gated on
  * the lease declaring claim arbitration, so owners from builds that predate
- * device claims (and therefore never hold one) keep today's refusal.
+ * device claims (and therefore never hold one) keep today's refusal. The probe
+ * receives the full device: claim ownership is canonical family/OS/id, and a
+ * bare id could let a same-id claim from another platform family authorize a
+ * destructive takeover.
  */
-function canDeviceClaimReclaimRunner(lease: RunnerLease): boolean {
-  return lease.deviceClaimProtocol === 1 && hasDeviceClaimAuthority(lease.deviceId);
+function canDeviceClaimReclaimRunner(lease: RunnerLease, device: DeviceInfo): boolean {
+  return (
+    lease.deviceClaimProtocol === 1 &&
+    lease.deviceId === device.id &&
+    hasDeviceClaimAuthority(device)
+  );
 }
 
 function canLogicalLeaseReclaimRunner(

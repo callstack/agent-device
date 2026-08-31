@@ -162,7 +162,7 @@ async function startRunnerSessionWithLease(
   }
   assertRunnerSessionMayStart(options.expectedRunnerSessionId);
   await measureRunnerStartupStep(startupTimings, 'cleanup_stale_xcodebuild', async () => {
-    await prepareRunnerLeaseForStartup(device.id, runnerLeaseCleanupAdapter, logicalLeaseContext);
+    await prepareRunnerLeaseForStartup(device, runnerLeaseCleanupAdapter, logicalLeaseContext);
   });
   await measureRunnerStartupStep(startupTimings, 'ensure_booted', async () => {
     await ensureBootedIfNeeded(device);

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, beforeEach, test } from 'vitest';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { appleRunnerTestHost } from '../test-host.ts';
 import {
   prepareRunnerLeaseForStartup,
@@ -9,6 +10,7 @@ import {
   type RunnerLease,
   type RunnerLeaseCleanupAdapter,
 } from '../runner-lease.ts';
+import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { makeRunnerLease } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
@@ -30,6 +32,10 @@ beforeEach(() => {
 afterEach(() => {
   fs.rmSync(ownerStateDir, { recursive: true, force: true });
 });
+
+function takeoverDevice(id: string): DeviceInfo {
+  return { ...IOS_SIMULATOR, id };
+}
 
 function liveForeignLease(deviceId: string, overrides: Partial<RunnerLease> = {}): RunnerLease {
   return makeRunnerLease({
@@ -59,28 +65,40 @@ function recordingCleanupAdapter(): RunnerLeaseCleanupAdapter & { calls: string[
 }
 
 test('device-claim authority reclaims a live foreign claim-aware lease', async () => {
-  const deviceId = 'claim-takeover-sim';
-  writeRunnerLease(liveForeignLease(deviceId, { deviceClaimProtocol: 1 }));
-  appleRunnerTestHost.update({ hasDeviceClaimAuthority: (id) => id === deviceId });
+  const device = takeoverDevice('claim-takeover-sim');
+  writeRunnerLease(liveForeignLease(device.id, { deviceClaimProtocol: 1 }));
+  const probedDevices: DeviceInfo[] = [];
+  appleRunnerTestHost.update({
+    hasDeviceClaimAuthority: (probed) => {
+      probedDevices.push(probed);
+      return probed.id === device.id;
+    },
+  });
   const cleanup = recordingCleanupAdapter();
 
-  await prepareRunnerLeaseForStartup(deviceId, cleanup);
+  await prepareRunnerLeaseForStartup(device, cleanup);
 
   assert.ok(cleanup.calls.includes('xcodebuild:owner-foreign-live'));
+  // The probe must receive the full device identity, never a bare id: claim
+  // ownership is canonical family/OS/id, and a same-id claim from another
+  // platform family grants nothing.
+  assert.equal(probedDevices[0]?.platform, 'apple');
+  assert.equal(probedDevices[0]?.appleOs, 'ios');
+  assert.equal(probedDevices[0]?.id, device.id);
   // The lease was released as part of the takeover, so the next classification
   // sees an empty store instead of the foreign owner.
   const emptyCleanup = recordingCleanupAdapter();
-  await prepareRunnerLeaseForStartup(deviceId, emptyCleanup);
+  await prepareRunnerLeaseForStartup(device, emptyCleanup);
   assert.ok(emptyCleanup.calls.includes('xcodebuild:any'));
 });
 
 test('a claim-aware lease still refuses without device-claim authority', async () => {
-  const deviceId = 'claim-no-authority-sim';
-  writeRunnerLease(liveForeignLease(deviceId, { deviceClaimProtocol: 1 }));
+  const device = takeoverDevice('claim-no-authority-sim');
+  writeRunnerLease(liveForeignLease(device.id, { deviceClaimProtocol: 1 }));
   const cleanup = recordingCleanupAdapter();
 
   await assert.rejects(
-    async () => await prepareRunnerLeaseForStartup(deviceId, cleanup),
+    async () => await prepareRunnerLeaseForStartup(device, cleanup),
     /already owned by another agent-device daemon/,
   );
   assert.deepEqual(cleanup.calls, []);
@@ -90,13 +108,13 @@ test('a pre-claims lease is never preempted despite device-claim authority', asy
   // A lease without deviceClaimProtocol was written by a build that never
   // arbitrates through device claims, so its owner may be actively using the
   // runner without holding any claim.
-  const deviceId = 'legacy-lease-sim';
-  writeRunnerLease(liveForeignLease(deviceId));
+  const device = takeoverDevice('legacy-lease-sim');
+  writeRunnerLease(liveForeignLease(device.id));
   appleRunnerTestHost.update({ hasDeviceClaimAuthority: () => true });
   const cleanup = recordingCleanupAdapter();
 
   await assert.rejects(
-    async () => await prepareRunnerLeaseForStartup(deviceId, cleanup),
+    async () => await prepareRunnerLeaseForStartup(device, cleanup),
     /already owned by another agent-device daemon/,
   );
   assert.deepEqual(cleanup.calls, []);
