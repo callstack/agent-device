@@ -23,7 +23,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   };
 });
 
-vi.mock('../../utils/video.ts', () => ({
+vi.mock('../video.ts', () => ({
   waitForStableFile: vi.fn(async () => {}),
   waitForPlayableVideo: vi.fn(async () => {}),
 }));

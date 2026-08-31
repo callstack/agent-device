@@ -5,7 +5,7 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildSwiftToolEnv, compileSwiftSourceFile } from './swift-cache.ts';
 import { findProjectRoot } from '@agent-device/host-kit/version';
-import { waitForPlayableVideo, waitForStableFile } from '../utils/video.ts';
+import { waitForPlayableVideo, waitForStableFile } from './video.ts';
 import {
   DEFAULT_RECORDING_EXPORT_QUALITY,
   type RecordingExportQuality,

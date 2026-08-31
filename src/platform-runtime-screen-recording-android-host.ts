@@ -5,7 +5,7 @@ import type {
 } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { shellQuote } from '@agent-device/host-kit/command';
-import { isPlayableVideo } from './utils/video.ts';
+import { isPlayableVideo } from './recording/video.ts';
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 const ANDROID_MANIFEST_NAME = 'agent-device-recording-active.json';
