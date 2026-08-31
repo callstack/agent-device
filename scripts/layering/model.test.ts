@@ -82,6 +82,26 @@ test('parseImports retains named source symbols without changing edge-kind detec
   );
 });
 
+test('parseImports ignores comments inside named bindings', () => {
+  const edges = parseImports(
+    [
+      "import { /* exact, declared */ SessionStore /* authority */ } from './store.ts';",
+      'import /* shape */ {',
+      '  // exact declaration',
+      '  type SessionState as State,',
+      "} from './types.ts';",
+    ].join('\n'),
+  );
+
+  assert.deepEqual(
+    edges.map(({ spec, typeOnly, symbols }) => ({ spec, typeOnly, symbols })),
+    [
+      { spec: './store.ts', typeOnly: false, symbols: ['SessionStore'] },
+      { spec: './types.ts', typeOnly: true, symbols: ['SessionState'] },
+    ],
+  );
+});
+
 test('value cycles fail while type-only and dynamic cycles stay outside the graph', () => {
   const valueCycle = resolveImportEdges(
     new Map([

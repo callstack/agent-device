@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { listSourceFiles, TYPE_INVERSION_BASELINE } from '../layering/check.ts';
+import { ARCHITECTURE_OWNERSHIP } from '../layering/architecture-ownership.ts';
 import { resolveImportEdges } from '../layering/model.ts';
 import {
   AUTHORITY_LABELS,
@@ -137,6 +138,43 @@ test('authority overlay uses declared roots and symbols, keeps kind separate, an
     ordinary: 2,
   });
   assert.equal(authorityLabelsForEdge(stateEdges[0]!).includes('live-state-shape'), true);
+});
+
+test('live-state labels follow shared declarations and reject lookalike targets', () => {
+  for (const declaration of ARCHITECTURE_OWNERSHIP.liveState) {
+    assert.deepEqual(
+      authorityLabelsForEdge({
+        file: 'src/core/live-state-consumer.ts',
+        target: declaration.root,
+        spec: `./${declaration.root.split('/').at(-1)}`,
+        dynamic: false,
+        typeOnly: true,
+        line: 1,
+        symbols: [declaration.symbol],
+        fromZone: 'core',
+        toZone: 'daemon-server',
+      }),
+      [declaration.label],
+    );
+  }
+
+  const sessionState = ARCHITECTURE_OWNERSHIP.liveState.find(
+    ({ label }) => label === 'live-state-shape',
+  )!;
+  assert.deepEqual(
+    authorityLabelsForEdge({
+      file: 'src/core/live-state-consumer.ts',
+      target: 'src/daemon/session-state.ts',
+      spec: './session-state.ts',
+      dynamic: false,
+      typeOnly: true,
+      line: 1,
+      symbols: [sessionState.symbol],
+      fromZone: 'core',
+      toZone: 'daemon-server',
+    }),
+    ['ordinary'],
+  );
 });
 
 test('collapseEdges keeps one edge per pair at the strongest kind', () => {

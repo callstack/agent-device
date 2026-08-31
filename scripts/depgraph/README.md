@@ -121,8 +121,7 @@ modules and edges, plus 88 dynamic/type-only edges dependency-cruiser fails to r
 
 The report also carries `edgeAuthorities[]`, aligned with `edges[]`. Each entry is a compact list
 of labels, so a collapsed edge may carry more than one label. The labels are derived from exact
-roots and exports in `scripts/layering/architecture-ownership.ts`, plus the named `SessionState`
-and `SessionStore` live-state APIs:
+roots, exports, and named live-state symbols in `scripts/layering/architecture-ownership.ts`:
 
 - `vocabulary` — the target is a declared contract facade root.
 - `capability` — the target is a declared capability root and the import names a declared export.

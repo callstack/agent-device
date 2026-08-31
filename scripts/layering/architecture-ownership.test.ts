@@ -36,6 +36,15 @@ test('architecture ownership roots resolve to tracked owners', () => {
   for (const declaration of ARCHITECTURE_OWNERSHIP.capabilities) {
     assert.ok(tracked.has(declaration.root), `${declaration.name} root is not tracked`);
   }
+  for (const declaration of ARCHITECTURE_OWNERSHIP.liveState) {
+    assert.ok(tracked.has(declaration.root), `${declaration.name} root is not tracked`);
+    assert.ok(
+      readNamedExports(fs.readFileSync(path.join(repoRoot, declaration.root), 'utf8')).includes(
+        declaration.symbol,
+      ),
+      `${declaration.name} symbol is not exported by ${declaration.root}`,
+    );
+  }
 });
 
 test('vocabulary roots are exported contract facades', () => {

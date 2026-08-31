@@ -123,6 +123,43 @@ function scanSideEffectImport(line: string, lineNo: number): ImportEdge | null {
     : null;
 }
 
+function withoutImportComments(statement: string): string {
+  let normalized = '';
+  let quote: string | null = null;
+  for (let index = 0; index < statement.length; index++) {
+    const char = statement[index]!;
+    const next = statement[index + 1];
+    if (quote) {
+      normalized += char;
+      if (char === '\\' && next) {
+        normalized += next;
+        index++;
+      } else if (char === quote) {
+        quote = null;
+      }
+    } else if (char === "'" || char === '"') {
+      quote = char;
+      normalized += char;
+    } else if (char === '/' && next === '*') {
+      index += 2;
+      while (
+        index < statement.length &&
+        !(statement[index] === '*' && statement[index + 1] === '/')
+      ) {
+        index++;
+      }
+      index++;
+      normalized += ' ';
+    } else if (char === '/' && next === '/') {
+      while (index < statement.length && statement[index] !== '\n') index++;
+      normalized += '\n';
+    } else {
+      normalized += char;
+    }
+  }
+  return normalized;
+}
+
 function importedSymbols(statement: string): string[] {
   const named = /\{([\s\S]*?)\}/.exec(statement);
   if (!named) return [];
@@ -165,12 +202,13 @@ function scanFromImport(lines: string[], index: number): ImportEdge | null {
   if (start < 0) return null;
 
   const statement = lines.slice(start, index + 1).join('\n');
+  const normalizedStatement = withoutImportComments(statement);
   return {
     spec: fromMatch[1]!,
     dynamic: false,
-    typeOnly: statementIsTypeOnly(statement),
+    typeOnly: statementIsTypeOnly(normalizedStatement),
     line: start + 1,
-    symbols: importedSymbols(statement),
+    symbols: importedSymbols(normalizedStatement),
   };
 }
 

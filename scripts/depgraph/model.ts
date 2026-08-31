@@ -81,9 +81,6 @@ export type GraphData = {
   typeInversions: Record<string, number>;
 };
 
-const SESSION_STATE_ROOT = 'src/daemon/types.ts';
-const SESSION_STORE_ROOT = 'src/daemon/session-store.ts';
-
 function hasDeclaredCapabilitySymbol(edge: ResolvedImportEdge): boolean {
   return ARCHITECTURE_OWNERSHIP.capabilities.some(
     ({ root, exports }) =>
@@ -104,17 +101,18 @@ function hasExecutablePolicyOwner(edge: ResolvedImportEdge): boolean {
   );
 }
 
+function declaredLiveStateLabels(edge: ResolvedImportEdge): AuthorityLabel[] {
+  return ARCHITECTURE_OWNERSHIP.liveState
+    .filter(({ root, symbol }) => edge.target === root && edge.symbols.includes(symbol))
+    .map(({ label }) => label);
+}
+
 /** Labels one resolved edge from exact declared roots and symbols. */
 export function authorityLabelsForEdge(edge: ResolvedImportEdge): AuthorityLabel[] {
   const labels = new Set<AuthorityLabel>();
   if (hasDeclaredVocabularyRoot(edge)) labels.add('vocabulary');
   if (hasDeclaredCapabilitySymbol(edge)) labels.add('capability');
-  if (edge.target === SESSION_STATE_ROOT && edge.symbols.includes('SessionState')) {
-    labels.add('live-state-shape');
-  }
-  if (edge.target === SESSION_STORE_ROOT && edge.symbols.includes('SessionStore')) {
-    labels.add('live-state-authority');
-  }
+  for (const label of declaredLiveStateLabels(edge)) labels.add(label);
   if (hasExecutablePolicyOwner(edge)) labels.add('executable-policy');
   if (labels.size === 0) labels.add('ordinary');
   return AUTHORITY_LABELS.filter((label) => labels.has(label));
