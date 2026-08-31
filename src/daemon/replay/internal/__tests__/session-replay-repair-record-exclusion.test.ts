@@ -3,7 +3,7 @@
  * observation-only commands (`snapshot`/`get`/`is`/a read-only `find`), the
  * `--record` opt-in for the corrective-read case, and the fail-loud empty-
  * segment guard. Exercised end to end at the same layer the ADR 0012 decision
- * 6 lifecycle tests use — `runReplayForTest` + `handleCloseCommand` sharing
+ * 6 lifecycle tests use — `runReplayCommand` + `handleCloseCommand` sharing
  * a live `SessionStore`, exactly like an agent's separate CLI invocations
  * against the same daemon session.
  *

@@ -15,7 +15,7 @@ import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts'
  * These six cases stayed daemon-side rather than moving into the package's
  * `step-loop.test.ts` because they are NOT a test of engine policy through
  * the façade in isolation — every one drives the full
- * `runReplayForTest` round trip against a REAL `SessionStore`, and two of
+ * `runReplayCommand` round trip against a REAL `SessionStore`, and two of
  * the six (`--keep-session fails explicitly when the completed replay has
  * no live session`, `--keep-session rejects Maestro YAML before engine
  * dispatch`) exercise daemon-ONLY authority
@@ -24,7 +24,7 @@ import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts'
  * OWN terminal-close-suppression decision has its own cheaper, direct
  * coverage in `packages/ad-replay/src/internal/__tests__/step-loop.test.ts`
  * (see that file's header). This file's real subject is
- * native replay command's `runReplayForTest` — specifically its
+ * native replay command's `runReplayCommand` — specifically its
  * `--keep-session` behavior — so it is named and grouped alongside that
  * file's other `session-replay-runtime-*.test.ts` siblings
  * (`-plan.test.ts`, `-maestro.test.ts`, `-failure.test.ts`, …) rather than

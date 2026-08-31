@@ -14,8 +14,8 @@ import {
 // `packages/ad-script/src/internal/__tests__/target-annotation-serde.test.ts`.
 // This file covers the local-identity + ancestry-prefix matching primitives.
 // The record/replay-shared CLASSIFICATION core built on top of them
-// (`classifyTargetBindingMatch`) is engine-owned policy and stays in
-// `@agent-device/ad-replay`'s `target-identity.ts` (#1478 P5 review).
+// (`classifyTargetBindingMatch`) is shared script vocabulary and stays in
+// `@agent-device/ad-script`'s `target-annotation-classification.ts` (#1478 P5 review).
 
 // ---------------------------------------------------------------------------
 // Leaf-anchored ancestry prefix matching: root-side truncation + inserted

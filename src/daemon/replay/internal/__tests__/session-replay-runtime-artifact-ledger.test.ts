@@ -18,7 +18,7 @@ import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts'
  * now the single ledger; `dispatchStep` writes it and returns its contents, and
  * the engine only threads that value.
  *
- * The ledger's one INDEPENDENT observation point is `runReplayForTest`'s
+ * The ledger's one INDEPENDENT observation point is `runReplayCommand`'s
  * catch block: on a mid-loop throw there is no run outcome to read artifacts
  * from, so what the failure reports comes from the ledger and nothing else.
  * That makes this the counterfactual test for the threading — break the ledger

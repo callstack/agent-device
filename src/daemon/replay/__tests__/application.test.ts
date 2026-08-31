@@ -13,12 +13,8 @@ import { makeIosSession } from '../../../__tests__/test-utils/session-factories.
 import { withClientReplayScriptSources } from '../../../__tests__/test-utils/replay-script-source.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import { SessionStore } from '../../session-store.ts';
-import {
-  runReplayCommand,
-  runReplayTestCommand,
-  type ReplayCommand,
-  type ReplayTestCommand,
-} from '../index.ts';
+import { runReplayCommand, runReplayTestCommand } from '../index.ts';
+import type { ReplayCommand, ReplayTestCommand } from '../internal/command-types.ts';
 import { captureSnapshotWithInteractor } from '../../handlers/snapshot-interactor-capture.ts';
 import {
   legacyDispatchCapture,

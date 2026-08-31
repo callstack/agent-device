@@ -15,7 +15,7 @@ import type {
 
 /**
  * #1478 P5 stage C2b: the `.ad` step-loop ENGINE policy, split out of
- * `session-replay-runtime.ts`'s `executeReplayActions` /
+ * `src/daemon/replay/internal/native-command.ts`'s replay orchestration /
  * `resolveReplayStepResponse` / `buildReplayActionFailure`. Everything that
  * touches a real device, a snapshot, `SessionStore`, or the P4b repair
  * coordinator is daemon authority and stays behind the narrow
@@ -36,7 +36,7 @@ import type {
  *
  * #1554 fold-in (rebase onto main's `replay --keep-session`): main grew a
  * terminal-close-suppression decision independently, daemon-side, as
- * `session-replay-terminal-lifecycle.ts`'s `resolveSuppressedTerminalCloseIndex`
+ * `runAdReplay`'s `resolveSuppressedTerminalCloseIndex`
  * / `countExecutedReplayActions`, generalizing the repair-only physical-last-
  * index check this module already had (`isRepairArmedTerminalCloseAction`) to
  * "terminal among EXECUTABLE actions" and adding `--keep-session` as a second
@@ -71,7 +71,7 @@ import type {
  *
  * #1478 P5 follow-up (one daemon-owned artifact ledger): artifact-path
  * accumulation used to be DOUBLE-WRITTEN — `dispatchStep` added each step's
- * entries to the daemon's own `Set` (`runReplayScriptSource`'s, read by its
+ * entries to the daemon's own `Set` (`runReplayCommand`'s, read by its
  * catch block so a mid-loop throw still reports what was collected) AND
  * returned them for this loop to add to a second `Set` of its own. Two
  * mutable collections, kept in sync by hand, with no single owner. The

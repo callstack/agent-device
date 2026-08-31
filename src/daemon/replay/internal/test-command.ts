@@ -5,7 +5,7 @@ import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../../replay-script-source.ts';
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
-import { SessionStore } from '../../session-store.ts';
+import { expandSessionPath } from '../../session-paths.ts';
 import type { ReplayTestCommand } from './command-types.ts';
 import {
   runReplayTestSuite,
@@ -313,8 +313,7 @@ function toReplayTestSuiteRequest(req: DaemonRequest, sessionName: string): Repl
     cwd,
     requestId: req.meta?.requestId,
     platformFilter: flags.platform,
-    artifactsDir:
-      artifactsDir === undefined ? undefined : SessionStore.expandHome(artifactsDir, cwd),
+    artifactsDir: artifactsDir === undefined ? undefined : expandSessionPath(artifactsDir, cwd),
     failFast: flags.failFast === true,
     retries: numberFlag(flags.retries),
     timeoutMs: numberFlag(flags.timeoutMs),

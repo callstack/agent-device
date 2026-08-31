@@ -1,7 +1,7 @@
 /**
  * ADR 0012 decision 6 "repair transaction" lifecycle fixes (Q1/Q2a/Q2b/Q2c):
  * proves the WHOLE chain end to end, at the layer these fixes actually live —
- * `runReplayForTest` + `handleCloseCommand` sharing a live `SessionStore`,
+ * `runReplayCommand` + `handleCloseCommand` sharing a live `SessionStore`,
  * exactly like separate CLI invocations against the same daemon. `sendToDaemon`'s
  * process-level keep-alive (Fix 1's daemon
  * teardown guard) is a different architectural layer — a client-side process

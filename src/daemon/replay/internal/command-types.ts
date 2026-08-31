@@ -24,12 +24,12 @@ type ReplayRequestContext = Readonly<{
   meta: DaemonRequest['meta'];
 }>;
 
-export type ReplayRecordVideoRequest = Readonly<{
-  request: ReplayRequestContext;
-  sessionName: string;
-  phase: 'start' | 'stop';
-  outputPath?: string;
-}>;
+export type ReplayRecordVideoRequest = Readonly<
+  { request: ReplayRequestContext; sessionName: string } & (
+    | { phase: 'start'; outputPath: string }
+    | { phase: 'stop' }
+  )
+>;
 
 export type ReplayRecordVideo = (params: ReplayRecordVideoRequest) => Promise<DaemonResponse>;
 

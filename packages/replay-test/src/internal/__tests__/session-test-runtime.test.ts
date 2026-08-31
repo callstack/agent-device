@@ -10,7 +10,7 @@ import type { ReplayTestAttemptOutcome } from '../session-test-types.ts';
 // What the scheduler owes its host around cancellation (#1478 P3b): cancel exactly once when
 // an attempt times out, and always release when it settles. How the daemon then maps that onto
 // its request registry is the adapter's contract, pinned in
-// `src/daemon/handlers/__tests__/session-replay-cancellation.test.ts`.
+// `src/daemon/replay/internal/__tests__/session-test-suite-command-cancellation.test.ts`.
 const cancellations: Array<{ attemptId: string; canceled: number; released: number }> = [];
 
 function trackCancellation() {

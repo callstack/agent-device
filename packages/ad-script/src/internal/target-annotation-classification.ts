@@ -10,7 +10,7 @@
  * than script vocabulary. In practice its only real consumers were the
  * daemon's RECORD-time self-check (`src/daemon/session-target-evidence.ts`)
  * and its REPLAY-time classification wrapper
- * (`src/daemon/handlers/session-replay-target-classification.ts`) — both
+ * (`src/daemon/replay/internal/session-replay-target-classification.ts`) — both
  * daemon files, neither reachable through `inspectAdReplay`/`runAdReplay`.
  * It interprets `TargetAnnotationV1` evidence semantics shared beyond the
  * engine (record-time AND replay-time both need the SAME verdict by

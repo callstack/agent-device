@@ -1,5 +1,5 @@
 /**
- * ADR 0012 migration step 4, end-to-end: `runReplayForTest` must consult
+ * ADR 0012 migration step 4, end-to-end: `runReplayCommand` must consult
  * `verifyReplayActionTarget` for every annotated resolved-target action
  * BEFORE dispatching it, and never send the device action on a non-verified
  * outcome. Mirrors the mocking pattern of `session-replay-runtime.test.ts`

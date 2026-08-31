@@ -134,16 +134,27 @@ function appendVideoTimingEvent(
   appendTimingEvent({ ...event, ts: new Date().toISOString() });
 }
 
-function replayVideoRecordRequest(params: {
+type ReplayVideoRecordRequestParams = Readonly<{
   req: DaemonRequest;
   sessionName: string;
-  phase: ReplayRecordVideoRequest['phase'];
-  outputPath?: string;
-}): ReplayRecordVideoRequest {
+}> &
+  ({ phase: 'start'; outputPath: string } | { phase: 'stop' });
+
+function replayVideoRecordRequest(
+  params: ReplayVideoRecordRequestParams,
+): ReplayRecordVideoRequest {
+  const request = { token: params.req.token, meta: params.req.meta };
+  if (params.phase === 'start') {
+    return {
+      request,
+      sessionName: params.sessionName,
+      phase: 'start',
+      outputPath: params.outputPath,
+    };
+  }
   return {
-    request: { token: params.req.token, meta: params.req.meta },
+    request,
     sessionName: params.sessionName,
-    phase: params.phase,
-    outputPath: params.outputPath,
+    phase: 'stop',
   };
 }

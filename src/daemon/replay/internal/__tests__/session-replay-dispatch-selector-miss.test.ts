@@ -4,7 +4,7 @@
  * press/click/fill/longpress THROWS an AppError instead of resolving to
  * `{ok:false}`. `invokeReplayAction` (session-replay-action-runtime.ts)
  * previously let that throw escape the per-action `if (!response.ok)`
- * handling in `runReplayForTest`'s loop, so it hit the outer catch and
+ * handling in `runReplayCommand`'s loop, so it hit the outer catch and
  * returned a bare `COMMAND_FAILED` with the legacy diagnostics shape instead
  * of the ADR 0012 `REPLAY_DIVERGENCE` report — breaking the interactive
  * repair loop (no `resume`, no `screen` refs, no `suggestions`) for the

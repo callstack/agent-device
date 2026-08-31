@@ -179,7 +179,7 @@ test('internal trees reject deep imports globally, including from daemon', () =>
   assert.match(violations[0]!.message, /must not import maestro's internal tree/);
 });
 
-test('daemon replay rejects handler, sibling-owner, and engine deep edges', () => {
+test('daemon replay rejects handler, owner, session-store, and engine deep edges', () => {
   const edges = resolveImportEdges(
     new Map([
       [
@@ -191,11 +191,16 @@ test('daemon replay rejects handler, sibling-owner, and engine deep edges', () =
         "import { handleCloseCommand } from '../../handlers/session-close.ts';",
       ],
       [
+        'src/daemon/replay/internal/command-types.ts',
+        "import { SessionStore } from '../../session-store.ts';",
+      ],
+      [
         'packages/ad-replay/src/internal/step-loop.ts',
         "import { runReplayCommand } from '../../../../src/daemon/replay/internal/native-command.ts';",
       ],
       ['src/daemon/replay/internal/native-command.ts', 'export function runReplayCommand() {}'],
       ['src/daemon/handlers/session-close.ts', 'export function handleCloseCommand() {}'],
+      ['src/daemon/session-store.ts', 'export class SessionStore {}'],
     ]),
   );
 
@@ -208,6 +213,7 @@ test('daemon replay rejects handler, sibling-owner, and engine deep edges', () =
     [
       "src/daemon/handlers/session.ts must not import daemon-replay's internal tree (src/daemon/replay/internal/native-command.ts)",
       'daemon-replay must not import src/daemon/handlers/session-close.ts',
+      'daemon-replay must not import src/daemon/session-store.ts',
       "packages/ad-replay/src/internal/step-loop.ts must not import daemon-replay's internal tree (src/daemon/replay/internal/native-command.ts)",
     ],
   );

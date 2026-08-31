@@ -40,6 +40,17 @@ type TypedMaestroReplayState = {
   snapshotStart: number;
 };
 
+type TypedMaestroReplayPreparation = Readonly<{
+  command: ReplayCommand;
+  bundle: ReplayScriptSourceBundle;
+}>;
+
+type TypedMaestroReplayExecution = TypedMaestroReplayPreparation &
+  Readonly<{
+    startedAt: number;
+    state: TypedMaestroReplayState;
+  }>;
+
 type TypedMaestroReplayContext = {
   filePath: string;
   flow: MaestroFlow;
@@ -71,7 +82,7 @@ export async function runTypedMaestroReplay(command: ReplayCommand): Promise<Dae
   const state: TypedMaestroReplayState = { snapshotStart: 0 };
   try {
     return await executeTypedMaestroReplay({
-      ...command,
+      command,
       bundle,
       startedAt,
       state,
@@ -87,23 +98,17 @@ export async function runTypedMaestroReplay(command: ReplayCommand): Promise<Dae
 }
 
 async function executeTypedMaestroReplay(
-  params: ReplayCommand & {
-    bundle: ReplayScriptSourceBundle;
-    startedAt: number;
-    state: TypedMaestroReplayState;
-  },
+  params: TypedMaestroReplayExecution,
 ): Promise<DaemonResponse> {
+  const { command, bundle, startedAt, state } = params;
   const {
     request: req,
     session: { name: sessionName, store: sessionStore },
     tracePath,
     onStep,
     invoke,
-    bundle,
-    startedAt,
-    state,
-  } = params;
-  const context = await prepareTypedMaestroReplay(params);
+  } = command;
+  const context = await prepareTypedMaestroReplay({ command, bundle });
   const port = createMaestroReplayPort({
     req,
     invoke,
@@ -133,7 +138,7 @@ async function executeTypedMaestroReplay(
   });
   if (!outcome.ok) {
     return await buildTypedMaestroReplayErrorResponse({
-      command: params,
+      command,
       replayPath: bundle.entry,
       state,
       outcome,
@@ -141,20 +146,20 @@ async function executeTypedMaestroReplay(
   }
   return buildTypedMaestroSuccessResponse({
     outcome,
-    command: params,
+    command,
     startedAt,
     snapshotStart: state.snapshotStart,
   });
 }
 
 async function prepareTypedMaestroReplay(
-  params: ReplayCommand & { bundle: ReplayScriptSourceBundle },
+  params: TypedMaestroReplayPreparation,
 ): Promise<TypedMaestroReplayContext> {
+  const { command, bundle } = params;
   const {
     request: req,
     session: { name: sessionName, store: sessionStore },
-    bundle,
-  } = params;
+  } = command;
   const filePath = bundle.entry;
   const flow = inspectMaestroFlow(readReplayScriptSourceFile(bundle, filePath), filePath);
   // `sessionName` is the resolved store key, so the lookup carries the address a selector

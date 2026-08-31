@@ -1,8 +1,19 @@
+type FacadeDeclaration = Readonly<{
+  root: string;
+  exports: readonly string[];
+}>;
+
 export type LogicalModulePolicy = Readonly<{
   name: string;
   roots: readonly string[];
   forbiddenTargetRoots: readonly string[];
+  facade?: FacadeDeclaration;
 }>;
+
+const DAEMON_REPLAY_FACADE = {
+  root: 'src/daemon/replay/index.ts',
+  exports: ['ReplaySession', 'ReplayTestVideoOwner', 'runReplayCommand', 'runReplayTestCommand'],
+} as const;
 
 export const LOGICAL_MODULE_POLICIES = [
   {
@@ -33,26 +44,17 @@ export const LOGICAL_MODULE_POLICIES = [
     forbiddenTargetRoots: [
       'src/daemon/handlers/session-close.ts',
       'src/daemon/handlers/record-runtime.ts',
+      'src/daemon/session-store.ts',
     ],
+    facade: DAEMON_REPLAY_FACADE,
   },
 ] as const satisfies readonly LogicalModulePolicy[];
 
-const DAEMON_REPLAY_FACADE = {
-  name: 'daemon-replay',
-  root: 'src/daemon/replay/index.ts',
-  exports: [
-    'ReplayCommand',
-    'ReplaySession',
-    'ReplayTestCommand',
-    'ReplayTestVideoOwner',
-    'runReplayCommand',
-    'runReplayTestCommand',
-  ],
-} as const;
-
 export const ARCHITECTURE_OWNERSHIP = {
   logicalModules: LOGICAL_MODULE_POLICIES,
-  facades: [DAEMON_REPLAY_FACADE],
+  facades: LOGICAL_MODULE_POLICIES.flatMap((module) =>
+    module.facade ? [{ name: module.name, ...module.facade }] : [],
+  ),
   vocabulary: [
     {
       name: 'client-contract',

@@ -7,7 +7,7 @@ import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-r
 import { runReplayCommand, runReplayTestCommand, type ReplaySession } from '../replay/index.ts';
 import { handleCloseCommand } from './session-close.ts';
 import { createReplayTestVideoOwner } from './session-replay-video-owner.ts';
-import type { SessionCommandHandler } from './session.ts';
+import type { SessionCommandHandler } from './session-command-input.ts';
 
 export const handleReplayCommand: SessionCommandHandler = async ({
   req,

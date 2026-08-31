@@ -56,7 +56,7 @@ export type AdReplayDigestFlags = Readonly<{ platform?: string; target?: string 
  * `AppError('INVALID_ARGS', …)` for the one source format `.ad` replay no
  * longer accepts — a legacy JSON replay payload — matching the daemon's
  * prior explicit rejection exactly. Callers do not need to check for this
- * case separately: `runReplayScriptSource`'s top-level catch (`asAppError`)
+ * case separately: `runReplayCommand`'s top-level catch (`asAppError`)
  * maps a thrown `AppError` straight to the same `errorResponse` the old
  * explicit branch built, so this is not a behavior change, only where the
  * check lives.

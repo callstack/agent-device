@@ -18,11 +18,9 @@ import { parseSync } from 'oxc-parser';
  * `session-replay-target-verification.ts`, `session-replay-runtime-failure.ts`,
  * `session-replay-runtime-failure-response.ts`) reaches resume-stamping ONLY through a
  * `ReplayResumeStamper` value handed to it by its caller — never by importing the factory,
- * the P4a `session-replay-transaction.ts` projection, or a live `SessionStore` binding of its
- * own. A type-only reference to `SessionStore` (an already-typed parameter whose value some
- * upstream caller supplies) is not authority and is allowed for files with an unrelated,
- * legitimate reason to type one — `session-replay-resume.ts` has none post-fix, so it is held to
- * a stricter "no `session-store.ts` import at all" bar than the other four.
+ * the P4a `session-replay-transaction.ts` projection, or a `SessionStore` binding of its own.
+ * Every file in this chain therefore has the same structural bar: no import from
+ * `session-store.ts` at all.
  */
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
@@ -40,13 +38,6 @@ const DIVERGENCE_CHAIN_FILES = [
   'src/daemon/replay/internal/session-replay-runtime-failure.ts',
   'src/daemon/replay/internal/session-replay-runtime-failure-response.ts',
 ] as const;
-
-/** Files in `DIVERGENCE_CHAIN_FILES` allowed a TYPE-ONLY `session-store.ts` reference. */
-const SESSION_STORE_TYPE_ONLY_ALLOWED = new Set<string>([
-  'src/daemon/replay/internal/session-replay-divergence.ts',
-  'src/daemon/replay/internal/session-replay-target-verification.ts',
-  'src/daemon/replay/internal/session-replay-runtime-failure.ts',
-]);
 
 type ImportSite = {
   file: string;
@@ -324,35 +315,14 @@ test('the divergence-report chain never imports the P4a ReplaySessionTransaction
   }
 });
 
-test('session-replay-resume.ts holds no SessionStore binding at all', () => {
-  const file = 'src/daemon/replay/internal/session-replay-resume.ts';
-  for (const site of collectImportSites(file)) {
-    assert.equal(
-      importsAnyBinding(site, SESSION_STORE_MODULE),
-      false,
-      `${file} imports session-store.ts — after the P4b resume-stamper fix it has no legitimate ` +
-        `remaining reason to hold a SessionStore binding (value or type); it can only act through ` +
-        `the ReplayResumeStamper it is handed.`,
-    );
-  }
-});
-
-test('the remaining divergence-report chain holds SessionStore only as a type', () => {
+test('the divergence-report chain never imports SessionStore', () => {
   for (const file of DIVERGENCE_CHAIN_FILES) {
-    if (!SESSION_STORE_TYPE_ONLY_ALLOWED.has(file)) continue;
     for (const site of collectImportSites(file)) {
-      if (site.target !== SESSION_STORE_MODULE) continue;
-      const valueImported = site.bindings.some(
-        (binding) =>
-          binding.name === 'SessionStore' && !binding.typeOnly && !site.declarationTypeOnly,
-      );
       assert.equal(
-        valueImported,
+        importsAnyBinding(site, SESSION_STORE_MODULE),
         false,
-        `${file} value-imports SessionStore from session-store.ts — it may only reference the ` +
-          `type (import type { SessionStore }) to annotate a parameter handed to it; a value ` +
-          `import is capability to construct or statically call the store, which this file must ` +
-          `never hold.`,
+        `${file} imports session-store.ts — the divergence-report chain must receive the ` +
+          `request's ReplayResumeStamper and never hold a SessionStore binding of its own.`,
       );
     }
   }
