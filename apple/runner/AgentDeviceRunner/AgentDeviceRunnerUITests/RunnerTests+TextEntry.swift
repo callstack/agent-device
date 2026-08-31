@@ -27,7 +27,7 @@ extension RunnerTests {
       case .synthesisUnavailable:
         return "Show the software keyboard, then retry type or fill."
       case .commitNotObserved:
-        return "The field may hold none, part, or all of the text. Read it back before retrying, and prefer fill, which replaces the whole value, over type, which appends to whatever committed."
+        return "The field may hold none, part, or all of the text. Run snapshot -i and inspect the field: if it already matches, continue; otherwise retry fill with the full text quoted and --delay-ms 80. Do not use type, which appends to whatever committed."
       }
     }
   }

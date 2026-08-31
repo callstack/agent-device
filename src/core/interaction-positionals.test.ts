@@ -99,3 +99,11 @@ test('readFillTargetFromPositionals still parses "x y" points and selectors', ()
     text: 'qa@example.com',
   });
 });
+
+test('readFillTargetFromPositionals treats every token after a ref as text', () => {
+  assert.deepEqual(readFillTargetFromPositionals(['@e29~s317228', 'good', 'morning']), {
+    kind: 'ref',
+    target: { ref: '@e29~s317228' },
+    text: 'good morning',
+  });
+});

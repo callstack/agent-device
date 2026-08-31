@@ -36,9 +36,9 @@ test('interaction and fill grammar share ref, selector, and point parsing', () =
   assert.deepEqual(selectorFill.target, { kind: 'selector', selector: 'id=email' });
   assert.equal(selectorFill.text, 'qa@example.com');
 
-  const refFill = readInputFromCli('fill', ['@e4', 'Email', 'qa@example.com'], BASE_FLAGS);
-  assert.deepEqual(refFill.target, { kind: 'ref', ref: '@e4', label: 'Email' });
-  assert.equal(refFill.text, 'qa@example.com');
+  const refFill = readInputFromCli('fill', ['@e4', 'good', 'morning'], BASE_FLAGS);
+  assert.deepEqual(refFill.target, { kind: 'ref', ref: '@e4' });
+  assert.equal(refFill.text, 'good morning');
 
   const pointFill = readInputFromCli('fill', ['10', '20', 'hello'], BASE_FLAGS);
   assert.deepEqual(pointFill.target, { kind: 'point', x: 10, y: 20 });

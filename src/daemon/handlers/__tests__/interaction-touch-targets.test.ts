@@ -138,10 +138,23 @@ test('parseFillTarget splits a pinned ref and keeps the text intact', () => {
     target: {
       kind: 'ref',
       ref: '@e4',
-      fallbackLabel: '',
     },
     refGeneration: 3,
     text: 'qa@example.com',
+  });
+});
+
+test('parseFillTarget does not reinterpret the first word of ref text as a fallback label', () => {
+  const parsed = parseFillTarget(['@e4~s3', 'good', 'morning']);
+
+  expect(parsed).toEqual({
+    ok: true,
+    target: {
+      kind: 'ref',
+      ref: '@e4',
+    },
+    refGeneration: 3,
+    text: 'good morning',
   });
 });
 

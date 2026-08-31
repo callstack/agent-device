@@ -23,7 +23,7 @@ type PositionalInteractionTarget =
  * erase the field instead of being refused.
  */
 export type DecodedFillTarget =
-  | { kind: 'ref'; target: { ref: string; label?: string }; text: string | undefined }
+  | { kind: 'ref'; target: { ref: string }; text: string | undefined }
   | { kind: 'selector'; target: { selector: string }; text: string | undefined }
   | { kind: 'point'; target: { x: number; y: number }; text: string | undefined };
 
@@ -58,14 +58,11 @@ export function readInteractionTargetFromPositionals(
 export function readFillTargetFromPositionals(positionals: string[]): DecodedFillTarget {
   const firstPositional = positionals[0];
   if (firstPositional?.startsWith('@')) {
-    const textPositionals = positionals.length >= 3 ? positionals.slice(2) : positionals.slice(1);
+    const textPositionals = positionals.slice(1);
     const text = textPositionals.length === 0 ? undefined : textPositionals.join(' ');
     return {
       kind: 'ref',
-      target: {
-        ref: firstPositional,
-        label: positionals.length >= 3 ? optionalTrimmedText(positionals.slice(1, 2)) : undefined,
-      },
+      target: { ref: firstPositional },
       text,
     };
   }
