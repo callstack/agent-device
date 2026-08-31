@@ -108,8 +108,19 @@ export function normalizeDevice(value: unknown): AgentDeviceDevice {
     // a non-Apple record with a stray appleOs value is not preserved.
     ...(isApplePlatform(platform) && appleOs ? { appleOs } : {}),
     identifiers: buildDeviceIdentifiers(platform, id, name),
+    ...readClaimedBy(record),
     ...buildClientDevicePlatformFields(platform, id),
   };
+}
+
+function readClaimedBy(record: Record<string, unknown>): Pick<AgentDeviceDevice, 'claimedBy'> {
+  const value = record.claimedBy;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const claimedBy = value as Record<string, unknown>;
+  const session = claimedBy.session;
+  const workspace = claimedBy.workspace;
+  if (typeof session !== 'string' || typeof workspace !== 'string') return {};
+  return { claimedBy: { session, workspace } };
 }
 
 export function normalizeSession(value: unknown): AgentDeviceSession {

@@ -512,6 +512,11 @@ Example:
   agent-device react-devtools profile report @c5
   agent-device network dump --include headers
 
+Device busy and ownership:
+  DEVICE_IN_USE has two flavors. "already in use by session X" is this daemon: reuse it with --session X, or run close --session X first. "owned by session X in workspace Y" is another worktree's daemon holding the host-global device claim: it is never retriable — run the error's exact recovery command instead of retrying.
+  Inspect ownership without any daemon: agent-device device status (add --stale for proven-dead owners; settle and release those with agent-device device release --stale). devices marks rows that are claimed, so pick an unclaimed device instead of contending.
+  A live foreign owner is released only by closing its session from its own workspace or stopping its daemon: agent-device daemon stop --state-dir <owner state dir> (the error names the state dir). Never recover by hunting PIDs with ps/kill. boot/install/shutdown take the same claims as open and refuse foreign-claimed devices identically.
+
 Use snapshot, screenshot, logs, network, perf frames, and perf memory for device/app runtime evidence. Use react-devtools when component internals or React rendering behavior matters.`,
   },
   cdp: {

@@ -95,6 +95,7 @@ export function serializeDevice(device: AgentDeviceDevice): Record<string, unkno
     kind: device.kind,
     target: device.target,
     ...(typeof device.booted === 'boolean' ? { booted: device.booted } : {}),
+    ...(device.claimedBy ? { claimedBy: device.claimedBy } : {}),
   };
 }
 

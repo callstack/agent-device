@@ -14,6 +14,7 @@ import { handleSessionCommands } from './session-command-harness.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { withTestDeviceInventory } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 
 test('devices filters Apple-family platform selectors', async () => {
   const sessionStore = makeSessionStore();
@@ -497,3 +498,80 @@ test('release_materialized_paths removes retained install artifacts', async () =
   expect(fs.existsSync(retained.installablePath)).toBe(false);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
+
+test('devices projects the blocking claim owner and hides provably dead owners', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-devices-claims-');
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+  const owner = readCurrentOwnerIdentity();
+  const writeClaim = (id: string, ownerPid: number, ownerStartTime: string | null) => {
+    fs.writeFileSync(
+      path.join(claimsDir, `${id}.json`),
+      JSON.stringify({
+        schemaVersion: 1,
+        deviceKey: `local:android:none:${id}`,
+        device: { platform: 'android', id, name: id, kind: 'emulator' },
+        session: `${id}-session`,
+        workspace: `/worktrees/${id}`,
+        stateDir: process.cwd(),
+        ownerPid,
+        ownerStartTime,
+        ownerToken: `${id}-token`,
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      }),
+    );
+  };
+  writeClaim('emulator-5554', owner.pid, owner.startTime);
+  writeClaim('emulator-5556', 999_999_999, 'long-gone');
+  const sessionStore = makeSessionStore();
+  const inventory: DeviceInfo[] = [
+    makeAndroidInventoryDevice('emulator-5554'),
+    makeAndroidInventoryDevice('emulator-5556'),
+  ];
+  try {
+    const response = await withTestDeviceInventory(
+      { local: async () => inventory },
+      async () =>
+        await handleSessionCommands({
+          req: {
+            token: 't',
+            session: 'default',
+            command: 'devices',
+            positionals: [],
+            flags: { platform: 'android' },
+          },
+          sessionName: 'default',
+          logPath: path.join(os.tmpdir(), 'daemon.log'),
+          sessionStore,
+          invoke: noopInvoke,
+        }),
+    );
+    expect(response?.ok).toBeTruthy();
+    if (response?.ok) {
+      const devices = response.data?.devices as Array<Record<string, unknown>> | undefined;
+      expect(devices).toHaveLength(2);
+      expect(devices?.[0]?.claimedBy).toEqual({
+        session: 'emulator-5554-session',
+        workspace: '/worktrees/emulator-5554',
+      });
+      // The dead owner is not projected: the next open reconciles and replaces it.
+      expect(devices?.[1]?.claimedBy).toBeUndefined();
+    }
+  } finally {
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});
+
+function makeAndroidInventoryDevice(id: string): DeviceInfo {
+  return {
+    platform: 'android',
+    id,
+    name: id,
+    kind: 'emulator',
+    target: 'mobile',
+    booted: true,
+  };
+}

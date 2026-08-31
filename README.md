@@ -145,7 +145,7 @@ The same session and evidence model works at every step: the agent explores the 
 
 Support depth varies by target. Newer backends such as HarmonyOS and Vega OS cover a subset of commands; run `agent-device capabilities --platform <platform>` to see what a target supports.
 
-Sessions are scoped to the caller's git worktree, and host-local device claims stop parallel agents from taking over each other's simulators and emulators. The same commands drive hosted devices on [BrowserStack, AWS Device Farm, and Limrun](https://oss.callstack.com/agent-device/docs/device-clouds).
+Sessions are scoped to the caller's git worktree, and host-local device claims stop parallel agents from taking over each other's simulators and emulators. Inspect ownership without a daemon via `agent-device device status`, and settle provably dead owners with `agent-device device release --stale`. The same commands drive hosted devices on [BrowserStack, AWS Device Farm, and Limrun](https://oss.callstack.com/agent-device/docs/device-clouds).
 
 `agent-device` uses the inspect-act-verify process from Vercel's [agent-browser](https://github.com/vercel-labs/agent-browser) for mobile, TV, and desktop apps. Basic `--platform web` support runs `agent-browser` in the same session and replay system.
 

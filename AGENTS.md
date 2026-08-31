@@ -113,8 +113,10 @@ cross-language rules change through golden tables under `contracts/fixtures/`.
   regenerate baselines to accept unrelated findings.
 - The first Node process after a newly signed Apple runner launches may block during Gatekeeper
   verification. Warm it with a throwaway `node -e 0` before measuring.
-- `DEVICE_IN_USE` normally means another session still owns the device. Follow the error's targeted
-  `close --session` hint instead of debugging the daemon.
+- `DEVICE_IN_USE` has two flavors. "already in use by session X" is this daemon — follow its
+  `close --session` hint. "owned by session X in workspace Y" is another worktree's device
+  claim — non-retriable; run the error's `device status`/`device release --stale` recovery,
+  never PID hunting.
 - A changing timeout failure set that passes in isolation is host contention. Reproduce the same
   test on `origin/main` under the same load before treating it as a regression.
 

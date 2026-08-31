@@ -232,7 +232,10 @@ function formatDeviceLine(device: AgentDeviceDevice): string {
   const kind = device.kind ? ` ${device.kind}` : '';
   const target = device.target ? ` target=${device.target}` : '';
   const booted = typeof device.booted === 'boolean' ? ` booted=${device.booted}` : '';
-  return `${device.name} (${device.platform}${kind}${target})${booted}`;
+  const claimed = device.claimedBy
+    ? ` claimed by session "${device.claimedBy.session}" in ${device.claimedBy.workspace}`
+    : '';
+  return `${device.name} (${device.platform}${kind}${target})${booted}${claimed}`;
 }
 
 function formatCloudArtifactLine(artifact: CloudArtifactsResult['cloudArtifacts'][number]): string {
