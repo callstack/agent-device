@@ -2,7 +2,7 @@ import path from 'node:path';
 import {
   buildAndroidHelperPresentationInput,
   type AndroidHelperPresentationInput,
-} from './android-helper-snapshot-presentation.ts';
+} from '../snapshot/snapshot-presentation/android/helper.ts';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { formatErrorCandidateLines } from './error-candidates.ts';
 import { detectPossibleRepeatedNavSubtree } from '../snapshot/snapshot-presentation/repeated-nav-subtree.ts';

@@ -29,6 +29,7 @@ on:
       - 'packages/*/src/**/*.test.ts'
       - 'packages/*/src/**/__tests__/**/*.ts'
       - 'packages/platform-android/src/**'
+      - 'src/snapshot/snapshot-presentation/android/**'
       - 'packages/platform-harmonyos/src/**'
       - 'packages/platform-linux/src/**'
       - 'packages/platform-vega/src/**'

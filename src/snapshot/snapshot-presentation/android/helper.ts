@@ -1,15 +1,12 @@
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { hasRenderableArea } from './android-helper-presentation/geometry.ts';
-import { isRootNode, isScrollableNode } from './android-helper-presentation/predicates.ts';
+import { hasRenderableArea } from './geometry.ts';
+import { isRootNode, isScrollableNode } from './predicates.ts';
 import {
   markAdjacentDuplicateStructuralNodesForRemoval,
   markRepeatedActionRowDescendantsForRemoval,
   markUnlabeledActionRowsForPromotion,
-} from './android-helper-presentation/structural-noise.ts';
-import {
-  findAncestor,
-  markNodeAndDescendantsForRemoval,
-} from './android-helper-presentation/tree.ts';
+} from './structural-noise.ts';
+import { findAncestor, markNodeAndDescendantsForRemoval } from './tree.ts';
 
 export type AndroidHelperPresentationInput = {
   nodes: SnapshotNode[];
