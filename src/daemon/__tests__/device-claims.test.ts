@@ -787,3 +787,59 @@ test('release refuses live owners and corrupt claims without touching them', asy
   assert.equal(fs.existsSync(claimPath(root)), true);
   assert.equal(fs.existsSync(path.join(root, 'corrupt.json')), true);
 });
+
+test('release names the exact refusal for uncertain owners and misnamed claim files', async () => {
+  const root = useClaimsRoot();
+  const acquired = await acquireDeviceClaim({
+    device,
+    session: 'reused-owner',
+    workspace: '/worktrees/reused',
+    stateDir: root,
+  });
+  assert.equal(acquired.status, 'acquired');
+  const stored = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
+  // Same PID, different recorded start time: PID reuse, uncertain ownership.
+  fs.writeFileSync(claimPath(root), JSON.stringify({ ...stored, ownerStartTime: 'other-start' }));
+  // A dead-owner claim stored under a name that is not the hash of its own
+  // device key: the claim lock protects a different path, so release refuses.
+  fs.writeFileSync(
+    path.join(root, 'misnamed.json'),
+    JSON.stringify({
+      ...stored,
+      deviceKey: 'local:android:none:misnamed-device',
+      device: { ...(stored.device as object), id: 'misnamed-device' },
+      ownerPid: 999_999_999,
+      ownerStartTime: 'long-gone',
+      session: 'misnamed-owner',
+    }),
+  );
+
+  const outcomes = await releaseProvenStaleDeviceClaims({
+    selectors: {},
+    reconcile: async () => ({ status: 'reconciled' }),
+  });
+  const reasons = new Map(outcomes.map((outcome) => [outcome.session, outcome.reason]));
+  assert.equal(reasons.get('reused-owner'), 'owner-pid-reused');
+  assert.equal(reasons.get('misnamed-owner'), 'claim-file-name-mismatch');
+  assert.ok(outcomes.every((outcome) => outcome.status === 'refused'));
+  assert.equal(fs.existsSync(path.join(root, 'misnamed.json')), true);
+});
+
+test('release refuses a live process whose state dir is gone', async () => {
+  const root = useClaimsRoot();
+  const acquired = await acquireDeviceClaim({
+    device,
+    session: 'dir-gone-owner',
+    workspace: '/worktrees/dir-gone',
+    stateDir: path.join(root, 'missing-state-dir'),
+  });
+  assert.equal(acquired.status, 'acquired');
+
+  const outcomes = await releaseProvenStaleDeviceClaims({
+    selectors: {},
+    reconcile: async () => ({ status: 'reconciled' }),
+  });
+  assert.equal(outcomes[0]?.status, 'refused');
+  assert.equal(outcomes[0]?.reason, 'owner-process-still-running');
+  assert.equal(fs.existsSync(claimPath(root)), true);
+});

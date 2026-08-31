@@ -128,3 +128,39 @@ test('device status --stale offers the exact release command for provably dead o
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }
 });
+
+test('device release --stale renders per-claim outcomes with a live-owner hint in text mode', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-cli-release-');
+  const stateDir = mkdtempForTestSync('agent-device-cli-release-state-');
+  const owner = readCurrentOwnerIdentity();
+  try {
+    writeClaim(claimsDir, {
+      deviceKey: 'local:android:none:emulator-5554',
+      id: 'emulator-5554',
+      name: 'Dead Pixel',
+      session: 'dead-session',
+      ownerPid: 999_999_999,
+      ownerStartTime: 'old-start-time',
+      stateDir,
+    });
+    writeClaim(claimsDir, {
+      deviceKey: 'local:android:none:emulator-5556',
+      id: 'emulator-5556',
+      name: 'Live Pixel',
+      session: 'live-session',
+      ownerPid: owner.pid,
+      ownerStartTime: owner.startTime,
+      stateDir: process.cwd(),
+    });
+
+    const result = await runCliCapture(['device', 'release', '--stale'], {
+      env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+    });
+    assert.match(result.stdout, /released android Dead Pixel session=dead-session/);
+    assert.match(result.stdout, /refused android Live Pixel session=live-session[^\n]*live-owner/);
+    assert.match(result.stdout, /agent-device daemon stop --state-dir/);
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});

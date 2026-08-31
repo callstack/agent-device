@@ -139,3 +139,40 @@ test('reports graceful provider cleanup as unknown when the shutdown report is u
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
+
+test('warns in text output when a graceful stop leaves an orphaned claim', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-command-');
+  mocks.readDaemonStopIdentity.mockReturnValue({ pid: 123, processStartTime: 'start-time' });
+  mocks.stopDaemon.mockResolvedValue(GRACEFUL_RESULT);
+  const claim = {
+    deviceKey: 'local:android:none:emulator-5554',
+    session: 'default',
+    platform: 'android',
+    deviceId: 'emulator-5554',
+  };
+  mocks.readDaemonShutdownReport.mockReturnValue({
+    providerReleases: { released: [], pending: [] },
+    claims: { released: [], orphaned: [claim], superseded: [] },
+  });
+
+  try {
+    await daemonCommand({
+      positionals: ['stop'],
+      flags: { clean: false, help: false, json: false, stateDir, version: false },
+      client: {} as never,
+    });
+
+    const [, data, renderHuman] = mocks.writeCommandOutput.mock.calls.at(-1) ?? [];
+    expect(data).toEqual(
+      expect.objectContaining({
+        claimsOrphaned: [claim],
+        warnings: [expect.stringContaining('was not released cleanly')],
+      }),
+    );
+    const rendered = (renderHuman as () => string)();
+    expect(rendered).toContain('Ownership of emulator-5554 was not released cleanly');
+    expect(rendered).toContain('agent-device device release --stale');
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
