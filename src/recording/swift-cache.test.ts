@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -14,7 +14,7 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
 }));
 
 import { runCmd } from '@agent-device/host-kit/command';
-import { compileSwiftSourceFile, compileSwiftSourceText } from '../swift-cache.ts';
+import { compileSwiftSourceFile, compileSwiftSourceText } from './swift-cache.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 

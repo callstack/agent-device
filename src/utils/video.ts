@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import { sleep } from '@agent-device/host-kit/retry';
-import { buildSwiftToolEnv, compileSwiftSourceText } from './swift-cache.ts';
+import { buildSwiftToolEnv, compileSwiftSourceText } from '../recording/swift-cache.ts';
 
 import { hasPlayableWebmStructure } from './video-webm.ts';
 
