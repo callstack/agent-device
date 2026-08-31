@@ -125,7 +125,11 @@ function findNativeDialogNodes(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
 }
 
 function isAndroidDialogType(type: string): boolean {
-  return /(?:^|[.$])[^.]*Dialog$/i.test(type);
+  const lastSeparator = Math.max(type.lastIndexOf('.'), type.lastIndexOf('$'));
+  return type
+    .slice(lastSeparator + 1)
+    .toLowerCase()
+    .endsWith('dialog');
 }
 
 function correlatedAndroidAlertIdNodes(nodes: RawSnapshotNode[]): RawSnapshotNode[] {

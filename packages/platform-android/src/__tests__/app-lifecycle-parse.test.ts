@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { parseAndroidLaunchComponent } from '../app-lifecycle.ts';
+import { isAmStartError, parseAndroidLaunchComponent } from '../app-lifecycle.ts';
+
+test('isAmStartError only matches an error line with a known launch failure', () => {
+  assert.equal(isAmStartError('', 'Error: Activity not started'), true);
+  assert.equal(isAmStartError('warning\nError: unable to resolve Intent', ''), true);
+  assert.equal(isAmStartError('notice: Activity not started', ''), false);
+  assert.equal(isAmStartError('Activity not started', ''), false);
+});
 
 test('parseAndroidLaunchComponent extracts final resolved components', () => {
   const stdout = [

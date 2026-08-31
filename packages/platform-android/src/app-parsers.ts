@@ -20,7 +20,6 @@ export const ANDROID_FOCUS_MARKERS = [
   'ResumedActivity:',
 ] as const;
 const ANDROID_ANR_TITLE_PATTERN = /\bApplication Not Responding:\s*([A-Za-z0-9_.]+)/i;
-const ANDROID_RESPONDING_TITLE_PATTERN = /([^{}]*\bis(?:n't| not)\s+responding[^{}]*)/i;
 const ANDROID_PACKAGE_PATTERN = /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\b/;
 
 export function parseAndroidLaunchablePackages(stdout: string): string[] {
@@ -106,12 +105,14 @@ function parseAndroidBlockingDialogFromSegment(
     };
   }
 
-  const respondingMatch = ANDROID_RESPONDING_TITLE_PATTERN.exec(windowText);
-  if (!respondingMatch) return null;
-
-  const focusedWindowTitle = respondingMatch[1];
-  if (focusedWindowTitle === undefined) return null;
-  const focusedWindow = focusedWindowTitle.trim().replaceAll(/\s+/g, ' ');
+  const normalizedWindowText = windowText.toLowerCase();
+  if (
+    !normalizedWindowText.includes("isn't responding") &&
+    !normalizedWindowText.includes('is not responding')
+  ) {
+    return null;
+  }
+  const focusedWindow = windowText.trim().replaceAll(/\s+/g, ' ');
   const packageName = ANDROID_PACKAGE_PATTERN.exec(focusedWindow)?.[1];
   return {
     ...(packageName ? { package: packageName } : {}),

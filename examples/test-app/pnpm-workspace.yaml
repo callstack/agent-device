@@ -15,5 +15,8 @@ overrides:
   ws@7: ^7.5.11
   brace-expansion@5: ^5.0.9
   shell-quote: ^1.9.0
-  js-yaml@4: ^4.3.0
+  js-yaml@4: ^4.3.1
+  nanoid@3: ^3.3.18
   '@babel/core@7': ^7.29.6
+patchedDependencies:
+  image-size@1.2.1: patches/image-size@1.2.1.patch

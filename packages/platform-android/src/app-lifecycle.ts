@@ -460,8 +460,14 @@ async function resolveAndroidLaunchComponent(
 }
 
 export function isAmStartError(stdout: string, stderr: string): boolean {
-  const output = `${stdout}\n${stderr}`;
-  return /Error:.*(?:Activity not started|unable to resolve Intent)/i.test(output);
+  return `${stdout}\n${stderr}`.split('\n').some((line) => {
+    const normalized = line.toLowerCase();
+    return (
+      normalized.startsWith('error:') &&
+      (normalized.includes('activity not started') ||
+        normalized.includes('unable to resolve intent'))
+    );
+  });
 }
 
 export function parseAndroidLaunchComponent(stdout: string): string | null {

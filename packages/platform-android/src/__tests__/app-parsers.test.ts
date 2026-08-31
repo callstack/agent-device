@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { parseAndroidLaunchablePackages } from '../app-parsers.ts';
+import { parseAndroidLaunchablePackages, readAndroidBlockingDialogFocus } from '../app-parsers.ts';
 
 test('parseAndroidLaunchablePackages ignores cmd package query metadata lines', () => {
   assert.deepEqual(
@@ -14,5 +14,21 @@ test('parseAndroidLaunchablePackages ignores cmd package query metadata lines', 
       ].join('\n'),
     ),
     ['com.google.android.apps.maps', 'org.mozilla.firefox'],
+  );
+});
+
+test('readAndroidBlockingDialogFocus preserves responding window text without regex backtracking', () => {
+  assert.deepEqual(
+    readAndroidBlockingDialogFocus(
+      'mCurrentFocus=Window{123 u0 com.example.app/com.example.MainActivity Demo is not responding}',
+    ),
+    {
+      focusObserved: true,
+      focus: {
+        package: 'com.example.app',
+        focusedWindow: '123 u0 com.example.app/com.example.MainActivity Demo is not responding',
+        raw: 'mCurrentFocus=Window{123 u0 com.example.app/com.example.MainActivity Demo is not responding}',
+      },
+    },
   );
 });
