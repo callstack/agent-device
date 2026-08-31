@@ -49,6 +49,7 @@ export function filterVisibleMaestroMatches(params: {
   matches: SnapshotNode[];
   platform: MaestroPlatform;
 }): SnapshotNode[] {
+  if (params.matches.length === 0) return [];
   const visibility = buildMaestroVisibilityContext(params.nodes);
   return params.matches.filter((node) => isMaestroNodeVisible(node, visibility, params.platform));
 }

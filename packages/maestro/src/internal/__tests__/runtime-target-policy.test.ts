@@ -136,3 +136,19 @@ test('one match-filtering operation builds one canonical visibility context for 
   ).toEqual([1, 2]);
   expect(traversals.calls).toEqual({ flatMap: 1, map: 1 });
 });
+
+test('empty match filtering skips canonical visibility context construction', () => {
+  const snapshot = makeSnapshot([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
+  ]);
+  const traversals = observeTreeTraversals(snapshot.nodes);
+
+  expect(
+    filterVisibleMaestroMatches({
+      nodes: traversals.observed,
+      matches: [],
+      platform: 'ios',
+    }),
+  ).toEqual([]);
+  expect(traversals.calls).toEqual({ flatMap: 0, map: 0 });
+});
