@@ -137,7 +137,13 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/host-kit/src/archive.ts': 9,
   'packages/host-kit/src/command.ts': 7,
   'packages/host-kit/src/diagnostics.ts': 3,
-  'packages/host-kit/src/file.ts': 12,
+  // #2136 adds one intentionally eager synchronous module: file.ts must value-re-export the
+  // moved verified-file operations from the existing capability surface. The same module is
+  // already on these static closure paths, so each exact ratchet moves by one: host-kit/file,
+  // provision-kit/install-source, platform-android/mechanics, the Apple app-lifecycle, doctor,
+  // install-artifact, and runner-operations facades, and src/cli. This records deliberate
+  // ownership growth, not budget headroom.
+  'packages/host-kit/src/file.ts': 13,
   'packages/host-kit/src/host-file.ts': 2,
   'packages/host-kit/src/process.ts': 12,
   'packages/host-kit/src/request.ts': 5,
@@ -148,7 +154,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/provision-kit/src/app-resolution-cache.ts': 1,
   'packages/provision-kit/src/boot-diagnostics.ts': 3,
   'packages/provision-kit/src/install-artifact-archive-context.ts': 10,
-  'packages/provision-kit/src/install-source.ts': 25,
+  'packages/provision-kit/src/install-source.ts': 26,
   'packages/provision-kit/src/install-source-network.ts': 3,
   'packages/provision-kit/src/install-source-network-transport.ts': 1,
   'packages/provision-kit/src/toolchain-probe.ts': 8,
@@ -292,19 +298,19 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/platform-android/src/adb-host.ts': 1,
   // The named mechanics facet is intentionally implementation-eager once selected. Its exact
   // closure is pinned so a future facade expansion is visible in review.
-  'packages/platform-android/src/mechanics.ts': 176,
+  'packages/platform-android/src/mechanics.ts': 177,
 
   // --- @agent-device/platform-apple ---
   'packages/platform-apple/src/index.ts': 1,
-  'packages/platform-apple/src/app-lifecycle-facade.ts': 119,
+  'packages/platform-apple/src/app-lifecycle-facade.ts': 120,
   'packages/platform-apple/src/app-resolution-facade.ts': 61,
   'packages/platform-apple/src/debug-symbols-facade.ts': 24,
-  'packages/platform-apple/src/doctor-facade.ts': 100,
-  'packages/platform-apple/src/install-artifact-facade.ts': 41,
+  'packages/platform-apple/src/doctor-facade.ts': 101,
+  'packages/platform-apple/src/install-artifact-facade.ts': 42,
   'packages/platform-apple/src/macos-facade.ts': 25,
   'packages/platform-apple/src/perf-facade.ts': 60,
   'packages/platform-apple/src/physical-device-facade.ts': 47,
-  'packages/platform-apple/src/runner-operations-facade.ts': 99,
+  'packages/platform-apple/src/runner-operations-facade.ts': 100,
   'packages/platform-apple/src/runner-owner-facade.ts': 2,
   'packages/platform-apple/src/simctl-facade.ts': 18,
   'packages/platform-apple/src/simulator-facade.ts': 25,
@@ -390,7 +396,7 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // readers), `input-audience.ts` (who may write a key), and `common-input-fields.ts` (the table
   // itself). Every command schema already evaluated all three concerns; the growth is three more
   // module records for the same code, with no new subtree behind any of them.
-  'src/cli.ts': 382,
+  'src/cli.ts': 383,
   'src/platform-runtime.ts': 47,
   'src/core/command-descriptor/registry.ts': 71,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,
