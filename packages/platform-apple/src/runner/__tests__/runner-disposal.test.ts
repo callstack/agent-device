@@ -16,7 +16,12 @@ vi.mock('../runner-io.ts', async (importOriginal) => {
 });
 
 import { abortRunnerSessionsAndPrepProcesses, disposeRunnerSession } from '../runner-disposal.ts';
-import { writeRunnerLease } from '../runner-lease.ts';
+import {
+  currentRunnerLeaseOwnerToken,
+  releaseRunnerLease,
+  withRunnerLeaseLock,
+  writeRunnerLease,
+} from '../runner-lease.ts';
 
 const mockIsProcessAlive = vi.fn();
 const mockIsProcessGroupAlive = vi.fn();
@@ -140,6 +145,41 @@ test('simulator disposal skips container-app termination after a foreign takeove
 
   expect(simulatorTerminateCalls()).toEqual([]);
   expect(mockCleanupTempFile).toHaveBeenCalledWith(session.xctestrunPath);
+});
+
+test('disposal serializes behind a successor reclaim window and never terminates its runner', async () => {
+  vi.useRealTimers();
+  mockIsProcessAlive.mockReturnValue(false);
+  const loserLease = makeRunnerLease({
+    deviceId: IOS_SIMULATOR.id,
+    ownerToken: 'owner-toctou-loser',
+  });
+  const session = makeRunnerSession(IOS_SIMULATOR, Promise.resolve(execResult()), {
+    lease: loserLease,
+  });
+  writeRunnerLease(loserLease);
+
+  let disposal: Promise<void> | undefined;
+  let disposalSettled = false;
+  await withRunnerLeaseLock(IOS_SIMULATOR.id, async () => {
+    // The successor's critical section: loser disposal starting now must not
+    // pass its ownership check inside this window — the on-disk lease still
+    // names the loser, but the takeover below is already in flight.
+    disposal = disposeRunnerSession(session, { graceful: false, waitTimeoutMs: 1 }).then(() => {
+      disposalSettled = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(disposalSettled).toBe(false);
+    expect(simulatorTerminateCalls()).toEqual([]);
+    releaseRunnerLease(loserLease);
+    writeRunnerLease(
+      makeRunnerLease({ deviceId: IOS_SIMULATOR.id, ownerToken: 'owner-toctou-successor' }),
+    );
+  });
+  await disposal;
+
+  expect(simulatorTerminateCalls()).toEqual([]);
+  expect(currentRunnerLeaseOwnerToken(IOS_SIMULATOR.id)).toBe('owner-toctou-successor');
 });
 
 function simulatorTerminateCalls(): unknown[] {

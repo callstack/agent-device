@@ -17,6 +17,7 @@ import {
   cleanupOwnedRunnerLease,
   currentRunnerLeaseOwnerToken,
   releaseRunnerLease,
+  withRunnerLeaseLock,
   type RunnerLeaseCleanupAdapter,
 } from './runner-lease.ts';
 import { IOS_RUNNER_CONTAINER_BUNDLE_IDS, runnerPrepProcesses } from './runner-xctestrun.ts';
@@ -37,16 +38,27 @@ export const runnerLeaseCleanupAdapter: RunnerLeaseCleanupAdapter = {
   cleanupTempFile,
 };
 
+export type RunnerDisposalOptions = {
+  graceful?: boolean;
+  waitTimeoutMs?: number;
+  /**
+   * The caller already executes inside {@link withRunnerLeaseLock} for this
+   * device, so the ownership-fenced device-wide teardown must not re-acquire
+   * the (non-reentrant) lease lock.
+   */
+  leaseLockHeld?: boolean;
+};
+
 export async function disposeRunnerSession(
   session: RunnerSession,
-  options: { graceful?: boolean; waitTimeoutMs?: number } = {},
+  options: RunnerDisposalOptions = {},
 ): Promise<void> {
   let processExitHandled = false;
   if (options.graceful !== false) {
     processExitHandled = await shutdownRunnerSessionGracefully(session);
   } else if (isMacOs(session.device)) {
     await interruptMacOsRunnerSessions([session]);
-    await cleanupRunnerSessionResources(session);
+    await cleanupRunnerSessionResources(session, options);
     return;
   } else {
     await killRunnerProcessTree(session.child.pid, 'SIGTERM');
@@ -58,7 +70,7 @@ export async function disposeRunnerSession(
       await killRunnerProcessTree(session.child.pid, 'SIGKILL');
     }
   }
-  await cleanupRunnerSessionResources(session);
+  await cleanupRunnerSessionResources(session, options);
 }
 
 export async function cleanupOwnedIosRunnerLease(deviceId: string): Promise<void> {
@@ -172,20 +184,54 @@ async function runnerSessionsStillAlive(
   return sessions.filter((_, index) => !exited[index]);
 }
 
-async function cleanupRunnerSessionResources(session: RunnerSession): Promise<void> {
-  // Terminating the runner container bundles acts on the whole device, so it is
-  // only this session's to do while the on-disk lease is still its own. After a
-  // takeover (device-claim or logical-lease) the successor's runner lives in the
-  // same bundles; killing them here would stop the new owner's runner.
-  if (!runnerLeaseOwnedElsewhere(session)) {
-    await terminateRunnerSimulatorApps(session.device);
-  }
+async function cleanupRunnerSessionResources(
+  session: RunnerSession,
+  options: Pick<RunnerDisposalOptions, 'leaseLockHeld'> = {},
+): Promise<void> {
+  await settleOwnedRunnerDeviceState(session, options);
   cleanupTempFile(session.xctestrunPath);
   cleanupTempFile(session.jsonPath);
+  await session.simulatorSetRedirect?.release();
+}
+
+/**
+ * Terminating the runner container bundles acts on the whole device, and the
+ * lease file names whose runner lives in them; a takeover (device-claim or
+ * logical-lease) can change that between a check and the termination. The
+ * ownership check, the termination, and the lease release therefore run as one
+ * operation under the runner-lease lock — the same lock a successor holds for
+ * its entire reclaim-and-publish window. If the lock cannot be acquired, all
+ * device-wide teardown is skipped: whoever owns the lease settles that state,
+ * and an unreleased own lease turns stale once this process exits.
+ */
+async function settleOwnedRunnerDeviceState(
+  session: RunnerSession,
+  options: Pick<RunnerDisposalOptions, 'leaseLockHeld'>,
+): Promise<void> {
+  const settle = async () => {
+    if (runnerLeaseOwnedElsewhere(session)) return;
+    try {
+      await terminateRunnerSimulatorApps(session.device);
+    } finally {
+      releaseRunnerLease(session.lease);
+    }
+  };
+  if (options.leaseLockHeld) {
+    await settle();
+    return;
+  }
   try {
-    await session.simulatorSetRedirect?.release();
-  } finally {
-    releaseRunnerLease(session.lease);
+    await withRunnerLeaseLock(session.deviceId, settle);
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'ios_runner_disposal_lease_lock_unavailable',
+      data: {
+        deviceId: session.deviceId,
+        sessionId: session.sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
   }
 }
 
