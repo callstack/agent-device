@@ -20,12 +20,20 @@ pnpm test:fixture-cache
 
 export TEST_WAIT_SECONDS=0
 
-# pnpm yields a fixed fingerprint so the step has a name to look up without
-# installing the app. The real selector uses the deliberately unavailable API.
+# The installed fingerprint binary yields a fixed value so the step has a name
+# to look up without installing the app. pnpm is a tripwire: machine-readable
+# fingerprint output must not pass through package-manager status output.
 mkdir -p "$WORK/bin"
+WORKSPACE="$WORK/workspace"
+mkdir -p "$WORKSPACE/examples/test-app/node_modules/.bin"
 REAL_NODE="$(command -v node)"
 export REAL_NODE
 cat > "$WORK/bin/pnpm" <<'STUB'
+#!/bin/sh
+echo "pnpm must not mediate machine-readable fingerprint output" >&2
+exit 91
+STUB
+cat > "$WORKSPACE/examples/test-app/node_modules/.bin/fingerprint" <<'STUB'
 #!/bin/sh
 printf '%s\n' "$*" >> "$WORK/fingerprint-calls"
 echo '{"hash":"deadbeefcafe"}'
@@ -35,7 +43,10 @@ cat > "$WORK/bin/node" <<'STUB'
 printf '%s\n' "$*" >> "$WORK/node-calls"
 exec "$REAL_NODE" "$@"
 STUB
-chmod +x "$WORK/bin/pnpm" "$WORK/bin/node"
+chmod +x \
+  "$WORK/bin/pnpm" \
+  "$WORK/bin/node" \
+  "$WORKSPACE/examples/test-app/node_modules/.bin/fingerprint"
 
 GITHUB_OUTPUT="$WORK/out"
 : > "$GITHUB_OUTPUT"
@@ -50,9 +61,11 @@ run_lookup_outage() {
   PLATFORM="$1"
   : > "$GITHUB_OUTPUT"
   set +e
-  PATH="$WORK/bin:$PATH" bash "$ACTION_PATH/fetch-artifact.sh" \
-    "$PLATFORM" "$WORK/fixture" "$TEST_WAIT_SECONDS" octo/repo current-head "$ACTION_PATH" \
-    > "$WORK/log-outage-$PLATFORM" 2>&1
+  (
+    cd "$WORKSPACE"
+    PATH="$WORK/bin:$PATH" bash "$ACTION_PATH/fetch-artifact.sh" \
+      "$PLATFORM" "$WORK/fixture" "$TEST_WAIT_SECONDS" octo/repo current-head "$ACTION_PATH"
+  ) > "$WORK/log-outage-$PLATFORM" 2>&1
   RC=$?
   set -e
 
@@ -71,7 +84,7 @@ run_lookup_outage() {
     echo "FAIL: $PLATFORM expected a warning that it is building inline." >&2
     FAIL=1
   fi
-  if ! grep -qx -- "--dir examples/test-app exec fingerprint fingerprint:generate --platform $PLATFORM" "$WORK/fingerprint-calls"; then
+  if ! grep -qx -- "fingerprint:generate --platform $PLATFORM" "$WORK/fingerprint-calls"; then
     echo "FAIL: fixture consumer did not request the $PLATFORM-scoped fingerprint." >&2
     FAIL=1
   fi
@@ -118,9 +131,11 @@ run_terminal_producer_case() {
   TEST_WAIT_SECONDS=1800
   export TEST_WAIT_SECONDS
   : > "$GITHUB_OUTPUT"
-  if ! PATH="$WORK/bin:$PATH" bash "$ACTION_PATH/fetch-artifact.sh" \
-    "$PLATFORM" "$WORK/fixture" "$TEST_WAIT_SECONDS" octo/repo current-head "$ACTION_PATH" \
-    > "$WORK/log-$TEST_PRODUCER_STATE-$PLATFORM" 2>&1; then
+  if ! (
+    cd "$WORKSPACE"
+    PATH="$WORK/bin:$PATH" bash "$ACTION_PATH/fetch-artifact.sh" \
+      "$PLATFORM" "$WORK/fixture" "$TEST_WAIT_SECONDS" octo/repo current-head "$ACTION_PATH"
+  ) > "$WORK/log-$TEST_PRODUCER_STATE-$PLATFORM" 2>&1; then
     echo "FAIL: $PLATFORM $TEST_PRODUCER_STATE producer state did not fall back cleanly." >&2
     FAIL=1
     return
