@@ -12,8 +12,7 @@ import {
 } from './runtime-target-ranking.ts';
 import { createMaestroSnapshotResolver } from './runtime-selector-resolution.ts';
 import { pointInsideRect, stripUndefined } from './shared.ts';
-import { isMaestroNodeVisible } from './snapshot-policy.ts';
-import { buildSnapshotNodeMap } from '@agent-device/contracts/snapshot';
+import { buildMaestroVisibilityContext, isMaestroNodeVisible } from './snapshot-policy.ts';
 import { hasMaestroRecursiveRelations as hasRecursiveRelations } from './selector-relations.ts';
 import { orderMaestroClickableFirst, resolveMaestroClickability } from './runtime-clickability.ts';
 
@@ -108,7 +107,8 @@ function createPresentedNodeLookup(presentation: MaestroInteractivePresentation)
   isVisible: (node: SnapshotNode) => boolean;
   visibleForSource: (node: SnapshotNode) => SnapshotNode[];
 } {
-  const presentedByIndex = buildSnapshotNodeMap(presentation.snapshot.nodes);
+  const visibility = buildMaestroVisibilityContext(presentation.snapshot.nodes);
+  const presentedByIndex = visibility.nodeByIndex;
   const visibleBySourceIndex = new Map<number, SnapshotNode[]>();
   const forSource = (semanticNode: SnapshotNode): SnapshotNode[] => {
     return (presentation.presentedIndexesBySourceIndex.get(semanticNode.index) ?? []).flatMap(
@@ -122,7 +122,7 @@ function createPresentedNodeLookup(presentation: MaestroInteractivePresentation)
     const cached = visibleBySourceIndex.get(node.index);
     if (cached) return cached;
     const visible = forSource(node).filter((presentedNode) =>
-      isMaestroNodeVisible(presentedNode, presentation.snapshot.nodes, 'ios'),
+      isMaestroNodeVisible(presentedNode, visibility, 'ios'),
     );
     visibleBySourceIndex.set(node.index, visible);
     return visible;

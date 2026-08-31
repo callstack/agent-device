@@ -1,7 +1,31 @@
 import { expect, test } from 'vitest';
-import { matchesMaestroTypedSelector } from '../runtime-target-policy.ts';
+import {
+  filterVisibleMaestroMatches,
+  matchesMaestroTypedSelector,
+} from '../runtime-target-policy.ts';
 import type { MaestroSelector } from '../program-ir.ts';
 import { makeSnapshot } from './runtime-target-fixtures.ts';
+
+function observeTreeTraversals<T>(values: T[]): {
+  observed: T[];
+  calls: Record<'flatMap' | 'map', number>;
+} {
+  const calls = { flatMap: 0, map: 0 };
+  return {
+    observed: new Proxy(values, {
+      get(target, property, receiver) {
+        if (property !== 'flatMap' && property !== 'map') {
+          return Reflect.get(target, property, receiver);
+        }
+        return (...args: unknown[]) => {
+          calls[property] += 1;
+          return Reflect.apply(Reflect.get(target, property, receiver), receiver, args);
+        };
+      },
+    }),
+    calls,
+  };
+}
 
 test('typed Maestro text selectors match visible text and state without expression strings', () => {
   const node = makeSnapshot([
@@ -81,4 +105,34 @@ test('the node-only matcher rejects full selectors at the type boundary', () => 
     matchesMaestroTypedSelector(node, recursiveSelector);
   });
   expect(node.label).toBe('Save');
+});
+
+test('one match-filtering operation builds one canonical visibility context for all candidates', () => {
+  const snapshot = makeSnapshot([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'StaticText',
+      identifier: 'candidate',
+      rect: { x: 20, y: 100, width: 100, height: 40 },
+    },
+    {
+      index: 2,
+      parentIndex: 0,
+      type: 'StaticText',
+      identifier: 'candidate',
+      rect: { x: 20, y: 200, width: 100, height: 40 },
+    },
+  ]);
+  const traversals = observeTreeTraversals(snapshot.nodes);
+
+  expect(
+    filterVisibleMaestroMatches({
+      nodes: traversals.observed,
+      matches: traversals.observed.slice(1),
+      platform: 'ios',
+    }).map((node) => node.index),
+  ).toEqual([1, 2]);
+  expect(traversals.calls).toEqual({ flatMap: 1, map: 1 });
 });

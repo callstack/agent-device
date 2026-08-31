@@ -6,7 +6,7 @@ export type MaestroFlatSelector = MaestroLeafSelector & {
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { matchesMaestroRegex } from './selector-regex.ts';
 import { extractNodeText, normalizeText } from './shared.ts';
-import { isMaestroNodeVisible } from './snapshot-policy.ts';
+import { buildMaestroVisibilityContext, isMaestroNodeVisible } from './snapshot-policy.ts';
 
 export type MaestroPlatform = 'ios' | 'android';
 
@@ -49,7 +49,8 @@ export function filterVisibleMaestroMatches(params: {
   matches: SnapshotNode[];
   platform: MaestroPlatform;
 }): SnapshotNode[] {
-  return params.matches.filter((node) => isMaestroNodeVisible(node, params.nodes, params.platform));
+  const visibility = buildMaestroVisibilityContext(params.nodes);
+  return params.matches.filter((node) => isMaestroNodeVisible(node, visibility, params.platform));
 }
 
 function matchesMaestroSelectorValue(value: string | undefined, query: string): boolean {
