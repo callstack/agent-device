@@ -5,7 +5,7 @@ import {
 } from './android-helper-snapshot-presentation.ts';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { formatErrorCandidateLines } from './error-candidates.ts';
-import { detectPossibleRepeatedNavSubtree } from './repeated-nav-subtree.ts';
+import { detectPossibleRepeatedNavSubtree } from '../snapshot/snapshot-presentation/repeated-nav-subtree.ts';
 import { formatReplayDivergenceReport } from '@agent-device/contracts/divergence';
 import { buildSnapshotDisplayLines, formatSnapshotLine } from '../snapshot/snapshot-lines.ts';
 import {

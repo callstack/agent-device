@@ -21,7 +21,7 @@ import {
   runScrollEdgePasses,
   type ScrollEdge,
   type ScrollEdgeState,
-} from '../utils/scroll-edge-state.ts';
+} from '../snapshot/scroll-edge-state.ts';
 import { withSuccessText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
 import { errorResponse } from './handlers/response.ts';

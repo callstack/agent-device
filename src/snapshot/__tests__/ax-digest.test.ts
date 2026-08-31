@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { computeAxDigest } from '../ax-digest.ts';
+import { computeAxDigest } from '../snapshot-evidence.ts';
 
 test('digest is stable across repeated calls for the same nodes', () => {
   const nodes = [

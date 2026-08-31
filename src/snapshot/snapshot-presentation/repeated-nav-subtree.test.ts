@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { detectPossibleRepeatedNavSubtree } from '../repeated-nav-subtree.ts';
+import { detectPossibleRepeatedNavSubtree } from './repeated-nav-subtree.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 
 test('detectPossibleRepeatedNavSubtree warns for overlapping duplicate rows', () => {

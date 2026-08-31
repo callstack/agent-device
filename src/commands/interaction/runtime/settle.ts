@@ -8,7 +8,7 @@ import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapsh
 import { buildSnapshotDiff } from '../../../snapshot/snapshot-diff.ts';
 import { displayLabel, formatRole } from '../../../snapshot/snapshot-lines.ts';
 import { collectSettleChromeRefs, withoutSettleChrome } from '../../../core/snapshot-chrome.ts';
-import { summarizeAxEvidence } from '../../../utils/ax-digest.ts';
+import { summarizeAxEvidence } from '../../../snapshot/snapshot-evidence.ts';
 import type {
   InteractionEvidence,
   ResolvedInteractionTarget,

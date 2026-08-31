@@ -4,36 +4,20 @@ import {
   isScrollableNodeLike,
   isViewportRootNode,
 } from '@agent-device/contracts/snapshot';
-import { AppError } from '@agent-device/kernel/errors';
-import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import type {
   HiddenContentHint,
   Point,
   RawSnapshotNode,
   SnapshotNode,
 } from '@agent-device/kernel/snapshot';
+import type { ScrollEdge, ScrollEdgeState, ScrollEdgeTarget } from '../scroll-edge-state.ts';
 
-export type ScrollEdge = 'top' | 'bottom';
-
-export type ScrollEdgeState = {
-  canScroll: boolean;
-  emptySnapshot: boolean;
-  scope?: string;
-};
-
-export type ScrollEdgeTarget = {
-  point?: Point;
-  nodeIndex?: number;
-};
-
-const SCROLL_EDGE_PASS_LIMIT = 40;
-
-function analyzeScrollEdgeState(
+export function analyzeScrollEdgeState(
   inputNodes: readonly (RawSnapshotNode | SnapshotNode)[],
   edge: ScrollEdge,
   target: ScrollEdgeTarget = {},
 ): ScrollEdgeState {
-  const nodes = ensureSnapshotNodes(inputNodes);
+  const nodes = normalizeSnapshotNodes(inputNodes);
   if (nodes.length === 0) {
     return {
       canScroll: false,
@@ -58,100 +42,9 @@ function analyzeScrollEdgeState(
   };
 }
 
-export async function captureScrollEdgeState(params: {
-  edge: ScrollEdge;
-  target?: ScrollEdgeTarget;
-  scope?: string;
-  captureNodes: (scope?: string) => Promise<readonly (RawSnapshotNode | SnapshotNode)[]>;
-}): Promise<ScrollEdgeState> {
-  const { edge, target = {}, scope, captureNodes } = params;
-  try {
-    const nodes = await captureNodes(scope);
-    const state = analyzeScrollEdgeState(nodes, edge, target);
-    if (scope && state.emptySnapshot) {
-      return await captureScrollEdgeState({ edge, target, captureNodes });
-    }
-    return state;
-  } catch (error) {
-    throw buildScrollEdgeVerificationError(edge, scope, error);
-  }
-}
-
-export async function runScrollEdgePasses<TResult>(params: {
-  edge: ScrollEdge;
-  captureState: (scope?: string) => Promise<ScrollEdgeState>;
-  scroll: () => Promise<TResult>;
-}): Promise<{ passes: number; result?: TResult }> {
-  const { edge, captureState, scroll } = params;
-  let state = await captureState();
-  if (state.scope) {
-    state = await captureState(state.scope);
-  }
-
-  let passes = 0;
-  let result: TResult | undefined;
-  while (state.canScroll) {
-    if (passes >= SCROLL_EDGE_PASS_LIMIT) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        `scroll ${edge} reached the safety limit before the snapshot showed the edge`,
-        {
-          hint: 'The scoped scroll container still reports hidden content. Use a smaller manual scroll + snapshot loop to inspect the current state.',
-        },
-      );
-    }
-
-    result = await scroll();
-    passes += 1;
-    state = await captureState(state.scope);
-  }
-
-  return { passes, result };
-}
-
-export function formatScrollEdgeMessage(
-  direction: ScrollDirection,
-  edge: ScrollEdge | undefined,
-  passes: number,
-  amount: number | undefined,
-  pixels: number | undefined,
-): string {
-  if (edge && passes === 0) {
-    return `Already at ${edge}; no hidden content ${edge === 'bottom' ? 'below' : 'above'} detected`;
-  }
-  if (edge) return `Scrolled to ${edge} with ${passes} ${direction} passes`;
-  if (pixels !== undefined) return `Scrolled ${direction} by ${pixels}px`;
-  if (amount !== undefined) return `Scrolled ${direction} by ${amount}`;
-  return `Scrolled ${direction}`;
-}
-
-function buildScrollEdgeVerificationError(
-  edge: ScrollEdge,
-  scope: string | undefined,
-  cause: unknown,
-): AppError {
-  if (scope) {
-    return new AppError(
-      'COMMAND_FAILED',
-      `Failed to verify scroll ${edge} state for scoped container`,
-      {
-        scope,
-        hint: `scroll ${edge} could not verify the scoped scroll container. Run snapshot -i for the current screen and retry with a visible scroll target.`,
-      },
-      cause,
-    );
-  }
-  return new AppError(
-    'COMMAND_FAILED',
-    `Failed to verify scroll ${edge} state`,
-    {
-      hint: `scroll ${edge} needs a snapshot showing hidden content ${edge === 'bottom' ? 'below' : 'above'} before it will move.`,
-    },
-    cause,
-  );
-}
-
-function ensureSnapshotNodes(nodes: readonly (RawSnapshotNode | SnapshotNode)[]): SnapshotNode[] {
+function normalizeSnapshotNodes(
+  nodes: readonly (RawSnapshotNode | SnapshotNode)[],
+): SnapshotNode[] {
   return nodes.map((node, index) => ({
     ...node,
     ref: 'ref' in node && node.ref ? node.ref : `e${index + 1}`,
@@ -165,13 +58,10 @@ function selectScrollContainer(
   target: ScrollEdgeTarget,
 ): SnapshotNode | null {
   const visibility = createSnapshotVisibility(nodes);
-  const byIndex = visibility.nodeByIndex;
   const scrollables = nodes.filter((node) => isScrollableNodeLike(node) && isUsableRect(node.rect));
-  if (scrollables.length === 0) {
-    return null;
-  }
+  if (scrollables.length === 0) return null;
 
-  const targetAncestor = findNearestScrollableAncestor(target.nodeIndex, byIndex);
+  const targetAncestor = findNearestScrollableAncestor(target.nodeIndex, visibility.nodeByIndex);
   if (targetAncestor) {
     return targetAncestor;
   }
@@ -200,13 +90,13 @@ function selectBroadScrollContainer(
 ): SnapshotNode | null {
   const withHiddenEdge = scrollables
     .filter((node) => hasHiddenContentAtEdge(node, hiddenHints.get(node.index), edge))
-    .sort(compareBroadScrollContainer);
+    .sort((a, b) => compareByArea(b, a));
   if (withHiddenEdge.length > 0) return withHiddenEdge[0] ?? null;
 
   const visibleScrollables = scrollables
     .filter(visibility.isVisibleInEffectiveViewport)
-    .sort(compareBroadScrollContainer);
-  return visibleScrollables[0] ?? scrollables.sort(compareBroadScrollContainer)[0] ?? null;
+    .sort((a, b) => compareByArea(b, a));
+  return visibleScrollables[0] ?? scrollables.sort((a, b) => compareByArea(b, a))[0] ?? null;
 }
 
 function selectPointScrollContainer(
@@ -217,7 +107,7 @@ function selectPointScrollContainer(
 ): SnapshotNode | null {
   const containing = scrollables
     .filter((node) => node.rect && containsPoint(node.rect, point))
-    .sort(compareSpecificScrollContainer);
+    .sort(compareByArea);
   const withHiddenEdge = containing.find((node) =>
     hasHiddenContentAtEdge(node, hiddenHints.get(node.index), edge),
   );
@@ -227,7 +117,7 @@ function selectPointScrollContainer(
 function inferViewportCenter(nodes: SnapshotNode[]): Point | undefined {
   const viewport = nodes
     .filter((node) => isViewportRootNode(node) && isUsableRect(node.rect))
-    .sort(compareBroadScrollContainer)[0]?.rect;
+    .sort((a, b) => compareByArea(b, a))[0]?.rect;
   if (!viewport) return undefined;
   return {
     x: viewport.x + viewport.width / 2,
@@ -239,9 +129,7 @@ function findNearestScrollableAncestor(
   nodeIndex: number | undefined,
   byIndex: ReadonlyMap<number, SnapshotNode>,
 ): SnapshotNode | null {
-  if (nodeIndex === undefined) {
-    return null;
-  }
+  if (nodeIndex === undefined) return null;
   let node = byIndex.get(nodeIndex);
   while (node) {
     if (isScrollableNodeLike(node) && isUsableRect(node.rect)) {
@@ -298,12 +186,8 @@ function isUsefulScope(value: string): boolean {
   );
 }
 
-function compareSpecificScrollContainer(a: SnapshotNode, b: SnapshotNode): number {
+function compareByArea(a: SnapshotNode, b: SnapshotNode): number {
   return rectArea(a.rect) - rectArea(b.rect);
-}
-
-function compareBroadScrollContainer(a: SnapshotNode, b: SnapshotNode): number {
-  return rectArea(b.rect) - rectArea(a.rect);
 }
 
 function rectArea(rect: SnapshotNode['rect']): number {

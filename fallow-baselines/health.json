@@ -486,7 +486,7 @@
         "count": 1
       }
     },
-    "src/utils/scroll-edge-state.ts": {
+    "src/snapshot/scroll-edge-state.ts": {
       "crap_moderate": {
         "count": 1
       }

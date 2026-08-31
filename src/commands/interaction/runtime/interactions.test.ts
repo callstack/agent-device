@@ -534,7 +534,7 @@ test('runtime fill with verify reports evidence and detects a changed post-actio
   assert.equal(result.kind, 'selector');
   assert.ok(result.evidence);
   // Digest is over (type, label, identifier) only, so a value-only change does
-  // not flip the digest — this is intentional (see ax-digest.ts docs).
+  // not flip the digest — this is intentional (see snapshot-evidence.ts docs).
   assert.equal(result.evidence?.changedFromBefore, false);
   assert.equal(result.evidence?.nodeCount, 1);
 });

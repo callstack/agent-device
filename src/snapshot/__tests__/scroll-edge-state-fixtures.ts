@@ -2,7 +2,7 @@ import {
   captureScrollEdgeState,
   type ScrollEdgeState,
   type ScrollEdgeTarget,
-} from './scroll-edge-state.ts';
+} from '../scroll-edge-state.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 

@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { captureScrollEdgeState } from './scroll-edge-state.ts';
+import { captureScrollEdgeState } from '../scroll-edge-state.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { capture, scopeFor, scrollNode, windowRoot } from './scroll-edge-state-fixtures.ts';
 
