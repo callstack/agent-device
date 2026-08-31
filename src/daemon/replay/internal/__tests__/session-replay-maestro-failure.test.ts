@@ -28,6 +28,7 @@ import { SessionStore } from '../../../session-store.ts';
 import { captureSnapshotWithInteractor } from '../../../handlers/snapshot-interactor-capture.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { baseReplayRequest as baseReq } from '../../__tests__/session-replay-runtime.fixtures.ts';
+import { replaySessionForTest } from './replay-session-fixture.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
@@ -56,6 +57,7 @@ async function buildFailureScenario(
   const sessionName = 'default';
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   sessionStore.set(sessionName, makeIosSession(sessionName));
+  const replaySession = replaySessionForTest(sessionStore, sessionName);
   mockDispatchCommand.mockResolvedValue({ nodes, truncated: false, backend: 'xctest' });
   const failure = await captureMaestroFailure(command, path.join(root, 'flow.yaml'));
   const response = await buildTypedMaestroFailureResponse({
@@ -64,7 +66,8 @@ async function buildFailureScenario(
     replayPath: path.join(root, 'flow.yaml'),
     req: baseReq({ flags: { replayBackend: 'maestro', platform: 'ios' } }),
     sessionName,
-    sessionStore,
+    sessionStore: replaySession.store,
+    observationStore: replaySession.observationStore,
     logPath: path.join(root, 'daemon.log'),
   });
   if (response.ok) throw new Error('expected typed Maestro failure response');

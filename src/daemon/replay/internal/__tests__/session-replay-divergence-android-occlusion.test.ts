@@ -7,8 +7,8 @@ import {
   walkNonRawAndroidFixture,
 } from '../../../../__tests__/test-utils/android-ui-hierarchy-fixtures.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import { createReplayCoordinator } from '../../../session-replay-coordinator.ts';
 import { SessionStore } from '../../../session-store.ts';
+import { replayCoordinatorForTest, replaySessionForTest } from './replay-session-fixture.ts';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,
@@ -72,10 +72,11 @@ test.each([
     index: 0,
     sourcePath: path.join(root, 'flow.ad'),
     sourceLine: 1,
-    session: sessionStore.get(sessionName),
+    session: replaySessionForTest(sessionStore, sessionName).observationStore.get(),
     sessionName,
-    sessionStore,
-    resumeStamper: createReplayCoordinator({ sessionStore, sessionName }).resumeStamper,
+    sessionStore: replaySessionForTest(sessionStore, sessionName).store,
+    observationStore: replaySessionForTest(sessionStore, sessionName).observationStore,
+    resumeStamper: replayCoordinatorForTest(sessionStore, sessionName).resumeStamper,
     logPath: path.join(root, 'daemon.log'),
     responseLevel: 'default',
     planActions: [action],

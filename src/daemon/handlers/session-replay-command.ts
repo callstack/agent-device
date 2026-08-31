@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest, SessionState } from '../types.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
@@ -58,6 +58,8 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
   return await runReplayTestCommand({
     request: req,
     session: createReplaySession(sessionName, logPath, sessionStore),
+    createSession: (testSessionName, testLogPath) =>
+      createReplaySession(testSessionName, testLogPath, sessionStore),
     invoke: invokeReplayAction ?? invoke,
     cleanupSession: async (testSessionName) =>
       await closeReplayTestSession({
@@ -74,8 +76,36 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
   });
 };
 
-function createReplaySession(name: string, logPath: string, store: SessionStore): ReplaySession {
-  return { name, logPath, store };
+export function createReplaySession(
+  name: string,
+  logPath: string,
+  store: SessionStore,
+): ReplaySession {
+  const updateSession = (mutate: (session: SessionState) => void): boolean => {
+    const session = store.get(name);
+    if (!session) return false;
+    mutate(session);
+    store.set(name, session);
+    return true;
+  };
+  return {
+    name,
+    logPath,
+    store: {
+      get: () => store.get(name),
+      lookup: () => store.lookup(name),
+      getRuntimeHints: () => store.getRuntimeHints(name),
+      ensureSessionDir: () => store.ensureSessionDir(name),
+    },
+    mutationStore: {
+      update: updateSession,
+      clearRepairTombstone: () => store.clearRepairTombstone(name),
+    },
+    observationStore: {
+      get: () => store.get(name),
+      update: updateSession,
+    },
+  };
 }
 
 type ReplayTestSessionCleanupParams = Readonly<{

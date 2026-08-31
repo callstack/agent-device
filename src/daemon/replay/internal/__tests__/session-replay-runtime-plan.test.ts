@@ -14,7 +14,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
 import { SessionStore } from '../../../session-store.ts';
-import { createReplayCoordinator } from '../../../session-replay-coordinator.ts';
 import { resolveTargetDevice } from '../../../../core/dispatch-resolve.ts';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
@@ -29,6 +28,7 @@ import {
   baseReplayRequest as baseReq,
   writeReplayFile,
 } from '../../__tests__/session-replay-runtime.fixtures.ts';
+import { replayCoordinatorForTest } from './replay-session-fixture.ts';
 
 const mockDispatchCommand = legacyDispatchCapture;
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
@@ -181,7 +181,7 @@ test("a rejected --from/--plan-digest resume never reaches prepareReplaySession'
   // below matches `expectedFrom`, so it WOULD clear) and
   // `prepareSaveScriptSession`'s `demoteForRerunIfArmed` — have something
   // real to mutate if this rejected request ever reaches them.
-  const coordinator = createReplayCoordinator({ sessionStore, sessionName });
+  const coordinator = replayCoordinatorForTest(sessionStore, sessionName);
   coordinator.armStep({ saveScript: true, force: undefined, sourcePath: filePath, firstArm: true });
   const armedSession = sessionStore.get(sessionName)!;
   // `actionsCountAtDivergence: 999` keeps `describeUnperformedRecordAndHeal`

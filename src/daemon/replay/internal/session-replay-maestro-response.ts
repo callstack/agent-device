@@ -20,7 +20,7 @@ export function buildTypedMaestroSuccessResponse(
   const {
     session: { name: sessionName, store: sessionStore },
   } = command;
-  const snapshotDiagnostics = readSnapshotDiagnostics(sessionStore, sessionName, snapshotStart);
+  const snapshotDiagnostics = readSnapshotDiagnostics(sessionStore, snapshotStart);
   const replayed = outcome.replayed;
   return {
     ok: true,
@@ -28,7 +28,7 @@ export function buildTypedMaestroSuccessResponse(
       replayed,
       healed: 0,
       session: sessionName,
-      sessionActive: sessionStore.get(sessionName) !== undefined,
+      sessionActive: sessionStore.get() !== undefined,
       artifactPaths: outcome.artifactPaths,
       ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
       ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
@@ -53,7 +53,7 @@ export async function buildTypedMaestroReplayErrorResponse(
   const { command, replayPath, state, outcome } = params;
   const {
     request: req,
-    session: { name: sessionName, store: sessionStore, logPath },
+    session: { name: sessionName, store: sessionStore, observationStore, logPath },
   } = command;
   const { failure } = outcome;
   const normalizedError = normalizeError(outcome.error);
@@ -65,8 +65,9 @@ export async function buildTypedMaestroReplayErrorResponse(
       req,
       sessionName,
       sessionStore,
+      observationStore,
       logPath,
-      snapshotDiagnostics: readSnapshotDiagnostics(sessionStore, sessionName, state.snapshotStart),
+      snapshotDiagnostics: readSnapshotDiagnostics(sessionStore, state.snapshotStart),
     });
   }
   // The normalized error IS the wire error shape. Returning it whole keeps the
@@ -75,13 +76,8 @@ export async function buildTypedMaestroReplayErrorResponse(
   return { ok: false, error: normalizedError };
 }
 
-function readSnapshotDiagnostics(
-  sessionStore: ReplaySessionStore,
-  sessionName: string,
-  snapshotStart: number,
-) {
-  const samples =
-    sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.slice(snapshotStart) ?? [];
+function readSnapshotDiagnostics(sessionStore: ReplaySessionStore, snapshotStart: number) {
+  const samples = sessionStore.get()?.snapshotDiagnostics?.samples.slice(snapshotStart) ?? [];
   return summarizeSnapshotTimingSamples(samples);
 }
 

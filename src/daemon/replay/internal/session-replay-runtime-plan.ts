@@ -95,7 +95,7 @@ export function prepareReplayPlan(params: {
 
   const { manifest, replayReq } = inspectReplayPlanManifest(req, script);
   const { metadata, actions, actionLines, actionSourcePaths, planDigest } = manifest;
-  const preEntrySession = sessionStore.get(sessionName);
+  const preEntrySession = sessionStore.get();
   const entryIndexResult = resolveReplayPlanEntryIndex({
     req,
     coordinator,

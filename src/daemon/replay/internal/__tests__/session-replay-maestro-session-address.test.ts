@@ -4,6 +4,7 @@ import { expect, test } from 'vitest';
 import { stringify } from 'yaml';
 import { runTypedMaestroReplay } from '../session-replay-maestro-runtime.ts';
 import { SessionStore } from '../../../session-store.ts';
+import { createReplaySession } from '../../../handlers/session-replay-command.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
@@ -38,11 +39,7 @@ test('a typed Maestro selector conflict names the session store key, not "defaul
 
   const response = await runTypedMaestroReplay({
     request: req,
-    session: {
-      name: SCOPED_ADDRESS,
-      logPath: path.join(root, 'daemon.log'),
-      store: sessionStore,
-    },
+    session: createReplaySession(SCOPED_ADDRESS, path.join(root, 'daemon.log'), sessionStore),
     invoke: async () => ({ ok: true, data: {} }),
   });
 

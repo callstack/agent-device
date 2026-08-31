@@ -27,7 +27,7 @@ import {
   type TargetBindingDivergenceContext,
 } from './session-replay-target-verification.ts';
 import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
-import type { ReplaySessionStore } from './command-types.ts';
+import type { ReplaySessionObservationStore, ReplaySessionStore } from './command-types.ts';
 
 /**
  * #1555 P5 (decomposition): the daemon's `AdReplayStepRuntime` adapter — extracted verbatim out
@@ -130,6 +130,7 @@ export function createAdReplayStepRuntime(params: {
     artifactPaths: [...stepArtifactPaths],
     sessionName: ctx.sessionName,
     sessionStore: ctx.sessionStore,
+    observationStore: ctx.observationStore,
     resumeStamper: ctx.coordinator.resumeStamper,
     responseLevel: ctx.responseLevel,
     scrubVars,
@@ -152,14 +153,13 @@ export function createAdReplayStepRuntime(params: {
       return resolveTargetVerificationEntry({
         action,
         resolvedAction,
-        sessionName: ctx.sessionName,
         sessionStore: ctx.sessionStore,
         targetRole,
       });
     },
 
     async captureObservation(action, _index, options) {
-      const session = ctx.sessionStore.get(ctx.sessionName);
+      const session = ctx.observationStore.get();
       // #1385: this is the pre-dispatch gate a step right after `open
       // --relaunch` can race — the app may still be launching/mounting when
       // this capture lands, producing a transient `capture-failed` /
@@ -170,7 +170,7 @@ export function createAdReplayStepRuntime(params: {
         ? await captureDivergenceObservation({
             session,
             sessionName: ctx.sessionName,
-            sessionStore: ctx.sessionStore,
+            observationStore: ctx.observationStore,
             logPath: ctx.logPath,
             action,
             retryLaunchRace: options.retryLaunchRace,
@@ -187,7 +187,7 @@ export function createAdReplayStepRuntime(params: {
     },
 
     classifyTarget({ action, token, nodes }) {
-      const session = ctx.sessionStore.get(ctx.sessionName);
+      const session = ctx.sessionStore.get();
       return classifyPreDispatchTarget({
         // Only ever called right after a successful `captureObservation`,
         // which itself only reaches `state: 'available'` when a session is
@@ -233,9 +233,9 @@ export function createAdReplayStepRuntime(params: {
       const response = await buildRecordedUnverifiableFailureResponse(
         buildDivergenceContext(action, index, stepArtifactPaths, scrubVars),
         {
-          session: ctx.sessionStore.get(ctx.sessionName),
+          session: ctx.observationStore.get(),
           sessionName: ctx.sessionName,
-          sessionStore: ctx.sessionStore,
+          observationStore: ctx.observationStore,
           logPath: ctx.logPath,
           action,
         },
@@ -268,9 +268,9 @@ export function createAdReplayStepRuntime(params: {
         buildDivergenceContext(action, index, stepArtifactPaths, scrubVars),
         evidence,
         {
-          session: ctx.sessionStore.get(ctx.sessionName),
+          session: ctx.observationStore.get(),
           sessionName: ctx.sessionName,
-          sessionStore: ctx.sessionStore,
+          observationStore: ctx.observationStore,
           logPath: ctx.logPath,
           action,
         },
@@ -313,9 +313,8 @@ export function createAdReplayStepRuntime(params: {
     isRepairArmed: () => ctx.coordinator.view()?.repairBoundary !== undefined,
     describeStepValue: (action) => describeReplayStepValue(action),
     onStep,
-    diagnosticsMarker: () => readSessionSnapshotSampleCount(ctx.sessionStore, ctx.sessionName),
-    diagnosticsSince: (marker) =>
-      readSessionSnapshotSamplesSince(ctx.sessionStore, ctx.sessionName, marker),
+    diagnosticsMarker: () => readSessionSnapshotSampleCount(ctx.sessionStore),
+    diagnosticsSince: (marker) => readSessionSnapshotSamplesSince(ctx.sessionStore, marker),
   };
   return { runtime, readLastResponse: () => lastResponse };
 }
@@ -331,6 +330,7 @@ export type ReplayStepContext = {
   replayReq: DaemonRequest;
   sessionName: string;
   sessionStore: ReplaySessionStore;
+  observationStore: ReplaySessionObservationStore;
   logPath: string;
   resolved: string;
   actions: SessionAction[];
@@ -391,6 +391,7 @@ async function buildReplayActionFailure(
       req,
       sessionName: ctx.sessionName,
       sessionStore: ctx.sessionStore,
+      observationStore: ctx.observationStore,
       resumeStamper: ctx.coordinator.resumeStamper,
       logPath: ctx.logPath,
       planActions: ctx.actions,
@@ -432,17 +433,13 @@ function isCompleteTargetBindingDivergenceResponse(response: DaemonResponse): bo
   return typeof kind === 'string' && kind !== 'action-failure';
 }
 
-function readSessionSnapshotSampleCount(
-  sessionStore: ReplaySessionStore,
-  sessionName: string,
-): number {
-  return sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.length ?? 0;
+function readSessionSnapshotSampleCount(sessionStore: ReplaySessionStore): number {
+  return sessionStore.get()?.snapshotDiagnostics?.samples.length ?? 0;
 }
 
 function readSessionSnapshotSamplesSince(
   sessionStore: ReplaySessionStore,
-  sessionName: string,
   start: number,
 ): SnapshotTimingSample[] {
-  return sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.slice(start) ?? [];
+  return sessionStore.get()?.snapshotDiagnostics?.samples.slice(start) ?? [];
 }

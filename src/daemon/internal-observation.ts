@@ -1,7 +1,6 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { readSessionRuntimeRevision } from './ref-frame.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from './session-snapshot.ts';
-import type { SessionStore } from './session-store.ts';
 import type { SessionState } from './types.ts';
 
 declare const INTERNAL_OBSERVATION_EVIDENCE: unique symbol;
@@ -65,8 +64,8 @@ type BoundInternalObservationSession = Readonly<{
 }>;
 
 type InternalObservationSessionStore = Readonly<{
-  get: SessionStore['get'];
-  set: SessionStore['set'];
+  get: () => SessionState | undefined;
+  update: (mutate: (session: SessionState) => void) => boolean;
 }>;
 
 /**
@@ -97,12 +96,17 @@ function storeInternalObservation(
   snapshot: SnapshotState,
 ): StoredInternalObservation {
   const { sessionStore, sessionName } = params;
-  const session = sessionStore.get(sessionName);
-  if (!session) {
+  let storedSession: SessionState | undefined;
+  if (
+    !sessionStore.update((session) => {
+      setSessionSnapshot(session, snapshot);
+      storedSession = session;
+    }) ||
+    !storedSession
+  ) {
     throw new Error('Internal observation session is no longer available.');
   }
-  setSessionSnapshot(session, snapshot);
-  sessionStore.set(sessionName, session);
+  const session = storedSession;
   const snapshotGeneration = session.snapshotGeneration;
   if (snapshotGeneration === undefined) {
     throw new Error('Internal observation did not establish a snapshot generation.');
@@ -167,7 +171,7 @@ function isCurrentLineage(
   params: Pick<BoundInternalObservationSession, 'sessionStore' | 'sessionName'>,
   lineage: InternalObservationLineage,
 ): boolean {
-  const current = params.sessionStore.get(params.sessionName);
+  const current = params.sessionStore.get();
   return (
     params.sessionName === lineage.sessionName &&
     current === lineage.session &&

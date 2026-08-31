@@ -42,7 +42,7 @@ import {
   type DivergenceObservation,
 } from './session-replay-divergence.ts';
 import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
-import type { ReplaySessionStore } from './command-types.ts';
+import type { ReplaySessionObservationStore, ReplaySessionStore } from './command-types.ts';
 import {
   computeReplayRepairHint,
   type ReplayRepairHintCapture,
@@ -112,6 +112,7 @@ export type TargetBindingDivergenceContext = {
   artifactPaths: string[];
   sessionName: string;
   sessionStore: ReplaySessionStore;
+  observationStore: ReplaySessionObservationStore;
   /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */
   resumeStamper: ReplayResumeStamper;
   responseLevel: ResponseLevel | undefined;
@@ -217,6 +218,7 @@ function buildTargetBindingDivergenceResponse(
   };
   const bounded = boundReplayDivergenceForSession({
     sessionStore,
+    observationStore: context.observationStore,
     sessionName,
     divergence,
     responseLevel,
@@ -273,14 +275,20 @@ export function buildTargetBindingFailureResponse(
 async function captureFreshObservation(params: {
   session: SessionState | undefined;
   sessionName: string;
-  sessionStore: ReplaySessionStore;
+  observationStore: ReplaySessionObservationStore;
   logPath: string;
   action: SessionAction;
   unavailableHint: string;
 }): Promise<DivergenceObservation> {
-  const { session, sessionName, sessionStore, logPath, action, unavailableHint } = params;
+  const { session, sessionName, observationStore, logPath, action, unavailableHint } = params;
   return session
-    ? await captureDivergenceObservation({ session, sessionName, sessionStore, logPath, action })
+    ? await captureDivergenceObservation({
+        session,
+        sessionName,
+        observationStore,
+        logPath,
+        action,
+      })
     : { state: 'unavailable', reason: 'no-session', hint: unavailableHint };
 }
 
@@ -295,7 +303,7 @@ export async function buildRecordedUnverifiableFailureResponse(
   params: {
     session: SessionState | undefined;
     sessionName: string;
-    sessionStore: ReplaySessionStore;
+    observationStore: ReplaySessionObservationStore;
     logPath: string;
     action: SessionAction;
   },
@@ -332,7 +340,7 @@ export async function buildPostDispatchTargetBindingFailureResponse(
   params: {
     session: SessionState | undefined;
     sessionName: string;
-    sessionStore: ReplaySessionStore;
+    observationStore: ReplaySessionObservationStore;
     logPath: string;
     action: SessionAction;
   },
@@ -383,12 +391,11 @@ function publicationEvidenceFrom(
 export function resolveTargetVerificationEntry(params: {
   action: SessionAction;
   resolvedAction: SessionAction;
-  sessionName: string;
   sessionStore: ReplaySessionStore;
   targetRole?: 'source' | 'destination';
 }): AdReplayVerificationEntry {
-  const { action, resolvedAction, sessionName, sessionStore, targetRole } = params;
-  const session = sessionStore.get(sessionName);
+  const { action, resolvedAction, sessionStore, targetRole } = params;
+  const session = sessionStore.get();
   if (!session) return { kind: 'inactive' };
   if (resolveTargetIdentityVerification(action.command) === 'post-resolution') {
     const parsed = parseWaitPositionals(resolvedAction.positionals ?? []);

@@ -52,6 +52,22 @@ test('parseImports distinguishes value, type-only, dynamic, and value re-export 
   );
 });
 
+test('parseImports detects multiline dynamic imports', () => {
+  const edges = parseImports(['void import(', "  '../multiline.ts'", ');'].join('\n'));
+
+  assert.deepEqual(edges, [
+    { spec: '../multiline.ts', dynamic: true, typeOnly: false, line: 1, symbols: [] },
+  ]);
+});
+
+test('parseImports resolves constant-template dynamic imports', () => {
+  const edges = parseImports('void import(`../template.ts`);');
+
+  assert.deepEqual(edges, [
+    { spec: '../template.ts', dynamic: true, typeOnly: false, line: 1, symbols: [] },
+  ]);
+});
+
 test('parseImports retains named source symbols without changing edge-kind detection', () => {
   const edges = parseImports(
     [

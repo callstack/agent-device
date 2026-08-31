@@ -134,7 +134,8 @@ function stripReplayTestHarnessFlags(flags: CommandFlags | undefined): CommandFl
 export async function runReplayTestCommand(command: ReplayTestCommand): Promise<DaemonResponse> {
   const {
     request: req,
-    session: { name: sessionName, logPath, store: sessionStore },
+    session: { name: sessionName, logPath },
+    createSession,
     invoke,
     cleanupSession,
     video,
@@ -206,11 +207,12 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
         sourceBundle: sourceBundlesByPath.get(filePath),
       });
 
+      const attemptSession = createSession(testSessionName, logPath);
       const videoRecordingParams = video
         ? {
             req,
             sessionName: testSessionName,
-            sessionStore,
+            sessionStore: attemptSession.store,
             artifactsDir,
             appendTimingEvent,
             video,
@@ -239,11 +241,7 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
               }
             : {}),
         },
-        session: {
-          name: testSessionName,
-          logPath,
-          store: sessionStore,
-        },
+        session: attemptSession,
         tracePath,
         onStep,
         invoke: async (nestedReq) => {
@@ -268,7 +266,7 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
         await finalizeReplayTestVideoRecording({
           req,
           sessionName: testSessionName,
-          sessionStore,
+          sessionStore: createSession(testSessionName, logPath).store,
           artifactsDir,
           appendTimingEvent,
           artifactPaths,

@@ -13,6 +13,7 @@ import { makeIosSession } from '../../../__tests__/test-utils/session-factories.
 import { withClientReplayScriptSources } from '../../../__tests__/test-utils/replay-script-source.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import { SessionStore } from '../../session-store.ts';
+import { createReplaySession } from '../../handlers/session-replay-command.ts';
 import { runReplayCommand, runReplayTestCommand } from '../index.ts';
 import type { ReplayCommand, ReplayTestCommand } from '../internal/command-types.ts';
 import { captureSnapshotWithInteractor } from '../../handlers/snapshot-interactor-capture.ts';
@@ -40,11 +41,7 @@ function replayCommand(
 ): ReplayCommand {
   return {
     request: req,
-    session: {
-      name: req.session,
-      logPath: path.join(root, 'daemon.log'),
-      store: sessionStore,
-    },
+    session: createReplaySession(req.session, path.join(root, 'daemon.log'), sessionStore),
     invoke,
   };
 }
@@ -57,6 +54,8 @@ function testCommand(
 ): ReplayTestCommand {
   return {
     ...replayCommand(req, root, sessionStore, invoke),
+    createSession: (sessionName, logPath) =>
+      createReplaySession(sessionName, logPath, sessionStore),
     cleanupSession: async () => {},
   };
 }

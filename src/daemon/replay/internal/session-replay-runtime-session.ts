@@ -27,32 +27,29 @@ export function prepareReplaySession(params: {
   req: DaemonRequest;
   entryIndex: number;
   sessionStore: ReplaySessionStore;
-  sessionName: string;
   sourcePath: string;
   coordinator: ReplayCoordinator;
 }): { ok: true; armSaveScript: () => void } | { ok: false; response: DaemonResponse } {
-  const { req, entryIndex, sessionStore, sessionName, sourcePath, coordinator } = params;
+  const { req, entryIndex, sessionStore, sourcePath, coordinator } = params;
   const sessionPreflight = validateReplaySessionEntry({
     entryIndex,
     sessionStore,
-    sessionName,
     coordinator,
   });
   if (sessionPreflight) return { ok: false, response: sessionPreflight };
 
   consumeReplayResumeState({ req, coordinator });
-  return prepareSaveScriptSession({ req, sessionStore, sessionName, sourcePath, coordinator });
+  return prepareSaveScriptSession({ req, sessionStore, sourcePath, coordinator });
 }
 
 function validateReplaySessionEntry(params: {
   entryIndex: number;
   sessionStore: ReplaySessionStore;
-  sessionName: string;
   coordinator: ReplayCoordinator;
 }): DaemonResponse | undefined {
   const repairPreflight = preflightReplayAgainstActiveRepair(params);
   if (repairPreflight) return repairPreflight;
-  if (params.entryIndex > 0 && !params.sessionStore.get(params.sessionName)) {
+  if (params.entryIndex > 0 && !params.sessionStore.get()) {
     return noActiveSessionError();
   }
   return undefined;
@@ -87,12 +84,11 @@ function rejectSaveScriptArming(params: {
 function prepareSaveScriptSession(params: {
   req: DaemonRequest;
   sessionStore: ReplaySessionStore;
-  sessionName: string;
   sourcePath: string;
   coordinator: ReplayCoordinator;
 }): { ok: true; armSaveScript: () => void } | { ok: false; response: DaemonResponse } {
-  const { req, sessionStore, sessionName, sourcePath, coordinator } = params;
-  const preRunSession = sessionStore.get(sessionName);
+  const { req, sessionStore, sourcePath, coordinator } = params;
+  const preRunSession = sessionStore.get();
   const { saveScript, force } = req.flags ?? {};
   const rejection = rejectSaveScriptArming({
     saveScript,

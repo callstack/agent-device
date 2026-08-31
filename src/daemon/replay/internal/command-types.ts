@@ -1,14 +1,28 @@
 import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../types.ts';
-import type { ReplaySessionStore as ReplaySessionStoreCapability } from '../../session-replay-coordinator.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import type {
+  ReplaySessionMutationStore as ReplaySessionMutationStoreCapability,
+  ReplaySessionStore as ReplaySessionStoreCapability,
+} from '../../session-replay-coordinator.ts';
 
 export type ReplaySessionStore = ReplaySessionStoreCapability;
+export type ReplaySessionMutationStore = ReplaySessionMutationStoreCapability;
+export type ReplaySessionObservationStore = Readonly<{
+  get: () => SessionState | undefined;
+  update: (mutate: (session: SessionState) => void) => boolean;
+}>;
+
+export type ReplayTestSessionFactory = (sessionName: string, logPath: string) => ReplaySession;
 
 export type ReplaySession = Readonly<{
   /** The effective SessionStore key selected by request binding. */
   name: string;
   logPath: string;
   store: ReplaySessionStore;
+  /** Bound repair writes; replay internals never receive an unbound SessionStore setter. */
+  mutationStore: ReplaySessionMutationStore;
+  /** Bound observation writes used only by the existing ref-publication owner. */
+  observationStore: ReplaySessionObservationStore;
 }>;
 
 export type ReplayCommand = Readonly<{
@@ -42,6 +56,7 @@ type ReplayTestSessionCleanup = (sessionName: string) => Promise<void>;
 
 export type ReplayTestCommand = ReplayCommand &
   Readonly<{
+    createSession: ReplayTestSessionFactory;
     cleanupSession: ReplayTestSessionCleanup;
     video?: ReplayTestVideoOwner;
   }>;

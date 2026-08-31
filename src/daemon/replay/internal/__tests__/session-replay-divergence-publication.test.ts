@@ -17,6 +17,7 @@ import { markSessionPartialRefsIssued, setSessionSnapshot } from '../../../sessi
 import { SessionStore } from '../../../session-store.ts';
 import { captureDivergenceObservation } from '../session-replay-divergence.ts';
 import { boundReplayDivergenceForSession } from '../session-replay-divergence-publication.ts';
+import { replaySessionForTest } from './replay-session-fixture.ts';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,
@@ -44,6 +45,7 @@ function scenario(refCount = 20) {
   setSessionSnapshot(session, prior);
   markSessionPartialRefsIssued(session, ['old']);
   sessionStore.set(sessionName, session);
+  const replaySession = replaySessionForTest(sessionStore, sessionName);
   const snapshot: SnapshotState = {
     createdAt: 2,
     nodes: Array.from({ length: refCount }, (_, index) => ({
@@ -57,11 +59,20 @@ function scenario(refCount = 20) {
     })),
   };
   const authority = bindInternalObservationAuthority({
-    sessionStore,
+    sessionStore: replaySession.observationStore,
     sessionName,
   });
   const observation = authority.store(snapshot);
-  return { root, sessionStore, sessionName, session, prior, snapshot, ...observation };
+  return {
+    root,
+    sessionStore,
+    replaySession,
+    sessionName,
+    session,
+    prior,
+    snapshot,
+    ...observation,
+  };
 }
 
 function divergence(
@@ -111,7 +122,7 @@ test('internal divergence capture updates observation without publishing client 
   const observation = await captureDivergenceObservation({
     session: input.session,
     sessionName: input.sessionName,
-    sessionStore: input.sessionStore,
+    observationStore: input.replaySession.observationStore,
     logPath: path.join(input.root, 'daemon.log'),
     action: {
       command: 'press',
@@ -135,7 +146,8 @@ test.each([
   const input = scenario();
 
   const result = boundReplayDivergenceForSession({
-    sessionStore: input.sessionStore,
+    sessionStore: input.replaySession.store,
+    observationStore: input.replaySession.observationStore,
     sessionName: input.sessionName,
     divergence: divergence(input),
     responseLevel: level,
@@ -154,7 +166,8 @@ test('missing capture evidence fails closed instead of exposing unauthorized ref
   const input = scenario();
 
   const result = boundReplayDivergenceForSession({
-    sessionStore: input.sessionStore,
+    sessionStore: input.replaySession.store,
+    observationStore: input.replaySession.observationStore,
     sessionName: input.sessionName,
     divergence: divergence(input),
     responseLevel: 'default',
@@ -174,7 +187,8 @@ test('missing capture evidence fails closed instead of exposing unauthorized ref
 test('degenerate projected refs fail closed when publication normalizes to empty', () => {
   const input = scenario();
   const result = boundReplayDivergenceForSession({
-    sessionStore: input.sessionStore,
+    sessionStore: input.replaySession.store,
+    observationStore: input.replaySession.observationStore,
     sessionName: input.sessionName,
     divergence: divergence(input, {
       screen: {
@@ -220,14 +234,16 @@ test('an empty outward projection consumes its one-shot capture evidence', () =>
   });
 
   const first = boundReplayDivergenceForSession({
-    sessionStore: input.sessionStore,
+    sessionStore: input.replaySession.store,
+    observationStore: input.replaySession.observationStore,
     sessionName: input.sessionName,
     divergence: empty,
     responseLevel: 'default',
     evidence: input.evidence,
   });
   const second = boundReplayDivergenceForSession({
-    sessionStore: input.sessionStore,
+    sessionStore: input.replaySession.store,
+    observationStore: input.replaySession.observationStore,
     sessionName: input.sessionName,
     divergence: divergence(input),
     responseLevel: 'default',
@@ -248,7 +264,8 @@ test('an empty outward projection consumes its one-shot capture evidence', () =>
 test('successful overflow publishes the refs exposed by the exact artifact projection', () => {
   const input = scenario();
   const result = boundReplayDivergenceForSession({
-    sessionStore: input.sessionStore,
+    sessionStore: input.replaySession.store,
+    observationStore: input.replaySession.observationStore,
     sessionName: input.sessionName,
     divergence: divergence(input, {
       cause: { code: 'COMMAND_FAILED', message: 'x'.repeat(40_000) },
@@ -276,7 +293,8 @@ test('failed overflow artifact with no inline refs publishes nothing', () => {
   fs.writeFileSync(blockedArtifactDir, 'not a directory');
 
   const result = boundReplayDivergenceForSession({
-    sessionStore: input.sessionStore,
+    sessionStore: input.replaySession.store,
+    observationStore: input.replaySession.observationStore,
     sessionName: input.sessionName,
     divergence: divergence(input, {
       cause: { code: 'COMMAND_FAILED', message: 'x'.repeat(40_000) },
@@ -299,7 +317,8 @@ test('stale capture suppresses outward refs and preserves newer authority', () =
   });
 
   const result = boundReplayDivergenceForSession({
-    sessionStore: input.sessionStore,
+    sessionStore: input.replaySession.store,
+    observationStore: input.replaySession.observationStore,
     sessionName: input.sessionName,
     divergence: divergence(input),
     responseLevel: 'default',
@@ -317,7 +336,8 @@ test('cancellation after capture suppresses outward refs without reactivating an
   controller.abort();
 
   const result = boundReplayDivergenceForSession({
-    sessionStore: input.sessionStore,
+    sessionStore: input.replaySession.store,
+    observationStore: input.replaySession.observationStore,
     sessionName: input.sessionName,
     divergence: divergence(input),
     responseLevel: 'default',

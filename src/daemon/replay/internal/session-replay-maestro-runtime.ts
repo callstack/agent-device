@@ -103,7 +103,7 @@ async function executeTypedMaestroReplay(
   const { command, bundle, startedAt, state } = params;
   const {
     request: req,
-    session: { name: sessionName, store: sessionStore },
+    session: { store: sessionStore },
     tracePath,
     onStep,
     invoke,
@@ -117,7 +117,7 @@ async function executeTypedMaestroReplay(
     runtimeHints: context.runtimeHints,
     sourcePath: context.filePath,
   });
-  state.snapshotStart = sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.length ?? 0;
+  state.snapshotStart = sessionStore.get()?.snapshotDiagnostics?.samples.length ?? 0;
   const outcome = await executeMaestroFlow(context.flow, port, {
     defaults: context.defaults,
     env: context.env,
@@ -164,7 +164,7 @@ async function prepareTypedMaestroReplay(
   const flow = inspectMaestroFlow(readReplayScriptSourceFile(bundle, filePath), filePath);
   // `sessionName` is the resolved store key, so the lookup carries the address a selector
   // conflict must tell the caller to close or reuse.
-  const sessionRef = sessionStore.lookup(sessionName);
+  const sessionRef = sessionStore.lookup();
   const session = sessionRef?.session;
   if (sessionRef) assertSessionSelectorMatches(sessionRef, req.flags);
   const binding = await resolveMaestroReplayBinding({
@@ -208,7 +208,7 @@ async function resolveMaestroReplayBinding(params: {
           buildMaestroReplayTargetDeviceResolutionOptions(flow.appTarget, requestedPlatform),
         ));
   const platform = resolveMaestroPlatform(req, device);
-  const runtimeHints = resolveEffectiveOpenRuntimeHints({
+  const runtimeHints = resolveReplayRuntimeHints({
     req,
     sessionStore,
     sessionName,
@@ -244,7 +244,7 @@ async function completeMaestroRuntimeBinding(
     device,
     platform: params.platform,
     target: resolveMaestroTarget(params.req, device),
-    runtimeHints: resolveEffectiveOpenRuntimeHints({
+    runtimeHints: resolveReplayRuntimeHints({
       req: params.req,
       sessionStore: params.sessionStore,
       sessionName: params.sessionName,
@@ -252,6 +252,27 @@ async function completeMaestroRuntimeBinding(
       platform: params.platform,
     }),
   };
+}
+
+function resolveReplayRuntimeHints(params: {
+  req: DaemonRequest;
+  sessionStore: ReplaySessionStore;
+  sessionName: string;
+  device?: DeviceInfo;
+  platform?: Extract<MaestroPlatform, 'android' | 'ios'>;
+}): ReturnType<typeof resolveEffectiveOpenRuntimeHints> {
+  return resolveEffectiveOpenRuntimeHints({
+    req: params.req,
+    sessionStore: {
+      getRuntimeHints: (requestedSessionName) =>
+        requestedSessionName === params.sessionName
+          ? params.sessionStore.getRuntimeHints()
+          : undefined,
+    },
+    sessionName: params.sessionName,
+    device: params.device,
+    platform: params.platform,
+  });
 }
 
 function requiresDeviceRuntimeDefaults(

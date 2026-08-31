@@ -40,7 +40,7 @@ export async function startReplayTestVideoRecordingIfReady(
 ): Promise<DaemonResponse | undefined> {
   const { req, sessionName, sessionStore, artifactsDir, appendTimingEvent } = params;
   if (req.flags?.recordVideo !== true) return undefined;
-  const activeSession = sessionStore.get(sessionName);
+  const activeSession = sessionStore.get();
   if (!activeSession || activeSession.screenRecording) return undefined;
 
   const extension = recordingExtensionForPlatform(activeSession.device.platform);
@@ -93,7 +93,7 @@ export async function finalizeReplayTestVideoRecording(
 ): Promise<DaemonResponse | undefined> {
   const { req, sessionName, sessionStore, artifactPaths, appendTimingEvent } = params;
   if (req.flags?.recordVideo !== true) return undefined;
-  if (!sessionStore.get(sessionName)?.screenRecording) return undefined;
+  if (!sessionStore.get()?.screenRecording) return undefined;
 
   appendVideoTimingEvent(appendTimingEvent, {
     type: 'video_tail_start',

@@ -19,6 +19,7 @@ import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { createReplayTestVideoOwner } from '../../../handlers/session-replay-video-owner.ts';
+import { createReplaySession } from '../../../handlers/session-replay-command.ts';
 
 const recordRuntimeMocks = vi.hoisted(() => ({
   handleRecordCommand: vi.fn(),
@@ -272,11 +273,9 @@ test('test finalizes replay video exactly once when cancellation arrives after s
 
   const responsePromise = runReplayTestCommand({
     request,
-    session: {
-      name: 'default',
-      logPath: path.join(root, 'daemon.log'),
-      store: sessionStore,
-    },
+    session: createReplaySession('default', path.join(root, 'daemon.log'), sessionStore),
+    createSession: (sessionName, logPath) =>
+      createReplaySession(sessionName, logPath, sessionStore),
     video,
     cleanupSession: async () => {},
     invoke: async (nestedReq) => {

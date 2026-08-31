@@ -57,7 +57,7 @@ import type { ReplayCommand, ReplaySessionStore } from './command-types.ts';
 export async function runReplayCommand(command: ReplayCommand): Promise<DaemonResponse> {
   const {
     request: req,
-    session: { name: sessionName, logPath, store: sessionStore },
+    session: { name: sessionName, logPath, store: sessionStore, mutationStore, observationStore },
     tracePath,
     onStep,
     invoke,
@@ -78,7 +78,7 @@ export async function runReplayCommand(command: ReplayCommand): Promise<DaemonRe
   const artifactPaths = new Set<string>();
   // #1478 P4b: the one locked coordinator this request reaches the repair
   // transaction and resume watermark through.
-  const coordinator = createReplayCoordinator({ sessionStore, sessionName });
+  const coordinator = createReplayCoordinator({ sessionStore, mutationStore });
   try {
     resolved = bundle.entry;
     if (isMaestroYamlPath(resolved) && req.flags?.replayBackend !== 'maestro') {
@@ -115,7 +115,6 @@ export async function runReplayCommand(command: ReplayCommand): Promise<DaemonRe
       req,
       entryIndex,
       sessionStore,
-      sessionName,
       sourcePath: resolved,
       coordinator,
     });
@@ -124,6 +123,7 @@ export async function runReplayCommand(command: ReplayCommand): Promise<DaemonRe
       replayReq,
       sessionName,
       sessionStore,
+      observationStore,
       logPath,
       resolved,
       actions,
@@ -216,7 +216,7 @@ function completeReplayRun(params: {
   } = params;
   armSaveScript();
   coordinator.markCompleteIfArmed();
-  const completedSession = sessionStore.get(sessionName);
+  const completedSession = sessionStore.get();
   const keepSessionFailure = requireLiveSessionForKeepSession({
     keepSession,
     sessionName,

@@ -4,6 +4,7 @@ import { expect, test } from 'vitest';
 import { stringify } from 'yaml';
 import { runTypedMaestroReplay } from '../session-replay-maestro-runtime.ts';
 import { SessionStore } from '../../../session-store.ts';
+import { createReplaySession } from '../../../handlers/session-replay-command.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
@@ -36,11 +37,7 @@ test('a typed Maestro replay error keeps its recovery hint', async () => {
 
   const response = await runTypedMaestroReplay({
     request: req,
-    session: {
-      name: 'default',
-      logPath: path.join(root, 'daemon.log'),
-      store: sessionStore,
-    },
+    session: createReplaySession('default', path.join(root, 'daemon.log'), sessionStore),
     invoke: async () => ({ ok: true, data: {} }),
   });
 

@@ -17,7 +17,7 @@ import {
   computeReplayRepairHint,
   type ReplayRepairHintCapture,
 } from './session-replay-repair-hint.ts';
-import type { ReplaySessionStore } from './command-types.ts';
+import type { ReplaySessionObservationStore, ReplaySessionStore } from './command-types.ts';
 import type { ReplayResumeStamper } from '../../session-replay-coordinator.ts';
 import {
   bindInternalObservationAuthority,
@@ -56,6 +56,7 @@ export async function buildReplayFailureDivergence(params: {
   session: SessionState | undefined;
   sessionName: string;
   sessionStore: ReplaySessionStore;
+  observationStore: ReplaySessionObservationStore;
   /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */
   resumeStamper: ReplayResumeStamper;
   logPath: string;
@@ -77,6 +78,7 @@ export async function buildReplayFailureDivergence(params: {
     session,
     sessionName,
     sessionStore,
+    observationStore,
     resumeStamper,
     logPath,
     responseLevel,
@@ -94,7 +96,13 @@ export async function buildReplayFailureDivergence(params: {
   };
 
   const observation = session
-    ? await captureDivergenceObservation({ session, sessionName, sessionStore, logPath, action })
+    ? await captureDivergenceObservation({
+        session,
+        sessionName,
+        observationStore,
+        logPath,
+        action,
+      })
     : ({
         state: 'unavailable',
         reason: 'no-session',
@@ -148,6 +156,7 @@ export async function buildReplayFailureDivergence(params: {
 
   return boundReplayDivergenceForSession({
     sessionStore,
+    observationStore,
     sessionName,
     divergence,
     responseLevel,
@@ -238,12 +247,19 @@ const DIVERGENCE_CAPTURE_RETRY_DELAYS_MS = [300, 500, 800, 1200, 2000, 3000, 400
 export async function captureDivergenceObservation(params: {
   session: SessionState;
   sessionName: string;
-  sessionStore: ReplaySessionStore;
+  observationStore: ReplaySessionObservationStore;
   logPath: string;
   action: ReplayReportAction;
   retryLaunchRace?: boolean;
 }): Promise<DivergenceObservation> {
-  const { session, sessionName, sessionStore, logPath, action, retryLaunchRace = false } = params;
+  const {
+    session,
+    sessionName,
+    observationStore,
+    logPath,
+    action,
+    retryLaunchRace = false,
+  } = params;
   const flags = divergenceCaptureFlags(action);
   // Anchored BEFORE the first attempt, not after: a slow first capture
   // shrinks the retry budget rather than getting a free `DEADLINE_MS` on top
@@ -253,7 +269,7 @@ export async function captureDivergenceObservation(params: {
   let attempt = await captureDivergenceObservationAttempt({
     session,
     sessionName,
-    sessionStore,
+    observationStore,
     logPath,
     flags,
   });
@@ -267,7 +283,7 @@ export async function captureDivergenceObservation(params: {
     attempt = await captureDivergenceObservationAttempt({
       session,
       sessionName,
-      sessionStore,
+      observationStore,
       logPath,
       flags,
     });
@@ -294,11 +310,11 @@ type DivergenceCaptureAttempt = {
 async function captureDivergenceObservationAttempt(params: {
   session: SessionState;
   sessionName: string;
-  sessionStore: ReplaySessionStore;
+  observationStore: ReplaySessionObservationStore;
   logPath: string;
   flags: CommandFlags;
 }): Promise<DivergenceCaptureAttempt> {
-  const { session, sessionName, sessionStore, logPath, flags } = params;
+  const { session, sessionName, observationStore, logPath, flags } = params;
   try {
     const capture = await captureSnapshot({
       device: session.device,
@@ -318,7 +334,7 @@ async function captureDivergenceObservationAttempt(params: {
       };
     }
     const observationAuthority = bindInternalObservationAuthority({
-      sessionStore,
+      sessionStore: observationStore,
       sessionName,
     });
     const stored = observationAuthority.store(snapshot);

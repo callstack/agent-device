@@ -11,7 +11,7 @@ import {
 import { formatScriptArg } from '@agent-device/ad-script';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
-import type { ReplaySessionStore } from './command-types.ts';
+import type { ReplaySessionObservationStore, ReplaySessionStore } from './command-types.ts';
 import type { ReplayReportAction } from './session-replay-report-action.ts';
 import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';
 import {
@@ -68,10 +68,11 @@ export async function buildTypedMaestroFailureResponse(params: {
   readonly req: DaemonRequest;
   readonly sessionName: string;
   readonly sessionStore: ReplaySessionStore;
+  readonly observationStore: ReplaySessionObservationStore;
   readonly logPath: string;
   readonly snapshotDiagnostics?: SnapshotDiagnosticsSummary;
 }): Promise<DaemonResponse> {
-  const { failure, replayPath, req, sessionName, sessionStore, logPath } = params;
+  const { failure, replayPath, req, sessionName, sessionStore, observationStore, logPath } = params;
   const requestSignal = getRequestSignal(req.meta?.requestId);
   const report = buildTypedMaestroFailureReportProjection(failure, req);
   const cause = hoistReplayFailureCauseDiagnosticMeta(params.error);
@@ -82,12 +83,12 @@ export async function buildTypedMaestroFailureResponse(params: {
     message: sanitize(cause.message),
     ...(cause.hint ? { hint: sanitize(cause.hint) } : {}),
   };
-  const session = sessionStore.get(sessionName);
+  const session = observationStore.get();
   const observation = session
     ? await captureDivergenceObservation({
         session,
         sessionName,
-        sessionStore,
+        observationStore,
         logPath,
         action: report.action,
       })
@@ -137,6 +138,7 @@ export async function buildTypedMaestroFailureResponse(params: {
   };
   const bounded = boundReplayDivergenceForSession({
     sessionStore,
+    observationStore,
     sessionName,
     divergence,
     responseLevel: req.meta?.responseLevel,

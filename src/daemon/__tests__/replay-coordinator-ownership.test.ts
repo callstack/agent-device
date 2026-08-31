@@ -41,6 +41,7 @@ const DIVERGENCE_CHAIN_FILES = [
 
 type ImportSite = {
   file: string;
+  kind: 'import' | 'dynamic-import' | 'named-reexport' | 'all-reexport';
   /** Repo-root-relative path the specifier resolves to, or `null` for an unresolved/external specifier. */
   target: string | null;
   /** A named import binding at this site: its exported name and whether IT is type-only. */
@@ -92,6 +93,7 @@ function collectImportSites(
         }));
       sites.push({
         file,
+        kind: 'import',
         target,
         bindings,
         declarationTypeOnly: node.importKind === 'type',
@@ -101,6 +103,7 @@ function collectImportSites(
     if (node.type === 'ImportExpression') {
       sites.push({
         file,
+        kind: 'dynamic-import',
         target: importSourceTarget(file, node.source),
         bindings: [],
         declarationTypeOnly: false,
@@ -120,6 +123,7 @@ function collectImportSites(
         : [];
     sites.push({
       file,
+      kind: node.type === 'ExportNamedDeclaration' ? 'named-reexport' : 'all-reexport',
       target: importSourceTarget(file, node.source),
       bindings,
       declarationTypeOnly: node.exportKind === 'type',
@@ -129,9 +133,54 @@ function collectImportSites(
 }
 
 function importSourceTarget(file: string, source: unknown): string | null {
-  if (!source || typeof source !== 'object') return null;
-  const value = (source as { value?: unknown }).value;
-  return typeof value === 'string' ? resolveRelativeTarget(file, value) : null;
+  const value = constantSpecifier(source);
+  return value === undefined ? null : resolveRelativeTarget(file, value);
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+}
+
+function templateSpecifier(node: Record<string, unknown>): string | undefined {
+  const expressions = node.expressions;
+  const quasis = node.quasis;
+  if (!Array.isArray(expressions) || expressions.length !== 0 || !Array.isArray(quasis)) {
+    return undefined;
+  }
+  const quasi = objectRecord(quasis[0]);
+  const value = quasi ? objectRecord(quasi.value) : undefined;
+  return value && typeof value.cooked === 'string' ? value.cooked : undefined;
+}
+
+function wrappedSpecifier(node: Record<string, unknown>): string | undefined {
+  return constantSpecifier(node.expression);
+}
+
+function binarySpecifier(node: Record<string, unknown>): string | undefined {
+  if (node.operator !== '+') return undefined;
+  const left = constantSpecifier(node.left);
+  const right = constantSpecifier(node.right);
+  return left !== undefined && right !== undefined ? left + right : undefined;
+}
+
+function literalSpecifier(node: Record<string, unknown>): string | undefined {
+  return typeof node.value === 'string' ? node.value : undefined;
+}
+
+const SPECIFIER_READERS: Record<string, (node: Record<string, unknown>) => string | undefined> = {
+  Literal: literalSpecifier,
+  TemplateLiteral: templateSpecifier,
+  TSAsExpression: wrappedSpecifier,
+  TSTypeAssertion: wrappedSpecifier,
+  ChainExpression: wrappedSpecifier,
+  ParenthesizedExpression: wrappedSpecifier,
+  BinaryExpression: binarySpecifier,
+};
+
+function constantSpecifier(value: unknown): string | undefined {
+  const node = objectRecord(value);
+  if (!node) return undefined;
+  return SPECIFIER_READERS[String(node.type)]?.(node);
 }
 
 function importsValueBinding(site: ImportSite, name: string): boolean {
@@ -196,9 +245,7 @@ function coordinatorImportBindings(
   const namespace = new Set<string>();
   for (const node of body) {
     if (node.type !== 'ImportDeclaration') continue;
-    const source = node.source as { value?: unknown };
-    if (typeof source.value !== 'string') continue;
-    if (resolveRelativeTarget(file, source.value) !== COORDINATOR_MODULE) continue;
+    if (importSourceTarget(file, node.source) !== COORDINATOR_MODULE) continue;
     if (node.importKind === 'type') continue;
     for (const specifier of node.specifiers as readonly Record<string, unknown>[]) {
       addCoordinatorImportBinding(specifier, direct, namespace);
@@ -268,15 +315,34 @@ function dynamicCoordinatorImportSite(
   file: string,
   node: Record<string, unknown>,
 ): CoordinatorConstructionSite | undefined {
-  const sourceNode = node.source as { type?: unknown; value?: unknown } | undefined;
-  if (
-    sourceNode?.type !== 'Literal' ||
-    typeof sourceNode.value !== 'string' ||
-    resolveRelativeTarget(file, sourceNode.value) !== COORDINATOR_MODULE
-  ) {
+  if (importSourceTarget(file, node.source) !== COORDINATOR_MODULE) {
     return undefined;
   }
   return { file, kind: 'dynamic-import', start: Number(node.start) };
+}
+
+function coordinatorReexportSites(
+  files: readonly string[],
+  sourceOverrides: ReadonlyMap<string, string> = new Map(),
+): ImportSite[] {
+  return files.flatMap((file) =>
+    collectImportSites(file, sourceOverrides.get(file)).filter(
+      (site) =>
+        (site.kind === 'named-reexport' || site.kind === 'all-reexport') &&
+        site.target === COORDINATOR_MODULE,
+    ),
+  );
+}
+
+function unresolvedDynamicImportSites(
+  files: readonly string[],
+  sourceOverrides: ReadonlyMap<string, string> = new Map(),
+): ImportSite[] {
+  return files.flatMap((file) =>
+    collectImportSites(file, sourceOverrides.get(file)).filter(
+      (site) => site.kind === 'dynamic-import' && site.target === null,
+    ),
+  );
 }
 
 const PRODUCTION_FILES = listProductionSourceFiles();
@@ -291,6 +357,31 @@ test('createReplayCoordinator has exactly one production call site', () => {
       `instead of using the request's own coordinator. Found: ${
         sites.map(({ file, kind }) => `${file} (${kind})`).join(', ') || '(none)'
       }`,
+  );
+  assert.deepEqual(
+    coordinatorReexportSites(PRODUCTION_FILES),
+    [],
+    'createReplayCoordinator must not be re-exported from a production module',
+  );
+});
+
+test('coordinator ownership scanning catches re-exports and unresolved dynamic imports', () => {
+  const probe = 'src/daemon/replay/internal/probe.ts';
+  const source = `
+    export { createReplayCoordinator } from '../../session-replay-coordinator.ts';
+    export * from '../../session-replay-coordinator.ts';
+    const target = '../../session-replay-coordinator.ts';
+    void import(target);
+    void import(
+      \`../../session-replay-coordinator.ts\`
+    );
+  `;
+  const overrides = new Map([[probe, source]]);
+  assert.equal(coordinatorReexportSites([probe], overrides).length, 2);
+  assert.equal(unresolvedDynamicImportSites([probe], overrides).length, 1);
+  assert.deepEqual(
+    coordinatorConstructionSites(probe, source).map(({ kind }) => kind),
+    ['dynamic-import'],
   );
 });
 
@@ -363,6 +454,14 @@ test('the divergence-report chain never imports SessionStore', () => {
       );
     }
   }
+});
+
+test('the divergence-report chain rejects unresolved dynamic imports', () => {
+  assert.deepEqual(
+    unresolvedDynamicImportSites(DIVERGENCE_CHAIN_FILES),
+    [],
+    'protected replay imports must resolve their dynamic specifier or fail closed',
+  );
 });
 
 test('SessionStore ownership scanning catches dynamic imports and re-exports', () => {

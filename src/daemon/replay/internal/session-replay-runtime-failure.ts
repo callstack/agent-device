@@ -13,7 +13,7 @@ import {
   hoistReplayFailureCauseDiagnosticMeta,
 } from './session-replay-runtime-failure-response.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import type { ReplaySessionStore } from './command-types.ts';
+import type { ReplaySessionObservationStore, ReplaySessionStore } from './command-types.ts';
 
 export async function withReplayFailureDiagnostics(params: {
   response: DaemonResponse;
@@ -29,6 +29,7 @@ export async function withReplayFailureDiagnostics(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: ReplaySessionStore;
+  observationStore: ReplaySessionObservationStore;
   /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */
   resumeStamper: ReplayResumeStamper;
   logPath: string;
@@ -55,6 +56,7 @@ async function withReplayFailureContext(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: ReplaySessionStore;
+  observationStore: ReplaySessionObservationStore;
   /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */
   resumeStamper: ReplayResumeStamper;
   logPath: string;
@@ -74,6 +76,7 @@ async function withReplayFailureContext(params: {
     req,
     sessionName,
     sessionStore,
+    observationStore,
     resumeStamper,
     logPath,
     planActions,
@@ -88,9 +91,10 @@ async function withReplayFailureContext(params: {
     index,
     sourcePath: failureSource?.path ?? sourcePath,
     sourceLine: failureSource?.line ?? sourceLine,
-    session: sessionStore.get(sessionName),
+    session: observationStore.get(),
     sessionName,
     sessionStore,
+    observationStore,
     resumeStamper,
     logPath,
     responseLevel: req.meta?.responseLevel,

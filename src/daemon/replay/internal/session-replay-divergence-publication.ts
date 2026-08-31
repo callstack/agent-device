@@ -7,7 +7,7 @@ import {
   bindInternalObservationAuthority,
   type InternalObservationEvidence,
 } from '../../internal-observation.ts';
-import type { ReplaySessionStore } from './command-types.ts';
+import type { ReplaySessionObservationStore, ReplaySessionStore } from './command-types.ts';
 
 /**
  * Daemon-owned replay projection and publication boundary. The response or
@@ -16,13 +16,14 @@ import type { ReplaySessionStore } from './command-types.ts';
  */
 export function boundReplayDivergenceForSession(params: {
   sessionStore: ReplaySessionStore;
+  observationStore: ReplaySessionObservationStore;
   sessionName: string;
   divergence: ReplayDivergence;
   responseLevel: ResponseLevel | undefined;
   evidence: InternalObservationEvidence | undefined;
   signal?: AbortSignal;
 }): ReplayDivergence {
-  const { sessionStore, sessionName, divergence, responseLevel } = params;
+  const { sessionStore, observationStore, sessionName, divergence, responseLevel } = params;
   let overflowProjection: ReplayDivergence | undefined;
   let overflowArtifactPath: string | undefined;
   const bounded = boundReplayDivergence({
@@ -30,7 +31,7 @@ export function boundReplayDivergenceForSession(params: {
     level: responseLevel,
     writeOverflowArtifact: (payload) => {
       const artifactProjection = redactDiagnosticData(payload);
-      const result = writeReplayDivergenceArtifact(sessionStore, sessionName, artifactProjection);
+      const result = writeReplayDivergenceArtifact(sessionStore, artifactProjection);
       if ('artifactPath' in result) {
         overflowProjection = artifactProjection;
         overflowArtifactPath = result.artifactPath;
@@ -43,7 +44,7 @@ export function boundReplayDivergenceForSession(params: {
   if (screen.state !== 'available' || screen.refs.length === 0) {
     if (params.evidence) {
       bindInternalObservationAuthority({
-        sessionStore,
+        sessionStore: observationStore,
         sessionName,
         ...(params.signal ? { signal: params.signal } : {}),
       }).finalize(params.evidence, {
@@ -59,7 +60,7 @@ export function boundReplayDivergenceForSession(params: {
   }
 
   const observationAuthority = bindInternalObservationAuthority({
-    sessionStore,
+    sessionStore: observationStore,
     sessionName,
     ...(params.signal ? { signal: params.signal } : {}),
   });
@@ -110,11 +111,10 @@ function removeUnpublishedOverflowArtifact(artifactPath: string | undefined): vo
 
 function writeReplayDivergenceArtifact(
   sessionStore: ReplaySessionStore,
-  sessionName: string,
   payload: ReplayDivergence,
 ): { artifactPath: string } | { artifactUnavailable: true } {
   try {
-    const dir = path.join(sessionStore.ensureSessionDir(sessionName), 'replay-divergence');
+    const dir = path.join(sessionStore.ensureSessionDir(), 'replay-divergence');
     fs.mkdirSync(dir, { recursive: true });
     const fileName = `${Date.now()}-step${payload.step.index}.json`;
     const artifactPath = path.join(dir, fileName);
