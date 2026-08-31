@@ -258,7 +258,9 @@ test('lease allocation hands the provider the request-bound signal and a deadlin
   const requestId = 'lease-alloc-cancel-req';
   const registration = registerRequestAbort(requestId);
   const before = Date.now();
-  let observed: { signal?: AbortSignal; deadline?: number } | undefined;
+  let observed:
+    | { signal?: AbortSignal; deadline?: number; publicNetworkOnly?: boolean }
+    | undefined;
 
   try {
     const response = await handleLeaseCommands({
@@ -273,6 +275,7 @@ test('lease allocation hands the provider the request-bound signal and a deadlin
           leaseBackend: 'android-instance',
           leaseProvider: 'fake-provider',
         },
+        internal: { publicNetworkOnly: true },
         positionals: [],
       },
       sessionName: 'catalog-test',
@@ -280,7 +283,11 @@ test('lease allocation hands the provider the request-bound signal and a deadlin
       leaseRegistry,
       leaseLifecycleProvider: {
         allocate: async (_lease, context) => {
-          observed = { signal: context?.signal, deadline: context?.deadline };
+          observed = {
+            signal: context?.signal,
+            deadline: context?.deadline,
+            publicNetworkOnly: context?.publicNetworkOnly,
+          };
           return { provider: 'fake-provider' };
         },
       },
@@ -288,6 +295,7 @@ test('lease allocation hands the provider the request-bound signal and a deadlin
 
     assert.equal(response?.ok, true);
     assert.equal(observed?.signal?.aborted, false);
+    assert.equal(observed?.publicNetworkOnly, true);
     markRequestCanceled(requestId);
     assert.equal(observed?.signal?.aborted, true, 'the provider signal must track this request');
     assert.ok(

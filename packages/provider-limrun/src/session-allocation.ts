@@ -5,6 +5,7 @@ import { createLimrunAndroidSession, type LimrunAndroidSession } from './android
 import { buildLimrunDevice } from './device.ts';
 import { createLimrunIosSession, type LimrunIosSession } from './ios.ts';
 import {
+  assertLimrunUploadedAppAccess,
   resolveInstalledAppIdForAsset,
   resolveLimrunAppAsset,
   type LimrunAppAsset,
@@ -41,6 +42,7 @@ export async function resolveRequestedLimrunAppAsset(
   const value = context?.flags?.providerApp;
   const name = typeof value === 'string' ? value.trim() : '';
   if (!name) return undefined;
+  assertLimrunUploadedAppAccess(context?.publicNetworkOnly);
   return await resolveLimrunAppAsset(limrun, platform, name, context?.signal);
 }
 

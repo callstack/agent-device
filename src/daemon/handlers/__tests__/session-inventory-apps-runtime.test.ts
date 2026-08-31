@@ -204,3 +204,30 @@ test('deferred provider apps forwards request cancellation to the catalog', asyn
     clearRequestAbortRegistration(registration);
   }
 });
+
+test('deferred provider apps forwards public daemon access to the catalog', async () => {
+  const listAvailableApps = vi.fn(async () => ['Example.apk']);
+  const req: DaemonRequest = {
+    token: 'test-token',
+    session: 'limrun-public-apps',
+    command: 'apps',
+    positionals: [],
+    flags: { platform: 'ios', leaseProvider: 'limrun' },
+    internal: { publicNetworkOnly: true },
+  };
+
+  await handleSessionInventoryCommands({
+    req,
+    sessionName: req.session,
+    sessionStore: makeSessionStore(),
+    providerAppCatalog: {
+      supports: (provider) => provider === 'limrun',
+      list: listAvailableApps,
+    },
+  });
+
+  expect(listAvailableApps).toHaveBeenCalledWith(
+    { provider: 'limrun', platform: 'ios', publicNetworkOnly: true },
+    undefined,
+  );
+});

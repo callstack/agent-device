@@ -231,6 +231,7 @@ function leaseLifecycleContext(req: DaemonRequest): LeaseLifecycleContext {
   return {
     flags: req.flags,
     cwd: typeof req.meta?.cwd === 'string' ? req.meta.cwd : undefined,
+    ...(req.internal?.publicNetworkOnly ? { publicNetworkOnly: true } : {}),
   };
 }
 

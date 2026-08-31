@@ -15,6 +15,14 @@ import type {
 const state = vi.hoisted(() => ({
   constructorOptions: [] as Array<{ defaultHeaders?: Record<string, string> }>,
   androidCreateInputs: [] as unknown[],
+  assetList: vi.fn(async () => [
+    {
+      id: 'asset-example',
+      name: 'Example.apk',
+      md5: 'uploaded',
+      os: 'android',
+    },
+  ]),
   tunnelClose: vi.fn(),
   disconnect: vi.fn(),
 }));
@@ -45,14 +53,7 @@ vi.mock('@limrun/api', () => ({
 
     readonly assets = {
       getOrUpload: vi.fn(),
-      list: vi.fn(async () => [
-        {
-          id: 'asset-example',
-          name: 'Example.apk',
-          md5: 'uploaded',
-          os: 'android',
-        },
-      ]),
+      list: state.assetList,
     };
 
     constructor(options: { defaultHeaders?: Record<string, string> }) {
@@ -153,6 +154,39 @@ test('allocation installs an exact uploaded asset before binding its application
       },
     });
     assert.equal(fixture.listApps.mock.calls[0]?.[1], 'user-installed');
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test('public daemon requests cannot list or allocate uploaded apps', async () => {
+  state.androidCreateInputs.length = 0;
+  state.assetList.mockClear();
+  const fixture = createContractFixture();
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, fixture.dependencies);
+  const appCatalog = runtime.appCatalog;
+  if (!appCatalog) throw new Error('Expected Limrun app catalog capability');
+
+  try {
+    await assert.rejects(
+      async () =>
+        await appCatalog({
+          provider: 'limrun',
+          platform: 'android',
+          publicNetworkOnly: true,
+        }),
+      (error) => error instanceof AppError && error.code === 'UNAUTHORIZED',
+    );
+    await assert.rejects(
+      async () =>
+        await runtime.leaseLifecycle.allocate?.(androidLease(), {
+          flags: { providerApp: 'Example.apk' },
+          publicNetworkOnly: true,
+        }),
+      (error) => error instanceof AppError && error.code === 'UNAUTHORIZED',
+    );
+    assert.equal(state.assetList.mock.calls.length, 0);
+    assert.equal(state.androidCreateInputs.length, 0);
   } finally {
     await runtime.shutdown();
   }

@@ -11,6 +11,14 @@ export type LimrunAppAsset = Readonly<{
 
 type InstalledAppIdentity = Readonly<{ id: string; name?: string }>;
 
+export function assertLimrunUploadedAppAccess(publicNetworkOnly: boolean | undefined): void {
+  if (!publicNetworkOnly) return;
+  throw new AppError(
+    'UNAUTHORIZED',
+    'Limrun uploaded apps are unavailable on the public daemon HTTP surface.',
+  );
+}
+
 export async function listLimrunAppAssets(
   limrun: Limrun,
   platform: 'android' | 'ios',

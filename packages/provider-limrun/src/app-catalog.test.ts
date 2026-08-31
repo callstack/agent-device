@@ -1,11 +1,17 @@
 import { describe, expect, test, vi } from 'vitest';
 import {
+  assertLimrunUploadedAppAccess,
   listLimrunAppAssets,
   resolveInstalledAppIdForAsset,
   resolveLimrunAppAsset,
 } from './app-catalog.ts';
 
 describe('Limrun uploaded app catalog', () => {
+  test('rejects uploaded app access on the public daemon HTTP surface', () => {
+    expect(() => assertLimrunUploadedAppAccess(true)).toThrow(/public daemon HTTP surface/);
+    expect(() => assertLimrunUploadedAppAccess(false)).not.toThrow();
+  });
+
   test('lists only uploaded assets compatible with the requested platform', async () => {
     const list = vi.fn(async () => [
       { id: 'android-explicit', name: 'build.bin', os: 'android', md5: 'a' },

@@ -358,6 +358,7 @@ async function resolveProviderAppCatalogResponse(
     {
       provider,
       platform,
+      ...(req.internal?.publicNetworkOnly ? { publicNetworkOnly: true } : {}),
     },
     getRequestSignal(req.meta?.requestId),
   );

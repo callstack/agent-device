@@ -101,7 +101,8 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   };
 
   readonly appCatalog: ProviderAppCatalogHandler = async (query, signal) => {
-    const { listLimrunAppAssets } = await import('./app-catalog.ts');
+    const { assertLimrunUploadedAppAccess, listLimrunAppAssets } = await import('./app-catalog.ts');
+    assertLimrunUploadedAppAccess(query.publicNetworkOnly);
     return (await listLimrunAppAssets(this.limrun, query.platform, signal)).map(
       (asset) => asset.name,
     );

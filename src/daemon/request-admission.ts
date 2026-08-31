@@ -4,7 +4,6 @@ import { isTenantOwnedSessionName, tenantScopedSessionName } from './session-ten
 import {
   isLeaseAdmissionExempt,
   isHumanControlMutation,
-  isSessionlessPlainCloseAdmissionExempt,
   resolveSessionlessLeaseAdmissionExemption,
 } from './daemon-command-registry.ts';
 import type { DeviceLease, ProviderAppCatalog } from '@agent-device/contracts/device';
@@ -78,8 +77,7 @@ export function assertRequestLeaseAdmission(
   if (
     session === undefined &&
     !requestLeaseScope.leaseId &&
-    (isSessionlessPlainCloseAdmissionExempt(req) ||
-      hasSessionlessLeaseAdmissionExemption(req, options.providerAppCatalog))
+    hasSessionlessLeaseAdmissionExemption(req, options.providerAppCatalog)
   ) {
     return undefined;
   }
