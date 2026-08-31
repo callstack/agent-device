@@ -74,27 +74,64 @@ function resolveRelativeTarget(fromFile: string, spec: string): string | null {
   return resolved.startsWith('src/') ? resolved : null;
 }
 
-function collectImportSites(file: string): ImportSite[] {
-  const source = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8');
+function collectImportSites(
+  file: string,
+  source = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8'),
+): ImportSite[] {
   const parsed = parseSync(file, source);
   const sites: ImportSite[] = [];
-  for (const node of parsed.program.body) {
-    if (node.type !== 'ImportDeclaration') continue;
-    const target = resolveRelativeTarget(file, node.source.value);
-    const bindings = node.specifiers
-      .filter((specifier) => specifier.type === 'ImportSpecifier')
-      .map((specifier) => ({
-        name: specifier.imported.type === 'Identifier' ? specifier.imported.name : '',
-        typeOnly: specifier.importKind === 'type',
-      }));
+  visitAst(parsed.program, (node) => {
+    if (node.type === 'ImportDeclaration') {
+      const target = importSourceTarget(file, node.source);
+      const specifiers = node.specifiers as readonly Record<string, unknown>[];
+      const bindings = specifiers
+        .filter((specifier) => specifier.type === 'ImportSpecifier')
+        .map((specifier) => ({
+          name: identifierName(specifier.imported) ?? '',
+          typeOnly: specifier.importKind === 'type',
+        }));
+      sites.push({
+        file,
+        target,
+        bindings,
+        declarationTypeOnly: node.importKind === 'type',
+      });
+      return;
+    }
+    if (node.type === 'ImportExpression') {
+      sites.push({
+        file,
+        target: importSourceTarget(file, node.source),
+        bindings: [],
+        declarationTypeOnly: false,
+      });
+      return;
+    }
+    if (node.type !== 'ExportNamedDeclaration' && node.type !== 'ExportAllDeclaration') return;
+    if (!node.source) return;
+    const bindings =
+      node.type === 'ExportNamedDeclaration'
+        ? (node.specifiers as readonly Record<string, unknown>[])
+            .filter((specifier) => specifier.type === 'ExportSpecifier')
+            .map((specifier) => ({
+              name: identifierName(specifier.local) ?? '',
+              typeOnly: node.exportKind === 'type' || specifier.exportKind === 'type',
+            }))
+        : [];
     sites.push({
       file,
-      target,
+      target: importSourceTarget(file, node.source),
       bindings,
-      declarationTypeOnly: node.importKind === 'type',
+      declarationTypeOnly: node.exportKind === 'type',
     });
-  }
+  });
   return sites;
+}
+
+function importSourceTarget(file: string, source: unknown): string | null {
+  if (!source || typeof source !== 'object') return null;
+  const value = (source as { value?: unknown }).value;
+  return typeof value === 'string' ? resolveRelativeTarget(file, value) : null;
 }
 
 function importsValueBinding(site: ImportSite, name: string): boolean {
@@ -326,4 +363,16 @@ test('the divergence-report chain never imports SessionStore', () => {
       );
     }
   }
+});
+
+test('SessionStore ownership scanning catches dynamic imports and re-exports', () => {
+  const sites = collectImportSites(
+    'src/daemon/replay/internal/probe.ts',
+    [
+      "void import('../../session-store.ts');",
+      "export { SessionStore } from '../../session-store.ts';",
+      "export * from '../../session-store.ts';",
+    ].join('\n'),
+  );
+  assert.equal(sites.filter((site) => importsAnyBinding(site, SESSION_STORE_MODULE)).length, 3);
 });
