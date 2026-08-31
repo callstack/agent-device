@@ -14,8 +14,21 @@ import {
   typeInversionPair,
   type ResolvedImportEdge,
 } from '../layering/model.ts';
+import { ARCHITECTURE_OWNERSHIP, matchesDeclaredRoot } from '../layering/architecture-ownership.ts';
 
 export type EdgeKind = 'value' | 'type' | 'dynamic';
+
+export const AUTHORITY_LABELS = [
+  'vocabulary',
+  'capability',
+  'live-state-shape',
+  'live-state-authority',
+  'executable-policy',
+  'ordinary',
+] as const;
+
+export type AuthorityLabel = (typeof AUTHORITY_LABELS)[number];
+export type AuthorityCounts = Record<AuthorityLabel, number>;
 
 export type GraphEdge = {
   from: string;
@@ -59,12 +72,90 @@ export type GraphCycle = {
 export type GraphData = {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  edgeAuthorities: AuthorityLabel[][];
+  authorityCounts: AuthorityCounts;
   zones: { id: string; classification: string; files: number; loc: number }[];
   zoneEdges: ZoneEdge[];
   cycles: GraphCycle[];
   /** Type-only spine inversions per zone pair, counted by the gate's rule. */
   typeInversions: Record<string, number>;
 };
+
+const SESSION_STATE_ROOT = 'src/daemon/types.ts';
+const SESSION_STORE_ROOT = 'src/daemon/session-store.ts';
+
+function hasDeclaredCapabilitySymbol(edge: ResolvedImportEdge): boolean {
+  return ARCHITECTURE_OWNERSHIP.capabilities.some(
+    ({ root, exports }) =>
+      edge.target === root &&
+      edge.symbols.some((symbol) => exports.some((name) => name === symbol)),
+  );
+}
+
+function hasDeclaredVocabularyRoot(edge: ResolvedImportEdge): boolean {
+  return ARCHITECTURE_OWNERSHIP.vocabulary.some(({ roots }) =>
+    roots.some((root) => matchesDeclaredRoot(edge.target, root)),
+  );
+}
+
+function hasExecutablePolicyOwner(edge: ResolvedImportEdge): boolean {
+  return ARCHITECTURE_OWNERSHIP.executablePolicies.some(({ roots }) =>
+    roots.some((root) => matchesDeclaredRoot(edge.file, root)),
+  );
+}
+
+/** Labels one resolved edge from exact declared roots and symbols. */
+export function authorityLabelsForEdge(edge: ResolvedImportEdge): AuthorityLabel[] {
+  const labels = new Set<AuthorityLabel>();
+  if (hasDeclaredVocabularyRoot(edge)) labels.add('vocabulary');
+  if (hasDeclaredCapabilitySymbol(edge)) labels.add('capability');
+  if (edge.target === SESSION_STATE_ROOT && edge.symbols.includes('SessionState')) {
+    labels.add('live-state-shape');
+  }
+  if (edge.target === SESSION_STORE_ROOT && edge.symbols.includes('SessionStore')) {
+    labels.add('live-state-authority');
+  }
+  if (hasExecutablePolicyOwner(edge)) labels.add('executable-policy');
+  if (labels.size === 0) labels.add('ordinary');
+  return AUTHORITY_LABELS.filter((label) => labels.has(label));
+}
+
+function edgePair(from: string, to: string): string {
+  return `${from}\u0000${to}`;
+}
+
+/** Classifications aligned by index with the collapsed graph edges. */
+function classifyEdgeAuthorities(
+  rawEdges: readonly ResolvedImportEdge[],
+  collapsedEdges: readonly GraphEdge[],
+): AuthorityLabel[][] {
+  const rawByPair = new Map<string, ResolvedImportEdge[]>();
+  for (const edge of rawEdges) {
+    const pair = edgePair(edge.file, edge.target);
+    const entries = rawByPair.get(pair) ?? [];
+    entries.push(edge);
+    rawByPair.set(pair, entries);
+  }
+
+  return collapsedEdges.map((edge) => {
+    const labels = new Set<AuthorityLabel>();
+    for (const rawEdge of rawByPair.get(edgePair(edge.from, edge.to)) ?? []) {
+      for (const label of authorityLabelsForEdge(rawEdge)) {
+        if (label !== 'ordinary') labels.add(label);
+      }
+    }
+    if (labels.size === 0) labels.add('ordinary');
+    return AUTHORITY_LABELS.filter((label) => labels.has(label));
+  });
+}
+
+function countAuthorityLabels(edgeAuthorities: readonly AuthorityLabel[][]): AuthorityCounts {
+  const counts = Object.fromEntries(AUTHORITY_LABELS.map((label) => [label, 0])) as AuthorityCounts;
+  for (const labels of edgeAuthorities) {
+    for (const label of labels) counts[label]++;
+  }
+  return counts;
+}
 
 function countLines(source: string): number {
   let lines = 1;
@@ -336,12 +427,15 @@ export function buildGraph(
 ): GraphData {
   const collapsed = collapseEdges(edges);
   markTransitivelyReachableEdges(collapsed);
+  const edgeAuthorities = classifyEdgeAuthorities(edges, collapsed);
   const cycles = collectCycles(edges);
   const nodes = buildNodes(sources, collapsed, indexCyclesByFile(cycles));
 
   return {
     nodes: [...nodes.values()].sort((left, right) => left.id.localeCompare(right.id)),
     edges: collapsed,
+    edgeAuthorities,
+    authorityCounts: countAuthorityLabels(edgeAuthorities),
     zones: aggregateZones(nodes),
     zoneEdges: aggregateZoneEdges(nodes, collapsed),
     cycles,

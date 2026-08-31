@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { ARCHITECTURE_OWNERSHIP, matchesDeclaredRoot } from './architecture-ownership.ts';
-import { readDirectNamedExports } from './facade-exports.ts';
+import { readNamedExports } from './facade-exports.ts';
 import { resolveImportEdges } from './model.ts';
 import { workspaceSpecifierTargets } from './package-boundaries.ts';
 import { listTrackedTypeScriptFiles } from './tracked-sources.ts';
@@ -64,7 +64,7 @@ test('capability roots enumerate current exports and have production consumers',
 
   for (const declaration of ARCHITECTURE_OWNERSHIP.capabilities) {
     assert.deepEqual(
-      readDirectNamedExports(sources.get(declaration.root)!),
+      readNamedExports(sources.get(declaration.root)!),
       declaration.exports,
       `${declaration.name} capability exports drifted`,
     );

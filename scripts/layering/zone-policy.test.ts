@@ -18,6 +18,7 @@ function edge(file: string, fromZone: string, toZone: string, kind: Kind = {}) {
       line: 1,
       dynamic: kind.dynamic ?? false,
       typeOnly: kind.typeOnly ?? false,
+      symbols: [],
     },
   };
 }

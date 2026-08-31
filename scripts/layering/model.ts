@@ -6,6 +6,8 @@ export type ImportEdge = {
   dynamic: boolean;
   typeOnly: boolean;
   line: number;
+  /** Named symbols imported from the target; empty for side-effect, namespace, and dynamic imports. */
+  symbols: readonly string[];
 };
 
 export type ResolvedImportEdge = ImportEdge & {
@@ -109,14 +111,31 @@ function scanDynamicImports(line: string, lineNo: number): ImportEdge[] {
   const re = /import\s*\(\s*['"]([^'"]+)['"]/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(line))) {
-    edges.push({ spec: match[1]!, dynamic: true, typeOnly: false, line: lineNo });
+    edges.push({ spec: match[1]!, dynamic: true, typeOnly: false, line: lineNo, symbols: [] });
   }
   return edges;
 }
 
 function scanSideEffectImport(line: string, lineNo: number): ImportEdge | null {
   const match = /^\s*import\s+['"]([^'"]+)['"]/.exec(line);
-  return match ? { spec: match[1]!, dynamic: false, typeOnly: false, line: lineNo } : null;
+  return match
+    ? { spec: match[1]!, dynamic: false, typeOnly: false, line: lineNo, symbols: [] }
+    : null;
+}
+
+function importedSymbols(statement: string): string[] {
+  const named = /\{([\s\S]*?)\}/.exec(statement);
+  if (!named) return [];
+  const symbols = new Set<string>();
+  for (const specifier of named[1]!.split(',')) {
+    const sourceName = specifier
+      .trim()
+      .replace(/^type\s+/, '')
+      .split(/\s+as\s+/, 1)[0]
+      ?.trim();
+    if (sourceName) symbols.add(sourceName);
+  }
+  return [...symbols];
 }
 
 function statementIsTypeOnly(statement: string): boolean {
@@ -151,6 +170,7 @@ function scanFromImport(lines: string[], index: number): ImportEdge | null {
     dynamic: false,
     typeOnly: statementIsTypeOnly(statement),
     line: start + 1,
+    symbols: importedSymbols(statement),
   };
 }
 

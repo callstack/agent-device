@@ -16,6 +16,7 @@ function importEdge(file: string, target: string): ResolvedImportEdge {
     line: 1,
     dynamic: false,
     typeOnly: true,
+    symbols: [],
     fromZone: targetDagZone(file),
     toZone: targetDagZone(target),
   };
