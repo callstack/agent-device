@@ -29,6 +29,39 @@ export const AUTHORITY_LABELS = [
 
 export type AuthorityLabel = (typeof AUTHORITY_LABELS)[number];
 export type AuthorityCounts = Record<AuthorityLabel, number>;
+type DeclaredAuthorityLabel = Exclude<AuthorityLabel, 'ordinary'>;
+
+type AuthorityRule = Readonly<{
+  label: DeclaredAuthorityLabel;
+  side: 'source' | 'target';
+  roots: readonly string[];
+  symbols?: readonly string[];
+}>;
+
+const AUTHORITY_RULES: readonly AuthorityRule[] = [
+  ...ARCHITECTURE_OWNERSHIP.vocabulary.map(({ kind, roots }): AuthorityRule => ({
+    label: kind,
+    side: 'target',
+    roots,
+  })),
+  ...ARCHITECTURE_OWNERSHIP.capabilities.map(({ kind, root, exports }): AuthorityRule => ({
+    label: kind,
+    side: 'target',
+    roots: [root],
+    symbols: exports,
+  })),
+  ...ARCHITECTURE_OWNERSHIP.liveState.map(({ kind, root, exports }): AuthorityRule => ({
+    label: kind,
+    side: 'target',
+    roots: [root],
+    symbols: exports,
+  })),
+  ...ARCHITECTURE_OWNERSHIP.executablePolicies.map(({ kind, roots }): AuthorityRule => ({
+    label: kind,
+    side: 'source',
+    roots,
+  })),
+];
 
 export type GraphEdge = {
   from: string;
@@ -42,6 +75,8 @@ export type GraphEdge = {
   /** True when the same pair is also reachable through a longer path of the same weight class. */
   /** Target also reachable at distance >= 2. Reachability only — see the marker function. */
   transitivelyReachable: boolean;
+  /** Declared labels accumulated from every raw import in this collapsed pair. */
+  authorities: readonly DeclaredAuthorityLabel[];
 };
 
 export type GraphNode = {
@@ -81,70 +116,39 @@ export type GraphData = {
   typeInversions: Record<string, number>;
 };
 
-function hasDeclaredCapabilitySymbol(edge: ResolvedImportEdge): boolean {
-  return ARCHITECTURE_OWNERSHIP.capabilities.some(
-    ({ root, exports }) =>
-      edge.target === root &&
-      edge.symbols.some((symbol) => exports.some((name) => name === symbol)),
+function orderedDeclaredAuthorities(
+  labels: Iterable<DeclaredAuthorityLabel>,
+): DeclaredAuthorityLabel[] {
+  const selected = new Set(labels);
+  return AUTHORITY_LABELS.filter(
+    (label): label is DeclaredAuthorityLabel => label !== 'ordinary' && selected.has(label),
   );
 }
 
-function hasDeclaredVocabularyRoot(edge: ResolvedImportEdge): boolean {
-  return ARCHITECTURE_OWNERSHIP.vocabulary.some(({ roots }) =>
-    roots.some((root) => matchesDeclaredRoot(edge.target, root)),
-  );
+function declaredAuthorities(edge: ResolvedImportEdge): DeclaredAuthorityLabel[] {
+  const labels = new Set<DeclaredAuthorityLabel>();
+  for (const rule of AUTHORITY_RULES) {
+    const subject = rule.side === 'source' ? edge.file : edge.target;
+    if (!rule.roots.some((root) => matchesDeclaredRoot(subject, root))) continue;
+    if (rule.symbols && !edge.symbols.some((symbol) => rule.symbols.includes(symbol))) continue;
+    labels.add(rule.label);
+  }
+  return orderedDeclaredAuthorities(labels);
 }
 
-function hasExecutablePolicyOwner(edge: ResolvedImportEdge): boolean {
-  return ARCHITECTURE_OWNERSHIP.executablePolicies.some(({ roots }) =>
-    roots.some((root) => matchesDeclaredRoot(edge.file, root)),
-  );
-}
-
-function declaredLiveStateLabels(edge: ResolvedImportEdge): AuthorityLabel[] {
-  return ARCHITECTURE_OWNERSHIP.liveState
-    .filter(({ root, symbol }) => edge.target === root && edge.symbols.includes(symbol))
-    .map(({ label }) => label);
+function authorityLabelsForDeclared(
+  authorities: readonly DeclaredAuthorityLabel[],
+): AuthorityLabel[] {
+  return authorities.length > 0 ? [...authorities] : ['ordinary'];
 }
 
 /** Labels one resolved edge from exact declared roots and symbols. */
 export function authorityLabelsForEdge(edge: ResolvedImportEdge): AuthorityLabel[] {
-  const labels = new Set<AuthorityLabel>();
-  if (hasDeclaredVocabularyRoot(edge)) labels.add('vocabulary');
-  if (hasDeclaredCapabilitySymbol(edge)) labels.add('capability');
-  for (const label of declaredLiveStateLabels(edge)) labels.add(label);
-  if (hasExecutablePolicyOwner(edge)) labels.add('executable-policy');
-  if (labels.size === 0) labels.add('ordinary');
-  return AUTHORITY_LABELS.filter((label) => labels.has(label));
+  return authorityLabelsForDeclared(declaredAuthorities(edge));
 }
 
 function edgePair(from: string, to: string): string {
   return `${from}\u0000${to}`;
-}
-
-/** Classifications aligned by index with the collapsed graph edges. */
-function classifyEdgeAuthorities(
-  rawEdges: readonly ResolvedImportEdge[],
-  collapsedEdges: readonly GraphEdge[],
-): AuthorityLabel[][] {
-  const rawByPair = new Map<string, ResolvedImportEdge[]>();
-  for (const edge of rawEdges) {
-    const pair = edgePair(edge.file, edge.target);
-    const entries = rawByPair.get(pair) ?? [];
-    entries.push(edge);
-    rawByPair.set(pair, entries);
-  }
-
-  return collapsedEdges.map((edge) => {
-    const labels = new Set<AuthorityLabel>();
-    for (const rawEdge of rawByPair.get(edgePair(edge.from, edge.to)) ?? []) {
-      for (const label of authorityLabelsForEdge(rawEdge)) {
-        if (label !== 'ordinary') labels.add(label);
-      }
-    }
-    if (labels.size === 0) labels.add('ordinary');
-    return AUTHORITY_LABELS.filter((label) => labels.has(label));
-  });
 }
 
 function countAuthorityLabels(edgeAuthorities: readonly AuthorityLabel[][]): AuthorityCounts {
@@ -179,10 +183,17 @@ export function collapseEdges(edges: readonly ResolvedImportEdge[]): GraphEdge[]
   const byPair = new Map<string, GraphEdge>();
   for (const edge of edges) {
     if (edge.file === edge.target) continue;
-    const key = `${edge.file}\u0000${edge.target}`;
+    const key = edgePair(edge.file, edge.target);
     const kind = edgeKind(edge);
     const existing = byPair.get(key);
-    if (existing && strength[existing.kind] >= strength[kind]) continue;
+    const authorities = orderedDeclaredAuthorities([
+      ...(existing?.authorities ?? []),
+      ...declaredAuthorities(edge),
+    ]);
+    if (existing && strength[existing.kind] >= strength[kind]) {
+      byPair.set(key, { ...existing, authorities });
+      continue;
+    }
     byPair.set(key, {
       from: edge.file,
       to: edge.target,
@@ -191,6 +202,7 @@ export function collapseEdges(edges: readonly ResolvedImportEdge[]): GraphEdge[]
       backEdge: backEdgePair(edge),
       typeInversion: typeInversionPair(edge),
       transitivelyReachable: false,
+      authorities,
     });
   }
   return [...byPair.values()].sort(
@@ -425,7 +437,9 @@ export function buildGraph(
 ): GraphData {
   const collapsed = collapseEdges(edges);
   markTransitivelyReachableEdges(collapsed);
-  const edgeAuthorities = classifyEdgeAuthorities(edges, collapsed);
+  const edgeAuthorities = collapsed.map(({ authorities }) =>
+    authorityLabelsForDeclared(authorities),
+  );
   const cycles = collectCycles(edges);
   const nodes = buildNodes(sources, collapsed, indexCyclesByFile(cycles));
 

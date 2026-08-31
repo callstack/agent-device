@@ -89,15 +89,15 @@ export const ARCHITECTURE_OWNERSHIP = {
   liveState: [
     {
       name: 'session-state-shape',
-      label: 'live-state-shape',
+      kind: 'live-state-shape',
       root: 'src/daemon/types.ts',
-      symbol: 'SessionState',
+      exports: ['SessionState'],
     },
     {
       name: 'session-store-authority',
-      label: 'live-state-authority',
+      kind: 'live-state-authority',
       root: 'src/daemon/session-store.ts',
-      symbol: 'SessionStore',
+      exports: ['SessionStore'],
     },
   ],
   executablePolicies: [

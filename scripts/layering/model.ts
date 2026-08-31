@@ -124,73 +124,47 @@ function scanSideEffectImport(line: string, lineNo: number): ImportEdge | null {
 }
 
 function withoutImportComments(statement: string): string {
-  let normalized = '';
-  let quote: string | null = null;
-  for (let index = 0; index < statement.length; index++) {
-    const char = statement[index]!;
-    const next = statement[index + 1];
-    if (quote) {
-      normalized += char;
-      if (char === '\\' && next) {
-        normalized += next;
-        index++;
-      } else if (char === quote) {
-        quote = null;
-      }
-    } else if (char === "'" || char === '"') {
-      quote = char;
-      normalized += char;
-    } else if (char === '/' && next === '*') {
-      index += 2;
-      while (
-        index < statement.length &&
-        !(statement[index] === '*' && statement[index + 1] === '/')
-      ) {
-        index++;
-      }
-      index++;
-      normalized += ' ';
-    } else if (char === '/' && next === '/') {
-      while (index < statement.length && statement[index] !== '\n') index++;
-      normalized += '\n';
-    } else {
-      normalized += char;
-    }
+  return statement.replaceAll(
+    /(["'])(?:\\.|(?!\1)[^\\\r\n])*?\1|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g,
+    (match) => (match.startsWith('/*') ? ' ' : match.startsWith('//') ? '\n' : match),
+  );
+}
+
+type NamedSpecifier = { name: string; typeOnly: boolean };
+type ParsedNamedSpecifiers = { index: number; specifiers: NamedSpecifier[] };
+
+function parseNamedSpecifiers(statement: string): ParsedNamedSpecifiers | null {
+  const named = /\{([\s\S]*?)\}/.exec(statement);
+  if (!named) return null;
+
+  const specifiers: NamedSpecifier[] = [];
+  for (const specifier of named[1]!.split(',')) {
+    const trimmed = specifier.trim();
+    const typeOnly = /^type\b/.test(trimmed);
+    const sourceName = trimmed.replace(/^type\s+/, '');
+    const name = /^[A-Za-z_$][\w$]*/.exec(sourceName)?.[0];
+    if (name) specifiers.push({ name, typeOnly });
   }
-  return normalized;
+  return { index: named.index, specifiers };
 }
 
 function importedSymbols(statement: string): string[] {
-  const named = /\{([\s\S]*?)\}/.exec(statement);
-  if (!named) return [];
-  const symbols = new Set<string>();
-  for (const specifier of named[1]!.split(',')) {
-    const sourceName = specifier
-      .trim()
-      .replace(/^type\s+/, '')
-      .split(/\s+as\s+/, 1)[0]
-      ?.trim();
-    if (sourceName) symbols.add(sourceName);
-  }
-  return [...symbols];
+  const parsed = parseNamedSpecifiers(statement);
+  return [...new Set(parsed?.specifiers.map(({ name }) => name) ?? [])];
 }
 
 function statementIsTypeOnly(statement: string): boolean {
   if (/^\s*(?:import|export)\s+type\b/.test(statement)) return true;
-  const named = /\{([\s\S]*?)\}/.exec(statement);
-  if (!named) return false;
+  const parsed = parseNamedSpecifiers(statement);
+  if (!parsed) return false;
   const prefix = statement
-    .slice(0, named.index)
+    .slice(0, parsed.index)
     .replace(/^\s*(?:import|export)\s+/, '')
     .trim()
     .replace(/,$/, '')
     .trim();
   if (prefix.length > 0) return false;
-  const specifiers = named[1]!
-    .split(',')
-    .map((specifier) => specifier.trim())
-    .filter(Boolean);
-  return specifiers.length > 0 && specifiers.every((specifier) => /^type\b/.test(specifier));
+  return parsed.specifiers.length > 0 && parsed.specifiers.every(({ typeOnly }) => typeOnly);
 }
 
 function scanFromImport(lines: string[], index: number): ImportEdge | null {

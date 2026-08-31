@@ -150,16 +150,16 @@ test('live-state labels follow shared declarations and reject lookalike targets'
         dynamic: false,
         typeOnly: true,
         line: 1,
-        symbols: [declaration.symbol],
+        symbols: [...declaration.exports],
         fromZone: 'core',
         toZone: 'daemon-server',
       }),
-      [declaration.label],
+      [declaration.kind],
     );
   }
 
   const sessionState = ARCHITECTURE_OWNERSHIP.liveState.find(
-    ({ label }) => label === 'live-state-shape',
+    ({ kind }) => kind === 'live-state-shape',
   )!;
   assert.deepEqual(
     authorityLabelsForEdge({
@@ -169,7 +169,7 @@ test('live-state labels follow shared declarations and reject lookalike targets'
       dynamic: false,
       typeOnly: true,
       line: 1,
-      symbols: [sessionState.symbol],
+      symbols: [...sessionState.exports],
       fromZone: 'core',
       toZone: 'daemon-server',
     }),

@@ -38,12 +38,6 @@ test('architecture ownership roots resolve to tracked owners', () => {
   }
   for (const declaration of ARCHITECTURE_OWNERSHIP.liveState) {
     assert.ok(tracked.has(declaration.root), `${declaration.name} root is not tracked`);
-    assert.ok(
-      readNamedExports(fs.readFileSync(path.join(repoRoot, declaration.root), 'utf8')).includes(
-        declaration.symbol,
-      ),
-      `${declaration.name} symbol is not exported by ${declaration.root}`,
-    );
   }
 });
 
@@ -81,6 +75,20 @@ test('capability roots enumerate current exports and have production consumers',
       edges.some((edge) => edge.target === declaration.root && productionFile(edge.file)),
       `${declaration.name} has no production consumer`,
     );
+  }
+});
+
+test('live-state roots enumerate their declared exports', () => {
+  const files = listTrackedTypeScriptFiles(repoRoot);
+  const sources = new Map(
+    files.map((file) => [file, fs.readFileSync(path.join(repoRoot, file), 'utf8')]),
+  );
+
+  for (const declaration of ARCHITECTURE_OWNERSHIP.liveState) {
+    const actual = new Set(readNamedExports(sources.get(declaration.root)!));
+    for (const name of declaration.exports) {
+      assert.equal(actual.has(name), true, `${declaration.name} export drifted: ${name}`);
+    }
   }
 });
 
