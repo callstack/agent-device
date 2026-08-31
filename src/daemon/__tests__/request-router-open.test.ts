@@ -772,7 +772,8 @@ test('open reconciles a foreign dead owner through that owner state dir, never t
     try {
       orphan.child.kill('SIGKILL');
     } catch {}
-    process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
     fs.rmSync(claimsDir, { recursive: true, force: true });
     fs.rmSync(foreignStateDir, { recursive: true, force: true });
   }

@@ -350,7 +350,8 @@ test('daemon runtime records startup device-claim reconciliation in daemon.log',
     await runtime?.shutdown();
     assert.equal(exitCode, 0);
   } finally {
-    process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
     fs.rmSync(stateDir, { recursive: true, force: true });
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }
@@ -490,7 +491,8 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
     try {
       orphanRecorder.kill('SIGKILL');
     } catch {}
-    process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
     fs.rmSync(daemonStateDir, { recursive: true, force: true });
     fs.rmSync(foreignStateDir, { recursive: true, force: true });
     fs.rmSync(claimsDir, { recursive: true, force: true });
