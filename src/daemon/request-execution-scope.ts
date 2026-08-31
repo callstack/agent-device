@@ -57,7 +57,7 @@ import {
   type RequestRuntimeBindings,
 } from './request-runtime-binding.ts';
 import { createDeviceClaimAdmission, type DeviceClaimAdmission } from './device-claim-admission.ts';
-import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
+import { createOwnerScopedDeviceClaimReconciler } from './device-claim-owner-recovery.ts';
 import { resolveCommandDeviceClaimPolicy } from '../core/command-descriptor/registry.ts';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 
@@ -320,10 +320,7 @@ function createRequestDeviceAccess(params: {
     command: params.command,
     workspace: params.workspace,
     stateDir: params.stateDir,
-    reconcileOrphanedDeviceClaim: createDeviceClaimReconciler({
-      gateway: deviceRuntimeGateway,
-      scope: platformRequestScope,
-    }),
+    reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler(platformRequestScope),
   });
   return {
     claimAdmission,

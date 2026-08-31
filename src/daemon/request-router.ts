@@ -47,7 +47,7 @@ import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { isWebSession } from './web-session-names.ts';
 import { inferFillText } from './action-utils.ts';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
-import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
+import { createOwnerScopedDeviceClaimReconciler } from './device-claim-owner-recovery.ts';
 import {
   createAppLogAdmissionLedger,
   type AppLogAdmissionLedger,
@@ -299,10 +299,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       bindDevice: lockedScope.bindDevice,
       inspectFacts: lockedScope.inspectFacts,
       bindExactDevice: lockedScope.bindExactDevice,
-      reconcileOrphanedDeviceClaim: createDeviceClaimReconciler({
-        gateway: deviceRuntimeGateway,
-        scope: requestScope,
-      }),
+      reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler(requestScope),
       appLogAdmissionLedger,
       audioProbeAdmissionLedger,
       perfCaptureAdmissionLedger,

@@ -32,7 +32,7 @@ import {
   reconcileOrphanedDeviceClaims,
   type DeviceClaimReconciler,
 } from '../device-claims.ts';
-import { createDeviceClaimReconciler } from '../device-claim-reconciliation.ts';
+import { createOwnerScopedDeviceClaimReconciler } from '../device-claim-owner-recovery.ts';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
 import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
 import {
@@ -565,10 +565,7 @@ export async function startDaemonRuntime(
     // written before it is lost — including reconciliation diagnostics.
     await reconcileDeviceClaimsForDaemonStartup(
       logPath,
-      createDeviceClaimReconciler({
-        gateway: deviceRuntimeGateway,
-        scope: createDaemonRecoveryPlatformScope(),
-      }),
+      createOwnerScopedDeviceClaimReconciler(createDaemonRecoveryPlatformScope()),
       baseDir,
     );
     // Arms the initial idle-reap timer: a daemon that starts and never
