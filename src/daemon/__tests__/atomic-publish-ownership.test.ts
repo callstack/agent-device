@@ -3,10 +3,10 @@ import fs from 'node:fs';
 import { test } from 'vitest';
 
 const SIMPLE_PUBLISHERS = [
-  new URL('../../daemon/device-claims.ts', import.meta.url),
-  new URL('../../daemon/daemon-shutdown-report.ts', import.meta.url),
-  new URL('../../daemon/provider-lease-expiry.ts', import.meta.url),
-  new URL('../../daemon/session-script-writer.ts', import.meta.url),
+  new URL('../device-claims.ts', import.meta.url),
+  new URL('../daemon-shutdown-report.ts', import.meta.url),
+  new URL('../provider-lease-expiry.ts', import.meta.url),
+  new URL('../session-script-writer.ts', import.meta.url),
   new URL('../../../packages/platform-apple/src/runner/runner-lease.ts', import.meta.url),
   new URL('../../remote/remote-connection-state.ts', import.meta.url),
   new URL('../../../packages/host-kit/src/internal/process-lock.ts', import.meta.url),
@@ -22,7 +22,7 @@ test('simple same-directory publishers use the shared atomic publish owner', () 
 
 test('durable capture publication keeps its specialized fsync and destination checks', () => {
   const source = fs.readFileSync(
-    new URL('../../daemon/durable-capture-resource-store.ts', import.meta.url),
+    new URL('../durable-capture-resource-store.ts', import.meta.url),
     'utf8',
   );
   assert.match(source, /withAtomicPublishTempPathSync/);

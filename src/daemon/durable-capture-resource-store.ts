@@ -5,8 +5,10 @@ import type {
   DurableResourceEnvelope,
 } from '@agent-device/contracts/durable-resource-envelope';
 import { decodeDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { withAtomicPublishTempPathSync } from '@agent-device/host-kit/file';
-import { openVerifiedFileForRead } from '../utils/verified-file.ts';
+import {
+  openVerifiedFileForRead,
+  withAtomicPublishTempPathSync,
+} from '@agent-device/host-kit/file';
 
 export type DurableCaptureResourceRecord<K extends string> =
   | Readonly<{ status: 'missing' }>

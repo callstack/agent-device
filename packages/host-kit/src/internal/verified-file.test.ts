@@ -1,8 +1,9 @@
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { assertThrowsAppError } from '../../__tests__/test-utils/app-error.ts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 
 // The recovery hints are pinned as literals, not imported from the module under test: an
 // assertion that compares the constant to itself stays green when the constant is deleted or
@@ -15,7 +16,7 @@ import {
   openVerifiedFileForAppend,
   openVerifiedFileForRead,
   openVerifiedFileForTruncate,
-} from '../verified-file.ts';
+} from './verified-file.ts';
 
 const roots: string[] = [];
 
@@ -113,4 +114,17 @@ function fixturePath(label: string): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), `agent-device-verified-${label}-`));
   roots.push(root);
   return path.join(root, 'artifact');
+}
+
+function assertThrowsAppError(
+  fn: () => unknown,
+  expected: Readonly<{ code: string; message?: RegExp; hint?: string }>,
+): void {
+  assert.throws(fn, (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, expected.code);
+    if (expected.message) assert.match(error.message, expected.message);
+    if (expected.hint !== undefined) assert.equal(normalizeError(error).hint, expected.hint);
+    return true;
+  });
 }

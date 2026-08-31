@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { lstatIfPresent, NOT_REGULAR_FILE_HINT } from './verified-file.ts';
+import { lstatIfPresent, NOT_REGULAR_FILE_HINT } from '@agent-device/host-kit/file';
 
 const DEFAULT_MAX_APP_LOG_BYTES = 5 * 1024 * 1024;
 const DEFAULT_MAX_ROTATED_FILES = 1;

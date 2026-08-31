@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { ensureAppLogPath } from '../utils/app-log-files.ts';
 import {
   openVerifiedFileForAppend,
   openVerifiedFileForRead,
   openVerifiedFileForTruncate,
-} from '../utils/verified-file.ts';
+} from '@agent-device/host-kit/file';
+import { ensureAppLogPath } from '../utils/app-log-files.ts';
 
 export function getAppLogPathMetadata(outPath: string): {
   exists: boolean;
