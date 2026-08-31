@@ -105,6 +105,7 @@ export type MaestroRuntimeMetrics = {
   hierarchyCaptures: number;
   screenshotCaptures: number;
   tapRetries: number;
+  settleTimeouts: number;
 };
 
 export type MaestroRuntimePort = {

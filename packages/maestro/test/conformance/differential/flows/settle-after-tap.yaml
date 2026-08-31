@@ -9,5 +9,6 @@ appId: com.callstack.agentdevicelab
 - assertVisible: Agent Device Tester
 - tapOn:
     text: Settings
+    retryTapIfNoChange: true
 - assertVisible:
     id: open-inert-surface

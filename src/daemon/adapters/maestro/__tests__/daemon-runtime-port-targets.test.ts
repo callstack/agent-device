@@ -235,6 +235,7 @@ test('retries an iOS non-hittable coordinate fallback when the hierarchy does no
     hierarchyCaptures: 5,
     screenshotCaptures: 2,
     tapRetries: 1,
+    settleTimeouts: 0,
   });
 });
 
@@ -298,6 +299,7 @@ test('does not retry an iOS tap when only the rendered surface changes', async (
     hierarchyCaptures: 3,
     screenshotCaptures: 2,
     tapRetries: 0,
+    settleTimeouts: 0,
   });
 });
 
@@ -344,6 +346,7 @@ test('uses screenshot evidence without a redundant hierarchy baseline for iOS po
     hierarchyCaptures: 4,
     screenshotCaptures: 2,
     tapRetries: 1,
+    settleTimeouts: 0,
   });
 });
 

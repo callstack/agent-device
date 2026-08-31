@@ -71,7 +71,7 @@ export async function resolveDaemonMaestroTarget(params: {
 export async function tapTargetAndSettle(
   options: CreateDaemonMaestroRuntimeOperationsOptions,
   snapshots: MaestroSnapshotSource,
-  metrics: { screenshotCaptures: number; tapRetries: number },
+  metrics: { screenshotCaptures: number; tapRetries: number; settleTimeouts: number },
   target: Parameters<MaestroRuntimeOperations['tapOn']>[0]['target'],
   context: MaestroRuntimeOperationContext,
   policy: { click: MaestroClickOptions; retryIfNoChange: boolean },
@@ -119,7 +119,7 @@ export async function tapTargetAndSettle(
 async function tapTargetWithRetry(
   options: CreateDaemonMaestroRuntimeOperationsOptions,
   snapshots: MaestroSnapshotSource,
-  metrics: { screenshotCaptures: number; tapRetries: number },
+  metrics: { screenshotCaptures: number; tapRetries: number; settleTimeouts: number },
   target: Parameters<MaestroRuntimeOperations['tapOn']>[0]['target'],
   context: MaestroRuntimeOperationContext,
   flags: MaestroClickOptions,
@@ -129,13 +129,16 @@ async function tapTargetWithRetry(
   const baselineSignature =
     target.resolution?.surfaceSignature ??
     (screenshotBaseline ? undefined : maestroSnapshotSignature(await snapshots.capture(context)));
-  const settle = async () =>
-    await waitForTypedSnapshotStability({
+  const settle = async () => {
+    const stable = await waitForTypedSnapshotStability({
       timeoutMs: MAESTRO_RUNTIME_ADAPTER_POLICY.settleTimeoutMs,
       context,
       snapshot: snapshots.capture,
       dependencies: options.dependencies,
     });
+    if (!stable.settled) metrics.settleTimeouts += 1;
+    return stable;
+  };
 
   try {
     const observed = await executeTapRetryLoop({

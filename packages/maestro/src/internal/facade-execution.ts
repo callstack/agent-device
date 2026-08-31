@@ -53,6 +53,7 @@ export type MaestroCompletedActionEvent = MaestroActionEvent & {
     hierarchyCaptures: number;
     screenshotCaptures: number;
     tapRetries: number;
+    settleTimeouts: number;
   };
   readonly data?: Record<string, unknown>;
 };

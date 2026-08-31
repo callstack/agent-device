@@ -49,6 +49,7 @@ export type MaestroSnapshotSource = {
 export type StableMaestroSnapshot = {
   readonly snapshot: SnapshotState;
   readonly signature: string;
+  readonly settled: boolean;
 };
 
 type MaestroTargetResolutionMode = 'tap' | 'swipe' | 'observe';
@@ -237,12 +238,12 @@ export async function waitForTypedSnapshotStability(params: {
     );
     const snapshot = await captureRetriableMaestroSnapshot(params, deadline);
     const signature = maestroSnapshotSignature(snapshot);
-    if (signature === previousSignature) return { snapshot, signature };
+    if (signature === previousSignature) return { snapshot, signature, settled: true };
     previous = snapshot;
     previousSignature = signature;
 
     if (params.dependencies.now() >= deadline) {
-      return { snapshot: previous, signature: previousSignature };
+      return { snapshot: previous, signature: previousSignature, settled: false };
     }
   }
 }

@@ -43,7 +43,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
   readMetrics: () => MaestroRuntimeMetrics;
 } {
   const snapshots = createDaemonMaestroSnapshotSource(options);
-  const metrics = { screenshotCaptures: 0, tapRetries: 0 };
+  const metrics = { screenshotCaptures: 0, tapRetries: 0, settleTimeouts: 0 };
   const platform = options.platform;
   const invoke = <Operation extends MaestroPublicOperation>(operation: Operation) => {
     if (operation.kind === 'screenshot') metrics.screenshotCaptures += 1;
@@ -78,6 +78,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       snapshot: snapshots.capture,
       dependencies: options.dependencies,
     });
+    if (!stable.settled) metrics.settleTimeouts += 1;
     snapshots.prime(context.generation, stable.snapshot);
   };
 
@@ -216,14 +217,14 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
                 },
             context,
           );
-          return (
-            await waitForTypedSnapshotStability({
-              timeoutMs: Math.min(MAESTRO_RUNTIME_ADAPTER_POLICY.settleTimeoutMs, remainingMs),
-              context,
-              snapshot: snapshots.capture,
-              dependencies: options.dependencies,
-            })
-          ).snapshot;
+          const stable = await waitForTypedSnapshotStability({
+            timeoutMs: Math.min(MAESTRO_RUNTIME_ADAPTER_POLICY.settleTimeoutMs, remainingMs),
+            context,
+            snapshot: snapshots.capture,
+            dependencies: options.dependencies,
+          });
+          if (!stable.settled) metrics.settleTimeouts += 1;
+          return stable.snapshot;
         },
       });
       if (match.visiblePercentage !== MAESTRO_RUNTIME_ADAPTER_POLICY.scrollUntilVisiblePercentage) {

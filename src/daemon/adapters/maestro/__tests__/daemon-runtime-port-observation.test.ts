@@ -235,6 +235,27 @@ test('compares snapshots before sleeping and captures once beyond a zero settle 
   expect(result.snapshot.nodes[0]?.value).toBe('settled');
 });
 
+test('reports which exit the stability loop took', async () => {
+  const clock = { value: 0 };
+
+  const latched = await waitForTypedSnapshotStability({
+    timeoutMs: 1_000,
+    context: { generation: 0, env: {} },
+    snapshot: async () => makeSnapshot([{ index: 0, type: 'Text', value: 'stable' }]),
+    dependencies: makeDependencies(clock),
+  });
+  expect(latched.settled).toBe(true);
+
+  let value = 0;
+  const exhausted = await waitForTypedSnapshotStability({
+    timeoutMs: 1_000,
+    context: { generation: 0, env: {} },
+    snapshot: async () => makeSnapshot([{ index: 0, type: 'Text', value: `moving ${++value}` }]),
+    dependencies: makeDependencies(clock),
+  });
+  expect(exhausted.settled).toBe(false);
+});
+
 test('confirms an unchanged hierarchy across one polling interval', async () => {
   const clock = { value: 0 };
   let captures = 0;
