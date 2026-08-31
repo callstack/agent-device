@@ -249,6 +249,7 @@ test('uses an observation as the baseline for a later mutation barrier', async (
     hierarchyCaptures: 2,
     screenshotCaptures: 0,
     tapRetries: 0,
+    settleLatches: 1,
     settleTimeouts: 0,
   });
   expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);

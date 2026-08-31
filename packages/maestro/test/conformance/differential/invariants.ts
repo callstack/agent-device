@@ -12,6 +12,7 @@
 // The evaluator is pure and unit-tested against synthetic traces; the device run
 // that produces a real trace happens only on the scheduled workflow.
 import fs from 'node:fs';
+import type { MaestroRuntimeMetrics } from '../../../src/internal/engine-types.ts';
 
 export type TraceEvent = {
   type: string;
@@ -19,15 +20,11 @@ export type TraceEvent = {
   command?: string;
   ok?: boolean;
   durationMs?: number;
-  /** Per-step MaestroRuntimeMetrics delta (hierarchyCaptures/screenshotCaptures/tapRetries). */
+  /** Per-step MaestroRuntimeMetrics delta. */
   resultTiming?: Record<string, unknown>;
 };
 
-export type MetricKey =
-  | 'tapRetries'
-  | 'hierarchyCaptures'
-  | 'screenshotCaptures'
-  | 'settleTimeouts';
+export type MetricKey = keyof MaestroRuntimeMetrics;
 
 export type Invariant =
   | {

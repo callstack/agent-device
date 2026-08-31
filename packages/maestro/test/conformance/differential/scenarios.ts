@@ -97,6 +97,13 @@ export const DIFFERENTIAL_SCENARIOS: DifferentialScenario[] = [
     // budget still passes. This invariant is the actual bug-class-4 detector.
     engineInvariants: [
       {
+        kind: 'metricAtLeast',
+        command: 'tapOn',
+        metric: 'settleLatches',
+        min: 1,
+        because: 'the scenario must execute and latch its inline stability loop',
+      },
+      {
         kind: 'metricAtMost',
         command: 'tapOn',
         metric: 'settleTimeouts',

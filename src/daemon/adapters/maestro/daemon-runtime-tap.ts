@@ -6,6 +6,7 @@ import {
   type MaestroDispatchSelector,
   type MaestroRuntimeOperationContext,
   type MaestroRuntimeOperations,
+  type MaestroRuntimeMetrics,
   type MaestroRuntimeReadContext,
   type MaestroTargetMatch,
   type MaestroTargetQuery,
@@ -71,7 +72,7 @@ export async function resolveDaemonMaestroTarget(params: {
 export async function tapTargetAndSettle(
   options: CreateDaemonMaestroRuntimeOperationsOptions,
   snapshots: MaestroSnapshotSource,
-  metrics: { screenshotCaptures: number; tapRetries: number; settleTimeouts: number },
+  metrics: Omit<MaestroRuntimeMetrics, 'hierarchyCaptures'>,
   target: Parameters<MaestroRuntimeOperations['tapOn']>[0]['target'],
   context: MaestroRuntimeOperationContext,
   policy: { click: MaestroClickOptions; retryIfNoChange: boolean },
@@ -119,7 +120,7 @@ export async function tapTargetAndSettle(
 async function tapTargetWithRetry(
   options: CreateDaemonMaestroRuntimeOperationsOptions,
   snapshots: MaestroSnapshotSource,
-  metrics: { screenshotCaptures: number; tapRetries: number; settleTimeouts: number },
+  metrics: Omit<MaestroRuntimeMetrics, 'hierarchyCaptures'>,
   target: Parameters<MaestroRuntimeOperations['tapOn']>[0]['target'],
   context: MaestroRuntimeOperationContext,
   flags: MaestroClickOptions,
@@ -136,7 +137,8 @@ async function tapTargetWithRetry(
       snapshot: snapshots.capture,
       dependencies: options.dependencies,
     });
-    if (!stable.settled) metrics.settleTimeouts += 1;
+    if (stable.settled) metrics.settleLatches += 1;
+    else metrics.settleTimeouts += 1;
     return stable;
   };
 

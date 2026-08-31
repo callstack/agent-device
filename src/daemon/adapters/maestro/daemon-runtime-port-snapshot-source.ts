@@ -101,7 +101,7 @@ export function createDaemonMaestroSnapshotSource(
       primed = { generation, snapshot };
     },
     settlePending: async (context) => {
-      if (stabilityRequiredGeneration === undefined) return;
+      if (stabilityRequiredGeneration === undefined) return undefined;
       if (stabilityRequiredGeneration !== context.generation) {
         throw new AppError(
           'COMMAND_FAILED',
@@ -120,6 +120,7 @@ export function createDaemonMaestroSnapshotSource(
       stabilityRequiredGeneration = undefined;
       stabilityBaseline = undefined;
       primed = { generation: context.generation, snapshot: stable.snapshot };
+      return stable;
     },
   };
 }

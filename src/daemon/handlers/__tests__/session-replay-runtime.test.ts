@@ -316,6 +316,7 @@ test('typed Maestro writes source-aware redacted step timing traces', async () =
         hierarchyCaptures: 2,
         screenshotCaptures: 0,
         tapRetries: 0,
+        settleLatches: 1,
         settleTimeouts: 0,
       },
     }),

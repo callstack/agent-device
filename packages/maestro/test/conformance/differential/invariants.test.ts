@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS, parseMaestroConformanceSource } from '../harness.ts';
+import { parseMaestroProgram } from '../../../src/internal/program-ir-parser.ts';
 import { DIFFERENTIAL_SCENARIOS } from './scenarios.ts';
 import { type Invariant, evaluateInvariant, readTrace } from './invariants.ts';
 
@@ -33,29 +34,59 @@ const SETTLE_TIMEOUT_INVARIANT: Invariant = {
   because: 'test',
 };
 
-const settleStep = (command: string, durationMs: number, settleTimeouts: number, step = 1) => ({
+const SETTLE_LATCH_INVARIANT: Invariant = {
+  kind: 'metricAtLeast',
+  command: 'tapOn',
+  metric: 'settleLatches',
+  min: 1,
+  because: 'test',
+};
+
+const settleStep = (
+  command: string,
+  durationMs: number,
+  metrics: { settleLatches: number; settleTimeouts: number },
+  step = 1,
+) => ({
   type: 'replay_action_stop',
   step,
   command,
   ok: true,
   durationMs,
-  resultTiming: { hierarchyCaptures: 1, screenshotCaptures: 0, tapRetries: 0, settleTimeouts },
+  resultTiming: { hierarchyCaptures: 1, screenshotCaptures: 0, tapRetries: 0, ...metrics },
 });
 
 test('a stability loop that latched holds the settle invariant however slow the step', () => {
-  const result = evaluateInvariant([settleStep('tapOn', 3344, 0)], SETTLE_TIMEOUT_INVARIANT);
+  const result = evaluateInvariant(
+    [settleStep('tapOn', 3344, { settleLatches: 1, settleTimeouts: 0 })],
+    SETTLE_TIMEOUT_INVARIANT,
+  );
   assert.equal(result.status, 'held');
 });
 
 test('a stability loop that never latched violates it however fast the step', () => {
-  const result = evaluateInvariant([settleStep('tapOn', 120, 1)], SETTLE_TIMEOUT_INVARIANT);
+  const result = evaluateInvariant(
+    [settleStep('tapOn', 120, { settleLatches: 0, settleTimeouts: 1 })],
+    SETTLE_TIMEOUT_INVARIANT,
+  );
   assert.equal(result.status, 'violated');
   assert.match(result.detail, /settleTimeouts was 1/);
 });
 
+test('a tap that did not run the loop violates the settle proof-of-life invariant', () => {
+  const result = evaluateInvariant(
+    [settleStep('tapOn', 120, { settleLatches: 0, settleTimeouts: 0 })],
+    SETTLE_LATCH_INVARIANT,
+  );
+  assert.equal(result.status, 'violated');
+});
+
 test('another command running out of settle budget does not implicate the tap', () => {
   const result = evaluateInvariant(
-    [settleStep('scroll', 900, 2), settleStep('tapOn', 3344, 0, 2)],
+    [
+      settleStep('scroll', 900, { settleLatches: 0, settleTimeouts: 2 }),
+      settleStep('tapOn', 3344, { settleLatches: 1, settleTimeouts: 0 }, 2),
+    ],
     SETTLE_TIMEOUT_INVARIANT,
   );
   assert.equal(result.status, 'held');
@@ -122,14 +153,20 @@ test('readTrace on a missing file returns no events', () => {
 
 test('bug class 4 has a machine-checkable invariant, not just outcome parity', () => {
   const settle = DIFFERENTIAL_SCENARIOS.find((scenario) => scenario.bugClass === 4);
-  const invariant = settle?.engineInvariants?.[0];
-  assert.ok(invariant, 'settle scenario must carry an engine-side invariant');
-  assert.equal(invariant?.kind, 'metricAtMost');
+  const invariants = settle?.engineInvariants;
+  assert.ok(invariants, 'settle scenario must carry engine-side invariants');
   assert.deepEqual(
-    invariant?.kind === 'metricAtMost'
-      ? { metric: invariant.metric, max: invariant.max }
-      : undefined,
-    { metric: 'settleTimeouts', max: 0 },
+    invariants.map((invariant) =>
+      invariant.kind === 'metricAtLeast'
+        ? { kind: invariant.kind, metric: invariant.metric, min: invariant.min }
+        : invariant.kind === 'metricAtMost'
+          ? { kind: invariant.kind, metric: invariant.metric, max: invariant.max }
+          : { kind: invariant.kind },
+    ),
+    [
+      { kind: 'metricAtLeast', metric: 'settleLatches', min: 1 },
+      { kind: 'metricAtMost', metric: 'settleTimeouts', max: 0 },
+    ],
   );
 });
 
@@ -137,6 +174,7 @@ const SETTLE_FLOW_PATH = path.join(import.meta.dirname, 'flows/settle-after-tap.
 
 function assertSettleFlowSemantics(source: string): void {
   const parsed = parseMaestroConformanceSource(source, SETTLE_FLOW_PATH);
+  const program = parseMaestroProgram(source, { sourcePath: SETTLE_FLOW_PATH });
   assert.equal(
     parsed.commands.some(
       (command) => command.kind === 'scroll' || command.kind === 'scrollUntilVisible',
@@ -147,7 +185,9 @@ function assertSettleFlowSemantics(source: string): void {
     parsed.commands.filter((command) => command.kind === 'tap'),
     [{ kind: 'tap', longPress: false, repeat: 1, target: { selector: { text: 'Settings' } } }],
   );
-  assert.match(source, /retryTapIfNoChange: true/);
+  const tap = program.commands.find((command) => command.kind === 'tapOn');
+  assert.equal(tap?.kind, 'tapOn');
+  assert.equal(tap?.retryTapIfNoChange, true);
   assert.equal(
     parsed.commands.some(
       (command) =>
@@ -163,9 +203,10 @@ test('the settle detector reaches its tap without an unrelated setup command', (
   assertSettleFlowSemantics(fs.readFileSync(SETTLE_FLOW_PATH, 'utf8'));
 });
 
-test('the settle flow guard rejects a changed tap target or inserted scroll', () => {
+test('the settle flow guard rejects a changed tap target, disabled retry, or inserted scroll', () => {
   const flow = fs.readFileSync(SETTLE_FLOW_PATH, 'utf8');
   assert.throws(() => assertSettleFlowSemantics(flow.replace('text: Settings', 'text: Home')));
+  assert.throws(() => assertSettleFlowSemantics(flow.replace(/\n\s*retryTapIfNoChange: true/, '')));
   assert.throws(() => assertSettleFlowSemantics(flow.replace('- tapOn:', '- scroll\n- tapOn:')));
 });
 

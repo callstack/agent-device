@@ -43,7 +43,9 @@ export type MaestroSnapshotSource = {
   readonly requireStability: (generation: number) => void;
   readonly consumeStabilityFromVisualWait: (context: MaestroRuntimeReadContext) => void;
   readonly prime: (generation: number, snapshot: SnapshotState) => void;
-  readonly settlePending: (context: MaestroRuntimeReadContext) => Promise<void>;
+  readonly settlePending: (
+    context: MaestroRuntimeReadContext,
+  ) => Promise<StableMaestroSnapshot | undefined>;
 };
 
 export type StableMaestroSnapshot = {
