@@ -352,7 +352,7 @@ export function resolveRunnerSigningBuildSettings(
   const teamId = env.AGENT_DEVICE_IOS_TEAM_ID?.trim() || '';
   const configuredIdentity = env.AGENT_DEVICE_IOS_SIGNING_IDENTITY?.trim() || '';
   const profile = env.AGENT_DEVICE_IOS_PROVISIONING_PROFILE?.trim() || '';
-  const args = ['CODE_SIGN_STYLE=Automatic'];
+  const args = [`CODE_SIGN_STYLE=${profile ? 'Manual' : 'Automatic'}`];
   if (teamId) {
     args.push(`DEVELOPMENT_TEAM=${teamId}`);
   }

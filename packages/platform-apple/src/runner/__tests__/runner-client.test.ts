@@ -494,11 +494,19 @@ test('resolveRunnerSigningBuildSettings applies optional overrides when provided
     true,
   );
   assert.deepEqual(settings, [
-    'CODE_SIGN_STYLE=Automatic',
+    'CODE_SIGN_STYLE=Manual',
     'DEVELOPMENT_TEAM=ABCDE12345',
     'CODE_SIGN_IDENTITY=Apple Development',
     'PROVISIONING_PROFILE_SPECIFIER=My Profile',
   ]);
+});
+
+test('resolveRunnerSigningBuildSettings switches to manual signing when a profile is set without team or identity', () => {
+  const settings = resolveRunnerSigningBuildSettings(
+    { AGENT_DEVICE_IOS_PROVISIONING_PROFILE: 'My Profile' },
+    true,
+  );
+  assert.deepEqual(settings, ['CODE_SIGN_STYLE=Manual', 'PROVISIONING_PROFILE_SPECIFIER=My Profile']);
 });
 
 test('resolveRunnerPerformanceBuildSettings disables indexing and code coverage', () => {
