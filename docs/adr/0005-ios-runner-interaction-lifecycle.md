@@ -62,10 +62,12 @@ root-only payload instead of issuing more flat fallback queries against the same
 the cached `XCUIApplication` handle is cleared so the next command reacquires the target through the
 normal activation path.
 
-An external iOS simulator relaunch also invalidates process-bound target state. After replacing the
-app process, the daemon sends a lifecycle reset to the retained runner so the next command reacquires
-`XCUIApplication`; the reset also clears process-bound snapshot penalty and private-AX depth state. If
-that reset cannot be confirmed, the daemon discards the runner session.
+An external iOS-family Simulator relaunch or physical iOS relaunch also invalidates process-bound
+target state. After replacing the app process, the daemon sends a lifecycle reset to the retained
+runner so the next command reacquires `XCUIApplication`; the reset also clears process-bound snapshot
+penalty and private-AX depth state. If that reset cannot be confirmed, or if relaunch fails before
+reset, the daemon discards the runner session. Other physical Apple OS leaves retain their existing
+runner-restart behavior until separately evidenced.
 
 The snapshot surface intentionally has two AX-failure shapes. Interactive fast snapshots return a
 truncated success payload with `runnerFatal` so agents can still see that AX state is unavailable
@@ -100,9 +102,10 @@ capture. A changed accessibility digest is reported as success with an explicit 
 not blindly repeat a tap that may already have navigated; unchanged, sparse, mismatched, or unavailable
 evidence remains the original failure.
 
-Simulator relaunch keeps the healthy XCTest process warm without carrying an app target across
-process identity. The reset adds one local runner request instead of paying for a runner restart and
-clears the old process's hostile-screen capture penalty before the replacement is reacquired.
+iOS-family Simulator and physical iOS relaunch keep the healthy XCTest process warm without carrying
+an app target across process identity. The reset adds one local runner request instead of paying for a
+runner restart and clears the old process's hostile-screen capture penalty before the replacement is
+reacquired.
 
 Future optimization work should only reduce these preflights after the runner exposes status in a
 way that survives command-induced XCTest teardown and can prove the session is still serving new

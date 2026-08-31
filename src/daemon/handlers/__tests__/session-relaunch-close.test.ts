@@ -157,12 +157,13 @@ test('open --relaunch does not let an ambient provider claim suppress a local pr
   }
 });
 
-test('open --relaunch on iOS stops runner before close/open', async () => {
+test('open --relaunch on physical iOS retains runner through close/open', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
       platform: 'apple',
+      appleOs: 'ios',
       id: 'ios-device-1',
       name: 'My iPhone',
       kind: 'device',
@@ -174,6 +175,7 @@ test('open --relaunch on iOS stops runner before close/open', async () => {
   const calls: string[] = [];
   mockResolveTargetDevice.mockResolvedValue({
     platform: 'apple',
+    appleOs: 'ios',
     id: 'ios-device-1',
     name: 'My iPhone',
     kind: 'device',
@@ -181,6 +183,9 @@ test('open --relaunch on iOS stops runner before close/open', async () => {
   });
   mockStopIosRunner.mockImplementation(async () => {
     calls.push('stop-runner');
+  });
+  mockNotifyIosRunnerAppRelaunched.mockImplementation(async () => {
+    calls.push('reset-runner-target');
   });
   mockDispatch.mockImplementation(async (_device, command, positionals) => {
     calls.push(`${command}:${positionals.join(' ')}`);
@@ -203,7 +208,8 @@ test('open --relaunch on iOS stops runner before close/open', async () => {
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  expect(calls).toEqual(['stop-runner', 'close:com.example.app', 'open:com.example.app']);
+  expect(calls).toEqual(['close:com.example.app', 'open:com.example.app', 'reset-runner-target']);
+  expect(mockStopIosRunner).not.toHaveBeenCalled();
 });
 
 test('open --relaunch on iOS simulator collapses into one terminate-running open dispatch', async () => {
@@ -368,6 +374,7 @@ test('open --relaunch includes timing and waits for iOS runner prewarm after ope
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
       platform: 'apple',
+      appleOs: 'ios',
       id: 'ios-device-1',
       name: 'My iPhone',
       kind: 'device',
@@ -413,13 +420,8 @@ test('open --relaunch includes timing and waits for iOS runner prewarm after ope
   const response = await responsePromise;
 
   expect(response?.ok).toBe(true);
-  expect(events).toEqual([
-    'stop-runner',
-    'dispatch:close',
-    'dispatch:open',
-    'prewarm-start',
-    'prewarm-finish',
-  ]);
+  expect(events).toEqual(['dispatch:close', 'dispatch:open', 'prewarm-start', 'prewarm-finish']);
+  expect(mockStopIosRunner).not.toHaveBeenCalled();
   expect((response as any).data?.timing).toMatchObject({
     runnerPrewarmKind: 'session',
     runnerPrewarmScheduled: true,
@@ -434,6 +436,7 @@ test('open --relaunch on iOS without existing session closes then opens target a
   const sessionName = 'ios-new-session';
   mockResolveTargetDevice.mockResolvedValue({
     platform: 'apple',
+    appleOs: 'ios',
     id: 'ios-device-1',
     name: 'My iPhone',
     kind: 'device',
@@ -443,6 +446,9 @@ test('open --relaunch on iOS without existing session closes then opens target a
   const calls: string[] = [];
   mockStopIosRunner.mockImplementation(async () => {
     calls.push('stop-runner');
+  });
+  mockNotifyIosRunnerAppRelaunched.mockImplementation(async () => {
+    calls.push('reset-runner-target');
   });
   mockDispatch.mockImplementation(async (_device, command, positionals) => {
     calls.push(`${command}:${positionals.join(' ')}`);
@@ -465,7 +471,8 @@ test('open --relaunch on iOS without existing session closes then opens target a
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  expect(calls).toEqual(['stop-runner', 'close:com.example.app', 'open:com.example.app']);
+  expect(calls).toEqual(['close:com.example.app', 'open:com.example.app', 'reset-runner-target']);
+  expect(mockStopIosRunner).not.toHaveBeenCalled();
 });
 
 test('close on macOS session stops runner and dismisses automation alert before delete', async () => {

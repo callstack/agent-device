@@ -96,22 +96,42 @@ async function openAppleApplication(
     input.surface === 'app' &&
     input.positionals.length > 0 &&
     Boolean(input.appBundleId);
-  if (localIosSimulator && shouldPrewarmRunner && !input.prewarmRunnerBeforeOpen) runner.schedule();
-  await closeAppleApplicationForRelaunch(host, binding, input, localIosSimulator, timing);
-  await applyAppleOpenRuntimeHints(input, timing);
-  await prewarmAppleRunnerBeforeOpen(runner, shouldPrewarmRunner, input.prewarmRunnerBeforeOpen);
-  const runnerTargetPredatesOpen = runner.wasAwaited();
-  await dispatchAppleOpen(binding, input, localIosSimulator, timing);
-  await finishAppleRunnerPrewarm(runner, shouldPrewarmRunner, input.relaunch);
-  await notifyAppleRunnerRelaunch(
-    host,
-    binding,
+  const retainRunnerForRelaunch = shouldRetainRunnerForRelaunch(
+    binding.device,
     input,
     localIosSimulator,
-    runnerTargetPredatesOpen,
   );
-  await settleAppleOpen(host, binding, localIosSimulator, timing);
-  return { appBundleId: input.appBundleId, timing };
+  if (localIosSimulator && shouldPrewarmRunner && !input.prewarmRunnerBeforeOpen) runner.schedule();
+  try {
+    await closeAppleApplicationForRelaunch(
+      host,
+      binding,
+      input,
+      localIosSimulator,
+      retainRunnerForRelaunch,
+      timing,
+    );
+    await applyAppleOpenRuntimeHints(input, timing);
+    await prewarmAppleRunnerBeforeOpen(runner, shouldPrewarmRunner, input.prewarmRunnerBeforeOpen);
+    const runnerTargetPredatesOpen = runner.wasAwaited();
+    await dispatchAppleOpen(binding, input, localIosSimulator, timing);
+    await finishAppleRunnerPrewarm(runner, shouldPrewarmRunner, input.relaunch);
+    await notifyAppleRunnerRelaunch(
+      host,
+      binding,
+      input,
+      localIosSimulator,
+      runnerTargetPredatesOpen,
+      retainRunnerForRelaunch,
+    );
+    await settleAppleOpen(host, binding, localIosSimulator, timing);
+    return { appBundleId: input.appBundleId, timing };
+  } catch (error) {
+    if (retainRunnerForRelaunch) {
+      await host.appleApplications.stopRunnerSession(binding.device.id).catch(() => {});
+    }
+    throw error;
+  }
 }
 
 async function closeAppleApplicationForRelaunch(
@@ -119,11 +139,12 @@ async function closeAppleApplicationForRelaunch(
   binding: BoundAppleInteractor,
   input: OpenApplicationInput,
   localIosSimulator: boolean,
+  retainRunnerForRelaunch: boolean,
   timing: MutableOpenTiming,
 ): Promise<void> {
   if (!shouldCloseForAppleRelaunch(input, localIosSimulator) || !input.target) return;
   const startedAtMs = Date.now();
-  if (isApplePlatform(binding.device.platform) && !localIosSimulator) {
+  if (isApplePlatform(binding.device.platform) && !localIosSimulator && !retainRunnerForRelaunch) {
     await host.appleApplications.stopRunnerSession(binding.device.id);
   }
   await invokeApplicationClose({
@@ -225,8 +246,15 @@ async function notifyAppleRunnerRelaunch(
   input: OpenApplicationInput,
   localIosSimulator: boolean,
   runnerTargetPredatesOpen: boolean,
+  retainRunnerForRelaunch: boolean,
 ): Promise<void> {
-  if (!localIosSimulator || (!input.relaunch && !runnerTargetPredatesOpen)) return;
+  if (
+    !isIosFamily(binding.device) ||
+    (!localIosSimulator && !retainRunnerForRelaunch) ||
+    (!input.relaunch && !runnerTargetPredatesOpen)
+  ) {
+    return;
+  }
   await host.appleApplications.notifyRunnerAppRelaunched(
     binding.device,
     input.execution,
@@ -252,6 +280,18 @@ function shouldCloseForAppleRelaunch(
   return (
     Boolean(input.relaunch && input.target) &&
     !(localIosSimulator && !input.execution.clearAppState)
+  );
+}
+
+function shouldRetainRunnerForRelaunch(
+  device: DeviceInfo,
+  input: OpenApplicationInput,
+  localIosSimulator: boolean,
+): boolean {
+  return (
+    device.kind === 'device' &&
+    device.appleOs === 'ios' &&
+    shouldCloseForAppleRelaunch(input, localIosSimulator)
   );
 }
 
