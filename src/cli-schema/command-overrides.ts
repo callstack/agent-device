@@ -46,14 +46,14 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
   },
   device: {
     text: {
-      summary: 'Inspect enforced local device ownership without daemon side effects',
+      summary: 'Inspect and recover enforced local device ownership without a daemon',
       description:
-        'Inspect enforced host-local device ownership claims without starting or contacting a daemon. --stale only inspects proven-stale claims; automatic reclamation occurs during open or daemon startup after exact-owner resource reconciliation.',
+        'Inspect enforced host-local device ownership claims without starting or contacting a daemon; status --stale only inspects proven-stale claims. release --stale settles a provably dead owner through exact-owner resource reconciliation and clears its claim last — live and uncertain owners always fail closed. Automatic reclamation still occurs during open and daemon startup.',
     },
     usageOverride:
-      'device status [--platform <platform>] [--udid <udid>] [--serial <serial>] [--stale]',
+      'device status|release [--platform <platform>] [--udid <udid>] [--serial <serial>] [--stale]',
     listUsageOverride: 'device status',
-    positionalArgs: ['status'],
+    positionalArgs: ['status|release'],
     allowedFlags: ['stale'],
     supportedFlags: ['platform', 'device', 'udid', 'serial'],
   },

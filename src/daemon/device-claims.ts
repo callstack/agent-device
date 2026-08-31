@@ -17,6 +17,7 @@ import {
   deviceClaimOwnerCannotRelease,
   inspectDeviceClaimFile,
   type DeviceClaimClassification,
+  type DeviceClaimSelectors,
   type InspectedDeviceClaim,
 } from './device-claim-inspection.ts';
 import {
@@ -282,6 +283,111 @@ function isCurrentClaimOwner(
     claim.stateDir === params.stateDir &&
     ownerIdentityMatches({ pid: claim.ownerPid, startTime: claim.ownerStartTime }, owner)
   );
+}
+
+/**
+ * One claim's outcome from `device release --stale`. `released` cleared the
+ * claim after resource reconciliation; `retained` has positive stale proof but
+ * unsettled resources; `refused` lacks positive proof that the owner cannot
+ * release (live, uncertain, corrupt, or PID-reused owners all fail closed);
+ * `changed` lost a race with a concurrent owner transition.
+ */
+export type DeviceClaimStaleReleaseOutcome = {
+  fileName: string;
+  classification: DeviceClaimClassification;
+  status: 'released' | 'retained' | 'refused' | 'changed';
+  reason?: string;
+  deviceKey?: string;
+  device?: DeviceClaim['device'];
+  session?: string;
+  workspace?: string;
+  stateDir?: string;
+};
+
+/**
+ * #1320 `device release --stale`: settle and clear every matching claim whose
+ * recorded owner provably cannot release it, through the same reconciliation
+ * transaction `open` and daemon startup use — resources first, claim last.
+ * Everything without that positive proof is reported and left untouched.
+ */
+export async function releaseProvenStaleDeviceClaims(params: {
+  selectors: DeviceClaimSelectors;
+  reconcile: DeviceClaimReconciler;
+}): Promise<DeviceClaimStaleReleaseOutcome[]> {
+  const outcomes: DeviceClaimStaleReleaseOutcome[] = [];
+  for (const entry of inspectDeviceClaims(params.selectors)) {
+    outcomes.push(await releaseInspectedStaleClaim(entry, params.reconcile));
+  }
+  return outcomes;
+}
+
+async function releaseInspectedStaleClaim(
+  entry: InspectedDeviceClaim,
+  reconcile: DeviceClaimReconciler,
+): Promise<DeviceClaimStaleReleaseOutcome> {
+  const claim = entry.claim;
+  const base = {
+    fileName: entry.fileName,
+    classification: entry.classification,
+    ...(entry.deviceKey ? { deviceKey: entry.deviceKey } : {}),
+    ...(claim
+      ? {
+          device: claim.device,
+          session: claim.session,
+          workspace: claim.workspace,
+          stateDir: claim.stateDir,
+        }
+      : {}),
+  };
+  if (!claim || !deviceClaimOwnerCannotRelease(entry.classification)) {
+    return { ...base, status: 'refused', reason: staleReleaseRefusalReason(entry.classification) };
+  }
+  // A file whose name is not the hash of its own device key is not the file
+  // the claim lock protects; releasing through it could unlink something else.
+  if (
+    resolveDeviceClaimPath(claim.deviceKey) !== path.join(resolveDeviceClaimRoot(), entry.fileName)
+  ) {
+    return { ...base, status: 'refused', reason: 'claim-file-name-mismatch' };
+  }
+  const { deviceKey, ownerToken } = claim;
+  return await withDeviceClaimLock(deviceKey, async () => {
+    const current = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey));
+    if (
+      !current?.claim ||
+      current.claim.ownerToken !== ownerToken ||
+      !deviceClaimOwnerCannotRelease(current.classification)
+    ) {
+      return { ...base, status: 'changed' as const, reason: 'claim-changed-during-release' };
+    }
+    const result = await settleVerifiedOrphanedClaim(current.claim, reconcile);
+    if (result.status === 'retained') {
+      return { ...base, status: 'retained' as const, reason: result.reason };
+    }
+    emitDiagnostic({
+      level: 'info',
+      phase: 'device_claim_stale_released',
+      data: { deviceKey, ownerSession: claim.session, ownerStateDir: claim.stateDir },
+    });
+    return { ...base, status: 'released' as const };
+  });
+}
+
+function staleReleaseRefusalReason(classification: DeviceClaimClassification): string {
+  switch (classification) {
+    case 'live':
+      return 'live-owner';
+    case 'owner-process-reused':
+      return 'owner-pid-reused';
+    case 'owner-state-dir-gone':
+      return 'owner-process-still-running';
+    case 'unknown':
+      return 'owner-liveness-unknown';
+    case 'inconsistent':
+      return 'claim-record-inconsistent';
+    case 'owner-process-dead':
+    case 'owner-daemon-superseded':
+      return 'claim-record-unreadable';
+  }
 }
 
 /**

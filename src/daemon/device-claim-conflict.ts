@@ -6,6 +6,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
 import {
+  deviceClaimOwnerCannotRelease,
   deviceClaimRequiresStaleInspection,
   type DeviceClaimClassification,
   type InspectedDeviceClaim,
@@ -31,6 +32,7 @@ export function isDeviceClaimConflictReason(value: unknown): value is DeviceClai
 export function buildDeviceClaimInspectionCommand(
   device: DeviceInfo,
   conflict: Pick<InspectedDeviceClaim, 'claim' | 'classification'>,
+  subcommand: 'status' | 'release' = 'status',
 ): string {
   const publicPlatform = conflict.claim
     ? publicPlatformString({
@@ -40,10 +42,12 @@ export function buildDeviceClaimInspectionCommand(
     : publicPlatformString(device);
   const selector = isApplePlatform(device.platform) ? '--udid' : '--serial';
   return [
-    'agent-device device status',
+    `agent-device device ${subcommand}`,
     `--platform ${shellQuoteIfNeeded(publicPlatform)}`,
     `${selector} ${shellQuoteIfNeeded(device.id)}`,
-    ...(deviceClaimRequiresStaleInspection(conflict.classification) ? ['--stale'] : []),
+    ...(subcommand === 'release' || deviceClaimRequiresStaleInspection(conflict.classification)
+      ? ['--stale']
+      : []),
   ].join(' ');
 }
 
@@ -57,7 +61,13 @@ export function deviceClaimConflictError(
   conflict: InspectedDeviceClaim,
 ): AppError {
   const owner = conflict.claim;
-  const recoveryCommand = buildDeviceClaimInspectionCommand(device, conflict);
+  // A provably dead owner has an exact recovery: settle its resources and
+  // release the claim. Everything else gets inspection, never a mutation.
+  const recoveryCommand = buildDeviceClaimInspectionCommand(
+    device,
+    conflict,
+    deviceClaimOwnerCannotRelease(conflict.classification) ? 'release' : 'status',
+  );
   const publicPlatform = owner
     ? publicPlatformString({ platform: owner.device.family, appleOs: owner.device.appleOs })
     : publicPlatformString(device);
@@ -80,7 +90,9 @@ export function deviceClaimConflictError(
           }
         : {}),
       recovery: { command: recoveryCommand },
-      hint: `Inspect the owner with: ${recoveryCommand}`,
+      hint: deviceClaimOwnerCannotRelease(conflict.classification)
+        ? `The recorded owner can no longer release this device; settle its resources and release the claim with: ${recoveryCommand}`
+        : `Inspect the owner with: ${recoveryCommand}`,
       retriable: false,
     },
   );

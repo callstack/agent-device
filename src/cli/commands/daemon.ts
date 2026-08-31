@@ -46,7 +46,11 @@ function mergeShutdownReport(
           claimsReleased: report.claims.released,
           claimsOrphaned: report.claims.orphaned,
           claimsSuperseded: report.claims.superseded,
-          warnings: [...stopped.warnings, ...supersededClaimWarnings(report.claims.superseded)],
+          warnings: [
+            ...stopped.warnings,
+            ...supersededClaimWarnings(report.claims.superseded),
+            ...orphanedClaimWarnings(report.claims.orphaned),
+          ],
         }
       : stopped;
   }
@@ -68,6 +72,17 @@ function supersededClaimWarnings(superseded: DaemonStopResult['claimsSuperseded'
   const devices = superseded.map((claim) => claim.deviceId).join(', ');
   return [
     `Another owner had already claimed ${devices} before this daemon released it, so those devices are now owned elsewhere.`,
+  ];
+}
+
+/** An orphaned claim keeps holding its device after the daemon is gone, and
+ * only `device release --stale` or the next open settles it — say so instead
+ * of leaving the block discoverable through --json alone. */
+function orphanedClaimWarnings(orphaned: DaemonStopResult['claimsOrphaned']): string[] {
+  if (orphaned.length === 0) return [];
+  const devices = orphaned.map((claim) => claim.deviceId).join(', ');
+  return [
+    `Ownership of ${devices} was not released cleanly; the claim now blocks other owners until it is settled. Inspect with: agent-device device status --stale, then release with: agent-device device release --stale.`,
   ];
 }
 

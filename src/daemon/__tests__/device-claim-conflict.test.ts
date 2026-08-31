@@ -58,3 +58,13 @@ test('routes conflict presentation through the canonical error response shape', 
     command: 'agent-device device status --platform android --serial emulator-5554',
   });
 });
+
+test('routes a provably dead owner to the exact stale release command', () => {
+  const response = buildDeviceClaimConflictError(device, conflict('owner-process-dead'));
+  assert.equal(response.ok, false);
+  if (response.ok) return;
+  assert.deepEqual(response.error.details?.recovery, {
+    command: 'agent-device device release --platform android --serial emulator-5554 --stale',
+  });
+  assert.match(String(response.error.hint), /settle its resources and release the claim with:/);
+});
