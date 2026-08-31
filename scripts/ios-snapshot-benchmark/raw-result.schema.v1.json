@@ -1,0 +1,342 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/callstack/agent-device/blob/main/scripts/ios-snapshot-benchmark/raw-result.schema.v1.json",
+  "title": "agent-device iOS snapshot convergence raw result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "issue",
+    "parent",
+    "references",
+    "runId",
+    "generatedAt",
+    "revision",
+    "toolchain",
+    "target",
+    "config",
+    "status",
+    "measurements",
+    "packageSize",
+    "deepButtonEvidence"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "ios-snapshot-convergence.v1" },
+    "issue": { "const": "#2189" },
+    "parent": { "const": "#2188" },
+    "references": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deepButton", "appMount"],
+      "properties": {
+        "deepButton": { "const": "#1626" },
+        "appMount": { "const": "#1571" }
+      }
+    },
+    "runId": { "type": "string", "minLength": 1 },
+    "generatedAt": { "type": "string", "minLength": 1 },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "branch", "dirty"],
+      "properties": {
+        "commit": { "type": "string", "minLength": 1 },
+        "branch": { "type": "string", "minLength": 1 },
+        "dirty": { "type": "boolean" }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "pnpm", "xcode", "simctl", "os", "arch"],
+      "properties": {
+        "node": { "type": "string", "minLength": 1 },
+        "pnpm": { "type": "string", "minLength": 1 },
+        "xcode": { "type": "string", "minLength": 1 },
+        "simctl": { "type": "string", "minLength": 1 },
+        "os": { "type": "string", "minLength": 1 },
+        "arch": { "type": "string", "minLength": 1 }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "kind", "udid", "name", "runtime", "appId"],
+      "properties": {
+        "platform": { "const": "ios" },
+        "kind": { "const": "simulator" },
+        "udid": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "runtime": { "type": "string", "minLength": 1 },
+        "appId": { "type": "string", "minLength": 1 },
+        "appPath": { "type": "string", "minLength": 1 }
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "warmSampleMinimum",
+        "coldSampleMinimum",
+        "requestedSamples",
+        "screens",
+        "states"
+      ],
+      "properties": {
+        "warmSampleMinimum": { "type": "integer", "minimum": 1 },
+        "coldSampleMinimum": { "type": "integer", "minimum": 1 },
+        "requestedSamples": { "type": "integer", "minimum": 1 },
+        "screens": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": ["quiet", "list", "nested-scroll", "alert", "system-surface", "xctest-stress"]
+          }
+        },
+        "states": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "enum": ["cold-cold", "cold", "warm", "relaunch"] }
+        }
+      }
+    },
+    "status": { "type": "string", "enum": ["completed", "stopped"] },
+    "measurements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "transport",
+          "execution",
+          "state",
+          "screen",
+          "sampleMinimum",
+          "operation",
+          "samples",
+          "wallClockMs",
+          "daemonDurationMs",
+          "responseBytes",
+          "failures",
+          "failureCategories"
+        ],
+        "properties": {
+          "transport": { "type": "string", "enum": ["local", "proxy"] },
+          "execution": { "type": "string", "enum": ["fresh-process-cli", "persistent-client"] },
+          "state": { "type": "string", "enum": ["cold-cold", "cold", "warm", "relaunch"] },
+          "screen": {
+            "type": "string",
+            "enum": ["quiet", "list", "nested-scroll", "alert", "system-surface", "xctest-stress"]
+          },
+          "sampleMinimum": { "type": "integer", "minimum": 1 },
+          "operation": {
+            "type": "string",
+            "enum": ["open-foreground", "snapshot", "relaunch-foreground"]
+          },
+          "samples": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/sample" } },
+          "wallClockMs": { "$ref": "#/$defs/summaryOrNull" },
+          "daemonDurationMs": { "$ref": "#/$defs/summaryOrNull" },
+          "responseBytes": { "$ref": "#/$defs/summaryOrNull" },
+          "network": { "$ref": "#/$defs/proxyNetwork" },
+          "failures": { "type": "integer", "minimum": 0 },
+          "failureCategories": {
+            "type": "object",
+            "additionalProperties": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "proxyNetworks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/proxyNetwork" }
+    },
+    "stop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "message"],
+      "properties": {
+        "category": { "type": "string", "enum": ["infrastructure", "contention", "configuration"] },
+        "message": { "type": "string", "minLength": 1 },
+        "command": { "type": "string", "minLength": 1 }
+      }
+    },
+    "packageSize": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "revision"],
+      "properties": {
+        "status": { "type": "string", "enum": ["measured", "not-run"] },
+        "revision": { "type": "string", "minLength": 1 },
+        "packed": { "$ref": "#/$defs/sizePair" },
+        "cleanInstalled": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["packageBytes", "files"],
+          "properties": {
+            "packageBytes": { "type": "integer", "minimum": 0 },
+            "files": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "bundled": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rawBytes", "gzipBytes", "files"],
+          "properties": {
+            "rawBytes": { "type": "integer", "minimum": 0 },
+            "gzipBytes": { "type": "integer", "minimum": 0 },
+            "files": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "deepButtonEvidence": { "$ref": "#/$defs/deepButtonEvidence" }
+  },
+  "$defs": {
+    "proxyNetwork": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rttMs", "bandwidthKbps", "packetLossPercent", "seed"],
+      "properties": {
+        "rttMs": { "type": "integer", "enum": [0, 20, 80] },
+        "bandwidthKbps": { "type": ["integer", "null"], "minimum": 1 },
+        "packetLossPercent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "seed": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "summaryOrNull": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["n", "min", "median", "p95", "max", "outlierCount", "outlierRule"],
+      "properties": {
+        "n": { "type": "integer", "minimum": 1 },
+        "min": { "type": "number", "minimum": 0 },
+        "median": { "type": "number", "minimum": 0 },
+        "p95": { "type": "number", "minimum": 0 },
+        "max": { "type": "number", "minimum": 0 },
+        "outlierCount": { "type": "integer", "minimum": 0 },
+        "outlierRule": { "const": "tukey-1.5-iqr" }
+      }
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "startedAt",
+        "finishedAt",
+        "operation",
+        "wallClockMs",
+        "targetGeneration",
+        "firstTree",
+        "ok",
+        "outlier"
+      ],
+      "properties": {
+        "index": { "type": "integer", "minimum": 1 },
+        "startedAt": { "type": "string", "minLength": 1 },
+        "finishedAt": { "type": "string", "minLength": 1 },
+        "operation": {
+          "type": "string",
+          "enum": ["open-foreground", "snapshot", "relaunch-foreground"]
+        },
+        "wallClockMs": { "type": "number", "minimum": 0 },
+        "daemonDurationMs": { "type": "number", "minimum": 0 },
+        "responseBytes": { "type": "integer", "minimum": 0 },
+        "nodeCount": { "type": "integer", "minimum": 0 },
+        "targetGeneration": { "type": ["integer", "null"], "minimum": 0 },
+        "firstTree": {
+          "type": "string",
+          "enum": ["readable", "empty", "unreadable", "not-observed"]
+        },
+        "ok": { "type": "boolean" },
+        "outlier": { "type": "boolean" },
+        "failure": { "$ref": "#/$defs/failure" }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category"],
+      "properties": {
+        "category": {
+          "type": "string",
+          "enum": [
+            "app-mount",
+            "bridge",
+            "runner",
+            "timeout",
+            "stale-generation",
+            "packet-loss",
+            "upstream",
+            "other"
+          ]
+        },
+        "code": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 }
+      }
+    },
+    "sizePair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tarballBytes", "unpackedBytes"],
+      "properties": {
+        "tarballBytes": { "type": "integer", "minimum": 0 },
+        "unpackedBytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "deepButtonEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "issue",
+        "fixture",
+        "changedDescendant",
+        "invalidShallowRule",
+        "safeFullRule",
+        "before",
+        "after"
+      ],
+      "properties": {
+        "issue": { "const": "#1626" },
+        "fixture": { "const": "deep-button-v1" },
+        "changedDescendant": { "const": "deep-button-state" },
+        "invalidShallowRule": { "$ref": "#/$defs/control" },
+        "safeFullRule": { "$ref": "#/$defs/control" },
+        "before": { "$ref": "#/$defs/observation" },
+        "after": { "$ref": "#/$defs/observation" }
+      }
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "exitCode", "assertion"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "exitCode": { "type": "integer", "minimum": 0 },
+        "assertion": { "type": "string", "minLength": 1 }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["surfaceDigest", "fullDigest", "state", "surfaceNodeIds", "fullNodeIds"],
+      "properties": {
+        "surfaceDigest": { "type": "string", "minLength": 1 },
+        "fullDigest": { "type": "string", "minLength": 1 },
+        "state": { "type": "string", "enum": ["off", "on"] },
+        "surfaceNodeIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "fullNodeIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

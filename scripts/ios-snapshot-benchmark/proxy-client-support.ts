@@ -1,0 +1,364 @@
+import { spawnSync } from 'node:child_process';
+import { performance } from 'node:perf_hooks';
+import path from 'node:path';
+import { buildDaemonHttpBaseUrl } from '../../src/daemon/http-contract.ts';
+import { BenchmarkContentionError, BenchmarkInfrastructureError } from './lifecycle.ts';
+import { classifyFailure, formatCliFailure, type CliContext, type CliResult } from './command.ts';
+import { type NetworkConditioner, type ProxyRpcRecord } from './proxy-conditioner.ts';
+import type { ProxyStartup } from './proxy-process.ts';
+import { asRecord } from './result-values.ts';
+import type { Failure, ProxyNetwork, RawSample, ScreenFixture } from './types.ts';
+
+export type AgentClient = {
+  apps: { open(options: Record<string, unknown>): Promise<unknown> };
+  interactions: { click(options: Record<string, unknown>): Promise<unknown> };
+  batch: { run(options: Record<string, unknown>): Promise<Record<string, unknown>> };
+  sessions: { close(): Promise<unknown> };
+  leases: {
+    allocate(options: Record<string, unknown>): Promise<Record<string, unknown>>;
+    release(options: Record<string, unknown>): Promise<unknown>;
+  };
+};
+
+export type ProxyClientOptions = {
+  repoRoot: string;
+  clientStateDir: string;
+  derivedPath: string;
+  udid: string;
+  proxy: ProxyStartup;
+  conditioner: NetworkConditioner;
+};
+
+export async function allocateLease(
+  options: Pick<ProxyClientOptions, 'udid' | 'proxy' | 'conditioner'>,
+  clientId: string,
+  runId: string,
+): Promise<Record<string, unknown>> {
+  const module = await import('../../dist/src/index.js');
+  const client = module.createAgentDeviceClient({
+    daemonBaseUrl: buildDaemonHttpBaseUrl(options.conditioner.baseUrl),
+    daemonAuthToken: options.proxy.token,
+    daemonTransport: 'http',
+    session: `lease-${clientId}`,
+    tenant: 'bench',
+    runId,
+    leaseProvider: 'proxy',
+    clientId,
+    leaseBackend: 'ios-simulator',
+  });
+  return client.leases.allocate({
+    tenant: 'bench',
+    runId,
+    leaseProvider: 'proxy',
+    clientId,
+    leaseBackend: 'ios-simulator',
+    platform: 'ios',
+    target: 'mobile',
+    udid: options.udid,
+  });
+}
+
+export async function createClient(
+  options: Pick<ProxyClientOptions, 'clientStateDir' | 'proxy' | 'conditioner'>,
+  lease: Record<string, unknown>,
+  clientId: string,
+  runId: string,
+  suffix: string,
+): Promise<AgentClient> {
+  const module = await import('../../dist/src/index.js');
+  return module.createAgentDeviceClient({
+    stateDir: path.join(options.clientStateDir, suffix),
+    daemonBaseUrl: buildDaemonHttpBaseUrl(options.conditioner.baseUrl),
+    daemonAuthToken: options.proxy.token,
+    daemonTransport: 'http',
+    session: clientId,
+    tenant: 'bench',
+    runId,
+    leaseProvider: 'proxy',
+    clientId,
+    leaseBackend: 'ios-simulator',
+    leaseId: readRequiredString(lease, 'leaseId'),
+    deviceKey: readRequiredString(lease, 'deviceKey'),
+  });
+}
+
+export async function openClientFixture(
+  client: AgentClient,
+  fixture: ScreenFixture,
+  udid: string,
+): Promise<void> {
+  await client.apps.open({
+    app: fixture.app,
+    ...(fixture.launchUrl ? { url: fixture.launchUrl } : {}),
+    platform: 'ios',
+    udid,
+    relaunch: true,
+    foreground: true,
+  });
+  if (fixture.setupAction === 'open-alert') {
+    await client.interactions.click({
+      target: { kind: 'selector', selector: 'id="automation-open-alert"' },
+      platform: 'ios',
+      udid,
+    });
+  }
+}
+
+export async function captureClientSample(
+  client: AgentClient,
+  options: Pick<ProxyClientOptions, 'conditioner'> & { network: ProxyNetwork },
+  index: number,
+): Promise<RawSample> {
+  const startedAt = new Date().toISOString();
+  const started = performance.now();
+  const mark = options.conditioner.mark();
+  try {
+    const result = await client.batch.run({
+      steps: [{ command: 'snapshot', input: { interactiveOnly: true } }],
+    });
+    const record = lastRecord(options.conditioner.recordsSince(mark));
+    return buildSuccessfulClientSample(result, options.network, record, index, startedAt, started);
+  } catch (error) {
+    const record = lastRecord(options.conditioner.recordsSince(mark));
+    return buildFailedClientSample(options.network, record, error, index, startedAt, started);
+  }
+}
+
+function buildSuccessfulClientSample(
+  result: Record<string, unknown>,
+  network: ProxyNetwork,
+  record: ProxyRpcRecord | undefined,
+  index: number,
+  startedAt: string,
+  started: number,
+): RawSample {
+  const first = firstClientResult(result);
+  const snapshot = snapshotFromClientResult(first);
+  const nodeCount = readNodeCount(snapshot);
+  return {
+    ...sampleTiming(index, startedAt, started),
+    ...daemonDurationFields(first),
+    ...responseFields(record),
+    ...nodeFields(nodeCount),
+    targetGeneration: targetGeneration(snapshot),
+    firstTree: firstTreeForClient(nodeCount),
+    ok: clientSampleSucceeded(record),
+    outlier: false,
+    ...clientFailureFields(network, record),
+  };
+}
+
+function firstClientResult(result: Record<string, unknown>): Record<string, unknown> | undefined {
+  return asRecord(result.results?.[0]);
+}
+
+function snapshotFromClientResult(
+  first: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  const data = asRecord(first?.data);
+  return snapshotFromData(data);
+}
+
+function snapshotFromData(
+  data: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  return asRecord(data?.snapshot) ?? data;
+}
+
+function daemonDurationFields(first: Record<string, unknown> | undefined): {
+  daemonDurationMs?: number;
+} {
+  return typeof first?.durationMs === 'number' ? { daemonDurationMs: first.durationMs } : {};
+}
+
+function targetGeneration(snapshot: Record<string, unknown> | undefined): number | null {
+  return readNumber(snapshot?.refsGeneration) ?? null;
+}
+
+function clientSampleSucceeded(record: ProxyRpcRecord | undefined): boolean {
+  return record?.failed !== true;
+}
+
+function buildFailedClientSample(
+  network: ProxyNetwork,
+  record: ProxyRpcRecord | undefined,
+  error: unknown,
+  index: number,
+  startedAt: string,
+  started: number,
+): RawSample {
+  return {
+    ...sampleTiming(index, startedAt, started),
+    ...responseFields(record),
+    targetGeneration: null,
+    firstTree: 'not-observed',
+    ok: false,
+    outlier: false,
+    failure: {
+      ...networkFailure(network, record?.failed),
+      ...(error instanceof Error ? { message: error.message.slice(0, 240) } : {}),
+    },
+  };
+}
+
+function sampleTiming(
+  index: number,
+  startedAt: string,
+  started: number,
+): Pick<RawSample, 'index' | 'startedAt' | 'finishedAt' | 'operation' | 'wallClockMs'> {
+  return {
+    index: index + 1,
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    operation: 'snapshot',
+    wallClockMs: performance.now() - started,
+  };
+}
+
+function responseFields(record: ProxyRpcRecord | undefined): { responseBytes?: number } {
+  return record ? { responseBytes: record.responseBytes } : {};
+}
+
+function nodeFields(nodeCount: number | undefined): { nodeCount?: number } {
+  return nodeCount === undefined ? {} : { nodeCount };
+}
+
+function readNodeCount(snapshot: Record<string, unknown> | undefined): number | undefined {
+  const nodes = snapshot?.nodes;
+  return Array.isArray(nodes) ? nodes.length : undefined;
+}
+
+function firstTreeForClient(nodeCount: number | undefined): RawSample['firstTree'] {
+  if (nodeCount === undefined) return 'not-observed';
+  return nodeCount === 0 ? 'empty' : 'readable';
+}
+
+function clientFailureFields(
+  network: ProxyNetwork,
+  record: ProxyRpcRecord | undefined,
+): { failure?: Failure } {
+  return record?.failed ? { failure: networkFailure(network) } : {};
+}
+
+export async function closeClient(client: AgentClient): Promise<void> {
+  try {
+    await client.sessions.close();
+  } catch {
+    return;
+  }
+}
+
+export async function releaseLease(
+  options: Pick<ProxyClientOptions, 'proxy' | 'conditioner'>,
+  lease: Record<string, unknown>,
+  clientId: string,
+  runId: string,
+): Promise<void> {
+  try {
+    const module = await import('../../dist/src/index.js');
+    const client = module.createAgentDeviceClient({
+      daemonBaseUrl: buildDaemonHttpBaseUrl(options.conditioner.baseUrl),
+      daemonAuthToken: options.proxy.token,
+      daemonTransport: 'http',
+      session: `release-${clientId}`,
+      tenant: 'bench',
+      runId,
+      leaseProvider: 'proxy',
+      clientId,
+      leaseBackend: 'ios-simulator',
+      leaseId: readRequiredString(lease, 'leaseId'),
+      deviceKey: readRequiredString(lease, 'deviceKey'),
+    });
+    await client.leases.release({
+      tenant: 'bench',
+      runId,
+      leaseId: readRequiredString(lease, 'leaseId'),
+      leaseProvider: 'proxy',
+      clientId,
+      leaseBackend: 'ios-simulator',
+      deviceKey: readRequiredString(lease, 'deviceKey'),
+    });
+  } catch {
+    return;
+  }
+}
+
+export function remoteFlags(
+  options: Pick<ProxyClientOptions, 'proxy' | 'conditioner'>,
+  lease: Record<string, unknown>,
+  clientId: string,
+  runId: string,
+): string[] {
+  return [
+    '--daemon-base-url',
+    buildDaemonHttpBaseUrl(options.conditioner.baseUrl),
+    '--daemon-auth-token',
+    options.proxy.token,
+    '--daemon-transport',
+    'http',
+    '--tenant',
+    'bench',
+    '--run-id',
+    runId,
+    '--lease-id',
+    readRequiredString(lease, 'leaseId'),
+    '--lease-provider',
+    'proxy',
+    '--client-id',
+    clientId,
+    '--device-key',
+    readRequiredString(lease, 'deviceKey'),
+    '--lease-backend',
+    'ios-simulator',
+  ];
+}
+
+export function closeCliSession(context: CliContext): void {
+  spawnSync(
+    process.execPath,
+    [
+      'bin/agent-device.mjs',
+      'close',
+      '--state-dir',
+      context.stateDir,
+      '--session',
+      context.session,
+      '--platform',
+      'ios',
+      '--udid',
+      context.udid,
+      ...(context.extraFlags ?? []),
+      '--json',
+    ],
+    { cwd: context.repoRoot, stdio: 'ignore', timeout: 60_000 },
+  );
+}
+
+export function setupFailure(operation: string, result: CliResult): BenchmarkInfrastructureError {
+  const failure = classifyFailure(result.payload, result);
+  const message = formatCliFailure(operation, failure, result);
+  if (failure.code === 'DEVICE_IN_USE') throw new BenchmarkContentionError(message, operation);
+  return new BenchmarkInfrastructureError(message, operation);
+}
+
+function networkFailure(network: ProxyNetwork, failed = true): Failure {
+  return {
+    category: failed && network.packetLossPercent > 0 ? 'packet-loss' : 'upstream',
+  };
+}
+
+function lastRecord(records: ProxyRpcRecord[]): ProxyRpcRecord | undefined {
+  return records.at(-1);
+}
+
+function readRequiredString(value: Record<string, unknown>, key: string): string {
+  const result = value[key];
+  if (typeof result !== 'string' || result.length === 0) {
+    throw new BenchmarkInfrastructureError(`Lease did not contain ${key}.`);
+  }
+  return result;
+}
+
+function readNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}

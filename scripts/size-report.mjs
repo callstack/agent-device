@@ -16,6 +16,7 @@ import {
   formatPackageComponents,
   formatPackedFiles,
 } from './size-report-package.mjs';
+import { measureCleanInstalledPackage } from './size-report-install.mjs';
 
 const COMMENT_MARKER = '<!-- agent-device-size-report -->';
 const GITHUB_REQUEST_ATTEMPTS = 4;
@@ -153,12 +154,18 @@ function collectReport(root, options) {
     { files: 0, rawBytes: 0, gzipBytes: 0 },
   );
 
+  const npmPackWithArchive = collectNpmPack(root);
+  const { tarballPath, ...npmPack } = npmPackWithArchive;
+  const cleanInstalled = measureCleanInstalledPackage(tarballPath, packageJson.name);
+
   return {
     packageName: packageJson.name,
     version: packageJson.version,
     generatedAt: new Date().toISOString(),
     js,
-    npmPack: collectNpmPack(root),
+    bundled: js,
+    npmPack,
+    cleanInstalled,
     ...(options.startupRuns > 0
       ? { startup: collectStartupBenchmarks(root, options.startupRuns) }
       : {}),
@@ -236,6 +243,23 @@ function formatMarkdown(report, baseReport) {
     metricRow('npm tarball', baseReport?.npmPack.tarballBytes, report.npmPack.tarballBytes),
     metricRow('npm unpacked', baseReport?.npmPack.unpackedBytes, report.npmPack.unpackedBytes),
   ];
+  if (report.bundled) {
+    rows.splice(
+      2,
+      0,
+      metricRow('npm bundled raw', baseReport?.bundled?.rawBytes, report.bundled.rawBytes),
+      metricRow('npm bundled gzip', baseReport?.bundled?.gzipBytes, report.bundled.gzipBytes),
+    );
+  }
+  if (report.cleanInstalled) {
+    rows.push(
+      metricRow(
+        'npm clean-installed',
+        baseReport?.cleanInstalled?.packageBytes,
+        report.cleanInstalled.packageBytes,
+      ),
+    );
+  }
 
   const changedChunks = baseReport
     ? formatChangedChunks(report.chunks, baseReport.chunks ?? [])

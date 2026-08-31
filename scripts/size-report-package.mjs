@@ -47,13 +47,14 @@ export function collectNpmPack(root) {
   fs.mkdirSync(cachePath, { recursive: true });
   const stdout = execFileSync(
     'npm',
-    ['pack', '--dry-run', '--ignore-scripts', '--json', '--cache', cachePath],
+    ['pack', '--ignore-scripts', '--json', '--pack-destination', cachePath, '--cache', cachePath],
     { cwd: root, encoding: 'utf8' },
   );
   const pack = parseNpmPackOutput(stdout);
   const entries = normalizeNpmPackEntries(pack);
   return {
     filename: pack.filename,
+    tarballPath: path.join(cachePath, pack.filename),
     tarballBytes: pack.size,
     unpackedBytes: pack.unpackedSize,
     files: entries.length,
