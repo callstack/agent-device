@@ -9,7 +9,7 @@ import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { isRootInteractionContainer } from '../../core/interaction-targeting.ts';
 import { preferOnscreenMatches } from './find-match-ranking.ts';
 import { formatSnapshotLine } from '../../snapshot/snapshot-lines.ts';
-import type { ElementMatchCandidateDetails } from './error-candidates.ts';
+import type { ElementMatchCandidateDetails } from '@agent-device/kernel/errors';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { errorResponse } from '../response.ts';
 
@@ -95,7 +95,7 @@ function narrowMultipleMatches(
 // candidate reads identically to its row in `snapshot -i` output: ref, role,
 // label/identifier. Capped at AMBIGUOUS_MATCH_CANDIDATE_LIMIT to bound the
 // error payload — `matches` (the true total) is what a "+N more" marker is
-// computed from at render time (./error-candidates.ts).
+// computed from at render time by the surface owners.
 // Module-local: no consumer outside this file needs the raw cap, only the
 // already-capped `candidates` array on the response.
 const AMBIGUOUS_MATCH_CANDIDATE_LIMIT = 5;

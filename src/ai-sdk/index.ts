@@ -127,7 +127,7 @@ export async function createAgentDeviceTools(
           // this exact shape as `structuredContent` (ADR 0012) — reuse it
           // instead of re-normalizing an already-normalized error.
           const normalized = result.structuredContent as NormalizedError;
-          const message = await formatToolErrorText(normalized);
+          const message = formatToolErrorText(normalized);
           throw new AppError(normalized.code, message, normalized.details);
         }
         return result.structuredContent ?? {};

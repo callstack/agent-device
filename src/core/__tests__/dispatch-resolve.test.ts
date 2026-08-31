@@ -290,7 +290,7 @@ test('resolveTargetDevice refuses booted simulator selection when the requested 
   assert.equal(error.code, 'APP_NOT_INSTALLED');
   assert.match(error.message, /No booted iOS simulator has com\.example\.demo installed/);
   // Keyed `devices`, not `candidates`: the find handler's element matches own
-  // that key with an incompatible shape (src/daemon/handlers/error-candidates.ts).
+  // that key with an incompatible shape (@agent-device/kernel/errors).
   assert.equal(error.details?.candidates, undefined);
   assert.deepEqual(error.details?.devices, [
     { id: bootedSimulator.id, name: bootedSimulator.name },

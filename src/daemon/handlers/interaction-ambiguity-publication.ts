@@ -1,5 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
-import { readElementMatchCandidateRefs } from './error-candidates.ts';
+import { AppError, readElementMatchCandidateRefs } from '@agent-device/kernel/errors';
 import { markSessionPartialRefsIssued } from '../session-snapshot.ts';
 import type { SessionState } from '../types.ts';
 

@@ -121,7 +121,7 @@ async function callTool(params: unknown): Promise<ToolResult> {
     // (unknown tool name, malformed params).
     return await commandToolExecutor.execute(name, optionalArguments(record.arguments));
   } catch (error) {
-    return textToolResult(await formatToolErrorText(normalizeToolError(error)), true);
+    return textToolResult(formatToolErrorText(normalizeToolError(error)), true);
   }
 }
 

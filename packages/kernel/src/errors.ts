@@ -122,6 +122,62 @@ export type NormalizedError = {
   details?: Record<string, unknown>;
 };
 
+export type ElementMatchCandidateDetails = {
+  candidates: string[];
+  matches: number;
+  refsGeneration?: number;
+};
+
+export type ErrorCandidateView =
+  | (ElementMatchCandidateDetails & { kind: 'element-match' })
+  | { kind: 'device'; devices: Array<{ id: string; name: string }> };
+
+export function readErrorCandidateViews(
+  details: Record<string, unknown> | undefined,
+): ErrorCandidateView[] {
+  const candidates = readStringArray(details?.candidates);
+  const views: ErrorCandidateView[] = [];
+  if (candidates.length > 0) {
+    const matches = typeof details?.matches === 'number' ? details.matches : candidates.length;
+    const refsGeneration =
+      typeof details?.refsGeneration === 'number' ? details.refsGeneration : undefined;
+    views.push({
+      kind: 'element-match',
+      candidates,
+      matches,
+      ...(refsGeneration !== undefined ? { refsGeneration } : {}),
+    });
+  }
+  const devices = readDeviceList(details?.devices);
+  if (devices.length > 0) views.push({ kind: 'device', devices });
+  return views;
+}
+
+export function readElementMatchCandidateRefs(
+  details: Record<string, unknown> | undefined,
+): string[] {
+  return readStringArray(details?.candidates).flatMap((candidate) => {
+    const match = /^@(e\d+)(?:~s\d+)?(?:\s|$)/.exec(candidate);
+    return match?.[1] ? [match[1]] : [];
+  });
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === 'string');
+}
+
+function readDeviceList(value: unknown): Array<{ id: string; name: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (entry): entry is { id: string; name: string } =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      typeof (entry as { id?: unknown }).id === 'string' &&
+      typeof (entry as { name?: unknown }).name === 'string',
+  );
+}
+
 /**
  * Error payload returned by the daemon transport. It is kept beside the local
  * error representation because clients immediately rehydrate this wire shape

@@ -93,8 +93,8 @@ test('printHumanError lists AMBIGUOUS_MATCH candidates unconditionally, not gate
   // This is the exact old-message shape the bug reported: the human render
   // used to stop at "Error (...): ...\nHint: ...", so an agent reading it had
   // no @ref to act on. Asserting the candidate lines appear proves this red
-  // against that shape (it would fail before formatErrorCandidateLines was
-  // wired into printHumanError).
+  // against that shape (it would fail before candidate views were wired into
+  // printHumanError).
   const output = await captureStderr(() => printHumanError(err));
 
   assert.match(output, /^Error \(AMBIGUOUS_MATCH\): find matched 3 elements/);
@@ -126,8 +126,8 @@ test('printHumanError appends a "+N more" marker when candidates were capped', a
 
 // The device-domain resolvers (findBootedAppleSimulatorWithApp,
 // src/core/dispatch-resolve.ts) key their candidate list `devices`, so the CLI
-// renders the udids the "pass --udid" hint asks for. Shape rules live with the
-// daemon-owned candidate renderer (src/daemon/handlers/__tests__/interaction-error-candidates.test.ts).
+// renders the udids the "pass --udid" hint asks for. The structured candidate
+// view comes from @agent-device/kernel/errors and formatting stays local here.
 test('printHumanError lists device candidates for the device-domain resolvers', async () => {
   const err = new AppError(
     'AMBIGUOUS_MATCH',

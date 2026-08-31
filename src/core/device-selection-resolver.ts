@@ -223,7 +223,7 @@ function withDeviceRetrySelectors(error: unknown, candidates: readonly DeviceInf
 /**
  * The device-domain candidate list. Keyed `devices`, not `candidates`: the find
  * handler's element matches own that key with an incompatible shape
- * (src/daemon/handlers/error-candidates.ts).
+ * (@agent-device/kernel/errors).
  */
 function deviceCandidateDetails(devices: readonly DeviceInfo[]) {
   return {

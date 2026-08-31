@@ -1,4 +1,5 @@
 import type { SettleObservation } from '@agent-device/contracts/interaction';
+import { readElementMatchCandidateRefs } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
 import type { CommandExecutionResult } from '../commands/command-surface.ts';
@@ -24,7 +25,7 @@ export type ToolRefPinStore = {
     details: Record<string, unknown> | undefined,
     stateDir: string | undefined,
     session: unknown,
-  ): Promise<void>;
+  ): void;
 };
 
 export function createToolRefPinStore(): ToolRefPinStore {
@@ -34,22 +35,21 @@ export function createToolRefPinStore(): ToolRefPinStore {
       pinPlainRefArguments(name, input, getScopePins(refPinsByScope, stateDir, input.session)),
     mergeCommandResult: (name, result, stateDir, session) =>
       mergeCommandResult(refPinsByScope, name, result, stateDir, session),
-    mergeErrorDetails: async (details, stateDir, session) => {
+    mergeErrorDetails: (details, stateDir, session) => {
       const scopeKey = makeScopeKey(stateDir, session);
-      await mergeErrorCandidateRefPins(refPinsByScope, scopeKey, details);
+      mergeErrorCandidateRefPins(refPinsByScope, scopeKey, details);
       mergeDivergenceScreenRefPins(refPinsByScope, scopeKey, details);
     },
   };
 }
 
-async function mergeErrorCandidateRefPins(
+function mergeErrorCandidateRefPins(
   refPinsByScope: Map<string, Map<string, number>>,
   scopeKey: string,
   details: Record<string, unknown> | undefined,
-): Promise<void> {
+): void {
   const refsGeneration = details?.refsGeneration;
   if (typeof refsGeneration !== 'number') return;
-  const { readElementMatchCandidateRefs } = await import('../daemon/handlers/error-candidates.ts');
   mergeIntoScopedPins(
     refPinsByScope,
     scopeKey,

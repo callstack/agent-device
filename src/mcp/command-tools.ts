@@ -232,11 +232,11 @@ async function buildErrorToolResult(
   session: unknown,
 ): Promise<ToolResult> {
   const normalized = normalizeToolError(error);
-  await refPins.mergeErrorDetails(normalized.details, stateDir, session);
+  refPins.mergeErrorDetails(normalized.details, stateDir, session);
   return {
     isError: true,
     structuredContent: normalized,
-    content: [{ type: 'text', text: await formatToolErrorText(normalized) }],
+    content: [{ type: 'text', text: formatToolErrorText(normalized) }],
   };
 }
 
