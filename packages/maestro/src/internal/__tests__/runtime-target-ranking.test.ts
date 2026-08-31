@@ -18,6 +18,72 @@ test('typed target matching preserves snapshot read order', () => {
   ).toEqual([1, 2]);
 });
 
+test('one ranking operation owns one lazy visibility context and one materialized index pair', () => {
+  const snapshot = makeSnapshot([
+    {
+      index: 0,
+      type: 'android.widget.FrameLayout',
+      rect: { x: 0, y: 0, width: 1080, height: 2400 },
+    },
+    {
+      index: 1,
+      parentIndex: 0,
+      identifier: 'candidate',
+      visibleToUser: true,
+      rect: { x: 20, y: 100, width: 200, height: 40 },
+    },
+    {
+      index: 2,
+      parentIndex: 0,
+      identifier: 'candidate',
+      visibleToUser: true,
+      rect: { x: 20, y: 200, width: 200, height: 40 },
+    },
+  ]);
+  const materialized = { contexts: 0, nodeMaps: 0, viewportRects: 0, containingFallbacks: 0 };
+
+  expect(
+    rankMaestroCandidates(snapshot, { id: 'candidate' }, 'android', {
+      onVisibilityContextCreated: () => materialized.contexts++,
+      onNodeMapBuilt: () => materialized.nodeMaps++,
+      onViewportRectsCollected: () => materialized.viewportRects++,
+      onContainingRectFallback: () => materialized.containingFallbacks++,
+    }).visible.map((node) => node.index),
+  ).toEqual([1, 2]);
+  expect(materialized).toEqual({
+    contexts: 1,
+    nodeMaps: 1,
+    viewportRects: 1,
+    containingFallbacks: 0,
+  });
+});
+
+test('ranking early-return candidates do not materialize visibility indexes or roots', () => {
+  const cases = [
+    makeSnapshot([{ index: 0, identifier: 'other' }]),
+    makeSnapshot([
+      {
+        index: 0,
+        identifier: 'candidate',
+        visibleToUser: false,
+        rect: { x: 0, y: 0, width: 1, height: 1 },
+      },
+    ]),
+    makeSnapshot([{ index: 0, identifier: 'candidate', hittable: true }]),
+  ];
+  const platforms = ['android', 'android', 'ios'] as const;
+
+  for (const [index, snapshot] of cases.entries()) {
+    const materialized = { contexts: 0, nodeMaps: 0, viewportRects: 0 };
+    rankMaestroCandidates(snapshot, { id: 'candidate' }, platforms[index]!, {
+      onVisibilityContextCreated: () => materialized.contexts++,
+      onNodeMapBuilt: () => materialized.nodeMaps++,
+      onViewportRectsCollected: () => materialized.viewportRects++,
+    });
+    expect(materialized).toEqual({ contexts: 1, nodeMaps: 0, viewportRects: 0 });
+  }
+});
+
 test('supported Android evidence applies stable clickableFirst ordering across all groups', () => {
   const snapshot = attachSnapshotClickabilityEvidence(
     makeSnapshot([

@@ -1,11 +1,7 @@
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { DisambiguationTiebreak } from '@agent-device/contracts/interaction';
-import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
-import {
-  buildSnapshotNodeMap,
-  collectViewportRects,
-  isNodeVisibleOnScreen,
-} from '@agent-device/contracts/snapshot';
+import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { matchesSelector } from './match.ts';
 import type { Selector, SelectorChain } from './parse.ts';
 import type {
@@ -228,15 +224,10 @@ function analyzeSelectorMatches(
   const state: DisambiguationState = { best: null, bestVisible: false, tie: false };
   // Lazily built: only ambiguous matches pay for viewport inference, and both
   // maps are built once per alternative so N ambiguous candidates share one
-  // whole-tree pass instead of `isNodeVisibleOnScreen` re-deriving the
+  // whole-tree pass instead of the visibility resolver re-deriving the
   // viewport rects for each candidate it is asked about (#1970).
-  let byIndex: Map<number, SnapshotNode> | undefined;
-  let viewportRects: Rect[] | undefined;
-  const isVisible = (node: SnapshotNode): boolean => {
-    byIndex ??= buildSnapshotNodeMap(nodes);
-    viewportRects ??= collectViewportRects(nodes);
-    return isNodeVisibleOnScreen(node, nodes, byIndex, viewportRects);
-  };
+  const visibility = createSnapshotVisibility(nodes);
+  const isVisible = visibility.isVisibleOnScreen;
   for (const node of nodes) {
     if (requireRect && !node.rect) continue;
     if (!matchesSelector(node, selector, platform)) continue;

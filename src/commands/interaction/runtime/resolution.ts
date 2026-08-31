@@ -28,12 +28,7 @@ import { resolvePressRecordingTarget } from '../../../core/press-retarget.ts';
 import { requireSnapshotSession } from './selector-read-shared.ts';
 import { findNodeByLabel, resolveRefLabel } from '../../../core/snapshot-node-lookup.ts';
 import { containsPoint } from '@agent-device/kernel/rect';
-import {
-  isNodeVisibleOnScreen,
-  normalizeType,
-  resolveEffectiveViewportRect,
-  resolveViewportRect,
-} from '@agent-device/contracts/snapshot';
+import { createSnapshotVisibility, normalizeType } from '@agent-device/contracts/snapshot';
 import {
   classifyOffscreenScrollDirection,
   type OffscreenScrollDirection,
@@ -206,7 +201,7 @@ async function tryResolveOutOfBoundsPointWarning(
 
   // Create a synthetic rect from the point for viewport lookup
   const pointRect = { x: target.x, y: target.y, width: 0, height: 0 };
-  const viewport = resolveViewportRect(session.snapshot.nodes, pointRect);
+  const viewport = createSnapshotVisibility(session.snapshot.nodes).resolveViewport(pointRect);
   if (!viewport) return undefined;
 
   const point = { x: target.x, y: target.y };
@@ -833,8 +828,9 @@ function resolveNodeTouchPoint(
     blockedTargetDetails: { ref: string } | { selector: string };
   },
 ): Point {
-  const effectiveViewport = resolveEffectiveViewportRect(node, nodes);
-  const rootViewport = node.rect ? resolveViewportRect(nodes, node.rect) : null;
+  const visibility = createSnapshotVisibility(nodes);
+  const effectiveViewport = visibility.resolveEffectiveViewport(node);
+  const rootViewport = node.rect ? visibility.resolveViewport(node.rect) : null;
   const resolution = resolveInteractionTouchPoint(nodes, node, {
     bounds: [effectiveViewport, rootViewport].filter((rect) => rect !== null),
   });
@@ -928,7 +924,7 @@ function scrollRevealClause(direction: OffscreenScrollDirection | null): string 
  * ref came from the stored session snapshot, so the node is already in hand:
  * run the SAME shared guards the runtime path uses against it before the
  * backend call — occlusion (`isSnapshotNodeInteractionBlocked` via
- * `assertInteractionNotBlocked`) and offscreen (`isNodeVisibleOnScreen` via
+ * `assertInteractionNotBlocked`) and offscreen (the snapshot visibility resolver via
  * `assertVisibleRefTarget`) ERROR with the runtime path's exact shapes, and
  * the non-hittable annotation is returned for the fast-path result.
  *
@@ -1028,7 +1024,7 @@ export async function dispatchNativeRefInteraction(
   };
 }
 
-// isNodeVisibleOnScreen (not the effective-viewport form): items inside an
+// Full on-screen visibility (not only the effective-viewport form): items inside an
 // off-screen scrollable container (closed drawer) must also count as
 // off-screen, not just items scrolled out of an on-screen container.
 //
@@ -1045,7 +1041,7 @@ export async function dispatchNativeRefInteraction(
 //
 // Exported (not just for callers here) for ADR 0011 registry honesty:
 // interaction-guarantees.ts's `offscreen` cells point their `via` at this
-// function, not at isNodeVisibleOnScreen alone, since this is the actual
+// function, not at the contracts predicate alone, since this is the actual
 // end-to-end enforcement point.
 export async function throwIfOffscreenInteractionTarget(
   runtime: AgentDeviceRuntime,
@@ -1058,9 +1054,10 @@ export async function throwIfOffscreenInteractionTarget(
     hint: (direction: OffscreenScrollDirection | null) => string;
   },
 ): Promise<SnapshotNode> {
-  const viewport = node.rect ? resolveEffectiveViewportRect(node, nodes) : null;
-  if (!node.rect || !viewport || isNodeVisibleOnScreen(node, nodes)) return node;
-  const rootViewport = resolveViewportRect(nodes, node.rect);
+  const visibility = createSnapshotVisibility(nodes);
+  const viewport = node.rect ? visibility.resolveEffectiveViewport(node) : null;
+  if (!node.rect || !viewport || visibility.isVisibleOnScreen(node)) return node;
+  const rootViewport = visibility.resolveViewport(node.rect);
   const liveRect = await runtime.backend.confirmOffscreenTargetVisible?.(
     toBackendContext(runtime, options),
     node,
@@ -1072,7 +1069,7 @@ export async function throwIfOffscreenInteractionTarget(
   // deterministic move instead of a guess (#1366). Derived from the same
   // boundary the rejection above used, so partial clips and off-screen
   // containers get a direction too, not just fully-scrolled-out items.
-  const scrollDirection = classifyOffscreenScrollDirection(node, nodes);
+  const scrollDirection = classifyOffscreenScrollDirection(node, visibility);
   throw new AppError('COMMAND_FAILED', failure.message, {
     ...failure.details,
     rect: node.rect,

@@ -13,14 +13,14 @@ export {
 } from '../snapshot-tree.ts';
 export {
   collectViewportRects,
+  createSnapshotVisibility,
   findNearestScrollableAncestor,
-  isNodeVisibleInEffectiveViewport,
-  isNodeVisibleOnScreen,
   isUsefulVisibilityAnchor,
   isViewportRootNode,
   isTapPointInsideViewport,
-  resolveEffectiveViewportRect,
   resolveViewportRect,
+  type SnapshotVisibility,
+  type SnapshotVisibilityProbe,
 } from '../snapshot-visibility.ts';
 export {
   extractNodeText,

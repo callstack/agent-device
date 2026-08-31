@@ -1,12 +1,13 @@
 import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
-import { buildSnapshotNodeMap, normalizeType } from '@agent-device/contracts/snapshot';
+import { normalizeType, type SnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { isDescendantOfSnapshotNode } from './snapshot-policy.ts';
 import { normalizeText } from './shared.ts';
 import type { MaestroSelector } from './program-ir.ts';
 import {
   createMaestroSnapshotResolver,
   selectMaestroIndexedNode,
+  type MaestroResolutionProbe,
   type MaestroSnapshotResolver,
 } from './runtime-selector-resolution.ts';
 import { type MaestroPositionRelation } from './runtime-target-position.ts';
@@ -31,12 +32,13 @@ export function rankMaestroCandidates(
   snapshot: SnapshotState,
   selector: MaestroSelector,
   platform: MaestroPlatform,
+  probe: MaestroResolutionProbe = {},
 ): MaestroRankedCandidates {
   const clickability = resolveMaestroClickability(snapshot, platform);
-  const resolver = createMaestroResolver(snapshot, clickability);
+  const resolver = createMaestroResolver(snapshot, clickability, probe);
   const scoped = matchMaestroCandidatesWithResolver(selector, resolver);
   const visible = filterVisibleMaestroMatches({
-    nodes: snapshot.nodes,
+    visibility: resolver.visibility,
     matches: scoped.matches,
     platform,
   });
@@ -45,11 +47,10 @@ export function rankMaestroCandidates(
     visible,
     clickability,
     ranked: rankVisibleMaestroMatches(
-      snapshot.nodes,
       visible,
       selector,
       platform,
-      resolver.nodeByIndex,
+      resolver.visibility,
       clickability,
     ),
   };
@@ -84,13 +85,14 @@ export function selectMaestroPositionMatches(
   return createMaestroResolver(snapshot, clickability).resolvePosition(relation, anchor);
 }
 
-function createMaestroResolver(
+export function createMaestroResolver(
   snapshot: SnapshotState,
   clickability: MaestroClickabilityDecision | undefined,
+  probe: MaestroResolutionProbe = {},
 ): MaestroSnapshotResolver {
   return createMaestroSnapshotResolver(
     snapshot,
-    {},
+    probe,
     clickability
       ? { orderUnindexed: (matches) => orderMaestroClickableFirst(matches, clickability) }
       : {},
@@ -98,11 +100,10 @@ function createMaestroResolver(
 }
 
 export function rankVisibleMaestroMatches(
-  nodes: SnapshotNode[],
   matches: SnapshotNode[],
   selector: MaestroSelector,
   platform: MaestroPlatform,
-  nodeByIndex: ReadonlyMap<number, SnapshotNode> = buildSnapshotNodeMap(nodes),
+  visibility: SnapshotVisibility,
   clickability?: MaestroClickabilityDecision,
 ): SnapshotNode[] {
   const ranked =
@@ -117,13 +118,13 @@ export function rankVisibleMaestroMatches(
             equivalentMatches.some(
               (other) =>
                 isInteractiveControl(other) &&
-                isDescendantOfSnapshotNode(nodes, candidate, other, nodeByIndex),
+                isDescendantOfSnapshotNode(candidate, other, visibility),
             )
           ) {
             return false;
           }
           return !equivalentMatches.some((other) =>
-            isDescendantOfSnapshotNode(nodes, other, candidate, nodeByIndex),
+            isDescendantOfSnapshotNode(other, candidate, visibility),
           );
         });
   return selector.index === undefined && clickability

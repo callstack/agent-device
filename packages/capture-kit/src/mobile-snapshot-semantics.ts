@@ -1,12 +1,10 @@
 import { isRectVisibleInViewport } from '@agent-device/kernel/rect';
 import {
-  buildSnapshotNodeMap,
+  createSnapshotVisibility,
   extractNodeText,
   findNearestScrollableAncestor,
-  isNodeVisibleInEffectiveViewport,
   isTapPointInsideViewport,
-  resolveEffectiveViewportRect,
-  resolveViewportRect,
+  type SnapshotVisibility,
 } from '@agent-device/contracts/snapshot';
 import { inferVerticalScrollIndicatorDirections } from '@agent-device/kernel/scroll-indicator';
 import type { HiddenContentHint, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
@@ -24,7 +22,7 @@ export function buildMobileSnapshotPresentation(nodes: SnapshotNode[]): MobileSn
     return { nodes, hiddenCount: 0, summaryLines: [] };
   }
 
-  const { byIndex, visibleNodeIndexes, offscreenNodes, hintedContainers } =
+  const { visibility, visibleNodeIndexes, offscreenNodes, hintedContainers } =
     analyzeMobileSnapshotVisibility(nodes);
   const presentedNodes =
     visibleNodeIndexes.size === 0
@@ -42,8 +40,7 @@ export function buildMobileSnapshotPresentation(nodes: SnapshotNode[]): MobileSn
         (node) =>
           !hintedContainers.coveredNodeIndexes.has(node.index) && isDiscoverableOffscreenNode(node),
       ),
-      nodes,
-      byIndex,
+      visibility,
     ),
   };
 }
@@ -60,7 +57,7 @@ export function deriveMobileSnapshotHiddenContentHints(
 }
 
 function analyzeMobileSnapshotVisibility(nodes: SnapshotNode[]): {
-  byIndex: Map<number, SnapshotNode>;
+  visibility: SnapshotVisibility;
   visibleNodeIndexes: Set<number>;
   offscreenNodes: SnapshotNode[];
   hintedContainers: {
@@ -68,12 +65,13 @@ function analyzeMobileSnapshotVisibility(nodes: SnapshotNode[]): {
     coveredNodeIndexes: Set<number>;
   };
 } {
-  const byIndex = buildSnapshotNodeMap(nodes);
+  const visibility = createSnapshotVisibility(nodes);
+  const byIndex = visibility.nodeByIndex;
   const visibleNodeIndexes = new Set<number>();
   const offscreenNodes: SnapshotNode[] = [];
 
   for (const node of nodes) {
-    if (isNodeVisibleInEffectiveViewport(node, nodes, byIndex)) {
+    if (visibility.isVisibleInEffectiveViewport(node)) {
       markNodeAndAncestorsVisible(node, visibleNodeIndexes, byIndex);
       continue;
     }
@@ -81,7 +79,7 @@ function analyzeMobileSnapshotVisibility(nodes: SnapshotNode[]): {
   }
 
   const hintedContainers = deriveContainerHints(nodes, offscreenNodes, visibleNodeIndexes, byIndex);
-  return { byIndex, visibleNodeIndexes, offscreenNodes, hintedContainers };
+  return { visibility, visibleNodeIndexes, offscreenNodes, hintedContainers };
 }
 
 /**
@@ -110,7 +108,7 @@ export type OffscreenScrollDirection = 'up' | 'down' | 'left' | 'right';
 
 /**
  * The direction to `scroll` so an off-screen interaction target comes into view.
- * Derived from the SAME two boundaries `isNodeVisibleOnScreen` rejects against,
+ * Derived from the SAME two boundaries the snapshot visibility resolver rejects against,
  * so every rejected target yields a direction (#1366) — not just the subset a
  * rect-vs-one-viewport check catches:
  *
@@ -128,14 +126,13 @@ export type OffscreenScrollDirection = 'up' | 'down' | 'left' | 'right';
  */
 export function classifyOffscreenScrollDirection(
   node: Pick<SnapshotNode, 'rect' | 'index' | 'parentIndex' | 'type' | 'role' | 'subrole'>,
-  nodes: SnapshotNode[],
-  byIndex: Map<number, SnapshotNode> = buildSnapshotNodeMap(nodes),
+  visibility: SnapshotVisibility,
 ): OffscreenScrollDirection | null {
   if (!node.rect) {
     return null;
   }
   // Boundary 1: fully separated from the effective (scroll-container) viewport.
-  const effectiveViewport = resolveEffectiveViewportRect(node, nodes, byIndex);
+  const effectiveViewport = visibility.resolveEffectiveViewport(node);
   if (effectiveViewport && !isRectVisibleInViewport(node.rect, effectiveViewport)) {
     const direction = directionOfCenterOutsideViewport(node.rect, effectiveViewport);
     if (direction) {
@@ -144,7 +141,7 @@ export function classifyOffscreenScrollDirection(
   }
   // Boundary 2: tap-point center outside the root viewport (off-screen container
   // or an edge-straddling rect whose center is past the frame).
-  const rootViewport = resolveViewportRect(nodes, node.rect);
+  const rootViewport = visibility.resolveViewport(node.rect);
   if (rootViewport && !isTapPointInsideViewport(node.rect, rootViewport)) {
     const direction = directionOfCenterOutsideViewport(node.rect, rootViewport);
     if (direction) {
@@ -185,7 +182,7 @@ function deriveContainerHints(
   allNodes: SnapshotNode[],
   offscreenNodes: SnapshotNode[],
   visibleNodeIndexes: Set<number>,
-  byIndex: Map<number, SnapshotNode>,
+  byIndex: ReadonlyMap<number, SnapshotNode>,
 ): {
   directionsByContainer: Map<number, Set<Direction>>;
   coveredNodeIndexes: Set<number>;
@@ -267,12 +264,11 @@ function applyDerivedHiddenContentHints(
 
 function buildOffscreenSummaryLines(
   nodes: SnapshotNode[],
-  snapshotNodes: SnapshotNode[],
-  byIndex: Map<number, SnapshotNode>,
+  visibility: SnapshotVisibility,
 ): string[] {
   const groups = new Map<Direction, SnapshotNode[]>();
   for (const node of nodes) {
-    const direction = classifyNodeDirection(node, snapshotNodes, byIndex);
+    const direction = classifyNodeDirection(node, visibility);
     if (!direction) {
       continue;
     }
@@ -297,13 +293,12 @@ function buildOffscreenSummaryLines(
 
 function classifyNodeDirection(
   node: SnapshotNode,
-  nodes: SnapshotNode[],
-  byIndex: Map<number, SnapshotNode>,
+  visibility: SnapshotVisibility,
 ): Direction | null {
   if (!node.rect) {
     return null;
   }
-  const viewport = resolveEffectiveViewportRect(node, nodes, byIndex);
+  const viewport = visibility.resolveEffectiveViewport(node);
   if (!viewport) {
     return null;
   }
@@ -357,7 +352,7 @@ function uniqueLabels(nodes: SnapshotNode[]): string[] {
 function markNodeAndAncestorsVisible(
   node: SnapshotNode,
   visibleNodeIndexes: Set<number>,
-  byIndex: Map<number, SnapshotNode>,
+  byIndex: ReadonlyMap<number, SnapshotNode>,
 ): void {
   let current: SnapshotNode | undefined = node;
   const visited = new Set<number>();
@@ -372,7 +367,7 @@ function markNodeAndAncestorsVisible(
 function findNearestVisibleScrollableAncestor(
   node: SnapshotNode,
   visibleNodeIndexes: Set<number>,
-  byIndex: Map<number, SnapshotNode>,
+  byIndex: ReadonlyMap<number, SnapshotNode>,
 ): SnapshotNode | null {
   return findNearestScrollableAncestor(node, byIndex, (current) =>
     visibleNodeIndexes.has(current.index),
@@ -383,7 +378,7 @@ function findNearestVisibleScrollableAncestor(
 function mergeScrollIndicatorDirections(
   nodes: SnapshotNode[],
   visibleNodeIndexes: Set<number>,
-  byIndex: Map<number, SnapshotNode>,
+  byIndex: ReadonlyMap<number, SnapshotNode>,
   directionsByContainer: Map<number, Set<Direction>>,
   geometryDirectionsByContainer: Map<number, Set<Direction>>,
 ): void {

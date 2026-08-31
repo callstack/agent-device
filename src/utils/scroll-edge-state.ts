@@ -1,6 +1,6 @@
 import { deriveMobileSnapshotHiddenContentHints } from '@agent-device/capture-kit/mobile-snapshot-semantics';
 import {
-  isNodeVisibleInEffectiveViewport,
+  createSnapshotVisibility,
   isScrollableNodeLike,
   isViewportRootNode,
 } from '@agent-device/contracts/snapshot';
@@ -164,7 +164,8 @@ function selectScrollContainer(
   edge: ScrollEdge,
   target: ScrollEdgeTarget,
 ): SnapshotNode | null {
-  const byIndex = new Map(nodes.map((node) => [node.index, node]));
+  const visibility = createSnapshotVisibility(nodes);
+  const byIndex = visibility.nodeByIndex;
   const scrollables = nodes.filter((node) => isScrollableNodeLike(node) && isUsableRect(node.rect));
   if (scrollables.length === 0) {
     return null;
@@ -179,7 +180,7 @@ function selectScrollContainer(
   if (targetPoint) {
     const containing = selectPointScrollContainer(scrollables, hiddenHints, edge, targetPoint);
     if (containing) return containing;
-    return selectBroadScrollContainer(scrollables, hiddenHints, edge, nodes);
+    return selectBroadScrollContainer(scrollables, hiddenHints, edge, visibility);
   }
 
   const viewportCenter = inferViewportCenter(nodes);
@@ -188,14 +189,14 @@ function selectScrollContainer(
     if (centered) return centered;
   }
 
-  return selectBroadScrollContainer(scrollables, hiddenHints, edge, nodes);
+  return selectBroadScrollContainer(scrollables, hiddenHints, edge, visibility);
 }
 
 function selectBroadScrollContainer(
   scrollables: SnapshotNode[],
   hiddenHints: Map<number, HiddenContentHint>,
   edge: ScrollEdge,
-  nodes: SnapshotNode[],
+  visibility: ReturnType<typeof createSnapshotVisibility>,
 ): SnapshotNode | null {
   const withHiddenEdge = scrollables
     .filter((node) => hasHiddenContentAtEdge(node, hiddenHints.get(node.index), edge))
@@ -203,7 +204,7 @@ function selectBroadScrollContainer(
   if (withHiddenEdge.length > 0) return withHiddenEdge[0] ?? null;
 
   const visibleScrollables = scrollables
-    .filter((node) => isNodeVisibleInEffectiveViewport(node, nodes))
+    .filter(visibility.isVisibleInEffectiveViewport)
     .sort(compareBroadScrollContainer);
   return visibleScrollables[0] ?? scrollables.sort(compareBroadScrollContainer)[0] ?? null;
 }
@@ -236,7 +237,7 @@ function inferViewportCenter(nodes: SnapshotNode[]): Point | undefined {
 
 function findNearestScrollableAncestor(
   nodeIndex: number | undefined,
-  byIndex: Map<number, SnapshotNode>,
+  byIndex: ReadonlyMap<number, SnapshotNode>,
 ): SnapshotNode | null {
   if (nodeIndex === undefined) {
     return null;

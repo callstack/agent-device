@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { buildSnapshotState } from '../core/snapshot-state.ts';
-import { isNodeVisibleOnScreen } from '@agent-device/contracts/snapshot';
+import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import {
   androidSnapshotPublicationInput,
   androidUiNodes,
@@ -134,7 +134,7 @@ test('interactive Android snapshots keep a fixed sibling outside filtered scroll
   const header = snapshot.nodes.find((node) => node.identifier === 'header-action');
 
   assert.equal(header?.parentIndex, undefined);
-  assert.equal(header && isNodeVisibleOnScreen(header, snapshot.nodes), true);
+  assert.equal(header && createSnapshotVisibility(snapshot.nodes).isVisibleOnScreen(header), true);
 });
 
 test('parseUiHierarchy reads Android bounds with negative coordinates', () => {

@@ -5,8 +5,32 @@ import {
   classifyOffscreenScrollDirection,
   isConfirmedOnScreenProbe,
 } from './mobile-snapshot-semantics.ts';
-import { isNodeVisibleInEffectiveViewport } from '@agent-device/contracts/snapshot';
+import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+
+test('rootless mobile presentation performs linear geometry reads', () => {
+  let rectReads = 0;
+  const nodes = Array.from({ length: 64 }, (_, index) => {
+    const node: SnapshotNode = {
+      index,
+      ref: `@e${index}`,
+      type: 'android.widget.TextView',
+      ...(index === 0 ? {} : { parentIndex: 0 }),
+    };
+    Object.defineProperty(node, 'rect', {
+      enumerable: true,
+      get() {
+        rectReads += 1;
+        return { x: 0, y: index * 20, width: 100, height: 18 };
+      },
+    });
+    return node;
+  });
+
+  buildMobileSnapshotPresentation(nodes);
+
+  assert.ok(rectReads < nodes.length * 8, `${rectReads} geometry reads for ${nodes.length} nodes`);
+});
 
 test('mobile presentation keeps only visible nodes and adds off-screen summary fallback', () => {
   const nodes: SnapshotNode[] = [
@@ -298,7 +322,7 @@ test('visibility is true for node at exact viewport boundary', () => {
   ];
 
   // Node overlaps viewport by 1 px at the top edge — should be considered visible
-  assert.equal(isNodeVisibleInEffectiveViewport(nodes[1]!, nodes), true);
+  assert.equal(createSnapshotVisibility(nodes).isVisibleInEffectiveViewport(nodes[1]!), true);
 });
 
 test('visibility is false for node just outside viewport boundary', () => {
@@ -323,7 +347,7 @@ test('visibility is false for node just outside viewport boundary', () => {
     },
   ];
 
-  assert.equal(isNodeVisibleInEffectiveViewport(nodes[1]!, nodes), false);
+  assert.equal(createSnapshotVisibility(nodes).isVisibleInEffectiveViewport(nodes[1]!), false);
 });
 
 function windowRoot(): SnapshotNode {
@@ -350,7 +374,10 @@ test('classifyOffscreenScrollDirection names the reveal direction for a fully sc
       hittable: true,
     },
   ];
-  assert.equal(classifyOffscreenScrollDirection(below[1]!, below), 'down');
+  assert.equal(
+    classifyOffscreenScrollDirection(below[1]!, createSnapshotVisibility(below)),
+    'down',
+  );
 
   const above: SnapshotNode[] = [
     windowRoot(),
@@ -365,7 +392,7 @@ test('classifyOffscreenScrollDirection names the reveal direction for a fully sc
       hittable: true,
     },
   ];
-  assert.equal(classifyOffscreenScrollDirection(above[1]!, above), 'up');
+  assert.equal(classifyOffscreenScrollDirection(above[1]!, createSnapshotVisibility(above)), 'up');
 });
 
 test('classifyOffscreenScrollDirection returns null for an on-screen node', () => {
@@ -382,13 +409,13 @@ test('classifyOffscreenScrollDirection returns null for an on-screen node', () =
       hittable: true,
     },
   ];
-  assert.equal(classifyOffscreenScrollDirection(nodes[1]!, nodes), null);
+  assert.equal(classifyOffscreenScrollDirection(nodes[1]!, createSnapshotVisibility(nodes)), null);
 });
 
 test('classifyOffscreenScrollDirection resolves a partial clip whose center is past the viewport (#1366)', () => {
   // The rect still OVERLAPS the root viewport (top edge inside), so the rect-vs-
   // viewport form returns null — but the tap-point center sits below the bottom
-  // edge, which is exactly what isNodeVisibleOnScreen rejects. Direction must be down.
+  // edge, which is exactly what full on-screen visibility rejects. Direction must be down.
   const nodes: SnapshotNode[] = [
     windowRoot(),
     {
@@ -403,8 +430,11 @@ test('classifyOffscreenScrollDirection resolves a partial clip whose center is p
     },
   ];
   // Sanity: this node is genuinely rejected by the interaction visibility guard.
-  assert.equal(isNodeVisibleInEffectiveViewport(nodes[1]!, nodes), true);
-  assert.equal(classifyOffscreenScrollDirection(nodes[1]!, nodes), 'down');
+  assert.equal(createSnapshotVisibility(nodes).isVisibleInEffectiveViewport(nodes[1]!), true);
+  assert.equal(
+    classifyOffscreenScrollDirection(nodes[1]!, createSnapshotVisibility(nodes)),
+    'down',
+  );
 });
 
 test('classifyOffscreenScrollDirection resolves a child inside an off-screen scrollable ancestor (#1366)', () => {
@@ -434,8 +464,11 @@ test('classifyOffscreenScrollDirection resolves a child inside an off-screen scr
     },
   ];
   // Boundary 1 passes (child overlaps its container); the root boundary fails.
-  assert.equal(isNodeVisibleInEffectiveViewport(nodes[2]!, nodes), true);
-  assert.equal(classifyOffscreenScrollDirection(nodes[2]!, nodes), 'left');
+  assert.equal(createSnapshotVisibility(nodes).isVisibleInEffectiveViewport(nodes[2]!), true);
+  assert.equal(
+    classifyOffscreenScrollDirection(nodes[2]!, createSnapshotVisibility(nodes)),
+    'left',
+  );
 });
 
 test('mobile presentation infers hidden content from vertical scroll indicator value at top', () => {

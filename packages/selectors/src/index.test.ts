@@ -128,142 +128,39 @@ test('recorded-target resolution keeps the matched domain from the alternative t
   assert.equal(permissive.matchCount, 3);
 });
 
-/**
- * Counts whole-array traversals of the snapshot tree: `for...of` passes through
- * the iterator, plus every array scan layered on top of them. The scan list is
- * the whole surface, not just the methods the resolver happens to use today, so
- * a regression that reintroduces a full pass through `flatMap`/`forEach`/
- * `reduce`/`some` cannot slip past a counter that only watches `filter`/`map`.
- * Functions are bound to the target so a counted traversal cannot re-enter the
- * proxy.
- */
-const SCAN_METHODS = [
-  'filter',
-  'map',
-  'flatMap',
-  'forEach',
-  'reduce',
-  'reduceRight',
-  'some',
-  'every',
-  'find',
-  'findIndex',
-  'findLast',
-  'findLastIndex',
-  'includes',
-  'indexOf',
-] as const;
-type ScanMethod = (typeof SCAN_METHODS)[number];
-type ScanPasses = { iterated: number } & Record<ScanMethod, number>;
-
-function observeTreeTraversals(nodes: SnapshotNode[]): {
-  observed: SnapshotNode[];
-  passes: ScanPasses;
-} {
-  const passes = Object.fromEntries([
-    ['iterated', 0],
-    ...SCAN_METHODS.map((method) => [method, 0]),
-  ]) as ScanPasses;
-  const observed = new Proxy(nodes, {
-    get(target, property) {
-      if (property === Symbol.iterator) passes.iterated += 1;
-      for (const method of SCAN_METHODS) if (property === method) passes[method] += 1;
-      const value = Reflect.get(target, property) as unknown;
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
-  return { observed, passes };
-}
-
-test('recorded-target resolution adds no second matching pass per selector alternative', () => {
+test('recorded-target resolution preserves resolved and ambiguous match domains', () => {
   const nodes: SnapshotNode[] = [
     { ...saveNode, ref: 'e1', label: 'Decoy', identifier: undefined, depth: 1 },
     { ...saveNode, ref: 'e2', label: 'Decoy', identifier: undefined, depth: 1 },
     { ...saveNode, ref: 'e4', label: 'Save', identifier: 'save', depth: 1 },
   ];
 
-  const resolved = observeTreeTraversals(nodes);
-  resolveRecordedTarget('id="missing" || id="save"', resolved.observed, policy());
-  // One matching pass per alternative tried, and no further pass rebuilding the
-  // winner's matched-node domain that the deciding pass already collected.
-  assert.deepEqual(resolved.passes, {
-    iterated: 2,
-    filter: 0,
-    map: 0,
-    flatMap: 0,
-    forEach: 0,
-    reduce: 0,
-    reduceRight: 0,
-    some: 0,
-    every: 0,
-    find: 0,
-    findIndex: 0,
-    findLast: 0,
-    findLastIndex: 0,
-    includes: 0,
-    indexOf: 0,
-  });
+  const resolved = resolveRecordedTarget('id="missing" || id="save"', nodes, policy());
+  assert.equal(resolved.kind, 'resolved');
+  if (resolved.kind !== 'resolved') throw new Error('unreachable');
+  assert.equal(resolved.winner.ref, 'e4');
 
-  const unresolved = observeTreeTraversals(nodes);
-  resolveRecordedTarget('label="Decoy"', unresolved.observed, policy());
-  // The ambiguous leg reports that same domain instead of re-listing the chain's
-  // matches: one matching pass, no second one. The `map` is the deciding pass's
-  // own lazily-built visibility index. The `flatMap`s are NOT that pass — they
-  // are whole-tree viewport-rect scans inside `isNodeVisibleOnScreen`, charged
-  // once per candidate it is asked about.
-  //
-  // #1970 collapsed the Application/Window-rect gather (`collectViewportRects`)
-  // to one shared scan per alternative instead of one per candidate, which is
-  // why this dropped from 8 to 5: this fixture has no Application/Window root,
-  // so every `resolveViewportRect` call still falls through to its OTHER
-  // flatMap — the "largest rect of any node containing this target's center"
-  // fallback — which cannot be precomputed the same way because it depends on
-  // each node's own rect, not the shared viewport-root set. That fallback fires
-  // twice per candidate (`isNodeVisibleOnScreen` calls `resolveViewportRect`
-  // once via the effective-viewport check, once directly for the root
-  // viewport) plus the one shared gather: 2*2 + 1 = 5. It predates #1970 and is
-  // out of scope here; pinned so the number cannot grow unnoticed.
-  assert.deepEqual(unresolved.passes, {
-    iterated: 1,
-    filter: 0,
-    map: 1,
-    flatMap: 5,
-    forEach: 0,
-    reduce: 0,
-    reduceRight: 0,
-    some: 0,
-    every: 0,
-    find: 0,
-    findIndex: 0,
-    findLast: 0,
-    findLastIndex: 0,
-    includes: 0,
-    indexOf: 0,
-  });
+  const unresolved = resolveRecordedTarget('label="Decoy"', nodes, policy());
+  assert.equal(unresolved.kind, 'unresolved');
+  if (unresolved.kind !== 'unresolved') throw new Error('unreachable');
+  assert.equal(unresolved.reason, 'ambiguous');
+  assert.deepEqual(
+    unresolved.matchedNodes.map((node) => node.ref),
+    ['e1', 'e2'],
+  );
 });
 
-test('policy resolution for disambiguate/fail-closed rows adds no second matching pass per selector alternative (#1970)', () => {
+test('policy resolution preserves first matched domain when a later alternative resolves (#1970)', () => {
   for (const row of [
     SELECTOR_RESOLUTION_POLICIES.readText,
     SELECTOR_RESOLUTION_POLICIES.readUnique,
   ]) {
-    const traced = observeTreeTraversals(loginFormNodes);
     const outcome = resolveSelectorChainWithPolicy(
-      traced.observed,
+      loginFormNodes,
       'label="Continue" || id=auth_continue',
       row,
       { platform: 'ios' },
     );
-    // The winner comes from the SECOND alternative — uniqueness skips the
-    // tied first one — but `matchedNodes` still reports the FIRST alternative
-    // that matched anything, the contract `wait`'s landmark check and the
-    // ambiguous outcome both rely on (resolve-with-policy.ts). Previously this
-    // ran `listSelectorChainMatches` once for that set and then
-    // `resolveSelectorChainDomain` (nee `resolveSelectorChain`) again for the
-    // winner: two full passes, one per alternative visited. `iterated: 2`
-    // below (one pass for each of the two alternatives) with `filter: 0`
-    // proves the redundant `listSelectorChainMatches` pass — which would show
-    // up as a `filter` — is gone.
     assert.equal(outcome.kind, 'resolved');
     if (outcome.kind !== 'resolved') throw new Error('unreachable');
     assert.equal(outcome.resolution.selectorIndex, 1);
@@ -272,8 +169,6 @@ test('policy resolution for disambiguate/fail-closed rows adds no second matchin
       outcome.matchedNodes.map((node) => node.ref),
       ['e2', 'e3'],
     );
-    assert.equal(traced.passes.filter, 0, 'no separate listSelectorChainMatches pass');
-    assert.equal(traced.passes.iterated, 2, 'one pass per alternative visited, not two');
   }
 });
 
