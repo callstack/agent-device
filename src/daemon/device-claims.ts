@@ -16,6 +16,7 @@ import { publishFileSync, acquireProcessLock } from '@agent-device/host-kit/file
 import {
   deviceClaimOwnerCannotRelease,
   inspectDeviceClaimFile,
+  inspectDeviceClaims,
   type DeviceClaimClassification,
   type InspectedDeviceClaim,
 } from './device-claim-inspection.ts';
@@ -195,6 +196,27 @@ function isClaimOwnedByThisDaemon(
 
 function isAbandonedDeviceClaim(claim: DeviceClaim): boolean {
   return claim.abandonedAtMs !== undefined;
+}
+
+/**
+ * Does this process hold a claim for a local device with this id right now?
+ * The Apple runner's device-claim arbitration probe (#1320 retained-runner
+ * rule): claim authority lets a daemon stop and replace a warm runner whose
+ * owner no longer holds the device. Ownership is proven by process identity
+ * alone — one process serves one daemon — and an abandoned claim holds the
+ * device for nobody, so it grants no authority either.
+ */
+export function processOwnsActiveDeviceClaim(deviceId: string): boolean {
+  const owner = readCurrentOwnerIdentity();
+  return inspectDeviceClaims({ udid: deviceId }).some(
+    (entry) =>
+      entry.claim &&
+      !isAbandonedDeviceClaim(entry.claim) &&
+      ownerIdentityMatches(
+        { pid: entry.claim.ownerPid, startTime: entry.claim.ownerStartTime },
+        owner,
+      ),
+  );
 }
 
 function isAbandonedClaimOfThisDaemon(

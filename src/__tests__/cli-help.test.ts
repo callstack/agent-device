@@ -175,7 +175,10 @@ test('help physical-device documents the runner/daemon lifecycle detail moved ou
     result.stdout,
     /a stale iOS runner lease — its owner process dead, or its AGENT_DEVICE_STATE_DIR deleted — is reclaimed automatically/i,
   );
-  assert.match(result.stdout, /genuinely live owner whose state dir still exists still rejects/);
+  assert.match(
+    result.stdout,
+    /A live owner's runner is also reclaimed when the requesting daemon holds the host-global device claim/,
+  );
 });
 
 test('help workflow documents ref lifetime and snapshot diff guarantees (#1051)', async () => {

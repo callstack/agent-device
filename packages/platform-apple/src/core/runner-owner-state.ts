@@ -13,3 +13,23 @@ export function setRunnerLeaseOwnerStateDir(stateDir: string | undefined): void 
 export function getRunnerLeaseOwnerStateDir(): string | undefined {
   return runnerLeaseOwnerStateDir;
 }
+
+/**
+ * Daemon-owned device-claim arbitration probe: does the embedding process hold
+ * the host-global local device claim for this device id right now? Unbound (in
+ * embedders that run no claim store, such as package tests) it answers false,
+ * which keeps runner-lease takeover disabled there.
+ */
+export type RunnerDeviceClaimAuthorityProbe = (deviceId: string) => boolean;
+
+let runnerDeviceClaimAuthorityProbe: RunnerDeviceClaimAuthorityProbe | undefined;
+
+export function setRunnerDeviceClaimAuthorityProbe(
+  probe: RunnerDeviceClaimAuthorityProbe | undefined,
+): void {
+  runnerDeviceClaimAuthorityProbe = probe;
+}
+
+export function getRunnerDeviceClaimAuthorityProbe(): RunnerDeviceClaimAuthorityProbe | undefined {
+  return runnerDeviceClaimAuthorityProbe;
+}

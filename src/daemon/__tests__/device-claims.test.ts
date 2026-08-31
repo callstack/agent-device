@@ -7,6 +7,7 @@ import {
   abandonDeviceClaim,
   acquireDeviceClaim as acquireProductionDeviceClaim,
   clearDeviceClaim,
+  processOwnsActiveDeviceClaim,
 } from '../device-claims.ts';
 import { canonicalLocalDeviceKey } from '../device-claim-paths.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
@@ -633,4 +634,40 @@ test('reports the exact outcome of abandoning an owned, missing, and unowned cla
   fs.rmSync(claimPath(root));
   assert.equal(await abandonDeviceClaim(acquired.ownership), 'absent');
   assert.equal(await abandonDeviceClaim(undefined), 'absent');
+});
+
+test('answers the runner authority probe only for a claim this process actively holds', async () => {
+  const root = useClaimsRoot();
+  assert.equal(processOwnsActiveDeviceClaim(device.id), false);
+
+  const acquired = await acquireDeviceClaim({
+    device,
+    session: 'probe-owner',
+    workspace: '/worktrees/probe',
+    stateDir: root,
+  });
+  assert.equal(acquired.status, 'acquired');
+  if (acquired.status !== 'acquired') return;
+  assert.equal(processOwnsActiveDeviceClaim(device.id), true);
+  assert.equal(processOwnsActiveDeviceClaim('some-other-device'), false);
+
+  assert.equal(await abandonDeviceClaim(acquired.ownership), 'abandoned');
+  assert.equal(processOwnsActiveDeviceClaim(device.id), false);
+});
+
+test('denies the runner authority probe for a claim held by another process', async () => {
+  const root = useClaimsRoot();
+  const acquired = await acquireDeviceClaim({
+    device,
+    session: 'foreign-owner',
+    workspace: '/worktrees/foreign',
+    stateDir: root,
+  });
+  assert.equal(acquired.status, 'acquired');
+  const stored = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
+  fs.writeFileSync(
+    claimPath(root),
+    JSON.stringify({ ...stored, ownerPid: 999_999, ownerStartTime: 'other-start' }),
+  );
+  assert.equal(processOwnsActiveDeviceClaim(device.id), false);
 });

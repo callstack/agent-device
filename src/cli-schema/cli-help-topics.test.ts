@@ -511,7 +511,11 @@ test('usageForCommand resolves physical-device help topic', async () => {
     help,
     /a stale iOS runner lease — its owner process dead, or its AGENT_DEVICE_STATE_DIR deleted — is reclaimed automatically/i,
   );
-  assert.match(help, /genuinely live owner whose state dir still exists still rejects/);
+  assert.match(
+    help,
+    /A live owner's runner is also reclaimed when the requesting daemon holds the host-global device claim/,
+  );
+  assert.match(help, /owners outside claim arbitration/);
 });
 
 test('usageForCommand resolves ios-system-ui help topic', async () => {

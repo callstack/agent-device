@@ -15,6 +15,7 @@ import { waitForRunner } from './runner-startup-transport.ts';
 import { withRunnerCommandId, type RunnerCommand } from './runner-contract.ts';
 import {
   cleanupOwnedRunnerLease,
+  currentRunnerLeaseOwnerToken,
   releaseRunnerLease,
   type RunnerLeaseCleanupAdapter,
 } from './runner-lease.ts';
@@ -172,7 +173,13 @@ async function runnerSessionsStillAlive(
 }
 
 async function cleanupRunnerSessionResources(session: RunnerSession): Promise<void> {
-  await terminateRunnerSimulatorApps(session.device);
+  // Terminating the runner container bundles acts on the whole device, so it is
+  // only this session's to do while the on-disk lease is still its own. After a
+  // takeover (device-claim or logical-lease) the successor's runner lives in the
+  // same bundles; killing them here would stop the new owner's runner.
+  if (!runnerLeaseOwnedElsewhere(session)) {
+    await terminateRunnerSimulatorApps(session.device);
+  }
   cleanupTempFile(session.xctestrunPath);
   cleanupTempFile(session.jsonPath);
   try {
@@ -180,6 +187,11 @@ async function cleanupRunnerSessionResources(session: RunnerSession): Promise<vo
   } finally {
     releaseRunnerLease(session.lease);
   }
+}
+
+function runnerLeaseOwnedElsewhere(session: RunnerSession): boolean {
+  const onDiskToken = currentRunnerLeaseOwnerToken(session.deviceId);
+  return onDiskToken !== null && onDiskToken !== session.lease?.ownerToken;
 }
 
 async function terminateRunnerSimulatorApps(device: DeviceInfo): Promise<void> {

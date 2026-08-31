@@ -27,7 +27,11 @@ import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn, SessionState } from '../types.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
 import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
-import { reconcileOrphanedDeviceClaims, type DeviceClaimReconciler } from '../device-claims.ts';
+import {
+  processOwnsActiveDeviceClaim,
+  reconcileOrphanedDeviceClaims,
+  type DeviceClaimReconciler,
+} from '../device-claims.ts';
 import { createDeviceClaimReconciler } from '../device-claim-reconciliation.ts';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
 import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
@@ -61,7 +65,10 @@ import {
 } from './transport.ts';
 import { prewarmPngWorker, terminatePngWorker } from '@agent-device/capture-kit/png-worker-client';
 
-import { configureAppleRunnerLeaseOwnerStateDir } from '../../platform-runtime-apple-runner-owner.ts';
+import {
+  configureAppleRunnerDeviceClaimAuthorityProbe,
+  configureAppleRunnerLeaseOwnerStateDir,
+} from '../../platform-runtime-apple-runner-owner.ts';
 import {
   cleanupManagedWebRuntimeOrphans,
   platformResourceCleanup,
@@ -253,6 +260,7 @@ export async function startDaemonRuntime(
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
   await configureAppleRunnerLeaseOwnerStateDir(baseDir);
+  await configureAppleRunnerDeviceClaimAuthorityProbe(processOwnsActiveDeviceClaim);
 
   const sessionStore = new SessionStore(sessionsDir);
   const ownedProcessRecords = createOwnedProcessRecordStore({
@@ -489,6 +497,7 @@ export async function startDaemonRuntime(
   if (!acquireDaemonLock(baseDir, lockPath, lockData)) {
     stderr.write('Daemon lock is held by another process; exiting.\n');
     await configureAppleRunnerLeaseOwnerStateDir(undefined);
+    await configureAppleRunnerDeviceClaimAuthorityProbe(undefined);
     exit(0);
     return null;
   }
@@ -570,6 +579,7 @@ export async function startDaemonRuntime(
     removeInfo(infoPath);
     releaseDaemonLock(lockPath);
     await configureAppleRunnerLeaseOwnerStateDir(undefined);
+    await configureAppleRunnerDeviceClaimAuthorityProbe(undefined);
     exit(1);
     return null;
   }
@@ -635,6 +645,7 @@ export async function startDaemonRuntime(
     removeInfo(infoPath);
     releaseDaemonLock(lockPath);
     await configureAppleRunnerLeaseOwnerStateDir(undefined);
+    await configureAppleRunnerDeviceClaimAuthorityProbe(undefined);
     exit(shutdownOptions.exitCode ?? 0);
   };
 

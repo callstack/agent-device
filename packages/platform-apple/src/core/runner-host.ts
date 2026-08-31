@@ -36,7 +36,10 @@ import {
 import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { visitXmlPlistEntries } from './plist-xml.ts';
-import { getRunnerLeaseOwnerStateDir } from './runner-owner-state.ts';
+import {
+  getRunnerDeviceClaimAuthorityProbe,
+  getRunnerLeaseOwnerStateDir,
+} from './runner-owner-state.ts';
 import { buildSimctlArgsForDevice } from './simctl.ts';
 import { readApplePlistJson, runAppleToolCommand, runXcrun } from './tool-provider.ts';
 
@@ -85,4 +88,5 @@ export const appleRunnerHost: AppleRunnerHost = {
   resolveIosPhysicalDeviceControl,
   visitXmlPlistEntries,
   leaseOwnerStateDir: getRunnerLeaseOwnerStateDir,
+  hasDeviceClaimAuthority: (deviceId) => getRunnerDeviceClaimAuthorityProbe()?.(deviceId) ?? false,
 };
