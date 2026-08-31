@@ -73,7 +73,7 @@ export default defineConfig({
     'internal/daemon': 'src/daemon.ts',
     'internal/run-script-http-child': 'src/daemon/adapters/maestro/run-script-http-child.ts',
     'internal/png-worker': 'packages/capture-kit/src/png-worker.ts',
-    'internal/update-check-entry': 'src/utils/update-check-entry.ts',
+    'internal/update-check-entry': 'src/cli/update-check-entry.ts',
   },
   deps: {
     alwaysBundle: [/^@agent-device\//, 'pngjs'],

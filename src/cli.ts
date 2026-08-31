@@ -38,7 +38,7 @@ import {
 import { resolveDaemonPaths } from './daemon/config.ts';
 import { applyDefaultPlatformBinding, resolveBindingSettings } from './utils/session-binding.ts';
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';
-import { maybeRunUpgradeNotifier } from './utils/update-check.ts';
+import { maybeRunUpgradeNotifier } from './cli/update-check.ts';
 import {
   resolveRemoteConnectionDefaults,
   type RemoteConnectionRequestMetadata,

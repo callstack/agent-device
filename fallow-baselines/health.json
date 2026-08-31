@@ -504,7 +504,7 @@
         "count": 1
       }
     },
-    "src/utils/update-check.ts": {
+    "src/cli/update-check.ts": {
       "crap_moderate": {
         "count": 1
       }

@@ -24,7 +24,7 @@
     // subprocess (test/integration/daemon-replace-exit-flush.test.ts), so
     // dependency analysis cannot follow the runCmdSync string path to it.
     "test/integration/support/exit-after-flush.ts",
-    "src/utils/update-check-entry.ts",
+    "src/cli/update-check-entry.ts",
     "examples/sdk/client-session.ts",
     "examples/sdk/metro-runtime.ts",
     "examples/sdk/contracts-result.ts",
