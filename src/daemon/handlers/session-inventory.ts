@@ -39,7 +39,7 @@ import {
 } from '@agent-device/contracts/platform-runtime-operations';
 import { ensureAppsRuntimeReady, listAppsFromRuntime } from '../apps-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import type { ProviderAppCatalog } from '@agent-device/contracts/device';
+import type { ProviderAppCatalog, ProviderAppCatalogQuery } from '@agent-device/contracts/device';
 import { resolveLeaseScope } from '../lease-context.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 
@@ -347,22 +347,25 @@ async function resolveProviderAppCatalogResponse(
   req: DaemonRequest,
   providerAppCatalog: ProviderAppCatalog | undefined,
 ): Promise<DaemonResponse | undefined> {
-  if (!providerAppCatalog) return undefined;
+  const query = resolveProviderAppCatalogQuery(req);
+  if (!providerAppCatalog || !query || !providerAppCatalog.supports(query.provider))
+    return undefined;
+  const apps = await providerAppCatalog.list(query, getRequestSignal(req.meta?.requestId));
+  return { ok: true, data: { apps: [...apps] } };
+}
+
+function resolveProviderAppCatalogQuery(req: DaemonRequest): ProviderAppCatalogQuery | undefined {
   const leaseScope = resolveLeaseScope(req);
   if (leaseScope.leaseId) return undefined;
   const provider = leaseScope.leaseProvider;
+  if (!provider) return undefined;
   const platform = req.flags?.platform;
-  if (!provider || (platform !== 'android' && platform !== 'ios')) return undefined;
-  if (!providerAppCatalog.supports(provider)) return undefined;
-  const apps = await providerAppCatalog.list(
-    {
-      provider,
-      platform,
-      ...(req.internal?.publicNetworkOnly ? { publicNetworkOnly: true } : {}),
-    },
-    getRequestSignal(req.meta?.requestId),
-  );
-  return { ok: true, data: { apps: [...apps] } };
+  if (platform !== 'android' && platform !== 'ios') return undefined;
+  return {
+    provider,
+    platform,
+    ...(req.internal?.publicNetworkOnly ? { publicNetworkOnly: true } : {}),
+  };
 }
 
 async function inspectCapabilityFacts(
