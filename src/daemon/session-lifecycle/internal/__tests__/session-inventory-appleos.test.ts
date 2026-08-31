@@ -14,6 +14,7 @@ import { listDeviceInventory } from '../../../../request/device-inventory-contex
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../types.ts';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   ANDROID_EMULATOR,
   IOS_SIMULATOR,
@@ -111,4 +112,21 @@ test('devices drops a stray appleOs on a non-Apple device (gated to Apple platfo
   const android = devices.find((device) => device.id === ANDROID_EMULATOR.id);
   expect(android?.platform).toBe('android');
   expect(android && 'appleOs' in android).toBe(false);
+});
+
+test('devices preserves the typed inventory failure response', async () => {
+  mockListDeviceInventory.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'device inventory unavailable', {
+      reason: 'inventory-failed',
+    }),
+  );
+
+  await expect(runDevices()).resolves.toEqual({
+    ok: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      message: 'device inventory unavailable',
+      details: { reason: 'inventory-failed' },
+    },
+  });
 });
