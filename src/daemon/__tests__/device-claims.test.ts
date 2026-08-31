@@ -16,6 +16,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { publishDaemonRegistration } from '../../__tests__/test-utils/device-claim-store.ts';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
+import { acquireProcessLock } from '@agent-device/host-kit/file';
 
 vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
   (await import('../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
@@ -842,4 +843,58 @@ test('release refuses a live process whose state dir is gone', async () => {
   assert.equal(outcomes[0]?.status, 'refused');
   assert.equal(outcomes[0]?.reason, 'owner-process-still-running');
   assert.equal(fs.existsSync(claimPath(root)), true);
+});
+
+test('release reports changed when the claim is replaced between scan and lock acquisition', async () => {
+  const root = useClaimsRoot();
+  const acquired = await acquireDeviceClaim({
+    device,
+    session: 'raced-owner',
+    workspace: '/worktrees/raced',
+    stateDir: root,
+  });
+  assert.equal(acquired.status, 'acquired');
+  const stored = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
+  fs.writeFileSync(
+    claimPath(root),
+    JSON.stringify({ ...stored, ownerPid: 999_999_999, ownerStartTime: 'long-gone' }),
+  );
+
+  const reconcile = vi.fn(async () => ({ status: 'reconciled' as const }));
+  // Owner start time stays null: the pinned test start time diverges from the
+  // real one the lock's liveness probe reads, which would classify this held
+  // lock as PID-reused and let the release steal it.
+  const releaseLock = await acquireProcessLock({
+    lockDirPath: `${claimPath(root)}.lock`,
+    owner: { pid: process.pid, startTime: null, acquiredAtMs: Date.now() },
+    timeoutMs: 5_000,
+    description: 'test-held device claim lock',
+  });
+  let outcomes: Awaited<ReturnType<typeof releaseProvenStaleDeviceClaims>> = [];
+  let releaseSettled = false;
+  const release = releaseProvenStaleDeviceClaims({ selectors: {}, reconcile }).then((result) => {
+    outcomes = result;
+    releaseSettled = true;
+  });
+  // The scan has run; the per-claim transaction is now waiting on the lock this
+  // test holds. Replace the claim with a successor before letting it in.
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  assert.equal(releaseSettled, false);
+  fs.writeFileSync(
+    claimPath(root),
+    JSON.stringify({
+      ...stored,
+      ownerPid: 999_999_999,
+      ownerStartTime: 'long-gone',
+      ownerToken: 'successor-token',
+      session: 'successor-session',
+    }),
+  );
+  await releaseLock();
+  await release;
+
+  assert.equal(outcomes[0]?.status, 'changed');
+  assert.equal(reconcile.mock.calls.length, 0);
+  const remaining = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
+  assert.equal(remaining.ownerToken, 'successor-token');
 });

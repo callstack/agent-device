@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { appLogResourceStore } from '../daemon/app-log-resource-store.ts';
 import { runCliCapture } from './cli-capture.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
@@ -162,5 +165,91 @@ test('device release --stale renders per-claim outcomes with a live-owner hint i
   } finally {
     fs.rmSync(claimsDir, { recursive: true, force: true });
     fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('device release --stale keeps the claim while durable resources cannot be settled', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-cli-release-');
+  const ownerStateDir = mkdtempForTestSync('agent-device-cli-release-owner-');
+  try {
+    writeClaim(claimsDir, {
+      deviceKey: 'local:android:none:emulator-5554',
+      id: 'emulator-5554',
+      name: 'Dead Pixel',
+      session: 'dead-session',
+      ownerPid: 999_999_999,
+      ownerStartTime: 'old-start-time',
+      stateDir: ownerStateDir,
+    });
+    // The dead owner left an attributable durable resource whose recorded
+    // device is NOT this claim's device: exact-owner recovery refuses it, and
+    // the claim must survive until the resource reaches a terminal state.
+    const resourcePath = appLogResourceStore.resolvePath(
+      path.join(ownerStateDir, 'sessions', 'dead-session'),
+    );
+    appLogResourceStore.write(
+      resourcePath,
+      createDurableResourceEnvelope({
+        resourceKind: 'app-log',
+        sessionId: 'dead-session',
+        device: { id: 'some-other-device', family: 'android', kind: 'emulator' },
+        owner: localRuntimeOwner('android'),
+        fence: { token: 'fence', generation: 1 },
+        lifecycle: 'open',
+        descriptor: { version: 1, body: { pid: 123 } },
+      }),
+    );
+
+    const result = await runCliCapture(['device', 'release', '--stale', '--json'], {
+      env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+    });
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.success, true);
+    assert.equal(payload.data.released.length, 0);
+    assert.equal(payload.data.retained.length, 1);
+    assert.equal(payload.data.retained[0].reason, 'app-log-owner-mismatch');
+    assert.equal(
+      fs.existsSync(hashedClaimPath(claimsDir, 'local:android:none:emulator-5554')),
+      true,
+    );
+    assert.equal(fs.existsSync(resourcePath), true);
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+    fs.rmSync(ownerStateDir, { recursive: true, force: true });
+  }
+});
+
+test('device release --stale keeps the claim when resource evidence is unreadable', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-cli-release-');
+  const ownerStateDir = mkdtempForTestSync('agent-device-cli-release-owner-');
+  try {
+    writeClaim(claimsDir, {
+      deviceKey: 'local:android:none:emulator-5554',
+      id: 'emulator-5554',
+      name: 'Dead Pixel',
+      session: 'dead-session',
+      ownerPid: 999_999_999,
+      ownerStartTime: 'old-start-time',
+      stateDir: ownerStateDir,
+    });
+    const resourcePath = appLogResourceStore.resolvePath(
+      path.join(ownerStateDir, 'sessions', 'dead-session'),
+    );
+    fs.mkdirSync(path.dirname(resourcePath), { recursive: true });
+    fs.writeFileSync(resourcePath, '{');
+
+    const result = await runCliCapture(['device', 'release', '--stale', '--json'], {
+      env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+    });
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.data.retained.length, 1);
+    assert.equal(payload.data.retained[0].reason, 'app-log-descriptor-invalid');
+    assert.equal(
+      fs.existsSync(hashedClaimPath(claimsDir, 'local:android:none:emulator-5554')),
+      true,
+    );
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+    fs.rmSync(ownerStateDir, { recursive: true, force: true });
   }
 });
