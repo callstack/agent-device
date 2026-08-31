@@ -393,6 +393,7 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
     command: readProcessCommand(orphanPid) ?? '',
   };
   assert.ok(orphanMarker.startTime.length > 0 && orphanMarker.command.length > 0);
+  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> = null;
 
   try {
     const foreignSessionDir = path.join(resolveDaemonPaths(foreignStateDir).sessionsDir, 'shared');
@@ -448,7 +449,7 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
       }),
     );
 
-    const runtime = await startDaemonRuntime({
+    runtime = await startDaemonRuntime({
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: daemonStateDir,
@@ -484,9 +485,8 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
       false,
       "the dead owner's orphaned recorder should be terminated by recovery",
     );
-
-    await runtime?.shutdown();
   } finally {
+    await runtime?.shutdown().catch(() => {});
     try {
       orphanRecorder.kill('SIGKILL');
     } catch {}
