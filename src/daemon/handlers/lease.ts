@@ -230,6 +230,7 @@ function canceledAllocationHint(
 function leaseLifecycleContext(req: DaemonRequest): LeaseLifecycleContext {
   return {
     flags: req.flags,
+    ...(typeof req.flags?.providerApp === 'string' ? { initialApp: req.flags.providerApp } : {}),
     cwd: typeof req.meta?.cwd === 'string' ? req.meta.cwd : undefined,
     ...(req.internal?.publicNetworkOnly ? { publicNetworkOnly: true } : {}),
   };

@@ -18,7 +18,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import {
   connectProviderNamesForError,
-  connectionProviderCapabilitiesForLease,
+  connectionProviderCapabilities,
   isConnectProviderName,
   type ConnectProvider,
 } from '../connection/provider-policy.ts';
@@ -26,7 +26,6 @@ import {
   resolveConnectProviderProfile,
   verifyResolvedConnectProvider,
 } from '../connection/connect-provider-adapters.ts';
-import { providerSessionResult } from '../connection/provider-session-result.ts';
 import {
   hasDeferredMetroConfig,
   releaseRemoteConnectionLease,
@@ -126,7 +125,7 @@ function readRequiredConnectScope(
   }
   if (
     !flags.daemonBaseUrl &&
-    connectionProviderCapabilitiesForLease(connectionMetadata ?? {}).requiresRemoteDaemon
+    connectionProviderCapabilities(connectionMetadata?.leaseProvider).requiresRemoteDaemon
   ) {
     throw new AppError(
       'INVALID_ARGS',
@@ -255,9 +254,9 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
   let providerData: CloudProviderSessionResult | undefined;
   if (state.leaseId || state.runtime || state.metro) {
     try {
-      providerData = providerSessionResult(
-        await client.sessions.close({ session: connectedSession, shutdown: flags.shutdown }),
-      );
+      providerData = (
+        await client.sessions.close({ session: connectedSession, shutdown: flags.shutdown })
+      ).provider;
     } catch {
       // Disconnect is idempotent; the session may already be closed.
     }
@@ -269,7 +268,7 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
     try {
       const release = await releaseRemoteConnectionLease(client, state, flags.daemonAuthToken);
       released = release.released;
-      providerData ??= providerSessionResult(release);
+      providerData ??= release.provider;
     } catch {
       // Bridges may release on close or be unreachable; local state still needs cleanup.
     }

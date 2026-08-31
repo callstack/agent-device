@@ -24,6 +24,7 @@ export type DeviceLease = {
 
 export type LeaseLifecycleContext = {
   flags?: Readonly<Record<string, unknown>>;
+  initialApp?: string;
   cwd?: string;
   publicNetworkOnly?: boolean;
   /** Request-bound cancellation (explicit cancel or client disconnect). */

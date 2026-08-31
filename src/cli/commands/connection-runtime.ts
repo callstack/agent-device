@@ -34,7 +34,7 @@ import type { AgentDeviceClient, Lease } from '../../agent-device-client.ts';
 import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { readMetroPrepareKind } from '../../commands/metro/prepare-kind.ts';
-import { connectionProviderCapabilitiesForLease } from '../connection/provider-policy.ts';
+import { connectionProviderCapabilities } from '../connection/provider-policy.ts';
 import { readCloudDeviceFeatureProfileFields } from '../connection/profile-fields.ts';
 import type { PreviousLeaseReleaseNotice } from './connection-presentation.ts';
 
@@ -111,13 +111,12 @@ export async function materializeRemoteConnectionForCommand(options: {
       remoteConfig.profile,
     );
   const nextFlags = { ...mergedFlags, session: state.session };
-  if (
-    connectionProviderCapabilitiesForLease(state).supportsDeferredAppSelection &&
-    command === PUBLIC_COMMANDS.open &&
-    typeof options.positionals?.[0] === 'string'
-  ) {
-    nextFlags.providerApp = options.positionals[0];
-  }
+  const deferredAppSelection = connectionProviderCapabilities(
+    state.leaseProvider,
+  ).supportsDeferredAppSelection;
+  const initialApp =
+    deferredAppSelection && command === PUBLIC_COMMANDS.open ? options.positionals?.[0] : undefined;
+  if (deferredAppSelection) delete nextFlags.providerApp;
   let nextRuntime = selectCompatibleRuntime(state.runtime, nextFlags.platform) ?? options.runtime;
   let nextState = state;
   let changed = !existingState;
@@ -131,6 +130,7 @@ export async function materializeRemoteConnectionForCommand(options: {
       state,
       nextState,
       nextFlags,
+      initialApp,
       policy: leasePolicy,
     });
     nextState = materializedLease.state;
@@ -289,6 +289,7 @@ async function materializeLeaseForCommand(options: {
   state: RemoteConnectionState;
   nextState: RemoteConnectionState;
   nextFlags: CliFlags;
+  initialApp?: string;
   policy: ConnectionLeasePolicy;
 }): Promise<{
   state: RemoteConnectionState;
@@ -320,6 +321,7 @@ async function materializeLeaseForCommand(options: {
     leaseBackend,
     policy,
     nextFlags,
+    options.initialApp,
   );
   const lease = materializedLease.lease;
   nextFlags.leaseId = lease.leaseId;
@@ -383,7 +385,7 @@ type ConnectionLeasePolicy = {
 };
 
 function connectionLeasePolicyForState(state: RemoteConnectionState): ConnectionLeasePolicy {
-  const capabilities = connectionProviderCapabilitiesForLease(state);
+  const capabilities = connectionProviderCapabilities(state.leaseProvider);
   if (capabilities.leaseKind === 'proxy') {
     return PROXY_CONNECTION_LEASE_POLICY;
   }
@@ -775,7 +777,7 @@ function createRemoteConnectionStateFromFlags(
   }
   if (
     !flags.daemonBaseUrl &&
-    connectionProviderCapabilitiesForLease(profile).requiresRemoteDaemon
+    connectionProviderCapabilities(profile.leaseProvider).requiresRemoteDaemon
   ) {
     throw new AppError(
       'INVALID_ARGS',
@@ -793,7 +795,9 @@ function createRemoteConnectionStateFromFlags(
     runId: flags.runId,
     leaseId: flags.leaseId,
     leaseBackend: flags.leaseBackend ?? resolveRequestedLeaseBackend(flags),
-    ...profile,
+    leaseProvider: profile.leaseProvider,
+    clientId: profile.clientId,
+    deviceKey: profile.deviceKey,
     platform: flags.platform,
     target: flags.target,
     connectedAt: now,
@@ -807,6 +811,7 @@ async function allocateOrReuseLease(
   leaseBackend: LeaseBackend,
   policy: ConnectionLeasePolicy,
   flags: CliFlags,
+  initialApp?: string,
 ): Promise<{ lease: Lease; acquired: boolean }> {
   const connection = buildRemoteConnectionRequestMetadata(state);
   if (state.leaseId && state.leaseBackend === leaseBackend) {
@@ -830,7 +835,7 @@ async function allocateOrReuseLease(
     device: flags.device,
     udid: flags.udid,
     serial: flags.serial,
-    providerApp: flags.providerApp,
+    providerApp: initialApp ?? flags.providerApp,
     providerOsVersion: flags.providerOsVersion,
     providerProject: flags.providerProject,
     providerBuild: flags.providerBuild,

@@ -49,11 +49,63 @@ test('Limrun apps lists uploaded assets without allocating an instance', async (
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('Limrun state keeps explicit connection identity and excludes profile secrets', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const stateDir = path.join(root, 'state');
+  const remoteConfig = path.join(project, 'limrun.remote.json');
+  fs.writeFileSync(
+    remoteConfig,
+    JSON.stringify({
+      tenant: 'profile-tenant',
+      runId: 'profile-run',
+      session: 'profile-session',
+      leaseBackend: 'android-instance',
+      leaseProvider: 'limrun',
+      platform: 'android',
+      daemonAuthToken: 'daemon-secret',
+      metroBearerToken: 'metro-secret',
+    }),
+    'utf8',
+  );
+
+  const result = await runCliCapture(
+    [
+      'apps',
+      '--remote-config',
+      remoteConfig,
+      '--state-dir',
+      stateDir,
+      '--tenant',
+      'cli-tenant',
+      '--run-id',
+      'cli-run',
+      '--session',
+      'cli-session',
+      '--json',
+    ],
+    {
+      cwd: project,
+      env: { HOME: home },
+      defaultResponse: { ok: true, data: { apps: [] } },
+    },
+  );
+
+  assert.equal(result.code, null);
+  const state = readActiveConnectionState({ stateDir });
+  assert.equal(state?.tenant, 'cli-tenant');
+  assert.equal(state?.runId, 'cli-run');
+  assert.equal(state?.session, 'cli-session');
+  assert.equal(Object.hasOwn(state ?? {}, 'daemonAuthToken'), false);
+  assert.equal(Object.hasOwn(state ?? {}, 'metroBearerToken'), false);
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('Limrun open allocates with the exact uploaded asset name', async () => {
   const { root, home, project } = makeTempWorkspace();
   const stateDir = path.join(root, 'state');
   const remoteConfig = path.join(project, 'limrun.remote.json');
-  fs.writeFileSync(remoteConfig, '{}', 'utf8');
+  fs.writeFileSync(remoteConfig, JSON.stringify({ providerApp: 'Stale.app.zip' }), 'utf8');
   const now = new Date().toISOString();
   writeRemoteConnectionState({
     stateDir,
@@ -104,7 +156,7 @@ test('Limrun open allocates with the exact uploaded asset name', async () => {
   assert.equal(result.calls[0]?.flags?.providerApp, 'Example.app.zip');
   assert.equal(result.calls[1]?.command, 'open');
   assert.equal(result.calls[1]?.positionals?.[0], 'Example.app.zip');
-  assert.equal(result.calls[1]?.flags?.providerApp, 'Example.app.zip');
+  assert.equal(result.calls[1]?.flags?.providerApp, undefined);
   assert.equal(readActiveConnectionState({ stateDir })?.leaseId, 'lease-limrun-open');
 
   fs.rmSync(root, { recursive: true, force: true });

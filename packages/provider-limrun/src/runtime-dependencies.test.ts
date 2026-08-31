@@ -128,7 +128,7 @@ test('allocation installs an exact uploaded asset before binding its application
 
   try {
     await runtime.leaseLifecycle.allocate?.(androidLease(), {
-      flags: { providerApp: 'Example.apk' },
+      initialApp: 'Example.apk',
     });
 
     assert.deepEqual(state.androidCreateInputs[0], {
@@ -180,7 +180,7 @@ test('public daemon requests cannot list or allocate uploaded apps', async () =>
     await assert.rejects(
       async () =>
         await runtime.leaseLifecycle.allocate?.(androidLease(), {
-          flags: { providerApp: 'Example.apk' },
+          initialApp: 'Example.apk',
           publicNetworkOnly: true,
         }),
       (error) => error instanceof AppError && error.code === 'UNAUTHORIZED',
@@ -204,7 +204,7 @@ test('allocation rejects an unrelated foreground app after preinstall', async ()
   await assert.rejects(
     async () =>
       await runtime.leaseLifecycle.allocate?.(androidLease(), {
-        flags: { providerApp: 'Example.apk' },
+        initialApp: 'Example.apk',
       }),
     (error) => error instanceof AppError && error.code === 'COMMAND_FAILED',
   );

@@ -42,7 +42,10 @@ export async function resolveLimrunAppAsset(
   signal?: AbortSignal,
 ): Promise<LimrunAppAsset | undefined> {
   signal?.throwIfAborted();
-  const assets = await limrun.assets.list({ limit: 2, nameFilter: name }, { signal });
+  const assets = await limrun.assets.list(
+    { limit: APP_CATALOG_LIMIT, nameFilter: name },
+    { signal },
+  );
   signal?.throwIfAborted();
   const matches = assets
     .filter((asset) => asset.name === name)

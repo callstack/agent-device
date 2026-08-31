@@ -39,7 +39,7 @@ export async function resolveRequestedLimrunAppAsset(
   platform: 'android' | 'ios',
   context?: LeaseLifecycleContext,
 ): Promise<LimrunAppAsset | undefined> {
-  const value = context?.flags?.providerApp;
+  const value = context?.initialApp;
   const name = typeof value === 'string' ? value.trim() : '';
   if (!name) return undefined;
   assertLimrunUploadedAppAccess(context?.publicNetworkOnly);

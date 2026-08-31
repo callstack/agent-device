@@ -7,7 +7,7 @@ import {
 export type DirectDeviceConnectProvider = CloudWebDriverKnownProviderName | 'limrun';
 export type ConnectProvider = 'cloud' | 'proxy' | DirectDeviceConnectProvider;
 
-type ConnectionProviderCapabilities = {
+export type ConnectionProviderCapabilities = {
   leaseKind: 'proxy' | 'direct-device-provider' | 'remote-provider';
   requiresAppAttachment: boolean;
   requiresRemoteDaemon: boolean;
@@ -37,19 +37,7 @@ export function connectProviderNamesForError(): string {
   ].join(', ');
 }
 
-export function connectionProviderCapabilitiesForLease(source: {
-  leaseProvider?: string;
-}): ConnectionProviderCapabilities {
-  return connectionProviderCapabilities(source.leaseProvider);
-}
-
-export function connectionProviderCapabilitiesForVerification(
-  verification: { provider?: string } | undefined,
-): ConnectionProviderCapabilities {
-  return connectionProviderCapabilities(verification?.provider);
-}
-
-function connectionProviderCapabilities(
+export function connectionProviderCapabilities(
   provider: string | undefined,
 ): ConnectionProviderCapabilities {
   const directDeviceProvider = isDirectDeviceConnectProvider(provider);

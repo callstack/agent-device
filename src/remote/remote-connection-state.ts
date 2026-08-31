@@ -186,12 +186,6 @@ export function mergeRemoteConnectionRequestMetadata(
   };
 }
 
-export function remoteConnectionProviderOutput(
-  state: RemoteConnectionState,
-): Pick<RemoteConnectionState, 'leaseProvider'> {
-  return { leaseProvider: state.leaseProvider };
-}
-
 export function remoteConnectionLeaseIdentityMatches(
   state: RemoteConnectionState,
   metadata: RemoteConnectionRequestMetadata | undefined,

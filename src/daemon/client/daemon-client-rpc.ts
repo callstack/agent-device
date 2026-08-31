@@ -181,7 +181,12 @@ export function buildHttpRpcPayload(
     jsonrpc: '2.0',
     id,
     method: leaseRpcMethodForCommand(req.command),
-    params: buildLeaseRpcParams(req, req.command, options),
+    params: {
+      ...buildLeaseRpcParams(req, req.command, options),
+      ...(req.command === 'lease_allocate' && typeof req.flags?.providerApp === 'string'
+        ? { providerApp: req.flags.providerApp }
+        : {}),
+    },
   };
 }
 

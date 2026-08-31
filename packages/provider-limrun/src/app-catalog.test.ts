@@ -35,7 +35,8 @@ describe('Limrun uploaded app catalog', () => {
     const list = vi
       .fn()
       .mockResolvedValueOnce([
-        { id: 'similar', name: 'Example.app.zip.backup.zip', md5: 'z' },
+        { id: 'similar-1', name: 'Example.app.zip.backup.zip', md5: 'z' },
+        { id: 'similar-2', name: 'Example.app.zip.previous.zip', md5: 'y' },
         { id: 'ios-app', name: 'Example.app.zip', md5: 'a' },
       ])
       .mockResolvedValueOnce([{ id: 'android-app', name: 'Example.apk', md5: 'b' }]);
@@ -46,6 +47,11 @@ describe('Limrun uploaded app catalog', () => {
       name: 'Example.app.zip',
     });
     await expect(resolveLimrunAppAsset(limrun, 'ios', 'Example.apk')).resolves.toBeUndefined();
+    expect(list).toHaveBeenNthCalledWith(
+      1,
+      { limit: 1_000, nameFilter: 'Example.app.zip' },
+      { signal: undefined },
+    );
   });
 
   test('matches an uploaded iOS asset when the instance also contains Expo Go', () => {

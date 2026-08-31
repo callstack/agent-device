@@ -1,13 +1,6 @@
-import {
-  fingerprint,
-  remoteConnectionProviderOutput,
-  type RemoteConnectionState,
-} from '../../remote/remote-connection-state.ts';
+import { fingerprint, type RemoteConnectionState } from '../../remote/remote-connection-state.ts';
 import type { ConnectVerification } from '../connection/connect-provider-adapters.ts';
-import {
-  connectionProviderCapabilitiesForLease,
-  connectionProviderCapabilitiesForVerification,
-} from '../connection/provider-policy.ts';
+import { connectionProviderCapabilities } from '../connection/provider-policy.ts';
 import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
 
 export type ConnectReadiness = ConnectVerification & {
@@ -38,7 +31,7 @@ export function buildLeasePreparationNotice(
   verification?: ConnectVerification,
 ): LeasePreparationNotice | undefined {
   if (state.leaseId) return undefined;
-  const capabilities = connectionProviderCapabilitiesForLease(state);
+  const capabilities = connectionProviderCapabilities(state.leaseProvider);
   const leaseKind = capabilities.leaseKind;
   if (leaseKind === 'proxy') {
     return {
@@ -148,7 +141,7 @@ export function serializeConnectionState(options: {
     leaseAllocated: Boolean(state.leaseId),
     leaseId: state.leaseId,
     leaseBackend: state.leaseBackend,
-    ...remoteConnectionProviderOutput(state),
+    leaseProvider: state.leaseProvider,
     platform: state.platform,
     target: state.target,
     remoteConfig: state.remoteConfigPath,
@@ -237,7 +230,7 @@ function buildUnscopedConnectWorkflow(
   state: RemoteConnectionState,
   verification?: ConnectVerification,
 ): Pick<ConnectReadiness, 'nextSteps' | 'notes'> {
-  const capabilities = connectionProviderCapabilitiesForLease(state);
+  const capabilities = connectionProviderCapabilities(state.leaseProvider);
   const leaseKind = capabilities.leaseKind;
   if (leaseKind === 'proxy') {
     return {
@@ -250,7 +243,7 @@ function buildUnscopedConnectWorkflow(
   if (!verification && leaseKind === 'direct-device-provider') {
     return { nextSteps: defaultDirectProviderLifecycle() };
   }
-  if (connectionProviderCapabilitiesForVerification(verification).supportsDeferredAppSelection) {
+  if (connectionProviderCapabilities(verification?.provider).supportsDeferredAppSelection) {
     return {
       nextSteps: ['agent-device apps', 'agent-device open <uploaded-asset-name>'],
     };
@@ -271,7 +264,7 @@ function requiresInstall(verification?: ConnectVerification): boolean {
 }
 
 function supportsProviderArtifacts(verification?: ConnectVerification): boolean {
-  return connectionProviderCapabilitiesForVerification(verification).supportsArtifacts;
+  return connectionProviderCapabilities(verification?.provider).supportsArtifacts;
 }
 
 function missingAttachedAppRecovery(verification?: ConnectVerification): string[] {
@@ -350,7 +343,7 @@ function appIdPlaceholder(platform: RemoteConnectionState['platform']): string {
 }
 
 function missingAppLabel(state: RemoteConnectionState): string {
-  const capabilities = connectionProviderCapabilitiesForLease(state);
+  const capabilities = connectionProviderCapabilities(state.leaseProvider);
   if (capabilities.requiresAppAttachment) return 'not attached';
   if (capabilities.supportsDeferredAppSelection) {
     return 'not installed yet';

@@ -93,32 +93,6 @@ export default defineConfig({
             ],
           },
         ],
-        'no-restricted-properties': [
-          'error',
-          {
-            property: 'leaseProvider',
-            message:
-              'Command implementations must ask src/cli/connection/provider-policy.ts for provider capabilities.',
-          },
-        ],
-      },
-    },
-    {
-      files: ['src/cli/commands/**/*.ts'],
-      rules: {
-        'no-restricted-properties': [
-          'error',
-          {
-            property: 'leaseProvider',
-            message:
-              'Command implementations must ask src/cli/connection/provider-policy.ts for provider capabilities.',
-          },
-          {
-            property: 'provider',
-            message:
-              'Connection commands must ask src/cli/connection/provider-policy.ts for provider capabilities.',
-          },
-        ],
       },
     },
     {

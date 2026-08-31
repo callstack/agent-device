@@ -1,7 +1,37 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { handleDaemonHttpResponseBody } from './daemon-client-rpc.ts';
+import { buildHttpRpcPayload, handleDaemonHttpResponseBody } from './daemon-client-rpc.ts';
+
+test('lease allocation transports an optional initial provider app', () => {
+  const payload = buildHttpRpcPayload(
+    {
+      token: 'daemon-token',
+      session: 'qa-android',
+      command: 'lease_allocate',
+      positionals: [],
+      flags: { providerApp: 'Example.apk' },
+      meta: {
+        requestId: 'lease-req',
+        tenantId: 'acme',
+        runId: 'run-123',
+        leaseBackend: 'android-instance',
+        leaseTtlMs: 30_000,
+      },
+    },
+    { includeTokenParam: false },
+  );
+
+  assert.equal(payload.method, 'agent_device.lease.allocate');
+  assert.deepEqual(payload.params, {
+    session: 'qa-android',
+    tenantId: 'acme',
+    runId: 'run-123',
+    ttlMs: 30_000,
+    backend: 'android-instance',
+    providerApp: 'Example.apk',
+  });
+});
 
 test('HTTP RPC errors sanitize an untrusted cause before rehydration', () => {
   const secret = 'adc_agent_remote-secret';

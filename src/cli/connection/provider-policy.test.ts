@@ -1,12 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import {
-  connectionProviderCapabilitiesForLease,
-  connectionProviderCapabilitiesForVerification,
-} from './provider-policy.ts';
+import { connectionProviderCapabilities } from './provider-policy.ts';
 
-test('provider carriers project provider identity into semantic capabilities', () => {
-  assert.deepEqual(connectionProviderCapabilitiesForLease({ leaseProvider: 'limrun' }), {
+test('provider policy projects provider identity into semantic capabilities', () => {
+  assert.deepEqual(connectionProviderCapabilities('limrun'), {
     leaseKind: 'direct-device-provider',
     requiresAppAttachment: false,
     requiresRemoteDaemon: false,
@@ -15,18 +12,9 @@ test('provider carriers project provider identity into semantic capabilities', (
     supportsDirectPortReverse: true,
     usesCloudWebDriverLease: false,
   });
-  const browserStack = connectionProviderCapabilitiesForVerification({
-    provider: 'browserstack',
-  });
+  const browserStack = connectionProviderCapabilities('browserstack');
   assert.equal(browserStack.supportsArtifacts, true);
   assert.equal(browserStack.usesCloudWebDriverLease, true);
-  assert.equal(
-    connectionProviderCapabilitiesForLease({ leaseProvider: 'aws-device-farm' })
-      .requiresAppAttachment,
-    true,
-  );
-  assert.equal(
-    connectionProviderCapabilitiesForLease({ leaseProvider: 'proxy' }).leaseKind,
-    'proxy',
-  );
+  assert.equal(connectionProviderCapabilities('aws-device-farm').requiresAppAttachment, true);
+  assert.equal(connectionProviderCapabilities('proxy').leaseKind, 'proxy');
 });
