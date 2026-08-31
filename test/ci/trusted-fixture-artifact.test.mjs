@@ -413,13 +413,30 @@ test('artifact name resolver scopes both platforms and rejects invalid output', 
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-artifact-name-'));
   t.after(() => fs.rmSync(tempRoot, { force: true, recursive: true }));
   const callLog = path.join(tempRoot, 'calls');
+  const actionDir = path.join(tempRoot, '.github/actions/setup-fixture-app');
+  const fingerprintBinDir = path.join(tempRoot, 'examples/test-app/node_modules/.bin');
   const pnpmStub = path.join(tempRoot, 'pnpm');
+  fs.mkdirSync(actionDir, { recursive: true });
+  fs.mkdirSync(fingerprintBinDir, { recursive: true });
+  fs.copyFileSync(
+    '.github/actions/setup-fixture-app/resolve-artifact-name.sh',
+    path.join(actionDir, 'resolve-artifact-name.sh'),
+  );
   fs.writeFileSync(
     pnpmStub,
     [
       '#!/bin/sh',
+      'echo "pnpm must not mediate machine-readable fingerprint output" >&2',
+      'exit 91',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(fingerprintBinDir, 'fingerprint'),
+    [
+      '#!/bin/sh',
       String.raw`printf "%s\n" "$*" >> "$TEST_CALL_LOG"`,
-      'if [ "$TEST_PNPM_EXIT" -ne 0 ]; then exit "$TEST_PNPM_EXIT"; fi',
+      'if [ "$TEST_FINGERPRINT_EXIT" -ne 0 ]; then exit "$TEST_FINGERPRINT_EXIT"; fi',
       'if [ -n "$TEST_RAW_OUTPUT" ]; then',
       String.raw`  printf "%s\n" "$TEST_RAW_OUTPUT"`,
       'else',
@@ -429,17 +446,18 @@ test('artifact name resolver scopes both platforms and rejects invalid output', 
     ].join('\n'),
   );
   fs.chmodSync(pnpmStub, 0o755);
+  fs.chmodSync(path.join(fingerprintBinDir, 'fingerprint'), 0o755);
   const resolver = '.github/actions/setup-fixture-app/resolve-artifact-name.sh';
-  const runResolver = (platform, hash, pnpmExit = 0, rawOutput = '') =>
+  const runResolver = (platform, hash, fingerprintExit = 0, rawOutput = '') =>
     spawnSync('sh', platform === undefined ? [resolver] : [resolver, platform], {
-      cwd: process.cwd(),
+      cwd: tempRoot,
       encoding: 'utf8',
       env: {
         ...process.env,
         PATH: `${tempRoot}:${process.env.PATH}`,
         TEST_CALL_LOG: callLog,
         TEST_HASH: hash,
-        TEST_PNPM_EXIT: String(pnpmExit),
+        TEST_FINGERPRINT_EXIT: String(fingerprintExit),
         TEST_RAW_OUTPUT: rawOutput,
       },
     });
@@ -453,13 +471,13 @@ test('artifact name resolver scopes both platforms and rejects invalid output', 
   assert.equal(android.stdout, 'fingerprint.android-hash.android\n');
 
   assert.deepEqual(fs.readFileSync(callLog, 'utf8').trim().split('\n'), [
-    '--dir examples/test-app exec fingerprint fingerprint:generate --platform ios',
-    '--dir examples/test-app exec fingerprint fingerprint:generate --platform android',
+    'fingerprint:generate --platform ios',
+    'fingerprint:generate --platform android',
   ]);
   assert.equal(runResolver(undefined, 'unused').status, 2);
   assert.equal(
     spawnSync('sh', [resolver, 'ios', 'extra'], {
-      cwd: process.cwd(),
+      cwd: tempRoot,
       encoding: 'utf8',
       env: process.env,
     }).status,
