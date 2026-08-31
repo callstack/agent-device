@@ -41,6 +41,20 @@ test('architecture ownership roots resolve to tracked owners', () => {
   }
 });
 
+test('daemon replay façade pins its named command surface', () => {
+  const tracked = new Set(listTrackedTypeScriptFiles(repoRoot));
+
+  for (const declaration of ARCHITECTURE_OWNERSHIP.facades) {
+    assert.ok(tracked.has(declaration.root), `${declaration.name} root is not tracked`);
+    const source = fs.readFileSync(path.join(repoRoot, declaration.root), 'utf8');
+    assert.deepEqual(
+      readNamedExports(source),
+      declaration.exports,
+      `${declaration.name} façade exports drifted`,
+    );
+  }
+});
+
 test('vocabulary roots are exported contract facades', () => {
   const manifest = JSON.parse(
     fs.readFileSync(path.join(repoRoot, 'packages/contracts/package.json'), 'utf8'),

@@ -10,7 +10,7 @@ import { parseSync } from 'oxc-parser';
  * `ReplayCoordinator`, and a `ReplayCoordinator`/`ReplayResumeStamper` manufactured from a bare
  * `SessionStore` + session name is repair authority conjured by naming a session, not proof of
  * holding the request's own coordinator. A behavior test cannot distinguish "the one coordinator
- * `runReplayScriptSource` created, threaded through" from "a second one built from the same
+ * `runReplayCommand` created, threaded through" from "a second one built from the same
  * store/name" — both produce identical wire output — so this is a structural check over the
  * import graph, using the same `oxc-parser` AST approach as `scripts/layering/session-state.ts`.
  *
@@ -30,22 +30,22 @@ const COORDINATOR_MODULE = 'src/daemon/session-replay-coordinator.ts';
 const TRANSACTION_MODULE = 'src/daemon/session-replay-transaction.ts';
 const SESSION_STORE_MODULE = 'src/daemon/session-store.ts';
 
-const RUNTIME_FILE = 'src/daemon/handlers/session-replay-runtime.ts';
+const RUNTIME_FILE = 'src/daemon/replay/internal/native-command.ts';
 
 /** The divergence-report chain: never a second `ReplayCoordinator`, never a bare `SessionStore`. */
 const DIVERGENCE_CHAIN_FILES = [
-  'src/daemon/handlers/session-replay-resume.ts',
-  'src/daemon/handlers/session-replay-divergence.ts',
-  'src/daemon/handlers/session-replay-target-verification.ts',
-  'src/daemon/handlers/session-replay-runtime-failure.ts',
-  'src/daemon/handlers/session-replay-runtime-failure-response.ts',
+  'src/daemon/replay/internal/session-replay-resume.ts',
+  'src/daemon/replay/internal/session-replay-divergence.ts',
+  'src/daemon/replay/internal/session-replay-target-verification.ts',
+  'src/daemon/replay/internal/session-replay-runtime-failure.ts',
+  'src/daemon/replay/internal/session-replay-runtime-failure-response.ts',
 ] as const;
 
 /** Files in `DIVERGENCE_CHAIN_FILES` allowed a TYPE-ONLY `session-store.ts` reference. */
 const SESSION_STORE_TYPE_ONLY_ALLOWED = new Set<string>([
-  'src/daemon/handlers/session-replay-divergence.ts',
-  'src/daemon/handlers/session-replay-target-verification.ts',
-  'src/daemon/handlers/session-replay-runtime-failure.ts',
+  'src/daemon/replay/internal/session-replay-divergence.ts',
+  'src/daemon/replay/internal/session-replay-target-verification.ts',
+  'src/daemon/replay/internal/session-replay-runtime-failure.ts',
 ]);
 
 type ImportSite = {
@@ -115,26 +115,183 @@ function importsAnyBinding(site: ImportSite, target: string): boolean {
   return site.target === target;
 }
 
+type CoordinatorConstructionSite = Readonly<{
+  file: string;
+  kind: 'call' | 'dynamic-import';
+  start: number;
+}>;
+
+function visitAst(value: unknown, visitor: (node: Record<string, unknown>) => void): void {
+  if (Array.isArray(value)) {
+    for (const child of value) visitAst(child, visitor);
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  const node = value as Record<string, unknown>;
+  visitor(node);
+  for (const child of Object.values(node)) visitAst(child, visitor);
+}
+
+function identifierName(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const node = value as { type?: unknown; name?: unknown };
+  return node.type === 'Identifier' && typeof node.name === 'string' ? node.name : undefined;
+}
+
+function coordinatorConstructionSites(
+  file: string,
+  source = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8'),
+): CoordinatorConstructionSite[] {
+  const parsed = parseSync(file, source);
+  const bindings = coordinatorImportBindings(
+    file,
+    parsed.program.body as unknown as readonly Record<string, unknown>[],
+  );
+  const sites: CoordinatorConstructionSite[] = [];
+  visitAst(parsed.program, (node) => {
+    const site = coordinatorConstructionSiteForNode(file, node, bindings);
+    if (site) sites.push(site);
+  });
+  return sites;
+}
+
+type CoordinatorImportBindings = Readonly<{
+  direct: ReadonlySet<string>;
+  namespace: ReadonlySet<string>;
+}>;
+
+function coordinatorImportBindings(
+  file: string,
+  body: readonly Record<string, unknown>[],
+): CoordinatorImportBindings {
+  const direct = new Set<string>();
+  const namespace = new Set<string>();
+  for (const node of body) {
+    if (node.type !== 'ImportDeclaration') continue;
+    const source = node.source as { value?: unknown };
+    if (typeof source.value !== 'string') continue;
+    if (resolveRelativeTarget(file, source.value) !== COORDINATOR_MODULE) continue;
+    if (node.importKind === 'type') continue;
+    for (const specifier of node.specifiers as readonly Record<string, unknown>[]) {
+      addCoordinatorImportBinding(specifier, direct, namespace);
+    }
+  }
+  return { direct, namespace };
+}
+
+function addCoordinatorImportBinding(
+  specifier: Record<string, unknown>,
+  direct: Set<string>,
+  namespace: Set<string>,
+): void {
+  if (specifier.type === 'ImportSpecifier') {
+    if (specifier.importKind === 'type') return;
+    if (identifierName(specifier.imported) !== 'createReplayCoordinator') return;
+    const localName = identifierName(specifier.local);
+    if (localName) direct.add(localName);
+    return;
+  }
+  if (specifier.type !== 'ImportNamespaceSpecifier') return;
+  const localName = identifierName(specifier.local);
+  if (localName) namespace.add(localName);
+}
+
+function coordinatorConstructionSiteForNode(
+  file: string,
+  node: Record<string, unknown>,
+  bindings: CoordinatorImportBindings,
+): CoordinatorConstructionSite | undefined {
+  if (node.type === 'ImportExpression') return dynamicCoordinatorImportSite(file, node);
+  if (node.type !== 'CallExpression') return undefined;
+  const callee = node.callee as Record<string, unknown> | undefined;
+  return (
+    directCoordinatorCallSite(file, node, callee, bindings) ??
+    namespaceCoordinatorCallSite(file, node, callee, bindings)
+  );
+}
+
+function directCoordinatorCallSite(
+  file: string,
+  node: Record<string, unknown>,
+  callee: Record<string, unknown> | undefined,
+  bindings: CoordinatorImportBindings,
+): CoordinatorConstructionSite | undefined {
+  const directCallee = identifierName(callee);
+  if (!directCallee || !bindings.direct.has(directCallee)) return undefined;
+  return { file, kind: 'call', start: Number(node.start) };
+}
+
+function namespaceCoordinatorCallSite(
+  file: string,
+  node: Record<string, unknown>,
+  callee: Record<string, unknown> | undefined,
+  bindings: CoordinatorImportBindings,
+): CoordinatorConstructionSite | undefined {
+  if (callee?.type !== 'MemberExpression' || callee.computed === true) return undefined;
+  const namespace = identifierName(callee.object);
+  const property = identifierName(callee.property);
+  if (!namespace || property !== 'createReplayCoordinator' || !bindings.namespace.has(namespace)) {
+    return undefined;
+  }
+  return { file, kind: 'call', start: Number(node.start) };
+}
+
+function dynamicCoordinatorImportSite(
+  file: string,
+  node: Record<string, unknown>,
+): CoordinatorConstructionSite | undefined {
+  const sourceNode = node.source as { type?: unknown; value?: unknown } | undefined;
+  if (
+    sourceNode?.type !== 'Literal' ||
+    typeof sourceNode.value !== 'string' ||
+    resolveRelativeTarget(file, sourceNode.value) !== COORDINATOR_MODULE
+  ) {
+    return undefined;
+  }
+  return { file, kind: 'dynamic-import', start: Number(node.start) };
+}
+
 const PRODUCTION_FILES = listProductionSourceFiles();
 
 test('createReplayCoordinator has exactly one production call site', () => {
-  const callers = new Set<string>();
-  for (const file of PRODUCTION_FILES) {
-    for (const site of collectImportSites(file)) {
-      if (
-        site.target === COORDINATOR_MODULE &&
-        importsValueBinding(site, 'createReplayCoordinator')
-      ) {
-        callers.add(file);
-      }
-    }
-  }
+  const sites = PRODUCTION_FILES.flatMap((file) => coordinatorConstructionSites(file));
   assert.deepEqual(
-    [...callers].sort(),
+    sites.map(({ file }) => file).sort(),
     [RUNTIME_FILE],
-    `createReplayCoordinator must be imported by exactly ${RUNTIME_FILE} — a second production ` +
-      `caller can manufacture repair authority from a bare SessionStore + session name instead ` +
-      `of using the request's own coordinator. Found: ${[...callers].sort().join(', ') || '(none)'}`,
+    `createReplayCoordinator must have exactly one production construction call in ${RUNTIME_FILE} — ` +
+      `a second caller can manufacture repair authority from a bare SessionStore + session name ` +
+      `instead of using the request's own coordinator. Found: ${
+        sites.map(({ file, kind }) => `${file} (${kind})`).join(', ') || '(none)'
+      }`,
+  );
+});
+
+test('coordinator ownership scanning catches aliases, namespaces, and dynamic imports', () => {
+  const source = `
+    import { createReplayCoordinator as makeCoordinator } from '../../session-replay-coordinator.ts';
+    import * as coordinatorModule from '../../session-replay-coordinator.ts';
+    makeCoordinator({});
+    coordinatorModule.createReplayCoordinator({});
+    void import('../../session-replay-coordinator.ts');
+  `;
+  assert.deepEqual(
+    coordinatorConstructionSites('src/daemon/replay/internal/probe.ts', source).map(
+      ({ kind }) => kind,
+    ),
+    ['call', 'call', 'dynamic-import'],
+  );
+});
+
+test('daemon replay production files never import the P4a ReplaySessionTransaction projection', () => {
+  const offenders = PRODUCTION_FILES.filter(
+    (file) =>
+      file.startsWith('src/daemon/replay/') &&
+      collectImportSites(file).some((site) => importsAnyBinding(site, TRANSACTION_MODULE)),
+  );
+  assert.deepEqual(
+    offenders,
+    [],
+    `daemon replay must reach repair-transaction writes through ReplayCoordinator; found: ${offenders.join(', ')}`,
   );
 });
 
@@ -168,7 +325,7 @@ test('the divergence-report chain never imports the P4a ReplaySessionTransaction
 });
 
 test('session-replay-resume.ts holds no SessionStore binding at all', () => {
-  const file = 'src/daemon/handlers/session-replay-resume.ts';
+  const file = 'src/daemon/replay/internal/session-replay-resume.ts';
   for (const site of collectImportSites(file)) {
     assert.equal(
       importsAnyBinding(site, SESSION_STORE_MODULE),

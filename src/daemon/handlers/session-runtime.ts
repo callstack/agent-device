@@ -11,6 +11,10 @@ import { trimRuntimeValue } from '../../utils/runtime-transport.ts';
 import { isAndroidEmulator, isIosSimulator } from '../device-targets.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';
 
+type SessionRuntimeHintsStore = Readonly<{
+  getRuntimeHints: SessionStore['getRuntimeHints'];
+}>;
+
 // Loopback aliases an emulator/simulator app uses to reach the dev server on the host machine.
 const ANDROID_EMULATOR_LOOPBACK_HOST = '10.0.2.2';
 const IOS_SIMULATOR_LOOPBACK_HOST = '127.0.0.1';
@@ -199,7 +203,7 @@ export function setSessionRuntimeHintsForOpen(
 }
 
 function resolveSessionRuntimeHints(
-  sessionStore: SessionStore,
+  sessionStore: SessionRuntimeHintsStore,
   sessionName: string,
   device?: DeviceInfo,
   platform?: RuntimePlatform,
@@ -228,7 +232,7 @@ function resolveSessionRuntimeHints(
 
 function resolveOpenRuntimeHints(params: {
   req: DaemonRequest;
-  sessionStore: SessionStore;
+  sessionStore: SessionRuntimeHintsStore;
   sessionName: string;
   device?: DeviceInfo;
   platform?: RuntimePlatform;

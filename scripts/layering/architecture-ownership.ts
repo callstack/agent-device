@@ -27,10 +27,32 @@ export const LOGICAL_MODULE_POLICIES = [
       'packages/ad-replay/',
     ],
   },
+  {
+    name: 'daemon-replay',
+    roots: ['src/daemon/replay/'],
+    forbiddenTargetRoots: [
+      'src/daemon/handlers/session-close.ts',
+      'src/daemon/handlers/record-runtime.ts',
+    ],
+  },
 ] as const satisfies readonly LogicalModulePolicy[];
+
+const DAEMON_REPLAY_FACADE = {
+  name: 'daemon-replay',
+  root: 'src/daemon/replay/index.ts',
+  exports: [
+    'ReplayCommand',
+    'ReplaySession',
+    'ReplayTestCommand',
+    'ReplayTestVideoOwner',
+    'runReplayCommand',
+    'runReplayTestCommand',
+  ],
+} as const;
 
 export const ARCHITECTURE_OWNERSHIP = {
   logicalModules: LOGICAL_MODULE_POLICIES,
+  facades: [DAEMON_REPLAY_FACADE],
   vocabulary: [
     {
       name: 'client-contract',

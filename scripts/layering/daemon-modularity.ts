@@ -37,7 +37,7 @@ export const TYPE_CYCLE_BASELINE = Object.values(LARGEST_TYPE_CYCLE_ZONE_CEILING
 const ENGINE_FILE_PREFIXES = [
   'packages/ad-replay/src/',
   'packages/maestro/src/',
-  'src/daemon/handlers/session-replay',
+  'src/daemon/replay/internal/',
   'packages/replay-test/src/',
 ] as const;
 

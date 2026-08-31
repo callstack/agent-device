@@ -12,7 +12,7 @@ import { runBatchCommands } from './session-batch.ts';
 import { handleSessionInventoryCommands } from './session-inventory.ts';
 import { handleSessionStateCommands } from './session-state.ts';
 import { handleSessionObservabilityCommands } from './session-observability.ts';
-import { handleSessionReplayCommands } from './session-replay.ts';
+import { handleReplayCommand, handleReplayTestCommand } from './session-replay-command.ts';
 import { handleSessionScriptPublication } from './session-script-publication.ts';
 import { handleSessionClipboardCommand } from './session-clipboard.ts';
 import { handleDoctorCommand } from './session-doctor.ts';
@@ -69,7 +69,9 @@ type SessionCommandParams = Omit<SessionCommandInput, 'leaseRegistry'> & {
   leaseRegistry: LeaseRegistry;
 };
 
-type SessionCommandHandler = (params: SessionCommandParams) => Promise<DaemonResponse | null>;
+export type SessionCommandHandler = (
+  params: SessionCommandParams,
+) => Promise<DaemonResponse | null>;
 
 const handleSessionInventoryCommandGroup: SessionCommandHandler = async ({
   req,
@@ -124,40 +126,6 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
     audioProbeAdmissionLedger,
     perfCaptureAdmissionLedger,
     throwIfCanceled,
-  });
-
-const handleSessionReplayCommandGroup: SessionCommandHandler = async ({
-  req,
-  sessionName,
-  logPath,
-  sessionStore,
-  leaseRegistry,
-  invoke,
-  invokeReplayAction,
-  bindDevice,
-  inspectFacts,
-  bindExactDevice,
-  screenRecordingAdmissionLedger,
-  requestScope,
-  retainDeviceExecutionLock,
-  throwIfCanceled,
-  platformResourceCleanup,
-}) =>
-  await handleSessionReplayCommands({
-    req,
-    sessionName,
-    logPath,
-    sessionStore,
-    leaseRegistry,
-    invoke: invokeReplayAction ?? invoke,
-    bindDevice,
-    inspectFacts,
-    bindExactDevice,
-    screenRecordingAdmissionLedger,
-    requestScope,
-    retainDeviceExecutionLock,
-    throwIfCanceled,
-    platformResourceCleanup,
   });
 
 /**
@@ -267,8 +235,8 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
       openResponse,
     });
   },
-  replay: handleSessionReplayCommandGroup,
-  test: handleSessionReplayCommandGroup,
+  replay: handleReplayCommand,
+  test: handleReplayTestCommand,
   batch: async ({ req, sessionName, invoke }) => await runBatchCommands(req, sessionName, invoke),
   close: async ({
     req,

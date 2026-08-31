@@ -1,7 +1,7 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { readSessionRuntimeRevision } from './ref-frame.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from './session-snapshot.ts';
-import { SessionStore } from './session-store.ts';
+import type { SessionStore } from './session-store.ts';
 import type { SessionState } from './types.ts';
 
 declare const INTERNAL_OBSERVATION_EVIDENCE: unique symbol;
@@ -59,9 +59,14 @@ type InternalObservationAuthority = Readonly<{
 }>;
 
 type BoundInternalObservationSession = Readonly<{
-  sessionStore: SessionStore;
+  sessionStore: InternalObservationSessionStore;
   sessionName: string;
   signal?: AbortSignal;
+}>;
+
+type InternalObservationSessionStore = Readonly<{
+  get: SessionStore['get'];
+  set: SessionStore['set'];
 }>;
 
 /**
@@ -125,7 +130,7 @@ function storeInternalObservation(
  * before the response returns to the client.
  */
 function finalizeClientRefPublication(params: {
-  sessionStore: SessionStore;
+  sessionStore: InternalObservationSessionStore;
   sessionName: string;
   evidence: InternalObservationEvidence;
   projection: ClientRefPublicationProjection;

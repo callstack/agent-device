@@ -5,8 +5,7 @@ import {
   type ReplayDivergenceResume,
   type ReplayRepairHint,
 } from '@agent-device/contracts/divergence';
-import type { DaemonResponse, SessionState } from './types.ts';
-import type { SessionStore } from './session-store.ts';
+import type { DaemonResponse, SessionRef, SessionRuntimeHints, SessionState } from './types.ts';
 import {
   armRepairStep,
   isUncommittedRepairSession,
@@ -23,7 +22,7 @@ import {
  * live session"); it owns every write this request performs against that session's repair
  * lifecycle — arming, demotion for a `--from` rerun, completion, hold-on-divergence stamping, the
  * `pendingRecordAndHeal` corrective watermark, and reap-tombstone clearing —
- * so `session-replay-runtime.ts` and `session-replay-resume.ts` reach neither the P4a projection
+ * so the replay command and its resume helper reach neither the P4a projection
  * nor `session.pendingRecordAndHeal` directly.
  *
  * Close-time sequencing (`session-close.ts`, `session-close-script.ts`: the platform-close
@@ -46,7 +45,7 @@ export type ReplaySessionView = Readonly<{
 /**
  * The one capability the divergence-report chain (`session-replay-resume.ts`,
  * `session-replay-divergence.ts`, `session-replay-target-verification.ts`) needs from a
- * `ReplayCoordinator`, bound to the SAME instance the owning `runReplayScriptSource` call
+ * `ReplayCoordinator`, bound to the SAME instance the owning replay command call
  * created — never a second construction from a bare session name. Carries no `SessionStore`
  * and cannot name or reacquire a different session.
  */
@@ -93,8 +92,17 @@ export type ReplayCoordinator = {
   readonly resumeStamper: ReplayResumeStamper;
 };
 
+export type ReplaySessionStore = Readonly<{
+  get: (sessionName: string) => SessionState | undefined;
+  set: (sessionName: string, session: SessionState) => void;
+  lookup: (address: string) => SessionRef | undefined;
+  getRuntimeHints: (sessionName: string) => SessionRuntimeHints | undefined;
+  ensureSessionDir: (sessionName: string) => string;
+  clearRepairTombstone: (sessionName: string) => void;
+}>;
+
 export function createReplayCoordinator(params: {
-  sessionStore: SessionStore;
+  sessionStore: ReplaySessionStore;
   sessionName: string;
 }): ReplayCoordinator {
   const { sessionStore, sessionName } = params;

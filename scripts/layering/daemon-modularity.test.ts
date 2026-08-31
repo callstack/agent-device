@@ -119,13 +119,13 @@ test('replay-test rejects request-global and engine-internal imports', () => {
         'packages/replay-test/src/internal/scheduler.ts',
         [
           "import { emitRequestProgress } from '../../../../src/request/progress.ts';",
-          "import { readReplayScriptMetadata } from '../../../../src/daemon/handlers/session-replay-runtime.ts';",
+          "import { readReplayScriptMetadata } from '../../../../src/daemon/replay/internal/native-command.ts';",
           "import { parseMaestroProgram } from '../../../../src/compat/maestro/program-ir-parser.ts';",
         ].join('\n'),
       ],
       ['src/request/progress.ts', 'export function emitRequestProgress() {}'],
       [
-        'src/daemon/handlers/session-replay-runtime.ts',
+        'src/daemon/replay/internal/native-command.ts',
         'export function readReplayScriptMetadata() {}',
       ],
       ['src/compat/maestro/program-ir-parser.ts', 'export function parseMaestroProgram() {}'],
@@ -140,7 +140,7 @@ test('replay-test rejects request-global and engine-internal imports', () => {
     violations.map(({ message }) => message.replace(/;.*/, '')),
     [
       'replay-test must not import src/request/progress.ts',
-      'replay-test must not import src/daemon/handlers/session-replay-runtime.ts',
+      "packages/replay-test/src/internal/scheduler.ts must not import daemon-replay's internal tree (src/daemon/replay/internal/native-command.ts)",
       'replay-test must not import src/compat/maestro/program-ir-parser.ts',
     ],
   );
@@ -177,6 +177,40 @@ test('internal trees reject deep imports globally, including from daemon', () =>
   );
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.message, /must not import maestro's internal tree/);
+});
+
+test('daemon replay rejects handler, sibling-owner, and engine deep edges', () => {
+  const edges = resolveImportEdges(
+    new Map([
+      [
+        'src/daemon/handlers/session.ts',
+        "import { runReplayCommand } from '../replay/internal/native-command.ts';",
+      ],
+      [
+        'src/daemon/replay/internal/test-command.ts',
+        "import { handleCloseCommand } from '../../handlers/session-close.ts';",
+      ],
+      [
+        'packages/ad-replay/src/internal/step-loop.ts',
+        "import { runReplayCommand } from '../../../../src/daemon/replay/internal/native-command.ts';",
+      ],
+      ['src/daemon/replay/internal/native-command.ts', 'export function runReplayCommand() {}'],
+      ['src/daemon/handlers/session-close.ts', 'export function handleCloseCommand() {}'],
+    ]),
+  );
+
+  const violations = checkDaemonModularityRatchets(
+    [...baselineEdges(), ...edges],
+    baselineTypeCycleMembers(),
+  );
+  assert.deepEqual(
+    violations.map(({ message }) => message.replace(/;.*/, '')),
+    [
+      "src/daemon/handlers/session.ts must not import daemon-replay's internal tree (src/daemon/replay/internal/native-command.ts)",
+      'daemon-replay must not import src/daemon/handlers/session-close.ts',
+      "packages/ad-replay/src/internal/step-loop.ts must not import daemon-replay's internal tree (src/daemon/replay/internal/native-command.ts)",
+    ],
+  );
 });
 
 test('R9 records zone ceilings and keeps engine files outside the largest component', () => {

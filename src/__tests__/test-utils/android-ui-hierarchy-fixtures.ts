@@ -121,7 +121,7 @@ export function parseUiHierarchy(
  * node (`status_bar_container`, `status_bar_contents`, ...), unlike a default
  * capture. Shared across the chrome-classification tests
  * (`core/__tests__/snapshot-chrome-android-statusbar.test.ts`) and the replay
- * divergence route test (`daemon/handlers/__tests__/session-replay-divergence.test.ts`)
+ * divergence route test (`daemon/replay/internal/__tests__/session-replay-divergence.test.ts`)
  * so both exercise the exact same real screen through `walkNonRawAndroidFixture`.
  */
 export const ANDROID_IME_CAPTURE_RAW_NODES: RawSnapshotNode[] = imeCapture;

@@ -282,7 +282,7 @@ const OBSERVATION_ONLY_COMMANDS: ReadonlySet<string> = new Set(['snapshot', 'get
  * Two facts, ANDed, and the second is the one that matters:
  *  1. the command is observation-only (above); and
  *  2. it is NOT a replay plan step (`internal.replayPlanStep`, stamped by
- *     `invokeResolvedReplayAction`, `handlers/session-replay-action-runtime.ts`).
+ *     `invokeResolvedReplayAction`, `daemon/replay/internal/session-replay-action-runtime.ts`).
  *
  * (2) is why this is a PROVENANCE rule, not a command-class rule. Replayed
  * plan steps dispatch through the ordinary request path and land in
