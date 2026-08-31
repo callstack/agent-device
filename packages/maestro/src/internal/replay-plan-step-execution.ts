@@ -7,6 +7,7 @@ import {
   type MaestroCompatibilityTimingPolicy,
 } from './compatibility-policy.ts';
 import type { MaestroExecutionContext } from './engine-context.ts';
+import { evaluateMaestroEvalScript } from './engine-eval-script.ts';
 import {
   checkpointMaestroCancellation,
   observationConditions,
@@ -80,6 +81,9 @@ async function executeOptionalCommand(
   appId: string | undefined,
   state: MaestroReplayPlanExecutionState,
 ): Promise<MaestroRuntimeResult | undefined> {
+  if (rawCommand.kind === 'evalScript') {
+    return await executeEvalScript(rawCommand, state);
+  }
   const command = resolveCommand(rawCommand, state.context);
   try {
     return await executeResolvedCommand(command, appId, state);
@@ -102,6 +106,16 @@ function formatOptionalWarning(command: MaestroRuntimeCommand, error: unknown): 
 
 function isOptionalCommand(command: MaestroRuntimeCommand): boolean {
   return 'optional' in command && command.optional === true;
+}
+
+async function executeEvalScript(
+  command: Extract<MaestroRuntimeCommand, { kind: 'evalScript' }>,
+  state: MaestroReplayPlanExecutionState,
+): Promise<undefined> {
+  const outputEnv = evaluateMaestroEvalScript(command.script, state.context.values);
+  state.context.merge(outputEnv);
+  state.executed += 1;
+  return undefined;
 }
 
 async function executeResolvedCommand(

@@ -191,10 +191,14 @@ two-pointer plans, executor selection, and app-observable effects must remain un
 - agent-device supports selected Maestro Flow syntax and behavior. Unsupported features return
   explicit errors, and intentional differences are declared in the conformance fixtures.
 - `${...}` interpolation stays variable-lookup-only, by decision (#1292): upstream's GraalJS
-  expression evaluation is not reimplemented, so unresolved or expression-shaped payloads fail
-  loud with source context; the escape hatch is `runScript` (compute) → `${output.x}` (consume).
-  `assertTrue` (#1295) is scoped to that same lookup-only subset — literal values and bare
-  `${VAR}` lookups evaluated with a pinned string-truthiness table — for the same reason.
+  expression evaluation is not reimplemented outside `evalScript`, so unresolved or
+  expression-shaped payloads fail loud with source context; the escape hatches are `evalScript`
+  (inline expression → `output.*` leaves) and `runScript` (file compute) → `${output.x}` (consume).
+  `evalScript` is the one command whose payload is evaluated as JavaScript: flow env and prior
+  `output` leaves are bound as strings in a `node:vm` context and the assigned `output` object
+  folds back into the flat string-key model, so `${output.uppercaseName}` and
+  `${output.list.length}` resolve. `assertTrue` (#1295) is scoped to that same lookup-only subset —
+  literal values and bare `${VAR}` lookups evaluated with a pinned string-truthiness table.
 - Shipping two production engines or a runtime fallback between them is rejected because it doubles
   semantic and performance ownership.
 - Source provenance and runtime values stay typed through execution.

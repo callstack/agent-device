@@ -596,6 +596,68 @@ describe('executeMaestroProgram', () => {
     expect(texts).toEqual(['ready']);
   });
 
+  test('evalScript computes output leaves consumed by later steps', async () => {
+    const texts: string[] = [];
+    const port = makePort({
+      execute: vi.fn(async (request) => {
+        if (request.command.kind === 'inputText') texts.push(request.command.text);
+        request.invalidateObservation();
+        return {};
+      }),
+    });
+    const program = parseMaestroProgram(
+      [
+        'env:',
+        '  BASE: "10"',
+        '---',
+        '- evalScript: ${output.sum = 1 + 2}',
+        '- inputText: ${output.sum}',
+        '- evalScript: ${output.total = Number(BASE) + Number(output.sum)}',
+        '- inputText: ${output.total}',
+      ].join('\n'),
+    );
+
+    await executeMaestroProgram(program, port);
+
+    expect(texts).toEqual(['3', '13']);
+  });
+
+  test('evalScript array output resolves .length for a later repeat', async () => {
+    const port = makePort({
+      execute: vi.fn(async (request) => {
+        if (request.command.kind !== 'takeScreenshot') request.invalidateObservation();
+        return {};
+      }),
+    });
+    const program = parseMaestroProgram(
+      [
+        '---',
+        '- evalScript: ${output.list = [1, 2, 3]}',
+        '- repeat:',
+        '    times: ${output.list.length}',
+        '    commands:',
+        '      - tapOn: Item',
+      ].join('\n'),
+    );
+
+    await executeMaestroProgram(program, port);
+
+    expect(port.execute.mock.calls.filter(([request]) => request.command.kind === 'tapOn')).toHaveLength(
+      3,
+    );
+  });
+
+  test('evalScript reports a failing expression with step source', async () => {
+    const program = parseMaestroProgram(
+      ['---', '- evalScript: ${exploded.leaf()}'].join('\n'),
+      { sourcePath: '/flows/eval.yaml' },
+    );
+
+    await expect(executeMaestroProgram(program, makePort())).rejects.toThrow(
+      /evalScript failed/i,
+    );
+  });
+
   test('rejects recursive file includes before loading the child', async () => {
     const loadProgram = vi.fn();
     const program = parseMaestroProgram('---\n- runFlow: ./main.yaml\n', {

@@ -214,6 +214,12 @@ export type MaestroRunScriptCommand = {
   env?: Record<string, string | number | boolean>;
 };
 
+export type MaestroEvalScriptCommand = {
+  kind: 'evalScript';
+  source: MaestroSourceLocation;
+  script: string;
+};
+
 export type MaestroRunFlowCondition = {
   platform?: MaestroPlatform;
   visible?: MaestroSelector;
@@ -266,6 +272,7 @@ export type MaestroCommand =
   | MaestroWaitForAnimationToEndCommand
   | MaestroStopAppCommand
   | MaestroRunScriptCommand
+  | MaestroEvalScriptCommand
   | MaestroRunFlowCommand
   | MaestroRepeatCommand
   | MaestroRetryCommand;
