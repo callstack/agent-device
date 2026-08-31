@@ -5,7 +5,7 @@ import {
   openVerifiedFileForRead,
   openVerifiedFileForTruncate,
 } from '@agent-device/host-kit/file';
-import { ensureAppLogPath } from '../utils/app-log-files.ts';
+import { ensureAppLogPath } from './app-log-files.ts';
 
 export function getAppLogPathMetadata(outPath: string): {
   exists: boolean;
