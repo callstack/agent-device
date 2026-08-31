@@ -313,3 +313,45 @@ describe('doctorCliOutput', () => {
     expect(output.text).toBe(['Doctor: pass', 'No blockers found.'].join('\n'));
   });
 });
+
+describe('devices output', () => {
+  test('carries the projected claim owner through JSON data and the text line', () => {
+    const output = managementCliOutputFormatters.devices({
+      input: {},
+      result: [
+        {
+          platform: 'ios',
+          appleOs: 'ios',
+          target: 'mobile',
+          kind: 'simulator',
+          id: 'sim-free',
+          name: 'Free iPhone',
+          booted: true,
+          identifiers: { deviceId: 'sim-free', deviceName: 'Free iPhone', udid: 'sim-free' },
+        },
+        {
+          platform: 'ios',
+          appleOs: 'ios',
+          target: 'mobile',
+          kind: 'simulator',
+          id: 'sim-claimed',
+          name: 'Claimed iPhone',
+          booted: true,
+          identifiers: {
+            deviceId: 'sim-claimed',
+            deviceName: 'Claimed iPhone',
+            udid: 'sim-claimed',
+          },
+          claimedBy: { session: 'qa', workspace: '/worktrees/qa' },
+        },
+      ],
+    });
+
+    const devices = (output.data as { devices: Record<string, unknown>[] }).devices;
+    expect(devices[0]).not.toHaveProperty('claimedBy');
+    expect(devices[1]?.claimedBy).toEqual({ session: 'qa', workspace: '/worktrees/qa' });
+    const lines = (output.text ?? '').split('\n');
+    expect(lines[0]).not.toContain('claimed by');
+    expect(lines[1]).toContain('claimed by session "qa" in /worktrees/qa');
+  });
+});

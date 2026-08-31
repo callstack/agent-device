@@ -575,3 +575,75 @@ function makeAndroidInventoryDevice(id: string): DeviceInfo {
     booted: true,
   };
 }
+
+test('a claim never projects onto a same-id device from another platform family', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-devices-claims-');
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+  const owner = readCurrentOwnerIdentity();
+  fs.writeFileSync(
+    path.join(claimsDir, 'shared-id.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      deviceKey: 'local:android:none:shared-id',
+      device: { platform: 'android', id: 'shared-id', name: 'Claimed Pixel', kind: 'emulator' },
+      session: 'android-session',
+      workspace: '/worktrees/android',
+      stateDir: process.cwd(),
+      ownerPid: owner.pid,
+      ownerStartTime: owner.startTime,
+      ownerToken: 'shared-id-token',
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    }),
+  );
+  const sessionStore = makeSessionStore();
+  const inventory: DeviceInfo[] = [
+    {
+      platform: 'apple',
+      appleOs: 'ios',
+      id: 'shared-id',
+      name: 'Colliding iPhone',
+      kind: 'simulator',
+      target: 'mobile',
+      booted: true,
+    },
+    makeAndroidInventoryDevice('shared-id'),
+  ];
+  try {
+    const response = await withTestDeviceInventory(
+      { local: async () => inventory },
+      async () =>
+        await handleSessionCommands({
+          req: {
+            token: 't',
+            session: 'default',
+            command: 'devices',
+            positionals: [],
+            flags: {},
+          },
+          sessionName: 'default',
+          logPath: path.join(os.tmpdir(), 'daemon.log'),
+          sessionStore,
+          invoke: noopInvoke,
+        }),
+    );
+    expect(response?.ok).toBeTruthy();
+    if (response?.ok) {
+      const devices = response.data?.devices as Array<Record<string, unknown>> | undefined;
+      expect(devices).toHaveLength(2);
+      const byPlatform = new Map(devices?.map((row) => [row.platform, row]));
+      // Claim ownership is canonical family/OS/id: the Android claim must not
+      // appear on the Apple row that happens to share the bare id.
+      expect(byPlatform.get('ios')?.claimedBy).toBeUndefined();
+      expect(byPlatform.get('android')?.claimedBy).toEqual({
+        session: 'android-session',
+        workspace: '/worktrees/android',
+      });
+    }
+  } finally {
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});

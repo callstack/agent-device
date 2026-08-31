@@ -231,7 +231,8 @@ function isAbandonedClaimOfThisDaemon(
   return isAbandonedDeviceClaim(claim) && isClaimOwnedByThisDaemon(claim, stateDir, owner);
 }
 
-function deviceClaimIdentity(device: DeviceInfo): DeviceIdentity {
+/** The canonical claim-facing identity of a local device: family, Apple OS, and id. */
+export function deviceClaimIdentity(device: DeviceInfo): DeviceIdentity {
   return deviceIdentity({
     ...device,
     ...(isApplePlatform(device.platform) ? { appleOs: resolveDeviceAppleOs(device) } : {}),
