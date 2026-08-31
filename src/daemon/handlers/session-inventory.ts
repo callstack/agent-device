@@ -27,7 +27,7 @@ import {
   selectorTargetsSessionDevice,
 } from './session-device-utils.ts';
 import { errorResponse } from './response.ts';
-import { resolveImplicitSessionScope, sessionMatchesScope } from '../session-routing.ts';
+import { resolveSessionScope, sessionMatchesInventoryScope } from '../session-routing.ts';
 import type {
   BoundDeviceRuntime,
   RuntimeFacts,
@@ -77,13 +77,13 @@ function sessionListInventoryResponse(
   req: DaemonRequest,
   sessionStore: SessionStore,
 ): DaemonResponse {
-  const scope = resolveImplicitSessionScope(req);
+  const scope = resolveSessionScope(req);
   return {
     ok: true,
     data: {
       sessions: sessionStore
         .listRefs()
-        .filter((ref) => sessionMatchesScope(ref.session, scope))
+        .filter((ref) => sessionMatchesInventoryScope(ref.session, scope))
         .map((ref) => publicSessionInfo(ref, sessionStore)),
     },
   };

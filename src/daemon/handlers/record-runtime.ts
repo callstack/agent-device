@@ -20,7 +20,7 @@ import {
   screenRecordingDurableResource,
 } from '../screen-recording-session-resource.ts';
 import { createScreenRecordingRecoveryControl } from '../screen-recording-resource-recovery.ts';
-import { resolveImplicitSessionScope } from '../session-routing.ts';
+import { resolveSessionScope } from '../session-routing.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
@@ -281,7 +281,7 @@ function createRecordOnlySession(
 ): SessionState {
   return {
     name: params.sessionName,
-    sessionScope: resolveImplicitSessionScope(params.req),
+    sessionScope: resolveSessionScope(params.req),
     device,
     createdAt: Date.now(),
     recordOnlySession: true,

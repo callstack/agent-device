@@ -14,6 +14,7 @@ import type { RuntimeAdmissionBindings } from './request-runtime-binding.ts';
 import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
 import { captureSnapshot } from './handlers/snapshot-capture.ts';
 import { buildSnapshotSession, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
+import { resolveSessionScope } from './session-routing.ts';
 import { activateCompleteRefFrame } from './ref-frame.ts';
 import {
   applyRecoveredWarningLatch,
@@ -28,7 +29,13 @@ import {
   resolveBoundSnapshotCaptureRuntime,
   type SnapshotRuntimeRouteParams,
 } from './snapshot-runtime-binding.ts';
-import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from './types.ts';
+import type {
+  DaemonRequest,
+  DaemonResponse,
+  DaemonResponseData,
+  SessionScope,
+  SessionState,
+} from './types.ts';
 
 export type SnapshotRuntimeRecord =
   | { kind: 'snapshot'; nodes: number; truncated: boolean | undefined }
@@ -152,6 +159,7 @@ function createSnapshotRuntime(
           buildNextSnapshotSession({
             current,
             sessionName,
+            sessionScope: resolveSessionScope(req),
             device,
             record: snapshotRecord,
             refScopedSnapshot: isRefScopedSnapshot(req),
@@ -169,17 +177,19 @@ function createSnapshotRuntime(
 function buildNextSnapshotSession(params: {
   current: SessionState | undefined;
   sessionName: string;
+  sessionScope: SessionScope;
   device: SessionState['device'];
   record: CommandSessionRecord & { snapshot: NonNullable<CommandSessionRecord['snapshot']> };
   refScopedSnapshot: boolean;
   issuesRefsToClient: boolean;
 }): SessionState {
-  const { current, sessionName, device, record, refScopedSnapshot } = params;
+  const { current, sessionName, sessionScope, device, record, refScopedSnapshot } = params;
   const keepCurrentSnapshot = shouldKeepCurrentSnapshot(current, record, refScopedSnapshot);
   const snapshot = keepCurrentSnapshot ? current.snapshot : record.snapshot;
   const nextSession = buildSnapshotSession({
     session: current,
     sessionName,
+    sessionScope,
     device,
     snapshot,
     appBundleId: record.appBundleId,

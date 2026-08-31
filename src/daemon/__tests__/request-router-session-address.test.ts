@@ -198,7 +198,7 @@ test('lock-policy conflict on an implicit session names its store key, not "defa
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.code).toBe('INVALID_ARGS');
-  expect(response.error.message).toContain(`session "${address}"`);
+  expect(response.error.message).toContain(`Session "${address}"`);
   expect(response.error.details?.session).toBe(address);
   expectAddressableRecovery(errorHint(response), address);
 });
@@ -221,4 +221,8 @@ test('session list reports the address an implicit session answers to alongside 
   expect(sessions?.[0]?.name).toBe('default');
   expect(sessions?.[0]?.address).toBe(address);
   expect(sessions?.[0]?.address).toMatch(SCOPED_ADDRESS_PATTERN);
+  expect(sessionStore.get(address)?.sessionScope).toEqual({
+    kind: 'cwd',
+    id: address.split(':')[1],
+  });
 });

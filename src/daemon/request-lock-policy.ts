@@ -115,8 +115,8 @@ function buildLockPolicyConflictMessage(
   const conflictList = conflicts.map(formatSessionSelectorConflict).join(', ');
   if (existingRef) {
     return (
-      `${req.command} is already bound to session "${existingRef.address}" on ${describeSessionDevice(existingRef.session)}, ` +
-      `but this request selected ${conflictList}.`
+      `Session "${existingRef.address}" is already bound to ${describeSessionDevice(existingRef.session)}, ` +
+      `but ${req.command} selected ${conflictList}.`
     );
   }
   const lockPlatform = req.meta?.lockPlatform;

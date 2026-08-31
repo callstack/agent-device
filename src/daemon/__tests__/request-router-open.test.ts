@@ -351,6 +351,10 @@ test('open stores admitted lease metadata on the session', async () => {
   );
 
   expect(response.ok).toBe(true);
+  expect(sessionStore.get('tenant-a:default')?.sessionScope).toEqual({
+    kind: 'tenant',
+    id: 'tenant-a',
+  });
   expect(sessionStore.get('tenant-a:default')?.lease).toEqual({
     leaseId: lease.leaseId,
     tenantId: 'tenant-a',

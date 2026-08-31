@@ -11,7 +11,7 @@ import { buildDisplayPositionals } from '../session-event-action.ts';
 import { appendReplayTraceEvent } from './session-replay-trace.ts';
 import { inferFillText } from '../action-utils.ts';
 import { readRecordedInputVariableName } from '@agent-device/ad-script';
-import { resolveImplicitSessionScope } from '../session-routing.ts';
+import { resolveSessionScope } from '../session-routing.ts';
 
 type ReplayBaseRequest = Omit<DaemonRequest, 'command' | 'positionals'>;
 
@@ -155,8 +155,7 @@ async function invokeResolvedReplayAction(params: {
       replayPlanStep: true,
       ...(resolved.command === 'open'
         ? {
-            resolvedSessionScope:
-              req.internal?.resolvedSessionScope ?? resolveImplicitSessionScope(req),
+            resolvedSessionScope: req.internal?.resolvedSessionScope ?? resolveSessionScope(req),
           }
         : {}),
     },

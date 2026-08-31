@@ -196,6 +196,7 @@ export function makeSessionStore(): SessionStore {
 export function makeSession(name: string, device: SessionState['device']): SessionState {
   return {
     name,
+    sessionScope: { kind: 'named-local' },
     device,
     createdAt: Date.now(),
     actions: [],

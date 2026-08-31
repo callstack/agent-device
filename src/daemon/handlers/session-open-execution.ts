@@ -10,7 +10,13 @@ import {
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonRequest, DaemonResponse, SessionRef, SessionState } from '../types.ts';
+import type {
+  DaemonRequest,
+  DaemonResponse,
+  SessionRef,
+  SessionScope,
+  SessionState,
+} from '../types.ts';
 import {
   abortAuthoringOnSecondOpen,
   armAuthoringOnOpen,
@@ -40,7 +46,7 @@ import { errorResponse } from './response.ts';
 import { buildSessionRecoveryHint } from '../session-recovery-hints.ts';
 import {
   isImplicitSessionScopeConflict,
-  resolveImplicitSessionScope,
+  resolveSessionScope,
   resolvePublicSessionName,
 } from '../session-routing.ts';
 import { resolveSessionLeaseForRequest } from '../lease-lifecycle.ts';
@@ -79,8 +85,8 @@ export type RuntimeHintClearOperation = BoundDeviceRuntime<
   typeof openApplicationWithRuntimeHintClearUse
 >['operations']['clearRuntimeHints'];
 
-function resolveOpenSessionScope(req: DaemonRequest): SessionState['sessionScope'] | undefined {
-  return req.internal?.resolvedSessionScope ?? resolveImplicitSessionScope(req);
+function resolveOpenSessionScope(req: DaemonRequest): SessionScope {
+  return req.internal?.resolvedSessionScope ?? resolveSessionScope(req);
 }
 
 function applyOrdinaryScriptRecordingOpenOutcome(params: {

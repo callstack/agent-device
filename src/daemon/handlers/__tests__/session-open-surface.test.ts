@@ -95,6 +95,7 @@ function reopen(existingSession: ReturnType<typeof makeIosSession>) {
   return buildNextOpenSession({
     existingSession,
     sessionName: existingSession.name,
+    sessionScope: existingSession.sessionScope ?? { kind: 'named-local' },
     device: IOS_SIMULATOR,
     surface: 'app',
     appBundleId: 'com.example.other',

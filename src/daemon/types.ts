@@ -240,12 +240,15 @@ export type SessionRef = {
   session: SessionState;
 };
 
+export type SessionScope =
+  | { kind: 'cwd'; id: string }
+  | { kind: 'tenant'; id: string }
+  | { kind: 'named-local' }
+  | { kind: 'global-default' };
+
 export type SessionState = {
   name: string;
-  sessionScope?: {
-    kind: 'cwd';
-    id: string;
-  };
+  sessionScope?: SessionScope;
   lease?: {
     leaseId: string;
     tenantId: string;
