@@ -21,7 +21,7 @@ import {
   unavailableRuntimeOperationResponse,
   unwrapAdmittedRuntimePlan,
   type AdmittedRuntimePlan,
-} from './handlers/session-runtime-admission.ts';
+} from './session-runtime-admission.ts';
 import { errorResponse } from './handlers/response.ts';
 import { resolveSnapshotScope } from './handlers/snapshot-capture.ts';
 import { resolveSessionDevice } from './handlers/snapshot-session.ts';

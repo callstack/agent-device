@@ -74,7 +74,11 @@ import {
   type LayeringViolation,
   type ResolvedImportEdge,
 } from './model.ts';
-import { checkDaemonModularityRatchets, daemonModularitySummary } from './daemon-modularity.ts';
+import {
+  checkDaemonModularityRatchets,
+  checkRetiredSessionLifecyclePaths,
+  daemonModularitySummary,
+} from './daemon-modularity.ts';
 import {
   checkPackageBoundaries,
   packageBoundariesSummary,
@@ -578,8 +582,10 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
   'back-edges': (context) => checkBackEdges(context.edges),
   'type-spine-inversions': (context) => checkTypeInversions(context.edges),
   'session-state-ownership': (context) => checkSessionStateOwnership(context.sources),
-  'daemon-modularity-ratchets': (context) =>
-    checkDaemonModularityRatchets(context.edges, context.typeCycleMembers),
+  'daemon-modularity-ratchets': (context) => [
+    ...checkDaemonModularityRatchets(context.edges, context.typeCycleMembers),
+    ...checkRetiredSessionLifecyclePaths(context.sourceFiles),
+  ],
   'daemon-platform-boundary': (context) =>
     checkDaemonPlatformBoundary([...context.sources].map(([path, source]) => ({ path, source }))),
   'bin-alias-fast-path': (context) => checkBinAliasFastPath(context.sources),

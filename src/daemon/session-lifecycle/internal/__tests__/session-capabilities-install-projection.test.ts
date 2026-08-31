@@ -1,15 +1,15 @@
 import { expect, test } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
-import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
-import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { PUBLIC_COMMANDS } from '../../../../command-catalog.ts';
+import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
-} from '../../request-runtime-binding.ts';
+} from '../../../request-runtime-binding.ts';
 import { createCapabilitiesAdmissionRuntime } from './session-capabilities.fixtures.ts';
-import { handleSessionCommands } from './session-command-harness.ts';
+import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
 
 test('capabilities projects the install family from exactly one facts inspection', async () => {
   const { sessionName, sessionStore } = createAndroidCapabilitiesSession('install-family');

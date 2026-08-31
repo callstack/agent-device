@@ -1,25 +1,25 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import type { SessionState } from '../../types.ts';
+import type { SessionState } from '../types.ts';
 
 import {
   resolveCommandDevice,
   refreshSessionDeviceIfNeeded,
   selectorTargetsSessionDevice,
-} from '../session-device-utils.ts';
+} from '../session-device-resolution.ts';
 import { getRunnerSessionSnapshot } from '@agent-device/platform-apple/runner/operations';
-import { resolveTargetDevice } from '../../../core/dispatch-resolve.ts';
-import { isActiveProviderDevice } from '../../../provider-device-runtime.ts';
+import { resolveTargetDevice } from '../../core/dispatch-resolve.ts';
+import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 
 vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   getRunnerSessionSnapshot: vi.fn(async () => null),
 }));
-vi.mock('../../../core/dispatch-resolve.ts', () => ({
+vi.mock('../../core/dispatch-resolve.ts', () => ({
   resolveTargetDevice: vi.fn(),
 }));
-vi.mock('../../../provider-device-runtime.ts', () => ({
+vi.mock('../../provider-device-runtime.ts', () => ({
   isActiveProviderDevice: vi.fn(() => false),
 }));
-vi.mock('../../device-ready.ts', () => ({
+vi.mock('../device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 

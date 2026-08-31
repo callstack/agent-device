@@ -1,15 +1,18 @@
 import { test, expect, vi } from 'vitest';
 import path from 'node:path';
 import os from 'node:os';
-import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
-import { LINUX_DEVICE, WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { PUBLIC_COMMANDS } from '../../../../command-catalog.ts';
+import {
+  LINUX_DEVICE,
+  WEB_DESKTOP_DEVICE,
+} from '../../../../__tests__/test-utils/device-fixtures.ts';
 import {
   makeAndroidSession,
   makeSession,
-} from '../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
+} from '../../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../../../__tests__/test-utils/device-inventory-gateways.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../../__tests__/test-utils/runtime-operation-facts.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
@@ -26,8 +29,8 @@ import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime'
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
-} from '../../request-runtime-binding.ts';
-import { handleSessionCommands } from './session-command-harness.ts';
+} from '../../../request-runtime-binding.ts';
+import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
 
 /** The system leaves this owner refuses: the retired fallback listed them unconditionally. */
 const ANDROID_REFUSED_SYSTEM_COMMANDS = ['clipboard', 'alert', 'settings', 'app-switcher'];

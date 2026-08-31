@@ -5,10 +5,10 @@ import type {
 } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import type { SessionStore } from '../session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
-import { errorResponse } from './response.ts';
+import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
+import type { SessionStore } from './session-store.ts';
+import type { DaemonRequest, DaemonResponse } from './types.ts';
+import { errorResponse } from './handlers/response.ts';
 
 export type RuntimeCommandHandlerParams = Readonly<{
   req: DaemonRequest;

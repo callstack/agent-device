@@ -2,6 +2,7 @@ import path from 'node:path';
 import {
   LOGICAL_MODULE_POLICIES,
   matchesDeclaredRoot,
+  SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS,
   type LogicalModulePolicy,
 } from './architecture-ownership.ts';
 import { targetDagZone, type LayeringViolation, type ResolvedImportEdge } from './model.ts';
@@ -51,6 +52,21 @@ export function checkDaemonModularityRatchets(
     ...checkDaemonTypesImporters(edges),
     ...checkLogicalModuleImports(edges),
   ];
+}
+
+export function checkRetiredSessionLifecyclePaths(
+  sourceFiles: readonly string[],
+): LayeringViolation[] {
+  return SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS.filter((file) => sourceFiles.includes(file)).map(
+    (file) => ({
+      rule: 'R10 daemon-modularity',
+      file,
+      line: 1,
+      message:
+        `retired session lifecycle helper path was restored: ${file}. ` +
+        'Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+    }),
+  );
 }
 
 function checkSessionStateBaseline(): LayeringViolation[] {

@@ -2,17 +2,17 @@ import { test, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { retainMaterializedPaths } from '../../materialized-path-registry.ts';
+import { retainMaterializedPaths } from '../../../materialized-path-registry.ts';
 import {
   mockCleanupRetainedMaterializedPaths,
   makeSessionStore,
   makeSession,
   noopInvoke,
-} from './session-test-harness.ts';
-import type { DaemonRequest } from '../../types.ts';
-import { handleSessionCommands } from './session-command-harness.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
-import { withTestDeviceInventory } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
+} from '../../../handlers/__tests__/session-test-harness.ts';
+import type { DaemonRequest } from '../../../types.ts';
+import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { withTestDeviceInventory } from '../../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 
@@ -442,8 +442,8 @@ test('close clears retained materialized install paths bound to the session', as
 
   // Use real cleanup implementation so retained paths are actually removed
   const { cleanupRetainedMaterializedPathsForSession: realCleanup } = await vi.importActual<
-    typeof import('../../materialized-path-registry.ts')
-  >('../../materialized-path-registry.ts');
+    typeof import('../../../materialized-path-registry.ts')
+  >('../../../materialized-path-registry.ts');
   mockCleanupRetainedMaterializedPaths.mockImplementation(realCleanup);
 
   const response = await handleSessionCommands({

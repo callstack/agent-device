@@ -1,11 +1,11 @@
 import { test, expect } from 'vitest';
 import path from 'node:path';
-import { handleSessionInventoryCommands } from '../session-inventory.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
-import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
-import { resolveImplicitSessionScope } from '../../session-routing.ts';
-import { tenantScopedSessionName } from '../../session-tenant-scope.ts';
+import { handleSessionInventoryCommands } from '../inventory.ts';
+import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import type { DaemonRequest, DaemonResponse, SessionState } from '../../../types.ts';
+import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
+import { resolveImplicitSessionScope } from '../../../session-routing.ts';
+import { tenantScopedSessionName } from '../../../session-tenant-scope.ts';
 
 // A session opened without an explicit --session is NAMED `default` and STORED under
 // `cwd:<hash>:default`. `session list` resolved its paths from the name, so it answered with

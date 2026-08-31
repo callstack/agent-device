@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   checkDaemonModularityRatchets,
+  checkRetiredSessionLifecyclePaths,
   DAEMON_MODULARITY_BASELINE,
   TYPE_CYCLE_BASELINE,
 } from './daemon-modularity.ts';
@@ -215,6 +216,54 @@ test('daemon replay rejects handler, owner, session-store, and engine deep edges
       'daemon-replay must not import src/daemon/handlers/session-close.ts',
       'daemon-replay must not import src/daemon/session-store.ts',
       "packages/ad-replay/src/internal/step-loop.ts must not import daemon-replay's internal tree (src/daemon/replay/internal/native-command.ts)",
+    ],
+  );
+});
+
+test('session lifecycle rejects handler deep imports in both directions', () => {
+  const edges = resolveImportEdges(
+    new Map([
+      [
+        'src/daemon/handlers/session.ts',
+        "import { handleSessionInventoryCommands } from '../session-lifecycle/internal/inventory.ts';",
+      ],
+      [
+        'src/daemon/session-lifecycle/internal/inventory.ts',
+        "import { handleCloseCommand } from '../../handlers/session-close.ts';",
+      ],
+      [
+        'src/daemon/session-lifecycle/index.ts',
+        'export function handleSessionInventoryCommands() {}',
+      ],
+      ['src/daemon/handlers/session-close.ts', 'export function handleCloseCommand() {}'],
+    ]),
+  );
+
+  const violations = checkDaemonModularityRatchets(
+    [...baselineEdges(), ...edges],
+    baselineTypeCycleMembers(),
+  );
+  assert.deepEqual(
+    violations.map(({ message }) => message.replace(/;.*/, '')),
+    [
+      "src/daemon/handlers/session.ts must not import daemon-session-lifecycle's internal tree (src/daemon/session-lifecycle/internal/inventory.ts)",
+      'daemon-session-lifecycle must not import src/daemon/handlers/session-close.ts',
+    ],
+  );
+});
+
+test('session lifecycle rejects restored neutral helper paths', () => {
+  const violations = checkRetiredSessionLifecyclePaths([
+    'src/daemon/session-device-resolution.ts',
+    'src/daemon/handlers/session-device-utils.ts',
+    'src/daemon/handlers/session-runtime-admission.ts',
+  ]);
+
+  assert.deepEqual(
+    violations.map(({ message }) => message),
+    [
+      'retired session lifecycle helper path was restored: src/daemon/handlers/session-device-utils.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      'retired session lifecycle helper path was restored: src/daemon/handlers/session-runtime-admission.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
     ],
   );
 });

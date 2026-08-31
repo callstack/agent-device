@@ -516,7 +516,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'session_list',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled
-      ? { ownerFiles: ['src/daemon/handlers/session-inventory.ts'] as const }
+      ? { ownerFiles: ['src/daemon/session-lifecycle/internal/inventory.ts'] as const }
       : {}),
     catalog: { group: 'internal', key: 'sessionList' },
     recordsSessionAction: false,

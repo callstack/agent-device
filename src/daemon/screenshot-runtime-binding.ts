@@ -20,7 +20,7 @@ import {
   unavailableRuntimeOperationResponse,
   unwrapAdmittedRuntimePlan,
   type AdmittedRuntimePlan,
-} from './handlers/session-runtime-admission.ts';
+} from './session-runtime-admission.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import type { DaemonResponse } from './types.ts';
 

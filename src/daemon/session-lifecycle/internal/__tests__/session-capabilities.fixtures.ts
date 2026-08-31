@@ -12,11 +12,11 @@ import { HOVER_UNAVAILABLE_HINT } from '@agent-device/contracts/touch-runtime';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
-} from '../../request-runtime-binding.ts';
+} from '../../../request-runtime-binding.ts';
 import {
   createUnavailableRuntimeFactsForTest,
   unavailableApplicationLifecycleOperationFacts,
-} from '../../../__tests__/test-utils/runtime-operation-facts.ts';
+} from '../../../../__tests__/test-utils/runtime-operation-facts.ts';
 
 const nativeRefUnavailable = Object.freeze({
   available: false,

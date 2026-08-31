@@ -4,7 +4,7 @@ import type { LeaseLifecycleProvider, TargetShutdownResult } from '@agent-device
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
-import { resolveCommandDevice } from './session-device-utils.ts';
+import { resolveCommandDevice } from '../session-device-resolution.ts';
 import { errorResponse } from './response.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';

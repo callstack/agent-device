@@ -35,7 +35,7 @@ import {
   unavailableRuntimeOperationResponse,
   unwrapAdmittedRuntimePlan,
   type AdmittedRuntimePlan,
-} from './session-runtime-admission.ts';
+} from '../session-runtime-admission.ts';
 
 export type PerfRuntimeHandlerParams = Readonly<{
   req: DaemonRequest;

@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { ARCHITECTURE_OWNERSHIP, matchesDeclaredRoot } from './architecture-ownership.ts';
+import {
+  ARCHITECTURE_OWNERSHIP,
+  matchesDeclaredRoot,
+  SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS,
+} from './architecture-ownership.ts';
 import { readNamedExports } from './facade-exports.ts';
 import { resolveImportEdges } from './model.ts';
 import { workspaceSpecifierTargets } from './package-boundaries.ts';
@@ -41,7 +45,7 @@ test('architecture ownership roots resolve to tracked owners', () => {
   }
 });
 
-test('daemon replay façade pins its named command surface', () => {
+test('logical module façades pin their named command surfaces', () => {
   const tracked = new Set(listTrackedTypeScriptFiles(repoRoot));
 
   for (const declaration of ARCHITECTURE_OWNERSHIP.facades) {
@@ -52,6 +56,13 @@ test('daemon replay façade pins its named command surface', () => {
       declaration.exports,
       `${declaration.name} façade exports drifted`,
     );
+  }
+});
+
+test('session lifecycle retires its handler-owned helper paths', () => {
+  const tracked = new Set(listTrackedTypeScriptFiles(repoRoot));
+  for (const retiredPath of SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS) {
+    assert.equal(tracked.has(retiredPath), false, `retired path was restored: ${retiredPath}`);
   }
 });
 

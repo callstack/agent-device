@@ -15,6 +15,16 @@ const DAEMON_REPLAY_FACADE = {
   exports: ['ReplaySession', 'ReplayTestVideoOwner', 'runReplayCommand', 'runReplayTestCommand'],
 } as const;
 
+const DAEMON_SESSION_LIFECYCLE_FACADE = {
+  root: 'src/daemon/session-lifecycle/index.ts',
+  exports: ['SessionInventoryCommandInput', 'handleSessionInventoryCommands'],
+} as const;
+
+export const SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS = [
+  'src/daemon/handlers/session-device-utils.ts',
+  'src/daemon/handlers/session-runtime-admission.ts',
+] as const;
+
 export const LOGICAL_MODULE_POLICIES = [
   {
     name: 'ad-replay',
@@ -47,6 +57,12 @@ export const LOGICAL_MODULE_POLICIES = [
       'src/daemon/session-store.ts',
     ],
     facade: DAEMON_REPLAY_FACADE,
+  },
+  {
+    name: 'daemon-session-lifecycle',
+    roots: ['src/daemon/session-lifecycle/'],
+    forbiddenTargetRoots: ['src/daemon/handlers/'],
+    facade: DAEMON_SESSION_LIFECYCLE_FACADE,
   },
 ] as const satisfies readonly LogicalModulePolicy[];
 

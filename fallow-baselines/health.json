@@ -189,7 +189,7 @@
         "count": 2
       }
     },
-    "src/daemon/handlers/__tests__/session-devices-batch-runtime.test.ts": {
+    "src/daemon/session-lifecycle/internal/__tests__/session-devices-batch-runtime.test.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -230,7 +230,7 @@
         "count": 1
       }
     },
-    "src/daemon/handlers/session-inventory.ts": {
+    "src/daemon/session-lifecycle/internal/inventory.ts": {
       "complexity_moderate": {
         "count": 1
       }

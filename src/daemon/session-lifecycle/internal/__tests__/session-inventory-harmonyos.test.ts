@@ -1,7 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { DaemonRequest, DaemonResponse } from '../../types.ts';
-import { makeSession, makeSessionStore } from './session-test-harness.ts';
-import { handleSessionInventoryCommands } from '../session-inventory.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../types.ts';
+import { makeSession, makeSessionStore } from '../../../handlers/__tests__/session-test-harness.ts';
+import { handleSessionInventoryCommands } from '../inventory.ts';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   type RuntimeFacts,
@@ -9,11 +9,11 @@ import {
   narrowDeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../../__tests__/test-utils/runtime-operation-facts.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
-} from '../../request-runtime-binding.ts';
+} from '../../../request-runtime-binding.ts';
 
 const HARMONY_DEVICE = {
   platform: 'harmonyos' as const,

@@ -1,8 +1,8 @@
 import {
   commandRuntimeUseRequirements,
   listRuntimeFactCommands,
-} from '../../core/command-descriptor/registry.ts';
-import { listDeviceInventory } from '../../request/device-inventory-context.ts';
+} from '../../../core/command-descriptor/registry.ts';
+import { listDeviceInventory } from '../../../request/device-inventory-context.ts';
 import { assertResolvedAppsFilter } from '@agent-device/contracts/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import {
@@ -19,18 +19,20 @@ import {
   resolveAndroidSerialAllowlist,
   resolveIosSimulatorDeviceSetPath,
 } from '@agent-device/kernel/device-isolation';
-import { deviceClaimOwnerCannotRelease, inspectDeviceClaims } from '../device-claim-inspection.ts';
-import { canonicalLocalDeviceKey } from '../device-claim-paths.ts';
-import { deviceClaimIdentity } from '../device-claims.ts';
-import type { DaemonRequest, DaemonResponse, SessionRef } from '../types.ts';
-import { resolveSessionRunnerLogPath, SessionStore } from '../session-store.ts';
+import {
+  deviceClaimOwnerCannotRelease,
+  inspectDeviceClaims,
+} from '../../device-claim-inspection.ts';
+import { canonicalLocalDeviceKey } from '../../device-claim-paths.ts';
+import { deviceClaimIdentity } from '../../device-claims.ts';
+import type { DaemonRequest, DaemonResponse, SessionRef } from '../../types.ts';
+import { resolveSessionRunnerLogPath, SessionStore } from '../../session-store.ts';
 import {
   requireSessionOrExplicitSelector,
   resolveCommandDevice,
   selectorTargetsSessionDevice,
-} from './session-device-utils.ts';
-import { errorResponse } from './response.ts';
-import { resolveSessionScope, sessionMatchesInventoryScope } from '../session-routing.ts';
+} from '../../session-device-resolution.ts';
+import { resolveSessionScope, sessionMatchesInventoryScope } from '../../session-routing.ts';
 import type {
   BoundDeviceRuntime,
   RuntimeFacts,
@@ -40,20 +42,27 @@ import {
   type PlatformRuntimeOperations,
   appsRuntimeUse,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { ensureAppsRuntimeReady, listAppsFromRuntime } from '../apps-runtime.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
+import { ensureAppsRuntimeReady, listAppsFromRuntime } from '../../apps-runtime.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../request-runtime-binding.ts';
 import type { ProviderAppCatalog, ProviderAppCatalogQuery } from '@agent-device/contracts/device';
-import { resolveLeaseScope } from '../lease-context.ts';
+import { resolveLeaseScope } from '../../lease-context.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 
-export async function handleSessionInventoryCommands(params: {
+export type SessionInventoryCommandInput = Readonly<{
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
   providerAppCatalog?: ProviderAppCatalog;
-}): Promise<DaemonResponse | null> {
+}>;
+
+export async function handleSessionInventoryCommands(
+  params: SessionInventoryCommandInput,
+): Promise<DaemonResponse | null> {
   const { req, sessionName, sessionStore } = params;
   switch (req.command) {
     case 'session_list':
@@ -97,15 +106,6 @@ function sessionListInventoryResponse(
   };
 }
 
-/**
- * `address` is the string `--session` accepts for this session, and `sessionStateDir` /
- * `runnerLogPath` are resolved from that same key rather than from `session.name`. An implicitly
- * cwd-scoped session is named `default` and stored under `cwd:<hash>:default`, so reporting only
- * the name left `session list` — the discovery surface — naming a session no `--session` value
- * could reach, and pointed its paths at `<state>/sessions/default`, a directory that does not
- * exist, while the real artifacts sat in `<state>/sessions/cwd_<hash>_default` (#2031/#1394).
- * `name` stays as the public name the session was opened under.
- */
 function publicSessionInfo({ address, session }: SessionRef, sessionStore: SessionStore) {
   const sessionStateDir = sessionStore.resolveSessionDir(address);
   return {
@@ -145,19 +145,17 @@ async function devicesInventoryResponse(req: DaemonRequest): Promise<DaemonRespo
     };
   } catch (error) {
     const appErr = asAppError(error);
-    return errorResponse(appErr.code, appErr.message, appErr.details);
+    return {
+      ok: false,
+      error: {
+        code: appErr.code,
+        message: appErr.message,
+        ...(appErr.details ? { details: appErr.details } : {}),
+      },
+    };
   }
 }
 
-/**
- * #1320 ownership projection (`observe` policy): device rows name the claim
- * owner that would block a foreign `open` right now, so an agent told a device
- * is busy can pick a free one from the same listing. Provably dead owners are
- * excluded — the next open reconciles and replaces them automatically. Both
- * sides key by the canonical local device key (family, Apple OS, id): distinct
- * platform devices may share a bare id, and a claim must never project onto
- * another family's row.
- */
 function blockingClaimOwnersByDevice(): Map<string, { session: string; workspace: string }> {
   const owners = new Map<string, { session: string; workspace: string }>();
   for (const entry of inspectDeviceClaims({})) {
@@ -250,13 +248,6 @@ async function capabilitiesInventoryResponse(params: {
     params.sessionStore.get(params.sessionName),
     params.req.flags,
   );
-  // Capability projection is admission-only: every fact-owned command reads this one
-  // side-effect-free exact-device snapshot, never a deleted descriptor capability bucket, and
-  // never a binding. R63 retired the three `bindDevice` probes that used to answer
-  // `logs`/`network`/`record`: every owner composes a binding's facts with the same function
-  // `inspectFacts` calls, so the probes read back values this snapshot already carries while
-  // costing a device claim on a read-only query. ADR 0019 §6 requires a `none` descriptor to bind
-  // nothing, and `capabilities` is one.
   const facts = await inspectCapabilityFacts(device, params.inspectFacts);
   return {
     ok: true,
@@ -299,15 +290,6 @@ function hasMacSessionSurface(
   );
 }
 
-/**
- * Whether the exact device admits any of `command`'s declared runtime uses, or `undefined` when
- * the command is not fact-owned at all.
- *
- * R63 reads the requirement straight off the descriptor (`commandRuntimeUseRequirements`), so a
- * command cannot be migrated in one place and left projecting from a stale list in another —
- * which is precisely how a real Vega VVD came to advertise `snapshot diff get is wait focus` it
- * cannot run.
- */
 function factOwnedCapabilityAvailable(
   command: string,
   facts: RuntimeFacts<PlatformRuntimeOperations> | undefined,
@@ -437,12 +419,14 @@ async function resolveAppsRuntime(params: {
   );
   if (unavailable && !unavailable.available) {
     return {
-      response: errorResponse(
-        'UNSUPPORTED_OPERATION',
-        'apps is not supported on this device',
-        undefined,
-        unavailable.hint ? { hint: unavailable.hint } : undefined,
-      ),
+      response: {
+        ok: false,
+        error: {
+          code: 'UNSUPPORTED_OPERATION',
+          message: 'apps is not supported on this device',
+          ...(unavailable.hint ? { hint: unavailable.hint } : {}),
+        },
+      },
     };
   }
   if (!params.bindDevice) {

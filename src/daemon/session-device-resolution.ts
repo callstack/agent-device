@@ -1,13 +1,13 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
-import { ensureDeviceReady } from '../device-ready.ts';
-import { inspectAppleRunnerSession } from '../../platform-runtime-apple-resources.ts';
-import { resolveTargetDevice } from '../../core/dispatch-resolve.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { hasDeviceSelectionInput, hasExplicitDeviceSelector } from '../device-selector-intent.ts';
-import { listSessionSelectorConflicts } from '../session-selector.ts';
-import { errorResponse } from './response.ts';
+import { isActiveProviderDevice } from '../provider-device-runtime.ts';
+import { ensureDeviceReady } from './device-ready.ts';
+import { inspectAppleRunnerSession } from '../platform-runtime-apple-resources.ts';
+import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
+import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import { hasDeviceSelectionInput, hasExplicitDeviceSelector } from './device-selector-intent.ts';
+import { listSessionSelectorConflicts } from './session-selector.ts';
+import { errorResponse } from './handlers/response.ts';
 
 export function requireSessionOrExplicitSelector(
   command: string,

@@ -9,7 +9,7 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
-import { refreshSessionDeviceIfNeeded } from './session-device-utils.ts';
+import { refreshSessionDeviceIfNeeded } from '../session-device-resolution.ts';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 import { buildOpenTargetDeviceResolutionOptions } from '../open-device-selection.ts';
 import {
