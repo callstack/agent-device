@@ -7,6 +7,7 @@ import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { appLogResourceStore } from '../daemon/app-log-resource-store.ts';
+import { runStaleDeviceClaimRelease } from '../cli/commands/device-release.ts';
 import { runCliCapture } from './cli-capture.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
@@ -251,5 +252,55 @@ test('device release --stale keeps the claim when resource evidence is unreadabl
   } finally {
     fs.rmSync(claimsDir, { recursive: true, force: true });
     fs.rmSync(ownerStateDir, { recursive: true, force: true });
+  }
+});
+
+test('recovery is composed per claim from the stale owner state dir, never the caller', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-cli-release-');
+  const ownerDirA = mkdtempForTestSync('agent-device-cli-release-owner-a-');
+  const ownerDirB = mkdtempForTestSync('agent-device-cli-release-owner-b-');
+  try {
+    // Two dead owners with the SAME session name in different state dirs: the
+    // adversarial shape from review — one caller-scoped store would clear the
+    // wrong worktree's records for that session name.
+    writeClaim(claimsDir, {
+      deviceKey: 'local:android:none:emulator-5554',
+      id: 'emulator-5554',
+      name: 'Dead Pixel A',
+      session: 'shared-session',
+      ownerPid: 999_999_999,
+      ownerStartTime: 'old-start-time',
+      stateDir: ownerDirA,
+    });
+    writeClaim(claimsDir, {
+      deviceKey: 'local:android:none:emulator-5556',
+      id: 'emulator-5556',
+      name: 'Dead Pixel B',
+      session: 'shared-session',
+      ownerPid: 999_999_999,
+      ownerStartTime: 'old-start-time',
+      stateDir: ownerDirB,
+    });
+    process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+
+    const composedFor: string[] = [];
+    const outcomes = await runStaleDeviceClaimRelease({}, (stateDir) => {
+      composedFor.push(stateDir);
+      return {
+        reconcile: async (claim) => {
+          assert.equal(claim.stateDir, stateDir);
+          return { status: 'reconciled' };
+        },
+        dispose: async () => {},
+      };
+    });
+
+    assert.deepEqual([...composedFor].sort(), [ownerDirA, ownerDirB].sort());
+    assert.equal(outcomes.filter((outcome) => outcome.status === 'released').length, 2);
+  } finally {
+    delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+    fs.rmSync(ownerDirA, { recursive: true, force: true });
+    fs.rmSync(ownerDirB, { recursive: true, force: true });
   }
 });

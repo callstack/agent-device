@@ -16,6 +16,7 @@ import { publishFileSync, acquireProcessLock } from '@agent-device/host-kit/file
 import {
   deviceClaimOwnerCannotRelease,
   inspectDeviceClaimFile,
+  inspectDeviceClaims,
   type DeviceClaimClassification,
   type DeviceClaimSelectors,
   type InspectedDeviceClaim,
