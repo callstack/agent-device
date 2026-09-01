@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { buildDaemonHttpBaseUrl } from '../../src/daemon/http-contract.ts';
 import { BenchmarkContentionError, BenchmarkInfrastructureError } from './lifecycle.ts';
 import { classifyFailure, formatCliFailure, type CliContext, type CliResult } from './command.ts';
@@ -20,6 +21,8 @@ export type AgentClient = {
   };
 };
 
+type BuiltAgentDeviceSdk = typeof import('../../src/sdk/index.ts');
+
 export type ProxyClientOptions = {
   repoRoot: string;
   clientStateDir: string;
@@ -30,12 +33,12 @@ export type ProxyClientOptions = {
 };
 
 export async function allocateLease(
-  options: Pick<ProxyClientOptions, 'udid' | 'proxy' | 'conditioner'>,
+  options: Pick<ProxyClientOptions, 'repoRoot' | 'udid' | 'proxy' | 'conditioner'>,
   clientId: string,
   runId: string,
 ): Promise<Record<string, unknown>> {
-  const module = await import('../../dist/src/index.js');
-  const client = module.createAgentDeviceClient({
+  const createAgentDeviceClient = await loadBuiltClient(options.repoRoot);
+  const client = createAgentDeviceClient({
     daemonBaseUrl: buildDaemonHttpBaseUrl(options.conditioner.baseUrl),
     daemonAuthToken: options.proxy.token,
     daemonTransport: 'http',
@@ -59,14 +62,14 @@ export async function allocateLease(
 }
 
 export async function createClient(
-  options: Pick<ProxyClientOptions, 'clientStateDir' | 'proxy' | 'conditioner'>,
+  options: Pick<ProxyClientOptions, 'repoRoot' | 'clientStateDir' | 'proxy' | 'conditioner'>,
   lease: Record<string, unknown>,
   clientId: string,
   runId: string,
   suffix: string,
 ): Promise<AgentClient> {
-  const module = await import('../../dist/src/index.js');
-  return module.createAgentDeviceClient({
+  const createAgentDeviceClient = await loadBuiltClient(options.repoRoot);
+  return createAgentDeviceClient({
     stateDir: path.join(options.clientStateDir, suffix),
     daemonBaseUrl: buildDaemonHttpBaseUrl(options.conditioner.baseUrl),
     daemonAuthToken: options.proxy.token,
@@ -249,14 +252,14 @@ export async function closeClient(client: AgentClient): Promise<void> {
 }
 
 export async function releaseLease(
-  options: Pick<ProxyClientOptions, 'proxy' | 'conditioner'>,
+  options: Pick<ProxyClientOptions, 'repoRoot' | 'proxy' | 'conditioner'>,
   lease: Record<string, unknown>,
   clientId: string,
   runId: string,
 ): Promise<void> {
   try {
-    const module = await import('../../dist/src/index.js');
-    const client = module.createAgentDeviceClient({
+    const createAgentDeviceClient = await loadBuiltClient(options.repoRoot);
+    const client = createAgentDeviceClient({
       daemonBaseUrl: buildDaemonHttpBaseUrl(options.conditioner.baseUrl),
       daemonAuthToken: options.proxy.token,
       daemonTransport: 'http',
@@ -281,6 +284,15 @@ export async function releaseLease(
   } catch {
     return;
   }
+}
+
+async function loadBuiltClient(
+  repoRoot: string,
+): Promise<BuiltAgentDeviceSdk['createAgentDeviceClient']> {
+  const module = (await import(
+    pathToFileURL(path.resolve(repoRoot, 'dist/src/index.js')).href
+  )) as BuiltAgentDeviceSdk;
+  return module.createAgentDeviceClient;
 }
 
 export function remoteFlags(

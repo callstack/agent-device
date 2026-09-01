@@ -19,6 +19,8 @@ export type NetworkConditioner = {
   close(): Promise<void>;
 };
 
+const UPSTREAM_FAILURE_BODY = JSON.stringify({ error: 'upstream request failed' });
+
 type RequestContext = {
   route: URL;
   method: string;
@@ -33,12 +35,19 @@ export async function createNetworkConditioner(options: {
   network: ProxyNetwork;
 }): Promise<NetworkConditioner> {
   const records: ProxyRpcRecord[] = [];
+  const upstreamPort = readLocalUpstreamPort(options.upstreamBaseUrl);
   let randomState = options.network.seed >>> 0;
   const server = http.createServer((request, response) => {
-    void forwardRequest(request, response, options, records, () => {
-      randomState = nextRandom(randomState);
-      return randomState / 0x1_0000_0000;
-    });
+    void forwardRequest(
+      request,
+      response,
+      { upstreamPort, network: options.network },
+      records,
+      () => {
+        randomState = nextRandom(randomState);
+        return randomState / 0x1_0000_0000;
+      },
+    );
   });
   await listen(server);
   const address = server.address();
@@ -57,7 +66,7 @@ export async function createNetworkConditioner(options: {
 async function forwardRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  options: { upstreamBaseUrl: string; network: ProxyNetwork },
+  options: { upstreamPort: string; network: ProxyNetwork },
   records: ProxyRpcRecord[],
   random: () => number,
 ): Promise<void> {
@@ -66,8 +75,8 @@ async function forwardRequest(
   await waitForNetwork(options.network, context.body.byteLength);
   try {
     await sendRequest(context, response, options, records);
-  } catch (error) {
-    writeUpstreamFailure(context, response, records, error);
+  } catch {
+    writeUpstreamFailure(context, response, records);
   }
 }
 
@@ -103,10 +112,10 @@ function dropRequest(
 async function sendRequest(
   context: RequestContext,
   response: ServerResponse,
-  options: { upstreamBaseUrl: string; network: ProxyNetwork },
+  options: { upstreamPort: string; network: ProxyNetwork },
   records: ProxyRpcRecord[],
 ): Promise<void> {
-  const upstream = await fetch(buildTargetUrl(options.upstreamBaseUrl, context.route), {
+  const upstream = await fetch(buildTargetUrl(options.upstreamPort, context.route), {
     method: context.method,
     headers: forwardHeaders(context.headers),
     ...(context.body.byteLength > 0 ? { body: context.body, duplex: 'half' } : {}),
@@ -132,12 +141,11 @@ function writeUpstreamFailure(
   context: RequestContext,
   response: ServerResponse,
   records: ProxyRpcRecord[],
-  error: unknown,
 ): void {
   if (context.isRpc) recordFailure(context, records);
   response.statusCode = 502;
   response.setHeader('content-type', 'application/json');
-  response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+  response.end(UPSTREAM_FAILURE_BODY);
 }
 
 function recordFailure(context: RequestContext, records: ProxyRpcRecord[]): void {
@@ -155,9 +163,30 @@ function copyHeader(response: ServerResponse, name: string, upstream: Response):
   if (value) response.setHeader(name, value);
 }
 
-function buildTargetUrl(upstreamBaseUrl: string, route: URL): string {
+function buildTargetUrl(upstreamPort: string, route: URL): string {
+  return `http://127.0.0.1:${upstreamPort}${route.pathname}${route.search}`;
+}
+
+function readLocalUpstreamPort(upstreamBaseUrl: string): string {
   const base = new URL(upstreamBaseUrl);
-  return new URL(`${route.pathname}${route.search}`, `${base.origin}/`).toString();
+  const validBase = [
+    base.protocol === 'http:',
+    base.hostname === '127.0.0.1',
+    base.port.length > 0,
+    base.username.length === 0,
+    base.password.length === 0,
+    base.pathname === '/',
+    base.search.length === 0,
+    base.hash.length === 0,
+  ].every(Boolean);
+  if (!validBase) {
+    throw new Error('Network conditioner upstream must be an HTTP 127.0.0.1 URL with a port.');
+  }
+  const port = Number(base.port);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error('Network conditioner upstream port must be between 1 and 65535.');
+  }
+  return String(port);
 }
 
 function forwardHeaders(headers: IncomingMessage['headers']): Headers {

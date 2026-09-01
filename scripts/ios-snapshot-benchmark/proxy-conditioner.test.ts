@@ -40,3 +40,13 @@ test('forwards an RPC response and records exact body bytes at zero loss', async
     );
   }
 });
+
+test('rejects non-loopback upstreams before binding the conditioner', async () => {
+  await assert.rejects(
+    createNetworkConditioner({
+      upstreamBaseUrl: 'https://example.com:443',
+      network: { rttMs: 0, bandwidthKbps: null, packetLossPercent: 0, seed: 1 },
+    }),
+    /must be an HTTP 127\.0\.0\.1 URL with a port/,
+  );
+});
