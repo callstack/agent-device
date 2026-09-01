@@ -4,17 +4,17 @@ import type {
   IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
 import type { SnapshotOptions } from '@agent-device/contracts/interactor-types';
-import { normalizeType } from '@agent-device/contracts/snapshot';
 import {
   IosSnapshotEngineError,
   presentIosRunnerSnapshot,
+  resolveIosViewportEvidenceFromRoots,
+  toIosSnapshotEngineErrorDetails,
 } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { readSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import {
   createIosSnapshotRequest,
   buildIosSnapshotPresentationKey,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
-import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 
@@ -119,36 +119,18 @@ function runnerViewportEvidence(
   qualityNodes: readonly RawSnapshotNode[] | undefined,
 ): IosViewportEvidence {
   return (
-    readReportedViewport(qualityNodes) ??
-    readReportedViewport(nodes) ?? { kind: 'missing', reason: 'not-provided' }
+    resolveIosViewportEvidenceFromRoots(rootNodes(qualityNodes), {
+      fallbackToLargestRoot: true,
+    }) ??
+    resolveIosViewportEvidenceFromRoots(rootNodes(nodes), { fallbackToLargestRoot: true }) ?? {
+      kind: 'missing',
+      reason: 'not-provided',
+    }
   );
 }
 
-function readReportedViewport(
-  nodes: readonly RawSnapshotNode[] | undefined,
-): IosViewportEvidence | undefined {
-  const roots = nodes?.filter((node) => node.parentIndex === undefined) ?? [];
-  const root =
-    [...roots]
-      .filter((node) => isViewportRoot(node))
-      .sort(compareRectArea)
-      .at(0) ?? [...roots].sort(compareRectArea).at(0);
-  if (!root) return undefined;
-  if (isPositiveFiniteRect(root.rect)) return { kind: 'reported', rect: root.rect };
-  return { kind: 'missing', reason: root.rect ? 'invalid' : 'not-provided' };
-}
-
-function isViewportRoot(node: RawSnapshotNode): boolean {
-  const type = normalizeType(node.type ?? '');
-  return type === 'application' || type === 'window';
-}
-
-function compareRectArea(left: RawSnapshotNode, right: RawSnapshotNode): number {
-  return rectArea(right.rect) - rectArea(left.rect);
-}
-
-function rectArea(rect: RawSnapshotNode['rect']): number {
-  return rect ? rect.width * rect.height : 0;
+function rootNodes(nodes: readonly RawSnapshotNode[] | undefined): readonly RawSnapshotNode[] {
+  return nodes?.filter((node) => node.parentIndex === undefined) ?? [];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -160,7 +142,7 @@ function throwSnapshotEngineError(error: unknown): never {
   throw new AppError(
     'COMMAND_FAILED',
     error.message,
-    { reason: error.reason, iosSnapshotEngine: { details: error.details } },
+    toIosSnapshotEngineErrorDetails(error),
     error,
   );
 }

@@ -32,6 +32,14 @@ test('WebDriver source facts do not fill absent provider attributes', () => {
   assert.equal('hittable' in (node ?? {}), false);
 });
 
+test('WebDriver source facts preserve explicitly reported hittability', () => {
+  const node = parseWebDriverSource(
+    '<AppiumAUT><XCUIElementTypeButton name="Continue" hittable="true" /></AppiumAUT>',
+  )[0];
+
+  assert.equal(node?.hittable, true);
+});
+
 test('legacy WebDriver parsing keeps Android-derived hittability explicit at its call site', () => {
   const node = parseWebDriverSource(
     '<hierarchy><android.widget.Button text="Continue" bounds="[0,0][100,40]" /></hierarchy>',
@@ -41,6 +49,19 @@ test('legacy WebDriver parsing keeps Android-derived hittability explicit at its
   assert.equal(node?.enabled, true);
   assert.equal(node?.visibleToUser, true);
   assert.equal(node?.hittable, true);
+});
+
+test('legacy WebDriver parsing keeps Android source booleans and ignores iOS hints', () => {
+  const node = parseWebDriverSource(
+    '<hierarchy><android.widget.Button bounds="[0,0][100,40]" enabled="invalid" displayed="invalid" selected="false" focused="false" hittable="false" /></hierarchy>',
+    { mode: 'legacy-derived' },
+  )[0];
+
+  assert.equal(node?.enabled, false);
+  assert.equal(node?.visibleToUser, false);
+  assert.equal(node?.selected, false);
+  assert.equal(node?.focused, false);
+  assert.equal(node?.hittable, false);
 });
 
 test('WebDriver source facts expose provider truncation without publishing wrapper nodes', () => {

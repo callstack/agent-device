@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
+import { readSnapshotPresentationEvidence } from '@agent-device/contracts/capture';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   acquireWebDriverIosSnapshot,
@@ -44,6 +45,7 @@ test('Appium iOS snapshots acquire facts and publish regular output through the 
     result.nodes?.every((node) => !('ref' in node)),
     true,
   );
+  assert.deepEqual(readSnapshotPresentationEvidence(result), { owner: 'ios-snapshot-engine' });
 });
 
 test('Appium iOS options become an engine plan and engine-owned projection', () => {
@@ -153,7 +155,7 @@ test('Appium iOS truncation is typed and disclosed at response level', async () 
 
   assert.equal(result.truncated, true);
   assert.deepEqual(result.warnings, [
-    'Appium page source does not provide hittability evidence; regular snapshot nodes are not actionable.',
+    'Appium page source does not provide hittability evidence; the capture carries no hittability fact.',
     'Appium page source is truncated; the snapshot hierarchy may be incomplete.',
   ]);
 });

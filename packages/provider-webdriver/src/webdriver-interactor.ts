@@ -307,7 +307,6 @@ class WebDriverInteractor implements Interactor {
       const { captureWebDriverIosSnapshot } = await import('./webdriver-ios-snapshot.ts');
       return await captureWebDriverIosSnapshot(this.client, options, this.targetId);
     }
-    // Spelled as a correlated pair per channel so the SnapshotProvenance union accepts it.
     return {
       backend: 'android' as const,
       producer: 'appium-source' as const,

@@ -147,6 +147,10 @@ test('presented producers cannot claim acquisition narrowing', () => {
   });
 });
 
+test('Appium source advertises viewport evidence when its root reports geometry', () => {
+  assert.equal(IOS_SNAPSHOT_PRODUCER_CAPABILITIES['appium-source'].viewportEvidence, 'available');
+});
+
 test('comparison identity rejects every identity axis and residue mismatch', () => {
   const base = comparisonIdentity();
   const mismatches: IosSnapshotComparisonIdentity[] = [

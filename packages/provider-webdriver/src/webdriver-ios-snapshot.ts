@@ -1,6 +1,8 @@
 import {
   createIosSnapshotEngine,
   IosSnapshotEngineError,
+  resolveIosViewportEvidenceFromRoots,
+  toIosSnapshotEngineErrorDetails,
 } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { attachSnapshotPresentationEvidence } from '@agent-device/contracts/capture';
 import {
@@ -17,12 +19,10 @@ import type {
   IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
 import type { SnapshotOptions, SnapshotResult } from '@agent-device/contracts/interactor-types';
-import { normalizeType } from '@agent-device/contracts/snapshot';
-import type { RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
-import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type { WebDriverClient } from './webdriver-client.ts';
-import { parseWebDriverSourceFacts, type WebDriverSourceRootFact } from './webdriver-source.ts';
+import { parseWebDriverSourceFacts } from './webdriver-source.ts';
 
 const APPIUM_PRODUCER = IOS_SNAPSHOT_PRODUCER_CAPABILITIES['appium-source'];
 const iosSnapshotEngine = createIosSnapshotEngine();
@@ -67,7 +67,10 @@ export function acquireWebDriverIosSnapshot(
   });
   const plan = iosSnapshotEngine.plan(request, APPIUM_PRODUCER);
   const sourceFacts = parseWebDriverSourceFacts(source, { mode: 'facts' });
-  const viewport = viewportEvidence(sourceFacts.roots);
+  const viewport = resolveIosViewportEvidenceFromRoots(sourceFacts.roots) ?? {
+    kind: 'missing' as const,
+    reason: 'not-provided' as const,
+  };
   const residue = residueForSource(sourceFacts.truncated, viewport);
   const common = {
     producer: 'appium-source' as const,
@@ -107,35 +110,6 @@ export function publishWebDriverIosSnapshot(
   return { acquisition, publication, result };
 }
 
-function viewportEvidence(roots: readonly WebDriverSourceRootFact[]): IosViewportEvidence {
-  const candidates = roots.filter((node) => {
-    const type = normalizeType(node.type ?? '');
-    return type === 'application' || type === 'window';
-  });
-  const root = [...candidates].sort(compareViewportRoots)[0];
-  if (!root) return { kind: 'missing', reason: 'not-provided' };
-  if (root.rectStatus === 'reported' && isPositiveFiniteRect(root.rect)) {
-    return { kind: 'reported', rect: root.rect };
-  }
-  return { kind: 'missing', reason: root.rectStatus === 'invalid' ? 'invalid' : 'not-provided' };
-}
-
-function rectArea(rect: Rect | undefined): number {
-  return rect && isPositiveFiniteRect(rect) ? rect.width * rect.height : 0;
-}
-
-function compareViewportRoots(
-  left: WebDriverSourceRootFact,
-  right: WebDriverSourceRootFact,
-): number {
-  const status = rootGeometryRank(right.rectStatus) - rootGeometryRank(left.rectStatus);
-  return status || rectArea(right.rect) - rectArea(left.rect);
-}
-
-function rootGeometryRank(status: WebDriverSourceRootFact['rectStatus']): number {
-  return status === 'reported' ? 2 : status === 'invalid' ? 1 : 0;
-}
-
 function residueForSource(
   truncated: boolean,
   viewport: IosViewportEvidence,
@@ -160,7 +134,7 @@ function warningsForResidue(residue: readonly IosAcquisitionResidue[]): { warnin
 function warningForResidue(entry: IosAcquisitionResidue): string | undefined {
   if (entry.kind === 'unavailable-fact') {
     return entry.fact === 'hittability'
-      ? 'Appium page source does not provide hittability evidence; regular snapshot nodes are not actionable.'
+      ? 'Appium page source does not provide hittability evidence; the capture carries no hittability fact.'
       : undefined;
   }
   if (entry.kind === 'missing-viewport' || entry.kind === 'truncated') {
@@ -178,10 +152,7 @@ function throwWebDriverIosSnapshotError(error: unknown): never {
   throw new AppError(
     'COMMAND_FAILED',
     error.message,
-    {
-      reason: error.reason,
-      ...(error.details.field ? { field: error.details.field } : {}),
-    },
+    toIosSnapshotEngineErrorDetails(error),
     error,
   );
 }

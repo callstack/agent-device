@@ -46,7 +46,7 @@ const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
     },
     scopeCompleteness: 'incomplete',
     interactiveQueryCompleteness: 'incomplete',
-    viewportEvidence: 'unavailable',
+    viewportEvidence: 'available',
     hittabilityEvidence: 'unavailable',
   },
   'limrun-ios-tree': {

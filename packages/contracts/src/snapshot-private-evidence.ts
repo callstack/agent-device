@@ -28,6 +28,7 @@ export type SnapshotOcclusionContextEvidence = {
   androidSiblingOrderByNodeIndex?: ReadonlyMap<number, AndroidSiblingOrderEvidence>;
 };
 
+/** Identifies the engine that owns interactive iOS snapshot presentation. */
 export type SnapshotPresentationEvidence = {
   owner: 'ios-snapshot-engine';
 };

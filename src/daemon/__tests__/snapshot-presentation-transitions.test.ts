@@ -7,10 +7,7 @@ import { navigationTitleWithAppProvidedDetailsAffordanceNodes } from '../../snap
 
 test('iOS daemon presentation applies transitions without reapplying runner-owned scope', () => {
   const snapshot = buildSnapshotState(
-    {
-      nodes: navigationTitleWithAppProvidedDetailsAffordanceNodes,
-      backend: 'xctest',
-    },
+    { nodes: navigationTitleWithAppProvidedDetailsAffordanceNodes, backend: 'xctest' },
     { snapshotInteractiveOnly: true, snapshotScope: 'DisplayNameTextField' },
   );
 

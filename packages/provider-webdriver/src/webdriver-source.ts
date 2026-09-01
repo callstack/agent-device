@@ -8,6 +8,7 @@ export type WebDriverSourceParseMode = 'facts' | 'legacy-derived';
 export type WebDriverSourceFacts = Readonly<{
   nodes: RawSnapshotNode[];
   roots: readonly WebDriverSourceRootFact[];
+  /** True only when the source explicitly marks the hierarchy as truncated. */
   truncated: boolean;
 }>;
 
@@ -35,7 +36,7 @@ export function parseWebDriverSourceFacts(
   for (const root of roots) {
     appendSourceNodes(nodes, root, undefined, 0, mode, sourceRoots);
   }
-  return { nodes, roots: sourceRoots, truncated: hasTruncationMarker(roots) };
+  return { nodes, roots: sourceRoots, truncated: hasExplicitTruncationMarker(roots) };
 }
 
 function appendSourceNodes(
@@ -134,15 +135,26 @@ function sourceStateFacts(
   rect: RawSnapshotNode['rect'],
   mode: WebDriverSourceParseMode,
 ): Partial<RawSnapshotNode> {
-  const legacyDerived = mode === 'legacy-derived';
+  if (mode === 'legacy-derived') {
+    const enabled = legacyBooleanAttribute(attrs.enabled, true);
+    const visibleToUser = legacyBooleanAttribute(attrs.displayed ?? attrs.visible, true);
+    return {
+      enabled,
+      selected: legacyBooleanAttribute(attrs.selected),
+      focused: legacyBooleanAttribute(attrs.focused),
+      visibleToUser,
+      hittable: visibleToUser && enabled && isPositiveRect(rect),
+    };
+  }
+
   const enabled = booleanAttribute(attrs.enabled);
   const visibleToUser = booleanAttribute(attrs.displayed ?? attrs.visible);
   return {
-    ...optionalBooleanFact('enabled', enabled, legacyDerived),
+    ...optionalBooleanFact('enabled', enabled, false),
     selected: booleanAttribute(attrs.selected),
     focused: booleanAttribute(attrs.focused),
-    ...optionalBooleanFact('visibleToUser', visibleToUser, legacyDerived),
-    ...hittabilityFact(attrs.hittable, visibleToUser, enabled, rect, legacyDerived),
+    ...optionalBooleanFact('visibleToUser', visibleToUser, false),
+    ...reportedHittabilityFact(attrs.hittable),
   };
 }
 
@@ -154,24 +166,18 @@ function optionalBooleanFact(
   return defaultWhenAbsent || value !== undefined ? { [key]: value ?? true } : {};
 }
 
-function hittabilityFact(
+function reportedHittabilityFact(
   reported: string | undefined,
-  visibleToUser: boolean | undefined,
-  enabled: boolean | undefined,
-  rect: RawSnapshotNode['rect'],
-  legacyDerived: boolean,
 ): Partial<Pick<RawSnapshotNode, 'hittable'>> {
   const reportedHittable = booleanAttribute(reported);
-  if (reportedHittable !== undefined) return { hittable: reportedHittable };
-  return legacyDerived
-    ? { hittable: (visibleToUser ?? true) && (enabled ?? true) && isPositiveRect(rect) }
-    : {};
+  return reportedHittable === undefined ? {} : { hittable: reportedHittable };
 }
 
-function hasTruncationMarker(nodes: readonly XmlNode[]): boolean {
+function hasExplicitTruncationMarker(nodes: readonly XmlNode[]): boolean {
   return nodes.some(
     (node) =>
-      booleanAttribute(node.attributes.truncated) === true || hasTruncationMarker(node.children),
+      booleanAttribute(node.attributes.truncated) === true ||
+      hasExplicitTruncationMarker(node.children),
   );
 }
 
@@ -208,6 +214,11 @@ function booleanAttribute(value: string | undefined): boolean | undefined {
   if (value === 'true' || value === '1') return true;
   if (value === 'false' || value === '0') return false;
   return undefined;
+}
+
+function legacyBooleanAttribute(value: string | undefined, defaultValue = false): boolean {
+  if (value === undefined) return defaultValue;
+  return value === 'true' || value === '1';
 }
 
 function isPositiveRect(rect: RawSnapshotNode['rect']): boolean {

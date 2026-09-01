@@ -128,10 +128,11 @@ function shouldPresentLegacyIosInteractiveSnapshot(
         Partial<Pick<CommandFlags, 'snapshotScope'>>)
     | undefined,
 ): boolean {
+  const presentationEvidence = readSnapshotPresentationEvidence(provenance);
   return (
     provenance.backend === 'xctest' &&
     iosSnapshotPresentationStage(provenance) === 'acquired' &&
-    readSnapshotPresentationEvidence(provenance) === undefined &&
+    presentationEvidence?.owner !== 'ios-snapshot-engine' &&
     flags?.snapshotInteractiveOnly === true &&
     flags.snapshotRaw !== true
   );

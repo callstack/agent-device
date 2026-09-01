@@ -3,7 +3,7 @@ import type { WebDriverWindowRect } from './webdriver-client.ts';
 import { parseWebDriverSource } from './webdriver-source.ts';
 
 export function scrollFrameFromWebDriverSource(source: string): WebDriverWindowRect | undefined {
-  const rect = parseWebDriverSource(source)
+  const rect = parseWebDriverSource(source, { mode: 'facts' })
     .flatMap((node) =>
       isScrollableSourceNode(node) && isUsableScrollRect(node.rect) ? [node.rect] : [],
     )
