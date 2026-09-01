@@ -21,7 +21,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { captureLimrunIosSnapshot } from './ios-snapshot-adapter.ts';
 import { toIosSelector, writeBase64File } from './snapshot.ts';
 import { normalizeOptionalString } from './strings.ts';
 import {
@@ -256,6 +255,7 @@ class LimrunIosInteractor implements Interactor {
   }
 
   async snapshot(options?: SnapshotOptions): Promise<SnapshotResult> {
+    const { captureLimrunIosSnapshot } = await import('./ios-snapshot-adapter.ts');
     return await captureLimrunIosSnapshot(this.session, options);
   }
 
