@@ -144,6 +144,29 @@ export function refFrameScope(session: SessionState): RefFrameScope {
   return session.refFrameScope ?? 'all';
 }
 
+export type RefMutationFrame = {
+  admission: RefFrameAdmission;
+  scope: RefFrameScope;
+  currentGeneration: number | undefined;
+};
+
+export function readRefMutationFrame(params: {
+  session: SessionState;
+  ref: string;
+  mintedGeneration: number | undefined;
+}): RefMutationFrame {
+  const refBody = params.ref.startsWith('@') ? params.ref.slice(1) : params.ref;
+  return {
+    admission: admitRefMutation({
+      session: params.session,
+      refBody,
+      mintedGeneration: params.mintedGeneration,
+    }),
+    scope: refFrameScope(params.session),
+    currentGeneration: refFrameEpoch(params.session),
+  };
+}
+
 /**
  * The ADR 0014 mutation-admission matrix, evaluated in reason order. Pure over
  * the session's frame fields; it does not itself read the operational

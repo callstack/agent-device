@@ -12,7 +12,7 @@ import { test } from 'vitest';
 // is assigned anything other than the shared builder's output, so a new
 // branch cannot regress without tripping CI.
 
-const HANDLERS_DIR = path.resolve(import.meta.dirname, '..');
+const HANDLERS_DIR = path.resolve(import.meta.dirname, '../../../handlers');
 const BUILDER_FILE = 'interaction-touch-response.ts';
 
 function touchHandlerSourceFiles(): string[] {

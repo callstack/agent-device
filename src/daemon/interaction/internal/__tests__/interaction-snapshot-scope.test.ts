@@ -1,9 +1,11 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import type { SnapshotOptions } from '@agent-device/contracts/interactor-types';
-import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { contextFromFlags } from '../../context.ts';
-import { captureSnapshotForSession } from '../interaction-snapshot.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { contextFromFlags } from '../../../context.ts';
+import { captureSnapshotForSession } from '../../index.ts';
 
 // The interaction runtime's capture (press/click/fill/longpress/hover <selector> --scope X,
 // --settle observation) carries the scope in `flags.snapshotScope` only. Android resolves scope
@@ -13,7 +15,7 @@ import { captureSnapshotForSession } from '../interaction-snapshot.ts';
 
 const captured = vi.hoisted(() => ({ options: [] as SnapshotOptions[] }));
 
-vi.mock('../snapshot-interactor-capture.ts', () => ({
+vi.mock('../../../handlers/snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(async ({ options }: { options: SnapshotOptions }) => {
     captured.options.push(options);
     const nodes = [
@@ -57,11 +59,14 @@ test('interaction captures hand flags.snapshotScope to the Android platform and 
     session,
     { snapshotScope: 'panel' },
     sessionStore,
-    (flags, appBundleId, traceLogPath) =>
+    (flags: CommandFlags | undefined, appBundleId?: string, traceLogPath?: string) =>
       contextFromFlags('/dev/null', flags, appBundleId, traceLogPath),
     { interactiveOnly: true },
   );
 
   expect(captured.options.map((options) => options.scope)).toEqual(['panel']);
-  expect(snapshot.nodes.map((node) => node.label ?? node.identifier)).toEqual(['panel', 'Save']);
+  expect(snapshot.nodes.map((node: SnapshotNode) => node.label ?? node.identifier)).toEqual([
+    'panel',
+    'Save',
+  ]);
 });

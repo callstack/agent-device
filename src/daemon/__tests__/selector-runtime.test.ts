@@ -9,7 +9,7 @@ const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
 
-import { queryDirectIosSelector } from '../selector-runtime.ts';
+import { queryDirectIosSelector } from '../direct-ios-selector.ts';
 
 beforeEach(() => {
   mockRunAppleRunnerCommand.mockReset();

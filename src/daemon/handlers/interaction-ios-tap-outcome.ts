@@ -12,8 +12,7 @@ import { isLocalIosRunnerSession } from '../direct-ios-selector.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
-import type { ContextFromFlags } from './interaction-common.ts';
-import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
+import type { CaptureSnapshotForSession, ContextFromFlags } from '../interaction/index.ts';
 
 const XCTEST_RECORDED_FAILURE = 'XCTEST_RECORDED_FAILURE';
 // A model commonly needs 5-10s to choose a target after receiving a snapshot.

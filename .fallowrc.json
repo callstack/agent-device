@@ -46,6 +46,7 @@
     "scripts/help-conformance-sample-outputs.d.mts",
     "scripts/help-conformance-runner-output.d.mts"
   ],
+  "dynamicallyLoaded": ["src/daemon/interaction/index.ts"],
   "ignoreDependencies": [
     "@theme",
     // @agent-device/maestro owns the source import, while the published root

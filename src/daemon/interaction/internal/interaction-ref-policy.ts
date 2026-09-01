@@ -1,66 +1,35 @@
-import {
-  admitRefMutation,
-  refFrameEpoch,
-  refFrameScope,
-  type RefFrameRejectReason,
-} from '../ref-frame.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonResponse, SessionState } from '../types.ts';
-import { errorResponse } from '../response.ts';
+import type { DaemonResponse } from '../../types.ts';
+import type { RefFrameRejectReason, RefMutationFrame } from '../../ref-frame.ts';
+import { interactionErrorResponse } from './interaction-response.ts';
 
-/**
- * ADR 0014 mutation-admission enforcement. A ref-targeting mutation is admitted
- * only against an active frame whose epoch and issuance scope authorize the ref
- * (`admitRefMutation`). This runs BEFORE resolution and dispatch, on EVERY
- * supported platform — a device side effect from an earlier command expires the
- * frame at its seam, so the next ref mutation is rejected before it can act on a
- * possibly-navigated screen.
- *
- * Returns `null` when the mutation is admitted, or a typed failure whose
- * `details.reason` distinguishes "capture a complete snapshot" from "use the
- * emitted pinned ref". The message names the actual lifetime failure rather than
- * claiming the ref was missing or lacked bounds.
- */
 export function refMutationAdmissionResponse(params: {
-  session: SessionState;
   ref: string;
   mintedGeneration: number | undefined;
-  /**
-   * The precise staleness diagnostic the caller already resolved
-   * (`resolveRefStalenessWarning`). Used as the failure hint when present — for
-   * a pinned generation mismatch it names the exact minted-vs-current
-   * generations — otherwise a generic actionable hint is attached.
-   */
   staleRefsWarning: string | undefined;
+  frame: RefMutationFrame;
 }): DaemonResponse | null {
   try {
     assertRefMutationAdmitted(params);
     return null;
   } catch (error) {
     if (error instanceof AppError) {
-      return errorResponse(error.code, error.message, error.details);
+      return interactionErrorResponse(error.code, error.message, error.details);
     }
     throw error;
   }
 }
 
-/** Shared throwing form for handlers that compose more than one ref target. */
 export function assertRefMutationAdmitted(params: {
-  session: SessionState;
   ref: string;
   mintedGeneration: number | undefined;
   staleRefsWarning?: string;
+  frame: RefMutationFrame;
 }): void {
   const refBody = params.ref.startsWith('@') ? params.ref.slice(1) : params.ref;
-  const admission = admitRefMutation({
-    session: params.session,
-    refBody,
-    mintedGeneration: params.mintedGeneration,
-  });
+  const { admission, scope, currentGeneration } = params.frame;
   if (admission.admitted) return;
 
-  const scope = refFrameScope(params.session);
-  const currentGeneration = refFrameEpoch(params.session);
   const suggestedRef =
     admission.reason === 'plain_ref_requires_complete_frame' &&
     scope !== 'all' &&

@@ -1,10 +1,12 @@
 import type { DaemonResponse, SessionState } from '../types.ts';
-import type { InteractionHandlerParams } from './interaction-common.ts';
+import type { InteractionRouteInput } from '../interaction/index.ts';
 import { handleTouchInteractionCommands } from './interaction-touch.ts';
-import { captureSnapshotForSession } from './interaction-snapshot.ts';
-import { refSnapshotFlagGuardResponse } from './interaction-flags.ts';
+import {
+  captureSnapshotForSession,
+  finalizeTouchInteraction,
+  refSnapshotFlagGuardResponse,
+} from '../interaction/index.ts';
 import { dispatchGetViaRuntime, dispatchIsViaRuntime } from '../selector-runtime.ts';
-import { finalizeTouchInteraction } from './interaction-common.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { errorResponse, noActiveSessionError } from '../response.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
@@ -17,11 +19,11 @@ import { dispatchGestureViaRuntime, dispatchSwipeViaRuntime } from './interactio
 import { resolveBoundTypeTextRuntime, type BoundTypeTextExecutor } from '../type-text-runtime.ts';
 
 export async function handleInteractionCommands(
-  params: InteractionHandlerParams,
+  params: InteractionRouteInput,
 ): Promise<DaemonResponse | null> {
   const touchResponse = await handleTouchInteractionCommands({
     ...params,
-    captureSnapshotForSession,
+    captureSnapshotForSession: params.captureSnapshotForSession ?? captureSnapshotForSession,
     refSnapshotFlagGuardResponse,
   });
   if (touchResponse) {
@@ -30,20 +32,11 @@ export async function handleInteractionCommands(
 
   switch (params.req.command) {
     case PUBLIC_COMMANDS.gesture:
-      return await dispatchGestureViaRuntime({
-        ...params,
-        captureSnapshotForSession,
-      });
+      return await dispatchGestureViaRuntime(params);
     case PUBLIC_COMMANDS.swipe:
-      return await dispatchSwipeViaRuntime({
-        ...params,
-        captureSnapshotForSession,
-      });
+      return await dispatchSwipeViaRuntime(params);
     case PUBLIC_COMMANDS.type:
-      return await dispatchTypeViaRuntime({
-        ...params,
-        captureSnapshotForSession,
-      });
+      return await dispatchTypeViaRuntime(params);
     case 'get':
       return await dispatchGetViaRuntime(params);
     case 'is':
@@ -53,11 +46,7 @@ export async function handleInteractionCommands(
   }
 }
 
-async function dispatchTypeViaRuntime(
-  params: InteractionHandlerParams & {
-    captureSnapshotForSession: typeof captureSnapshotForSession;
-  },
-): Promise<DaemonResponse> {
+async function dispatchTypeViaRuntime(params: InteractionRouteInput): Promise<DaemonResponse> {
   const { sessionName, sessionStore } = params;
   const session = sessionStore.get(sessionName);
   if (!session) return noActiveSessionError();
@@ -110,7 +99,7 @@ async function recoverAndroidRecordingDialogForType(
 }
 
 async function runTypeTextViaRuntime(
-  params: InteractionHandlerParams,
+  params: InteractionRouteInput,
   session: SessionState,
   boundTypeText: BoundTypeTextExecutor,
   recordingRecoveryWarning?: string,

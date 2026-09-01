@@ -7,6 +7,7 @@ export type LogicalModulePolicy = Readonly<{
   name: string;
   roots: readonly string[];
   forbiddenTargetRoots: readonly string[];
+  internalForbiddenTargetRoots?: readonly string[];
   facade?: FacadeDeclaration;
 }>;
 
@@ -37,6 +38,27 @@ export const SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS = [
   'src/daemon/handlers/session-open-surface.ts',
   'src/daemon/handlers/session-startup-metrics.ts',
 ] as const;
+
+const DAEMON_INTERACTION_FACADE = {
+  root: 'src/daemon/interaction/index.ts',
+  exports: [
+    'CaptureSnapshotForSession',
+    'ContextFromFlags',
+    'InteractionRouteInput',
+    'RefSnapshotFlagGuardResponse',
+    'assertRecordedFillParameterization',
+    'assertRefMutationAdmitted',
+    'captureSnapshotForSession',
+    'createInteractionRuntime',
+    'finalizeTouchInteraction',
+    'publishInteractionAmbiguityCandidates',
+    'readSettleRequest',
+    'readTextForNode',
+    'refMutationAdmissionResponse',
+    'refSnapshotFlagGuardResponse',
+    'settleFlagGuardResponse',
+  ],
+} as const;
 
 export const LOGICAL_MODULE_POLICIES = [
   {
@@ -76,6 +98,13 @@ export const LOGICAL_MODULE_POLICIES = [
     roots: ['src/daemon/session-lifecycle/'],
     forbiddenTargetRoots: ['src/daemon/handlers/'],
     facade: DAEMON_SESSION_LIFECYCLE_FACADE,
+  },
+  {
+    name: 'daemon-interaction',
+    roots: ['src/daemon/interaction/'],
+    forbiddenTargetRoots: [],
+    internalForbiddenTargetRoots: ['src/daemon/handlers/'],
+    facade: DAEMON_INTERACTION_FACADE,
   },
 ] as const satisfies readonly LogicalModulePolicy[];
 

@@ -1,7 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SettleParams } from '@agent-device/contracts/interaction';
-import type { DaemonResponse } from '../types.ts';
-import { errorResponse } from '../response.ts';
+import type { DaemonResponse } from '../../types.ts';
+import { interactionErrorResponse } from './interaction-response.ts';
 
 const REF_UNSUPPORTED_FLAG_MAP: ReadonlyArray<[keyof CommandFlags, string]> = [
   ['snapshotDepth', '--depth'],
@@ -15,13 +15,11 @@ export function refSnapshotFlagGuardResponse(
 ): DaemonResponse | null {
   const unsupported = unsupportedRefSnapshotFlags(flags);
   if (unsupported.length === 0) return null;
-  return errorResponse(
+  return interactionErrorResponse(
     'INVALID_ARGS',
     `${command} @ref does not support ${unsupported.join(', ')}.`,
   );
 }
-
-export type RefSnapshotFlagGuardResponse = typeof refSnapshotFlagGuardResponse;
 
 export function unsupportedRefSnapshotFlags(flags: CommandFlags | undefined): string[] {
   if (!flags) return [];
@@ -32,19 +30,6 @@ export function unsupportedRefSnapshotFlags(flags: CommandFlags | undefined): st
   return unsupported;
 }
 
-/**
- * `--settle` (#1101) flag grammar for commands carrying the descriptor
- * post-action observation trait: `--settle` opts in, `--settle-quiet <ms>`
- * overrides the quiet window, and `--timeout <ms>` bounds the settle wait (the
- * same budget the descriptor's flag-sourced timeout policy widens the request
- * envelope past, mirroring wait's positional budget). Preserve compatibility
- * for a bare `--timeout` without `--settle`: older touch commands silently
- * ignored it. Only `--settle-quiet` is settle-specific enough to reject when
- * orphaned.
- *
- * `command` names the command in the error message only; callers gate on the
- * descriptor trait (`commandSupportsSettleObservation`) before reaching here.
- */
 export function settleFlagGuardResponse(
   command: string,
   flags: CommandFlags | undefined,
@@ -53,13 +38,12 @@ export function settleFlagGuardResponse(
   const orphaned: string[] = [];
   if (flags.settleQuietMs !== undefined) orphaned.push('--settle-quiet');
   if (orphaned.length === 0) return null;
-  return errorResponse(
+  return interactionErrorResponse(
     'INVALID_ARGS',
     `${command}: ${orphaned.join(', ')} require${orphaned.length === 1 ? 's' : ''} --settle.`,
   );
 }
 
-/** The runtime settle request for a command's flags, or undefined without --settle. */
 export function readSettleRequest(flags: CommandFlags | undefined): SettleParams | undefined {
   if (flags?.settle !== true) return undefined;
   return {

@@ -1,16 +1,18 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { FillCommandResult, InteractionTarget } from '@agent-device/contracts/interaction';
 import { issueSettleRefs, resolveRefStalenessWarning } from '../session-snapshot.ts';
+import { readRefMutationFrame } from '../ref-frame.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
-import type { InteractionHandlerParams } from './interaction-common.ts';
+import { isSessionRecording } from '../session-script-publication-capability.ts';
 import {
+  assertRecordedFillParameterization,
   readSettleRequest,
+  refMutationAdmissionResponse,
   settleFlagGuardResponse,
+  type CaptureSnapshotForSession,
+  type InteractionRouteInput,
   type RefSnapshotFlagGuardResponse,
-} from './interaction-flags.ts';
-import { assertRecordedFillParameterization } from './interaction-recorded-input.ts';
-import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
-import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
+} from '../interaction/index.ts';
 import { refreshAndroidRefSnapshotIfFreshnessActive } from './interaction-touch-android-freshness.ts';
 import { unsupportedMacOsDesktopSurfaceInteraction } from './interaction-touch-policy.ts';
 import { readSnapshotNodesReferenceFrame } from './interaction-touch-reference-frame.ts';
@@ -32,7 +34,7 @@ import { prepareTouchDispatch } from './interaction-touch-prepare.ts';
  */
 
 export async function dispatchFillViaRuntime(
-  params: InteractionHandlerParams & {
+  params: InteractionRouteInput & {
     captureSnapshotForSession: CaptureSnapshotForSession;
     refSnapshotFlagGuardResponse: RefSnapshotFlagGuardResponse;
   },
@@ -55,9 +57,9 @@ export async function dispatchFillViaRuntime(
   if (!prepared.ok) return prepared.response;
   const { touchExecutor } = prepared;
   assertRecordedFillParameterization({
-    session,
     flags: req.flags,
     replayPlanStep: req.internal?.replayPlanStep === true,
+    isSessionRecording: isSessionRecording(session),
   });
   const invalidSettleFlags = settleFlagGuardResponse('fill', req.flags);
   if (invalidSettleFlags) return invalidSettleFlags;
@@ -109,7 +111,7 @@ export async function dispatchFillViaRuntime(
 // @ref-incompatible flags, enforce iOS mutation freshness, and run the Android
 // freshness refresh.
 async function prepareFillRefTarget(
-  params: InteractionHandlerParams & {
+  params: InteractionRouteInput & {
     captureSnapshotForSession: CaptureSnapshotForSession;
     refSnapshotFlagGuardResponse: RefSnapshotFlagGuardResponse;
   },
@@ -133,10 +135,14 @@ async function prepareFillRefTarget(
   const admissionResponse = params.req.internal?.findResolvedTarget
     ? null
     : refMutationAdmissionResponse({
-        session,
         ref: target.ref,
         mintedGeneration: refGeneration,
         staleRefsWarning,
+        frame: readRefMutationFrame({
+          session,
+          ref: target.ref,
+          mintedGeneration: refGeneration,
+        }),
       });
   if (admissionResponse) return { response: admissionResponse, staleRefsWarning };
   await refreshAndroidRefSnapshotIfFreshnessActive(params, session);

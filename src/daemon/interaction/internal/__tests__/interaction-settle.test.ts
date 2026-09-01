@@ -1,27 +1,27 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
+import { legacyDispatchCapture } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
-import { handleInteractionCommands } from '../interaction.ts';
-import type { SessionStore } from '../../session-store.ts';
-import type { SessionState } from '../../types.ts';
+import { handleInteractionCommands } from '../../../handlers/interaction.ts';
+import type { SessionStore } from '../../../session-store.ts';
+import type { SessionState } from '../../../types.ts';
 import type { SnapshotBackend } from '@agent-device/kernel/snapshot';
-import { buildSnapshotState } from '../../../core/snapshot-state.ts';
-import { setSessionSnapshot } from '../../session-snapshot.ts';
-import { activateCompleteRefFrame } from '../../ref-frame.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
-import { createInteractionRuntime } from '../interaction-runtime.ts';
+import { buildSnapshotState } from '../../../../core/snapshot-state.ts';
+import { setSessionSnapshot } from '../../../session-snapshot.ts';
+import { activateCompleteRefFrame } from '../../../ref-frame.ts';
+import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { createInteractionRuntime } from '../../index.ts';
 import {
   clearRequestAbortRegistration,
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
-import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
 import {
   getRuntimeBindings,
   mockFillPoint,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from './interaction-get-runtime-fixture.ts';
+} from '../../../handlers/__tests__/interaction-get-runtime-fixture.ts';
 
 // #1101 --settle daemon response shape: the settle payload (diff + settled +
 // refsGeneration) rides the wire response through the shared builder, and a
@@ -29,20 +29,15 @@ import {
 // Quiet windows are tuned down (--settle-quiet 25) so no test waits real time
 // beyond a few poll ticks.
 
-vi.mock('../interaction-snapshot.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../interaction-snapshot.ts')>();
+const mockCaptureSnapshotForSession = vi.hoisted(() => vi.fn());
+
+vi.mock('../../index.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../index.ts')>();
   return {
     ...actual,
-    captureSnapshotForSession: vi.fn(async () => ({
-      nodes: [],
-      createdAt: 0,
-      backend: 'xctest' as const,
-    })),
+    captureSnapshotForSession: mockCaptureSnapshotForSession,
   };
 });
-
-import { captureSnapshotForSession } from '../interaction-snapshot.ts';
-const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
 
 const BEFORE_NODES = [
   { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
@@ -397,7 +392,13 @@ test('a stalled settle capture receives its deadline signal and leaves the inter
   let captureCalls = 0;
   let observedAbort = false;
   mockCaptureSnapshotForSession.mockImplementation(
-    async (_session, _flags, _sessionStore, _contextFromFlags, options) => {
+    async (
+      _session: SessionState,
+      _flags: CommandFlags | undefined,
+      _sessionStore: SessionStore,
+      _contextFromFlags: typeof contextFromFlags,
+      options: { interactiveOnly: boolean; signal?: AbortSignal },
+    ) => {
       captureCalls += 1;
       if (captureCalls === 1) {
         return buildSnapshotState({ nodes: BEFORE_NODES, backend: 'xctest' }, {});
@@ -410,10 +411,11 @@ test('a stalled settle capture receives its deadline signal and leaves the inter
         const onAbort = () => {
           clearTimeout(fallback);
           observedAbort = true;
-          reject(options.signal?.reason);
+          reject(signal?.reason);
         };
-        options.signal?.addEventListener('abort', onAbort, { once: true });
-        if (options.signal?.aborted) onAbort();
+        const signal = options.signal;
+        signal?.addEventListener('abort', onAbort, { once: true });
+        if (signal?.aborted) onAbort();
       });
     },
   );

@@ -6,8 +6,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../session-store.ts';
 import { getSnapshotReferenceFrame } from '../touch-reference-frame.ts';
 import type { SessionState } from '../types.ts';
-import type { ContextFromFlags } from './interaction-common.ts';
-import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
+import type { CaptureSnapshotForSession, ContextFromFlags } from '../interaction/index.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 
 async function resolveDirectTouchReferenceFrame(params: {

@@ -3,8 +3,6 @@ import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import type { WaitParsed } from '../core/wait-positionals.ts';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { queryAppleRuntimeSelector } from '../platform-runtime-apple-resources.ts';
-import type { AppleRunnerRequestOptions } from './apple-runner-options.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { errorResponse } from './response.ts';
 import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from './session-snapshot.ts';
@@ -17,7 +15,7 @@ import {
   checkFindArgs,
   isReadOnlyFindAction,
 } from '@agent-device/selectors';
-import { refSnapshotFlagGuardResponse } from './handlers/interaction-flags.ts';
+import { refSnapshotFlagGuardResponse } from './interaction/index.ts';
 import { parseVersionedRefPositional } from './handlers/interaction-touch-targets.ts';
 import {
   describeAndroidEscapeSurface,
@@ -37,7 +35,6 @@ import type { RecordedTargetCapture } from './session-target-evidence.ts';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';
 import { withSystemSurfaceDisclosure } from './handlers/system-surface-disclosure.ts';
-import type { DirectIosSelectorTarget } from './direct-ios-selector.ts';
 import {
   createBoundSelectorRuntime,
   createSelectorRuntimeForDevice,
@@ -49,12 +46,6 @@ import {
   type BoundSelectorOperations,
 } from './selector-capture-binding.ts';
 import { dispatchConditionalWaitSelector } from './wait-conditional-selector.ts';
-
-export type DirectIosSelectorQueryResult = {
-  found: boolean;
-  text?: string;
-  node?: SnapshotNode;
-};
 
 export async function dispatchFindReadOnlyViaRuntime(
   params: SelectorRuntimeParams,
@@ -365,42 +356,6 @@ function readRecordedResolutionTarget(
   const preActionNodes = result.preActionNodes;
   if (!node || typeof node !== 'object' || !Array.isArray(preActionNodes)) return undefined;
   return { node: node as SnapshotNode, preActionNodes: preActionNodes as SnapshotNode[] };
-}
-
-/**
- * The single querySelector client for the local XCTest runner: a live,
- * tree-independent read (and its found/text/node shape) for exactly one
- * selector. Decoupled from `SelectorRuntimeParams` on purpose — the offscreen
- * refusal double-check (`src/daemon/offscreen-target-probe.ts`) reuses this
- * SAME function from a plain daemon session, not a selector-runtime request,
- * so it must not depend on that request bag.
- */
-export async function queryDirectIosSelector(
-  session: SessionState,
-  selector: Pick<DirectIosSelectorTarget, 'key' | 'value'>,
-  requestOptions: AppleRunnerRequestOptions,
-): Promise<DirectIosSelectorQueryResult> {
-  const data = await queryAppleRuntimeSelector(
-    session.device,
-    selector,
-    session.appBundleId,
-    requestOptions,
-  );
-  const found = data.found === true;
-  const node = readDirectIosSelectorNode(data);
-  return {
-    found,
-    ...(typeof data.text === 'string' ? { text: data.text } : {}),
-    ...(node ? { node } : {}),
-  };
-}
-
-function readDirectIosSelectorNode(data: Record<string, unknown>): SnapshotNode | undefined {
-  const nodes = data.nodes;
-  if (!Array.isArray(nodes)) return undefined;
-  const node = nodes[0];
-  if (!node || typeof node !== 'object') return undefined;
-  return node as SnapshotNode;
 }
 
 function parseGetTarget(req: DaemonRequest):

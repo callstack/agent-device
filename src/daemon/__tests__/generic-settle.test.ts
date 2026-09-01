@@ -15,8 +15,8 @@ import { buildSnapshotState } from '../../core/snapshot-state.ts';
 // a resolution, and the observation must run after the deferred-outcome
 // markers. Quiet windows are tuned down so no test waits real time.
 
-vi.mock('../handlers/interaction-snapshot.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../handlers/interaction-snapshot.ts')>();
+vi.mock('../interaction/index.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../interaction/index.ts')>();
   return {
     ...actual,
     captureSnapshotForSession: vi.fn(async () => ({
@@ -27,7 +27,7 @@ vi.mock('../handlers/interaction-snapshot.ts', async (importOriginal) => {
   };
 });
 
-import { captureSnapshotForSession } from '../handlers/interaction-snapshot.ts';
+import { captureSnapshotForSession } from '../interaction/index.ts';
 import { dispatchGenericCommand } from '../request-generic-dispatch.ts';
 
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
@@ -167,8 +167,10 @@ beforeEach(() => {
   mockDispatch.mockResolvedValue({});
   mockCaptureSnapshotForSession.mockReset();
   mockCaptureSnapshotForSession.mockImplementation(
-    (session, flags, sessionStore, _contextFromFlags, options) =>
-      emulateCaptureSnapshotForSession(session, flags, sessionStore, options),
+    (...args: Parameters<typeof captureSnapshotForSession>) => {
+      const [session, flags, sessionStore, _contextFromFlags, options] = args;
+      return emulateCaptureSnapshotForSession(session, flags, sessionStore, options);
+    },
   );
 });
 

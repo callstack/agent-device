@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
-import { activatePartialRefFrame } from '../../ref-frame.ts';
+import { activatePartialRefFrame, readRefMutationFrame } from '../../../ref-frame.ts';
 import { refMutationAdmissionResponse } from '../interaction-ref-policy.ts';
-import { makeStaleRefSession } from './interaction-touch-fixtures.ts';
+import { makeStaleRefSession } from '../../../handlers/__tests__/interaction-touch-fixtures.ts';
 
 test('a plain ref emitted by the current partial frame suggests its exact pinned form', () => {
   const session = makeStaleRefSession('partial-frame-suggestion');
@@ -9,10 +9,10 @@ test('a plain ref emitted by the current partial frame suggests its exact pinned
   activatePartialRefFrame(session, new Set(['e19', 'e20']));
 
   const response = refMutationAdmissionResponse({
-    session,
     ref: '@e19',
     mintedGeneration: undefined,
     staleRefsWarning: undefined,
+    frame: readRefMutationFrame({ session, ref: '@e19', mintedGeneration: undefined }),
   });
 
   expect(response?.ok).toBe(false);
@@ -31,10 +31,10 @@ test('a plain ref outside the emitted partial scope keeps the recapture hint', (
   activatePartialRefFrame(session, new Set(['e20']));
 
   const response = refMutationAdmissionResponse({
-    session,
     ref: '@e19',
     mintedGeneration: undefined,
     staleRefsWarning: undefined,
+    frame: readRefMutationFrame({ session, ref: '@e19', mintedGeneration: undefined }),
   });
 
   expect(response?.ok).toBe(false);

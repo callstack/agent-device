@@ -197,6 +197,23 @@ function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): Layeri
     const sourceModule = moduleForFile(edge.file);
     const targetModule = moduleForFile(edge.target);
     if (
+      sourceModule &&
+      isInsideInternalTree(edge.file, sourceModule.roots) &&
+      sourceModule.internalForbiddenTargetRoots?.some((root) =>
+        matchesDeclaredRoot(edge.target, root),
+      )
+    ) {
+      violations.push({
+        rule: 'R10 daemon-modularity',
+        file: edge.file,
+        line: edge.line,
+        message:
+          `${edge.file} must not import ${edge.target} from ${sourceModule.name}'s internal tree; ` +
+          'keep handler adapters above the interaction façade.',
+      });
+      continue;
+    }
+    if (
       targetModule &&
       sourceModule !== targetModule &&
       isInsideInternalTree(edge.target, targetModule.roots)

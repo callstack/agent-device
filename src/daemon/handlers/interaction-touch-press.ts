@@ -7,8 +7,7 @@ import type { resolveClickButton } from '@agent-device/contracts/click-button';
 import type { ReplayTargetGuardDenotation } from '@agent-device/contracts/replay';
 import type { DaemonResponse } from '../types.ts';
 import { assertAndroidPressStayedInApp } from './interaction-android-escape.ts';
-import { readSettleRequest } from './interaction-flags.ts';
-import { createInteractionRuntime } from './interaction-runtime.ts';
+import { createInteractionRuntime, readSettleRequest } from '../interaction/index.ts';
 import { dispatchDirectIosSelectorTap } from './interaction-touch-direct-ios.ts';
 import { readDirectIosSelectorTapTarget } from './interaction-touch-direct-ios-eligibility.ts';
 import {

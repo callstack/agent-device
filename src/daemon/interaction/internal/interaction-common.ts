@@ -1,42 +1,19 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import type { DaemonCommandContext } from '../context.ts';
-import { recordTouchVisualizationEvent } from '../recording-gestures.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { SessionStore } from '../session-store.ts';
-import { markDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
-import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts';
-import { computeTargetEvidence, type RecordedTargetCapture } from '../session-target-evidence.ts';
+import type { DaemonResponse } from '../../types.ts';
+import { stripInternalInteractionFlags } from '../../interaction-outcome-policy.ts';
+import {
+  computeTargetEvidence,
+  type RecordedTargetCapture,
+} from '../../session-target-evidence.ts';
 import type { MultiTargetAnnotationV1 } from '@agent-device/contracts/replay';
-import { inferFillText } from '../action-utils.ts';
+import { inferFillText } from '../../action-utils.ts';
 import { recordedInputPlaceholder } from '@agent-device/ad-script';
-import { parameterizeRecordedFillPayload } from '../parameterized-recorded-fill.ts';
-import { isSessionRecording } from '../session-script-publication-capability.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
-import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
-
-export type ContextFromFlags = (
-  flags: CommandFlags | undefined,
-  appBundleId?: string,
-  traceLogPath?: string,
-) => DaemonCommandContext;
-
-export type InteractionHandlerParams = {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath?: string;
-  sessionStore: SessionStore;
-  contextFromFlags: ContextFromFlags;
-  inspectFacts?: InspectDeviceRuntimeFacts;
-  bindDevice?: BindDeviceRuntime;
-  androidObservation?: AndroidObservationAdapter;
-  platformResourceCleanup?: PlatformResourceCleanup;
-};
+import { parameterizeRecordedFillPayload } from '../../parameterized-recorded-fill.ts';
+import type { InteractionFinalizationOperations } from './types.ts';
 
 export function finalizeTouchInteraction(params: {
-  session: SessionState;
-  sessionStore: SessionStore;
+  operations: InteractionFinalizationOperations;
   command: string;
   positionals: string[];
   actionCommand?: string;
@@ -44,18 +21,15 @@ export function finalizeTouchInteraction(params: {
   flags: CommandFlags | undefined;
   result: Record<string, unknown>;
   responseData: Record<string, unknown>;
-  /** ADR 0012 decision 3: record-time input for the `target-v1` annotation. */
   recordedTarget?: RecordedTargetCapture;
   recordedTargets?: { source: RecordedTargetCapture; destination: RecordedTargetCapture };
-  /** False when a post-action observation already proved the interaction landed. */
   scheduleInteractionOutcomeRetry?: boolean;
   actionStartedAt: number;
   actionFinishedAt: number;
   androidFreshnessBaseline?: SnapshotState | undefined;
 }): DaemonResponse {
   const {
-    session,
-    sessionStore,
+    operations,
     command,
     positionals,
     actionCommand = command,
@@ -79,14 +53,14 @@ export function finalizeTouchInteraction(params: {
     responseData,
   });
   const targetEvidence =
-    isSessionRecording(session) && recordedTarget
+    operations.isSessionRecording() && recordedTarget
       ? computeTargetEvidence(recordedTarget)
       : undefined;
   const targetEvidences =
-    isSessionRecording(session) && recordedTargets
+    operations.isSessionRecording() && recordedTargets
       ? computeMultiTargetEvidence(recordedTargets)
       : undefined;
-  sessionStore.recordAction(session, {
+  operations.recordAction({
     command,
     positionals,
     flags: actionFlags ?? {},
@@ -94,8 +68,7 @@ export function finalizeTouchInteraction(params: {
     ...(targetEvidence ? { targetEvidence } : {}),
     ...(targetEvidences ? { targetEvidences } : {}),
   });
-  markDeferredInteractionOutcome({
-    session,
+  operations.markDeferredOutcome({
     command,
     action: actionCommand,
     positionals: retryPositionals ?? positionals,
@@ -103,8 +76,7 @@ export function finalizeTouchInteraction(params: {
     scheduleOutcomeRetry: scheduleInteractionOutcomeRetry,
     androidFreshnessBaseline,
   });
-  recordTouchVisualizationEvent(
-    session,
+  operations.recordGestureVisualization(
     actionCommand,
     positionals,
     parameterizedResult,

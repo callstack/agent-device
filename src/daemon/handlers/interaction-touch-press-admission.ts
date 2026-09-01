@@ -7,11 +7,15 @@ import {
 } from '@agent-device/contracts/click-button';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { resolveRefStalenessWarning } from '../session-snapshot.ts';
+import { readRefMutationFrame } from '../ref-frame.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
-import type { InteractionHandlerParams } from './interaction-common.ts';
-import { settleFlagGuardResponse, type RefSnapshotFlagGuardResponse } from './interaction-flags.ts';
-import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
-import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
+import {
+  refMutationAdmissionResponse,
+  settleFlagGuardResponse,
+  type CaptureSnapshotForSession,
+  type InteractionRouteInput,
+  type RefSnapshotFlagGuardResponse,
+} from '../interaction/index.ts';
 import type { RefAdmissionContext } from './interaction-touch-android-readiness.ts';
 import { unsupportedMacOsDesktopSurfaceInteraction } from './interaction-touch-policy.ts';
 import {
@@ -33,7 +37,7 @@ export type TargetedTouchCommand = 'press' | 'click' | 'longpress' | 'hover';
 /** The family members that take `--button`; longpress and hover have no button. */
 const CLICK_BUTTON_COMMANDS: ReadonlySet<TargetedTouchCommand> = new Set(['press', 'click']);
 
-export type TargetedTouchParams = InteractionHandlerParams & {
+export type TargetedTouchParams = InteractionRouteInput & {
   captureSnapshotForSession: CaptureSnapshotForSession;
   refSnapshotFlagGuardResponse: RefSnapshotFlagGuardResponse;
 };
@@ -145,7 +149,7 @@ function clickButtonValidationResponse(
  */
 function readTargetedTouchStalenessWarning(
   session: SessionState,
-  req: InteractionHandlerParams['req'],
+  req: InteractionRouteInput['req'],
   parsedTarget: ParsedTargetedTouch,
 ): string | undefined {
   if (parsedTarget.target.kind !== 'ref') return undefined;
@@ -158,7 +162,7 @@ function readTargetedTouchStalenessWarning(
 }
 
 function readRefAdmissionContext(
-  req: InteractionHandlerParams['req'],
+  req: InteractionRouteInput['req'],
   parsedTarget: ParsedTargetedTouch,
   staleRefsWarning: string | undefined,
 ): RefAdmissionContext | undefined {
@@ -188,10 +192,14 @@ function admitTargetedTouchRef(
   const admissionResponse = req.internal?.findResolvedTarget
     ? null
     : refMutationAdmissionResponse({
-        session,
         ref: parsedTarget.target.ref,
         mintedGeneration: parsedTarget.refGeneration,
         staleRefsWarning,
+        frame: readRefMutationFrame({
+          session,
+          ref: parsedTarget.target.ref,
+          mintedGeneration: parsedTarget.refGeneration,
+        }),
       });
   if (admissionResponse) return { response: admissionResponse };
   return {};

@@ -1,8 +1,7 @@
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { getActiveAndroidSnapshotFreshness } from '../session-snapshot-freshness.ts';
 import type { SessionState } from '../types.ts';
-import type { InteractionHandlerParams } from './interaction-common.ts';
-import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
+import type { CaptureSnapshotForSession, InteractionRouteInput } from '../interaction/index.ts';
 
 /**
  * The Android ref-refresh capture a `@ref` mutation takes before dispatch, and
@@ -11,7 +10,7 @@ import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
  */
 
 export async function refreshAndroidRefSnapshotIfFreshnessActive(
-  params: InteractionHandlerParams & {
+  params: InteractionRouteInput & {
     captureSnapshotForSession: CaptureSnapshotForSession;
   },
   session: SessionState,

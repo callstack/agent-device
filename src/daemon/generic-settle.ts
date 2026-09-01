@@ -2,10 +2,13 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SettleObservation, SettleParams } from '@agent-device/contracts/interaction';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
-import type { ContextFromFlags } from './handlers/interaction-common.ts';
-import { readSettleRequest, settleFlagGuardResponse } from './handlers/interaction-flags.ts';
-import { createInteractionRuntime } from './handlers/interaction-runtime.ts';
-import { captureSnapshotForSession } from './handlers/interaction-snapshot.ts';
+import {
+  captureSnapshotForSession,
+  createInteractionRuntime,
+  readSettleRequest,
+  settleFlagGuardResponse,
+  type ContextFromFlags,
+} from './interaction/index.ts';
 import { issueSettleRefs } from './session-snapshot.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';

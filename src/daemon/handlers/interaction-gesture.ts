@@ -27,26 +27,26 @@ import { resolveBoundGestureRuntime, type BoundGestureExecutor } from '../gestur
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { sleep } from '@agent-device/host-kit/retry';
 import { ensureAndroidBlockingSystemDialogReady } from '../android-system-dialog.ts';
+import { readRefMutationFrame } from '../ref-frame.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
-import type { InteractionHandlerParams } from './interaction-common.ts';
-import { finalizeTouchInteraction } from './interaction-common.ts';
-import { createInteractionRuntime } from './interaction-runtime.ts';
-import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
+import {
+  assertRefMutationAdmitted,
+  createInteractionRuntime,
+  finalizeTouchInteraction,
+  type InteractionRouteInput,
+} from '../interaction/index.ts';
 import { noActiveSessionError } from '../response.ts';
-import { assertRefMutationAdmitted } from './interaction-ref-policy.ts';
 import type { RecordedTargetCapture } from '../session-target-evidence.ts';
 import { gestureResponseData } from './interaction-gesture-response.ts';
 
-type GestureHandlerParams = InteractionHandlerParams & {
-  captureSnapshotForSession: CaptureSnapshotForSession;
-};
+type GestureHandlerParams = InteractionRouteInput;
 
 type GestureRuntime = ReturnType<typeof createInteractionRuntime>;
 type GestureRuntimeResult = Awaited<ReturnType<GestureRuntime['interactions']['gesture']>>;
 
 type GestureInteractionOutcome = {
   positionals: string[];
-  flags: InteractionHandlerParams['req']['flags'];
+  flags: InteractionRouteInput['req']['flags'];
   responseData: Record<string, unknown>;
   recordingResultExtra?: Record<string, unknown>;
   recordedTargets?: { source: RecordedTargetCapture; destination: RecordedTargetCapture };
@@ -101,7 +101,7 @@ async function runPreparedGesture(
   runtime: GestureRuntime,
   context: { session: string; requestId: string | undefined },
   gesture: GestureCommandInput,
-  internal: InteractionHandlerParams['req']['internal'],
+  internal: InteractionRouteInput['req']['internal'],
 ): Promise<GestureRuntimeResult> {
   if (gesture.intent !== 'drag') {
     return await runtime.interactions.gesture({ ...context, gesture });
@@ -120,7 +120,7 @@ function buildGestureOutcome(
   input: GesturePayload,
   gesture: GestureCommandInput,
   result: GestureRuntimeResult,
-  flags: InteractionHandlerParams['req']['flags'],
+  flags: InteractionRouteInput['req']['flags'],
 ): GestureInteractionOutcome {
   const recording = result.kind === 'drag' ? result.recording : undefined;
   const sourceTarget = recording?.sourceTarget;
@@ -281,9 +281,13 @@ function prepareDragTarget(target: string, session: SessionState): string {
     });
   }
   assertRefMutationAdmitted({
-    session,
     ref: split.base,
     mintedGeneration: split.generation,
+    frame: readRefMutationFrame({
+      session,
+      ref: split.base,
+      mintedGeneration: split.generation,
+    }),
   });
   return split.base;
 }
@@ -360,7 +364,7 @@ function swipeReplayPositionals(input: SwipePayload): string[] {
 
 async function runSwipeRepetitions(
   runtime: ReturnType<typeof createInteractionRuntime>,
-  params: InteractionHandlerParams,
+  params: InteractionRouteInput,
   input: SwipePayload,
   count: number,
   pauseMs: number,
@@ -392,8 +396,8 @@ function swipeMotionAtIndex(
 
 function gestureReplayFlags(
   input: GesturePayload,
-  flags: InteractionHandlerParams['req']['flags'],
-): InteractionHandlerParams['req']['flags'] {
+  flags: InteractionRouteInput['req']['flags'],
+): InteractionRouteInput['req']['flags'] {
   if (input.kind !== 'pan' || input.pointerCount === undefined) return flags;
   return { ...flags, pointerCount: input.pointerCount };
 }

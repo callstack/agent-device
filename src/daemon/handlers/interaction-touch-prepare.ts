@@ -5,8 +5,8 @@ import {
   type BoundTouchExecutor,
   type TouchRuntimeCommand,
 } from '../touch-runtime.ts';
-import type { InteractionHandlerParams } from './interaction-common.ts';
 import type { DaemonFailureResponse } from '../response.ts';
+import type { InteractionRouteInput } from '../interaction/index.ts';
 
 export type PreparedTouchDispatch =
   | Readonly<{ ok: false; response: DaemonFailureResponse }>
@@ -14,7 +14,7 @@ export type PreparedTouchDispatch =
 
 /** Exact-owner admission, one bind, and command-context projection shared by every touch route. */
 export async function prepareTouchDispatch(
-  params: InteractionHandlerParams,
+  params: InteractionRouteInput,
   session: SessionState,
   command: TouchRuntimeCommand,
   requiresCapture: boolean,

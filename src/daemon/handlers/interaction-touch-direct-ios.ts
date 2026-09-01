@@ -7,9 +7,12 @@ import {
 } from '../direct-ios-selector.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
-import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
+import {
+  finalizeTouchInteraction,
+  type CaptureSnapshotForSession,
+  type InteractionRouteInput,
+} from '../interaction/index.ts';
 import { corroborateIosTapFailure } from './interaction-ios-tap-outcome.ts';
-import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
 import type { BoundTouchExecutor } from '../touch-runtime.ts';
 import {
   buildCorroboratedTapResponseData,
@@ -28,7 +31,7 @@ import {
  */
 
 export async function dispatchDirectIosSelectorTap(
-  params: InteractionHandlerParams & { captureSnapshotForSession: CaptureSnapshotForSession },
+  params: InteractionRouteInput & { captureSnapshotForSession: CaptureSnapshotForSession },
   session: SessionState,
   selector: DirectIosSelectorTarget,
   tapElementSelector: NonNullable<BoundTouchExecutor['tapElementSelector']>,
@@ -116,7 +119,7 @@ export async function dispatchDirectIosSelectorTap(
 
 async function buildDirectIosCorroboratedResponse(params: {
   error: unknown;
-  handlerParams: InteractionHandlerParams & {
+  handlerParams: InteractionRouteInput & {
     captureSnapshotForSession: CaptureSnapshotForSession;
   };
   session: SessionState;

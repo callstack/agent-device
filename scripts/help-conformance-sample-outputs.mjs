@@ -100,7 +100,7 @@ Hint: Inspect the owner with: agent-device device status --platform android --se
 };
 
 // ADR 0014 mutation rejection from
-// src/daemon/handlers/interaction-ref-policy.ts: a pinned ref minted from a
+// src/daemon/interaction/index.ts: a pinned ref minted from a
 // superseded generation is rejected before dispatch. The daemon strips the
 // `~s5` pin at the boundary (interaction-touch-targets.ts), so the message
 // names the plain ref; the hint is the precise resolveRefStalenessWarning.

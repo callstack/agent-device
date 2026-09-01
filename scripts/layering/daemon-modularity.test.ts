@@ -309,6 +309,67 @@ test('session lifecycle rejects handler deep imports in both directions', () => 
   );
 });
 
+test('interaction rejects handler crossings and deep imports around its facade', () => {
+  const edges = resolveImportEdges(
+    new Map([
+      [
+        'src/daemon/handlers/interaction.ts',
+        "import { refSnapshotFlagGuardResponse } from '../interaction/internal/interaction-flags.ts';\nexport function handleInteractionCommands() {}",
+      ],
+      [
+        'src/daemon/interaction/internal/interaction-runtime.ts',
+        "import { handleInteractionCommands } from '../../handlers/interaction.ts';\nexport function createInteractionRuntime() {}",
+      ],
+      [
+        'src/daemon/generic-settle.ts',
+        "import { createInteractionRuntime } from './interaction/internal/interaction-runtime.ts';",
+      ],
+      [
+        'src/daemon/selector-runtime.ts',
+        "import { refSnapshotFlagGuardResponse } from './interaction/internal/interaction-flags.ts';",
+      ],
+      [
+        'src/daemon/selector-runtime-backend.ts',
+        "import { readTextForNode } from './interaction/internal/interaction-read.ts';",
+      ],
+      [
+        'src/daemon/interaction/internal/interaction-flags.ts',
+        'export function refSnapshotFlagGuardResponse() {}',
+      ],
+      [
+        'src/daemon/interaction/internal/interaction-read.ts',
+        'export function readTextForNode() {}',
+      ],
+    ]),
+  );
+
+  const violations = checkDaemonModularityRatchets(
+    [...baselineEdges(), ...edges],
+    baselineTypeCycleMembers(),
+  );
+  assert.equal(violations.length, 5);
+  assert.ok(
+    violations.some(({ message }) =>
+      message.includes(
+        "src/daemon/handlers/interaction.ts must not import daemon-interaction's internal tree",
+      ),
+    ),
+  );
+  assert.ok(
+    violations.some(({ message }) =>
+      message.includes(
+        "src/daemon/interaction/internal/interaction-runtime.ts must not import src/daemon/handlers/interaction.ts from daemon-interaction's internal tree",
+      ),
+    ),
+  );
+  assert.equal(
+    violations.filter(({ message }) =>
+      message.includes("must not import daemon-interaction's internal tree"),
+    ).length,
+    4,
+  );
+});
+
 test('session lifecycle rejects restored neutral helper paths', () => {
   const violations = checkRetiredSessionLifecyclePaths([
     'src/daemon/session-device-resolution.ts',

@@ -8,14 +8,18 @@ import type {
 import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
 import { asAppError, normalizeError } from '@agent-device/kernel/errors';
 import { readResolvedInteractionTarget } from '../../core/interaction-outcome.ts';
+import { markSessionPartialRefsIssued } from '../session-snapshot.ts';
 import { isSessionRecording } from '../session-script-publication-capability.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
-import { publishInteractionAmbiguityCandidates } from './interaction-ambiguity-publication.ts';
+import {
+  createInteractionRuntime,
+  finalizeTouchInteraction,
+  publishInteractionAmbiguityCandidates,
+  type CaptureSnapshotForSession,
+  type InteractionRouteInput,
+} from '../interaction/index.ts';
 import { isAndroidEscapeError } from './interaction-android-escape.ts';
-import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
 import { corroborateIosTapFailure, interactionTargetExtra } from './interaction-ios-tap-outcome.ts';
-import { createInteractionRuntime } from './interaction-runtime.ts';
-import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
 import {
   runWithAndroidDialogReadinessCheck,
   type RefAdmissionContext,
@@ -39,7 +43,7 @@ import type { BoundTouchExecutor } from '../touch-runtime.ts';
 export async function dispatchRuntimeInteraction<
   TResult extends PressCommandResult | FillCommandResult | LongPressCommandResult,
 >(
-  params: InteractionHandlerParams & {
+  params: InteractionRouteInput & {
     captureSnapshotForSession: CaptureSnapshotForSession;
   },
   options: {
@@ -114,7 +118,11 @@ export async function dispatchRuntimeInteraction<
       androidFreshnessBaseline: options.androidFreshnessBaseline,
     });
   } catch (error) {
-    const appError = publishInteractionAmbiguityCandidates(session, asAppError(error));
+    const appError = publishInteractionAmbiguityCandidates({
+      error: asAppError(error),
+      snapshotGeneration: session.snapshotGeneration,
+      publishPartialRefs: (refs) => markSessionPartialRefsIssued(session, refs),
+    });
     if (isAndroidEscapeError(appError)) throw appError;
     if (appError.code === 'AMBIGUOUS_MATCH') return appErrorResponse(appError);
     const corroboratedResponse = await buildRuntimeIosCorroboratedResponse({
@@ -133,7 +141,7 @@ export async function dispatchRuntimeInteraction<
 
 async function buildRuntimeIosCorroboratedResponse(params: {
   error: unknown;
-  handlerParams: InteractionHandlerParams & {
+  handlerParams: InteractionRouteInput & {
     captureSnapshotForSession: CaptureSnapshotForSession;
   };
   session: SessionState;

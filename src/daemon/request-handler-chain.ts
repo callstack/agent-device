@@ -289,7 +289,6 @@ async function runInteractionHandler(
       inspectFacts: params.inspectFacts,
       bindDevice: params.bindDevice,
       androidObservation: params.androidObservation,
-      platformResourceCleanup: params.platformResourceCleanup,
     }),
   );
 }

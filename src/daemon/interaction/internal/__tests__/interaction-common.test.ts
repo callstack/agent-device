@@ -1,21 +1,21 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
+import { legacyDispatchCapture } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { beforeEach, expect, test } from 'vitest';
 import {
   makeIosSession,
   makeAuthoringSession,
   authoringPublication,
-} from '../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+} from '../../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { handleInteractionCommands } from '../interaction.ts';
-import { finalizeTouchInteraction } from '../interaction-common.ts';
-import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { handleInteractionCommands } from '../../../handlers/interaction.ts';
+import { finalizeTouchInteraction } from '../../index.ts';
+import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
 import {
   getRuntimeBindings,
   mockFillPoint,
   resetGetRuntimeFixture,
-} from './interaction-get-runtime-fixture.ts';
+} from '../../../handlers/__tests__/interaction-get-runtime-fixture.ts';
 
 const contextFromFlags = (_flags: CommandFlags | undefined) => ({});
 
