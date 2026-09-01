@@ -60,10 +60,20 @@ pnpm bench:ios-snapshot -- \
 
 The conditioner is semantics-preserving at zero packet loss. Non-zero loss is an explicit failure experiment, not a successful baseline.
 
-The reviewed exact-head warm/quiet outputs are retained under [`evidence/`](./evidence/):
-`ios-snapshot-warm-quiet-local-0ae8894dc.json` and
-`ios-snapshot-warm-quiet-proxy-0ae8894dc.json`, with adjacent Markdown summaries. Each JSON file
-is the schema-validated raw result from the commit named in its `revision` field.
+The complete exact-head corpus from `bench-golden-v2` (iPhone 17 Pro, iOS 27.0) is retained under
+[`evidence/`](./evidence/) from revision `955ed760e4563f181db91ffe719ba74e827e21bf`:
+
+- [`ios-snapshot-cold-local-955ed760e.json`](./evidence/ios-snapshot-cold-local-955ed760e.json)
+  covers cold-cold and cold lifecycle cells across all six screens with 10 samples per cell.
+- [`ios-snapshot-warm-relaunch-local-955ed760e.json`](./evidence/ios-snapshot-warm-relaunch-local-955ed760e.json)
+  covers warm and relaunch lifecycle cells across all six screens with 20 samples per cell and
+  includes package-size measurements.
+- [`ios-snapshot-proxy-955ed760e.json`](./evidence/ios-snapshot-proxy-955ed760e.json) covers
+  persistent-client and fresh-process CLI cells at RTT 0, 20, and 80 ms with 20 samples per cell.
+
+Each JSON file is the schema-validated raw result from the commit named in its `revision` field;
+each has an adjacent Markdown summary. The earlier warm/quiet artifacts remain retained for
+historical comparison.
 
 ## Package-size evidence
 
