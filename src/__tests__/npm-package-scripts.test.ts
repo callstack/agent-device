@@ -59,8 +59,7 @@ test('the npm package build covers every package-owned output before verificatio
     'pnpm build:xcuitest:tvos',
     'pnpm build:xcuitest:visionos',
     'pnpm build:macos-helper:clean',
-    'pnpm package:apple-runner:npm',
-    'pnpm build:android',
+    'pnpm prepare:publish-assets',
   ]);
   assert.equal(script('package:npm'), 'pnpm build:package && pnpm check:package');
 
