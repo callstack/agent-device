@@ -106,6 +106,11 @@ export async function openClientFixture(
     foreground: true,
   });
   if (fixture.setupAction === 'open-alert') {
+    await client.interactions.scroll({
+      direction: 'bottom',
+      platform: 'ios',
+      udid,
+    });
     await client.interactions.click({
       target: { kind: 'selector', selector: 'id="automation-open-alert"' },
       platform: 'ios',
