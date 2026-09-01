@@ -95,9 +95,7 @@ function buildResult(options: {
 }): CliResult {
   const stdout = readOutput(options.stdout);
   const stderr = readOutput(options.stderr);
-  const spawnErrorCode = readString(
-    (options.error as (NodeJS.ErrnoException & { code?: unknown }) | null | undefined)?.code,
-  );
+  const spawnErrorCode = readAsyncErrorCode(options.error);
   const spawnError = options.error ? `${options.error.name}: ${options.error.message}` : '';
   const payload = parseJson(stdout);
   return {
@@ -111,6 +109,15 @@ function buildResult(options: {
     ok: options.exitCode === 0 && !isExplicitFailure(payload) && !isBatchStepFailure(payload),
     ...(spawnErrorCode ? { spawnErrorCode } : {}),
   };
+}
+
+function readAsyncErrorCode(error: Error | null | undefined): string | undefined {
+  const processError = error as
+    | (NodeJS.ErrnoException & { killed?: boolean; signal?: NodeJS.Signals | null })
+    | null
+    | undefined;
+  if (processError?.killed && processError.signal === 'SIGTERM') return 'ETIMEDOUT';
+  return readString(processError?.code);
 }
 
 function baseFlags(context: CliContext): string[] {

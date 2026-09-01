@@ -60,6 +60,11 @@ pnpm bench:ios-snapshot -- \
 
 The conditioner is semantics-preserving at zero packet loss. Non-zero loss is an explicit failure experiment, not a successful baseline.
 
+The reviewed exact-head warm/quiet outputs are retained under [`evidence/`](./evidence/):
+`ios-snapshot-warm-quiet-local-e9b1fc523.json` and
+`ios-snapshot-warm-quiet-proxy-e9b1fc523.json`, with adjacent Markdown summaries. Each JSON file
+is the schema-validated raw result from the commit named in its `revision` field.
+
 ## Package-size evidence
 
 `pnpm size --json .tmp/size.json --markdown .tmp/size.md` measures bundled JavaScript, packed tarball, packed unpacked tree, and the package tree after a clean `npm install` into an isolated consumer. The iOS harness includes those three package measurements unless `--skip-package-size` is supplied.
