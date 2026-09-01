@@ -77,14 +77,11 @@ export function acquireWebDriverIosSnapshot(
     lineage: targetId ? { targetId } : {},
     residue,
   };
-  const acquisition: IosSnapshotAcquisition =
-    request.acquisitionIntent === 'full'
-      ? { ...common, intent: 'full', hint: { ...plan.hint, acquisitionIntent: 'full' } }
-      : {
-          ...common,
-          intent: 'surface-observation',
-          hint: { ...plan.hint, acquisitionIntent: 'surface-observation' },
-        };
+  const acquisition: IosSnapshotAcquisition = {
+    ...common,
+    intent: 'full',
+    hint: { ...plan.hint, acquisitionIntent: 'full' },
+  };
   return { request, plan, input: { stage: 'acquired', acquisition } };
 }
 
@@ -164,7 +161,7 @@ function warningForResidue(entry: IosAcquisitionResidue): string | undefined {
   if (entry.kind === 'unavailable-fact') {
     return entry.fact === 'hittability'
       ? 'Appium page source does not provide hittability evidence; regular snapshot nodes are not actionable.'
-      : `Appium page source does not provide ${entry.fact} evidence.`;
+      : undefined;
   }
   if (entry.kind === 'missing-viewport' || entry.kind === 'truncated') {
     return RESIDUE_WARNINGS[entry.kind];
