@@ -4,7 +4,7 @@ import type { SpikeCell, SpikeReport, SpikeSample } from './types.ts';
 
 export function writeSpikeReport(outputPath: string, report: SpikeReport): void {
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-  fs.writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`);
+  fs.writeFileSync(outputPath, `${JSON.stringify(report)}\n`);
   fs.writeFileSync(outputPath.replace(/\.json$/u, '.md'), renderSpikeMarkdown(report));
 }
 
@@ -27,7 +27,7 @@ function renderSpikeMarkdown(report: SpikeReport): string {
     '',
     '| Candidate | Mechanism | App surface | System surface | Lifecycle | Main limitation |',
     '|---|---|---|---|---|---|',
-    `| public-macos-ax | public macOS ApplicationServices AX | ${surfaceStatus(report, 'public-macos-ax', 'app')} | ${surfaceStatus(report, 'public-macos-ax', 'system')} | framed protocol | host Accessibility permission and whole-Simulator process-tree breadth |`,
+    `| public-macos-ax | public macOS ApplicationServices AX | ${surfaceStatus(report, 'public-macos-ax', 'app')} | ${surfaceStatus(report, 'public-macos-ax', 'system')} | framed protocol | exact Simulator content surface, but complex trees exceed the latency budget |`,
     `| private-coresimulator-ax | external/private CoreSimulator AX tool | ${surfaceStatus(report, 'private-coresimulator-ax', 'app')} | ${surfaceStatus(report, 'private-coresimulator-ax', 'system')} | framed protocol contract only | private interface/tool compatibility |`,
     `| xctest-control | #2189 XCTest runner control | ${surfaceStatus(report, 'xctest-control', 'app')} | ${surfaceStatus(report, 'xctest-control', 'system')} | existing runner lifecycle | control, not a host-side AX bridge |`,
     '',
