@@ -120,7 +120,8 @@ export function createInteractionRuntime(
   const session = params.sessionStore.get(params.sessionName);
   if (!session) throw new KernelAppError('SESSION_NOT_FOUND', NO_ACTIVE_SESSION_MESSAGE);
   return createInternalInteractionRuntime({
-    req: params.req,
+    requestId: params.req.meta?.requestId,
+    flags: params.req.flags,
     session,
     contextFromFlags: params.contextFromFlags,
     captureSnapshot: async (flags, options) =>

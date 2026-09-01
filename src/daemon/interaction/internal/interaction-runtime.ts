@@ -16,18 +16,18 @@ export function createInteractionRuntime(params: InteractionRuntimeInput) {
     backend: createInteractionBackend(params),
     ...createDaemonRuntimePolicy('interaction commands', { plural: true }),
     sessions: params.runtimeSessions,
-    signal: getRequestSignal(params.req.meta?.requestId),
+    signal: getRequestSignal(params.requestId),
   });
 }
 
 function createInteractionBackend(params: InteractionRuntimeInput): AgentDeviceBackend {
-  const { req, session } = params;
+  const { flags, session } = params;
   const gestureContext = () =>
-    params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath);
+    params.contextFromFlags(flags, session.appBundleId, session.trace?.outPath);
   return {
     platform: publicPlatformString(session.device),
     captureSnapshot: async (context, options): Promise<BackendSnapshotResult> => ({
-      snapshot: await params.captureSnapshot(req.flags, {
+      snapshot: await params.captureSnapshot(flags, {
         interactiveOnly: options?.interactiveOnly === true,
         preferredBackend: options?.preferredBackend,
         includeRects: options?.includeRects === true,
@@ -42,7 +42,7 @@ function createInteractionBackend(params: InteractionRuntimeInput): AgentDeviceB
             await params.confirmOffscreenTargetVisible!(node, rootViewport),
         }
       : {}),
-    ...touchBackendMembers(params.touchExecutor, params.expireRefFrame, req.flags),
+    ...touchBackendMembers(params.touchExecutor, params.expireRefFrame, flags),
   };
 }
 
@@ -70,7 +70,7 @@ function gestureBackendMembers(
 function touchBackendMembers(
   executor: InteractionRuntimeInput['touchExecutor'],
   expireRefFrame: () => void,
-  flags: InteractionRuntimeInput['req']['flags'],
+  flags: InteractionRuntimeInput['flags'],
 ): Partial<AgentDeviceBackend> {
   if (!executor) return {};
   const { tapPoint, tapRef, fillPoint, fillRef, longPressPoint, hoverPoint, hoverRef } = executor;

@@ -5,7 +5,7 @@ import type { CommandSessionStore } from '../../../runtime-contract.ts';
 import type { DeferredInteractionOutcomeMark } from '../../deferred-interaction-outcome.ts';
 import type { RecordActionEntry } from '../../session-action-recorder.ts';
 import type { DaemonCommandContext } from '../../context.ts';
-import type { DaemonRequest, SessionState } from '../../types.ts';
+import type { SessionState } from '../../types.ts';
 import type { BoundGestureExecutor } from '../../gesture-runtime.ts';
 import type { BoundTouchExecutor } from '../../touch-runtime.ts';
 import type { BoundSnapshotCapture } from '../../snapshot-runtime-binding.ts';
@@ -38,7 +38,8 @@ export type InteractionCaptureOperation = (
 ) => Promise<SnapshotState>;
 
 export type InteractionRuntimeInput = {
-  req: DaemonRequest;
+  requestId?: string;
+  flags: CommandFlags | undefined;
   session: InteractionSessionView;
   contextFromFlags: ContextFromFlags;
   captureSnapshot: InteractionCaptureOperation;
