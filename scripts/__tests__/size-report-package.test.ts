@@ -103,7 +103,7 @@ test('Markdown reports component diffs and changed packed files', () => {
       unpackedBytes: 1600,
       components: summarizeNpmPackComponents({
         ...fixturePack,
-      unpackedSize: 2105,
+        unpackedSize: 2105,
         files: baseEntries,
       }),
       entries: baseEntries,
