@@ -12,7 +12,6 @@ import type {
   RawSnapshotNode,
   Point,
   Rect,
-  SnapshotEnginePresentedMarker,
   SnapshotOptions as BaseSnapshotOptions,
   SnapshotProvenance,
 } from '@agent-device/kernel/snapshot';
@@ -248,8 +247,7 @@ export type KeyboardEnterResult =
  */
 export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & {
   nodes?: RawSnapshotNode[];
-} & SnapshotProvenance &
-  SnapshotEnginePresentedMarker;
+} & SnapshotProvenance;
 
 export type Interactor = {
   open(

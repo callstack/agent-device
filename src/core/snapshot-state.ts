@@ -1,17 +1,16 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   readSnapshotOcclusionContextEvidence,
+  readSnapshotPresentationEvidence,
   snapshotCaptureAnnotationsFrom,
 } from '@agent-device/contracts/capture';
 import { isAndroidInputMethodNode } from '@agent-device/contracts/android-input-ownership';
 import {
   attachRefs,
   buildSnapshotPresentationKey,
-  SNAPSHOT_ENGINE_PRESENTED,
   snapshotPresentationOptionsFromFlags,
   type RawSnapshotNode,
   type SnapshotBackend,
-  type SnapshotEnginePresentedMarker,
   type SnapshotStateProvenance,
   snapshotStateProvenance,
   type SnapshotState,
@@ -40,8 +39,7 @@ export function buildSnapshotState(
     nodes?: RawSnapshotNode[];
     truncated?: boolean;
     quality?: unknown;
-  } & SnapshotStateProvenance &
-    SnapshotEnginePresentedMarker,
+  } & SnapshotStateProvenance,
   flags:
     | (Pick<CommandFlags, 'snapshotDepth' | 'snapshotInteractiveOnly' | 'snapshotRaw'> &
         Partial<Pick<CommandFlags, 'snapshotScope'>>)
@@ -57,7 +55,7 @@ export function buildSnapshotState(
   const normalizedNodes = normalizeSnapshotTree(
     snapshotRaw ? backendAnnotatedNodes : pruneGroupNodes(backendAnnotatedNodes),
   );
-  const presentableNodes = shouldPresentIosInteractiveSnapshot(data, flags)
+  const presentableNodes = shouldPresentLegacyIosInteractiveSnapshot(data, flags)
     ? presentIosInteractiveSnapshot(normalizedNodes)
     : normalizedNodes;
   const scopedNodes =
@@ -123,17 +121,17 @@ function backendScopesAfterWire(backend: SnapshotBackend | undefined): boolean {
   return backend !== 'macos-helper' && backend !== 'android' && backend !== 'xctest';
 }
 
-function shouldPresentIosInteractiveSnapshot(
-  provenance: SnapshotStateProvenance & SnapshotEnginePresentedMarker,
+function shouldPresentLegacyIosInteractiveSnapshot(
+  provenance: object & SnapshotStateProvenance,
   flags:
     | (Pick<CommandFlags, 'snapshotDepth' | 'snapshotInteractiveOnly' | 'snapshotRaw'> &
         Partial<Pick<CommandFlags, 'snapshotScope'>>)
     | undefined,
 ): boolean {
   return (
-    provenance[SNAPSHOT_ENGINE_PRESENTED] !== true &&
     provenance.backend === 'xctest' &&
     iosSnapshotPresentationStage(provenance) === 'acquired' &&
+    readSnapshotPresentationEvidence(provenance)?.owner !== 'ios-snapshot-engine' &&
     flags?.snapshotInteractiveOnly === true &&
     flags.snapshotRaw !== true
   );

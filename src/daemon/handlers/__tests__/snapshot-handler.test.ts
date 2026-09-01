@@ -17,10 +17,8 @@ import { AppError } from '@agent-device/kernel/errors';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { buildSnapshotSignatures } from '../../../snapshot/snapshot-freshness/index.ts';
 import { buildInteractionSurfaceSignature } from '../../interaction-outcome-policy.ts';
-import {
-  buildSnapshotPresentationKey,
-  SNAPSHOT_ENGINE_PRESENTED,
-} from '@agent-device/kernel/snapshot';
+import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
+import { attachSnapshotPresentationEvidence } from '@agent-device/contracts/capture';
 import { snapshotCliOutput } from '../../../commands/capture/output.ts';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
@@ -504,13 +502,17 @@ test('Limrun unknown truncation stays omitted through daemon and public output',
   };
   sessionStore.set(sessionName, makeSession(sessionName, limrunDevice));
   setActiveProviderDeviceRuntimes([makeProviderRuntimeOwning(limrunDevice, 'limrun')]);
-  legacyDispatchCapture.mockResolvedValue({
-    nodes: [{ index: 0, depth: 0, type: 'Application', label: 'Demo' }],
-    backend: 'xctest',
-    producer: 'limrun-ios-tree',
-    warnings: ['tree completeness is not independently verified'],
-    [SNAPSHOT_ENGINE_PRESENTED]: true,
-  });
+  legacyDispatchCapture.mockResolvedValue(
+    attachSnapshotPresentationEvidence(
+      {
+        nodes: [{ index: 0, depth: 0, type: 'Application', label: 'Demo' }],
+        backend: 'xctest',
+        producer: 'limrun-ios-tree',
+        warnings: ['tree completeness is not independently verified'],
+      },
+      { owner: 'ios-snapshot-engine' },
+    ),
+  );
 
   const response = await handleSnapshotCommands({
     req: {

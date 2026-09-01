@@ -4,6 +4,7 @@ import type {
   IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
 import type { SnapshotOptions, SnapshotResult } from '@agent-device/contracts/interactor-types';
+import { attachSnapshotPresentationEvidence } from '@agent-device/contracts/capture';
 import {
   IOS_SNAPSHOT_PRODUCER_CAPABILITIES,
   createIosSnapshotRequest,
@@ -14,7 +15,7 @@ import {
   presentIosSnapshot,
 } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { AppError } from '@agent-device/kernel/errors';
-import { SNAPSHOT_ENGINE_PRESENTED, type Rect } from '@agent-device/kernel/snapshot';
+import { type Rect } from '@agent-device/kernel/snapshot';
 import type { LimrunIosSession } from './ios.ts';
 import { flattenIosTree, type IosTreeNode } from './snapshot.ts';
 
@@ -53,13 +54,15 @@ export async function captureLimrunIosSnapshot(
   try {
     const presentation = presentIosSnapshot({ stage: 'acquired', acquisition }, request);
     const warnings = limrunSnapshotWarnings(residue);
-    return {
-      nodes: presentation.nodes,
-      backend: 'xctest',
-      producer: 'limrun-ios-tree',
-      [SNAPSHOT_ENGINE_PRESENTED]: true,
-      ...(warnings.length > 0 ? { warnings } : {}),
-    };
+    return attachSnapshotPresentationEvidence(
+      {
+        nodes: presentation.nodes,
+        backend: 'xctest',
+        producer: 'limrun-ios-tree',
+        ...(warnings.length > 0 ? { warnings } : {}),
+      },
+      { owner: 'ios-snapshot-engine' },
+    );
   } catch (error) {
     throwLimrunSnapshotError(error, residue);
   }

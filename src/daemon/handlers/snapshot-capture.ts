@@ -10,7 +10,6 @@ import {
   findNodeByRef,
   normalizeRef,
   type RawSnapshotNode,
-  type SnapshotEnginePresentedMarker,
   type SnapshotStateProvenance,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
@@ -56,8 +55,7 @@ type SnapshotData = {
   truncated?: boolean;
   quality?: unknown;
 } & Omit<SnapshotCaptureAnnotations, 'quality'> &
-  SnapshotStateProvenance &
-  SnapshotEnginePresentedMarker;
+  SnapshotStateProvenance;
 
 type SnapshotAttempt = {
   data: SnapshotData;

@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { SNAPSHOT_ENGINE_PRESENTED } from '@agent-device/kernel/snapshot';
+import { readSnapshotPresentationEvidence } from '@agent-device/contracts/capture';
 import {
   IOS_SNAPSHOT_PRODUCER_CAPABILITIES,
   createIosSnapshotRequest,
@@ -30,7 +30,7 @@ test('derives the current engine viewport from the tree before the cached device
     'Save',
   ]);
   expect(result.nodes?.find((node) => node.label === 'Save')?.hittable).toBe(false);
-  expect(result[SNAPSHOT_ENGINE_PRESENTED]).toBe(true);
+  expect(readSnapshotPresentationEvidence(result)).toEqual({ owner: 'ios-snapshot-engine' });
   expect(result.warnings).toContain(
     'Limrun iOS tree responses do not expose truncation metadata; tree completeness is not independently verified.',
   );

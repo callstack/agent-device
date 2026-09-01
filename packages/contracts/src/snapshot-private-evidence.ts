@@ -28,9 +28,15 @@ export type SnapshotOcclusionContextEvidence = {
   androidSiblingOrderByNodeIndex?: ReadonlyMap<number, AndroidSiblingOrderEvidence>;
 };
 
+/** Identifies the engine that owns interactive iOS snapshot presentation. */
+export type SnapshotPresentationEvidence = {
+  owner: 'ios-snapshot-engine';
+};
+
 type SnapshotPrivateEvidence = {
   clickability?: SnapshotClickabilityEvidence;
   occlusionContext?: SnapshotOcclusionContextEvidence;
+  presentation?: SnapshotPresentationEvidence;
 };
 
 const privateEvidenceBySnapshotObject = new WeakMap<object, SnapshotPrivateEvidence>();
@@ -57,6 +63,19 @@ export function readSnapshotClickabilityEvidence(
   owner: object | null | undefined,
 ): SnapshotClickabilityEvidence | undefined {
   return owner ? privateEvidenceBySnapshotObject.get(owner)?.clickability : undefined;
+}
+
+export function attachSnapshotPresentationEvidence<T extends object>(
+  owner: T,
+  evidence: SnapshotPresentationEvidence,
+): T {
+  return attachSnapshotPrivateEvidence(owner, { presentation: evidence });
+}
+
+export function readSnapshotPresentationEvidence(
+  owner: object | null | undefined,
+): SnapshotPresentationEvidence | undefined {
+  return owner ? privateEvidenceBySnapshotObject.get(owner)?.presentation : undefined;
 }
 
 export function copySnapshotClickabilityEvidence<T extends object>(
