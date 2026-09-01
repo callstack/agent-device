@@ -88,7 +88,15 @@ test('cloud iOS engine-presented snapshot survives daemon publication', async ()
     );
 
     const data = assertRpcOk<{
-      nodes?: Array<{ type?: string; label?: string; identifier?: string; enabled?: boolean }>;
+      nodes?: Array<{
+        type?: string;
+        label?: string;
+        identifier?: string;
+        enabled?: boolean;
+        hittable?: boolean;
+      }>;
+      truncated?: boolean;
+      warnings?: string[];
     }>(response);
     assert.equal(
       data.nodes?.some(
@@ -100,6 +108,12 @@ test('cloud iOS engine-presented snapshot survives daemon publication', async ()
       ),
       true,
     );
+    assert.equal(
+      data.nodes?.find((node) => node.identifier === 'DisplayNameTextField')?.hittable,
+      undefined,
+    );
+    assert.ok(data.warnings?.some((warning) => warning.includes('hittability evidence')));
+    assert.equal(data.truncated, undefined);
     assert.equal(
       data.nodes?.some((node) => node.type === 'StaticText' && node.label === 'Team Standup'),
       false,

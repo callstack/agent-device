@@ -67,7 +67,7 @@ export function serializeDevice(device: AgentDeviceDevice): Record<string, unkno
 export function serializeSnapshotResult(result: CaptureSnapshotResult): Record<string, unknown> {
   return {
     nodes: result.nodes,
-    truncated: result.truncated,
+    ...(result.truncated === undefined ? {} : { truncated: result.truncated }),
     ...(result.appName ? { appName: result.appName } : {}),
     ...(result.appBundleId ? { appBundleId: result.appBundleId } : {}),
     ...(result.visibility ? { visibility: result.visibility } : {}),

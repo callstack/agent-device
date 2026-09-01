@@ -96,8 +96,8 @@ test('Appium regular presentation omits unavailable hittability while raw preser
   const raw = await captureWebDriverIosSnapshot({ source: async () => source }, { raw: true });
   assert.equal(raw.nodes?.find((node) => node.label === 'Continue')?.hittable, true);
   assert.equal(
-    raw.warnings?.some((warning) => warning.includes('hittability')),
-    false,
+    raw.warnings?.some((warning) => warning.includes('absent hittable means no evidence')),
+    true,
   );
   assert.ok(raw.warnings?.some((warning) => warning.includes('provider-side depth')));
 });
@@ -213,6 +213,7 @@ test('Appium iOS hierarchy limits are typed and disclosed at response level', as
 
   assert.equal(result.truncated, undefined);
   assert.deepEqual(result.warnings, [
+    'Appium page source does not guarantee hittability evidence; absent hittable means no evidence, not false. Raw output preserves any provider-reported value.',
     'Appium page source does not report hierarchy completeness; provider-side depth or child limits may omit nodes.',
   ]);
 });

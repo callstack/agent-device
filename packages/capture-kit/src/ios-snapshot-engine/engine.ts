@@ -95,13 +95,12 @@ export function publishIosSnapshot(
     input.stage === 'presented'
       ? input.validation.presentationKey
       : buildIosSnapshotPresentationKey(request);
+  const truncated =
+    input.stage === 'acquired' ? input.acquisition.truncated : input.presentation.payload.truncated;
   return {
     payload: {
       nodes: attachRefs(presentation.nodes),
-      truncated:
-        input.stage === 'acquired'
-          ? input.acquisition.truncated
-          : input.presentation.payload.truncated,
+      ...(truncated === undefined ? {} : { truncated }),
     },
     presentationKey,
     comparisonIdentity: buildIosSnapshotComparisonIdentity(input, request),

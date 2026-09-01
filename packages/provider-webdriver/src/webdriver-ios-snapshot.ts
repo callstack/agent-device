@@ -6,6 +6,7 @@ import {
 } from '@agent-device/capture-kit/ios-snapshot-engine';
 import {
   createIosSnapshotRequest,
+  deriveIosSnapshotCapabilityResidue,
   IOS_SNAPSHOT_PRODUCER_CAPABILITIES,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import type {
@@ -15,7 +16,6 @@ import type {
   IosSnapshotPlan,
   IosSnapshotPublication,
   IosSnapshotRequest,
-  IosSnapshotFact,
   IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
 import type { SnapshotOptions, SnapshotResult } from '@agent-device/contracts/interactor-types';
@@ -30,12 +30,14 @@ const RESIDUE_WARNINGS = {
   'missing-viewport':
     'Appium page source does not provide valid viewport evidence; regular snapshots fail closed. Use snapshot --raw to inspect the acquired tree.',
 } satisfies Pick<Record<IosAcquisitionResidue['kind'], string>, 'missing-viewport'>;
-const UNAVAILABLE_FACT_WARNINGS: Partial<Record<IosSnapshotFact, string>> = {
+type WebDriverUnavailableFact = 'acquisition-depth' | 'hittability';
+
+const UNAVAILABLE_FACT_WARNINGS = {
   'acquisition-depth':
     'Appium page source does not report hierarchy completeness; provider-side depth or child limits may omit nodes.',
   hittability:
-    'Appium page source does not guarantee hittability evidence; regular presentation treats it as unavailable.',
-};
+    'Appium page source does not guarantee hittability evidence; absent hittable means no evidence, not false. Raw output preserves any provider-reported value.',
+} satisfies Record<WebDriverUnavailableFact, string>;
 
 export type WebDriverIosSnapshotAcquisition = Readonly<{
   request: IosSnapshotRequest;
@@ -80,7 +82,6 @@ export function acquireWebDriverIosSnapshot(
   const common = {
     producer: 'appium-source' as const,
     nodes: sourceFacts.nodes,
-    truncated: false,
     viewport,
     lineage: targetId ? { targetId } : {},
     residue,
@@ -106,41 +107,33 @@ export function publishWebDriverIosSnapshot(
     backend: 'xctest',
     producer: 'appium-source',
     nodes: stripRefs(publication.payload.nodes),
-    ...warningsForResidue(publication.residue, acquisition.request),
+    ...warningsForResidue(publication.residue),
   } satisfies SnapshotResult;
   return { acquisition, publication, result };
 }
 
 function residueForSource(viewport: IosViewportEvidence): readonly IosAcquisitionResidue[] {
-  const residue: IosAcquisitionResidue[] = [
-    { kind: 'unavailable-fact', fact: 'hittability' },
-    { kind: 'unavailable-fact', fact: 'acquisition-depth' },
-  ];
+  const residue = [...deriveIosSnapshotCapabilityResidue(APPIUM_PRODUCER)];
   if (viewport.kind === 'missing') {
     residue.push({ kind: 'missing-viewport', reason: viewport.reason });
   }
   return residue;
 }
 
-function warningsForResidue(
-  residue: readonly IosAcquisitionResidue[],
-  request: IosSnapshotRequest,
-): { warnings?: string[] } {
+function warningsForResidue(residue: readonly IosAcquisitionResidue[]): { warnings?: string[] } {
   const warnings = new Set<string>();
   for (const entry of residue) {
-    const warning = warningForResidue(entry, request);
+    const warning = warningForResidue(entry);
     if (warning) warnings.add(warning);
   }
   return warnings.size > 0 ? { warnings: [...warnings] } : {};
 }
 
-function warningForResidue(
-  entry: IosAcquisitionResidue,
-  request: IosSnapshotRequest,
-): string | undefined {
+function warningForResidue(entry: IosAcquisitionResidue): string | undefined {
   if (entry.kind === 'unavailable-fact') {
-    if (entry.fact === 'hittability' && request.projection === 'raw') return undefined;
-    return UNAVAILABLE_FACT_WARNINGS[entry.fact];
+    return entry.fact === 'acquisition-depth' || entry.fact === 'hittability'
+      ? UNAVAILABLE_FACT_WARNINGS[entry.fact]
+      : undefined;
   }
   if (entry.kind === 'missing-viewport') {
     return RESIDUE_WARNINGS[entry.kind];

@@ -507,9 +507,10 @@ class WebDriverInteractor implements Interactor {
   }
 
   private async scrollGestureFrame(): Promise<WebDriverWindowRect> {
+    const sourceMode = this.backend === 'xctest' ? 'facts' : 'legacy-derived';
     const sourceFrame = await this.client
       .source()
-      .then((source) => scrollFrameFromWebDriverSource(source))
+      .then((source) => scrollFrameFromWebDriverSource(source, { mode: sourceMode }))
       .catch(() => undefined);
     if (sourceFrame) return sourceFrame;
     return await this.client.windowRect();

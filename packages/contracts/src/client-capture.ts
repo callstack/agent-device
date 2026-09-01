@@ -37,7 +37,7 @@ export type CaptureSnapshotOptions = AgentDeviceRequestOverrides &
 
 export type CaptureSnapshotResult = {
   nodes: SnapshotNode[];
-  truncated: boolean;
+  truncated?: boolean;
   appName?: string;
   appBundleId?: string;
   visibility?: SnapshotVisibility;

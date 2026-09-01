@@ -37,7 +37,7 @@ import {
 
 export type SnapshotCommandResult = {
   nodes: SnapshotNode[];
-  truncated: boolean;
+  truncated?: boolean;
   appName?: string;
   appBundleId?: string;
   visibility?: SnapshotVisibility;
@@ -68,9 +68,10 @@ export const snapshotCommand: RuntimeCommand<
     },
   });
   await runtime.sessions.set(nextSnapshotSession(options.session, capture));
+  const truncated = snapshotTruncationForResult(capture.snapshot);
   return copySnapshotClickabilityEvidence(capture.snapshot, {
     nodes: capture.snapshot.nodes,
-    truncated: capture.snapshot.truncated ?? false,
+    ...(truncated === undefined ? {} : { truncated }),
     visibility: buildSnapshotVisibility({
       nodes: capture.snapshot.nodes,
       backend: capture.snapshot.backend,
@@ -216,6 +217,11 @@ function snapshotAppFields(capture: SnapshotCapture): {
     ...(appName || appBundleId ? { appName: appName ?? appBundleId } : {}),
     ...(appBundleId ? { appBundleId } : {}),
   };
+}
+
+function snapshotTruncationForResult(snapshot: SnapshotState): boolean | undefined {
+  if (snapshot.truncated !== undefined) return snapshot.truncated;
+  return snapshot.backend === 'xctest' && snapshot.producer === 'appium-source' ? undefined : false;
 }
 
 function buildSnapshotWarnings(params: {

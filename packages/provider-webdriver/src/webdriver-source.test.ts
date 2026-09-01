@@ -111,6 +111,7 @@ test('WebDriver scroll frame prefers visible scrollable containers', () => {
         '<android.widget.ListView bounds="[0,393][1080,1496]" displayed="true" />' +
         '<android.support.v7.widget.RecyclerView bounds="[18,597][1062,1196]" displayed="false" />' +
         '</hierarchy>',
+      { mode: 'legacy-derived' },
     ),
     { x: 0, y: 393, width: 1080, height: 1103 },
   );

@@ -71,6 +71,23 @@ export const IOS_SNAPSHOT_PRODUCER_CAPABILITIES: Readonly<
   Record<IosSnapshotProducer, IosSnapshotProducerCapabilities>
 > = Object.freeze(IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES);
 
+export function deriveIosSnapshotCapabilityResidue(
+  producer: IosSnapshotProducerCapabilities,
+): readonly IosAcquisitionResidue[] {
+  const residue: IosAcquisitionResidue[] = [];
+  if (producer.hittabilityEvidence === 'unavailable') {
+    residue.push({ kind: 'unavailable-fact', fact: 'hittability' });
+  }
+  if (
+    producer.stage === 'acquired' &&
+    (producer.acquisitionDepth.rawTraversal.kind === 'incomplete' ||
+      producer.acquisitionDepth.regularPresented.kind === 'incomplete')
+  ) {
+    residue.push({ kind: 'unavailable-fact', fact: 'acquisition-depth' });
+  }
+  return Object.freeze(residue);
+}
+
 export function createIosSnapshotRequest(input: IosSnapshotRequestInput = {}): IosSnapshotRequest {
   return Object.freeze({
     projection: input.projection ?? (input.raw === true ? 'raw' : 'regular'),

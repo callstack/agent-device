@@ -103,7 +103,7 @@ test('the independent iOS snapshot goldens match the TypeScript engine', () => {
       actual = {
         outcome: 'success',
         nodes: normalizeGoldenNodes(result.nodes),
-        truncated: acquisition.truncated,
+        truncated: acquisition.truncated ?? false,
         residue: acquisition.residue,
         ...(testCase.qualityLabels
           ? { qualityLabels: result.qualityNodes?.map((node) => node.label ?? null) }

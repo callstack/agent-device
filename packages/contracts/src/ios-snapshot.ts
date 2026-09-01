@@ -150,7 +150,7 @@ type IosSnapshotAcquisitionForIntent<Intent extends IosAcquisitionIntent> = Read
   intent: Intent;
   hint: CaptureHint & Readonly<{ acquisitionIntent: Intent }>;
   nodes: readonly RawSnapshotNode[];
-  truncated: boolean;
+  truncated?: boolean;
   viewport: IosViewportEvidence;
   lineage: IosSnapshotLineage;
   residue: readonly IosAcquisitionResidue[];
@@ -218,7 +218,7 @@ export type IosSnapshotPlan = Readonly<{
 
 export type IosSnapshotPublishedPayload = Readonly<{
   nodes: readonly SnapshotNode[];
-  truncated: boolean;
+  truncated?: boolean;
 }>;
 
 export type IosSnapshotComparisonIdentity = Readonly<{
