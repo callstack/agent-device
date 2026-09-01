@@ -17,7 +17,7 @@ import {
   ENV_COMPANION_TUNNEL_STATE_PATH,
   ENV_COMPANION_TUNNEL_UNREGISTER_PATH,
 } from './client-companion-tunnel-contract.ts';
-import { normalizeBaseUrl } from '../utils/url.ts';
+import { normalizeBaseUrl } from './base-url.ts';
 import { runCmdDetached } from '@agent-device/host-kit/command';
 import {
   isProcessAlive,

@@ -29,7 +29,8 @@ import {
   readProjectPackageJson,
   type PackageJsonShape,
 } from '../utils/project-runtime.ts';
-import { buildBundleUrl, normalizeBaseUrl } from '../utils/url.ts';
+import { normalizeBaseUrl } from '../client/base-url.ts';
+import { buildBundleUrl } from './bundle-url.ts';
 import {
   EXPO_VIRTUAL_ENTRY_BUNDLE_PATH,
   parsePort,

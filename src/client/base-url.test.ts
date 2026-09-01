@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { normalizeBaseUrl } from '../url.ts';
+import { normalizeBaseUrl } from './base-url.ts';
 
 test('normalizeBaseUrl trims trailing slashes without changing other characters', () => {
   assert.equal(normalizeBaseUrl('https://example.test'), 'https://example.test');
