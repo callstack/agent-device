@@ -68,7 +68,7 @@ test('reports a decisive partial corpus failure instead of replacing it with com
     { candidate: 'public-macos-ax' },
   ]);
   assert.equal(result.decision, 'NO-GO');
-  assert.ok(result.reasons.some((reason) => reason.includes('warm acquisition')));
+  assert.ok(result.reasons.some((reason) => reason.includes('warm/list acquisition')));
   assert.equal(
     result.reasons.some((reason) => reason.includes('required corpus')),
     false,

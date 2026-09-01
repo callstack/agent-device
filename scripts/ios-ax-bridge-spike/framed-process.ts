@@ -76,7 +76,6 @@ export async function runFramedBatch(
                 {
                   requestBytes: requestBytesFor(request, encodedRequests),
                   responseBytes: stdoutBytes,
-                  durationMs: batchDurationMs,
                 },
               ),
             );

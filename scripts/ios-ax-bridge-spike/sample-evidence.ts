@@ -1,5 +1,6 @@
 import { firstTreeStatus } from './protocol.ts';
 import { presentAcquisitionForMeasurement } from './presentation.ts';
+import { screenFixture } from '../ios-snapshot-benchmark/definitions.ts';
 import type { SpikeConfig } from './config.ts';
 import type { SpikeCell, SpikeRequest, SpikeResponse, SpikeSample } from './types.ts';
 
@@ -21,7 +22,7 @@ export function appendSamples(
   presentationSamples: SpikeSample[],
 ): void {
   const acquiredAt = new Date().toISOString();
-  const status = firstTreeStatus(captured.response);
+  const status = fixtureBoundStatus(captured.response, screen);
   const keepRawExemplar =
     captured.response.acquisition !== undefined &&
     acquisitionSamples.every((sample) => sample.acquisition === undefined);
@@ -44,6 +45,21 @@ export function appendSamples(
     ...(captured.response.failure ? { failure: captured.response.failure } : {}),
   });
   presentationSamples.push(presentationSample(candidate, state, screen, index, captured, status));
+}
+
+function fixtureBoundStatus(
+  response: SpikeResponse,
+  screen: SpikeCell['screen'],
+): SpikeSample['firstTree'] {
+  const status = firstTreeStatus(response);
+  if (status !== 'readable' || !response.acquisition) return status;
+  const fixture = screenFixture(screen);
+  const anchor = fixture.setupAnchorText ?? fixture.anchorText;
+  return response.acquisition.nodes.some((node) =>
+    [node.label, node.value, node.identifier].some((value) => value?.includes(anchor)),
+  )
+    ? 'readable'
+    : 'unreadable';
 }
 
 export function makeRequest(

@@ -11,7 +11,8 @@ export function writeSpikeReport(outputPath: string, report: SpikeReport): void 
 }
 
 export function markdownPath(outputPath: string): string {
-  return outputPath.replace(/\.json(?:\.gz)?$/u, '.md');
+  const replaced = outputPath.replace(/\.json(?:\.gz)?$/u, '.md');
+  return replaced === outputPath ? `${outputPath}.md` : replaced;
 }
 
 export function renderSpikeMarkdown(report: SpikeReport): string {
@@ -40,7 +41,7 @@ export function renderSpikeMarkdown(report: SpikeReport): string {
     '',
     '## Raw acquisition and prototype presentation results',
     '',
-    '| Candidate | State | Screen | N | Acquisition p50/p95 ms | First look p95 ms | Presentation p50/p95 ms | Nodes | Failures |',
+    '| Candidate | State | Screen | Readable/attempted | Acquisition p50/p95 ms | First look p95 ms | Presentation p50/p95 ms | Nodes | Failures |',
     '|---|---|---|---:|---:|---:|---:|---:|---:|',
     ...report.cells.map(renderCellRow),
     '',
@@ -144,7 +145,7 @@ function renderCellRow(cell: SpikeCell): string {
   const nodeCounts = readable.flatMap((sample) =>
     typeof sample.metrics?.nodeCount === 'number' ? [sample.metrics.nodeCount] : [],
   );
-  return `| ${cell.candidate} | ${cell.state} | ${cell.screen} | ${acquisition.length} | ${summary(readable, 'wallClockMs')} | ${summary(readable, 'firstLookMs')} | ${summary(
+  return `| ${cell.candidate} | ${cell.state} | ${cell.screen} | ${readable.length}/${acquisition.length} | ${summary(readable, 'wallClockMs')} | ${summary(readable, 'firstLookMs')} | ${summary(
     presentation.filter((sample) => sample.ok),
     'wallClockMs',
   )} | ${formatNumber(median(nodeCounts))} | ${failures} |`;
@@ -186,14 +187,17 @@ function preferenceExperimentLine(report: SpikeReport): string {
 }
 
 function publicAxLimitation(report: SpikeReport): string {
-  const publicList = exemplar(report, 'public-macos-ax', 'list');
-  const controlList = exemplar(report, 'xctest-control', 'list');
+  const publicList = exemplarSample(report, 'public-macos-ax', 'list');
+  const controlList = exemplarSample(report, 'xctest-control', 'list');
   if (!publicList || !controlList) return 'fidelity and latency remain unproven';
-  const publicDepth = treeDepth(publicList);
-  const controlDepth = treeDepth(controlList);
-  const publicIdentifiers = publicList.filter((node) => node.identifier).length;
-  const controlIdentifiers = controlList.filter((node) => node.identifier).length;
-  return `list evidence is substantially flatter and has different identifier coverage (depth ${publicDepth} vs ${controlDepth}; identifiers ${publicIdentifiers} vs ${controlIdentifiers})`;
+  const publicDepth = publicList.metrics?.maxTraversalDepth ?? 0;
+  const controlDepth = controlList.metrics?.maxTraversalDepth ?? 0;
+  const publicIdentifiers = publicList.acquisition!.nodes.filter((node) => node.identifier).length;
+  const controlIdentifiers = controlList.acquisition!.nodes.filter(
+    (node) => node.identifier,
+  ).length;
+  const shape = publicDepth < controlDepth ? 'flatter' : 'structurally different';
+  return `list evidence is ${shape} and has different identifier coverage (depth ${publicDepth} vs ${controlDepth}; identifiers ${publicIdentifiers} vs ${controlIdentifiers})`;
 }
 
 function compactReportEvidence(report: SpikeReport): SpikeReport {
@@ -202,7 +206,7 @@ function compactReportEvidence(report: SpikeReport): SpikeReport {
     cells: report.cells.map((cell) => ({
       ...cell,
       acquisitionSamples: cell.acquisitionSamples.map((sample, index) =>
-        index === 0 || sample.stderr === undefined ? sample : withoutStderr(sample),
+        index === 0 || !sample.ok || sample.stderr === undefined ? sample : withoutStderr(sample),
       ),
       presentationSamples: cell.presentationSamples.map((sample) => withoutStderr(sample)),
     })),
@@ -217,35 +221,26 @@ function withoutStderr(sample: SpikeSample): SpikeSample {
 function fidelityLines(report: SpikeReport): string[] {
   const lines = ['Raw exemplar fidelity (public AX vs XCTest control):'];
   for (const screen of report.config.screens) {
-    const publicNodes = exemplar(report, 'public-macos-ax', screen);
-    const controlNodes = exemplar(report, 'xctest-control', screen);
-    if (!publicNodes || !controlNodes) continue;
+    const publicSample = exemplarSample(report, 'public-macos-ax', screen);
+    const controlSample = exemplarSample(report, 'xctest-control', screen);
+    if (!publicSample || !controlSample) continue;
+    const publicNodes = publicSample.acquisition!.nodes;
+    const controlNodes = controlSample.acquisition!.nodes;
     lines.push(
-      `- ${screen}: nodes ${publicNodes.length}/${controlNodes.length}; depth ${treeDepth(publicNodes)}/${treeDepth(controlNodes)}; identifiers ${publicNodes.filter((node) => node.identifier).length}/${controlNodes.filter((node) => node.identifier).length}.`,
+      `- ${screen}: nodes ${publicNodes.length}/${controlNodes.length}; depth ${publicSample.metrics?.maxTraversalDepth ?? '–'}/${controlSample.metrics?.maxTraversalDepth ?? '–'}; identifiers ${publicNodes.filter((node) => node.identifier).length}/${controlNodes.filter((node) => node.identifier).length}.`,
     );
   }
   return lines.length === 1 ? ['Raw exemplar fidelity comparison was not available.'] : lines;
 }
 
-function exemplar(
+function exemplarSample(
   report: SpikeReport,
   candidate: SpikeCell['candidate'],
   screen: SpikeCell['screen'],
-): NonNullable<SpikeSample['acquisition']>['nodes'] | undefined {
+): SpikeSample | undefined {
   return report.cells
     .find((cell) => cell.candidate === candidate && cell.screen === screen)
-    ?.acquisitionSamples.find((sample) => sample.acquisition)?.acquisition?.nodes;
-}
-
-function treeDepth(nodes: NonNullable<SpikeSample['acquisition']>['nodes']): number {
-  const depthById = new Map<string, number>();
-  let maximum = 0;
-  for (const node of nodes) {
-    const depth = node.parentId ? (depthById.get(node.parentId) ?? 0) + 1 : 0;
-    depthById.set(node.id, depth);
-    maximum = Math.max(maximum, depth);
-  }
-  return maximum;
+    ?.acquisitionSamples.find((sample) => sample.acquisition);
 }
 
 function summary(samples: readonly SpikeSample[], key: 'wallClockMs' | 'firstLookMs'): string {

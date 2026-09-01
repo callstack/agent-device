@@ -212,7 +212,9 @@ function latencyReasons(cell: SpikeCell): string[] {
     cell.state === 'warm' &&
     (percentile(acquisition, 50) >= 75 || percentile(acquisition, 95) >= 150)
   ) {
-    reasons.push(`${cell.candidate} warm acquisition missed the 75/150 ms target.`);
+    reasons.push(
+      `${cell.candidate} ${cell.state}/${cell.screen} acquisition missed the 75/150 ms target.`,
+    );
   }
   return reasons;
 }

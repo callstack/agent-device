@@ -9,18 +9,14 @@ import {
 import { parseConfig, type SpikeConfig } from './config.ts';
 import { decideSpike } from './decision.ts';
 import { runLifecycleProbes } from './lifecycle.ts';
-import {
-  applyPrebootPreferences,
-  readSimulatorState,
-  restorePrebootPreferences,
-} from './preferences.ts';
 import { markdownPath, writeSpikeReport } from './report.ts';
+import { corpusCoverage } from './corpus-coverage.ts';
+import { primeFixtureApps, runPreferenceExperiment } from './preference-experiment.ts';
 import { createAdapterOptions, runSpikeCells } from './runner.ts';
 import { readGitRevision, readTarget, readToolchain } from '../ios-snapshot-benchmark/host.ts';
 import { runDeepButtonControls } from '../ios-snapshot-benchmark/deep-control.ts';
 import { deepButtonFixtureEvidence } from '../ios-snapshot-benchmark/deep-button.ts';
 import { bootSimulator, shutdownSimulator } from '../ios-snapshot-benchmark/lifecycle.ts';
-import { screenFixture } from '../ios-snapshot-benchmark/definitions.ts';
 import type { AcquisitionAdapter } from './adapter.ts';
 import { SPIKE_ISSUE, SPIKE_PARENT, SPIKE_PREREQUISITES, SPIKE_SCHEMA_VERSION } from './types.ts';
 import type {
@@ -113,56 +109,6 @@ async function collectSpikeEvidence(config: SpikeConfig): Promise<CollectedSpike
   };
 }
 
-function primeFixtureApps(config: SpikeConfig): void {
-  const apps = new Set(config.screens.map((screen) => screenFixture(screen).app));
-  for (const app of apps) {
-    if (!tryPrimeFixtureApp(config.udid, app))
-      throw new Error(`Failed to prime ${app} after booting the restored disposable Simulator.`);
-  }
-}
-
-function runPreferenceExperiment(config: SpikeConfig): PreferenceEvidence {
-  if (!config.applyPreferences) {
-    return initialPreferenceEvidence(config.udid);
-  }
-  shutdownSimulator(config.udid);
-  const applied = applyPrebootPreferences(config.udid);
-  let fixtureLaunchCompatible = false;
-  let restored = false;
-  try {
-    bootSimulator(config.udid);
-    fixtureLaunchCompatible = tryPrimeFixtureApp(
-      config.udid,
-      screenFixture(config.screens[0]!).app,
-    );
-    shutdownSimulator(config.udid);
-  } finally {
-    try {
-      if (readSimulatorState(config.udid) !== 'Shutdown') shutdownSimulator(config.udid);
-    } finally {
-      restored = restorePrebootPreferences(config.udid, applied.snapshots);
-    }
-  }
-  return {
-    ...applied.evidence,
-    fixtureLaunchCompatible,
-    restored,
-  };
-}
-
-function tryPrimeFixtureApp(udid: string, app: string): boolean {
-  try {
-    execFileSync('xcrun', ['simctl', 'launch', udid, app], {
-      encoding: 'utf8',
-      timeout: 60_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function stopForError(error: unknown): SpikeReport['stop'] {
   return {
     category: isConfigurationError(error) ? 'configuration' : 'infrastructure',
@@ -200,7 +146,7 @@ function createReport(
     lifecycle,
     positiveControl: evidence.positiveControl,
     status: evidence.status,
-    corpusCoverage: corpusCoverage(config),
+    corpusCoverage: corpusCoverage(config.states, config.screens, evidence.cells),
     cells: evidence.cells,
     decision: decision.decision,
     decisionReasons: decision.reasons,
@@ -280,22 +226,6 @@ function readMetadata(config: SpikeConfig): {
   };
 }
 
-function initialPreferenceEvidence(udid: string): PreferenceEvidence {
-  let simulatorStateBefore = 'unknown';
-  try {
-    simulatorStateBefore = readSimulatorState(udid);
-  } catch {
-    simulatorStateBefore = 'unavailable';
-  }
-  return {
-    applied: false,
-    restored: false,
-    fixtureLaunchCompatible: null,
-    simulatorStateBefore,
-    diffs: [],
-  };
-}
-
 function supportedAdapters(
   adapters: readonly AcquisitionAdapter[],
   probes: readonly SpikeResponse[],
@@ -305,24 +235,6 @@ function supportedAdapters(
     const probe = probes.find((candidate) => candidate.candidate === adapter.candidate);
     return probe?.failure?.kind !== 'unsupported-mechanism';
   });
-}
-
-function corpusCoverage(config: SpikeConfig): SpikeReport['corpusCoverage'] {
-  const fullStates = ['cold-cold', 'cold', 'warm', 'relaunch'];
-  const fullScreens = [
-    'quiet',
-    'list',
-    'nested-scroll',
-    'alert',
-    'system-surface',
-    'xctest-stress',
-  ];
-  return fullStates.every((state) =>
-    config.states.includes(state as SpikeConfig['states'][number]),
-  ) &&
-    fullScreens.every((screen) => config.screens.includes(screen as SpikeConfig['screens'][number]))
-    ? 'full'
-    : 'decisive-early-stop';
 }
 
 function commandText(command: string, args: readonly string[]): string {

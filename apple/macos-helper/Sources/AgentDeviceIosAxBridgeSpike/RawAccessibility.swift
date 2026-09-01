@@ -52,7 +52,8 @@ func capturePublicAccessibility(request: SpikeRequest) -> SpikeCapture {
   guard let traversalRoot = firstDescendant(
     window,
     subrole: "iOSContentGroup",
-    maxDepth: request.limits.maxTraversalDepth
+    maxDepth: request.limits.maxTraversalDepth,
+    maxNodes: request.limits.maxNodes
   ) else {
     return unsupportedCapture(
       code: "target-simulator-content-unavailable",
@@ -148,14 +149,14 @@ private func targetWindow(_ windows: [AXUIElement], name: String?) -> AXUIElemen
 private func firstDescendant(
   _ element: AXUIElement,
   subrole: String,
-  maxDepth: Int
+  maxDepth: Int,
+  maxNodes: Int
 ) -> AXUIElement? {
   var queue: [(AXUIElement, Int)] = [(element, 0)]
-  var visited: [AXUIElement] = []
-  while !queue.isEmpty {
+  var visited = Set<ObjectIdentifier>()
+  while !queue.isEmpty && visited.count < maxNodes {
     let (candidate, depth) = queue.removeFirst()
-    if visited.contains(where: { CFEqual($0, candidate) }) { continue }
-    visited.append(candidate)
+    if !visited.insert(ObjectIdentifier(candidate)).inserted { continue }
     if axString(candidate, kAXSubroleAttribute as String) == subrole { return candidate }
     if depth < maxDepth {
       queue.append(contentsOf: axChildren(candidate).map { ($0, depth + 1) })

@@ -107,22 +107,27 @@ async function collectWarmSamples(
   presentationSamples: SpikeSample[],
 ): Promise<void> {
   admitReadyCell(context, admission);
-  const requests = Array.from({ length: config.samples }, (_, index) =>
-    makeRequest(config, adapter.candidate, admission.state, admission.fixture.id, index),
-  );
-  const captured = await captureBatch(adapter, requests);
-  captured.forEach((item, index) =>
+  for (let index = 0; index < config.samples; index += 1) {
+    if (index > 0) prepareSampleState(admission);
+    const request = makeRequest(
+      config,
+      adapter.candidate,
+      admission.state,
+      admission.fixture.id,
+      index,
+    );
+    const captured = await capture(adapter, request);
     appendSamples(
       adapter.candidate,
       admission.state,
       admission.fixture.id,
       index,
-      item,
+      captured,
       0,
       acquisitionSamples,
       presentationSamples,
-    ),
-  );
+    );
+  }
 }
 
 async function collectNonWarmSamples(
@@ -194,27 +199,6 @@ async function capture(
     startedAt,
     wallClockMs: performance.now() - started,
   };
-}
-
-async function captureBatch(
-  adapter: AcquisitionAdapter,
-  requests: readonly SpikeRequest[],
-): Promise<CapturedResponse[]> {
-  const startedAt = new Date().toISOString();
-  const started = performance.now();
-  const batch = await adapter.acquireBatch(requests);
-  const batchWallClockMs = performance.now() - started;
-  if (batch.responses.length !== requests.length) {
-    throw new BenchmarkInfrastructureError(
-      `Adapter ${adapter.candidate} returned an incomplete batch.`,
-    );
-  }
-  return batch.responses.map((response) => ({
-    response,
-    stderr: batch.stderr,
-    startedAt,
-    wallClockMs: response.metrics.durationMs > 0 ? response.metrics.durationMs : batchWallClockMs,
-  }));
 }
 
 function contextFor(

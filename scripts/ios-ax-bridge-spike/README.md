@@ -24,7 +24,7 @@ pnpm bench:ios-ax-bridge -- \
   --out .tmp/ios-ax-bridge-spike.v1.json.gz
 ```
 
-The default candidate set, state set, screen set, and sample minimums come from the #2189 benchmark definitions. Each request carries a target generation and fixed request, response, node-count, traversal-depth, CPU, memory, and duration bounds. The native helper sends one newline-delimited response per request and writes diagnostics to stderr only. The report keeps raw nodes, viewport evidence, target lineage, truncation, residue, resource metrics, stderr, and a separate prototype presentation measurement.
+The default candidate set, state set, screen set, and sample minimums come from the #2189 benchmark definitions. Each request carries an optional expected target generation and fixed request, response, node-count, traversal-depth, CPU, memory, and duration bounds; each successful response reports the observed generation. The native helper sends one newline-delimited response per request and writes diagnostics to stderr only. The report keeps raw nodes, viewport evidence, target lineage, truncation, residue, resource metrics, stderr, and a separate prototype presentation measurement.
 
 `--apply-preferences` is the only way the experiment edits Simulator preference plists. The Simulator must be shutdown; the harness records exact plist hashes and targeted key changes, then restores the original bytes before reporting. The keys are not production defaults. Omit `--private-tool` unless a disposable, compatible private mechanism is being tested; the harness never invents a private fallback.
 

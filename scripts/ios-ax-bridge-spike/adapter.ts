@@ -8,7 +8,7 @@ import {
   type CliResult,
 } from '../ios-snapshot-benchmark/command.ts';
 import { runFramedBatch, type FramedProcessSpec } from './framed-process.ts';
-import { DEFAULT_SPIKE_LIMITS } from './limits.ts';
+import { DEFAULT_SPIKE_LIMITS, validateRawAcquisition } from './limits.ts';
 import { failureResponse } from './protocol.ts';
 import type {
   CandidateId,
@@ -159,6 +159,10 @@ function successfulControlResponse(
     truncated: snapshot.truncated,
     residue: [{ kind: 'missing-viewport', reason: 'not-provided' }],
   } as const;
+  const validated = validateRawAcquisition(acquisition, request.limits);
+  if (!validated.ok) {
+    return failureResponse(request, { kind: 'malformed-tree', code: validated.code });
+  }
   return {
     version: 1,
     id: request.id,
@@ -169,9 +173,9 @@ function successfulControlResponse(
       requestBytes: 0,
       responseBytes: Buffer.byteLength(result.stdout),
       nodeCount: acquisition.nodes.length,
-      maxTraversalDepth: 0,
+      maxTraversalDepth: validated.maxTraversalDepth,
       cpuMs: null,
-      memoryBytes: process.memoryUsage().rss,
+      memoryBytes: null,
       durationMs,
     },
   };
