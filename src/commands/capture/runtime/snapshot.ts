@@ -37,7 +37,7 @@ import {
 
 export type SnapshotCommandResult = {
   nodes: SnapshotNode[];
-  truncated: boolean;
+  truncated?: boolean;
   appName?: string;
   appBundleId?: string;
   visibility?: SnapshotVisibility;
@@ -70,7 +70,7 @@ export const snapshotCommand: RuntimeCommand<
   await runtime.sessions.set(nextSnapshotSession(options.session, capture));
   return copySnapshotClickabilityEvidence(capture.snapshot, {
     nodes: capture.snapshot.nodes,
-    truncated: capture.snapshot.truncated ?? false,
+    ...(capture.snapshot.truncated !== undefined ? { truncated: capture.snapshot.truncated } : {}),
     visibility: buildSnapshotVisibility({
       nodes: capture.snapshot.nodes,
       backend: capture.snapshot.backend,

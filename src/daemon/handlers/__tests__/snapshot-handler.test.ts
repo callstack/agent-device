@@ -17,7 +17,10 @@ import { AppError } from '@agent-device/kernel/errors';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { buildSnapshotSignatures } from '../../../snapshot/snapshot-freshness/index.ts';
 import { buildInteractionSurfaceSignature } from '../../interaction-outcome-policy.ts';
-import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
+import {
+  buildSnapshotPresentationKey,
+  SNAPSHOT_ENGINE_PRESENTED,
+} from '@agent-device/kernel/snapshot';
 import { snapshotCliOutput } from '../../../commands/capture/output.ts';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
@@ -124,9 +127,12 @@ const providerIosDevice: SessionState['device'] = {
   booted: true,
 };
 
-function makeProviderRuntimeOwning(device: SessionState['device']): ProviderDeviceRuntime {
+function makeProviderRuntimeOwning(
+  device: SessionState['device'],
+  provider = 'browserstack',
+): ProviderDeviceRuntime {
   return {
-    provider: 'browserstack',
+    provider,
     leaseLifecycle: {},
     deviceInventoryProvider: async () => [device],
     ownsDevice: (candidate) => candidate.id === device.id,
@@ -482,6 +488,51 @@ test('snapshot on provider-backed iOS runs without a tracked app', async () => {
   // guaranteed-useless spawn on what is now a success path.
   expect(mockBuildIosOpenCommandHint).not.toHaveBeenCalled();
   expect(bindCount).toBe(1);
+});
+
+test('Limrun unknown truncation stays omitted through daemon and public output', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'limrun-ios-unknown-truncation';
+  const limrunDevice: SessionState['device'] = {
+    platform: 'apple',
+    appleOs: 'ios',
+    id: 'limrun:ios:lease-a',
+    name: 'Limrun iOS',
+    kind: 'simulator',
+    target: 'mobile',
+    booted: true,
+  };
+  sessionStore.set(sessionName, makeSession(sessionName, limrunDevice));
+  setActiveProviderDeviceRuntimes([makeProviderRuntimeOwning(limrunDevice, 'limrun')]);
+  legacyDispatchCapture.mockResolvedValue({
+    nodes: [{ index: 0, depth: 0, type: 'Application', label: 'Demo' }],
+    backend: 'xctest',
+    producer: 'limrun-ios-tree',
+    warnings: ['tree completeness is not independently verified'],
+    [SNAPSHOT_ENGINE_PRESENTED]: true,
+  });
+
+  const response = await handleSnapshotCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'snapshot',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(true);
+  if (!response?.ok) return;
+  expect(response.data).not.toHaveProperty('truncated');
+
+  const cliOutput = await snapshotCliOutput({
+    result: response.data as unknown as CaptureSnapshotResult,
+  });
+  expect(cliOutput.jsonData).not.toHaveProperty('truncated');
 });
 
 test('diff on local iOS still requires a tracked app', async () => {

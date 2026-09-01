@@ -1118,6 +1118,22 @@ test('client capture.snapshot preserves visibility metadata from daemon response
   });
 });
 
+test('client capture.snapshot preserves unknown truncation as an omitted field', async () => {
+  const setup = createTransport(async () => ({
+    ok: true,
+    data: {
+      nodes: [],
+      warnings: ['tree completeness is not independently verified'],
+    },
+  }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.capture.snapshot();
+
+  assert.equal('truncated' in result, false);
+  assert.equal(result.truncated, undefined);
+});
+
 test('client capture.snapshot preserves refsGeneration from daemon responses (ADR 0014)', async () => {
   const setup = createTransport(async () => ({
     ok: true,

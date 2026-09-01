@@ -37,7 +37,8 @@ export type CaptureSnapshotOptions = AgentDeviceRequestOverrides &
 
 export type CaptureSnapshotResult = {
   nodes: SnapshotNode[];
-  truncated: boolean;
+  /** Present only when the capture owner establishes whether the tree was truncated. */
+  truncated?: boolean;
   appName?: string;
   appBundleId?: string;
   visibility?: SnapshotVisibility;

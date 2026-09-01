@@ -511,7 +511,7 @@ function normalizeSnapshotResult(
   const appBundleId = readOptionalString(data, 'appBundleId');
   return {
     nodes: readSnapshotNodes(data.nodes),
-    truncated: data.truncated === true,
+    ...(typeof data.truncated === 'boolean' ? { truncated: data.truncated } : {}),
     appName: readOptionalString(data, 'appName'),
     appBundleId,
     ...optionalSnapshotResponseFields(data),

@@ -36,7 +36,7 @@ test('runtime snapshot captures nodes and updates the session baseline', async (
   const result = await device.capture.snapshot({ session: 'default' });
 
   assert.equal(result.nodes[0]?.label, 'Home');
-  assert.equal(result.truncated, false);
+  assert.equal(result.truncated, undefined);
   assert.equal(result.appName, 'Demo');
   assert.equal(result.appBundleId, 'com.example.demo');
   assert.equal(stored?.snapshot?.nodes[0]?.label, 'Home');

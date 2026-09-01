@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { SnapshotEnginePresentedMarker } from '@agent-device/kernel/snapshot';
 import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
 import type { captureSnapshotWithInteractor } from '../handlers/snapshot-interactor-capture.ts';
 
@@ -19,7 +20,7 @@ export const legacyDispatchCapture = vi.fn<
     positionals?: string[],
     outPath?: string,
     context?: Record<string, unknown>,
-  ) => Promise<Record<string, unknown> | void>
+  ) => Promise<(Record<string, unknown> & SnapshotEnginePresentedMarker) | void>
 >(async () => ({}));
 
 /**
