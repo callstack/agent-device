@@ -37,6 +37,7 @@ export type ScreenFixture = {
   app: string;
   launchUrl?: string;
   anchorText: string;
+  postSetupAnchorText?: string;
   setupAction?: 'open-alert';
 };
 

@@ -43,6 +43,7 @@ const SCREEN_FIXTURES: readonly ScreenFixture[] = [
     app: FIXTURE_APP_ID,
     launchUrl: `${FIXTURE_SCHEME}/automation`,
     anchorText: 'Automation lab',
+    postSetupAnchorText: 'Automation confirmation',
     setupAction: 'open-alert',
   },
   {
