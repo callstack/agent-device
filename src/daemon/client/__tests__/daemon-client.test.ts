@@ -10,7 +10,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   supportsLoopbackBind,
-} from '../../__tests__/test-utils/loopback.ts';
+} from '../../../__tests__/test-utils/loopback.ts';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import {
   isProcessAlive,
@@ -18,24 +18,24 @@ import {
   readProcessStartTime,
   waitForProcessExit,
 } from '@agent-device/host-kit/process';
-import { sendToDaemon } from '../../daemon/client/daemon-client.ts';
-import { computeDaemonCodeSignature } from '../../daemon/code-signature.ts';
-import { downloadRemoteArtifact } from '../../remote/daemon-artifacts.ts';
+import { sendToDaemon } from '../daemon-client.ts';
+import { computeDaemonCodeSignature } from '../../code-signature.ts';
+import { downloadRemoteArtifact } from '../../../remote/daemon-artifacts.ts';
 import {
   cleanupFailedDaemonStartupMetadata,
   resolveDaemonStartupHint,
-} from '../../daemon/client/daemon-client-metadata.ts';
-import { canConnectSocket } from '../../daemon/client/daemon-client-transport.ts';
-import { DAEMON_RPC_PROTOCOL_VERSION } from '../../daemon/http-health.ts';
+} from '../daemon-client-metadata.ts';
+import { canConnectSocket } from '../daemon-client-transport.ts';
+import { DAEMON_RPC_PROTOCOL_VERSION } from '../../http-health.ts';
 import {
   resolveDaemonRequestTimeoutMs,
   resolveRequestTimeoutHint,
   shouldResetDaemonAfterRequestTimeout,
-} from '../../daemon/client/daemon-client-timeout.ts';
-import { resolveDaemonPaths } from '../../daemon/config.ts';
-import { stopProcessForTakeover } from '../../daemon/daemon-process.ts';
+} from '../daemon-client-timeout.ts';
+import { resolveDaemonPaths } from '../../config.ts';
+import { stopProcessForTakeover } from '../../daemon-process.ts';
 import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 // readProcessStartTime/readProcessCommand shell out to `ps` with a 1s
 // timeout (see host-process.ts). isAgentDeviceDaemonProcess re-reads both for

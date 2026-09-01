@@ -6,7 +6,7 @@
  * process-level keep-alive (Fix 1's daemon
  * teardown guard) is a different architectural layer — a client-side process
  * manager, not session/script state — and is covered separately in
- * `src/utils/__tests__/daemon-client-lifecycle.test.ts`
+ * `src/daemon/client/__tests__/daemon-client-lifecycle.test.ts`
  * ("keeps an owned ephemeral daemon alive and hints its --state-dir...").
  *
  * Fix 1 (session-side): a divergence never deletes the session — it stays in

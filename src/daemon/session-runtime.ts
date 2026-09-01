@@ -7,7 +7,7 @@ import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, SessionRuntimeHints, SessionState } from './types.ts';
 import { SessionStore } from './session-store.ts';
-import { trimRuntimeValue } from '../utils/runtime-transport.ts';
+import { trimRuntimeValue } from '../core/runtime-transport-hints.ts';
 import { isAndroidEmulator, isIosSimulator } from './device-targets.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';
 

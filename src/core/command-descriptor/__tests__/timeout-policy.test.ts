@@ -16,7 +16,7 @@ import { DEFAULT_STABLE_TIMEOUT_MS } from '../../../commands/interaction/runtime
 // default are bounded, diffable lists — they may only change in the same PR
 // that updates them here. Behavioral derivation (envelope arithmetic, wait
 // budget parsing, flag overrides) is proven by the pre-existing oracle tests in
-// src/utils/__tests__/daemon-client.test.ts, which survived this migration
+// src/daemon/client/__tests__/daemon-client.test.ts, which survived this migration
 // unchanged.
 
 function settleObservationCommandNames(): string[] {

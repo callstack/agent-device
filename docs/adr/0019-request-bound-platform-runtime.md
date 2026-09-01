@@ -151,6 +151,7 @@ selection, R11/R13 package enumeration, and the composite typecheck project list
 >   commands), `process` (observing and owning host processes), `diagnostics`, `retry`
 >   (deadline/backoff/sleep), `archive` (bounded extraction and byte limits), `file` (atomic
 >   publishes, locks, path resolution), `request` (request-scoped cancellation and progress),
+>   `transport` (line framing, lazy HTTP/body mechanics, and constant-time secret comparison),
 >   and `version` (the installed version off disk). Modules under `src/internal/` are reachable
 >   only through a port, and a port may only hold mechanics a consumer of that capability
 >   needs — the eager-closure row per port is what keeps that honest.

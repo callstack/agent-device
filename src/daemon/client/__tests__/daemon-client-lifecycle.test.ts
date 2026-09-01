@@ -5,7 +5,7 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
@@ -18,20 +18,16 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
   sleep: vi.fn(async () => {}),
 }));
 
-import { resolveDaemonPaths, type DaemonPaths } from '../../daemon/config.ts';
-import {
-  sendToDaemon,
-  type DaemonRequest,
-  type DaemonResponse,
-} from '../../daemon/client/daemon-client.ts';
-import { attachActiveSessionAddressHint } from '../../daemon/client/daemon-client-lifecycle.ts';
-import { computeDaemonCodeSignature } from '../../daemon/code-signature.ts';
-import { sendRequest } from '../../daemon/client/daemon-client-transport.ts';
+import { resolveDaemonPaths, type DaemonPaths } from '../../config.ts';
+import { sendToDaemon, type DaemonRequest, type DaemonResponse } from '../daemon-client.ts';
+import { attachActiveSessionAddressHint } from '../daemon-client-lifecycle.ts';
+import { computeDaemonCodeSignature } from '../../code-signature.ts';
+import { sendRequest } from '../daemon-client-transport.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
   supportsLoopbackBind,
-} from '../../__tests__/test-utils/loopback.ts';
+} from '../../../__tests__/test-utils/loopback.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   runCmdDetachedMonitored,

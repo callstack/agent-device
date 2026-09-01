@@ -518,6 +518,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/host-kit/process',
     '@agent-device/host-kit/request',
     '@agent-device/host-kit/retry',
+    '@agent-device/host-kit/transport',
     '@agent-device/host-kit/version',
   ]);
   assert.deepEqual([...hostKitPackage.workspaceDependencies].sort(), [

@@ -152,6 +152,9 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/host-kit/src/process.ts': 12,
   'packages/host-kit/src/request.ts': 5,
   'packages/host-kit/src/retry.ts': 6,
+  // #2139 keeps framing, lazy HTTP/body mechanics, and secret comparison behind one
+  // transport port without growing the CLI's eager closure.
+  'packages/host-kit/src/transport.ts': 4,
   'packages/host-kit/src/version.ts': 4,
 
   // --- @agent-device/provision-kit ---

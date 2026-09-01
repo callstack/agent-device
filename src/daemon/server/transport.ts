@@ -11,7 +11,7 @@ import {
   withRequestProgressSink,
 } from '@agent-device/host-kit/request';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { consumeTextLines } from '../../utils/line-stream.ts';
+import { consumeTextLines } from '@agent-device/host-kit/transport';
 
 import {
   serializeDaemonProgressEnvelope,

@@ -64,7 +64,7 @@ test('a successful replay prints one line with the step count and wall time', as
 // producer (`completeReplayRun`'s `sessionStore.get(sessionName)` check), not
 // asserted against a hand-crafted fixture — deleting that line would fail
 // these, unlike the client-lifecycle tests in
-// `src/utils/__tests__/daemon-client-lifecycle.test.ts`, which only prove the
+// `src/daemon/client/__tests__/daemon-client-lifecycle.test.ts`, which only prove the
 // CLIENT'S reaction to a `sessionActive` value it is handed. ---
 
 test('a close-less replay reports sessionActive: true (real producer, session still in the store)', async () => {

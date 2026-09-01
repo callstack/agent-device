@@ -47,6 +47,10 @@
       "types": "./src/retry.ts",
       "default": "./src/retry.ts"
     },
+    "./transport": {
+      "types": "./src/transport.ts",
+      "default": "./src/transport.ts"
+    },
     "./version": {
       "types": "./src/version.ts",
       "default": "./src/version.ts"

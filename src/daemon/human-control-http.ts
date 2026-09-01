@@ -1,7 +1,6 @@
 import type http from 'node:http';
 import { AppError, createRequestCanceledError, normalizeError } from '@agent-device/kernel/errors';
-import { readNodeHttpRequestBody } from '../utils/node-http.ts';
-import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
+import { readNodeHttpRequestBody, timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import { sendRestJsonError } from './http-errors.ts';
 import {
   HUMAN_CONTROL_HTTP_PREFIX,

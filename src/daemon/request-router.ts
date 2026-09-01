@@ -10,7 +10,7 @@ import {
   retriableForErrorCode,
   type DaemonError,
 } from '@agent-device/kernel/errors';
-import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
+import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import type { DaemonArtifactType, ResponseCost } from '@agent-device/kernel/contracts';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
 import type {

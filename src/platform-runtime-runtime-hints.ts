@@ -3,7 +3,7 @@ import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { escapeXmlTextAndAttribute } from '@agent-device/xml';
 import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { execFailureDetails, type ExecResult } from '@agent-device/host-kit/command';
-import { type ResolvedRuntimeTransport } from './utils/runtime-transport.ts';
+import { type ResolvedRuntimeTransport } from './core/runtime-transport-hints.ts';
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 // React Native's PackagerConnectionSettings/DevInternalSettings read debug_http_host via
