@@ -61,6 +61,7 @@ test('the npm package build covers every package-owned output before verificatio
     'pnpm build:macos-helper:clean',
     'pnpm prepare:publish-assets',
   ]);
+  assert.equal(script('prepare:publish-assets'), 'node scripts/prepare-publish-assets.mjs');
   assert.equal(script('package:npm'), 'pnpm build:package && pnpm check:package');
 
   assert.deepEqual(script('build:android').split(' && '), [

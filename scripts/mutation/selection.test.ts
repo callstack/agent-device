@@ -80,9 +80,9 @@ test('a lane-tooling diff selects real mutants', () => {
 // The weekly sweep is the kernel report; selecting on derived ownership would
 // run the full ten-shard sweep on most PRs for a report nobody gates on.
 test('a kernel diff selects nothing — only a harness diff spends mutants', () => {
-  const dir = worktreeWithCommit('kernel', ['src/utils/scroll-edge-state.ts']);
+  const dir = worktreeWithCommit('kernel', ['src/snapshot/scroll-edge-state.ts']);
   assert.deepEqual(listAffected(dir), []);
-  assert.deepEqual(affectedMatrixFor(['src/utils/scroll-edge-state.ts']), []);
+  assert.deepEqual(affectedMatrixFor(['src/snapshot/scroll-edge-state.ts']), []);
 });
 
 test('a docs-only diff selects nothing', () => {

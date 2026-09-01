@@ -46,7 +46,6 @@ const TARGET_DAG_RANK = new Map([
   ['screenshot-diff', 1],
   ['selectors', 1],
   ['snapshot', 1],
-  ['utils', 1],
   ['core', 2],
   ['cli-schema', 3],
   ['commands', 3],
@@ -78,9 +77,9 @@ export function zoneRank(zone: string): number | null {
 // and the no-root-back-import rule instead of their former src folder rank.
 //
 // The satellite zones used to be listed here too, on the grounds that ranking them would
-// invent an order the architecture had not committed to. Once `utils` joined the spine and
-// `(root)` was emptied of shared contracts, every one of them turned out to have a
-// consistent rank already — so the order was there, just unasserted.
+// invent an order the architecture had not committed to. Once `(root)` was emptied of shared
+// contracts, every one of them turned out to have a consistent rank already — so the order was
+// there, just unasserted. The former `utils` zone was retired into owning modules and packages.
 // Extracted workspace packages are not src/ zones: R11 owns their physical seams, and their zone
 // names only appear in workspace-aware graphs. The platform packages additionally carry R13's
 // exact-family/composition/laziness policy.

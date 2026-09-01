@@ -102,7 +102,7 @@ test('Markdown reports component diffs and changed packed files', () => {
     js: { rawBytes: 10, gzipBytes: 8 },
     npmPack: {
       tarballBytes: 100,
-      unpackedBytes: 1713,
+      unpackedBytes: 2218,
       components: summarizeNpmPackComponents({
         ...fixturePack,
         unpackedSize: 2218,
