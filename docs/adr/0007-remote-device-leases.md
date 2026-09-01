@@ -73,6 +73,20 @@ draining removes only that request's pending hold, leaving successor and unrelat
 canceling activation does not cancel the mutations being drained. Completed holds use their TTL or
 explicit release lifecycle.
 
-Holds, like leases, are in-memory and do not survive daemon restart. Controllers must reconnect and
-re-establish them; no persisted hold store is used. Local takeover is deferred: a future host-global
-human-control fence must coexist with the local session's device claim, not acquire it exclusively.
+Holds and ordinary proxy leases are in-memory and do not survive daemon restart. Controllers must
+reconnect and re-establish them; no persisted hold store is used. Local takeover is deferred: a
+future host-global human-control fence must coexist with the local session's device claim, not
+acquire it exclusively.
+
+## Host managed-device durability amendment
+
+ADR 0021 adds a narrow durability exception for Host leases backed by a managed-device allocator.
+Before allocator acquisition, the daemon persists a non-authoritative allocation operation record;
+Host adds its asserted principal, Host lease id, and run/client attribution. After grant, it records
+the allocator outcome and Host-to-managed-device lease mapping before publishing the Host grant.
+
+This record tracks Host publication and cleanup; it never mirrors allocator lifecycle state or
+becomes a second source of device truth. It exists to reconcile an uncertain allocator outcome and
+prevent duplicate or unattributed local ownership. It does not make the ordinary `LeaseRegistry`,
+proxy leases, or human-control holds durable. Rehydration requires the same authorized Host user
+and revalidates the allocator lease before device operations resume.
