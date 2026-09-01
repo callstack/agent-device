@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { buildSnapshotState } from '../../core/snapshot-state.ts';
 
 // End-to-end publication-membership contract for the acquire/present design (#1797, external
@@ -11,7 +12,10 @@ import { buildSnapshotState } from '../../core/snapshot-state.ts';
 // suppression test below fails because promo-banner is published. It passes only when the
 // production suppression fires.
 function publish(nodes: RawSnapshotNode[]) {
-  return buildSnapshotState({ nodes, backend: 'xctest' }, { snapshotInteractiveOnly: true }).nodes;
+  return buildSnapshotState(
+    { nodes: presentIosInteractiveSnapshot(nodes), backend: 'xctest' },
+    { snapshotInteractiveOnly: true },
+  ).nodes;
 }
 
 const screen: RawSnapshotNode[] = [

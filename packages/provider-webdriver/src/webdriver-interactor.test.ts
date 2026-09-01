@@ -249,6 +249,26 @@ test('fill refuses empty text as an unsupported clear rather than a vacuous succ
   assert.deepEqual(world.transcript, []);
 });
 
+test('iOS WebDriver interactor routes snapshots through the acquisition adapter', async () => {
+  const source = vi.fn(
+    async () =>
+      '<AppiumAUT><XCUIElementTypeApplication x="0" y="0" width="390" height="844" /></AppiumAUT>',
+  );
+  const interactor = createWebDriverInteractor({
+    client: { source } as unknown as WebDriverClient,
+    backend: 'xctest',
+    capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'ios' }),
+    targetId: 'ios-1',
+  });
+
+  const result = await interactor.snapshot({ raw: true, depth: 1 });
+
+  assert.equal(result.backend, 'xctest');
+  assert.equal(result.producer, 'appium-source');
+  assert.equal(source.mock.calls.length, 1);
+  assert.equal(result.nodes?.[0]?.type, 'XCUIElementTypeApplication');
+});
+
 async function runFill(world: ReturnType<typeof createTextEntryWorld>) {
   vi.useFakeTimers();
   try {

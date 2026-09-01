@@ -25,6 +25,7 @@ import type { W3CPointerAction, WebDriverClient, WebDriverWindowRect } from './w
 import { touchPointer } from './webdriver-gestures.ts';
 import { scrollFrameFromWebDriverSource } from './webdriver-scroll-frame.ts';
 import { parseWebDriverSource } from './webdriver-source.ts';
+import { captureWebDriverIosSnapshot } from './webdriver-ios-snapshot.ts';
 import { setWebDriverOrientation } from './webdriver-orientation.ts';
 
 /**
@@ -99,25 +100,34 @@ export type WebDriverInteractorOptions = {
   client: WebDriverClient;
   backend: Extract<SnapshotResult['backend'], 'android' | 'xctest'>;
   capabilities: CloudWebDriverProviderCapabilities;
+  targetId?: string;
 };
 
 export function createWebDriverInteractor(options: WebDriverInteractorOptions): Interactor {
-  return new WebDriverInteractor(options.client, options.backend, options.capabilities);
+  return new WebDriverInteractor(
+    options.client,
+    options.backend,
+    options.capabilities,
+    options.targetId,
+  );
 }
 
 class WebDriverInteractor implements Interactor {
   private readonly client: WebDriverClient;
   private readonly backend: Extract<SnapshotResult['backend'], 'android' | 'xctest'>;
   private readonly capabilities: CloudWebDriverProviderCapabilities;
+  private readonly targetId: string | undefined;
 
   constructor(
     client: WebDriverClient,
     backend: Extract<SnapshotResult['backend'], 'android' | 'xctest'>,
     capabilities: CloudWebDriverProviderCapabilities,
+    targetId?: string,
   ) {
     this.client = client;
     this.backend = backend;
     this.capabilities = capabilities;
+    this.targetId = targetId;
   }
 
   async open(
@@ -292,14 +302,16 @@ class WebDriverInteractor implements Interactor {
     await this.client.screenshot(outPath);
   }
 
-  async snapshot(_options?: SnapshotOptions): Promise<SnapshotResult> {
+  async snapshot(options?: SnapshotOptions): Promise<SnapshotResult> {
     this.requireSupport('snapshot');
+    if (this.backend === 'xctest') {
+      return await captureWebDriverIosSnapshot(this.client, options, this.targetId);
+    }
     // Spelled as a correlated pair per channel so the SnapshotProvenance union accepts it.
     return {
-      ...(this.backend === 'xctest'
-        ? { backend: 'xctest' as const, producer: 'appium-source' as const }
-        : { backend: 'android' as const, producer: 'appium-source' as const }),
-      nodes: parseWebDriverSource(await this.client.source()),
+      backend: 'android' as const,
+      producer: 'appium-source' as const,
+      nodes: parseWebDriverSource(await this.client.source(), { mode: 'legacy-derived' }),
     };
   }
 
