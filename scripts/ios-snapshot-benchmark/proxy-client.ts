@@ -8,6 +8,11 @@ import {
 } from './command.ts';
 import { buildMeasurement } from './statistics.ts';
 import {
+  fixtureOperationFromCli,
+  prepareFixture,
+  requireFixtureAnchor,
+} from './fixture-admission.ts';
+import {
   allocateLease,
   captureClientSample,
   closeCliSession,
@@ -131,6 +136,14 @@ async function collectFreshCliSamples(
   for (let index = 0; index < options.samples; index += 1) {
     const mark = options.conditioner.mark();
     const result = await snapshotFixtureAsync(context);
+    if (result.ok) {
+      requireFixtureAnchor(
+        result.payload,
+        options.fixture,
+        'sample',
+        'agent-device batch --steps snapshot',
+      );
+    }
     samples.push(sampleFromProxyCli(result, options.conditioner, mark, index));
   }
   return samples;
@@ -140,11 +153,20 @@ async function prepareFreshCliFixture(
   context: ReturnType<typeof freshCliContext>,
   fixture: ScreenFixture,
 ): Promise<void> {
-  if (fixture.setupAction !== 'open-alert') return;
-  const scrolled = await scrollFixtureSetupAsync(context);
-  if (!scrolled.ok) throw setupFailure('fresh CLI alert setup scroll', scrolled);
-  const pressed = await pressFixtureTargetAsync(context, 'id="automation-open-alert"');
-  if (!pressed.ok) throw setupFailure('fresh CLI alert setup', pressed);
+  await prepareFixture(fixture, {
+    observe: async () =>
+      fixtureOperationFromCli(
+        await snapshotFixtureAsync(context),
+        'agent-device batch --steps snapshot',
+      ),
+    scrollToBottom: async () =>
+      fixtureOperationFromCli(await scrollFixtureSetupAsync(context), 'agent-device scroll bottom'),
+    openAlert: async () =>
+      fixtureOperationFromCli(
+        await pressFixtureTargetAsync(context, 'id="automation-open-alert"'),
+        'agent-device click id="automation-open-alert"',
+      ),
+  });
 }
 
 function sampleFromProxyCli(

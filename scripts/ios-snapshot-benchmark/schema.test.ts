@@ -14,6 +14,12 @@ function result(): BenchmarkResult {
     generatedAt: '2026-01-01T00:00:00.000Z',
     revision: { commit: 'abc', branch: 'test', dirty: false },
     toolchain: { node: 'v26', pnpm: '10', xcode: '27', simctl: '27', os: 'darwin', arch: 'arm64' },
+    host: {
+      model: 'MacBook Pro',
+      modelIdentifier: 'Mac16,8',
+      cpu: 'Apple M4 Pro',
+      cpuCores: 12,
+    },
     target: {
       platform: 'ios',
       kind: 'simulator',

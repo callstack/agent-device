@@ -6,6 +6,7 @@ export function renderBenchmarkMarkdown(result: BenchmarkResult): string {
     '',
     `- Status: **${result.status}**`,
     `- Revision: ${result.revision.commit}`,
+    `- Host: ${result.host.model} (${result.host.modelIdentifier}; ${result.host.cpu}, ${result.host.cpuCores} cores)`,
     `- Target: ${result.target.name} (${result.target.udid}, ${result.target.runtime})`,
     `- Generated: ${result.generatedAt}`,
     '',

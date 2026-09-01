@@ -10,7 +10,7 @@ import { classifyFailure, formatCliFailure, openFixture, type CliContext } from 
 import { BenchmarkControlError, runDeepButtonControls } from './deep-control.ts';
 import { CONTRACT, screenFixture } from './definitions.ts';
 import { deepButtonFixtureEvidence } from './deep-button.ts';
-import { readGitRevision, readTarget, readToolchain } from './host.ts';
+import { readGitRevision, readHostIdentity, readTarget, readToolchain } from './host.ts';
 import {
   BenchmarkCellAdmissionError,
   BenchmarkContentionError,
@@ -30,6 +30,7 @@ import {
   type BenchmarkResult,
   type DeepButtonEvidence,
   type GitRevision,
+  type HostIdentity,
   type Measurement,
   type PackageSize,
   type ProxyNetwork,
@@ -37,7 +38,12 @@ import {
   type Toolchain,
 } from './types.ts';
 
-type BenchmarkMetadata = { revision: GitRevision; target: Target; toolchain: Toolchain };
+type BenchmarkMetadata = {
+  revision: GitRevision;
+  target: Target;
+  toolchain: Toolchain;
+  host: HostIdentity;
+};
 type BenchmarkEvidence = {
   packageSize: PackageSize;
   deepButtonEvidence: DeepButtonEvidence;
@@ -71,6 +77,7 @@ function readMetadata(config: BenchmarkConfig): BenchmarkMetadata {
     revision: readGitRevision(config.repoRoot),
     target: readTarget(config.udid, config.appId, config.appPath),
     toolchain: readToolchain(),
+    host: readHostIdentity(),
   };
 }
 
@@ -248,6 +255,7 @@ function resultFields(
     generatedAt: new Date().toISOString(),
     revision: metadata.revision,
     toolchain: metadata.toolchain,
+    host: metadata.host,
     target: metadata.target,
     config: {
       warmSampleMinimum: CONTRACT.warmSampleMinimum,
