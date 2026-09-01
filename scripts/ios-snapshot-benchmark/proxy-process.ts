@@ -20,8 +20,6 @@ export async function startProxy(repoRoot: string, stateDir: string): Promise<Pr
       'proxy',
       '--state-dir',
       stateDir,
-      '--port',
-      '0',
       '--daemon-auth-token',
       token,
       '--json',
