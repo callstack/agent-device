@@ -43,7 +43,8 @@ jobs:
       - name: Preserve report scripts
         run: |
           mkdir -p /tmp/agent-device-size-report
-          cp scripts/size-report*.mjs scripts/prepare-publish-assets.mjs /tmp/agent-device-size-report/
+          cp scripts/size-report*.mjs /tmp/agent-device-size-report/
+          cp scripts/prepare-publish-assets.mjs /tmp/agent-device-size-report/
 
       - name: Install Android helper toolchain
         run: |
