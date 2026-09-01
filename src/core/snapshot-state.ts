@@ -1,7 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   readSnapshotOcclusionContextEvidence,
-  readSnapshotPresentationEvidence,
   snapshotCaptureAnnotationsFrom,
 } from '@agent-device/contracts/capture';
 import { isAndroidInputMethodNode } from '@agent-device/contracts/android-input-ownership';
@@ -128,11 +127,10 @@ function shouldPresentLegacyIosInteractiveSnapshot(
         Partial<Pick<CommandFlags, 'snapshotScope'>>)
     | undefined,
 ): boolean {
-  const presentationEvidence = readSnapshotPresentationEvidence(provenance);
   return (
     provenance.backend === 'xctest' &&
     iosSnapshotPresentationStage(provenance) === 'acquired' &&
-    presentationEvidence?.owner !== 'ios-snapshot-engine' &&
+    iosSnapshotPresentationOwner(provenance) !== 'ios-snapshot-engine' &&
     flags?.snapshotInteractiveOnly === true &&
     flags.snapshotRaw !== true
   );
@@ -146,6 +144,15 @@ function iosSnapshotPresentationStage(
   return IOS_SNAPSHOT_PRODUCER_CAPABILITIES[
     provenance.producer as 'apple-runner' | 'appium-source' | 'limrun-ios-tree'
   ].stage;
+}
+
+function iosSnapshotPresentationOwner(
+  provenance: SnapshotStateProvenance,
+): 'ios-snapshot-engine' | 'snapshot-state' | undefined {
+  if (provenance.backend !== 'xctest' || provenance.producer === undefined) return undefined;
+  return IOS_SNAPSHOT_PRODUCER_CAPABILITIES[
+    provenance.producer as 'apple-runner' | 'appium-source' | 'limrun-ios-tree'
+  ].presentationOwner;
 }
 
 function isAndroidComparisonSafeSnapshot(

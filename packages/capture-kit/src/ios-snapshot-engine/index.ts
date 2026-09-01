@@ -11,7 +11,6 @@ export {
 } from './semantic-index.ts';
 export { collectIosStructuralIdentifierSuppression } from './noise-structural.ts';
 export { findNearestScrollableContainer, mergeReplacement, updateReplacement } from './tree.ts';
-export { IosSnapshotEngineError } from './types.ts';
-export { toIosSnapshotEngineErrorDetails } from './errors.ts';
-export { resolveIosViewportEvidenceFromRoots } from './viewport.ts';
+export { IosSnapshotEngineError, toIosSnapshotEngineErrorDetails } from './types.ts';
+export { resolveIosViewportEvidenceFromRoots } from './engine.ts';
 export type { SnapshotTreeRuleContext } from './tree.ts';

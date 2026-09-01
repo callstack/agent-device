@@ -231,6 +231,7 @@ function acquiredProducer(
     interactiveQueryCompleteness: 'incomplete',
     viewportEvidence: 'available',
     hittabilityEvidence: 'available',
+    presentationOwner: 'snapshot-state',
     ...overrides,
   };
 }

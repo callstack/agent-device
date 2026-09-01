@@ -6,6 +6,7 @@ import { parseWebDriverSource, parseWebDriverSourceFacts } from './webdriver-sou
 test('WebDriver source parsing preserves hardened attributes and geometry', () => {
   const nodes = parseWebDriverSource(
     '<hierarchy><node text="A &gt; B" resource-id="login" bounds="[0,0][10,10]" displayed="true" enabled="true" /></hierarchy>',
+    { mode: 'facts' },
   );
 
   assert.equal(nodes[0]?.label, 'A > B');
@@ -15,7 +16,7 @@ test('WebDriver source parsing preserves hardened attributes and geometry', () =
   assert.equal(nodes[0]?.visibleToUser, true);
   assert.equal(nodes[0]?.hittable, undefined);
   assert.throws(
-    () => parseWebDriverSource('<node __proto__="polluted" text="x" />'),
+    () => parseWebDriverSource('<node __proto__="polluted" text="x" />', { mode: 'facts' }),
     /Unsupported XML attribute name "__proto__"/,
   );
 });
@@ -23,6 +24,7 @@ test('WebDriver source parsing preserves hardened attributes and geometry', () =
 test('WebDriver source facts do not fill absent provider attributes', () => {
   const node = parseWebDriverSource(
     '<AppiumAUT><XCUIElementTypeButton name="Continue" x="0" y="0" width="100" height="40" /></AppiumAUT>',
+    { mode: 'facts' },
   )[0];
 
   assert.equal(node?.label, 'Continue');
@@ -37,6 +39,7 @@ test('WebDriver source facts do not fill absent provider attributes', () => {
 test('WebDriver source facts preserve explicitly reported hittability', () => {
   const node = parseWebDriverSource(
     '<AppiumAUT><XCUIElementTypeButton name="Continue" hittable="true" /></AppiumAUT>',
+    { mode: 'facts' },
   )[0];
 
   assert.equal(node?.hittable, true);
@@ -69,6 +72,7 @@ test('legacy WebDriver parsing keeps Android source booleans and ignores iOS hin
 test('WebDriver source facts preserve roots without claiming hierarchy completeness', () => {
   const facts = parseWebDriverSourceFacts(
     '<AppiumAUT truncated="true"><XCUIElementTypeApplication x="0" y="0" width="390" height="844" /></AppiumAUT>',
+    { mode: 'facts' },
   );
 
   assert.equal('truncated' in facts, false);
@@ -88,6 +92,7 @@ test('WebDriver source facts preserve roots without claiming hierarchy completen
 test('WebDriver source facts classify invalid root geometry', () => {
   const facts = parseWebDriverSourceFacts(
     '<AppiumAUT><XCUIElementTypeApplication x="0" y="0" width="invalid" height="844" /></AppiumAUT>',
+    { mode: 'facts' },
   );
 
   assert.deepEqual(facts.roots, [

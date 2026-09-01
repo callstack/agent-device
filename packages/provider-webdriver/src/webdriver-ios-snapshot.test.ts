@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
-import { readSnapshotPresentationEvidence } from '@agent-device/contracts/capture';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   acquireWebDriverIosSnapshot,
@@ -45,7 +44,6 @@ test('Appium iOS snapshots acquire facts and publish regular output through the 
     result.nodes?.every((node) => !('ref' in node)),
     true,
   );
-  assert.deepEqual(readSnapshotPresentationEvidence(result), { owner: 'ios-snapshot-engine' });
 });
 
 test('Appium iOS options become an engine plan and engine-owned projection', () => {
@@ -140,10 +138,30 @@ test('Appium iOS regular presentation fails typed when page source has no viewpo
     () => publishWebDriverIosSnapshot(acquired),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
-      assert.deepEqual(error.details, { reason: 'missing-viewport', field: 'viewport' });
+      assert.deepEqual(error.details, {
+        reason: 'missing-viewport',
+        field: 'viewport',
+        hint: 'Use snapshot --raw to inspect the acquired Appium tree; regular presentation requires valid viewport evidence.',
+      });
       return true;
     },
   );
+});
+
+test('Appium iOS raw presentation discloses missing viewport without failing', async () => {
+  const result = await captureWebDriverIosSnapshot(
+    {
+      source: async () =>
+        '<AppiumAUT><XCUIElementTypeOther name="Content"><XCUIElementTypeButton name="Continue" /></XCUIElementTypeOther></AppiumAUT>',
+    },
+    { raw: true },
+  );
+
+  assert.equal(
+    result.nodes?.some((node) => node.label === 'Continue'),
+    true,
+  );
+  assert.ok(result.warnings?.some((warning) => warning.includes('snapshot --raw to inspect')));
 });
 
 test('Appium iOS does not promote a non-viewport root rectangle to viewport evidence', () => {

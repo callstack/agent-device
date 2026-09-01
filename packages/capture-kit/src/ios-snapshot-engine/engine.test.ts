@@ -11,12 +11,14 @@ import {
   createIosSnapshotRequest,
   deriveIosCaptureHint,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
+import { toIosSnapshotEngineErrorDetails } from './types.ts';
 import {
   compactIosInteractiveSnapshot,
   createIosSnapshotEngine,
   IosSnapshotEngineError,
   presentIosSnapshot,
   publishIosSnapshot,
+  resolveIosViewportEvidenceFromRoots,
 } from './index.ts';
 import type { Rect, RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
@@ -186,6 +188,65 @@ test('regular presentation fails typed when the viewport is missing or the graph
     () => publishIosSnapshot({ stage: 'acquired', acquisition: malformed }, request),
     (error: unknown) =>
       error instanceof IosSnapshotEngineError && error.reason === 'malformed-graph',
+  );
+});
+
+test('engine error details preserve typed public context', () => {
+  const error = new IosSnapshotEngineError('invalid-viewport', 'invalid viewport', {
+    field: 'viewport',
+    index: 4,
+    parentIndex: 2,
+    frame: { x: 0, y: 0, width: 10, height: 10 },
+    clip: { x: 1, y: 2, width: 3, height: 4 },
+    projection: 'regular',
+  });
+
+  assert.deepEqual(toIosSnapshotEngineErrorDetails(error), {
+    reason: 'invalid-viewport',
+    field: 'viewport',
+    index: 4,
+    parentIndex: 2,
+    frame: { x: 0, y: 0, width: 10, height: 10 },
+    clip: { x: 1, y: 2, width: 3, height: 4 },
+    projection: 'regular',
+  });
+});
+
+test('viewport evidence prefers reported application and window roots', () => {
+  assert.deepEqual(
+    resolveIosViewportEvidenceFromRoots([
+      { type: 'XCUIElementTypeApplication', rectStatus: 'invalid' },
+      {
+        type: 'XCUIElementTypeWindow',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+        rectStatus: 'reported',
+      },
+    ]),
+    { kind: 'reported', rect: { x: 0, y: 0, width: 390, height: 844 } },
+  );
+});
+
+test('viewport evidence can fall back to the largest top-level root', () => {
+  assert.deepEqual(
+    resolveIosViewportEvidenceFromRoots(
+      [
+        { type: 'Other', rect: { x: 0, y: 0, width: 100, height: 100 } },
+        { type: 'Other', rect: { x: 0, y: 0, width: 200, height: 300 } },
+      ],
+      { fallbackToLargestRoot: true },
+    ),
+    { kind: 'reported', rect: { x: 0, y: 0, width: 200, height: 300 } },
+  );
+});
+
+test('viewport evidence preserves explicit missing geometry reasons', () => {
+  assert.deepEqual(
+    resolveIosViewportEvidenceFromRoots([{ type: 'Application', rectStatus: 'invalid' }]),
+    { kind: 'missing', reason: 'invalid' },
+  );
+  assert.deepEqual(
+    resolveIosViewportEvidenceFromRoots([{ type: 'Application', rectStatus: 'not-provided' }]),
+    { kind: 'missing', reason: 'not-provided' },
   );
 });
 

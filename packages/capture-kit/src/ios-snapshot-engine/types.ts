@@ -64,3 +64,13 @@ export class IosSnapshotEngineError extends Error {
     this.details = details;
   }
 }
+
+export type IosSnapshotEnginePublicErrorDetails = Readonly<
+  IosSnapshotEngineFailureDetails & { reason: IosSnapshotEngineFailureReason }
+>;
+
+export function toIosSnapshotEngineErrorDetails(
+  error: IosSnapshotEngineError,
+): IosSnapshotEnginePublicErrorDetails {
+  return { reason: error.reason, ...error.details };
+}

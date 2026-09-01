@@ -18,19 +18,19 @@ export type WebDriverSourceRootFact = Readonly<{
 
 export function parseWebDriverSource(
   source: string,
-  options: Readonly<{ mode?: WebDriverSourceParseMode }> = {},
+  options: Readonly<{ mode: WebDriverSourceParseMode }>,
 ): RawSnapshotNode[] {
   return parseWebDriverSourceFacts(source, options).nodes;
 }
 
 export function parseWebDriverSourceFacts(
   source: string,
-  options: Readonly<{ mode?: WebDriverSourceParseMode }> = {},
+  options: Readonly<{ mode: WebDriverSourceParseMode }>,
 ): WebDriverSourceFacts {
   const roots = parseSourceRoots(source);
   const nodes: RawSnapshotNode[] = [];
   const sourceRoots: WebDriverSourceRootFact[] = [];
-  const mode = options.mode ?? 'facts';
+  const mode = options.mode;
   for (const root of roots) {
     appendSourceNodes(nodes, root, undefined, 0, mode, sourceRoots);
   }
@@ -40,10 +40,10 @@ export function parseWebDriverSourceFacts(
 function appendSourceNodes(
   nodes: RawSnapshotNode[],
   xmlNode: XmlNode,
-  parentIndex?: number,
-  depth = 0,
-  mode: WebDriverSourceParseMode = 'facts',
-  sourceRoots: WebDriverSourceRootFact[] = [],
+  parentIndex: number | undefined,
+  depth: number,
+  mode: WebDriverSourceParseMode,
+  sourceRoots: WebDriverSourceRootFact[],
 ): void {
   const currentIndex = isSourceContainer(xmlNode, mode)
     ? parentIndex

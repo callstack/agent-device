@@ -24,6 +24,7 @@ const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
     interactiveQueryCompleteness: 'complete',
     viewportEvidence: 'available',
     hittabilityEvidence: 'available',
+    presentationOwner: 'ios-snapshot-engine',
   },
   'simulator-ax-bridge': {
     producer: 'simulator-ax-bridge',
@@ -36,6 +37,7 @@ const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
     interactiveQueryCompleteness: 'incomplete',
     viewportEvidence: 'available',
     hittabilityEvidence: 'available',
+    presentationOwner: 'snapshot-state',
   },
   'appium-source': {
     producer: 'appium-source',
@@ -48,6 +50,7 @@ const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
     interactiveQueryCompleteness: 'incomplete',
     viewportEvidence: 'available',
     hittabilityEvidence: 'unavailable',
+    presentationOwner: 'ios-snapshot-engine',
   },
   'limrun-ios-tree': {
     producer: 'limrun-ios-tree',
@@ -60,6 +63,7 @@ const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
     interactiveQueryCompleteness: 'incomplete',
     viewportEvidence: 'available',
     hittabilityEvidence: 'unavailable',
+    presentationOwner: 'snapshot-state',
   },
 } as const satisfies Record<IosSnapshotProducer, IosSnapshotProducerCapabilities>;
 

@@ -4,7 +4,6 @@ import {
   resolveIosViewportEvidenceFromRoots,
   toIosSnapshotEngineErrorDetails,
 } from '@agent-device/capture-kit/ios-snapshot-engine';
-import { attachSnapshotPresentationEvidence } from '@agent-device/contracts/capture';
 import {
   createIosSnapshotRequest,
   IOS_SNAPSHOT_PRODUCER_CAPABILITIES,
@@ -29,7 +28,7 @@ const APPIUM_PRODUCER = IOS_SNAPSHOT_PRODUCER_CAPABILITIES['appium-source'];
 const iosSnapshotEngine = createIosSnapshotEngine();
 const RESIDUE_WARNINGS = {
   'missing-viewport':
-    'Appium page source does not provide a valid viewport; regular snapshot presentation is unavailable.',
+    'Appium page source does not provide valid viewport evidence; regular snapshots fail closed. Use snapshot --raw to inspect the acquired tree.',
 } satisfies Pick<Record<IosAcquisitionResidue['kind'], string>, 'missing-viewport'>;
 const UNAVAILABLE_FACT_WARNINGS: Partial<Record<IosSnapshotFact, string>> = {
   'acquisition-depth':
@@ -103,16 +102,13 @@ export function publishWebDriverIosSnapshot(
   } catch (error) {
     throwWebDriverIosSnapshotError(error);
   }
-  const result = attachSnapshotPresentationEvidence(
-    {
-      backend: 'xctest',
-      producer: 'appium-source',
-      nodes: stripRefs(publication.payload.nodes),
-      truncated: publication.payload.truncated,
-      ...warningsForResidue(publication.residue),
-    } satisfies SnapshotResult,
-    { owner: 'ios-snapshot-engine' },
-  );
+  const result = {
+    backend: 'xctest',
+    producer: 'appium-source',
+    nodes: stripRefs(publication.payload.nodes),
+    truncated: publication.payload.truncated,
+    ...warningsForResidue(publication.residue),
+  } satisfies SnapshotResult;
   return { acquisition, publication, result };
 }
 
@@ -152,10 +148,18 @@ function stripRefs(nodes: readonly SnapshotNode[]): RawSnapshotNode[] {
 
 function throwWebDriverIosSnapshotError(error: unknown): never {
   if (!(error instanceof IosSnapshotEngineError)) throw error;
+  const details = toIosSnapshotEngineErrorDetails(error);
   throw new AppError(
     'COMMAND_FAILED',
     error.message,
-    toIosSnapshotEngineErrorDetails(error),
+    {
+      ...details,
+      ...(error.reason === 'missing-viewport' || error.reason === 'invalid-viewport'
+        ? {
+            hint: 'Use snapshot --raw to inspect the acquired Appium tree; regular presentation requires valid viewport evidence.',
+          }
+        : {}),
+    },
     error,
   );
 }

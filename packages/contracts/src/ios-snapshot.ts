@@ -11,6 +11,7 @@ export type IosAcquisitionIntent = 'full' | 'surface-observation';
 export type IosSnapshotProjection = 'regular' | 'raw';
 export type IosSnapshotCompleteness = 'complete' | 'incomplete';
 export type IosSnapshotEvidenceAvailability = 'available' | 'unavailable';
+export type IosSnapshotPresentationOwner = 'ios-snapshot-engine' | 'snapshot-state';
 
 export type IosSnapshotGeneration = string;
 
@@ -79,6 +80,7 @@ type IosSnapshotProducerCapabilityFacts = Readonly<{
   interactiveQueryCompleteness: IosSnapshotCompleteness;
   viewportEvidence: IosSnapshotEvidenceAvailability;
   hittabilityEvidence: IosSnapshotEvidenceAvailability;
+  presentationOwner: IosSnapshotPresentationOwner;
 }>;
 
 export type IosSnapshotAcquisitionProducerCapabilities = IosSnapshotProducerCapabilityFacts &
