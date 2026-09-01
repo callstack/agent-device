@@ -188,8 +188,9 @@ const closeDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.close, (input) =>
 export const appsCommandFacet = defineCommandFacet({
   name: 'apps',
   text: {
-    summary: 'List installed apps',
-    cliDetail: 'Defaults to user-installed apps; use --all to include system/OEM apps.',
+    summary: 'List installed apps or deferred provider app assets',
+    cliDetail:
+      'Before provider allocation, lists uploaded app assets when the selected provider exposes a catalog. On a live device, defaults to user-installed apps; use --all to include system/OEM apps.',
   },
   metadata: appsCommandMetadata,
   definition: appsCommandDefinition,

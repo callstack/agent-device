@@ -10,6 +10,11 @@ External PRs are not part of the triage request queue. Use `gh pr` commands only
 
 ## Conventions
 
+Write issues as concise implementation contracts. Start with the purpose. Include a concrete API,
+data shape, or CLI example when the issue changes a boundary. State required behavior, observable
+completion conditions, and dependencies. Use plain, direct sentences. Remove persuasion, repeated
+context, and filler, but never remove a normative requirement to make the issue shorter.
+
 `gh` authentication may only be available through the user's login shell. In sandboxed agent environments, run GitHub operations through the login shell and request escalation for network/auth access, for example:
 
 ```sh

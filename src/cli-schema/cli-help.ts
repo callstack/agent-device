@@ -16,7 +16,7 @@ import {
   type FlagKey,
 } from './command-schema.ts';
 import { buildCommandUsage } from './usage.ts';
-import { readVersion } from '../utils/version.ts';
+import { readVersion } from '@agent-device/host-kit/version';
 import { renderCliHelpOverview } from './cli-help-overview.ts';
 
 const CONFIGURATION_LINES = [
@@ -179,7 +179,7 @@ Validation and evidence:
 
 React Native: help react-native for Metro/Re.Pack reload, DevTools, RN overlays. JS-only change: metro reload, find "Home"; open --relaunch for native reset.
 
-Lifecycle facts (trust these instead of probing): open without --relaunch is idempotent-foreground; --relaunch restarts it. close keeps a healthy iOS runner warm by default; runners and daemons both self-idle after 5 minutes, and a stale lease reclaims automatically -- a live owner still rejects with "already owned by another agent-device daemon". Env vars: help physical-device.
+Lifecycle facts (trust these instead of probing): open without --relaunch is idempotent-foreground; --relaunch restarts it. close keeps a healthy iOS runner warm by default; runners and daemons both self-idle after 5 minutes, and a stale lease reclaims automatically. The device claim taken by open also reclaims another worktree's retained warm runner; "already owned by another agent-device daemon" = owner outside claim arbitration. Env vars: help physical-device.
 
 Escalate:
   help manual-qa scripted manual QA
@@ -512,6 +512,11 @@ Example:
   agent-device react-devtools profile report @c5
   agent-device network dump --include headers
 
+Device busy and ownership:
+  DEVICE_IN_USE has two flavors. "already in use by session X" is this daemon: reuse it with --session X, or run close --session X first. "owned by session X in workspace Y" is another worktree's daemon holding the host-global device claim: it is never retriable — run the error's exact recovery command instead of retrying.
+  Inspect ownership without any daemon: agent-device device status (add --stale for proven-dead owners; settle and release those with agent-device device release --stale). devices marks rows that are claimed, so pick an unclaimed device instead of contending.
+  A live foreign owner is released only by closing its session from its own workspace or stopping its daemon: agent-device daemon stop --state-dir <owner state dir> (the error names the state dir). Never recover by hunting PIDs with ps/kill. boot/install/shutdown take the same claims as open and refuse foreign-claimed devices identically.
+
 Use snapshot, screenshot, logs, network, perf frames, and perf memory for device/app runtime evidence. Use react-devtools when component internals or React rendering behavior matters.`,
   },
   cdp: {
@@ -684,7 +689,7 @@ Runner and daemon lifecycle (applies to simulators too):
   open without --relaunch is idempotent-foreground for an already-running app (it brings the process forward; it does not restart it). open --relaunch restarts the app; on iOS simulators this collapses to one simctl launch --terminate-running-process call instead of a separate terminate-then-launch.
   close keeps a healthy iOS simulator XCTest runner warm by default so the next open on that device skips the runner build, unless --shutdown was requested, the session was recording, the session held a device lease, or the device used a scoped (non-default) simulator set. A retained runner auto-stops after an idle window (default 5 minutes); set AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS to override, or 0 to disable idle stop and retain until daemon exit.
   Each AGENT_DEVICE_STATE_DIR runs its own daemon. It self-exits after an idle window (default 5 minutes, matching the runner idle-stop default) once it has no open sessions, no in-flight requests, and no active recording; set AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS to override, or 0 to disable idle reap.
-  A stale iOS runner lease — its owner process dead, or its AGENT_DEVICE_STATE_DIR deleted — is reclaimed automatically instead of failing with "is already owned by another agent-device daemon"; a genuinely live owner whose state dir still exists still rejects with that error.
+  A stale iOS runner lease — its owner process dead, or its AGENT_DEVICE_STATE_DIR deleted — is reclaimed automatically instead of failing with "is already owned by another agent-device daemon". A live owner's runner is also reclaimed when the requesting daemon holds the host-global device claim for that device: claims are exclusive, so holding one proves the runner's owner released the device and merely kept the runner warm. The error remains only for owners outside claim arbitration (a pre-claims build, or daemons pointed at different claim stores).
 
 For iOS SpringBoard, widget, or other system-UI surfaces, read agent-device help ios-system-ui.`,
   },
@@ -736,9 +741,9 @@ Providers:
 After direct-provider connect:
   Read the printed Device, App, Next, and workflow-note lines. They are also available as verification/device/app/liveSession/nextSteps/notes in --json output.
   BrowserStack and AWS Device Farm create the hosted session on open. open needs the installed package or bundle identifier, not the app artifact name or ARN.
-  A new Limrun instance has no user app. Run install <package-or-bundle-id> <app-path-or-url> first; install allocates the instance, then open launches the installed id.
+  Before provider allocation, apps lists compatible uploaded app assets without creating an instance when the selected provider exposes a catalog. open <exact-asset-name> creates the instance with that asset, resolves its installed app id, and launches it. install remains available when the app comes from a fresh local path or URL.
   AWS Device Farm cannot install after allocation. If connect reports no attached app, run its printed reconnect command, which includes --session <name> --force, before open.
-  Do not run devices or apps as a pre-open catalog probe for direct providers; those commands can allocate the deferred provider session and only inspect that live device.
+  Do not run devices as a pre-open catalog probe for direct providers; it can allocate the deferred provider session. Limrun is the exception for apps: before allocation it lists uploaded assets for the selected platform.
 
 Device cloud interfaces:
   CLI is the canonical bootstrap path: connect limrun/browserstack/aws-device-farm, then use normal open/snapshot/click/close/artifacts/disconnect commands.
@@ -757,6 +762,13 @@ Direct proxy flow for a remote Mac/simulator:
     agent-device artifacts --json
     agent-device close
     agent-device disconnect
+
+Human takeover of a leased remote device:
+  Run agent-device takeover using the active remote connection and session. It pauses state-changing agent commands until Ctrl+C while snapshots and other read-only diagnostics remain available. Tenant requests can control only their admitted lease device. Local takeover without a remote device lease is not supported.
+    agent-device takeover --session remote-session
+    agent-device takeover status
+    agent-device takeover release <hold-id>
+  An HTTP-mode daemon also accepts authenticated GET/PUT/DELETE requests at /admin/human-control/holds on its loopback listener. Host administrators supply the exact lease backend/provider/device key and use the local daemon token, not a tenant credential. This host-admin route is intentionally not forwarded by agent-device proxy. Holds do not survive daemon restart; re-establish them after reconnecting.
 
 Cloud profile flow:
   agent-device connect
@@ -788,7 +800,8 @@ Limrun direct-device flow:
   agent-device connect limrun --platform android
 
   Limrun creates remote iOS simulators and Android emulators only. Do not pass local device selectors such as --udid, --serial, or --device.
-  agent-device open com.example.app
+  agent-device apps
+  agent-device open Example.apk
   agent-device snapshot -i
   agent-device close
   agent-device disconnect
@@ -822,6 +835,7 @@ Rules:
   disconnect releases local connection state; close releases the active session and device lease.
   A busy direct-proxy device error means another agent owns the device until it closes or its inactivity lease expires.
   Keep the proxy token secret. Anyone with the token can control the proxied daemon.
+  A daemon with AGENT_DEVICE_HTTP_AUTH_HOOK configured treats HTTP requests as remote: host-path install sources are rejected, uploaded artifacts remain supported, and Maestro runScript HTTP helpers allow only public network destinations. No-hook local HTTP and socket flows retain their local behavior.
   If local/proxy iOS reports that the runner is already owned by another agent-device daemon after lease admission, retry after the owning session closes or after lease expiry. If the conflict repeats, clean stale daemon state on the machine with simulator access.
   Do not use --config as a remote profile flag. --config loads CLI defaults; --remote-config selects remote daemon/profile settings.
   For self-contained scripts, pass the same --remote-config to every operational command, including disconnect; a preceding connect is optional but not required.

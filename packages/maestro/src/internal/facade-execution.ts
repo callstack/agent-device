@@ -7,6 +7,7 @@ import {
   isMaestroControlCommandDescriptor,
   type MaestroEngineEvent,
   type MaestroEngineObserver,
+  type MaestroRuntimeMetrics,
   type MaestroRuntimePort,
 } from './engine-types.ts';
 import { parseMaestroProgram } from './program-ir-parser.ts';
@@ -49,11 +50,7 @@ export type MaestroActionEvent = {
 
 export type MaestroCompletedActionEvent = MaestroActionEvent & {
   readonly durationMs: number;
-  readonly runtimeMetrics?: {
-    hierarchyCaptures: number;
-    screenshotCaptures: number;
-    tapRetries: number;
-  };
+  readonly runtimeMetrics?: MaestroRuntimeMetrics;
   readonly data?: Record<string, unknown>;
 };
 

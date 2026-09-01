@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
-import { parseRect } from '../../../src/utils/parsing.ts';
+import { parseRect } from '@agent-device/kernel/record';
 import type { CliJsonResult } from '../cli-json.ts';
 import {
   assertElementText,

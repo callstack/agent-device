@@ -150,10 +150,14 @@ export default defineConfig({
             // Package attribution models npm-pack output. Keep it in the fast lane so every new
             // package path remains accounted for.
             'scripts/__tests__/size-report-package.test.ts',
+            // Publish preparation spawns only fixture-owned scripts and proves both Android
+            // helper families are rebuilt through the shared release/size-report owner.
+            'scripts/__tests__/prepare-publish-assets.test.ts',
             'scripts/ios-snapshot-benchmark/*.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
             'test/ci/upload-artifact-hidden-paths.test.ts',
+            'scripts/__tests__/diagnose-1874-iteration.test.ts',
             // The size reporter is preserved across a base checkout; its entrypoint and imported
             // modules must move as one directory or the Bundle Size lane fails before measuring.
             'test/ci/size-workflow.test.ts',

@@ -75,6 +75,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/audio-probe-support',
   '@agent-device/contracts/audio-runtime-plan',
   '@agent-device/contracts/back-mode',
+  '@agent-device/contracts/backend-diagnostics',
   '@agent-device/contracts/back-runtime',
   '@agent-device/contracts/boot-failure',
   '@agent-device/contracts/capture',
@@ -106,6 +107,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/interaction-guarantees',
   '@agent-device/contracts/interactor-operation-catalog',
   '@agent-device/contracts/interactor-types',
+  '@agent-device/contracts/ios-snapshot',
   '@agent-device/contracts/keyboard',
   '@agent-device/contracts/keyboard-runtime',
   '@agent-device/contracts/local-interactor-operation-set',
@@ -150,6 +152,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/snapshot',
   '@agent-device/contracts/snapshot-presentation',
   '@agent-device/contracts/snapshot-runtime',
+  '@agent-device/contracts/snapshot-scope',
   '@agent-device/contracts/snapshot-timeout-evidence',
   '@agent-device/contracts/startup-recovery-fence',
   '@agent-device/contracts/touch-runtime',
@@ -453,26 +456,119 @@ test('the real tree parses, declares, and passes R11', () => {
     true,
     'capture-kit stays a private implementation package',
   );
-  assert.deepEqual([...captureKitPackage.exportTargets.keys()], ['@agent-device/capture-kit']);
+  assert.deepEqual([...captureKitPackage.exportTargets.keys()].sort(), [
+    '@agent-device/capture-kit',
+    '@agent-device/capture-kit/ios-snapshot-engine',
+    '@agent-device/capture-kit/ios-snapshot-planning',
+    '@agent-device/capture-kit/mobile-snapshot-semantics',
+    '@agent-device/capture-kit/png',
+    '@agent-device/capture-kit/png-resize',
+    '@agent-device/capture-kit/png-rgb-difference',
+    '@agent-device/capture-kit/png-size',
+    '@agent-device/capture-kit/png-worker-client',
+    '@agent-device/capture-kit/screenshot-density',
+    '@agent-device/capture-kit/screenshot-diff-pixels',
+    '@agent-device/capture-kit/snapshot-desktop-projection',
+    '@agent-device/capture-kit/snapshot-occlusion',
+    '@agent-device/capture-kit/snapshot-quality-backend-capabilities',
+    '@agent-device/capture-kit/snapshot-quality-verdict',
+  ]);
+
+  const provisionKitPackage = packages.find((pkg) => pkg.name === '@agent-device/provision-kit');
+  assert.ok(provisionKitPackage, 'provision-kit package must exist');
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(repoRoot, 'packages/provision-kit/package.json'), 'utf8'))
+      .private,
+    true,
+    'provision-kit stays a private implementation package',
+  );
+  assert.deepEqual([...provisionKitPackage.exportTargets.keys()].sort(), [
+    '@agent-device/provision-kit/app-resolution-cache',
+    '@agent-device/provision-kit/boot-diagnostics',
+    '@agent-device/provision-kit/install-artifact-archive-context',
+    '@agent-device/provision-kit/install-source',
+    '@agent-device/provision-kit/install-source-config',
+    '@agent-device/provision-kit/install-source-network',
+    '@agent-device/provision-kit/install-source-network-transport',
+    '@agent-device/provision-kit/toolchain-probe',
+  ]);
+  assert.deepEqual([...provisionKitPackage.workspaceDependencies].sort(), [
+    '@agent-device/contracts',
+    '@agent-device/host-kit',
+    '@agent-device/kernel',
+  ]);
   assert.deepEqual([...captureKitPackage.workspaceDependencies].sort(), [
+    '@agent-device/contracts',
+    '@agent-device/host-kit',
+    '@agent-device/kernel',
+  ]);
+  const hostKitPackage = packages.find((pkg) => pkg.name === '@agent-device/host-kit');
+  assert.ok(hostKitPackage, 'host-kit package must exist');
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(repoRoot, 'packages/host-kit/package.json'), 'utf8'))
+      .private,
+    true,
+    'host-kit stays a private implementation package',
+  );
+  assert.deepEqual([...hostKitPackage.exportTargets.keys()].sort(), [
+    '@agent-device/host-kit/archive',
+    '@agent-device/host-kit/command',
+    '@agent-device/host-kit/diagnostics',
+    '@agent-device/host-kit/file',
+    '@agent-device/host-kit/host-file',
+    '@agent-device/host-kit/process',
+    '@agent-device/host-kit/request',
+    '@agent-device/host-kit/retry',
+    '@agent-device/host-kit/transport',
+    '@agent-device/host-kit/version',
+  ]);
+  assert.deepEqual([...hostKitPackage.workspaceDependencies].sort(), [
     '@agent-device/contracts',
     '@agent-device/kernel',
   ]);
   const platformApplePackage = packages.find((pkg) => pkg.name === '@agent-device/platform-apple');
   assert.ok(platformApplePackage, 'platform-apple package must exist');
-  // The root façade plus the runner mechanics facet's enumerated subpaths
-  // (#2040); any further subpath widens this key list and fails the
-  // assertion. R13 pins the same list from the manifest side.
   assert.deepEqual([...platformApplePackage.exportTargets.keys()].sort(), [
     '@agent-device/platform-apple',
+    '@agent-device/platform-apple/app-lifecycle',
+    '@agent-device/platform-apple/app-resolution',
+    '@agent-device/platform-apple/debug-symbols',
+    '@agent-device/platform-apple/doctor',
+    '@agent-device/platform-apple/install-artifact',
+    '@agent-device/platform-apple/macos',
+    '@agent-device/platform-apple/perf',
+    '@agent-device/platform-apple/physical-device',
     '@agent-device/platform-apple/runner',
-    '@agent-device/platform-apple/runner/client',
+    '@agent-device/platform-apple/runner-owner',
+    '@agent-device/platform-apple/runner/operations',
     '@agent-device/platform-apple/runner/test-host',
+    '@agent-device/platform-apple/simctl',
+    '@agent-device/platform-apple/simulator',
+    '@agent-device/platform-apple/tool-provider',
   ]);
   assert.deepEqual([...platformApplePackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',
     '@agent-device/contracts',
+    '@agent-device/host-kit',
     '@agent-device/kernel',
+    '@agent-device/provision-kit',
+    '@agent-device/xml',
+  ]);
+  const platformAndroidPackage = packages.find(
+    (pkg) => pkg.name === '@agent-device/platform-android',
+  );
+  assert.ok(platformAndroidPackage, 'platform-android package must exist');
+  assert.deepEqual([...platformAndroidPackage.exportTargets.keys()].sort(), [
+    '@agent-device/platform-android',
+    '@agent-device/platform-android/adb-host',
+    '@agent-device/platform-android/mechanics',
+  ]);
+  assert.deepEqual([...platformAndroidPackage.workspaceDependencies].sort(), [
+    '@agent-device/capture-kit',
+    '@agent-device/contracts',
+    '@agent-device/host-kit',
+    '@agent-device/kernel',
+    '@agent-device/provision-kit',
     '@agent-device/xml',
   ]);
   const maestroPackage = packages.find((pkg) => pkg.name === '@agent-device/maestro');

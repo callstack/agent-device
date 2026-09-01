@@ -1,7 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { screenshotFlagsFromOptions } from '@agent-device/contracts/capture';
 import { leaseScopeFromOptions, leaseScopeToCommandFlags } from '../core/lease-scope.ts';
-import { stripUndefined } from '../utils/parsing.ts';
+import { stripUndefined } from '@agent-device/kernel/record';
 import { getFlagDefinitions } from './cli-grammar/flag-registry.ts';
 import type { InternalRequestOptions } from '@agent-device/contracts/client';
 import type { CommandMetadata } from './command-contract.ts';

@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdStreaming, runCmdSync } from '@agent-device/host-kit/command';
 import {
   checkLockfileInstallSync,
   STALE_NODE_MODULES_MESSAGE,

@@ -6,7 +6,7 @@ import {
   isConfirmedCleanup,
 } from '@agent-device/contracts/durable-resource';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   acquireDurableCaptureRecoveryAuthorityBeforeDeadline,
   DurableCaptureRecoveryDeadlineError,

@@ -14,7 +14,7 @@ import { createAgentDeviceClient } from '../agent-device-client.ts';
 import { readMetroSessionHints } from '../metro/metro-session-hints.ts';
 import { resolveDaemonPaths } from '../daemon/config.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { isProcessAlive, waitForProcessExit } from '../utils/host-process.ts';
+import { isProcessAlive, waitForProcessExit } from '@agent-device/host-kit/process';
 
 const TEST_TOKEN = 'agent-device-proxy-test-token';
 

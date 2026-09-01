@@ -3,7 +3,8 @@ import type { ElementSelectorKey } from '@agent-device/contracts/interactor-type
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 export async function inspectAppleRunnerSession(deviceId: string) {
-  const { getRunnerSessionSnapshot } = await import('./platforms/apple/core/runner-client.ts');
+  const { getRunnerSessionSnapshot } =
+    await import('@agent-device/platform-apple/runner/operations');
   return getRunnerSessionSnapshot(deviceId);
 }
 
@@ -14,6 +15,6 @@ export async function queryAppleRuntimeSelector(
   options: AppleRunnerRequestOptions,
 ): Promise<Record<string, unknown>> {
   const { queryAppleRunnerSelector } =
-    await import('./platforms/apple/core/runner-selector-query.ts');
+    await import('@agent-device/platform-apple/runner/operations');
   return await queryAppleRunnerSelector(device, selector, appBundleId, options);
 }

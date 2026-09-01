@@ -1,3 +1,5 @@
+import AgentDeviceSnapshotPresentation
+
 // MARK: - Wire Models
 
 enum CommandType: String, Codable {
@@ -237,6 +239,7 @@ struct DataPayload: Codable {
   var items: [String]?
   var nodes: [PresentedNode]?
   var truncated: Bool?
+  var qualityPayload: SnapshotQualityPayload? = nil
   var snapshotQuality: SnapshotQuality?
   var gestureStartUptimeMs: Double?
   var gestureEndUptimeMs: Double?
@@ -272,29 +275,33 @@ struct DataPayload: Codable {
   var sequenceResults: [SequenceStepResult]?
 }
 
+struct SnapshotQualityPayload: Codable {
+  let nodes: [PresentedNode]
+  let truncated: Bool
+  let scope: String?
+
+  init(nodes: [PresentedNode], truncated: Bool) {
+    self.nodes = nodes
+    self.truncated = truncated
+    self.scope = nil
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case nodes
+    case truncated
+    case scope
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(nodes, forKey: .nodes)
+    try container.encode(truncated, forKey: .truncated)
+    try container.encodeNil(forKey: .scope)
+  }
+}
+
 struct ErrorPayload: Codable {
   var code: String?
   let message: String
   var hint: String?
-}
-
-struct SnapshotRect: Codable {
-  let x: Double
-  let y: Double
-  let width: Double
-  let height: Double
-}
-
-struct PresentationOptions {
-  let interactiveOnly: Bool
-  let depth: Int?
-  let scope: String?
-  let raw: Bool
-  /// Internal daemon ask: capture with this backend first regardless of channel
-  /// health ("private-ax"). Same-backend evidence probes (tap-outcome
-  /// corroboration) must be captured the way their baseline was.
-  var preferredBackend: String? = nil
-  /// Read UIAccessibilityCustomActions for merged leaves. Opt-in: each element
-  /// costs its own AX round trip (see RunnerAXSnapshotBridge).
-  var customActions: Bool = false
 }

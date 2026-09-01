@@ -79,7 +79,7 @@ export function parseManifestWrite(
   if (!serializedManifest || !temporaryPath || !manifestPath || temporaryPath !== manifestPath)
     return undefined;
   try {
-    const parsed: unknown = JSON.parse(serializedManifest.replace(/'\\''/g, "'"));
+    const parsed: unknown = JSON.parse(serializedManifest.replaceAll(String.raw`'\''`, "'"));
     return isAndroidRecordingManifestFixture(parsed)
       ? { path: manifestPath, manifest: parsed }
       : undefined;

@@ -12,7 +12,7 @@ import {
 import type { DaemonResponse } from '../types.ts';
 import { REF_GRAMMAR_HINT, splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
 import { parseCoordinateTarget } from './interaction-targeting.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '../response.ts';
 
 export type ParsedTouchTarget =
   | { ok: true; target: InteractionTarget; refGeneration?: number; durationMs?: never }
@@ -141,7 +141,6 @@ export function parseFillTarget(positionals: string[]): ParsedFillTarget {
         target: {
           kind: 'ref',
           ref: versioned.ref,
-          fallbackLabel: readRefFallbackLabel(positionals),
         },
         refGeneration: versioned.generation,
         text: decoded.text,
@@ -226,10 +225,6 @@ export function formatTouchTargetLabel(
   if (result.kind === 'selector' && result.target?.kind === 'selector')
     return result.target.selector;
   return 'target';
-}
-
-function readRefFallbackLabel(positionals: string[]): string {
-  return positionals.length >= 3 ? positionals[1]?.trim() || '' : '';
 }
 
 function splitTrailingDuration(positionals: string[]): {

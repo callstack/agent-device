@@ -113,6 +113,7 @@
 			);
 			name = AgentDeviceRunnerUITests;
 			packageProductDependencies = (
+				A1B2C3D4E5F60718293A4B5D /* AgentDeviceSnapshotPresentation */,
 			);
 			productName = AgentDeviceRunnerUITests;
 			productReference = 20EA2EDD2F2CFC7C001CF0EF /* AgentDeviceRunnerUITests.xctest */;
@@ -146,6 +147,9 @@
 			);
 			mainGroup = 20EA2EBD2F2CFC7B001CF0EF;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A1B2C3D4E5F60718293A4B5C /* XCLocalSwiftPackageReference "snapshot-presentation" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 20EA2EC72F2CFC7B001CF0EF /* Products */;
 			projectDirPath = "";
@@ -156,6 +160,21 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A1B2C3D4E5F60718293A4B5C /* XCLocalSwiftPackageReference "snapshot-presentation" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../snapshot-presentation;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A1B2C3D4E5F60718293A4B5D /* AgentDeviceSnapshotPresentation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1B2C3D4E5F60718293A4B5C /* XCLocalSwiftPackageReference "snapshot-presentation" */;
+			productName = AgentDeviceSnapshotPresentation;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin PBXResourcesBuildPhase section */
 		20EA2EC42F2CFC7B001CF0EF /* Resources */ = {

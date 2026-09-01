@@ -61,6 +61,7 @@ agent-device app-switcher
 - `shutdown` must not target an active session device; use `close --shutdown` to end the session and turn it off.
 - `daemon stop --state-dir <path>` verifies the daemon PID/start-time identity, requests graceful shutdown, and reports whether provider-release state is known. Use `daemon stop --clean` to also remove retained Apple runner processes and leases owned by that daemon.
 - `device status` reads host-local device claims without starting or contacting a daemon. Normal output shows live and attention-needed claims, then summarizes proven-stale records in one line; use `device status --stale` to inspect the hidden records. Scope either view with `--platform` plus `--udid` (Apple) or `--serial` (Android). A foreign live or uncertain claim blocks `open`; a proven-dead owner is replaced only after its session's exact-owner durable resources reconcile successfully.
+- `device release --stale` settles a provably dead owner's durable resources through the same exact-owner reconciliation `open` uses and clears its claim last, all without a daemon. Live, uncertain, PID-reused, and corrupt claims always fail closed and are reported with the reason; a live owner is released by closing its session from its own workspace or with `daemon stop --state-dir <owner state dir>`.
 - `--platform apple` is an alias for the Apple automation backend (`ios`, `tvOS`, `macOS` selection).
 - Use `--target mobile|tv|desktop` with `--platform` (required) to select phone/tablet vs TV-class vs desktop-class targets.
 - `boot` is mainly needed when starting a new session and `open` fails because no booted simulator/emulator is available.
@@ -107,6 +108,34 @@ agent-device reinstall MyApp /path/to/app-debug.apk --platform android --serial 
 agent-device open com.example.myapp --platform android --serial emulator-5554 --session my-session --relaunch
 agent-device metro reload
 ```
+
+## Human Takeover
+
+Use `takeover` with an active remote connection when a person needs to interact with its leased
+device without racing the agent:
+
+```bash
+agent-device takeover --session remote-session
+agent-device takeover status --session remote-session
+agent-device takeover release <hold-id> --session remote-session
+```
+
+The command uses the device from the admitted remote lease, installs a short-lived hold, keeps it
+alive in the foreground, and releases it on Ctrl+C. Activation waits for admitted mutations to finish
+before reporting active. While held, state-changing commands fail with
+`DEVICE_IN_USE` and `details.reason: "human_control_active"`, explaining that agent interactions are
+temporarily disabled. Snapshots, screenshots, selector reads, logs, and other read-only diagnostics
+remain available. The hold also
+protects an existing remote device lease from inactivity expiry so the human does not accidentally
+hand the simulator to a different agent.
+
+A foreground hold expires automatically if its process disappears. Releasing or expiring the final
+hold refreshes the existing lease's inactivity window. Tenant commands can modify only holds owned
+by their admitted lease, not provider-host administrative holds.
+
+Holds do not survive daemon restart; reconnect and re-establish them before continuing human
+interaction. Local takeover without a device-scoped remote lease is not supported in this version.
+See [remote takeover and host administration](./remote-proxy.md#human-takeover) for the VM-side API.
 
 ## Web Automation
 
@@ -427,7 +456,7 @@ agent-device gesture transform 200 420 80 -40 2 35 700 # combined pan, zoom, and
 `type` accepts text only. Do not pass `@ref` to `type`; use `fill @ref "text"` to target a field directly, or `press @ref` then `type "text"` to append in the focused field.
 If `type` reports `TEXT_INPUT_NOT_FOCUSED`, focus a visible text input and retry; when accessibility does not expose the input, use a coordinate focus command before typing.
 On iOS, if `type` reports `TEXT_INPUT_SYNTHESIS_UNAVAILABLE` while the software keyboard is hidden, show the software keyboard, then retry `type` or `fill`. The runner reports this error instead of risking partial input through an unreliable text-entry path.
-On iOS, if `type` or `fill` reports `TEXT_INPUT_COMMIT_NOT_OBSERVED`, the runner could not confirm the typed text reached the field — either it did not land before the runner's deadline, or the expected final text is identical to the field's placeholder. In the latter case, accessibility cannot distinguish committed text from an empty field rendering that placeholder, even if the field held content before dispatch. The field may hold none, part, or all of the text: read it back, then retry with `fill`, which replaces the whole value, rather than `type`, which appends to whatever committed. This covers the bare-type route and the coordinate-driven `fill` route taken when the accessibility channel is under load, both of which observe the field after synthesizing; it is not a guarantee that every text-entry route verifies its result.
+On iOS, if `type` or `fill` reports `TEXT_INPUT_COMMIT_NOT_OBSERVED`, the runner could not confirm the typed text reached the field — either it did not land before the runner's deadline, or the expected final text is identical to the field's placeholder. In the latter case, accessibility cannot distinguish committed text from an empty field rendering that placeholder, even if the field held content before dispatch. The field may hold none, part, or all of the text: run `snapshot -i` and inspect it. If it already matches, continue; otherwise retry with the full text quoted and `fill --delay-ms 80`, which replaces the whole value. Do not use `type`, which appends to whatever committed. This covers the bare-type route and the coordinate-driven `fill` route taken when the accessibility channel is under load, both of which observe the field after synthesizing; it is not a guarantee that every text-entry route verifies its result.
 Use plain `fill` or `type` first for ordinary login and form fields. Use `--delay-ms` on `type` or `fill` only when a debounced search field or search-as-you-type input actually misses characters, or when the app must receive incremental updates.
 Delayed typing intentionally prefers paced character entry over clipboard-style fallbacks so the target field receives each incremental update.
 On Android, `fill` also verifies text and treats IME-owned capture as a terminal failure instead of retrying against the wrong field.

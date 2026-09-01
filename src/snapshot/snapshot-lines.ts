@@ -1,6 +1,10 @@
-import { isSystemScrollIndicatorLabel } from '../utils/scroll-indicator.ts';
+import { isSystemScrollIndicatorLabel } from '@agent-device/kernel/scroll-indicator';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { buildTextPreview, describeTextSurface, trimText } from '../utils/text-surface.ts';
+import {
+  buildTextPreview,
+  describeTextSurface,
+  trimText,
+} from './snapshot-presentation/text-surface.ts';
 
 type SnapshotDisplayLine = {
   node: SnapshotNode;
@@ -72,7 +76,7 @@ export function buildSnapshotDisplayLines(
     if (type === 'group' && !label && !hasInheritedLabel) {
       continue;
     }
-    while (visibleDepths.length > 0 && depth <= visibleDepths[visibleDepths.length - 1]!) {
+    while (visibleDepths.length > 0 && depth <= visibleDepths.at(-1)!) {
       visibleDepths.pop();
     }
     const adjustedDepth = visibleDepths.length;
@@ -135,10 +139,10 @@ function collapseControlCharacters(value: string): string {
   return (
     value
       // Whitespace folds the way text previews already fold it (newlines, tabs).
-      .replace(/\s+/g, ' ')
+      .replaceAll(/\s+/g, ' ')
       // Remaining C0/C1 controls are zero-width but can still corrupt a terminal.
       // eslint-disable-next-line no-control-regex
-      .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
+      .replaceAll(/[\u0000-\u001f\u007f-\u009f]/g, '')
       .trim()
   );
 }
@@ -169,7 +173,7 @@ export function displayLabel(node: SnapshotNode, type: string): string {
 
 export function formatRole(type: string): string {
   const raw = type;
-  let normalized = type.replace(/XCUIElementType/gi, '').toLowerCase();
+  let normalized = type.replaceAll(/XCUIElementType/gi, '').toLowerCase();
   const isAndroidClass =
     raw.includes('.') &&
     (raw.startsWith('android.') || raw.startsWith('androidx.') || raw.startsWith('com.'));
@@ -284,7 +288,7 @@ function looksScrollable(node: SnapshotNode, type: string): boolean {
 }
 
 function escapePreviewText(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return value.replaceAll('\\', String.raw`\\`).replaceAll('"', String.raw`\"`);
 }
 
 function uniqueMetadata(values: string[]): string[] {

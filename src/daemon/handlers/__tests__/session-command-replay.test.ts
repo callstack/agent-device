@@ -159,7 +159,7 @@ test('replay inherits parent device selectors for each invoked step', async () =
   expect(invoked[0]?.flags?.udid).toBe('00008150-001849640CF8401C');
 });
 
-// #1900: `replay` routes through `handleSessionReplayCommandGroup` -> `session-replay.ts`, which
+// #1900: `replay` routes through the named replay command handler, which
 // re-invokes each recorded step with no `platform === 'web'` branch anywhere in that path.
 test('replay inherits the parent web platform selector for each invoked step', async () => {
   const sessionStore = makeSessionStore();

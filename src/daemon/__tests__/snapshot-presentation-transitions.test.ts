@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
 import { createInteractionDevice } from '../../commands/interaction/runtime/__tests__/test-utils/index.ts';
 import { buildSnapshotState } from '../../core/snapshot-state.ts';
-import { presentIosInteractiveSnapshot } from '../../snapshot/snapshot-presentation/ios/index.ts';
+import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { navigationTitleWithAppProvidedDetailsAffordanceNodes } from '../../snapshot/snapshot-presentation/ios/transitions.fixtures.ts';
 
 test('iOS daemon presentation applies transitions without reapplying runner-owned scope', () => {

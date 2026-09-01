@@ -15,7 +15,6 @@ import type { ResolvedScrollExecutionOptions } from '@agent-device/contracts/scr
 import type { TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { RecordingExportQuality } from '@agent-device/contracts/recording';
 import type { SessionSurface } from '@agent-device/contracts/session';
-import type { NetworkIncludeMode } from '@agent-device/kernel/contracts';
 import type {
   DeviceTarget,
   Platform,
@@ -307,14 +306,22 @@ export type BackendTraceResult = Record<string, unknown> & {
   outPath?: string;
 };
 
-export type BackendDiagnosticsTimeWindow = {
-  since?: string;
-  until?: string;
-};
+import type {
+  BackendDiagnosticsPageOptions,
+  BackendDiagnosticsTimeWindow,
+  BackendDumpNetworkOptions,
+  BackendDumpNetworkResult,
+  BackendNetworkEntry,
+  BackendNetworkIncludeMode,
+} from '@agent-device/contracts/backend-diagnostics';
 
-export type BackendDiagnosticsPageOptions = BackendDiagnosticsTimeWindow & {
-  cursor?: string;
-  limit?: number;
+export type {
+  BackendDiagnosticsPageOptions,
+  BackendDiagnosticsTimeWindow,
+  BackendDumpNetworkOptions,
+  BackendDumpNetworkResult,
+  BackendNetworkEntry,
+  BackendNetworkIncludeMode,
 };
 
 export type BackendLogEntry = {
@@ -333,34 +340,6 @@ export type BackendReadLogsOptions = BackendDiagnosticsPageOptions & {
 
 export type BackendReadLogsResult = {
   entries: readonly BackendLogEntry[];
-  nextCursor?: string;
-  timeWindow?: BackendDiagnosticsTimeWindow;
-  backend?: string;
-  redacted?: boolean;
-  notes?: readonly string[];
-};
-
-export type BackendNetworkIncludeMode = NetworkIncludeMode;
-
-export type BackendNetworkEntry = {
-  timestamp?: string;
-  method?: string;
-  url?: string;
-  status?: number;
-  durationMs?: number;
-  requestHeaders?: Record<string, string>;
-  responseHeaders?: Record<string, string>;
-  requestBody?: string;
-  responseBody?: string;
-  metadata?: Record<string, unknown>;
-};
-
-export type BackendDumpNetworkOptions = BackendDiagnosticsPageOptions & {
-  include?: BackendNetworkIncludeMode;
-};
-
-export type BackendDumpNetworkResult = {
-  entries: readonly BackendNetworkEntry[];
   nextCursor?: string;
   timeWindow?: BackendDiagnosticsTimeWindow;
   backend?: string;

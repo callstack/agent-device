@@ -6,7 +6,7 @@ import type {
 } from '@agent-device/contracts/client';
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
-import { parseStringMember } from '../../utils/string-enum.ts';
+import { parseStringMember } from './string-enum.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { booleanField, enumField, integerField, stringField } from '../command-input.ts';

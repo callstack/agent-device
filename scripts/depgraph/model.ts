@@ -14,8 +14,54 @@ import {
   typeInversionPair,
   type ResolvedImportEdge,
 } from '../layering/model.ts';
+import { ARCHITECTURE_OWNERSHIP, matchesDeclaredRoot } from '../layering/architecture-ownership.ts';
 
 export type EdgeKind = 'value' | 'type' | 'dynamic';
+
+export const AUTHORITY_LABELS = [
+  'vocabulary',
+  'capability',
+  'live-state-shape',
+  'live-state-authority',
+  'executable-policy',
+  'ordinary',
+] as const;
+
+export type AuthorityLabel = (typeof AUTHORITY_LABELS)[number];
+export type AuthorityCounts = Record<AuthorityLabel, number>;
+type DeclaredAuthorityLabel = Exclude<AuthorityLabel, 'ordinary'>;
+
+type AuthorityRule = Readonly<{
+  label: DeclaredAuthorityLabel;
+  side: 'source' | 'target';
+  roots: readonly string[];
+  symbols?: readonly string[];
+}>;
+
+const AUTHORITY_RULES: readonly AuthorityRule[] = [
+  ...ARCHITECTURE_OWNERSHIP.vocabulary.map(({ kind, roots }): AuthorityRule => ({
+    label: kind,
+    side: 'target',
+    roots,
+  })),
+  ...ARCHITECTURE_OWNERSHIP.capabilities.map(({ kind, root, exports }): AuthorityRule => ({
+    label: kind,
+    side: 'target',
+    roots: [root],
+    symbols: exports,
+  })),
+  ...ARCHITECTURE_OWNERSHIP.liveState.map(({ kind, root, exports }): AuthorityRule => ({
+    label: kind,
+    side: 'target',
+    roots: [root],
+    symbols: exports,
+  })),
+  ...ARCHITECTURE_OWNERSHIP.executablePolicies.map(({ kind, roots }): AuthorityRule => ({
+    label: kind,
+    side: 'source',
+    roots,
+  })),
+];
 
 export type GraphEdge = {
   from: string;
@@ -29,6 +75,8 @@ export type GraphEdge = {
   /** True when the same pair is also reachable through a longer path of the same weight class. */
   /** Target also reachable at distance >= 2. Reachability only — see the marker function. */
   transitivelyReachable: boolean;
+  /** Declared labels accumulated from every raw import in this collapsed pair. */
+  authorities: readonly DeclaredAuthorityLabel[];
 };
 
 export type GraphNode = {
@@ -59,12 +107,57 @@ export type GraphCycle = {
 export type GraphData = {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  edgeAuthorities: AuthorityLabel[][];
+  authorityCounts: AuthorityCounts;
   zones: { id: string; classification: string; files: number; loc: number }[];
   zoneEdges: ZoneEdge[];
   cycles: GraphCycle[];
   /** Type-only spine inversions per zone pair, counted by the gate's rule. */
   typeInversions: Record<string, number>;
 };
+
+function orderedDeclaredAuthorities(
+  labels: Iterable<DeclaredAuthorityLabel>,
+): DeclaredAuthorityLabel[] {
+  const selected = new Set(labels);
+  return AUTHORITY_LABELS.filter(
+    (label): label is DeclaredAuthorityLabel => label !== 'ordinary' && selected.has(label),
+  );
+}
+
+function declaredAuthorities(edge: ResolvedImportEdge): DeclaredAuthorityLabel[] {
+  const labels = new Set<DeclaredAuthorityLabel>();
+  for (const rule of AUTHORITY_RULES) {
+    const subject = rule.side === 'source' ? edge.file : edge.target;
+    if (!rule.roots.some((root) => matchesDeclaredRoot(subject, root))) continue;
+    if (rule.symbols && !edge.symbols.some((symbol) => rule.symbols.includes(symbol))) continue;
+    labels.add(rule.label);
+  }
+  return orderedDeclaredAuthorities(labels);
+}
+
+function authorityLabelsForDeclared(
+  authorities: readonly DeclaredAuthorityLabel[],
+): AuthorityLabel[] {
+  return authorities.length > 0 ? [...authorities] : ['ordinary'];
+}
+
+/** Labels one resolved edge from exact declared roots and symbols. */
+export function authorityLabelsForEdge(edge: ResolvedImportEdge): AuthorityLabel[] {
+  return authorityLabelsForDeclared(declaredAuthorities(edge));
+}
+
+function edgePair(from: string, to: string): string {
+  return `${from}\u0000${to}`;
+}
+
+function countAuthorityLabels(edgeAuthorities: readonly AuthorityLabel[][]): AuthorityCounts {
+  const counts = Object.fromEntries(AUTHORITY_LABELS.map((label) => [label, 0])) as AuthorityCounts;
+  for (const labels of edgeAuthorities) {
+    for (const label of labels) counts[label]++;
+  }
+  return counts;
+}
 
 function countLines(source: string): number {
   let lines = 1;
@@ -90,10 +183,17 @@ export function collapseEdges(edges: readonly ResolvedImportEdge[]): GraphEdge[]
   const byPair = new Map<string, GraphEdge>();
   for (const edge of edges) {
     if (edge.file === edge.target) continue;
-    const key = `${edge.file}\u0000${edge.target}`;
+    const key = edgePair(edge.file, edge.target);
     const kind = edgeKind(edge);
     const existing = byPair.get(key);
-    if (existing && strength[existing.kind] >= strength[kind]) continue;
+    const authorities = orderedDeclaredAuthorities([
+      ...(existing?.authorities ?? []),
+      ...declaredAuthorities(edge),
+    ]);
+    if (existing && strength[existing.kind] >= strength[kind]) {
+      byPair.set(key, { ...existing, authorities });
+      continue;
+    }
     byPair.set(key, {
       from: edge.file,
       to: edge.target,
@@ -102,6 +202,7 @@ export function collapseEdges(edges: readonly ResolvedImportEdge[]): GraphEdge[]
       backEdge: backEdgePair(edge),
       typeInversion: typeInversionPair(edge),
       transitivelyReachable: false,
+      authorities,
     });
   }
   return [...byPair.values()].sort(
@@ -336,12 +437,17 @@ export function buildGraph(
 ): GraphData {
   const collapsed = collapseEdges(edges);
   markTransitivelyReachableEdges(collapsed);
+  const edgeAuthorities = collapsed.map(({ authorities }) =>
+    authorityLabelsForDeclared(authorities),
+  );
   const cycles = collectCycles(edges);
   const nodes = buildNodes(sources, collapsed, indexCyclesByFile(cycles));
 
   return {
     nodes: [...nodes.values()].sort((left, right) => left.id.localeCompare(right.id)),
     edges: collapsed,
+    edgeAuthorities,
+    authorityCounts: countAuthorityLabels(edgeAuthorities),
     zones: aggregateZones(nodes),
     zoneEdges: aggregateZoneEdges(nodes, collapsed),
     cycles,

@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
-import { PNG } from '../../../../utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../types.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
@@ -235,6 +235,8 @@ test('retries an iOS non-hittable coordinate fallback when the hierarchy does no
     hierarchyCaptures: 5,
     screenshotCaptures: 2,
     tapRetries: 1,
+    settleLatches: 2,
+    settleTimeouts: 0,
   });
 });
 
@@ -298,6 +300,8 @@ test('does not retry an iOS tap when only the rendered surface changes', async (
     hierarchyCaptures: 3,
     screenshotCaptures: 2,
     tapRetries: 0,
+    settleLatches: 1,
+    settleTimeouts: 0,
   });
 });
 
@@ -344,7 +348,52 @@ test('uses screenshot evidence without a redundant hierarchy baseline for iOS po
     hierarchyCaptures: 4,
     screenshotCaptures: 2,
     tapRetries: 1,
+    settleLatches: 2,
+    settleTimeouts: 0,
   });
+});
+
+test('records an exhausted inline tap settle', async () => {
+  const clock = { value: 0 };
+  let snapshots = 0;
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      if (request.command !== 'snapshot') return { ok: true, data: {} };
+      snapshots += 1;
+      return {
+        ok: true,
+        data: {
+          nodes: [
+            { index: 0, type: 'Application' },
+            {
+              index: 1,
+              parentIndex: 0,
+              type: snapshots === 1 ? 'Button' : 'Text',
+              ...(snapshots === 1 ? { identifier: 'continue' } : { value: String(snapshots) }),
+              rect: { x: 20, y: 40, width: 120, height: 44 },
+            },
+          ],
+        },
+      };
+    },
+    dependencies: makeDependencies(clock),
+    platform: 'android',
+  });
+
+  await port.execute({
+    command: {
+      kind: 'tapOn',
+      source: { line: 2 },
+      target: { space: 'target', selector: { id: 'continue' } },
+      retryTapIfNoChange: true,
+    },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(port.readMetrics?.()).toMatchObject({ settleTimeouts: 1 });
 });
 
 function solidPng(value: number): Buffer {

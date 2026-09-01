@@ -1,17 +1,17 @@
-import { serializeSnapshotResult } from '../../utils/result-serialization.ts';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import { dedupeInheritedSnapshotLabels } from '../../snapshot/snapshot-label-dedup.ts';
-import { formatSnapshotText } from '../../utils/output.ts';
+import { formatSnapshotText } from '../output/snapshot.ts';
 import type { CliOutput } from '../command-contract.ts';
 import { messageOutput, type CliOutputFormatter } from '../output-common.ts';
 
-export function snapshotCliOutput(params: {
+export async function snapshotCliOutput(params: {
   result: CaptureSnapshotResult;
   raw?: boolean;
   interactiveOnly?: boolean;
   scope?: string;
   depth?: number;
-}): CliOutput {
+}): Promise<CliOutput> {
+  const { serializeSnapshotResult } = await import('../../daemon/result-serialization.ts');
   // --raw is the full-fidelity escape hatch (e.g. rect fallback lookups): keep
   // it byte-for-byte, undeduped. Every other presentation (default text and
   // --json) collapses labels/identifiers that repeat an ancestor's value.
@@ -39,8 +39,8 @@ export function snapshotCliOutput(params: {
 }
 
 export const captureCliOutputFormatters = {
-  snapshot: ({ input, result }) =>
-    snapshotCliOutput({
+  snapshot: async ({ input, result }) =>
+    await snapshotCliOutput({
       result: result as Parameters<typeof snapshotCliOutput>[0]['result'],
       raw: input.raw as boolean | undefined,
       interactiveOnly: input.interactiveOnly as boolean | undefined,

@@ -68,7 +68,6 @@ function requiredContext(): DeviceInventoryContext {
   return context;
 }
 
-/** Control-flow and composition failures that a best-effort inventory probe must never hide. */
 export function shouldPropagateDeviceInventoryProbeError(error: unknown): boolean {
   if (isRequestCanceledError(error)) return true;
   if (

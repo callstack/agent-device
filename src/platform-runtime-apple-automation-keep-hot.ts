@@ -3,17 +3,17 @@ import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-
 export function createAppleAutomationKeepHotHost(): DeviceReadinessRuntimeHost['appleAutomation'] {
   return Object.freeze({
     keepHot: (device) => {
-      void import('./platforms/apple/core/runner-client.ts')
+      void import('@agent-device/platform-apple/runner/operations')
         .then(({ prewarmAppleRunnerCache }) => prewarmAppleRunnerCache(device, {}))
         .catch(() => {});
     },
     wasRecentlyObservedBooted: async (device) => {
       const { wasSimulatorRecentlyObservedBooted } =
-        await import('./platforms/apple/core/simulator.ts');
+        await import('@agent-device/platform-apple/simulator');
       return wasSimulatorRecentlyObservedBooted(device);
     },
     markBooted: (device) => {
-      void import('./platforms/apple/core/simulator.ts')
+      void import('@agent-device/platform-apple/simulator')
         .then(({ markSimulatorBooted }) => markSimulatorBooted(device))
         .catch(() => {});
     },

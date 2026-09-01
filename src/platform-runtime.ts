@@ -31,7 +31,7 @@ import {
 import {
   createAndroidObservationAdapter as createPackageAndroidObservationAdapter,
   createAndroidInventoryModule,
-  parseAndroidForegroundApp as parseAndroidPackageForegroundApp,
+  readAndroidAppStateWithExecutor,
   readAndroidAppState as readAndroidPackageAppState,
   loadShutdownRuntime as loadAndroidShutdownRuntime,
   runtimeModule as androidRuntimeModule,
@@ -45,6 +45,7 @@ import {
   runtimeModule as vegaRuntimeModule,
 } from '@agent-device/platform-vega';
 import {
+  captureLinuxSurfaceSnapshot,
   inventoryModule as linuxInventoryModule,
   runtimeModule as linuxRuntimeModule,
 } from '@agent-device/platform-linux';
@@ -74,10 +75,10 @@ export async function readAndroidAppStateWithHost(
   return await readAndroidPackageAppState(host, device, signal);
 }
 
-export async function parseAndroidForegroundApp(
-  text: string,
-): Promise<Readonly<{ package?: string; activity?: string }> | null> {
-  return await parseAndroidPackageForegroundApp(text);
+export async function getAndroidAppStateWithAdb(
+  adb: Parameters<typeof readAndroidAppStateWithExecutor>[0],
+): Promise<AppStateRuntimeResult> {
+  return await readAndroidAppStateWithExecutor(adb);
 }
 
 const androidInventoryModule = createAndroidInventoryModule({
@@ -151,11 +152,16 @@ export function createPlatformRuntimeGateway(
   return createComposedPlatformRuntimeGateway({
     modules: platformRuntimeModules,
     loadHost: async () => {
-      const { createPlatformRuntimeHost } = await import('./platform-runtime-operation-host.ts');
+      const { createPlatformRuntimeHost, createSnapshotRuntimeHost, loadMacOsSurfaceSnapshot } =
+        await import('./platform-runtime-operation-host.ts');
       return createPlatformRuntimeHost({
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,
         shutdownLoaders,
+        snapshot: createSnapshotRuntimeHost({
+          linux: captureLinuxSurfaceSnapshot,
+          macos: loadMacOsSurfaceSnapshot,
+        }),
         ownedProcesses: options.ownedProcesses,
       });
     },

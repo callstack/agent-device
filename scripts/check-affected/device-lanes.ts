@@ -3,7 +3,7 @@
 // The live lanes (`replay-ios`, `replay-ios-device`, `replay-macos`, `replay-android`,
 // `replay-linux`, `linux-command-evidence`, `web-smoke`) drive the CLI and daemon against a real
 // simulator, emulator, desktop, or browser. Before this rule the selector could reach them only through a full
-// fail-open, so a TypeScript-only Apple change (`src/platforms/apple/**`) produced a plan
+// fail-open, so a TypeScript-only Apple change (`packages/platform-apple/src/**`) produced a plan
 // with no iOS check in it at all, and nothing could route `ios.yml` on the plan.
 //
 // What enumerates the surface. The import graph cannot: the daemon value-imports every
@@ -12,9 +12,9 @@
 // session close), so reachability from `src/bin.ts` is the whole tree, and the layering graph
 // does not resolve relative imports inside `packages/`. The repo's *enforced* platform partition
 // can: `CANONICAL_PLATFORM_FAMILIES` names the families, layering R13 pins each family's runtime
-// to `packages/platform-<family>/` and `src/platforms/<family>/`, and the remaining family-owned
+// to `packages/platform-<family>/`, and the remaining family-owned
 // trees are named by a family or Apple-leaf directory segment (`android/`, `linux/`,
-// `test/integration/replays/<leaf>/`, `src/snapshot/snapshot-presentation/ios/`) or, under
+// `test/integration/replays/<leaf>/`, `packages/capture-kit/src/ios-snapshot-engine/`) or, under
 // `test/integration/`, by the lane prefix of the smoke file. A path tagged with exactly one
 // family owns that family's lanes; a path tagged with none — or with two — is shared runtime
 // surface and owns every lane. Unit tests (`*.test.ts`, `__tests__/`) under `src/` and
@@ -55,6 +55,7 @@ const LEAF_LANES: Readonly<Record<Leaf, readonly CheckId[]>> = {
 // `xcuitest`, whose only lanes today are the Apple family's) owns every Apple lane.
 const APPLE_LEAF_TAGS: Readonly<Record<string, 'ios' | 'macos' | 'apple'>> = {
   ios: 'ios',
+  'ios-snapshot-engine': 'ios',
   macos: 'macos',
   apple: 'apple',
   tvos: 'apple',

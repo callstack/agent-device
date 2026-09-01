@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import { isAtomicPublishTemporaryPath } from '../../utils/atomic-file.ts';
+import { isAtomicPublishTemporaryPath } from '@agent-device/host-kit/file';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 export type FilesystemErrno = 'EIO' | 'ENOSPC' | 'EMFILE';

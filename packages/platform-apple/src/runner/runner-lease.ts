@@ -6,6 +6,7 @@ import {
   emitDiagnostic,
   publishFileSync,
   acquireProcessLock,
+  hasDeviceClaimAuthority,
   isProcessAlive,
   readProcessCommand,
   readProcessStartTime,
@@ -13,6 +14,7 @@ import {
   leaseOwnerStateDir,
 } from './host.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 
 const RUNNER_LEASE_SCHEMA_VERSION = 1;
@@ -48,6 +50,14 @@ export type RunnerLease = {
   xctestrunPath: string;
   jsonPath: string;
   createdAtMs: number;
+  /**
+   * The owner arbitrates device ownership through host-global device claims
+   * (#1320): while it wants the device it holds the claim, so a daemon that
+   * holds the claim instead may stop and replace this runner. Absent on leases
+   * written before claim arbitration existed — those owners never signal
+   * ownership through claims, so claim authority must not preempt them.
+   */
+  deviceClaimProtocol?: 1;
 };
 
 // Why a foreign lease classifies as stale (reclaimable). The distinction is
@@ -99,6 +109,7 @@ export function buildRunnerLease(params: {
     xctestrunPath: params.xctestrunPath,
     jsonPath: params.jsonPath,
     createdAtMs: Date.now(),
+    deviceClaimProtocol: 1,
   };
 }
 
@@ -145,10 +156,11 @@ function classifyRunnerLease(lease: RunnerLease | null): RunnerLeaseState {
 }
 
 export async function prepareRunnerLeaseForStartup(
-  deviceId: string,
+  device: DeviceInfo,
   cleanup: RunnerLeaseCleanupAdapter,
   logicalLeaseContext?: RunnerLogicalLeaseContext,
 ): Promise<void> {
+  const deviceId = device.id;
   const state = classifyRunnerLease(readRunnerLease(deviceId));
   if (state.type === 'empty') {
     await cleanup.cleanupRunnerXcodebuildProcesses(deviceId, undefined);
@@ -157,6 +169,10 @@ export async function prepareRunnerLeaseForStartup(
   if (state.type === 'busy') {
     if (isSameStateDirRunnerLease(state.lease)) {
       await cleanupLeasedRunnerProcesses(state.lease, 'same-state-dir', cleanup);
+      return;
+    }
+    if (canDeviceClaimReclaimRunner(state.lease, device)) {
+      await cleanupLeasedRunnerProcesses(state.lease, 'device-claim-takeover', cleanup);
       return;
     }
     if (canLogicalLeaseReclaimRunner(state.lease, logicalLeaseContext)) {
@@ -189,6 +205,25 @@ function isSameStateDirRunnerLease(lease: RunnerLease): boolean {
   const currentStateDir = readCurrentStateDir();
   if (!currentStateDir || !lease.ownerStateDir) return false;
   return path.resolve(currentStateDir) === path.resolve(lease.ownerStateDir);
+}
+
+/**
+ * #1320 retained-runner rule: device claims are exclusive per device, so this
+ * process holding the claim proves the lease owner released or lost it — a
+ * retained warm runner, not an active one. Stop-and-recreate is safe because
+ * every owner-side cleanup path no-ops once the lease token changes. Gated on
+ * the lease declaring claim arbitration, so owners from builds that predate
+ * device claims (and therefore never hold one) keep today's refusal. The probe
+ * receives the full device: claim ownership is canonical family/OS/id, and a
+ * bare id could let a same-id claim from another platform family authorize a
+ * destructive takeover.
+ */
+function canDeviceClaimReclaimRunner(lease: RunnerLease, device: DeviceInfo): boolean {
+  return (
+    lease.deviceClaimProtocol === 1 &&
+    lease.deviceId === device.id &&
+    hasDeviceClaimAuthority(device)
+  );
 }
 
 function canLogicalLeaseReclaimRunner(
@@ -255,7 +290,7 @@ function formatEnvAssignment(name: string, value: string): string {
 }
 
 function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
+  return `'${value.replaceAll("'", String.raw`'\''`)}'`;
 }
 
 // A lease whose owner process is gone but whose runner may still be running:
@@ -303,6 +338,15 @@ export async function cleanupRunnerLeasesForOwner(
       await cleanupLeasedRunnerProcesses(lease, 'owned', cleanup);
     }),
   );
+}
+
+/**
+ * The owner token of the lease currently on disk for this device, or null when
+ * none is readable. Lets disposal recognize that a foreign owner (a device-claim
+ * or logical-lease takeover) has replaced the runner it is cleaning up after.
+ */
+export function currentRunnerLeaseOwnerToken(deviceId: string): string | null {
+  return readRunnerLease(deviceId)?.ownerToken ?? null;
 }
 
 export function releaseRunnerLease(lease: RunnerLease | undefined): void {
@@ -395,6 +439,7 @@ function normalizeRunnerLease(value: unknown, deviceId: string): RunnerLease | n
     ownerStateDir: readOptionalString(raw.ownerStateDir) ?? undefined,
     runnerPid: readPositiveInteger(raw.runnerPid),
     runnerStartTime: readOptionalString(raw.runnerStartTime),
+    ...(raw.deviceClaimProtocol === 1 ? { deviceClaimProtocol: 1 as const } : {}),
   };
 }
 
@@ -441,14 +486,11 @@ function readFiniteNumber(value: unknown): number | null {
 // liveness only.
 async function cleanupLeasedRunnerProcesses(
   lease: RunnerLease,
-  reason: 'owned' | 'stale' | 'same-state-dir' | 'logical-lease-takeover',
+  reason: 'owned' | 'stale' | 'same-state-dir' | 'logical-lease-takeover' | 'device-claim-takeover',
   cleanup: RunnerLeaseCleanupAdapter,
 ): Promise<void> {
   emitDiagnostic({
-    level:
-      reason === 'stale' || reason === 'same-state-dir' || reason === 'logical-lease-takeover'
-        ? 'warn'
-        : 'debug',
+    level: reason === 'owned' ? 'debug' : 'warn',
     phase: 'ios_runner_lease_cleanup',
     data: {
       deviceId: lease.deviceId,

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { afterEach } from 'vitest';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import type { DeviceClaimReconciler } from '../../daemon/device-claims.ts';
-import type { OwnerIdentity } from '../../utils/owner-identity.ts';
+import { type OwnerIdentity } from '@agent-device/host-kit/process';
 
 export type IsolatedDeviceClaimStore = {
   /** Temporary root holding both the claim store and the daemon state dir. */

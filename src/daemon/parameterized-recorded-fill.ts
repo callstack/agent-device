@@ -382,7 +382,7 @@ function parameterizeSensitiveString(value: string, literal: string, placeholder
 
 /**
  * Mirrors the `${VAR}` grammar `@agent-device/ad-script`'s `REPLAY_VAR_KEY_RE`
- * and `src/replay/recorded-input.ts`'s `RECORDED_INPUT_PLACEHOLDER_RE` define.
+ * and recorded-input placeholder define.
  * The sticky (`y`) flag makes `exec` match only starting exactly at
  * `lastIndex` (never scanning ahead to find a later match), so the scan below
  * can test one position at a time without slicing a fresh substring per

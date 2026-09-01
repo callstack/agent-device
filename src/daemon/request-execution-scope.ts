@@ -1,10 +1,11 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import type { ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
 import {
   emitDiagnostic,
   getDiagnosticsMeta,
   updateDiagnosticsScope,
-} from '../utils/diagnostics.ts';
+} from '@agent-device/host-kit/diagnostics';
 import { applyCommandDefaults } from '../cli-schema/command-schema.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
@@ -21,10 +22,11 @@ import {
 } from './lease-lifecycle.ts';
 import { prepareLockedRequestBinding, resolveRequestExecutionLockKeys } from './request-binding.ts';
 import { createRequestExecutionLocks } from './request-execution-locks.ts';
-import { throwIfRequestCanceled } from '../request/cancel.ts';
+import { throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import { finalizeDaemonResponse } from './request-finalization.ts';
 import { refreshRecordingHealth } from './request-recording-health.ts';
 import {
+  isHumanControlMutation,
   shouldBlockForInvalidRecording,
   shouldLockSessionExecution,
   shouldValidateSessionSelector,
@@ -43,7 +45,7 @@ import {
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { teardownSessionResources } from './session-teardown.ts';
 import { finalizeBoundSessionApplicationLifecycle } from './application-lifecycle-recovery.ts';
-import { runtimeHintValues } from './handlers/session-runtime.ts';
+import { runtimeHintValues } from './session-runtime.ts';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
@@ -55,7 +57,7 @@ import {
   type RequestRuntimeBindings,
 } from './request-runtime-binding.ts';
 import { createDeviceClaimAdmission, type DeviceClaimAdmission } from './device-claim-admission.ts';
-import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
+import { createOwnerScopedDeviceClaimReconciler } from './device-claim-owner-recovery.ts';
 import { resolveCommandDeviceClaimPolicy } from '../core/command-descriptor/registry.ts';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 
@@ -116,6 +118,7 @@ export async function createRequestExecutionScope(params: {
   deviceRuntimeGateway?: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   platformRequestScope?: PlatformRequestScope;
   platformResourceCleanup?: PlatformResourceCleanup;
+  providerAppCatalog?: ProviderAppCatalog;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
   let scopedReq = applyRequestCommandDefaults(scopeRequestSession(params.req));
@@ -235,9 +238,12 @@ export async function createRequestExecutionScope(params: {
           sessionName,
           sessionStore,
           leaseRegistry,
+          providerAppCatalog: params.providerAppCatalog,
         });
         scope.req = scopedReq;
-        return await task();
+        return isHumanControlMutation(scopedReq)
+          ? await leaseRegistry.runDeviceMutation(scopedReq.internal?.admittedLease, task)
+          : await task();
       },
       runLocked: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
@@ -314,10 +320,7 @@ function createRequestDeviceAccess(params: {
     command: params.command,
     workspace: params.workspace,
     stateDir: params.stateDir,
-    reconcileOrphanedDeviceClaim: createDeviceClaimReconciler({
-      gateway: deviceRuntimeGateway,
-      scope: platformRequestScope,
-    }),
+    reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler(platformRequestScope),
   });
   return {
     claimAdmission,

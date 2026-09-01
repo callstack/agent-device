@@ -188,7 +188,7 @@ export function loadLanes(
 
 export function matchesGlob(pattern: string, file: string): boolean {
   const escape = (part: string) =>
-    part.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*');
+    part.replaceAll(/[.+^${}()|[\]\\]/g, String.raw`\$&`).replaceAll('*', '[^/]*');
   return new RegExp(
     `^${pattern
       .split(/(\/\*\*\/|\/\*\*|\*\*\/|\*\*)/)
@@ -213,8 +213,8 @@ export function verbatimScripts(
   command: string,
   scripts: Readonly<Record<string, string>>,
 ): string[] {
-  const wanted = commandSegments(command).map((segment) => segment.replace(/\s+/g, ' '));
+  const wanted = commandSegments(command).map((segment) => segment.replaceAll(/\s+/g, ' '));
   return Object.entries(scripts)
-    .filter(([, body]) => wanted.includes(body.replace(/\s+/g, ' ')))
+    .filter(([, body]) => wanted.includes(body.replaceAll(/\s+/g, ' ')))
     .map(([name]) => name);
 }

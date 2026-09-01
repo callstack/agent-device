@@ -15,21 +15,21 @@ import {
 } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
-import { resolveAndroidSerialAllowlist } from '../../utils/device-isolation.ts';
+import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import {
   hasExplicitSessionFlag,
   requireSessionOrExplicitSelector,
   resolveCommandDevice,
   selectorTargetsSessionDevice,
-} from './session-device-utils.ts';
-import { errorResponse } from './response.ts';
+} from '../session-device-resolution.ts';
+import { errorResponse } from '../response.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import {
   admitRuntimeOperations,
   admitRuntimeUse,
   type UnavailableRuntimeResponse,
 } from '../runtime-admission.ts';
-import type { RuntimeCommandHandlerParams } from './session-runtime-admission.ts';
+import type { RuntimeCommandHandlerParams } from '../session-runtime-admission.ts';
 
 const IOS_APPSTATE_SESSION_REQUIRED_MESSAGE =
   'iOS appstate requires an active session on the target device. Run open first (for example: open --session sim --platform ios --device "<name>" <app>).';

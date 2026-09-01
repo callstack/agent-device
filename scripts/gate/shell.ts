@@ -10,7 +10,7 @@ export const ENV_PREFIX = /^(?:[A-Z_][A-Z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s+)+/;
  */
 export function commandSegments(body: string): string[] {
   return body
-    .replace(/\\\n/g, ' ')
+    .replaceAll('\\\n', ' ')
     .split('\n')
     .map(stripComment)
     .join('\n')

@@ -5,7 +5,7 @@ import {
   screenshotFlagsFromOptions,
   type ScreenshotRuntimeFlags,
 } from '@agent-device/contracts/capture';
-import { getDiagnosticsMeta } from '../utils/diagnostics.ts';
+import { getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
 import { resolveRunnerLogicalLeaseContext } from './lease-context.ts';
 import type { DaemonRequest } from './types.ts';
 

@@ -4,11 +4,11 @@ import type {
   CommandContext,
   CommandSessionRecord,
 } from '../../../runtime-contract.ts';
-import { isSparseSnapshotQualityVerdict } from '../../../snapshot-quality/verdict.ts';
+import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { buildSnapshotDiff } from '../../../snapshot/snapshot-diff.ts';
 import { displayLabel, formatRole } from '../../../snapshot/snapshot-lines.ts';
 import { collectSettleChromeRefs, withoutSettleChrome } from '../../../core/snapshot-chrome.ts';
-import { summarizeAxEvidence } from '../../../utils/ax-digest.ts';
+import { summarizeAxEvidence } from '../../../snapshot/snapshot-evidence.ts';
 import type {
   InteractionEvidence,
   ResolvedInteractionTarget,

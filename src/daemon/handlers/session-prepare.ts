@@ -8,8 +8,11 @@ import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { admitRuntimeUse } from '../runtime-admission.ts';
-import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
-import { errorResponse } from './response.ts';
+import {
+  requireSessionOrExplicitSelector,
+  resolveCommandDevice,
+} from '../session-device-resolution.ts';
+import { errorResponse } from '../response.ts';
 
 const PREPARE_IOS_RUNNER_TIMING_NOTE =
   'Top-level prepare timing fields are diagnostic and may overlap; use timing.additiveParts for additive wall-clock phases.';

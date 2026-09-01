@@ -34,13 +34,10 @@ vi.mock('../snapshot-interactor-capture.ts', async () => {
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
-vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/runner-client.ts')>();
-  return {
-    ...actual,
-    runAppleRunnerCommand: vi.fn(async () => ({})),
-  };
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
+  return { ...actual, runAppleRunnerCommand: vi.fn(async () => ({})) };
 });
 
 // The real implementation shells out to simctl to probe for a hint-worthy
@@ -51,7 +48,7 @@ vi.mock('../../ios-app-session-hint.ts', () => ({
   buildIosOpenCommandHint: vi.fn(async () => undefined),
 }));
 
-import { runAppleRunnerCommand } from '../../../platforms/apple/core/runner-client.ts';
+import { runAppleRunnerCommand } from '@agent-device/platform-apple/runner/operations';
 import { buildIosOpenCommandHint } from '../../ios-app-session-hint.ts';
 
 const mockRunnerCommand = vi.mocked(runAppleRunnerCommand);
@@ -813,7 +810,7 @@ test('snapshot annotations survive pending interaction capture into CLI JSON', a
   expect(response.data?.snapshotQuality).toEqual(snapshotQuality);
   expect(response.data?.warnings).toEqual(['backend warning from interaction capture']);
 
-  const cliOutput = snapshotCliOutput({
+  const cliOutput = await snapshotCliOutput({
     result: response.data as unknown as CaptureSnapshotResult,
   });
   expect(cliOutput.jsonData).toMatchObject({
@@ -2116,107 +2113,6 @@ test('wait selector bypasses a fresh matching session snapshot', async () => {
     undefined,
     expect.anything(),
   );
-});
-
-/**
- * Absence as the XCTest runner states it (`ALERT_NOT_FOUND` surfaces as `details.runnerErrorCode`).
- * The retry and the fallback hint key on that evidence, never on the message text.
- */
-function alertAbsence(message = 'alert not found'): AppError {
-  return new AppError('COMMAND_FAILED', message, { runnerErrorCode: 'ALERT_NOT_FOUND' });
-}
-
-test('alert accept retries a typed alert absence and succeeds on the second attempt', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-sim';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
-
-  let calls = 0;
-  mockRunnerCommand.mockImplementation(async () => {
-    calls += 1;
-    if (calls === 1) throw alertAbsence();
-    return { accepted: true };
-  });
-
-  const response = await handleSnapshotCommands({
-    req: { token: 't', session: sessionName, command: 'alert', positionals: ['accept'], flags: {} },
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-  });
-
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(true);
-  expect(calls).toBe(2);
-  expect(mockRunnerCommand.mock.calls[0]?.[1]).toMatchObject({
-    command: 'alert',
-    action: 'accept',
-    timeoutMs: 10_000,
-  });
-});
-
-// The non-absence case moved to `src/platforms/apple/__tests__/alert.test.ts` with the retry policy
-// itself (R59), where it also covers a failure whose message merely reads like an absence — the
-// case this daemon-altitude copy could not distinguish.
-
-test('alert accept adds a scoped-snapshot hint after retrying alert-not-found failures', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-sim';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
-
-  mockRunnerCommand.mockRejectedValue(alertAbsence());
-
-  let thrown: unknown;
-  try {
-    await handleSnapshotCommands({
-      req: {
-        token: 't',
-        session: sessionName,
-        command: 'alert',
-        positionals: ['accept'],
-        flags: {},
-      },
-      sessionName,
-      logPath: '/tmp/daemon.log',
-      sessionStore,
-    });
-  } catch (error) {
-    thrown = error;
-  }
-
-  expect(thrown).toBeInstanceOf(AppError);
-  expect((thrown as AppError).message).toBe('alert not found');
-  expect((thrown as AppError).details?.hint).toMatch(/scoped snapshot/i);
-});
-
-test('alert dismiss retries a typed absence whatever the message says', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-sim';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
-
-  let calls = 0;
-  mockRunnerCommand.mockImplementation(async () => {
-    calls += 1;
-    if (calls < 3) throw alertAbsence('no alert present');
-    return { dismissed: true };
-  });
-
-  const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'alert',
-      positionals: ['dismiss'],
-      flags: {},
-    },
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-  });
-
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(true);
-  expect(calls).toBe(3);
 });
 
 test('wait sleep bypasses sessionless runner cleanup wrapper', async () => {

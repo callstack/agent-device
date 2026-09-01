@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { presentIosInteractiveSnapshot } from './index.ts';
+import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
 import {
   closedComposerWithRetainedActionShelfNodes,
   closedComposerWithRetainedRegularTreeActionNodes,

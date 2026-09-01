@@ -2,11 +2,11 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../types.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 
-vi.mock('../../platforms/apple/core/runner-client.ts', () => ({
+vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   getRunnerSessionSnapshot: vi.fn(),
 }));
 
-import { getRunnerSessionSnapshot } from '../../platforms/apple/core/runner-client.ts';
+import { getRunnerSessionSnapshot } from '@agent-device/platform-apple/runner/operations';
 import { refreshRecordingHealth } from '../request-recording-health.ts';
 
 const mockGetRunnerSessionSnapshot = vi.mocked(getRunnerSessionSnapshot);
@@ -48,7 +48,7 @@ test('runner-backed iOS recordings still invalidate on runner restarts', async (
     showTouches: true,
     runnerSessionId: 'runner-before',
   });
-  mockGetRunnerSessionSnapshot.mockReturnValue({
+  mockGetRunnerSessionSnapshot.mockResolvedValue({
     alive: true,
     sessionId: 'runner-after',
   });

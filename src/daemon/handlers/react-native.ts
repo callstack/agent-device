@@ -9,19 +9,23 @@ import {
   type ReactNativeOverlayDismissTarget,
 } from '../../core/react-native-overlay.ts';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { stripUndefined } from '../../utils/parsing.ts';
-import { successText } from '../../utils/success-text.ts';
+import { stripUndefined } from '@agent-device/kernel/record';
+import { successText } from '@agent-device/kernel/success-text';
+
 import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel/snapshot';
-import { isSparseSnapshotQualityVerdict } from '../../snapshot-quality/verdict.ts';
+import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { DaemonResponse, SessionState } from '../types.ts';
-import { errorResponse, noActiveSessionError } from './response.ts';
-import { captureSnapshotForSession } from './interaction-snapshot.ts';
-import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
+import { errorResponse, noActiveSessionError } from '../response.ts';
+import {
+  captureSnapshotForSession,
+  finalizeTouchInteraction,
+  type InteractionRouteInput,
+} from '../interaction/index.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { readSnapshotNodesReferenceFrame } from './interaction-touch-reference-frame.ts';
 
 export async function handleReactNativeCommands(
-  params: InteractionHandlerParams,
+  params: InteractionRouteInput,
 ): Promise<DaemonResponse | null> {
   const { req, sessionName, sessionStore } = params;
   if (req.command !== PUBLIC_COMMANDS.reactNative) return null;
@@ -129,7 +133,7 @@ function responseForSparseReactNativeOverlaySnapshot(
  * already-bound runtime and executes the one tap.
  */
 async function executeReactNativeOverlayDismiss(
-  params: InteractionHandlerParams,
+  params: InteractionRouteInput,
   session: SessionState,
   snapshot: SnapshotState,
   target: ReactNativeOverlayDismissTarget,
@@ -188,7 +192,7 @@ async function executeReactNativeOverlayDismiss(
 }
 
 async function verifyReactNativeOverlayDismissal(
-  params: InteractionHandlerParams,
+  params: InteractionRouteInput,
   session: SessionState,
 ): Promise<{
   verified: boolean;

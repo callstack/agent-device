@@ -6,11 +6,8 @@ import {
   applyRuntimeHintValues,
   clearRuntimeHintValues,
 } from '../platform-runtime-runtime-hints.ts';
-import {
-  applyDeviceDefaultMetroHost,
-  runtimeHintValues,
-} from '../daemon/handlers/session-runtime.ts';
-import { resolveRuntimeTransportHints } from '../utils/runtime-transport.ts';
+import { applyDeviceDefaultMetroHost, runtimeHintValues } from '../daemon/session-runtime.ts';
+import { resolveRuntimeTransportHints } from '../core/runtime-transport-hints.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   defaultPrefsPath,

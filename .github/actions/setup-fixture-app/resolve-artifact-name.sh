@@ -15,7 +15,13 @@ case "$PLATFORM" in
     ;;
 esac
 
-FINGERPRINT_JSON="$(pnpm --dir examples/test-app exec fingerprint fingerprint:generate --platform "$PLATFORM")"
+FINGERPRINT_BIN="examples/test-app/node_modules/.bin/fingerprint"
+if [ ! -x "$FINGERPRINT_BIN" ]; then
+  echo "fingerprint binary is missing; run the test-app dependency setup first" >&2
+  exit 1
+fi
+
+FINGERPRINT_JSON="$("$FINGERPRINT_BIN" fingerprint:generate --platform "$PLATFORM")"
 if ! HASH="$(
   printf '%s\n' "$FINGERPRINT_JSON" |
     jq -ser '

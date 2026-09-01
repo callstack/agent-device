@@ -25,7 +25,6 @@ const ACTIVITY_DUMPS = [
 ] as const;
 const FOCUS_LINE = new RegExp(`(?:${FOCUS_MARKERS.map(escapeRegExp).join('|')})(.*)$`, 'gm');
 const ANR_TITLE = /\bApplication Not Responding:\s*([A-Za-z0-9_.]+)/i;
-const RESPONDING_TITLE = /([^{}]*\bis(?:n't| not)\s+responding[^{}]*)/i;
 const PACKAGE_NAME = /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\b/;
 const PERMISSION_PACKAGES = new Set([
   'com.android.permissioncontroller',
@@ -186,8 +185,14 @@ function parseDialogFocus(segment: string, raw: string): AndroidBlockingDialogFo
       raw,
     };
   }
-  const responding = RESPONDING_TITLE.exec(segment)?.[1]?.trim().replace(/\s+/g, ' ');
-  if (!responding) return null;
+  const normalizedSegment = segment.toLowerCase();
+  if (
+    !normalizedSegment.includes("isn't responding") &&
+    !normalizedSegment.includes('is not responding')
+  ) {
+    return null;
+  }
+  const responding = segment.trim().replaceAll(/\s+/g, ' ');
   const packageName = PACKAGE_NAME.exec(responding)?.[1];
   return {
     ...(packageName ? { package: packageName } : {}),
@@ -201,5 +206,5 @@ function markerPattern(markers: readonly string[]): RegExp {
 }
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }

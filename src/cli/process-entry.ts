@@ -1,4 +1,4 @@
-import { exitAfterFlush } from '../utils/process-exit.ts';
+import { exitAfterFlush } from './process-exit.ts';
 
 type CliModule = {
   runCli(argv: string[]): Promise<void>;

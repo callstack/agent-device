@@ -1,5 +1,5 @@
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
-import { stripUndefined } from '../utils/parsing.ts';
+import { stripUndefined } from '@agent-device/kernel/record';
 
 const PROXY_LEASE_PROVIDER = 'proxy';
 export const DEFAULT_PROXY_LEASE_TTL_MS = 300_000;

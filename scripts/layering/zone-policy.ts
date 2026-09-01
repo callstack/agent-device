@@ -1,22 +1,16 @@
 import type { ImportEdge } from './model.ts';
 
 /**
- * R1-R3 as data: which zone may import which, and on what terms.
+ * R2 as data: which zone may import which.
  *
- * These three rules used to be three hand-written predicate functions. They were short, but each
- * one buried its boundary in control flow — you had to read the early-returns to learn that R3
- * tolerates dynamic imports, or that R1 opens exactly one door. Stating them as a table means the
- * policy is readable without reading code, and a fourth boundary is a table entry rather than a
- * fourth function to keep consistent with the other three.
+ * The original folder policies were hand-written predicate functions. Stating the remaining rule
+ * as data keeps its scope readable without following control flow.
  *
  * The evaluator is deliberately small. Everything a policy can say is in `ZonePolicy`, so a rule
  * that needs more than these fields does NOT belong here: R4 (cycles), R5/R6 (spine ranking),
  * R7 (field ownership) and R9 (cycle size) are whole-graph or non-import properties, and each
  * keeps its own checker.
  */
-
-/** Edge kinds a boundary can tolerate. Both are erased or deferred, so both can be legitimate. */
-export type ToleratedKind = 'type-only' | 'dynamic';
 
 export type ZonePolicy = {
   /** Rule id reported on violation, e.g. `R1 kernel-sink`. */
@@ -27,15 +21,6 @@ export type ZonePolicy = {
   to?: readonly string[];
   /** Target zones this policy does NOT govern — the complement form of `to`. */
   exceptTo?: readonly string[];
-  /**
-   * Edge kinds that do not violate this boundary. A type-only edge costs nothing at runtime; a
-   * dynamic edge defers the cost past startup. Omitted means the boundary is closed to every kind.
-   */
-  tolerates?: readonly ToleratedKind[];
-  /** Path prefixes allowed to cross regardless: the declared seam. */
-  seam?: readonly string[];
-  /** Subtrees of `seam` that are NOT part of it (a seam owner with a non-owning child). */
-  seamExcept?: readonly string[];
   /** Why the boundary exists and what to do instead. ADR 0010: every error carries a hint. */
   hint: string;
 };
@@ -50,33 +35,18 @@ export type ZonePolicy = {
 export const ZONE_POLICIES: readonly ZonePolicy[] = [
   {
     rule: 'R2 commands-floor',
-    from: ['platforms', 'core', 'daemon'],
+    from: ['core', 'daemon'],
     to: ['commands'],
     hint:
       'commands/ is the command surface, above these zones. Depend on shared kernel/contracts ' +
       'instead; if two zones need the same rule, put the rule below both of them.',
   },
-  {
-    rule: 'R3 platforms-seam',
-    to: ['platforms'],
-    tolerates: ['type-only', 'dynamic'],
-    seam: ['src/core/interactors/', 'src/sdk/'],
-    hint:
-      'Only src/core/interactors/ and the sdk barrel may statically import ' +
-      'platforms/; elsewhere use a dynamic import() or a type-only import to preserve CLI ' +
-      'cold-start.',
-  },
 ];
 
-function kindOf(imp: ImportEdge): ToleratedKind | 'value' {
+function kindOf(imp: ImportEdge): 'type-only' | 'dynamic' | 'value' {
   if (imp.dynamic) return 'dynamic';
   if (imp.typeOnly) return 'type-only';
   return 'value';
-}
-
-function crossesSeam(policy: ZonePolicy, file: string): boolean {
-  if (!policy.seam?.some((prefix) => file.startsWith(prefix))) return false;
-  return !policy.seamExcept?.some((prefix) => file.startsWith(prefix));
 }
 
 /**
@@ -90,10 +60,6 @@ export function policyViolation(
   if (policy.from && !policy.from.includes(edge.fromZone)) return null;
   if (policy.to && !policy.to.includes(edge.toZone)) return null;
   if (policy.exceptTo?.includes(edge.toZone)) return null;
-
-  const kind = kindOf(edge.imp);
-  if (kind !== 'value' && policy.tolerates?.includes(kind)) return null;
-  if (crossesSeam(policy, edge.file)) return null;
 
   return policy.hint;
 }

@@ -66,7 +66,7 @@ class LimitedXmlParser {
 
   private assertFullyClosed(): void {
     if (this.stack.length > 0) {
-      const node = this.stack[this.stack.length - 1];
+      const node = this.stack.at(-1);
       throw new Error(`Unclosed XML tag <${node?.name ?? 'unknown'}>.`);
     }
   }
@@ -170,7 +170,7 @@ class LimitedXmlParser {
   private appendText(text: string, decodeEntities: boolean): void {
     const trimmed = text.trim();
     if (!trimmed) return;
-    const node = this.stack[this.stack.length - 1];
+    const node = this.stack.at(-1);
     if (!node) return;
     // Preserve fast-xml-parser's trimValues behavior for each text segment we keep.
     node.text = `${node.text ?? ''}${
@@ -179,7 +179,7 @@ class LimitedXmlParser {
   }
 
   private addNode(node: XmlNode): void {
-    const parent = this.stack[this.stack.length - 1];
+    const parent = this.stack.at(-1);
     if (parent) {
       parent.children.push(node);
     } else {

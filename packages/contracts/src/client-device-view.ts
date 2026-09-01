@@ -21,6 +21,15 @@ export type AgentDeviceDevice = {
    */
   appleOs?: AppleOS;
   identifiers: AgentDeviceIdentifiers;
+  /**
+   * Present when a host-local device claim currently blocks foreign use of
+   * this device (#1320). Provably dead owners are not projected — the next
+   * open reconciles and replaces them automatically.
+   */
+  claimedBy?: {
+    session: string;
+    workspace: string;
+  };
   ios?: {
     udid: string;
   };

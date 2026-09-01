@@ -20,7 +20,7 @@ import {
   buildSnapshotDiff,
   countSnapshotComparableLines,
 } from '../../../snapshot/snapshot-diff.ts';
-import { renderSnapshotQualityWarnings } from '../../../snapshot-quality/warnings.ts';
+import { renderSnapshotQualityWarnings } from '../../../snapshot/snapshot-presentation/quality-warnings.ts';
 import { buildSnapshotVisibility } from '../../../snapshot/snapshot-visibility.ts';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../../core/android-system-surface-disclosure.ts';
 import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';

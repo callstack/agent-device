@@ -37,9 +37,9 @@ export type ChangedFileDiff = {
 // absolute-path prefix some coverage providers emit; `./` and `b/` prefixes are
 // dropped so lcov and diff paths join on the same key.
 export function normalizePath(raw: string, rootDir?: string): string {
-  let p = raw.trim().replace(/\\/g, '/');
+  let p = raw.trim().replaceAll('\\', '/');
   if (rootDir) {
-    const root = rootDir.replace(/\\/g, '/').replace(/\/$/, '');
+    const root = rootDir.replaceAll('\\', '/').replace(/\/$/, '');
     if (p === root) return '';
     if (p.startsWith(`${root}/`)) p = p.slice(root.length + 1);
   }

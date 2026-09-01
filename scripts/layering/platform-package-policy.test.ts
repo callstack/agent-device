@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   CANONICAL_PLATFORM_FAMILIES,
   checkPlatformPackagePolicy,
+  checkRetiredPlatformsZone,
   type PlatformPackageDeclaration,
 } from './platform-package-policy.ts';
 import { classifyZone } from './model.ts';
@@ -26,17 +27,27 @@ function declarations(): PlatformPackageDeclaration[] {
       family === 'apple'
         ? [
             '@agent-device/platform-apple',
+            '@agent-device/platform-apple/app-lifecycle',
+            '@agent-device/platform-apple/app-resolution',
+            '@agent-device/platform-apple/debug-symbols',
+            '@agent-device/platform-apple/doctor',
+            '@agent-device/platform-apple/install-artifact',
+            '@agent-device/platform-apple/macos',
+            '@agent-device/platform-apple/perf',
+            '@agent-device/platform-apple/physical-device',
             '@agent-device/platform-apple/runner',
-            '@agent-device/platform-apple/runner/client',
             '@agent-device/platform-apple/runner/test-host',
+            '@agent-device/platform-apple/runner/operations',
+            '@agent-device/platform-apple/runner-owner',
+            '@agent-device/platform-apple/simctl',
+            '@agent-device/platform-apple/simulator',
+            '@agent-device/platform-apple/tool-provider',
           ]
         : family === 'android'
           ? [
               '@agent-device/platform-android',
-              '@agent-device/platform-android/adb-executor',
               '@agent-device/platform-android/adb-host',
-              '@agent-device/platform-android/ime-lifecycle',
-              '@agent-device/platform-android/ime-helper',
+              '@agent-device/platform-android/mechanics',
             ]
           : [`@agent-device/platform-${family}`],
   }));
@@ -88,6 +99,27 @@ test('the inventory substrate has six private lazy packages and one exact compos
   assert.deepEqual(checkPlatformPackagePolicy(validSources(), declarations()), []);
 });
 
+test('retired platform family implementations are rejected from src/platforms', () => {
+  const violations = checkRetiredPlatformsZone([
+    'src/platforms/apple/core/apps.ts',
+    'src/platforms/harmonyos/app-lifecycle.ts',
+    'src/platforms/linux/snapshot.ts',
+    'src/platforms/vega/interactor.ts',
+    'src/platforms/web/provider.ts',
+  ]);
+
+  assert.deepEqual(
+    violations.map(({ file, rule }) => ({ file, rule })),
+    [
+      { file: 'src/platforms/apple/core/apps.ts', rule: 'retired-platforms-zone' },
+      { file: 'src/platforms/harmonyos/app-lifecycle.ts', rule: 'retired-platforms-zone' },
+      { file: 'src/platforms/linux/snapshot.ts', rule: 'retired-platforms-zone' },
+      { file: 'src/platforms/vega/interactor.ts', rule: 'retired-platforms-zone' },
+      { file: 'src/platforms/web/provider.ts', rule: 'retired-platforms-zone' },
+    ],
+  );
+});
+
 test('capture-kit and platform workspace packages are R11-owned unranked zones', () => {
   assert.equal(classifyZone('capture-kit'), 'unranked');
   for (const family of CANONICAL_PLATFORM_FAMILIES) {
@@ -128,20 +160,86 @@ test('composition policy does not pin local platform-module identifier spelling'
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 });
 
-test('only the canonical composition root and its governed provider submodule may import a concrete platform package', () => {
-  for (const statement of [
+test('external consumers use root facades with static imports only at the interactor seam', () => {
+  const staticImport = validSources();
+  staticImport.set(
+    'src/daemon/not-the-root.ts',
     "import { applePlatformMetadata } from '@agent-device/platform-apple';",
+  );
+  assert.match(
+    messages(staticImport).join('\n'),
+    /production static imports of '@agent-device\/platform-apple' are limited to src\/platform-runtime\.ts and src\/core\/interactors\//,
+  );
+
+  for (const statement of [
     "import type { AppleThing } from '@agent-device/platform-apple';",
     "void import('@agent-device/platform-apple');",
-    "export { applePlatformMetadata } from '@agent-device/platform-apple';",
   ]) {
     const sources = validSources();
-    sources.set('src/daemon/not-the-root.test.ts', statement);
+    sources.set('src/daemon/not-the-root.ts', statement);
     assert.match(
       messages(sources).join('\n'),
-      /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import/,
+      /production static imports of '@agent-device\/platform-apple' are limited to/,
     );
   }
+
+  const hostDynamic = validSources();
+  hostDynamic.set(
+    'src/platform-runtime-network-web-transport.ts',
+    "void import('@agent-device/platform-web');",
+  );
+  assert.deepEqual(messages(hostDynamic), []);
+
+  const hostTypeOnly = validSources();
+  hostTypeOnly.set(
+    'src/platform-runtime-network-web-transport.ts',
+    "import type { WebThing } from '@agent-device/platform-web';",
+  );
+  assert.deepEqual(messages(hostTypeOnly), []);
+
+  const hostStatic = validSources();
+  hostStatic.set(
+    'src/platform-runtime-network-web-transport.ts',
+    "import { resolveWebProvider } from '@agent-device/platform-web';",
+  );
+  assert.match(
+    messages(hostStatic).join('\n'),
+    /production static imports of '@agent-device\/platform-web' are limited to/,
+  );
+
+  const interactor = validSources();
+  interactor.set(
+    'src/core/interactors/apple.ts',
+    "import { applePlatformMetadata } from '@agent-device/platform-apple';",
+  );
+  assert.deepEqual(messages(interactor), []);
+
+  const testConsumer = validSources();
+  testConsumer.set(
+    'test/integration/platform-fixture.ts',
+    "import { applePlatformMetadata } from '@agent-device/platform-apple';",
+  );
+  assert.deepEqual(messages(testConsumer), []);
+
+  const reExport = validSources();
+  reExport.set(
+    'src/daemon/not-the-root.ts',
+    "export { applePlatformMetadata } from '@agent-device/platform-apple';",
+  );
+  assert.match(
+    messages(reExport).join('\n'),
+    /production static imports of '@agent-device\/platform-apple' are limited to src\/platform-runtime\.ts and src\/core\/interactors\//,
+  );
+
+  const deep = validSources();
+  deep.set(
+    'src/daemon/not-the-root.ts',
+    "import { implementation } from '@agent-device/platform-apple/internal';",
+  );
+  assert.match(
+    messages(deep).join('\n'),
+    /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import/,
+  );
 
   const governed = validSources();
   governed.set(
@@ -179,22 +277,6 @@ test('the apple runner mechanics facet subpaths are the enumerated exception', (
   );
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 
-  // The host-bound client factory has exactly one composition root.
-  const clientSources = validSources();
-  clientSources.set(
-    'src/platforms/apple/core/runner-client.ts',
-    "import { createAppleRunnerClient } from '@agent-device/platform-apple/runner/client';",
-  );
-  assert.deepEqual(checkPlatformPackagePolicy(clientSources, declarations()), []);
-  clientSources.set(
-    'src/daemon/handlers/session.ts',
-    "import { createAppleRunnerClient } from '@agent-device/platform-apple/runner/client';",
-  );
-  assert.match(
-    messages(clientSources).join('\n'),
-    /only the composition root src\/platforms\/apple\/core\/runner-client\.ts may construct/,
-  );
-
   // The test-host installer is a single vitest setup file, dynamic imports included.
   const testHostSources = validSources();
   testHostSources.set(
@@ -212,6 +294,35 @@ test('the apple runner mechanics facet subpaths are the enumerated exception', (
   );
 
   // A NEW unenumerated subpath widens the export list and fails declarations.
+  const widened = declarations();
+  const apple = widened.find((pkg) => pkg.family === 'apple')!;
+  widened[widened.indexOf(apple)] = {
+    ...apple,
+    exportedSubpaths: [...apple.exportedSubpaths, '@agent-device/platform-apple/internal'],
+  };
+  assert.match(
+    messages(validSources(), widened).join('\n'),
+    /platform-apple must export exactly its root façade/,
+  );
+});
+
+test('the Apple domain facades preserve synchronous helpers without widening the root facade', () => {
+  const sources = validSources();
+  for (const specifier of [
+    '@agent-device/platform-apple/app-resolution',
+    '@agent-device/platform-apple/install-artifact',
+    '@agent-device/platform-apple/perf',
+    '@agent-device/platform-apple/physical-device',
+    '@agent-device/platform-apple/runner-owner',
+    '@agent-device/platform-apple/simctl',
+    '@agent-device/platform-apple/simulator',
+    '@agent-device/platform-apple/tool-provider',
+  ]) {
+    sources.set('src/platform-runtime-domain-facade.ts', `import '${specifier}';`);
+    assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+    sources.delete('src/platform-runtime-domain-facade.ts');
+  }
+
   const widened = declarations();
   const apple = widened.find((pkg) => pkg.family === 'apple')!;
   widened[widened.indexOf(apple)] = {
@@ -264,58 +375,39 @@ test('platform packages may import the xml vocabulary package', () => {
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 });
 
-test('transitional #2041 android adb subpaths are importable only by their named shims', () => {
-  const shimImport =
-    "export { resolveAndroidAdbExecutor } from '@agent-device/platform-android/adb-executor';";
-
+test('the Android mechanics facet is the named consumer seam and adb host wiring is root-only', () => {
+  const mechanicsImport =
+    "import { resolveAndroidAdbExecutor } from '@agent-device/platform-android/mechanics';";
+  const hostImport =
+    "import { bindAndroidAdbHost } from '@agent-device/platform-android/adb-host';";
   const allowed = validSources();
-  allowed.set('src/platforms/android/adb-executor.ts', shimImport);
+  allowed.set('src/core/interactors/android.ts', mechanicsImport);
+  allowed.set('src/sdk/android-adb.ts', mechanicsImport);
+  allowed.set('src/daemon/handlers/session.test.ts', mechanicsImport);
+  allowed.set('src/platform-runtime-android-adb-host.ts', hostImport);
   assert.deepEqual(
     messages(allowed).filter((message) => message.includes('may import')),
     [],
   );
 
   const denied = validSources();
-  denied.set('src/daemon/handlers/session.ts', shimImport);
+  denied.set('src/daemon/handlers/session.ts', mechanicsImport);
   assert.match(
     messages(denied).join('\n'),
-    /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import '@agent-device\/platform-android\/adb-executor'/,
+    /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import '@agent-device\/platform-android\/mechanics'/,
   );
 
-  // The cluster's own root tests may name the package module (to mock its internal edges) …
-  const clusterTest = validSources();
-  clusterTest.set('src/platforms/android/__tests__/ime-lifecycle.test.ts', shimImport);
-  assert.deepEqual(
-    messages(clusterTest).filter((message) => message.includes('may import')),
-    [],
-  );
-
-  // … but an unrelated test file elsewhere stays under the composition-only rule.
-  const foreignTest = validSources();
-  foreignTest.set('src/daemon/handlers/session.test.ts', shimImport);
+  const deniedHost = validSources();
+  deniedHost.set('src/daemon/handlers/session.ts', hostImport);
   assert.match(
-    messages(foreignTest).join('\n'),
-    /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import '@agent-device\/platform-android\/adb-executor'/,
+    messages(deniedHost).join('\n'),
+    /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import '@agent-device\/platform-android\/adb-host'/,
   );
 
-  // Android may export exactly the transitional subpaths; any other subpath is still a violation.
-  const androidTransitional = declarations().map((declaration) =>
-    declaration.family === 'android'
-      ? {
-          ...declaration,
-          exportedSubpaths: [
-            declaration.name,
-            `${declaration.name}/adb-executor`,
-            `${declaration.name}/adb-host`,
-            `${declaration.name}/ime-helper`,
-            `${declaration.name}/ime-lifecycle`,
-          ],
-        }
-      : declaration,
-  );
-  assert.deepEqual(messages(validSources(), androidTransitional), []);
+  const androidMechanics = declarations();
+  assert.deepEqual(messages(validSources(), androidMechanics), []);
 
-  const androidWidened = androidTransitional.map((declaration) =>
+  const androidWidened = androidMechanics.map((declaration) =>
     declaration.family === 'android'
       ? {
           ...declaration,
@@ -385,7 +477,7 @@ test('platform packages may use capture-kit but no unrelated workspace implement
     );
     assert.match(
       messages(sources).join('\n'),
-      /may import workspace code only from capture-kit, contracts, kernel, or xml/,
+      /may import workspace code only from capture-kit, host-kit, provision-kit, contracts, kernel, or xml/,
     );
   }
 });
@@ -489,4 +581,73 @@ test('Node resolves only each platform package root facade', () => {
       /ERR_PACKAGE_PATH_NOT_EXPORTED|Package subpath/,
     );
   }
+});
+
+test('the retired src/platforms zone rejects every production, test, and fixture file', () => {
+  const planted = [
+    'src/platforms/__tests__/install-source.test.ts',
+    'src/platforms/__fixtures__/snapshot.json',
+    'src/platforms/helper.mjs',
+  ];
+  const found = checkRetiredPlatformsZone(planted);
+  assert.deepEqual(
+    found.map(({ file, rule }) => ({ file, rule })),
+    planted.map((file) => ({ file, rule: 'retired-platforms-zone' })),
+  );
+});
+
+test('a moved Android family cannot leave production or test files under the old root', () => {
+  const planted = [
+    'src/platforms/android/adb.ts',
+    'src/platforms/android/__tests__/snapshot.test.ts',
+  ];
+  const found = checkRetiredPlatformsZone(planted);
+  assert.deepEqual(
+    found.map(({ file, message }) => ({ file, message })),
+    planted.map((file) => ({
+      file,
+      message:
+        'src/platforms is retired; family code belongs in its platform package, shared mechanics in an owning substrate package, and cross-family tests in their root or package test owner',
+    })),
+  );
+});
+
+test('a new direct production file or sibling directory under src/platforms fails closed', () => {
+  const planted = [
+    'src/platforms/shared-helper.ts',
+    'src/platforms/common/util.ts',
+    'src/platforms/perf-utils.ts',
+  ];
+  const found = checkRetiredPlatformsZone(planted);
+  assert.deepEqual(
+    found.map(({ file }) => file),
+    planted,
+  );
+  for (const violation of found) {
+    assert.equal(violation.rule, 'retired-platforms-zone');
+    assert.match(violation.message, /src\/platforms is retired/);
+  }
+});
+
+test('platform packages may import the provision-kit substrate', () => {
+  const sources = validSources();
+  sources.set(
+    'packages/platform-apple/src/install.ts',
+    "import { resolveInstallSource } from '@agent-device/provision-kit/install-source';",
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+});
+
+test('a provision-kit import of a concrete platform package fails closed', () => {
+  const sources = validSources();
+  sources.set(
+    'packages/provision-kit/src/backdoor.ts',
+    "import { runtimeModule } from '@agent-device/platform-android';",
+  );
+  assert.match(
+    checkPlatformPackagePolicy(sources, declarations())
+      .map(({ message }) => message)
+      .join('\n'),
+    /may import '@agent-device\/platform-android'/,
+  );
 });

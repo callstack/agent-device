@@ -1,4 +1,6 @@
-// The file list every layering scan reads: TRACKED production TypeScript, nothing else.
+// Layering scans read tracked repository paths only. Most rules consume production TypeScript;
+// the retired-platform zone also consumes every tracked path under its former root so non-TS
+// fixtures cannot bypass the ownership boundary.
 //
 // A leaf module on purpose. `check.ts` owns the scan and imports `package-boundaries.ts`, so the
 // boundary rules cannot import `check.ts` back for its file list; without a shared leaf the two
@@ -47,6 +49,15 @@ export function listTrackedPackageManifests(repoRoot: string): string[] {
 /** Every tracked `.ts` source file under the scanned roots, repo-root-relative. */
 export function listTrackedTypeScriptFiles(repoRoot: string): string[] {
   const out = execFileSync('git', ['ls-files', ...TRACKED_SOURCE_PATHSPECS], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  return out.split('\n').filter(Boolean);
+}
+
+/** Every tracked file under the retired platform root, regardless of extension. */
+export function listTrackedPlatformZoneFiles(repoRoot: string): string[] {
+  const out = execFileSync('git', ['ls-files', '--', 'src/platforms'], {
     cwd: repoRoot,
     encoding: 'utf8',
   });

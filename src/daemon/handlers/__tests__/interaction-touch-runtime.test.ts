@@ -1,5 +1,6 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
+import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction.ts';
 import {
@@ -17,17 +18,15 @@ const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
 
-vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/android/input-actions.ts')>();
-  return { ...actual, getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })) };
-});
+async function withRunner<T>(operation: () => Promise<T>): Promise<T> {
+  return await withAppleRunnerProvider(mockRunAppleRunnerCommand, { deviceId: 'sim-1' }, operation);
+}
 
-vi.mock('../../../platforms/android/window-state.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/android/window-state.ts')>();
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
   return {
     ...actual,
+    getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })),
     getAndroidAppState: vi.fn(async () => ({})),
     getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
   };
@@ -37,17 +36,17 @@ vi.mock('../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
-vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/runner-client.ts')>();
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
 import {
   getAndroidAppState,
   getAndroidBlockingDialogObservation,
-} from '../../../platforms/android/window-state.ts';
-import { getAndroidScreenSize } from '../../../platforms/android/input-actions.ts';
+  getAndroidScreenSize,
+} from '@agent-device/platform-android/mechanics';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
@@ -240,19 +239,21 @@ test('press @ref fails fast when the target is off-screen', async () => {
   };
   sessionStore.set(sessionName, session);
 
-  const response = await handleInteractionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'press',
-      positionals: ['@e2'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-    ...getRuntimeBindings(),
-  });
+  const response = await withRunner(() =>
+    handleInteractionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'press',
+        positionals: ['@e2'],
+        flags: {},
+      },
+      sessionName,
+      sessionStore,
+      contextFromFlags,
+      ...getRuntimeBindings(),
+    }),
+  );
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(false);

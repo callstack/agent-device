@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { readVersion } from '../utils/version.ts';
+import { readVersion } from '@agent-device/host-kit/version';
 
 /**
  * MCP has two protocol eras, and agent-device serves both from one stdio process

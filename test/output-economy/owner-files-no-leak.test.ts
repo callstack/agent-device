@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import { COMMAND_OWNER_FILES } from '../../src/core/command-descriptor/owner-files.ts';
 import { getDaemonRouteOwnerFiles } from '../../src/daemon/route-owner-files.ts';
 

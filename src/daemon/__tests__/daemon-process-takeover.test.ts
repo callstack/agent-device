@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test } from 'vitest';
-import { isProcessAlive, readProcessStartTime } from '../../utils/host-process.ts';
+import { isProcessAlive, readProcessStartTime } from '@agent-device/host-kit/process';
 import { isAgentDeviceDaemonProcess, stopProcessForTakeover } from '../daemon-process.ts';
 
 const TAKEOVER_TIMEOUTS = { termTimeoutMs: 5_000, killTimeoutMs: 2_000 };

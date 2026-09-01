@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { SessionStore } from '../session-store.ts';
-import { resolveEffectiveSessionName } from '../session-routing.ts';
-import type { SessionState } from '../types.ts';
+import { resolveEffectiveSessionName, resolveSessionScope } from '../session-routing.ts';
+import type { DaemonRequest, SessionState } from '../types.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function makeSession(name: string): SessionState {
@@ -110,4 +110,36 @@ test('keeps explicitly configured default session global', (t) => {
   );
 
   assert.equal(resolved, 'default');
+});
+
+test('classifies every persisted session provenance without parsing its address', (t) => {
+  const cwd = mkdtempForTestSync('agent-device-cwd-scope-');
+  t.onTestFinished(() => {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+  const request: DaemonRequest = {
+    token: 't',
+    session: 'default',
+    command: 'open',
+    positionals: ['com.example.app'],
+    flags: {},
+  };
+
+  const cwdScope = resolveSessionScope({ ...request, session: 'default', meta: { cwd } });
+  assert.equal(cwdScope.kind, 'cwd');
+  if (cwdScope.kind === 'cwd') assert.match(cwdScope.id, /^[a-f0-9]{16}$/);
+  assert.deepEqual(resolveSessionScope({ ...request, session: 'tenant-a:qa' }), {
+    kind: 'named-local',
+  });
+  assert.deepEqual(resolveSessionScope({ ...request, session: 'default' }), {
+    kind: 'global-default',
+  });
+  assert.deepEqual(
+    resolveSessionScope({
+      ...request,
+      session: 'tenant-a:default',
+      meta: { tenantId: 'tenant-a', sessionIsolation: 'tenant' },
+    }),
+    { kind: 'tenant', id: 'tenant-a' },
+  );
 });

@@ -14,6 +14,15 @@ import type {
 
 const state = vi.hoisted(() => ({
   constructorOptions: [] as Array<{ defaultHeaders?: Record<string, string> }>,
+  androidCreateInputs: [] as unknown[],
+  assetList: vi.fn(async () => [
+    {
+      id: 'asset-example',
+      name: 'Example.apk',
+      md5: 'uploaded',
+      os: 'android',
+    },
+  ]),
   tunnelClose: vi.fn(),
   disconnect: vi.fn(),
 }));
@@ -27,20 +36,24 @@ vi.mock('@limrun/api', () => ({
     };
 
     readonly androidInstances = {
-      create: vi.fn(async () => ({
-        metadata: { id: 'android-instance-1' },
-        status: {
-          token: 'instance-token',
-          apiUrl: 'https://android.example',
-          adbWebSocketUrl: 'wss://adb.example',
-        },
-      })),
+      create: vi.fn(async (input: unknown) => {
+        state.androidCreateInputs.push(input);
+        return {
+          metadata: { id: 'android-instance-1' },
+          status: {
+            token: 'instance-token',
+            apiUrl: 'https://android.example',
+            adbWebSocketUrl: 'wss://adb.example',
+          },
+        };
+      }),
       list: vi.fn(),
       delete: vi.fn(async () => undefined),
     };
 
     readonly assets = {
       getOrUpload: vi.fn(),
+      list: state.assetList,
     };
 
     constructor(options: { defaultHeaders?: Record<string, string> }) {
@@ -108,6 +121,96 @@ test('factory uses the injected Android and host adapters as its construction se
   assert.equal(state.tunnelClose.mock.calls.length, 1);
 });
 
+test('allocation installs an exact uploaded asset before binding its application id', async () => {
+  state.androidCreateInputs.length = 0;
+  const fixture = createContractFixture();
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, fixture.dependencies);
+
+  try {
+    await runtime.leaseLifecycle.allocate?.(androidLease(), {
+      initialApp: 'Example.apk',
+    });
+
+    assert.deepEqual(state.androidCreateInputs[0], {
+      wait: true,
+      metadata: {
+        displayName: 'agent-device-team-a-run-a',
+        labels: {
+          source: 'agent-device-cli',
+          provider: 'limrun',
+          leaseId: 'lease-android',
+          tenantId: 'team-a',
+          runId: 'run-a',
+        },
+      },
+      spec: {
+        initialAssets: [
+          {
+            kind: 'App',
+            source: 'AssetIDs',
+            assetIds: ['asset-example'],
+          },
+        ],
+      },
+    });
+    assert.equal(fixture.listApps.mock.calls[0]?.[1], 'user-installed');
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test('public daemon requests cannot list or allocate uploaded apps', async () => {
+  state.androidCreateInputs.length = 0;
+  state.assetList.mockClear();
+  const fixture = createContractFixture();
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, fixture.dependencies);
+  const appCatalog = runtime.appCatalog;
+  if (!appCatalog) throw new Error('Expected Limrun app catalog capability');
+
+  try {
+    await assert.rejects(
+      async () =>
+        await appCatalog({
+          provider: 'limrun',
+          platform: 'android',
+          publicNetworkOnly: true,
+        }),
+      (error) => error instanceof AppError && error.code === 'UNAUTHORIZED',
+    );
+    await assert.rejects(
+      async () =>
+        await runtime.leaseLifecycle.allocate?.(androidLease(), {
+          initialApp: 'Example.apk',
+          publicNetworkOnly: true,
+        }),
+      (error) => error instanceof AppError && error.code === 'UNAUTHORIZED',
+    );
+    assert.equal(state.assetList.mock.calls.length, 0);
+    assert.equal(state.androidCreateInputs.length, 0);
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test('allocation rejects an unrelated foreground app after preinstall', async () => {
+  const fixture = createContractFixture();
+  fixture.listApps.mockResolvedValueOnce([{ id: 'com.foreground.app', name: 'Foreground' }]);
+  fixture.getForegroundApp.mockResolvedValueOnce({
+    appId: 'com.foreground.app',
+    activity: '.MainActivity',
+  });
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, fixture.dependencies);
+
+  await assert.rejects(
+    async () =>
+      await runtime.leaseLifecycle.allocate?.(androidLease(), {
+        initialApp: 'Example.apk',
+      }),
+    (error) => error instanceof AppError && error.code === 'COMMAND_FAILED',
+  );
+  assert.equal(fixture.getForegroundApp.mock.calls.length, 0);
+});
+
 function createContractFixture() {
   const adbCalls: string[][] = [];
   const activeReverseMappings: LimrunPortReverseMapping[] = [];
@@ -120,6 +223,10 @@ function createContractFixture() {
     visible: false,
     inputOwner: 'unknown' as const,
   }));
+  const getForegroundApp = vi.fn(async () => ({
+    appId: 'com.example.app',
+    activity: '.MainActivity',
+  }));
   const dependencies = {
     clientVersion: 'test-version',
     android: {
@@ -128,10 +235,7 @@ function createContractFixture() {
         createInMemoryPortReverse(adb, activeReverseMappings),
       inferAppName: async () => 'Example',
       listApps,
-      getForegroundApp: async () => ({
-        appId: 'com.example.app',
-        activity: '.MainActivity',
-      }),
+      getForegroundApp,
       getKeyboardState,
       dismissKeyboard: async () => ({
         visible: false,
@@ -155,7 +259,15 @@ function createContractFixture() {
       readBundleAppName: async () => undefined,
     },
   } satisfies LimrunRuntimeDependencies;
-  return { adbCalls, createInteractor, dependencies, getKeyboardState, interactor, listApps };
+  return {
+    adbCalls,
+    createInteractor,
+    dependencies,
+    getForegroundApp,
+    getKeyboardState,
+    interactor,
+    listApps,
+  };
 }
 
 function createInMemoryPortReverse(adb: LimrunAdbExecutor, mappings: LimrunPortReverseMapping[]) {

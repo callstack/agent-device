@@ -1,22 +1,18 @@
 import path from 'node:path';
+import {
+  LOGICAL_MODULE_POLICIES,
+  matchesDeclaredRoot,
+  SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS,
+  SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS,
+  type LogicalModulePolicy,
+} from './architecture-ownership.ts';
 import { targetDagZone, type LayeringViolation, type ResolvedImportEdge } from './model.ts';
 import { SESSION_STATE_FIELD_OWNERS } from './session-state.ts';
 
 const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
-  // Request provider composition now consumes the neutral contracts context instead of importing
-  // daemon request/session types, removing the root provider seam from this component.
-  '(root)': 1,
-  core: 4,
-  // Same move, daemon side: with no dispatcher to re-fire a tap through, the pending-outcome
-  // retry declares its own callback seam instead of importing runtime admission, so
-  // `interaction-outcome-policy.ts` and `deferred-interaction-outcome.ts` both left the cycle.
-  // R63 then deleted `session-install-capability-projection.ts` outright — the general
-  // fact-owned projection subsumes it — taking a third member with it.
-  // The daemon side of that seam no longer imports the concrete provider resolver table.
-  'daemon-server': 10,
-  // R64 deletes the last perf support closure from `apple/plugin.ts`, taking the final
-  // platform-owned member out of the type cycle.
-  platforms: 0,
+  // co-defined-contract pair (`capabilities.ts` ↔ `runtime.ts` and the four files they
+  // pull in). The standard shrink is a third module holding the shared type.
+  'provider-webdriver': 6,
 };
 
 export const DAEMON_MODULARITY_BASELINE = {
@@ -40,64 +36,10 @@ export const TYPE_CYCLE_BASELINE = Object.values(LARGEST_TYPE_CYCLE_ZONE_CEILING
   0,
 );
 
-type LogicalModulePolicy = {
-  name: string;
-  roots: readonly string[];
-  forbiddenTargetRoots: readonly string[];
-};
-
-/**
- * Zero-count targets for the accepted daemon modularity design. A root may be absent today:
- * the policy starts enforcing as soon as the first file is added, without scaffolding an empty
- * façade or package merely to make the gate concrete.
- */
-export const LOGICAL_MODULE_POLICIES: readonly LogicalModulePolicy[] = [
-  {
-    name: 'ad-replay',
-    roots: ['packages/ad-replay/src/'],
-    forbiddenTargetRoots: [
-      'src/daemon/',
-      'src/platforms/',
-      'src/providers/',
-      'src/compat/',
-      'packages/maestro/',
-    ],
-  },
-  {
-    name: 'maestro',
-    roots: ['packages/maestro/src/'],
-    forbiddenTargetRoots: [
-      'src/daemon/',
-      'src/platforms/',
-      'src/providers/',
-      'packages/ad-replay/',
-    ],
-  },
-  {
-    // Replay-test schedules and reports; it must stay format-neutral. `src/request/` is
-    // request-global daemon plumbing (progress sinks, cancellation, AsyncLocalStorage), and the
-    // remaining roots are engine internals — reaching into either is how a scheduler quietly
-    // acquires daemon authority or an engine-specific value shape.
-    name: 'replay-test',
-    roots: ['packages/replay-test/src/'],
-    forbiddenTargetRoots: [
-      'src/daemon/',
-      'src/platforms/',
-      'src/providers/',
-      'src/request/',
-      'src/replay/',
-      'src/compat/',
-      'packages/maestro/',
-      'packages/ad-replay/',
-    ],
-  },
-];
-
 const ENGINE_FILE_PREFIXES = [
   'packages/ad-replay/src/',
   'packages/maestro/src/',
-  'src/replay/',
-  'src/daemon/handlers/session-replay',
+  'src/daemon/replay/internal/',
   'packages/replay-test/src/',
 ] as const;
 
@@ -111,6 +53,46 @@ export function checkDaemonModularityRatchets(
     ...checkDaemonTypesImporters(edges),
     ...checkLogicalModuleImports(edges),
   ];
+}
+
+export function checkRetiredSessionLifecyclePaths(
+  sourceFiles: readonly string[],
+): LayeringViolation[] {
+  return checkRetiredHandlerPaths(
+    sourceFiles,
+    SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS,
+    /^src\/daemon\/handlers\/session-(?:open|close)(?:-[^/]+)?\.ts$/,
+    'session lifecycle',
+  );
+}
+
+export function checkRetiredSessionObservabilityPaths(
+  sourceFiles: readonly string[],
+): LayeringViolation[] {
+  return checkRetiredHandlerPaths(
+    sourceFiles,
+    SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS,
+    /^src\/daemon\/handlers\/session-(?:observability|perf|logs|events|network|audio)(?:-[^/]+)?\.ts$/,
+    'session observability',
+  );
+}
+
+function checkRetiredHandlerPaths(
+  sourceFiles: readonly string[],
+  retiredPaths: readonly string[],
+  pattern: RegExp,
+  capability: string,
+): LayeringViolation[] {
+  return sourceFiles
+    .filter((file) => retiredPaths.includes(file) || pattern.test(file))
+    .map((file) => ({
+      rule: 'R10 daemon-modularity',
+      file,
+      line: 1,
+      message:
+        `retired ${capability} path was restored: ${file}. ` +
+        'Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+    }));
 }
 
 function checkSessionStateBaseline(): LayeringViolation[] {
@@ -238,6 +220,23 @@ function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): Layeri
     const sourceModule = moduleForFile(edge.file);
     const targetModule = moduleForFile(edge.target);
     if (
+      sourceModule &&
+      isInsideInternalTree(edge.file, sourceModule.roots) &&
+      sourceModule.internalForbiddenTargetRoots?.some((root) =>
+        matchesDeclaredRoot(edge.target, root),
+      )
+    ) {
+      violations.push({
+        rule: 'R10 daemon-modularity',
+        file: edge.file,
+        line: edge.line,
+        message:
+          `${edge.file} must not import ${edge.target} from ${sourceModule.name}'s internal tree; ` +
+          'keep handler adapters above the interaction façade.',
+      });
+      continue;
+    }
+    if (
       targetModule &&
       sourceModule !== targetModule &&
       isInsideInternalTree(edge.target, targetModule.roots)
@@ -252,10 +251,10 @@ function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): Layeri
     }
 
     if (!sourceModule) continue;
-    // A module's own files are never a forbidden target: `replay-test` sits inside the wider
-    // `src/replay/` engine root it may not import from.
-    if (sourceModule.roots.some((root) => edge.target.startsWith(root))) continue;
-    if (!sourceModule.forbiddenTargetRoots.some((root) => edge.target.startsWith(root))) continue;
+    // A module's own files are never a forbidden target.
+    if (sourceModule.roots.some((root) => matchesDeclaredRoot(edge.target, root))) continue;
+    if (!sourceModule.forbiddenTargetRoots.some((root) => matchesDeclaredRoot(edge.target, root)))
+      continue;
     violations.push({
       rule: 'R10 daemon-modularity',
       file: edge.file,
@@ -268,12 +267,12 @@ function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): Layeri
 
 function moduleForFile(file: string): LogicalModulePolicy | undefined {
   return LOGICAL_MODULE_POLICIES.find((module) =>
-    module.roots.some((root) => file.startsWith(root)),
+    module.roots.some((root) => matchesDeclaredRoot(file, root)),
   );
 }
 
 function isInsideInternalTree(file: string, roots: readonly string[]): boolean {
-  return roots.some((root) => file.startsWith(path.posix.join(root, 'internal/')));
+  return roots.some((root) => matchesDeclaredRoot(file, path.posix.join(root, 'internal/')));
 }
 
 function groupBy(

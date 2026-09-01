@@ -169,7 +169,7 @@ function collectPackagePids(
   currentPid: string | undefined,
 ): readonly string[] {
   const pids = new Set<string>(currentPid ? [currentPid] : []);
-  const packagePattern = appBundleId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const packagePattern = appBundleId.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
   const patterns = [
     new RegExp(`\\bStart proc\\s+(\\d+):${packagePattern}(?:\\b|/)`, 'i'),
     new RegExp(`\\b(\\d+):${packagePattern}(?:\\b|/)`, 'i'),

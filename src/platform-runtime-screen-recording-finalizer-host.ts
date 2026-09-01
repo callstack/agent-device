@@ -5,7 +5,7 @@ import {
   trimRecordingStart,
 } from './recording/overlay.ts';
 import { persistRecordingTelemetry } from './recording/telemetry.ts';
-import { isPlayableVideo, waitForPlayableVideo, waitForStableFile } from './utils/video.ts';
+import { isPlayableVideo, waitForPlayableVideo, waitForStableFile } from './recording/video.ts';
 
 export function createScreenRecordingFinalizer(): ScreenRecordingRuntimeHost['finalize'] {
   return Object.freeze({ complete: finalizeScreenRecording });

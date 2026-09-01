@@ -1,5 +1,5 @@
 import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
-import { successText } from '../../utils/success-text.ts';
+import { successText } from '@agent-device/kernel/success-text';
 
 /**
  * What a built touch payload looks like: the field merge (backend data, point,

@@ -516,9 +516,10 @@ async function buildRunnerXctestrun(
         },
       },
     );
-  } catch (err) {
-    if (isRequestCanceledError(err)) throw err;
-    const appErr = err instanceof AppError ? err : new AppError('COMMAND_FAILED', String(err));
+  } catch (error) {
+    if (isRequestCanceledError(error)) throw error;
+    const appErr =
+      error instanceof AppError ? error : new AppError('COMMAND_FAILED', String(error));
     const hint = resolveRunnerBuildFailureHint(appErr);
     throw new AppError('COMMAND_FAILED', 'xcodebuild build-for-testing failed', {
       error: appErr.message,

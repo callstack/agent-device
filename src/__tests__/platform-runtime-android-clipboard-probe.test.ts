@@ -4,8 +4,8 @@ import { createAndroidToolHost } from '../platform-runtime-android-tool-host.ts'
 
 const runAndroidAdb = vi.hoisted(() => vi.fn());
 
-vi.mock('../platforms/android/adb.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../platforms/android/adb.ts')>()),
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/platform-android/mechanics')>()),
   runAndroidAdb,
 }));
 

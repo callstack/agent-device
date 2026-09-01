@@ -3,7 +3,7 @@
 import https, { type RequestOptions } from 'node:https';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
-import { exitAfterFlush } from '../../../src/utils/process-exit.ts';
+import { exitAfterFlush } from '../../../src/cli/process-exit.ts';
 import { buildPayload, PAYLOAD_MARKER } from './exit-payload.ts';
 
 const DAEMON_BASE_URL = 'https://agent-device-exit-flush.test/agent-device';
@@ -13,7 +13,7 @@ if (cliPayloadMarker) {
   installCliTransportFixture(cliPayloadMarker);
 } else if (process.argv.includes('--success')) {
   const { runCliProcess } = await import('../../../src/cli/process-entry.ts');
-  const { printJson } = await import('../../../src/utils/output.ts');
+  const { printJson } = await import('../../../src/commands/output/json.ts');
   await runCliProcess([], async () => ({
     runCli: async () => {
       printJson({ success: true, data: { payload: `${'x'.repeat(256_000)}${PAYLOAD_MARKER}` } });

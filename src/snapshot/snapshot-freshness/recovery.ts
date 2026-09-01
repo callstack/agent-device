@@ -3,7 +3,7 @@ import {
   type SnapshotCaptureAnnotations,
 } from '@agent-device/contracts/capture';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { sleep } from '../../utils/timeouts.ts';
+import { sleep } from '@agent-device/host-kit/retry';
 import type { SnapshotFreshnessReason, SnapshotFreshnessWindow } from './types.ts';
 
 /**

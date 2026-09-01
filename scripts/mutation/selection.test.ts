@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import { LANE_CANARY, shardMatrix, type ShardSpec } from './modules.ts';
 import { affectedMatrixFor } from './run.ts';
 

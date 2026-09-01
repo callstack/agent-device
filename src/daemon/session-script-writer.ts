@@ -4,7 +4,7 @@ import path from 'node:path';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/gesture-normalization';
 import { inferFillText } from './action-utils.ts';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   appendScriptSeriesFlags,
@@ -17,7 +17,7 @@ import {
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from './session-paths.ts';
-import { publishFileSync } from '../utils/atomic-file.ts';
+import { publishFileSync } from '@agent-device/host-kit/file';
 import type { SessionState } from './types.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -163,7 +163,7 @@ export class SessionScriptWriter {
       return expandSessionPath(targetPath);
     }
     const safeName = safeSessionName(session.name);
-    const timestamp = new Date(session.createdAt).toISOString().replace(/[:.]/g, '-');
+    const timestamp = new Date(session.createdAt).toISOString().replaceAll(/[:.]/g, '-');
     return path.join(this.sessionsDir, `${safeName}-${timestamp}.ad`);
   }
 }

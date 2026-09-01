@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '../utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/command';
 
 const ARTIFACT_HASH_ALGORITHM = 'sha256';
 const DEFAULT_CONTENT_TYPE = 'application/octet-stream';
@@ -99,12 +99,12 @@ async function computeFileHash(localPath: string): Promise<string> {
       callback();
     },
   });
-  await pipeline(fs.createReadStream(localPath), sink).catch((err: unknown) => {
+  await pipeline(fs.createReadStream(localPath), sink).catch((error: unknown) => {
     throw new AppError(
       'COMMAND_FAILED',
       'Failed to read local artifact',
       {},
-      err instanceof Error ? err : undefined,
+      error instanceof Error ? error : undefined,
     );
   });
   return hash.digest('hex');

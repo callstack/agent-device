@@ -1,6 +1,6 @@
 import { withResolveTargetDeviceCacheScope } from '../core/dispatch-resolve.ts';
 import { withDeviceInventoryContext } from '../request/device-inventory-context.ts';
-import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
+import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { ComposedDeviceInventoryGateways } from '@agent-device/contracts/platform-module';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
@@ -10,7 +10,7 @@ import {
   retriableForErrorCode,
   type DaemonError,
 } from '@agent-device/kernel/errors';
-import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
+import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import type { DaemonArtifactType, ResponseCost } from '@agent-device/kernel/contracts';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
 import type {
@@ -20,7 +20,7 @@ import type {
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
 import { RESPONSE_VIEWS } from './response-views.ts';
 import { SessionStore } from './session-store.ts';
-import { errorResponse, noActiveSessionError } from './handlers/response.ts';
+import { errorResponse, noActiveSessionError } from './response.ts';
 import { resolvePlatformProviderRequestContext } from './request-platform-provider-context.ts';
 import {
   countDiagnosticEventsByPhase,
@@ -29,7 +29,7 @@ import {
   getDiagnosticsMeta,
   registerDiagnosticSensitiveValue,
   withDiagnosticsScope,
-} from '../utils/diagnostics.ts';
+} from '@agent-device/host-kit/diagnostics';
 import type { LeaseRegistry } from './lease-registry.ts';
 import {
   loadGenericRequestHandlerModule,
@@ -47,7 +47,7 @@ import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { isWebSession } from './web-session-names.ts';
 import { inferFillText } from './action-utils.ts';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
-import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
+import { createOwnerScopedDeviceClaimReconciler } from './device-claim-owner-recovery.ts';
 import {
   createAppLogAdmissionLedger,
   type AppLogAdmissionLedger,
@@ -90,6 +90,7 @@ export type RequestRouterDeps = {
   providerRuntimeRequiredIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  providerAppCatalog?: ProviderAppCatalog;
   androidObservation?: AndroidObservationAdapter;
   platformResourceCleanup?: PlatformResourceCleanup;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
@@ -150,6 +151,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     providerRuntimeRequiredIds,
     leaseLifecycleProvider,
     cloudArtifactProvider,
+    providerAppCatalog,
     androidObservation = unavailableAndroidObservation,
     platformResourceCleanup = unavailablePlatformResourceCleanup,
     providerDeviceRuntimeScope,
@@ -216,6 +218,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               deviceRuntimeGateway,
               platformRequestScope,
               platformResourceCleanup,
+              providerAppCatalog,
             });
             return await executeRequestScope(scope);
           }),
@@ -285,6 +288,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       providerRuntimeIds,
       providerRuntimeRequiredIds,
       cloudArtifactProvider,
+      providerAppCatalog,
       invoke: handleRequest,
       invokeReplayAction: allowReplayActions
         ? createReplayScopedActionInvoker(lockedScope, providerScope)
@@ -295,10 +299,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       bindDevice: lockedScope.bindDevice,
       inspectFacts: lockedScope.inspectFacts,
       bindExactDevice: lockedScope.bindExactDevice,
-      reconcileOrphanedDeviceClaim: createDeviceClaimReconciler({
-        gateway: deviceRuntimeGateway,
-        scope: requestScope,
-      }),
+      reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler(requestScope),
       appLogAdmissionLedger,
       audioProbeAdmissionLedger,
       perfCaptureAdmissionLedger,
@@ -341,6 +342,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           deviceRuntimeGateway,
           platformRequestScope: createPlatformRequestScope(scopedReq),
           platformResourceCleanup,
+          providerAppCatalog,
         });
         // The outer replay keeps its stable session lock plus the device lock
         // from the first device binding through response projection and ref

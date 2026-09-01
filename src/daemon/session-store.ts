@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { AppError, type DiagnosticsRecordRef } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionRef, SessionRuntimeHints, SessionState } from './types.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
 import { expandSessionPath, isSafeSessionSegment, safeSessionName } from './session-paths.ts';
@@ -16,7 +16,7 @@ import {
   type SessionScriptWriteOptions,
   type SessionScriptWriteResult,
 } from './session-script-writer.ts';
-import { successText } from '../utils/success-text.ts';
+import { successText } from '@agent-device/kernel/success-text';
 import {
   appendActionEvent,
   appendSessionEvent,
@@ -176,9 +176,9 @@ export class SessionStore {
    * teardown finalize step for a session (idle-reap or daemon shutdown).
    *
    * BLOCKER 3: unlike the explicit `close --save-script` path
-   * (`session-close-script.ts`), teardown never runs `close`'s handler — but
-   * the source plan's terminal `close` was already skipped-while-armed (Fix
-   * 3), so a COMPLETE transaction's auto-commit here must record the same
+   * (`session-lifecycle/internal/session-close-script.ts`), teardown never runs `close`'s
+   * handler — but the source plan's terminal `close` was already skipped-while-armed (Fix 3),
+   * so a COMPLETE transaction's auto-commit here must record the same
    * synthetic finalize `close` first, or the auto-committed healed `.ad`
    * would be missing its own terminal `close` (not self-contained, unlike an
    * explicit close's commit).
@@ -220,8 +220,8 @@ export class SessionStore {
 
   /**
    * BLOCKER 3: mirrors the explicit close script's finalize-`close` recording
-   * (`session-close-script.ts`) for the auto-commit path, which never routes
-   * through `close`'s handler. Only recorded when this teardown is actually
+   * (`session-lifecycle/internal/session-close-script.ts`) for the auto-commit path, which never
+   * routes through `close`'s handler. Only recorded when this teardown is actually
    * about to attempt a commit (COMPLETE, not yet COMMITTED) — an aborted
    * (incomplete) transaction's write is a no-op regardless, so there is
    * nothing to make self-contained.
@@ -296,7 +296,7 @@ export class SessionStore {
 
   defaultTracePath(session: SessionState): string {
     const safeName = safeSessionName(session.name);
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
     return path.join(this.sessionsDir, `${safeName}-${timestamp}.trace.log`);
   }
 
@@ -317,7 +317,8 @@ export class SessionStore {
   }
 
   // Daemon state dir (parent of the `sessions/` dir), matching daemonPaths.baseDir. Called via
-  // sessionStore.resolveDaemonStateDir() in session-open.ts and session-close.ts.
+  // sessionStore.resolveDaemonStateDir() in session-lifecycle/internal/session-open.ts and
+  // session-lifecycle/internal/session-close.ts.
   resolveDaemonStateDir(): string {
     return path.dirname(this.sessionsDir);
   }

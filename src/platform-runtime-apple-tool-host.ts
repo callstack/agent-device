@@ -4,18 +4,19 @@ export function createAppleToolHost(): AppleToolHost {
   return Object.freeze({
     isXcrunAvailable: async (signal?: AbortSignal) => {
       const { resolveAppleToolProvider } = await awaitPreservingAbortReason(
-        async () => await import('./platforms/apple/core/tool-provider.ts'),
+        async () => await import('@agent-device/platform-apple/tool-provider'),
         signal,
       );
+      const provider = resolveAppleToolProvider();
       const available = await awaitPreservingAbortReason(
-        async () => await resolveAppleToolProvider().whichCommand('xcrun'),
+        async () => await provider.whichCommand('xcrun'),
         signal,
       );
       return available;
     },
     run: async (request, signal) => {
       const { runXcrun } = await awaitPreservingAbortReason(
-        async () => await import('./platforms/apple/core/tool-provider.ts'),
+        async () => await import('@agent-device/platform-apple/tool-provider'),
         signal,
       );
       const result = await awaitPreservingAbortReason(

@@ -1,0 +1,59 @@
+{
+  "name": "@agent-device/host-kit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private host-mechanics package: each export is one narrow capability port over the host machine \u2014 running commands, observing and owning processes, diagnostics, retry/deadline, archive extraction, durable files and locks, request-scoped plumbing, and the installed version.",
+  "dependencies": {
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "tar-stream": "^3.2.0",
+    "yauzl": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/tar-stream": "^3.1.4",
+    "@types/yauzl": "^3.4.0"
+  },
+  "exports": {
+    "./archive": {
+      "types": "./src/archive.ts",
+      "default": "./src/archive.ts"
+    },
+    "./command": {
+      "types": "./src/command.ts",
+      "default": "./src/command.ts"
+    },
+    "./diagnostics": {
+      "types": "./src/diagnostics.ts",
+      "default": "./src/diagnostics.ts"
+    },
+    "./file": {
+      "types": "./src/file.ts",
+      "default": "./src/file.ts"
+    },
+    "./host-file": {
+      "types": "./src/host-file.ts",
+      "default": "./src/host-file.ts"
+    },
+    "./process": {
+      "types": "./src/process.ts",
+      "default": "./src/process.ts"
+    },
+    "./request": {
+      "types": "./src/request.ts",
+      "default": "./src/request.ts"
+    },
+    "./retry": {
+      "types": "./src/retry.ts",
+      "default": "./src/retry.ts"
+    },
+    "./transport": {
+      "types": "./src/transport.ts",
+      "default": "./src/transport.ts"
+    },
+    "./version": {
+      "types": "./src/version.ts",
+      "default": "./src/version.ts"
+    }
+  }
+}

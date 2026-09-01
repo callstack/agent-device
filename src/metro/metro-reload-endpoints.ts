@@ -3,7 +3,7 @@ import type { MetroRuntimeHints } from './metro-types.ts';
 import {
   resolveRuntimeTransportHints,
   type ResolvedRuntimeTransport,
-} from '../utils/runtime-transport.ts';
+} from '../core/runtime-transport-hints.ts';
 
 const DEFAULT_METRO_HOST = 'localhost';
 const DEFAULT_METRO_PORT = 8081;

@@ -1,4 +1,4 @@
-import { withKeyedLock } from '../utils/keyed-lock.ts';
+import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 import type { RequestExecutionLockKey } from './request-binding.ts';
 
 type RetainedExecutionLock = {

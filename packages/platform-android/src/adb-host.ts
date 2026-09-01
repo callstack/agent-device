@@ -12,11 +12,6 @@ import type {
   AndroidAdbSpawnOptions,
 } from './adb-transport.ts';
 
-// R13 bars platform packages from raw process, fs, and ambient host authority; the adb/IME
-// cluster reaches those primitives only through this explicitly injected host port. The root
-// composition wiring (src/platforms/android/adb-host-binding.ts) binds it before any consumer
-// can call into the cluster.
-
 export type AndroidAdbCommandExecutorOverride = (
   cmd: string,
   args: string[],
@@ -30,7 +25,28 @@ export type AndroidAdbDiagnosticEvent = {
   data?: Record<string, unknown>;
 };
 
+export type AndroidAdbFileHost = Readonly<{
+  access(path: string): Promise<void>;
+  ensureDirectory(path: string): Promise<void>;
+  isExecutable(path: string): Promise<boolean>;
+  makeTempDirectory(prefix: string): Promise<string>;
+  readBytes(path: string): Promise<Buffer>;
+  readDirectory(path: string): Promise<string[]>;
+  readText(path: string): Promise<string>;
+  remove(path: string, options?: Readonly<{ force?: boolean; recursive?: boolean }>): Promise<void>;
+  sha256(value: Buffer): string;
+  stat(path: string): Promise<Readonly<{ isFile: boolean; size: number }>>;
+  writeAtomicText(path: string, value: string, mode?: number): Promise<void>;
+  writeBytes(path: string, value: Buffer): Promise<void>;
+}>;
+
+export type AndroidAdbEnvironment = Record<string, string | undefined>;
+
 export type AndroidAdbHost = Readonly<{
+  /** Explicit process environment captured by the root composition boundary. */
+  environment: AndroidAdbEnvironment;
+  /** Narrow filesystem authority used by Android helper, SDK, and artifact mechanics. */
+  files: AndroidAdbFileHost;
   /**
    * Device-scoped local adb execution for `serial`, escaping any active command-executor
    * override (a tunnel-backed provider shelling out to adb must not route back into itself)
@@ -113,7 +129,7 @@ export function requireAndroidAdbHost(): AndroidAdbHost {
   if (!boundHost) {
     throw new Error(
       'Android adb host port is not bound; import the platform composition wiring ' +
-        '(src/platforms/android/adb-host-binding.ts) before using the adb/IME cluster.',
+        '(src/platform-runtime-android-adb-host.ts) before using the adb/IME cluster.',
     );
   }
   return boundHost;

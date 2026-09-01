@@ -37,7 +37,7 @@ test('the local host arm always obtains a result before applying the shared fail
 
   const error = await runAndroidHostAdb(['devices']).then(
     () => assert.fail('expected the host adb call to reject'),
-    (cause: unknown) => cause,
+    (error: unknown) => error,
   );
 
   assert.deepEqual(receivedOptions, { allowFailure: true });

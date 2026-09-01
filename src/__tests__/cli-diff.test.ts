@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { PNG } from '../utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import type { DaemonResponse } from '../daemon/client/daemon-client.ts';
 import {
   runCliCapture as captureCli,
@@ -103,8 +103,8 @@ describe('cli diff commands', () => {
     assert.equal(result.code, null);
     assert.equal(result.calls.length, 1);
     assert.match(result.stdout, /^@e2 \[window\]/m);
-    assert.match(result.stdout, /^-  @e3 \[text\] "67"$/m);
-    assert.match(result.stdout, /^\+  @e3 \[text\] "134"$/m);
+    assert.match(result.stdout, /^- {2}@e3 \[text\] "67"$/m);
+    assert.match(result.stdout, /^\+ {2}@e3 \[text\] "134"$/m);
     assert.match(result.stdout, /1 additions, 1 removals, 1 unchanged/);
     assert.equal(result.stderr, '');
   });
@@ -139,8 +139,8 @@ describe('cli diff commands', () => {
     assert.deepEqual(request.positionals, ['snapshot']);
     assert.equal(request.flags?.snapshotDiff, undefined);
     assert.match(result.stdout, /^@e2 \[window\]/m);
-    assert.match(result.stdout, /^-  @e3 \[text\] "67"$/m);
-    assert.match(result.stdout, /^\+  @e3 \[text\] "134"$/m);
+    assert.match(result.stdout, /^- {2}@e3 \[text\] "67"$/m);
+    assert.match(result.stdout, /^\+ {2}@e3 \[text\] "134"$/m);
     assert.match(result.stdout, /1 additions, 1 removals, 1 unchanged/);
     assert.equal(result.stderr, '');
   });

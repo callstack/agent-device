@@ -203,12 +203,12 @@ export const BOUNDARY_FAULT_MATRIX = {
     },
     'artifact-producing': {
       kind: 'covered',
-      evidence: ['src/platforms/apple/core/__tests__/screenshot.test.ts'],
+      evidence: ['packages/platform-apple/src/core/__tests__/screenshot.test.ts'],
       invariants: ['best-effort-degradation'],
     },
     'session-lifecycle': {
       kind: 'covered',
-      evidence: ['src/platforms/web/agent-browser-provider.test.ts'],
+      evidence: ['packages/platform-web/src/agent-browser-provider.test.ts'],
       invariants: ['best-effort-degradation'],
     },
   },

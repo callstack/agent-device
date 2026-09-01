@@ -3,13 +3,13 @@
 //
 // Ranked target spine, as rank groups lowest to highest. `A ◄ B` means B may not
 // be outranked by A (the back-edge order the gate rejects), NOT that every displayed import exists:
-//   { contracts, request, selectors, platforms } ◄ core ◄ { commands, cli-schema }
+//   { contracts, request, selectors } ◄ core ◄ { commands, cli-schema }
 //         ◄ { client, daemon-server } ◄ daemon-client ◄ cli
 // (authoritative ranks: `TARGET_DAG_RANK` in model.ts. The former rank-0 kernel
 // zone lives in packages/kernel since #1490 W0; R11 owns its boundary.)
 //
 // This gate enforces five things, across four scopes:
-//   - GLOBALLY, across every production source file: the R2-R3 move rules and
+//   - GLOBALLY, across every production source file: the remaining R2 move rule and
 //     rejection of all production static value-import cycles (R4). R1 kernel-sink
 //     retired with the kernel's move to packages/kernel (#1490 W0); R8
 //     zero-dep-job-closure retired with the last `install-deps: false` job
@@ -20,8 +20,8 @@
 //     same inversion measured over TYPE-ONLY edges (R6).
 //   - Over the DAEMON only: SessionState field ownership (R7), because the session
 //     record is store-owned mutable state that any daemon module can write; and the terminal
-//     concrete-platform boundary (R65), which rejects every import form into src/platforms or a
-//     platform package.
+//     concrete-platform boundary (R65), which rejects every import form into the retired
+//     src/platforms path or a platform package.
 //   - Over the TYPE GRAPH: the largest type-level import cycle is pinned by
 //     equality (R9). R4 keeps the value graph acyclic, so these cycles are free at
 //     runtime but bound what can be read in isolation; growth fails, and so does a
@@ -74,7 +74,12 @@ import {
   type LayeringViolation,
   type ResolvedImportEdge,
 } from './model.ts';
-import { checkDaemonModularityRatchets, daemonModularitySummary } from './daemon-modularity.ts';
+import {
+  checkDaemonModularityRatchets,
+  checkRetiredSessionLifecyclePaths,
+  checkRetiredSessionObservabilityPaths,
+  daemonModularitySummary,
+} from './daemon-modularity.ts';
 import {
   checkPackageBoundaries,
   packageBoundariesSummary,
@@ -82,6 +87,7 @@ import {
 } from './package-boundaries.ts';
 import {
   checkPlatformPackagePolicy,
+  checkRetiredPlatformsZone,
   platformPackagePolicySummary,
 } from './platform-package-policy.ts';
 import {
@@ -90,15 +96,22 @@ import {
 } from './platform-package-repository.ts';
 import { policyLead, policyViolation, ZONE_POLICIES } from './zone-policy.ts';
 import { contractsImplementationAuthorityViolations } from './contracts-implementation-policy.ts';
+import { substrateDomainShapeViolations } from './substrate-domain-shape.ts';
 import { selectorPipelineOwnershipViolations } from './selector-pipeline-ownership.ts';
 import { recordRuntimeRegistryJoinViolations } from './record-runtime-registry-policy.ts';
 import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechanics-policy.ts';
 import { checkDaemonPlatformBoundary } from './daemon-platform-boundary.ts';
-import { listTrackedProductionSources, listTrackedTypeScriptFiles } from './tracked-sources.ts';
+import {
+  listTrackedPlatformZoneFiles,
+  listTrackedProductionSources,
+  listTrackedTypeScriptFiles,
+} from './tracked-sources.ts';
 import { runtimeExecutionIntegrityViolations } from './runtime-execution-policy.ts';
 import { sourceExecutionCompatibilityViolations } from './source-execution-policy.ts';
 import { sessionResourceOwnershipViolations } from './session-resource-ownership.ts';
+import { replayOwnershipViolations } from './replay-ownership.ts';
 import { applicationLifecycleOwnershipViolations } from './application-lifecycle-policy.ts';
+import { iosSnapshotEngineOwnershipViolations } from './ios-snapshot-engine-policy.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -193,7 +206,7 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation
 
 // R6 ratchet: type-only spine inversions, per zone pair. R5 cannot see these (a type-only import
 // is free at runtime), but "zone A is declared in terms of zone B" is still a boundary claim, and
-// ranking type edges surfaced 61 of them. Down to 7, and every one of the 7 is now a deliberate
+// ranking type edges surfaced 61 of them. Down to 5, and every one of the 5 is now a deliberate
 // architectural position rather than a misplaced declaration:
 //
 //   commands/mcp -> client (4)   `AgentDeviceClient`, used as an opaque handle ("the client this
@@ -206,20 +219,12 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation
 //                                a design call, not a file move. R5 is zero here: nothing imports
 //                                the client at runtime, only its type.
 //
-//   core -> daemon-server (2)    `DaemonCommandDescriptor`, which is STATED IN TERMS OF the daemon's
-//                                own server-private `DaemonRequest` (`refFrameEffect`,
-//                                `allowSessionlessDefaultDevice`, `skipSessionlessProviderDevice`
-//                                are all `(req: DaemonRequest) => …`). It therefore cannot be
-//                                declared below the daemon, and having core/ re-declare a parallel
-//                                13-field shape would trade one erased edge for a second source of
-//                                truth. Zones that only need to CLASSIFY a command take
-//                                `contracts/dispatched-command.ts` instead. ADR 0003/0008.
-//
-//   commands -> daemon-server (1)  `DaemonCommandRoute` = `keyof typeof DAEMON_ROUTE_HANDLERS`, so
-//                                it is COMPUTED FROM the daemon's handler table and cannot exist
-//                                below it. `commands/command-explain.ts` uses it to key an
-//                                exhaustive `Record<DaemonCommandRoute, string>` of owner files; a
-//                                hand-written union in contracts/ would drop that exhaustiveness.
+//   commands -> daemon-server (1)  `DaemonCommandRoute` is declared in core so descriptors can
+//                                name a route without importing the daemon. `command-explain.ts`
+//                                still type-imports the re-export from `daemon-command-registry.ts`
+//                                to key an exhaustive `Record<DaemonCommandRoute, string>` of
+//                                owner files; that remaining inversion is the commands-zone
+//                                consumer, not a second source of truth for the union.
 //
 // See docs/dependency-graph-findings.md §0 for the long form. The counts may only go DOWN. Fixing edges without lowering the number fails too, so the baseline
 // cannot quietly stop describing the tree.
@@ -229,7 +234,6 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation
 export const TYPE_INVERSION_BASELINE: Readonly<Record<string, number>> = {
   'commands -> client': 3,
   'commands -> daemon-server': 1,
-  'core -> daemon-server': 2,
   'mcp -> client': 1,
 };
 
@@ -476,7 +480,7 @@ function report(
 ): number {
   if (violations.length === 0) {
     process.stdout.write(
-      `Layering guard: OK — ${files.length} source files satisfy R2-R3 and contain no ` +
+      `Layering guard: OK — ${files.length} source files satisfy R2 and contain no ` +
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
         `back-edges (only the composition root is unranked among src zones), and its type-only ` +
         `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
@@ -543,6 +547,7 @@ export const LAYERING_RULE_IDS = [
   'session-resource-ownership',
   'application-lifecycle-ownership',
   'contracts-implementation-authority',
+  'substrate-domain-shape',
   'selector-pipeline-ownership',
   'back-edges',
   'type-spine-inversions',
@@ -552,6 +557,9 @@ export const LAYERING_RULE_IDS = [
   'bin-alias-fast-path',
   'package-boundaries',
   'platform-package-policy',
+  'retired-platforms-zone',
+  'replay-ownership',
+  'ios-snapshot-engine-ownership',
 ] as const;
 
 export type LayeringRuleId = (typeof LAYERING_RULE_IDS)[number];
@@ -568,13 +576,20 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     applicationLifecycleOwnershipViolations(context.sources),
   'contracts-implementation-authority': (context) =>
     checkContractsImplementationAuthority(context.sources),
+  'substrate-domain-shape': (context) =>
+    substrateDomainShapeViolations(
+      [...context.allTypeScriptSources].map(([path, source]) => ({ path, source })),
+    ),
   'selector-pipeline-ownership': (context) =>
     selectorPipelineOwnershipViolations(context.edges, workspaceSpecifierTargets(repoRoot)),
   'back-edges': (context) => checkBackEdges(context.edges),
   'type-spine-inversions': (context) => checkTypeInversions(context.edges),
   'session-state-ownership': (context) => checkSessionStateOwnership(context.sources),
-  'daemon-modularity-ratchets': (context) =>
-    checkDaemonModularityRatchets(context.edges, context.typeCycleMembers),
+  'daemon-modularity-ratchets': (context) => [
+    ...checkDaemonModularityRatchets(context.edges, context.typeCycleMembers),
+    ...checkRetiredSessionLifecyclePaths(context.sourceFiles),
+    ...checkRetiredSessionObservabilityPaths(context.sourceFiles),
+  ],
   'daemon-platform-boundary': (context) =>
     checkDaemonPlatformBoundary([...context.sources].map(([path, source]) => ({ path, source }))),
   'bin-alias-fast-path': (context) => checkBinAliasFastPath(context.sources),
@@ -584,6 +599,12 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
       context.allTypeScriptSources,
       readTrackedPlatformPackageDeclarations(repoRoot),
       { untrackedProductionFiles: listUntrackedProductionTypeScriptFiles(repoRoot) },
+    ),
+  'retired-platforms-zone': () => checkRetiredPlatformsZone(listTrackedPlatformZoneFiles(repoRoot)),
+  'replay-ownership': (context) => replayOwnershipViolations(context.sourceFiles),
+  'ios-snapshot-engine-ownership': (context) =>
+    iosSnapshotEngineOwnershipViolations(
+      [...context.sources].map(([path, source]) => ({ path, source })),
     ),
 };
 

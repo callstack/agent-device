@@ -112,6 +112,8 @@ function runtimeMetricsDelta(
       hierarchyCaptures: after.hierarchyCaptures - before.hierarchyCaptures,
       screenshotCaptures: after.screenshotCaptures - before.screenshotCaptures,
       tapRetries: after.tapRetries - before.tapRetries,
+      settleLatches: after.settleLatches - before.settleLatches,
+      settleTimeouts: after.settleTimeouts - before.settleTimeouts,
     },
   };
 }

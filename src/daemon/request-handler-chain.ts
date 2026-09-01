@@ -1,10 +1,11 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
 import { AppError } from '@agent-device/kernel/errors';
+import type { DaemonCommandRoute } from '../core/command-descriptor/daemon-command-descriptor.ts';
 import { getDaemonCommandRoute } from './daemon-command-registry.ts';
 import * as genericRequestHandlerModule from './request-generic-dispatch.ts';
 import type { DaemonCommandContext } from './context.ts';
-import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
+import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { LeaseRegistry } from './lease-registry.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';
@@ -34,6 +35,7 @@ type RequestHandlerChainParams = {
   providerRuntimeRequiredIds?: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  providerAppCatalog?: ProviderAppCatalog;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
   /**
@@ -65,6 +67,10 @@ type RequestHandlerChainParams = {
 };
 
 const DAEMON_ROUTE_HANDLERS = {
+  humanControl: defineDaemonRoute({
+    load: () => import('./handlers/human-control.ts'),
+    run: runHumanControlHandler,
+  }),
   lease: defineDaemonRoute({
     load: () => import('./handlers/lease.ts'),
     run: runLeaseHandler,
@@ -97,9 +103,15 @@ const DAEMON_ROUTE_HANDLERS = {
     load: async () => genericRequestHandlerModule,
     run: async () => null,
   }),
-} as const;
+} as const satisfies Record<
+  DaemonCommandRoute,
+  {
+    loadModule: () => Promise<unknown>;
+    run: (params: RequestHandlerChainParams) => Promise<DaemonResponse | null>;
+  }
+>;
 
-export type DaemonCommandRoute = keyof typeof DAEMON_ROUTE_HANDLERS;
+export type { DaemonCommandRoute };
 
 export async function runRequestHandlerChain(
   params: RequestHandlerChainParams,
@@ -112,6 +124,16 @@ export async function loadGenericRequestHandlerModule(): Promise<
   typeof import('./request-generic-dispatch.ts')
 > {
   return await DAEMON_ROUTE_HANDLERS.generic.loadModule();
+}
+
+async function runHumanControlHandler(
+  { handleHumanControlCommand }: typeof import('./handlers/human-control.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
+  return await handleHumanControlCommand({
+    req: params.req,
+    registry: params.leaseRegistry,
+  });
 }
 
 async function runLeaseHandler(
@@ -148,6 +170,7 @@ async function runSessionHandler(
       sessionStore: params.sessionStore,
       leaseRegistry: params.leaseRegistry,
       leaseLifecycleProvider: params.leaseLifecycleProvider,
+      providerAppCatalog: params.providerAppCatalog,
       invoke: params.invoke,
       invokeReplayAction: params.invokeReplayAction,
       androidAdbExecutor: params.providerScope.androidAdbExecutor,
@@ -266,7 +289,6 @@ async function runInteractionHandler(
       inspectFacts: params.inspectFacts,
       bindDevice: params.bindDevice,
       androidObservation: params.androidObservation,
-      platformResourceCleanup: params.platformResourceCleanup,
     }),
   );
 }

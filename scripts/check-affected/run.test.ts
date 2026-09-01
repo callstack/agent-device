@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import { STALE_NODE_MODULES_MESSAGE } from './lockfile-install-sync.ts';
 import { CHECK_CATALOG } from './checks.ts';
 import { DEFAULT_VITEST_MAX_WORKERS } from '../lib/vitest-concurrency.ts';
@@ -140,7 +140,7 @@ test('runChecks runs local checks in order and stops on the first failure', asyn
   assert.equal(code, 1);
   // format then lint, then it stops — nothing after the failing check runs.
   assert.deepEqual(
-    executed.map((command) => command[command.length - 1]),
+    executed.map((command) => command.at(-1)),
     ['format:check', 'lint'],
   );
 });
@@ -188,7 +188,7 @@ test('runChecks skips GitHub-authoritative checks and passes when locals succeed
   assert.equal(plan.failOpen, true);
   const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, { execute, cwd: '.' });
   assert.equal(code, 0);
-  const ran = executed.map((command) => command[command.length - 1]);
+  const ran = executed.map((command) => command.at(-1));
   // Derived from the catalog rather than hand-listed. A hand-written name goes vacuous the
   // moment a check is repointed: this list still asserted `build:android-snapshot-helper`
   // after `android-helpers` moved to `build:android`, so it could not have failed however

@@ -42,7 +42,7 @@ function normalize(source: string, span: Span, comments: readonly Span[]): strin
   for (const comment of inner) {
     text = `${text.slice(0, comment.start - span.start)} ${text.slice(comment.end - span.start)}`;
   }
-  return text.replace(/\s+/g, ' ').trim();
+  return text.replaceAll(/\s+/g, ' ').trim();
 }
 
 /**

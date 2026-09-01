@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { computeDaemonCodeSignature } from '../../code-signature.ts';
 import { resolveDaemonLaunchSpec, resolveLocalDaemonCodeSignature } from '../daemon-launch-spec.ts';
-import { resetAllProcessMemosForTests } from '../../../utils/ttl-memo.ts';
+import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 
 afterEach(() => {
   vi.restoreAllMocks();

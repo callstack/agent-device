@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { ExecBackgroundResult, ExecResult } from './utils/exec.ts';
-import { createScopedProvider } from './utils/scoped-provider.ts';
+import { type ExecBackgroundResult, type ExecResult } from '@agent-device/host-kit/command';
+import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
 
 export type AppleSimulatorScreenRecordingProcess = Readonly<{
   child: Pick<ExecBackgroundResult['child'], 'kill' | 'pid'>;
@@ -26,8 +26,8 @@ const localTransport: AppleSimulatorScreenRecordingTransport = Object.freeze({
   mode: 'local',
   async start({ device, outputPath, signal }) {
     const [{ buildSimctlArgsForDevice }, { runCmdBackground }] = await Promise.all([
-      import('./platforms/apple/core/simctl.ts'),
-      import('./utils/exec.ts'),
+      import('@agent-device/platform-apple/simctl'),
+      import('@agent-device/host-kit/command'),
     ]);
     signal?.throwIfAborted();
     return runCmdBackground(

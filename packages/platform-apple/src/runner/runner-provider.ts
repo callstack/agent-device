@@ -21,7 +21,10 @@ export type AppleRunnerLifecycleOptions = AppleRunnerCommandOptions & {
   forceRunnerXctestrunRebuild?: boolean;
 };
 
-export type AppleRunnerPrewarmOptions = AppleRunnerLifecycleOptions;
+export type AppleRunnerPrewarmOptions = AppleRunnerLifecycleOptions & {
+  /** A false value starts the session and lets its first consumer prove readiness. */
+  healthCheck?: boolean;
+};
 
 export type AppleRunnerPrepareOptions = AppleRunnerLifecycleOptions & {
   healthTimeoutMs: number;

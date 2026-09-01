@@ -19,7 +19,7 @@
  */
 
 import path from 'node:path';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { repoGit, requireUnshallowHistory } from '../lib/repo-git.ts';
 import { digestDeclaration } from '../../test/wire-compat/declaration-digest.ts';
 import {
   digestWireSurface,
@@ -32,15 +32,8 @@ import { compareWireLedgers } from './model.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 
-function git(args: string[]): string {
-  return runCmdSync('git', args, { cwd: repoRoot, allowFailure: true }).stdout.trim();
-}
-
-if (git(['rev-parse', '--is-shallow-repository']) === 'true') {
-  throw new Error(
-    'Daemon wire compatibility needs full history and tags. Run `git fetch --unshallow --tags` first.',
-  );
-}
+const git = repoGit(repoRoot);
+requireUnshallowHistory(git, 'Daemon wire compatibility');
 
 /** Released tags newest-first by semver, not by tag-creation order. */
 function releasedTagsNewestFirst(): string[] {

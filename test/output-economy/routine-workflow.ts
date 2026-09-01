@@ -176,10 +176,10 @@ export async function renderRoutineWorkflow(): Promise<{
 }> {
   const error = normalizeError(FAILURE_ERROR);
   const orientText = readCliText(
-    snapshotCliOutput({ result: SNAPSHOT_RESULT, interactiveOnly: true }),
+    await snapshotCliOutput({ result: SNAPSHOT_RESULT, interactiveOnly: true }),
   );
   const recheckText = readCliText(
-    snapshotCliOutput({ result: RECHECK_RESULT, interactiveOnly: true }),
+    await snapshotCliOutput({ result: RECHECK_RESULT, interactiveOnly: true }),
   );
   const mcpSnapshot = await renderMcpSnapshot();
 

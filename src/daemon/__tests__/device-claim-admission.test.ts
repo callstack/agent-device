@@ -9,7 +9,7 @@ import {
   retainOrphanedDeviceClaims,
 } from '../../__tests__/test-utils/device-claim-store.ts';
 import { createDeviceClaimAdmission } from '../device-claim-admission.ts';
-import { acquireDeviceClaim } from '../device-claims.ts';
+import { abandonDeviceClaim, acquireDeviceClaim } from '../device-claims.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
 import { createRequestExecutionScope } from '../request-execution-scope.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
@@ -76,7 +76,7 @@ test('a foreign live claim refuses the command before it can reach device operat
 
   const admission = makeAdmission('transient-exclusive', stateDir, 'shutdown');
   const error = asAppError(
-    await admission.admit(ANDROID_EMULATOR, localAndroid).catch((thrown: unknown) => thrown),
+    await admission.admit(ANDROID_EMULATOR, localAndroid).catch((error: unknown) => error),
   );
 
   expect(error.code).toBe('DEVICE_IN_USE');
@@ -107,6 +107,28 @@ test('a claim already held by this daemon covers the command instead of collidin
 
   // The session claim is untouched: the command neither replaced nor released it.
   expect(claimedSessions()).toEqual(['open-session']);
+});
+
+test("an abandoned claim becomes this command's own transient claim and is released", async () => {
+  const { stateDir } = setup();
+  const aborted = await acquireDeviceClaim({
+    device: ANDROID_EMULATOR,
+    session: 'aborted-open',
+    workspace: '/worktrees/current',
+    stateDir,
+    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+  });
+  expect(aborted.status).toBe('acquired');
+  if (aborted.status !== 'acquired') return;
+  expect(await abandonDeviceClaim(aborted.ownership)).toBe('abandoned');
+
+  const admission = makeAdmission('transient-exclusive', stateDir, 'install');
+  await admission.admit(ANDROID_EMULATOR, localAndroid);
+
+  // Coverage would have left the abandoned record owning the device with nothing to release it.
+  expect(claimedSessions()).toEqual(['transient:install']);
+  await admission[Symbol.asyncDispose]();
+  expect(inspectDeviceClaims({})).toEqual([]);
 });
 
 test('a provider-owned device takes no host-local claim', async () => {

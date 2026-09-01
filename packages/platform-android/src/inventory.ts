@@ -137,10 +137,10 @@ async function resolveDeviceName(
   context: AndroidInventoryContext,
   entry: AndroidDeviceEntry,
 ): Promise<string> {
-  const model = entry.rawModel.replace(/_/g, ' ').trim();
+  const model = entry.rawModel.replaceAll('_', ' ').trim();
   if (!isAndroidEmulatorSerial(entry.serial)) return model || entry.serial;
   const avdName = await resolveEmulatorAvdName(context, entry.serial);
-  return avdName?.replace(/_/g, ' ') || model || entry.serial;
+  return avdName?.replaceAll('_', ' ') || model || entry.serial;
 }
 
 async function resolveEmulatorAvdName(

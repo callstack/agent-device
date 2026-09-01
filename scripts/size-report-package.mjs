@@ -21,6 +21,13 @@ const PACKAGE_COMPONENTS = [
       entryPath === 'dist/apple/runner' || entryPath.startsWith('dist/apple/runner/'),
   },
   {
+    id: 'apple-snapshot-presentation',
+    label: 'Apple snapshot presentation source',
+    matches: (entryPath) =>
+      entryPath === 'dist/apple/snapshot-presentation' ||
+      entryPath.startsWith('dist/apple/snapshot-presentation/'),
+  },
+  {
     id: 'macos-helper',
     label: 'macOS helper source',
     matches: (entryPath) =>

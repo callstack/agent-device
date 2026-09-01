@@ -44,11 +44,7 @@ vi.mock('../runner-xctestrun.ts', async () => {
   };
 });
 
-import {
-  prepareIosRunner,
-  prewarmIosRunnerSession,
-  runAppleRunnerCommand,
-} from '../runner-client.ts';
+import { prepareIosRunner, runAppleRunnerCommand } from '../runner-client.ts';
 import { resetRunnerRecycleLedgerForTests } from '../runner-recycle-ledger.ts';
 import type { RunnerXctestrunArtifact } from '../runner-xctestrun.ts';
 
@@ -208,47 +204,6 @@ test('prepareIosRunner spends one shared deadline across setup and health check'
   } finally {
     vi.useRealTimers();
   }
-});
-
-test('prewarmIosRunnerSession proves cached runner health with uptime', async () => {
-  const session = makeRunnerSession({ port: 8100 });
-  mockEnsureRunnerSession.mockResolvedValueOnce(session);
-  mockExecuteRunnerCommandWithSession.mockResolvedValueOnce({ uptimeMs: 42 });
-
-  const prewarm = prewarmIosRunnerSession(IOS_SIMULATOR, {
-    buildTimeoutMs: 300_000,
-    requestId: 'prewarm-request',
-  });
-
-  await prewarm;
-
-  assert.equal(mockEnsureRunnerSession.mock.calls.length, 1);
-  assert.equal(mockEnsureRunnerSession.mock.calls[0]?.[1]?.buildTimeoutMs, 300_000);
-  assert.equal(mockEnsureRunnerSession.mock.calls[0]?.[1]?.requestId, 'prewarm-request');
-  assert.equal(mockEnsureRunnerSession.mock.calls[0]?.[1]?.healthTimeoutMs, 45_000);
-  assert.equal(mockExecuteRunnerCommandWithSession.mock.calls.length, 1);
-  assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[0]?.[1], session);
-  assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[0]?.[2].command, 'uptime');
-  assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[0]?.[4], 45_000);
-});
-
-test('prewarmIosRunnerSession can propagate setup failures for blocking callers', async () => {
-  const failure = new AppError('COMMAND_FAILED', 'Developer mode is disabled');
-  mockEnsureRunnerSession.mockRejectedValueOnce(failure);
-  const prewarm = prewarmIosRunnerSession(IOS_SIMULATOR, { propagateError: true });
-
-  assert.ok(prewarm);
-  await assert.rejects(prewarm, (error: unknown) => error === failure);
-
-  assert.deepEqual(mockEmitDiagnostic.mock.calls[0]?.[0], {
-    level: 'warn',
-    phase: 'ios_runner_session_prewarm_failed',
-    data: {
-      deviceId: IOS_SIMULATOR.id,
-      error: 'Developer mode is disabled',
-    },
-  });
-  assert.equal(mockEnsureRunnerSession.mock.calls[0]?.[1]?.propagateError, undefined);
 });
 
 test('prepareIosRunner does not force a rebuild when the relaunched fresh session still cannot connect', async () => {

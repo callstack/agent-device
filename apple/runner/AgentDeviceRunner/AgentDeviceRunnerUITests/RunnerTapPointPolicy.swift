@@ -11,8 +11,8 @@ import XCTest
 // This is pure geometry on purpose — no XCUIElement — so the exact decision
 // can be proven against the golden fixture table shared with the TS twin:
 //   table:   contracts/fixtures/tap-point-policy.json
-//   TS twin: src/snapshot/mobile-snapshot-semantics.ts#isTapPointInsideViewport
-//   TS test: src/snapshot/__tests__/tap-point-policy-parity.test.ts
+//   TS twin: packages/contracts/src/snapshot-visibility.ts#isTapPointInsideViewport
+//   TS test: packages/contracts/src/snapshot-tap-point-policy.test.ts
 // Drift on either side turns CI red without needing a simulator.
 enum TapPointPolicy {
   static func isAllowed(elementFrame: CGRect, windowFrame: CGRect) -> Bool {

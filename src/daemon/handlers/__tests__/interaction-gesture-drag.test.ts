@@ -7,8 +7,8 @@ import {
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { activateCompleteRefFrame, refFrameState } from '../../ref-frame.ts';
 
-vi.mock('../interaction-snapshot.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../interaction-snapshot.ts')>();
+vi.mock('../../interaction/index.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../interaction/index.ts')>();
   return {
     ...actual,
     captureSnapshotForSession: vi.fn(

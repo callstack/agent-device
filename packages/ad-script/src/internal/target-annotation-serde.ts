@@ -82,7 +82,7 @@ export function normalizeRoleField(value: string): string {
 /** label fields: NFC, trim, collapse internal whitespace runs to one space. */
 export function normalizeLabelField(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
-  const collapsed = nfc(value).trim().replace(/\s+/g, ' ');
+  const collapsed = nfc(value).trim().replaceAll(/\s+/g, ' ');
   return collapsed.length > 0 ? collapsed : undefined;
 }
 

@@ -36,7 +36,7 @@ test('isAgentDeviceDaemonCommand matches daemons from branch-named checkouts', (
   );
   assert.equal(
     isAgentDeviceDaemonCommand(
-      '"C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\dev\\wt\\fix-1545\\dist\\src\\daemon.js"',
+      String.raw`"C:\Program Files\nodejs\node.exe" "C:\Users\dev\wt\fix-1545\dist\src\daemon.js"`,
     ),
     true,
   );

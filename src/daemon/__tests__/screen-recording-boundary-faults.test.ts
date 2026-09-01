@@ -14,7 +14,10 @@ import type {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { countDiagnosticEventsByPhase, withDiagnosticsScope } from '../../utils/diagnostics.ts';
+import {
+  countDiagnosticEventsByPhase,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 import { createDurableCaptureAdmissionLedger } from '../durable-capture-admission-ledger.ts';
 import { createDurableCaptureResource } from '../durable-capture-resource.ts';
 import type { DurableCaptureResourceStore } from '../durable-capture-resource-store.ts';

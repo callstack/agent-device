@@ -2,7 +2,7 @@ import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { captureSnapshot } from './handlers/snapshot-capture.ts';
-import { errorResponse } from './handlers/response.ts';
+import { errorResponse } from './response.ts';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 import type { BoundSelectorCapture } from './selector-capture-binding.ts';
@@ -139,7 +139,7 @@ function extractSurfaceText(node: SnapshotNode, options: { includeIdentifiers: b
   const value = candidates
     .map((candidate) => (typeof candidate === 'string' ? candidate.trim() : ''))
     .find((candidate) => candidate.length > 0);
-  return value ? value.replace(/\s+/g, ' ').slice(0, 80) : '';
+  return value ? value.replaceAll(/\s+/g, ' ').slice(0, 80) : '';
 }
 
 function isChromeLikeNode(node: SnapshotNode): boolean {

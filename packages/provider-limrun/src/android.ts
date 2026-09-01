@@ -244,6 +244,6 @@ function tcpEndpoint(port: number): LimrunPortReverseEndpoint {
 
 function buildAndroidAssetName(packageName: string | undefined, artifactPath: string): string {
   const extension = path.extname(artifactPath) || '.apk';
-  const prefix = packageName?.replace(/[^a-zA-Z0-9_.-]+/g, '-') || 'android-app';
+  const prefix = packageName?.replaceAll(/[^a-zA-Z0-9_.-]+/g, '-') || 'android-app';
   return `${prefix}${extension}`;
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { PNG } from '../../../src/utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import type { ProviderScenarioRpcResult } from './harness.ts';
 
 export function assertCommandCall(calls: readonly string[][], expected: readonly string[]): void {

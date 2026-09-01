@@ -13,14 +13,14 @@ import type {
   SnapshotRuntimeOperations,
 } from '@agent-device/contracts/snapshot-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { errorResponse } from './handlers/response.ts';
+import { errorResponse } from './response.ts';
 import {
   admitRuntimePlan,
   requireRuntimeBinding,
   unavailableRuntimeOperationResponse,
   unwrapAdmittedRuntimePlan,
   type AdmittedRuntimePlan,
-} from './handlers/session-runtime-admission.ts';
+} from './session-runtime-admission.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import type { DaemonResponse } from './types.ts';
 

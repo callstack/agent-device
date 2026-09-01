@@ -30,14 +30,14 @@ export function selectElementTextOperation(
 ): Pick<SelectorOperations, 'readTextAtPoint'> {
   const { readTextAtPoint } = runtime.operations;
   const selected = readTextAtPoint ? { operations: { readTextAtPoint } } : undefined;
-  return Object.freeze({
-    ...(selected
+  return Object.freeze(
+    selected
       ? {
           readTextAtPoint: async (input: ReadTextAtPointInput) =>
             await selected.operations.readTextAtPoint(input),
         }
-      : {}),
-  });
+      : {},
+  );
 }
 
 /** Projects only the fact-conditional observations admitted for `wait`. */

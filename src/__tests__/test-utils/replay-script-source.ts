@@ -1,20 +1,15 @@
+import fs from 'node:fs';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import type { MaestroSourceReader } from '@agent-device/maestro';
+import { resolveUserPath } from '@agent-device/host-kit/file';
 import type { DaemonRequest } from '../../daemon/types.ts';
-import {
-  loadReplayScriptSourceBundle,
-  readAdScriptSourceBundle,
-} from '../../replay/script-source-bundle.ts';
-import { discoverReplaySourcePaths } from '../../replay/source-discovery.ts';
+import { loadReplayScriptSourceBundle } from '../../commands/replay/script-source-bundle.ts';
+import { discoverReplaySourcePaths } from '../../commands/replay/source-discovery.ts';
 
-/**
- * A native `.ad` script's bundle, built from a file on disk through the client's own reader
- * (#1802) so a test never hand-rolls a shape the CLI would not actually send. Synchronous
- * because an `.ad` script has no include grammar and needs no engine; use
- * `maestroScriptSourceBundleFor` for a flow.
- */
+/** A native `.ad` script's one-entry source bundle for test requests. */
 export function replayScriptSourceBundleFor(filePath: string): ReplayScriptSourceBundle {
-  return readAdScriptSourceBundle({ inputPath: filePath, cwd: process.cwd() });
+  const entry = resolveUserPath(filePath, { cwd: process.cwd() });
+  return { entry, files: { [entry]: fs.readFileSync(entry, 'utf8') } };
 }
 
 /** A Maestro flow's bundle — async because the engine that walks its includes loads on demand. */

@@ -4,11 +4,10 @@ import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import {
-  isUsefulVisibilityAnchor,
-  buildSnapshotNodeMap,
+  createSnapshotVisibility,
   extractNodeText,
-  findSnapshotAncestor,
-  isNodeVisibleInEffectiveViewport,
+  isUsefulVisibilityAnchor,
+  type SnapshotVisibility,
 } from '@agent-device/contracts/snapshot';
 import { isNodeEditable, isNodeVisible } from './node.ts';
 import { tryParseSelectorChain } from './parse.ts';
@@ -80,7 +79,9 @@ export function evaluateIsPredicate(params: {
   const selected = node.selected === true;
   const focused = node.focused === true;
   const visible =
-    predicate === 'text' ? isNodeVisible(node) : isAssertionVisible(node, nodes, platform);
+    predicate === 'text'
+      ? isNodeVisible(node)
+      : isAssertionVisible(node, createSnapshotVisibility(nodes), platform);
   let pass = false;
   switch (predicate) {
     case 'visible':
@@ -116,33 +117,25 @@ export function evaluateIsPredicate(params: {
 
 function isAssertionVisible(
   node: SnapshotState['nodes'][number],
-  nodes: SnapshotState['nodes'],
+  visibility: SnapshotVisibility,
   platform: Platform | PublicPlatform,
 ): boolean {
   if (platform === 'android' && node.visibleToUser === false) return false;
-  if (isPositiveFiniteRect(node.rect)) return isRectVisibleInViewport(node, nodes);
+  if (isPositiveFiniteRect(node.rect)) return visibility.isVisibleInEffectiveViewport(node);
   if (node.rect) return false;
   if (platform !== 'android' && node.hittable === true) return true;
-  const anchor = resolveVisibilityAnchor(node, nodes, platform);
+  const anchor = resolveVisibilityAnchor(node, visibility, platform);
   if (!anchor) return false;
   if (!isPositiveFiniteRect(anchor.rect)) return platform !== 'android' && anchor.hittable === true;
-  return isRectVisibleInViewport(anchor, nodes);
-}
-
-function isRectVisibleInViewport(
-  node: SnapshotState['nodes'][number],
-  nodes: SnapshotState['nodes'],
-): boolean {
-  return isNodeVisibleInEffectiveViewport(node, nodes);
+  return visibility.isVisibleInEffectiveViewport(anchor);
 }
 
 function resolveVisibilityAnchor(
   node: SnapshotState['nodes'][number],
-  nodes: SnapshotState['nodes'],
+  visibility: SnapshotVisibility,
   platform: Platform | PublicPlatform,
 ): SnapshotState['nodes'][number] | null {
-  const nodesByIndex = buildSnapshotNodeMap(nodes);
-  return findSnapshotAncestor(nodes, node, nodesByIndex, (parent) =>
+  return visibility.findAncestor(node, (parent) =>
     isUsefulVisibilityAnchor(parent, platform) ? parent : null,
   );
 }

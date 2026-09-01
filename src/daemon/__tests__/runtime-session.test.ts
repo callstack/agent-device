@@ -1,7 +1,10 @@
 import { test, expect } from 'vitest';
 import fs from 'node:fs';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
-import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../utils/diagnostics.ts';
+import {
+  flushDiagnosticsToSessionFile,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 import { createDaemonRuntimeSessionStore } from '../runtime-session.ts';
 import type { CommandSessionRecord } from '../../runtime-contract.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';

@@ -1,5 +1,8 @@
 import { expect, test } from 'vitest';
-import { countDiagnosticEventsByPhase, withDiagnosticsScope } from '../../utils/diagnostics.ts';
+import {
+  countDiagnosticEventsByPhase,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 import {
   createTestCaptureResource,
   makeDurableCaptureContext,

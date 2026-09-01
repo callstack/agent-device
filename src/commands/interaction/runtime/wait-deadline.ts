@@ -1,4 +1,6 @@
-export type WaitDeadlineResult<T> = { timedOut: false; value: T } | { timedOut: true };
+export type WaitDeadlineResult<T> =
+  | { timedOut: false; value: T }
+  | { timedOut: true; error?: unknown };
 
 type AbortSignalSource = { signal?: AbortSignal };
 
@@ -37,7 +39,7 @@ export async function runWithinWaitDeadline<T>(
     return { timedOut: false, value };
   } catch (error) {
     if (deadlineExpired && !parentSignals.some((parent) => parent.aborted)) {
-      return { timedOut: true };
+      return { timedOut: true, error };
     }
     throw error;
   } finally {

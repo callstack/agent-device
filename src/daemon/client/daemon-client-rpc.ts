@@ -5,7 +5,7 @@ import {
   type DaemonError,
 } from '@agent-device/kernel/errors';
 import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
-import { createRequestId } from '../../utils/diagnostics.ts';
+import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { materializeRemoteArtifacts } from '../../remote/daemon-artifacts.ts';
 import { localizeRemoteDaemonError } from '../../remote/remote-request-diagnostics.ts';
@@ -181,7 +181,12 @@ export function buildHttpRpcPayload(
     jsonrpc: '2.0',
     id,
     method: leaseRpcMethodForCommand(req.command),
-    params: buildLeaseRpcParams(req, req.command, options),
+    params: {
+      ...buildLeaseRpcParams(req, req.command, options),
+      ...(req.command === 'lease_allocate' && typeof req.flags?.providerApp === 'string'
+        ? { providerApp: req.flags.providerApp }
+        : {}),
+    },
   };
 }
 

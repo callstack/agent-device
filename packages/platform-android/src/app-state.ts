@@ -4,6 +4,7 @@ import type {
   AppStateRuntimeResult,
 } from '@agent-device/contracts/app-state-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { parseAndroidFocusSegment } from './app-parsers.ts';
 
 export type AndroidAppStateHost = Readonly<{
   run(
@@ -21,12 +22,33 @@ const ACTIVITY_COMMANDS = [
   ['shell', 'dumpsys', 'activity', 'activities'],
   ['shell', 'dumpsys', 'activity'],
 ] as const;
-const ANDROID_FOCUS_MARKERS = [
-  'mCurrentFocus=Window{',
-  'mFocusedApp=AppWindowToken{',
-  'mResumedActivity:',
-  'ResumedActivity:',
-] as const;
+export type AndroidCommandExecutor = (
+  args: string[],
+  options: { allowFailure: boolean },
+) => Promise<{ exitCode: number; stdout?: string; stderr?: string }>;
+
+export async function readAndroidAppStateWithExecutor(
+  run: AndroidCommandExecutor,
+): Promise<AppStateRuntimeResult> {
+  const windowFocus = await readAndroidFocusWithExecutor(run, FOCUS_COMMANDS);
+  if (windowFocus) return windowFocus;
+
+  const activityFocus = await readAndroidFocusWithExecutor(run, ACTIVITY_COMMANDS);
+  if (activityFocus) return activityFocus;
+  return {};
+}
+
+async function readAndroidFocusWithExecutor(
+  run: AndroidCommandExecutor,
+  commands: readonly (readonly string[])[],
+): Promise<AppStateRuntimeResult | null> {
+  for (const args of commands) {
+    const result = await run([...args], { allowFailure: true });
+    const parsed = parseAndroidForegroundApp(result.stdout ?? '');
+    if (parsed) return parsed;
+  }
+  return null;
+}
 
 export async function readAndroidAppState(
   host: AndroidAppStateHost,
@@ -42,16 +64,7 @@ export async function readAndroidAppState(
 }
 
 export function parseAndroidForegroundApp(text: string): AppStateRuntimeResult | null {
-  const lines = text.split('\n');
-  for (const marker of ANDROID_FOCUS_MARKERS) {
-    for (const line of lines) {
-      const markerIndex = line.indexOf(marker);
-      if (markerIndex === -1) continue;
-      const parsed = parseAndroidComponentFromSegment(line.slice(markerIndex + marker.length));
-      if (parsed) return parsed;
-    }
-  }
-  return null;
+  return parseAndroidFocusSegment(text, (segment) => parseAndroidComponentFromSegment(segment));
 }
 
 async function readAndroidFocus(

@@ -7,6 +7,16 @@ import {
 export type DirectDeviceConnectProvider = CloudWebDriverKnownProviderName | 'limrun';
 export type ConnectProvider = 'cloud' | 'proxy' | DirectDeviceConnectProvider;
 
+export type ConnectionProviderCapabilities = {
+  leaseKind: 'proxy' | 'direct-device-provider' | 'remote-provider';
+  requiresAppAttachment: boolean;
+  requiresRemoteDaemon: boolean;
+  supportsArtifacts: boolean;
+  supportsDeferredAppSelection: boolean;
+  supportsDirectPortReverse: boolean;
+  usesCloudWebDriverLease: boolean;
+};
+
 export function isConnectProviderName(value: string | undefined): value is ConnectProvider {
   return value === 'cloud' || value === 'proxy' || isDirectDeviceConnectProvider(value);
 }
@@ -27,14 +37,23 @@ export function connectProviderNamesForError(): string {
   ].join(', ');
 }
 
-export function connectionProviderRequiresRemoteDaemon(provider: string | undefined): boolean {
-  return !isDirectDeviceConnectProvider(provider);
-}
-
-export function connectionProviderLeaseKind(
+export function connectionProviderCapabilities(
   provider: string | undefined,
-): 'proxy' | 'direct-device-provider' | 'remote-provider' {
-  if (provider === 'proxy') return 'proxy';
-  if (isDirectDeviceConnectProvider(provider)) return 'direct-device-provider';
-  return 'remote-provider';
+): ConnectionProviderCapabilities {
+  const directDeviceProvider = isDirectDeviceConnectProvider(provider);
+  const cloudWebDriver = isCloudWebDriverProviderName(provider);
+  return {
+    leaseKind:
+      provider === 'proxy'
+        ? 'proxy'
+        : directDeviceProvider
+          ? 'direct-device-provider'
+          : 'remote-provider',
+    requiresAppAttachment: provider === CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+    requiresRemoteDaemon: !directDeviceProvider,
+    supportsArtifacts: cloudWebDriver,
+    supportsDeferredAppSelection: provider === 'limrun',
+    supportsDirectPortReverse: provider === 'limrun',
+    usesCloudWebDriverLease: cloudWebDriver,
+  };
 }

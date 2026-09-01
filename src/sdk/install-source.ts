@@ -2,6 +2,6 @@ export {
   ARCHIVE_EXTENSIONS,
   isTrustedInstallSourceUrl,
   validateDownloadSourceUrl,
-} from '../platforms/install-source.ts';
+} from '@agent-device/provision-kit/install-source';
 
 export type { LocalInstallSource as MaterializeInstallSource } from '@agent-device/kernel/contracts';

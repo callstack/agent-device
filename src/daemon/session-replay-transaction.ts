@@ -21,11 +21,12 @@ import { expandSessionPath } from './session-paths.ts';
  * #1478 P4b: a native `.ad` replay request no longer imports this module directly — it reaches
  * every operation here through `session-replay-coordinator.ts`'s `ReplayCoordinator`, the one
  * locked gateway for that request's repair transaction. Close-time sequencing
- * (`session-close.ts`'s platform-close receipt and repair-armed check,
- * `session-close-script.ts`'s commit/abort) is a different capability — commit/abort happen at
- * teardown, ordered against platform close and lease release, not during a replay request — and
- * remains a direct caller by design. `session-store.ts`, `session-action-recorder.ts`,
- * `session-script-writer.ts`, and `server/daemon-idle-reap.ts` also stay direct callers of the
+ * (`session-lifecycle/internal/session-close.ts`'s platform-close receipt and repair-armed
+ * check, `session-lifecycle/internal/session-close-script.ts`'s commit/abort) is a different
+ * capability — commit/abort happen at teardown, ordered against platform close and lease
+ * release, not during a replay request — and remains a direct caller by design.
+ * `session-store.ts`, `session-action-recorder.ts`, and `session-script-writer.ts`, along with
+ * `server/daemon-idle-reap.ts`, also stay direct callers of the
  * read-only projections (`isRepairArmedSession`, `repairSessionBoundary`,
  * `isUncommittedRepairSession`, `repairSessionSourcePath`): those sites span session lifecycle
  * concerns outside any single locked replay request, so routing them through a per-request

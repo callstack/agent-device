@@ -35,23 +35,33 @@ function scenario() {
   markSessionPartialRefsIssued(session, ['e1']);
   sessionStore.set(sessionName, session);
   const captured = snapshot('e2', 'Internal capture');
-  const authority = bindInternalObservationAuthority({
-    sessionStore,
-    sessionName,
-  });
+  const authority = bindAuthority(sessionStore, sessionName);
   const stored = authority.store(captured);
   return { sessionStore, sessionName, session, prior, captured, authority, ...stored };
 }
 
 function publishCurrent(input: ReturnType<typeof scenario>, signal?: AbortSignal) {
-  const authority = bindInternalObservationAuthority({
-    sessionStore: input.sessionStore,
-    sessionName: input.sessionName,
-    ...(signal ? { signal } : {}),
-  });
+  const authority = bindAuthority(input.sessionStore, input.sessionName, signal);
   return authority.finalize(input.evidence, {
     refsGeneration: input.refsGeneration,
     refs: ['@e2'],
+  });
+}
+
+function bindAuthority(sessionStore: SessionStore, sessionName: string, signal?: AbortSignal) {
+  return bindInternalObservationAuthority({
+    sessionStore: {
+      get: () => sessionStore.get(sessionName),
+      update: (mutate) => {
+        const session = sessionStore.get(sessionName);
+        if (!session) return false;
+        mutate(session);
+        sessionStore.set(sessionName, session);
+        return true;
+      },
+    },
+    sessionName,
+    ...(signal ? { signal } : {}),
   });
 }
 

@@ -50,3 +50,29 @@ owning lease expiry.
 
 Backend-only leases remain valid for older remote clients, while provider-aware
 clients get device-level contention and clearer recovery.
+
+## Human control
+
+Human-control holds coexist with an open remote session. They belong to `LeaseRegistry` and use
+the same backend/provider/device contention key as device-aware leases. Hold heartbeat, expiry,
+lease preservation, and release refresh are one registry-owned lifecycle. Releasing or expiring the
+last hold gives the lease its existing inactivity TTL again; expiry uses the hold's expiry instant.
+
+Tenant hold operations are ordinary daemon RPCs admitted through `request-admission.ts`. Their
+device comes only from the admitted lease. Host administration is a distinct loopback capability
+authenticated with the daemon token, never a tenant credential; tenants cannot modify host holds.
+
+Mutation admission derives from existing recording effects, observation-class inventory, and
+observability semantics. Takeover and lease heartbeats are exempt from the mutation fence, not from
+their ownership checks. Unknown effects are treated as mutations. A pending activation fences new
+mutations and drains those already admitted before reporting active; advisory execution locks alone
+do not establish this guarantee for fresh sessions.
+
+Activation follows the calling RPC or host HTTP request's cancellation signal. A disconnect while
+draining removes only that request's pending hold, leaving successor and unrelated holds intact;
+canceling activation does not cancel the mutations being drained. Completed holds use their TTL or
+explicit release lifecycle.
+
+Holds, like leases, are in-memory and do not survive daemon restart. Controllers must reconnect and
+re-establish them; no persisted hold store is used. Local takeover is deferred: a future host-global
+human-control fence must coexist with the local session's device claim, not acquire it exclusively.

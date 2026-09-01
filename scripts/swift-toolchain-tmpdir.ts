@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { runCmdBackground } from '../src/utils/exec.ts';
+import { runCmdBackground } from '@agent-device/host-kit/command';
 
 const [command, ...args] = process.argv.slice(2);
 if (!command) {

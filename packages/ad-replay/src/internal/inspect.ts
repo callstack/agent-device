@@ -13,7 +13,7 @@ import { resolveReplayEntryIndex, type PendingRecordAndHeal } from './resume.ts'
  * #1478 P5 stage C2b: the read-only `.ad` inspection façade. Moved out of
  * `session-replay-runtime.ts`'s old `parseReplayScript` (the
  * legacy-JSON-payload rejection it guarded) plus the `parseReplayInput`
- * composition (`src/compat/replay-input.ts`) it fed into — this is the same
+ * composition (`parseReplayInput`) it fed into — this is the same
  * `parseReplayScriptDetailed` + `readReplayScriptMetadata` pair
  * `src/cli/commands/replay.ts` and `session-test-source-discovery.ts` already
  * call directly off `@agent-device/ad-script`; nothing beyond the actions,
@@ -56,7 +56,7 @@ export type AdReplayDigestFlags = Readonly<{ platform?: string; target?: string 
  * `AppError('INVALID_ARGS', …)` for the one source format `.ad` replay no
  * longer accepts — a legacy JSON replay payload — matching the daemon's
  * prior explicit rejection exactly. Callers do not need to check for this
- * case separately: `runReplayScriptSource`'s top-level catch (`asAppError`)
+ * case separately: `runReplayCommand`'s top-level catch (`asAppError`)
  * maps a thrown `AppError` straight to the same `errorResponse` the old
  * explicit branch built, so this is not a behavior change, only where the
  * check lives.

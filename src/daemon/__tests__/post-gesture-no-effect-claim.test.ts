@@ -4,7 +4,10 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { countDiagnosticEventsByPhase, withDiagnosticsScope } from '../../utils/diagnostics.ts';
+import {
+  countDiagnosticEventsByPhase,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 import {
   buildInteractionSurfaceSignature,
   summarizeDiscriminatingSurfaceDivergence,

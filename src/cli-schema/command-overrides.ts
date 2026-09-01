@@ -46,14 +46,14 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
   },
   device: {
     text: {
-      summary: 'Inspect enforced local device ownership without daemon side effects',
+      summary: 'Inspect and recover enforced local device ownership without a daemon',
       description:
-        'Inspect enforced host-local device ownership claims without starting or contacting a daemon. --stale only inspects proven-stale claims; automatic reclamation occurs during open or daemon startup after exact-owner resource reconciliation.',
+        'Inspect enforced host-local device ownership claims without starting or contacting a daemon; status --stale only inspects proven-stale claims. release --stale settles a provably dead owner through exact-owner resource reconciliation and clears its claim last — live and uncertain owners always fail closed. Automatic reclamation still occurs during open and daemon startup.',
     },
     usageOverride:
-      'device status [--platform <platform>] [--udid <udid>] [--serial <serial>] [--stale]',
+      'device status|release [--platform <platform>] [--udid <udid>] [--serial <serial>] [--stale]',
     listUsageOverride: 'device status',
-    positionalArgs: ['status'],
+    positionalArgs: ['status|release'],
     allowedFlags: ['stale'],
     supportedFlags: ['platform', 'device', 'udid', 'serial'],
   },
@@ -141,6 +141,29 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       'proxy [--host <host>] [--port <port>] [--daemon-auth-token <token>] [--state-dir <path>]',
     listUsageOverride: 'proxy',
     allowedFlags: ['proxyHost', 'proxyPort', 'daemonAuthToken', 'stateDir'],
+  },
+  takeover: {
+    text: {
+      summary: 'Pause agent interactions while a person controls a device',
+      description:
+        'Temporarily hand control of the active remote lease device to a person. The foreground command pauses state-changing agent commands, renews the hold until Ctrl+C, and then releases it. Read-only diagnostics remain available. Uses the active connection and --session, with normal tenant and lease admission. status lists holds on that device; release removes a hold owned by the admitted lease. The host-only /admin/human-control/holds API uses the separate local daemon token. Holds do not survive daemon restart. Local takeover without a remote device lease is not supported.',
+    },
+    usageOverride: 'takeover [status | release <hold-id>] [--session <name>]',
+    listUsageOverride: 'takeover [status|release]',
+    positionalArgs: ['status|release?', 'hold-id?'],
+    supportedFlags: [
+      'stateDir',
+      'session',
+      'remoteConfig',
+      'daemonBaseUrl',
+      'daemonAuthToken',
+      'daemonTransport',
+      'tenant',
+      'runId',
+      'leaseId',
+      'leaseBackend',
+      'sessionIsolation',
+    ],
   },
   'react-devtools': {
     text: {

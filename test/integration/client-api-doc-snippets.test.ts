@@ -4,7 +4,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 
 // Compiles every fenced ```ts snippet in website/docs/docs/client-api.md against
 // agent-device's real `agent-device/*` subpath sources, so a doc snippet that no

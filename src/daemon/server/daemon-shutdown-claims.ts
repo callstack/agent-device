@@ -1,5 +1,5 @@
 import { publicPlatformString } from '@agent-device/kernel/device';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { clearDeviceClaim, type DeviceClaimClearOutcome } from '../device-claims.ts';
 import type { DeviceClaimRecord } from '../daemon-shutdown-report.ts';
 import type { SessionState } from '../types.ts';

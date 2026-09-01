@@ -6,8 +6,8 @@ import {
   toAppErrorCode,
   type DiagnosticsRecordRef,
 } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { timingSafeStringEqual } from '../../utils/timing-safe-equal.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import type {
   CommandRpcParams,
   JsonRpcId,
@@ -22,21 +22,29 @@ import {
   markRequestCanceled,
   registerRequestAbort,
   resolveRequestTrackingId,
-} from '../../request/cancel.ts';
+  withRequestProgressSink,
+} from '@agent-device/host-kit/request';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { withRequestProgressSink } from '../../request/progress.ts';
+
 import {
   serializeDaemonProgressEnvelope,
   serializeDaemonRpcResponseEnvelope,
   shouldStreamRequestProgress,
 } from '../request-progress-protocol.ts';
 import { buildDaemonHealthPayload } from '../http-health.ts';
-import { DAEMON_HTTP_TENANT_HEADER } from '../http-contract.ts';
+import {
+  DAEMON_HTTP_NETWORK_ACCESS_HEADER,
+  DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
+  DAEMON_HTTP_TENANT_HEADER,
+} from '../http-contract.ts';
 import { sendRestJsonError, statusCodeForNormalizedError } from '../http-errors.ts';
 import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
 import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-http.ts';
+import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
+import { tryHandleHumanControlHttpRoute } from '../human-control-http.ts';
+import type { LeaseRegistry } from '../lease-registry.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
 
@@ -99,6 +107,35 @@ const LEASE_RPC_METHOD_TO_COMMAND: Record<
   'agent_device.lease.release': 'lease_release',
   'agent-device.lease.release': 'lease_release',
 };
+
+function restrictRemoteHttpRequest(
+  request: DaemonRequest,
+  authHookConfigured: boolean,
+  networkAccessMarker: string | string[] | undefined,
+): DaemonRequest {
+  if (
+    networkAccessMarker !== undefined &&
+    networkAccessMarker !== DAEMON_HTTP_PUBLIC_NETWORK_ACCESS
+  ) {
+    throw new AppError('INVALID_ARGS', 'Invalid daemon HTTP network access marker');
+  }
+  if (!authHookConfigured && networkAccessMarker === undefined) return request;
+  const source = request.meta?.installSource;
+  const uploadedArtifactId = request.meta?.uploadedArtifactId;
+  if (
+    source?.kind === 'path' &&
+    !(typeof uploadedArtifactId === 'string' && uploadedArtifactId.length > 0)
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'Invalid params: path install sources are disabled on the remote HTTP surface',
+    );
+  }
+  return {
+    ...request,
+    internal: { ...request.internal, publicNetworkOnly: true },
+  };
+}
 const SUPPORTED_RPC_METHODS = new Set([
   ...COMMAND_RPC_METHODS,
   ...INSTALL_FROM_SOURCE_RPC_METHODS,
@@ -214,7 +251,7 @@ function readRequiredGitHubArtifactText(
 function readGitHubArtifactInteger(record: Record<string, unknown>, key: 'artifactId' | 'runId') {
   const value = record[key];
   const parsed =
-    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
   if (!Number.isInteger(parsed)) {
     throw new AppError('INVALID_ARGS', `Invalid params: source.${key} must be an integer`);
   }
@@ -276,6 +313,10 @@ function toLeaseDaemonRequest(
     session: readStringParam(params, 'session') ?? 'default',
     command,
     positionals: [],
+    flags:
+      command === 'lease_allocate'
+        ? { providerApp: readStringParam(params, 'providerApp') }
+        : undefined,
     meta: {
       tenantId: readStringParam(params, 'tenantId') ?? readStringParam(params, 'tenant'),
       runId: readStringParam(params, 'runId'),
@@ -489,10 +530,12 @@ async function runHttpAuthHook(
   return { ok: true };
 }
 
-async function loadHttpAuthHook(): Promise<HttpAuthHook | null> {
-  const hookPath = process.env.AGENT_DEVICE_HTTP_AUTH_HOOK;
+async function loadHttpAuthHook(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<HttpAuthHook | null> {
+  const hookPath = env.AGENT_DEVICE_HTTP_AUTH_HOOK;
   if (!hookPath) return null;
-  const exportName = process.env.AGENT_DEVICE_HTTP_AUTH_EXPORT || 'default';
+  const exportName = env.AGENT_DEVICE_HTTP_AUTH_EXPORT || 'default';
   const resolvedPath = path.isAbsolute(hookPath) ? hookPath : path.resolve(hookPath);
   let imported: Record<string, unknown>;
   try {
@@ -515,8 +558,10 @@ async function loadHttpAuthHook(): Promise<HttpAuthHook | null> {
 
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
+  leaseRegistry?: LeaseRegistry;
   token?: string;
   retainArtifacts?: boolean;
+  env?: NodeJS.ProcessEnv;
   /**
    * Resolves a request diagnostics record path for the `/sessions/.../requests/...`
    * route (#1801). Omitted by embedded servers with no session store; the route
@@ -525,13 +570,27 @@ export async function createDaemonHttpServer(options: {
    */
   resolveRequestDiagnosticsPath?: (ref: DiagnosticsRecordRef) => string;
 }): Promise<http.Server> {
-  const authHook = await loadHttpAuthHook();
+  const environment = options.env ?? process.env;
+  const authHook = await loadHttpAuthHook(environment);
   const { handleRequest, token, retainArtifacts = false, resolveRequestDiagnosticsPath } = options;
   return http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
       res.statusCode = 200;
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify(buildDaemonHealthPayload('agent-device-daemon')));
+      return;
+    }
+
+    if (
+      token &&
+      options.leaseRegistry &&
+      tryHandleHumanControlHttpRoute({
+        req,
+        res,
+        expectedToken: token,
+        registry: options.leaseRegistry,
+      })
+    ) {
       return;
     }
 
@@ -642,7 +701,7 @@ export async function createDaemonHttpServer(options: {
       let handlerCompleted = false;
       try {
         const params = rpcRequest.params as Record<string, unknown>;
-        const daemonRequest = methodToDaemonRequest(rpcRequest.method, params, req.headers);
+        let daemonRequest = methodToDaemonRequest(rpcRequest.method, params, req.headers);
         if (
           isCommandRpcMethod(rpcRequest.method) &&
           (typeof daemonRequest.command !== 'string' || daemonRequest.command.length === 0)
@@ -664,6 +723,7 @@ export async function createDaemonHttpServer(options: {
           requestId: requestIdForCleanup,
         };
         requestAbortRegistration = registerRequestAbort(requestIdForCleanup);
+        const clientDeclaredTenant = daemonRequest.meta?.tenantId ?? daemonRequest.flags?.tenant;
 
         const authResult = await runHttpAuthHook(authHook, {
           headers: req.headers,
@@ -674,16 +734,37 @@ export async function createDaemonHttpServer(options: {
           sendJson(res, authResult.response, authResult.statusCode);
           return;
         }
-        if (authResult.tenantId) {
-          daemonRequest.meta = {
-            ...daemonRequest.meta,
-            tenantId: authResult.tenantId,
-            sessionIsolation:
-              daemonRequest.meta?.sessionIsolation ??
-              daemonRequest.flags?.sessionIsolation ??
-              'tenant',
-          };
+        const tenantTrust = resolveTrustedTenant({
+          hookConfigured: authHook !== null,
+          hookAttestedTenant: authResult.tenantId,
+          clientDeclaredTenant,
+        });
+        if (!tenantTrust.trusted) {
+          const normalized = tenantTrustRejectionError();
+          sendJson(
+            res,
+            createRpcError(rpcRequest.id ?? null, -32001, normalized.message, normalized),
+            401,
+          );
+          return;
         }
+        daemonRequest.meta = {
+          ...daemonRequest.meta,
+          tenantId: tenantTrust.tenantId,
+          sessionIsolation: authResult.tenantId
+            ? (daemonRequest.meta?.sessionIsolation ??
+              daemonRequest.flags?.sessionIsolation ??
+              'tenant')
+            : daemonRequest.meta?.sessionIsolation,
+        };
+        if (daemonRequest.flags?.tenant !== undefined) {
+          daemonRequest.flags = { ...daemonRequest.flags, tenant: tenantTrust.tenantId };
+        }
+        daemonRequest = restrictRemoteHttpRequest(
+          daemonRequest,
+          authHook !== null,
+          req.headers[DAEMON_HTTP_NETWORK_ACCESS_HEADER],
+        );
 
         let canceledInFlight = false;
         // Request-scoped cancellation: mark this request canceled whenever its client
@@ -752,7 +833,7 @@ export async function createDaemonHttpServer(options: {
             daemonResponse.error.message,
             daemonResponse.error,
           ),
-          statusCodeForNormalizedError(daemonResponse.error.code),
+          statusCodeForDaemonError(daemonResponse.error),
         );
       } catch (error) {
         handlerCompleted = true;
@@ -775,6 +856,16 @@ export async function createDaemonHttpServer(options: {
       }
     });
   });
+}
+
+function statusCodeForDaemonError(error: {
+  code: string;
+  details?: Record<string, unknown>;
+}): number {
+  if (error.code === 'DEVICE_IN_USE' && error.details?.reason === 'human_control_active') {
+    return 423;
+  }
+  return statusCodeForNormalizedError(error.code);
 }
 
 async function authorizeAuxiliaryHttpRequest(params: {
@@ -824,9 +915,17 @@ async function authorizeAuxiliaryHttpRequest(params: {
     return null;
   }
 
-  // Auth-hook identity remains authoritative. The header fallback only preserves the
-  // client-declared tenant used by RPC when a deployment does not derive tenant scope in its hook.
-  return { tenantId: authResult.tenantId ?? tenantId };
+  const tenantTrust = resolveTrustedTenant({
+    hookConfigured: authHook !== null,
+    hookAttestedTenant: authResult.tenantId,
+    clientDeclaredTenant: tenantId,
+  });
+  if (!tenantTrust.trusted) {
+    sendRestJsonError(res, tenantTrustRejectionError());
+    return null;
+  }
+
+  return { tenantId: tenantTrust.tenantId };
 }
 
 function readHeaderValue(headers: IncomingHttpHeaders, name: string): string | undefined {

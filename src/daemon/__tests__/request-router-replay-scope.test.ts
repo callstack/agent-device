@@ -14,14 +14,15 @@ vi.mock('../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
   return { ...actual, applyRuntimeHintValues: vi.fn(async () => {}) };
 });
 
-vi.mock('../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../platforms/apple/core/runner-client.ts')>();
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
   return { ...actual, prewarmIosRunnerSession: vi.fn() };
 });
 
-vi.mock('../../platforms/apple/core/apps.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/apple/core/apps.ts')>();
+vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/platform-apple/app-resolution')>();
   return {
     ...actual,
     resolveIosApp: vi.fn(async () => 'com.example.app'),

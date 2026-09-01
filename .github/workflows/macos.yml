@@ -70,6 +70,10 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: macos-coverage }
 
+      - name: Run iOS snapshot Swift/TypeScript differential
+        uses: ./.github/actions/run-gate
+        with: { gate: ios-snapshot-differential }
+
       - name: Restore and build macOS XCTest runner
         uses: ./.github/actions/setup-apple-runner-build
         with:

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { createWebInteractor } from '../interactors/web.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { withWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
+import { withWebProvider, type WebProvider } from '@agent-device/platform-web';
 
 test('web interactor delegates first-slice operations to the scoped provider', async () => {
   const calls: string[] = [];
@@ -44,7 +44,7 @@ test('web interactor delegates first-slice operations to the scoped provider', a
   });
 
   const snapshot = await withWebProvider(provider, async () => {
-    const interactor = createWebInteractor();
+    const interactor = await createWebInteractor();
     await interactor.open('https://example.test');
     await interactor.open('app-shell', { url: 'https://example.test/deep' });
     await interactor.close('app-shell');
@@ -80,7 +80,7 @@ test('web interactor delegates first-slice operations to the scoped provider', a
 
 test('web interactor reports hover unsupported when the provider lacks it', async () => {
   await withWebProvider(makeWebProvider(), async () => {
-    const interactor = createWebInteractor();
+    const interactor = await createWebInteractor();
     assert.equal(interactor.tapRef, undefined);
     assert.equal(interactor.hover, undefined);
     assert.equal(interactor.hoverRef, undefined);
@@ -89,7 +89,7 @@ test('web interactor reports hover unsupported when the provider lacks it', asyn
 });
 
 test('web interactor reports unsupported operations explicitly', async () => {
-  const interactor = createWebInteractor();
+  const interactor = await createWebInteractor();
 
   await assert.rejects(
     () => interactor.back(),

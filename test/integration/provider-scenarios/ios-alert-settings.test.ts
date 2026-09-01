@@ -13,12 +13,7 @@ import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../..
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createTestAppLogLiveHandle } from '../../../src/__tests__/test-utils/app-log-live-handle.ts';
-import { setIosSetting } from '../../../src/platforms/apple/core/app-settings.ts';
-import {
-  actOnAppleAlert,
-  awaitAppleAlert,
-  readAppleAlert,
-} from '../../../src/platforms/apple/alert.ts';
+import { applePlugin } from '@agent-device/platform-apple';
 import type { AlertRuntimeInput } from '@agent-device/contracts/alert-runtime';
 import { assertFlatToolCall } from './assertions.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
@@ -216,6 +211,7 @@ function createRecordingPlatformRuntimeGateway(params: {
         throw new TypeError('The iOS provider scenario requires an explicit Apple leaf');
       }
       const appleOs = device.appleOs;
+      const interactor = await applePlugin.createInteractor(device, {});
       return {
         device,
         owner,
@@ -291,8 +287,7 @@ function createRecordingPlatformRuntimeGateway(params: {
           // family's implementation — the same shape Limrun's Android leg takes — so the simctl
           // argument mapping this scenario asserts still runs through the recorded tool seam.
           setSetting: async (input) =>
-            await setIosSetting(
-              device,
+            await interactor.setSetting(
               input.setting,
               input.state,
               input.appBundleId,
@@ -301,12 +296,10 @@ function createRecordingPlatformRuntimeGateway(params: {
           // R59 does the same for `alert`: the scenario's gateway states and serves the four
           // legs, reusing the Apple family's own module so the runner transcript this scenario
           // scripts — including its retry and poll windows — is what actually runs.
-          readAlert: async (input) => await readAppleAlert(device, {}, alertOptions(input)),
-          awaitAlert: async (input) => await awaitAppleAlert(device, {}, alertOptions(input)),
-          acceptAlert: async (input) =>
-            await actOnAppleAlert(device, {}, 'accept', alertOptions(input)),
-          dismissAlert: async (input) =>
-            await actOnAppleAlert(device, {}, 'dismiss', alertOptions(input)),
+          readAlert: async (input) => await interactor.readAlert(alertOptions(input)),
+          awaitAlert: async (input) => await interactor.awaitAlert(alertOptions(input)),
+          acceptAlert: async (input) => await interactor.acceptAlert(alertOptions(input)),
+          dismissAlert: async (input) => await interactor.dismissAlert(alertOptions(input)),
           appLogReattach: async () => ({ status: 'missing' }),
           appLogCleanup: async () => ({ status: 'already-missing' }),
           resolveOpenTarget: async (input) => ({

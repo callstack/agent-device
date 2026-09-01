@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   private static let privateAXSnapshotMaxNodes = 5_000
@@ -769,7 +770,7 @@ extension RunnerTests {
       options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
       policy: .cursorProjected
     )
-    let labels = (capture.payload.nodes ?? []).compactMap { $0.label }
+    let labels = capture.nodes.compactMap { $0.label }
     XCTAssertEqual(
       labels,
       ["Blue Sky", "Callstack", "Welcome back", "Email", "Password", "Sign in", "Forgot password?"]

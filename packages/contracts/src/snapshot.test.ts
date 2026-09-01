@@ -4,18 +4,16 @@ import type { RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/s
 import {
   buildSnapshotNodeMap,
   collectViewportRects,
+  createSnapshotVisibility,
   extractNodeText,
   findNearestAncestor,
   findNearestScrollableAncestor,
   findSnapshotAncestor,
   isFillableType,
-  isNodeVisibleInEffectiveViewport,
-  isNodeVisibleOnScreen,
   isScrollableNodeLike,
   isScrollableType,
   isTapPointInsideViewport,
   normalizeType,
-  resolveEffectiveViewportRect,
   resolveViewportRect,
 } from './facades/snapshot.ts';
 
@@ -147,11 +145,11 @@ test('snapshot visibility uses the nearest scrollable viewport before applying t
       rect: { x: 80, y: 80, width: 50, height: 50 },
     }),
   ];
-  const byIndex = buildSnapshotNodeMap(nodes);
+  const visibility = createSnapshotVisibility(nodes);
 
-  assert.deepEqual(resolveEffectiveViewportRect(nodes[2]!, nodes, byIndex), nodes[1]!.rect);
-  assert.equal(isNodeVisibleInEffectiveViewport(nodes[2]!, nodes, byIndex), true);
-  assert.equal(isNodeVisibleOnScreen(nodes[2]!, nodes, byIndex), false);
+  assert.deepEqual(visibility.resolveEffectiveViewport(nodes[2]!), nodes[1]!.rect);
+  assert.equal(visibility.isVisibleInEffectiveViewport(nodes[2]!), true);
+  assert.equal(visibility.isVisibleOnScreen(nodes[2]!), false);
   assert.equal(isTapPointInsideViewport(nodes[2]!.rect!, nodes[0]!.rect!), false);
   assert.equal(isTapPointInsideViewport(nodes[2]!.rect!, null), true);
 });

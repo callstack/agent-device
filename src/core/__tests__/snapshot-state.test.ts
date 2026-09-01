@@ -1,11 +1,11 @@
 import { expect, test } from 'vitest';
 import { buildSnapshotState } from '../snapshot-state.ts';
-import { isNodeVisibleOnScreen } from '@agent-device/contracts/snapshot';
+import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { attachSnapshotOcclusionContextEvidence } from '@agent-device/contracts/capture';
 import {
   buildUiHierarchySnapshot,
   parseUiHierarchyTree,
-} from '../../platforms/android/ui-hierarchy.ts';
+} from '@agent-device/platform-android/mechanics';
 
 test('buildSnapshotState handles undefined nodes gracefully', () => {
   const state = buildSnapshotState({ nodes: undefined, truncated: undefined }, undefined);
@@ -75,7 +75,7 @@ test('buildSnapshotState preserves Android effective geometry for post-wire cons
     rect: { x: 200, y: 300, width: 100, height: 80 },
     hittable: true,
   });
-  expect(target && isNodeVisibleOnScreen(target, state.nodes)).toBe(true);
+  expect(target && createSnapshotVisibility(state.nodes).isVisibleOnScreen(target)).toBe(true);
 });
 
 test('buildSnapshotState handles nodes with missing fields', () => {
@@ -134,6 +134,22 @@ test('buildSnapshotState applies iOS interactive presentation for xctest snapsho
     ['CollectionView', undefined, 0],
     ['Cell', 'General', 1],
   ]);
+});
+
+test('buildSnapshotState leaves Apple runner presentation to the engine', () => {
+  const nodes = [
+    { index: 0, depth: 0, type: 'Application', label: 'Settings' },
+    { index: 1, depth: 1, parentIndex: 0, type: 'Table', label: 'Settings' },
+    { index: 2, depth: 2, parentIndex: 1, type: 'Cell', label: 'General' },
+    { index: 3, depth: 3, parentIndex: 2, type: 'Button', label: 'General' },
+  ];
+
+  const state = buildSnapshotState(
+    { nodes, backend: 'xctest', producer: 'apple-runner' },
+    { snapshotInteractiveOnly: true },
+  );
+
+  expect(state.nodes.map((node) => node.type)).toEqual(['Application', 'Table', 'Cell', 'Button']);
 });
 
 test('buildSnapshotState marks content covered by floating overlays as visible but blocked', () => {

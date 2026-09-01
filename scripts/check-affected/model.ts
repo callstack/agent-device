@@ -46,6 +46,7 @@ export type CheckId =
   | 'provider-integration'
   | 'integration-node'
   | 'macos-coverage'
+  | 'ios-snapshot-differential'
   | 'integration-progress'
   | 'swift-runner-ios'
   | 'swift-runner-macos'
@@ -105,6 +106,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   // run before the related-project workload heats the host.
   'integration-node',
   'macos-coverage',
+  'ios-snapshot-differential',
   'vitest-related',
   'unit',
   'unit-ci',
@@ -187,7 +189,8 @@ const ROOT_TOOLING = new Set([
   'tsconfig.lib.json',
   'tsdown.config.ts',
   'vitest.config.ts',
-  '.oxlintrc.json',
+  '.fallowrc.json',
+  'oxlint.config.ts',
   '.oxfmtrc.json',
   '.npmrc',
 ]);
@@ -258,27 +261,10 @@ const staticTsGates: OwnershipRule = ({ file, isTs, underSrc, underTest }) =>
 
 const srcProdGate: OwnershipRule = ({ file, isSrcProd }) => {
   if (!isSrcProd) return [];
-  const selections = [
+  return [
     reason('layering', file, 'gate:layering', 'layering guard reads production src/ modules'),
     reason('build', file, 'src-prod', 'production source is compiled by the build'),
   ];
-  if (file.startsWith('src/platforms/')) {
-    selections.push(
-      reason(
-        'provider-integration',
-        file,
-        'platform-src',
-        'platform source shapes device/provider wire behavior',
-      ),
-      reason(
-        'coverage',
-        file,
-        'platform-src',
-        'Testing Matrix requires coverage for platform/device-response changes',
-      ),
-    );
-  }
-  return selections;
 };
 
 function isNodeIntegrationPath(file: string): boolean {
@@ -451,6 +437,15 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
   detail: string;
   owns: (file: string) => boolean;
 }> = [
+  {
+    check: 'ios-snapshot-differential',
+    rule: 'own:ios-snapshot-differential',
+    detail: 'the required macOS lane runs the Swift/TypeScript snapshot differential',
+    owns: (file) =>
+      file.startsWith('packages/capture-kit/src/ios-snapshot-engine/') ||
+      file.startsWith('apple/snapshot-presentation/') ||
+      file === 'contracts/fixtures/ios-snapshot-engine-conformance.json',
+  },
   // Both platform builds compile the same runner sources, and each is a separate
   // gate in a separate lane, so a Swift change owns both.
   {
@@ -480,6 +475,14 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     detail: 'Android helper packages have their own build',
     owns: (file) =>
       file.startsWith('android/snapshot-helper/') || file.startsWith('android/ime-helper/'),
+  },
+  {
+    check: 'unit',
+    rule: 'own:android-package-test-fixture',
+    detail: 'the Android package test fixture is consumed by the unit suite',
+    owns: (file) =>
+      file ===
+      'packages/platform-android/src/__tests__/test-utils/fixtures/android-helper-apk.fixture',
   },
   {
     check: 'macos-helper',

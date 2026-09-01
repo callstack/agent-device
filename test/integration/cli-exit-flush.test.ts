@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { runCmd } from '../../src/utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/command';
 import { PAYLOAD_MARKER } from './support/exit-payload.ts';
 
 const SUPPORT_DIR = path.join(import.meta.dirname, 'support');

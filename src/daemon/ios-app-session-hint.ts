@@ -1,6 +1,6 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { resolveSoleForegroundIosApp } from '../platform-runtime-open-target.ts';
-import { shellQuoteIfNeeded } from '../utils/shell-quote.ts';
+import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
 
 export { resolveSoleForegroundIosApp } from '../platform-runtime-open-target.ts';
 

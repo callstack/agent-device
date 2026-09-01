@@ -257,7 +257,7 @@ test('post-action observation MCP output schemas follow descriptor traits', () =
   }
 });
 
-test('post-action observation CLI output formatters follow descriptor traits', () => {
+test('post-action observation CLI output formatters follow descriptor traits', async () => {
   const formatters = listCommandFamilyCliOutputFormatters();
   for (const command of SETTLE_OBSERVATION_COMMANDS) {
     assert.ok(formatters[command], `${command}: missing CLI output formatter`);
@@ -266,7 +266,7 @@ test('post-action observation CLI output formatters follow descriptor traits', (
   for (const [command, format] of Object.entries(formatters)) {
     let text: string;
     try {
-      text = String(format({ input: {}, result: settledResult }).text ?? '');
+      text = String((await format({ input: {}, result: settledResult })).text ?? '');
     } catch {
       // Formatters expecting a differently-shaped result (device lists) are
       // orthogonal to settle rendering — but a settle-capable formatter must

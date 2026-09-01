@@ -66,6 +66,9 @@ export type {
 } from '../client-gesture.ts';
 export type {
   CloudArtifactsOptions,
+  HumanControlHold,
+  HumanControlHoldOptions,
+  HumanControlHoldScope,
   Lease,
   LeaseAllocateOptions,
   LeaseOptions,

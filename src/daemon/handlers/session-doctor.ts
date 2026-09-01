@@ -2,13 +2,13 @@ import path from 'node:path';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { isIosFamily, publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { emitRequestProgress } from '../../request/progress.ts';
+import { emitRequestProgress } from '@agent-device/host-kit/request';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import {
   listLocalDeviceInventory,
   shouldPropagateDeviceInventoryProbeError,
 } from '../../request/device-inventory-context.ts';
-import { readVersion } from '../../utils/version.ts';
+import { readVersion } from '@agent-device/host-kit/version';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { appendAppChecks, type DoctorAppInventory } from './session-doctor-app.ts';
@@ -36,7 +36,7 @@ import type {
   HostDiagnostics,
   HostDiagnosticsContext,
 } from '@agent-device/contracts/host-diagnostics';
-import { resolveAndroidSerialAllowlist } from '../../utils/device-isolation.ts';
+import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import type { InstalledAppInfo } from '@agent-device/contracts/app-inventory-runtime';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import { appsRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';

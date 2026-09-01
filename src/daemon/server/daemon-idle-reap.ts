@@ -1,4 +1,4 @@
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
 import { isUncommittedRepairSession } from '../session-replay-transaction.ts';

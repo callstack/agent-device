@@ -1,5 +1,5 @@
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
-import { errorResponse } from './handlers/response.ts';
+import { errorResponse } from './response.ts';
 import { resolveBoundFocusRuntime } from './focus-runtime.ts';
 import { resolveScreenshotGenericExecution } from './screenshot-runtime.ts';
 import { resolveBoundScrollRuntime } from './scroll-runtime.ts';

@@ -1,11 +1,11 @@
-import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import {
+  normalizeError,
+  readErrorCandidateViews,
+  type ErrorCandidateView,
+  type NormalizedError,
+} from '@agent-device/kernel/errors';
 import { formatReplayDivergenceReport } from '@agent-device/contracts/divergence';
-import { formatErrorCandidateLines } from '../utils/error-candidates.ts';
 
-/**
- * Shared MCP error normalization + text rendering (executor and router
- * catches). Keeps the full error contract (code + hint) visible to agents.
- */
 export function normalizeToolError(error: unknown): NormalizedError {
   return normalizeError(error);
 }
@@ -17,15 +17,30 @@ export function formatToolErrorText(normalized: NormalizedError): string {
     lines.push(`Cause: ${code}${normalized.cause.message}`);
   }
   if (normalized.hint) lines.push(`Hint: ${normalized.hint}`);
-  // #1597: printed unconditionally, same as the CLI text path
-  // (src/utils/output.ts printHumanError) — an MCP-connected agent must see
-  // the candidate refs directly in the tool result text.
-  lines.push(...formatErrorCandidateLines(normalized.details));
+  lines.push(...formatErrorCandidateViews(readErrorCandidateViews(normalized.details)));
   if (normalized.supportedOn) lines.push(`Supported on: ${normalized.supportedOn}`);
-  // ADR 0012: the MCP text path must carry the same repair data as
-  // structuredContent — a text-only divergence loses the screen refs and
-  // suggestions the agent repairs from.
   const divergence = formatReplayDivergenceReport(normalized.details);
   if (divergence) lines.push(divergence);
   return lines.join('\n');
+}
+
+function formatErrorCandidateViews(views: ErrorCandidateView[]): string[] {
+  return views.flatMap((view) => {
+    if (view.kind === 'element-match') {
+      const remaining = view.matches - view.candidates.length;
+      return [
+        'Candidates:',
+        ...view.candidates.map(
+          (candidate) => `  ${pinCandidateLine(candidate, view.refsGeneration)}`,
+        ),
+        ...(remaining > 0 ? [`  +${remaining} more`] : []),
+      ];
+    }
+    return ['Devices:', ...view.devices.map((device) => `  ${device.id}  ${device.name}`)];
+  });
+}
+
+function pinCandidateLine(candidate: string, generation: number | undefined): string {
+  if (generation === undefined) return candidate;
+  return candidate.replace(/^@(e\d+)(?=\s|$)/, `@$1~s${generation}`);
 }

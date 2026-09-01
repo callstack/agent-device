@@ -5,7 +5,11 @@ import type {
 } from '../types.ts';
 import type { AgentDeviceDaemonTransportContext } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
-import { createRequestId, emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
+import {
+  createRequestId,
+  emitDiagnostic,
+  withDiagnosticTimer,
+} from '@agent-device/host-kit/diagnostics';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { prepareRemoteRequestArtifacts } from '../../remote/daemon-artifacts.ts';
 import {

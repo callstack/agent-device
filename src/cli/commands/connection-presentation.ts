@@ -1,7 +1,7 @@
 import { fingerprint, type RemoteConnectionState } from '../../remote/remote-connection-state.ts';
 import type { ConnectVerification } from '../connection/connect-provider-adapters.ts';
-import { connectionProviderLeaseKind } from '../connection/provider-policy.ts';
-import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
+import { connectionProviderCapabilities } from '../connection/provider-policy.ts';
+import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
 
 export type ConnectReadiness = ConnectVerification & {
   preparationMessage: string;
@@ -31,13 +31,22 @@ export function buildLeasePreparationNotice(
   verification?: ConnectVerification,
 ): LeasePreparationNotice | undefined {
   if (state.leaseId) return undefined;
-  const leaseKind = connectionProviderLeaseKind(state.leaseProvider);
+  const capabilities = connectionProviderCapabilities(state.leaseProvider);
+  const leaseKind = capabilities.leaseKind;
   if (leaseKind === 'proxy') {
     return {
       status: 'deferred',
       nextSteps: buildConnectWorkflow(state, verification).nextSteps,
       message:
         'No live device session has been created. Run devices to inspect inventory without allocating, then open when ready.',
+    };
+  }
+  if (capabilities.supportsDeferredAppSelection) {
+    return {
+      status: 'deferred',
+      nextSteps: buildConnectWorkflow(state, verification).nextSteps,
+      message:
+        'No live device session has been created. Run apps to inspect uploaded assets without allocating; open <uploaded-asset-name> creates the instance.',
     };
   }
   if (leaseKind === 'direct-device-provider') {
@@ -221,7 +230,8 @@ function buildUnscopedConnectWorkflow(
   state: RemoteConnectionState,
   verification?: ConnectVerification,
 ): Pick<ConnectReadiness, 'nextSteps' | 'notes'> {
-  const leaseKind = connectionProviderLeaseKind(state.leaseProvider);
+  const capabilities = connectionProviderCapabilities(state.leaseProvider);
+  const leaseKind = capabilities.leaseKind;
   if (leaseKind === 'proxy') {
     return {
       nextSteps: [
@@ -232,6 +242,11 @@ function buildUnscopedConnectWorkflow(
   }
   if (!verification && leaseKind === 'direct-device-provider') {
     return { nextSteps: defaultDirectProviderLifecycle() };
+  }
+  if (connectionProviderCapabilities(verification?.provider).supportsDeferredAppSelection) {
+    return {
+      nextSteps: ['agent-device apps', 'agent-device open <uploaded-asset-name>'],
+    };
   }
   const appMissing = verification?.app?.status === 'missing';
   return {
@@ -249,7 +264,7 @@ function requiresInstall(verification?: ConnectVerification): boolean {
 }
 
 function supportsProviderArtifacts(verification?: ConnectVerification): boolean {
-  return verification?.provider === 'browserstack' || verification?.provider === 'aws-device-farm';
+  return connectionProviderCapabilities(verification?.provider).supportsArtifacts;
 }
 
 function missingAttachedAppRecovery(verification?: ConnectVerification): string[] {
@@ -328,7 +343,10 @@ function appIdPlaceholder(platform: RemoteConnectionState['platform']): string {
 }
 
 function missingAppLabel(state: RemoteConnectionState): string {
-  if (state.leaseProvider === 'aws-device-farm') return 'not attached';
-  if (state.leaseProvider === 'limrun') return 'not installed yet';
+  const capabilities = connectionProviderCapabilities(state.leaseProvider);
+  if (capabilities.requiresAppAttachment) return 'not attached';
+  if (capabilities.supportsDeferredAppSelection) {
+    return 'not installed yet';
+  }
   return 'not available';
 }

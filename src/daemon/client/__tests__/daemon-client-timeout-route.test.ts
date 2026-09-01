@@ -1,10 +1,10 @@
 // Production-seam coverage for the real request-timeout route.
 //
-// src/utils/__tests__/daemon-client.test.ts covers `resolveRequestTimeoutHint`
+// src/daemon/client/__tests__/daemon-client.test.ts covers `resolveRequestTimeoutHint`
 // as a pure formatter, but a pure-formatter test cannot catch a bug in
 // CLEANUP ELIGIBILITY: whether `cleanupTimedOutIosRunnerBuilds` (the Apple
 // xcodebuild pkill sweep) actually runs. This file spies on the real
-// process-execution seam (`runCmdSync`, src/utils/exec.ts) and drives an
+// process-execution seam (`runCmdSync`, @agent-device/host-kit/command) and drives an
 // actual socket/HTTP timeout through `sendRequest` so the assertions exercise
 // the same code path a real client does.
 //
@@ -31,9 +31,10 @@ import { beforeEach, test, vi } from 'vitest';
 
 const { mockRunCmdSync } = vi.hoisted(() => ({ mockRunCmdSync: vi.fn() }));
 
-vi.mock('../../../utils/exec.ts', async () => {
-  const actual =
-    await vi.importActual<typeof import('../../../utils/exec.ts')>('../../../utils/exec.ts');
+vi.mock('@agent-device/host-kit/command', async () => {
+  const actual = await vi.importActual<typeof import('@agent-device/host-kit/command')>(
+    '@agent-device/host-kit/command',
+  );
   return { ...actual, runCmdSync: mockRunCmdSync };
 });
 

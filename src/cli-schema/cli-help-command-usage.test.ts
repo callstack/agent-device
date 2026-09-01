@@ -174,6 +174,17 @@ test('proxy command help describes tunnel usage', async () => {
   assert.doesNotMatch(help, /agent-device-proxy/);
 });
 
+test('takeover command help documents lease-bound foreground and host API flows', async () => {
+  const help = await usageForCommand('takeover');
+  if (help === null) throw new Error('Expected command help text');
+  assert.match(help, /Usage:\s+agent-device takeover/);
+  assert.match(help, /foreground command pauses state-changing agent commands/);
+  assert.match(help, /until Ctrl\+C/);
+  assert.match(help, /\/admin\/human-control\/holds/);
+  assert.match(help, /active remote lease device/);
+  assert.match(help, /do not survive daemon restart/);
+});
+
 test('connect command help lists lease id in usage and flags', async () => {
   const help = await usageForCommand('connect');
   if (help === null) throw new Error('Expected command help text');
@@ -428,22 +439,28 @@ test('replay --save-script help describes arming a repair transaction, not open/
   assert.doesNotMatch(help, /Arm evidence capture on open, publish the armed recording on close/);
 });
 
-test('open --save-script help keeps the shared open\\/close authoring description', async () => {
-  const help = await usageForCommand('open');
-  if (help === null) throw new Error('Expected open help text');
-  assert.match(
-    help,
-    /Arm evidence capture on open, publish the armed recording on close; close --save-script alone \(without an armed open\) is rejected/,
-  );
-  assert.doesNotMatch(help, /Arm a repair transaction from this replay/);
-});
+test(
+  String.raw`open --save-script help keeps the shared open\/close authoring description`,
+  async () => {
+    const help = await usageForCommand('open');
+    if (help === null) throw new Error('Expected open help text');
+    assert.match(
+      help,
+      /Arm evidence capture on open, publish the armed recording on close; close --save-script alone \(without an armed open\) is rejected/,
+    );
+    assert.doesNotMatch(help, /Arm a repair transaction from this replay/);
+  },
+);
 
-test('close --save-script help keeps the shared open\\/close authoring description', async () => {
-  const help = await usageForCommand('close');
-  if (help === null) throw new Error('Expected close help text');
-  assert.match(
-    help,
-    /Arm evidence capture on open, publish the armed recording on close; close --save-script alone \(without an armed open\) is rejected/,
-  );
-  assert.doesNotMatch(help, /Arm a repair transaction from this replay/);
-});
+test(
+  String.raw`close --save-script help keeps the shared open\/close authoring description`,
+  async () => {
+    const help = await usageForCommand('close');
+    if (help === null) throw new Error('Expected close help text');
+    assert.match(
+      help,
+      /Arm evidence capture on open, publish the armed recording on close; close --save-script alone \(without an armed open\) is rejected/,
+    );
+    assert.doesNotMatch(help, /Arm a repair transaction from this replay/);
+  },
+);

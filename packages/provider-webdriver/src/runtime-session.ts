@@ -146,12 +146,25 @@ export class WebDriverSessionManager {
 
   async listCloudArtifacts(query: CloudArtifactsQuery): Promise<CloudArtifactsResult | undefined> {
     if (query.provider !== this.options.provider) return undefined;
-    const session = query.leaseId ? this.sessionsByLeaseId.get(query.leaseId) : undefined;
-    if (session) return await this.safeListArtifacts(session);
-    const providerSessionId =
-      query.providerSessionId ??
-      (query.leaseId ? this.releasedProviderSessionIdsByLeaseId.get(query.leaseId) : undefined);
+    const session = this.sessionsByLeaseId.get(query.leaseId ?? '');
+    if (session) return await this.listActiveCloudArtifacts(session, query.providerSessionId);
+    return await this.listReleasedCloudArtifacts(query);
+  }
+
+  private async listActiveCloudArtifacts(
+    session: WebDriverProviderSession,
+    providerSessionId: string | undefined,
+  ): Promise<CloudArtifactsResult | undefined> {
+    if (providerSessionId && providerSessionId !== session.providerSessionId) return undefined;
+    return await this.safeListArtifacts(session);
+  }
+
+  private async listReleasedCloudArtifacts(
+    query: CloudArtifactsQuery,
+  ): Promise<CloudArtifactsResult | undefined> {
+    const providerSessionId = this.releasedProviderSessionIdsByLeaseId.get(query.leaseId ?? '');
     if (!providerSessionId || !this.options.listArtifacts) return undefined;
+    if (query.providerSessionId && query.providerSessionId !== providerSessionId) return undefined;
     return await this.options.listArtifacts({
       provider: this.options.provider,
       providerSessionId,

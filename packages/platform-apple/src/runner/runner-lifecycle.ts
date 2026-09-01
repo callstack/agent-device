@@ -218,9 +218,9 @@ async function recoverBadCachedRunnerArtifact(params: {
       },
     });
     return recordPrepareResult(device, recovered);
-  } catch (retryErr) {
+  } catch (error) {
     await invalidateRunnerSessionBestEffort(rebuiltSession, 'prepare_rebuilt_runner_health_failed');
-    const wrapped = wrapPrepareHealthFailure(retryErr, rebuiltSession, reason);
+    const wrapped = wrapPrepareHealthFailure(error, rebuiltSession, reason);
     emitPrepareDiagnostic(device, {
       cache: rebuiltSession.xctestrunArtifact?.cache,
       artifact: rebuiltSession.xctestrunArtifact?.artifact,
@@ -290,12 +290,12 @@ export async function executeRunnerCommand(
       timeoutMs,
       signal,
     );
-  } catch (err) {
-    if (options.expectedRunnerSessionId !== undefined) throw err;
-    const appErr = asAppError(err, 'COMMAND_FAILED');
+  } catch (error) {
+    if (options.expectedRunnerSessionId !== undefined) throw error;
+    const appErr = asAppError(error, 'COMMAND_FAILED');
     if (session && !session.ready && isRequestCanceledError(appErr)) {
       await invalidateRunnerSessionBestEffort(session, 'runner_startup_request_canceled');
-      throw err;
+      throw error;
     }
     if (shouldRestartRunnerBeforeCommandSend(appErr) && session) {
       assertRunnerRequestActive(options.requestId);
@@ -332,7 +332,7 @@ export async function executeRunnerCommand(
         invalidateSession: invalidateRunnerSession,
       });
     }
-    throw err;
+    throw error;
   }
 }
 
@@ -359,6 +359,8 @@ async function restartSessionAndRunCommand(params: {
   const restartedSession = await ensureRunnerSession(device, {
     ...options,
     cleanStaleBundles: true,
+  }).catch((error: unknown) => {
+    throw markRunnerRestartError(error, params);
   });
   commitRunnerRecycle(recycleKey);
   try {
@@ -383,22 +385,54 @@ async function restartSessionAndRunCommand(params: {
       });
     }
     return recovered;
-  } catch (retryErr) {
-    const retryAppErr = asAppError(retryErr, 'COMMAND_FAILED');
+  } catch (error) {
+    const retryAppErr = asAppError(error, 'COMMAND_FAILED');
     if (isRetryableRunnerError(retryAppErr)) {
-      return await handleRunnerTransportErrorAfterCommandSend({
-        device,
-        session: restartedSession,
-        command,
-        transportError: retryAppErr,
-        options,
-        signal,
-        invalidationReason: 'transport_error_after_retry_command_send',
-        invalidateSession: invalidateRunnerSession,
-      });
+      try {
+        return await handleRunnerTransportErrorAfterCommandSend({
+          device,
+          session: restartedSession,
+          command,
+          transportError: retryAppErr,
+          options,
+          signal,
+          invalidationReason: 'transport_error_after_retry_command_send',
+          invalidateSession: invalidateRunnerSession,
+        });
+      } catch (error) {
+        throw markRunnerRestartError(error, params, restartedSession);
+      }
     }
-    throw retryErr;
+    throw markRunnerRestartError(error, params, restartedSession);
   }
+}
+
+function markRunnerRestartError(
+  error: unknown,
+  params: Pick<
+    Parameters<typeof restartSessionAndRunCommand>[0],
+    'session' | 'command' | 'options' | 'restartReason'
+  >,
+  restartedSession?: RunnerSession,
+): unknown {
+  if (!(error instanceof AppError)) return error;
+  return new AppError(
+    error.code,
+    error.message,
+    {
+      ...(error.details ?? {}),
+      runnerRestarted: true,
+      runnerRestartReason: params.restartReason,
+      runnerRestartCommand: params.command.command,
+      ...(params.command.commandId ? { runnerRestartCommandId: params.command.commandId } : {}),
+      runnerInvalidatedSessionId: params.session.sessionId,
+      ...(restartedSession ? { runnerRestartSessionId: restartedSession.sessionId } : {}),
+      ...(error.details?.logPath === undefined && params.options.logPath
+        ? { logPath: params.options.logPath }
+        : {}),
+    },
+    error.cause ?? error,
+  );
 }
 
 async function runPrepareHealthCheck(

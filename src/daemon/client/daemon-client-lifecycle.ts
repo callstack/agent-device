@@ -5,9 +5,15 @@ import path from 'node:path';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { readReplayDivergenceResume } from '@agent-device/contracts/divergence';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
-import { runCmdDetachedMonitored, type ExecDetachedExit } from '../../utils/exec.ts';
-import { readVersion } from '../../utils/version.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import {
+  runCmdDetachedMonitored,
+  type ExecDetachedExit,
+  shellQuoteIfNeeded,
+} from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { sleep } from '@agent-device/host-kit/retry';
+import { readVersion } from '@agent-device/host-kit/version';
+
 import { findUnrecoveredRepairCommitFailure } from '../session-store.ts';
 import {
   resolveDaemonPaths,
@@ -19,8 +25,7 @@ import {
 } from '../config.ts';
 import { resolveDaemonLaunchSpec, resolveLocalDaemonCodeSignature } from './daemon-launch-spec.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
-import { sleep } from '../../utils/timeouts.ts';
+
 import {
   cleanupFailedDaemonStartupMetadata,
   cleanupStaleDaemonLockIfSafe,
@@ -527,7 +532,7 @@ export function isActiveReplaySessionResponse(
  * emitted when a name is available, explicit state dir or not. Attached to
  * both a structured `hint` field (for `--json` consumers) and appended to
  * `message` — the only field the default text renderer surfaces
- * (`src/utils/success-text.ts`) — so the hint reaches a caller in either mode.
+ * (`@agent-device/kernel/success-text`) — so the hint reaches a caller in either mode.
  *
  * `data.session` is used verbatim, never reconstructed as `default`: an
  * EXPLICIT `--session <value>` is used as-is by `resolveEffectiveSessionName`,

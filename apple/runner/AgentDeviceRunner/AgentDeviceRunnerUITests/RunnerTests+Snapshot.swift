@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   private static let axSnapshotErrorCode = "IOS_AX_SNAPSHOT_FAILED"

@@ -24,7 +24,7 @@ import {
 } from '../../touch-reference-frame.ts';
 import { isPositiveFiniteRect, rectContains } from '@agent-device/kernel/rect';
 import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
-import { buildIosInteractiveSnapshotPresentation } from '../../../snapshot/snapshot-presentation/ios/index.ts';
+import { buildIosInteractiveSnapshotPresentation } from '@agent-device/capture-kit/ios-snapshot-engine';
 
 export const MAESTRO_OBSERVATION_POLL_MS = MAESTRO_RUNTIME_ADAPTER_POLICY.observationPollMs;
 export type DaemonMaestroRuntimeDependencies = {
@@ -43,12 +43,15 @@ export type MaestroSnapshotSource = {
   readonly requireStability: (generation: number) => void;
   readonly consumeStabilityFromVisualWait: (context: MaestroRuntimeReadContext) => void;
   readonly prime: (generation: number, snapshot: SnapshotState) => void;
-  readonly settlePending: (context: MaestroRuntimeReadContext) => Promise<void>;
+  readonly settlePending: (
+    context: MaestroRuntimeReadContext,
+  ) => Promise<StableMaestroSnapshot | undefined>;
 };
 
 export type StableMaestroSnapshot = {
   readonly snapshot: SnapshotState;
   readonly signature: string;
+  readonly settled: boolean;
 };
 
 type MaestroTargetResolutionMode = 'tap' | 'swipe' | 'observe';
@@ -237,12 +240,12 @@ export async function waitForTypedSnapshotStability(params: {
     );
     const snapshot = await captureRetriableMaestroSnapshot(params, deadline);
     const signature = maestroSnapshotSignature(snapshot);
-    if (signature === previousSignature) return { snapshot, signature };
+    if (signature === previousSignature) return { snapshot, signature, settled: true };
     previous = snapshot;
     previousSignature = signature;
 
     if (params.dependencies.now() >= deadline) {
-      return { snapshot: previous, signature: previousSignature };
+      return { snapshot: previous, signature: previousSignature, settled: false };
     }
   }
 }

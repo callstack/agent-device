@@ -46,7 +46,7 @@ test('repair fails when re-signing leaves the product unverifiable', async () =>
     XCTESTRUN_PATH,
   ).then(
     () => null,
-    (thrown: unknown) => thrown,
+    (error: unknown) => error,
   );
 
   assert.ok(error instanceof AppError);

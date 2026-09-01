@@ -57,6 +57,6 @@ export function createHarmonyScreenRecordingHost(): ScreenRecordingRuntimeHost['
 }
 
 async function hdc(device: DeviceInfo, args: string[], signal?: AbortSignal) {
-  const { runHarmonyHdc } = await import('./platforms/harmonyos/hdc.ts');
+  const { runHarmonyHdc } = await import('@agent-device/platform-harmonyos');
   return await runHarmonyHdc(device, args, { allowFailure: true, signal });
 }

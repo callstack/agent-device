@@ -1,7 +1,8 @@
 import fs from 'node:fs';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { shellQuote } from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { isAgentDeviceDaemonProcess, stopProcessForTakeover } from '../daemon-process.ts';
-import { shellQuote } from '../../utils/shell-quote.ts';
+
 import { resolveDaemonPaths, type DaemonPaths, type DaemonServerMode } from '../config.ts';
 
 export type DaemonInfo = {

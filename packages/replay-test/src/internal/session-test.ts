@@ -126,8 +126,8 @@ export async function runReplayTestSuite(
 
     const data = summarizeReplayTestResults(plan.total, results, Date.now() - suiteStartedAt);
     return { status: 'completed', data };
-  } catch (err) {
-    const appErr = asAppError(err);
+  } catch (error) {
+    const appErr = asAppError(error);
     return { status: 'failed', error: { code: appErr.code, message: appErr.message } };
   }
 }

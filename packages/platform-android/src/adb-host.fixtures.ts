@@ -1,4 +1,5 @@
 import { bindAndroidAdbHost, type AndroidAdbHost } from './adb-host.ts';
+import { createHash } from 'node:crypto';
 
 export type AndroidAdbHostStub = AndroidAdbHost & {
   diagnostics: Array<{ phase: string; level?: string }>;
@@ -21,6 +22,41 @@ export function bindAndroidAdbHostStub(
     return existing;
   };
   const host: AndroidAdbHostStub = {
+    environment: {},
+    files: {
+      access: async () => {
+        throw new Error('adb-host stub: access not stubbed');
+      },
+      ensureDirectory: async () => {
+        throw new Error('adb-host stub: ensureDirectory not stubbed');
+      },
+      isExecutable: async () => false,
+      makeTempDirectory: async () => {
+        throw new Error('adb-host stub: makeTempDirectory not stubbed');
+      },
+      readBytes: async () => {
+        throw new Error('adb-host stub: readBytes not stubbed');
+      },
+      readDirectory: async () => {
+        throw new Error('adb-host stub: readDirectory not stubbed');
+      },
+      readText: async () => {
+        throw new Error('adb-host stub: readText not stubbed');
+      },
+      remove: async () => {
+        throw new Error('adb-host stub: remove not stubbed');
+      },
+      sha256: (value) => createHash('sha256').update(value).digest('hex'),
+      stat: async () => {
+        throw new Error('adb-host stub: stat not stubbed');
+      },
+      writeAtomicText: async () => {
+        throw new Error('adb-host stub: writeAtomicText not stubbed');
+      },
+      writeBytes: async () => {
+        throw new Error('adb-host stub: writeBytes not stubbed');
+      },
+    },
     execSerialAdb: async () => {
       throw new Error('adb-host stub: execSerialAdb not stubbed');
     },

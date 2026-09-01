@@ -1,6 +1,6 @@
 import { resolveTargetDevice } from '../../core/dispatch-resolve.ts';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
-import type { DaemonRequest, SessionState } from '../types.ts';
+import type { DaemonRequest, SessionScope, SessionState } from '../types.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 import { SessionStore } from '../session-store.ts';
 
@@ -49,11 +49,12 @@ export function recordIfSession(
 export function buildSnapshotSession(params: {
   session: SessionState | undefined;
   sessionName: string;
+  sessionScope: SessionScope;
   device: SessionState['device'];
   snapshot: SessionState['snapshot'];
   appBundleId?: string;
 }): SessionState {
-  const { session, sessionName, device, snapshot, appBundleId } = params;
+  const { session, sessionName, sessionScope, device, snapshot, appBundleId } = params;
   if (session) {
     return {
       ...session,
@@ -64,6 +65,7 @@ export function buildSnapshotSession(params: {
   }
   return {
     name: sessionName,
+    sessionScope,
     device,
     createdAt: Date.now(),
     appBundleId,

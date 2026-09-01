@@ -7,8 +7,8 @@ import type {
 import type { ArtifactDescriptor, FileOutputRef } from '../../../io.ts';
 import type { CommandContext } from '../../../runtime-contract.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { successText } from '../../../utils/success-text.ts';
-import { requireIntInRange } from '../../../utils/validation.ts';
+import { successText } from '@agent-device/kernel/success-text';
+import { requireIntInRange } from '../../../core/validation.ts';
 import {
   recordingQualityInputToExportQuality,
   type RecordingExportQuality,
@@ -104,9 +104,7 @@ export const traceCommand: RuntimeCommand<
       })
     : undefined;
   try {
-    const backendOptions: BackendTraceOptions = {
-      ...(output?.path ? { outPath: output.path } : {}),
-    };
+    const backendOptions: BackendTraceOptions = output?.path ? { outPath: output.path } : {};
     const result = await method.call(
       runtime.backend,
       toBackendContext(runtime, options),

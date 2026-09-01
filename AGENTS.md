@@ -15,7 +15,7 @@ task procedures only when needed:
 | Adding or changing a CLI flag | `docs/agents/cli-flags.md` |
 | Opening or reviewing a PR | `docs/agents/pull-requests.md` |
 | Running against a real device | `docs/agents/device-verification.md` |
-| Issues, PRDs, and triage labels | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
+| Writing issues or PRDs, and triage labels | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
 | Web backend setup or diagnostics | `docs/agents/web-backend.md` |
 
 Versioned CLI help is the source of truth for command behavior. Start workflow planning with
@@ -61,9 +61,10 @@ Read the declaration rather than maintaining a prose copy:
 - common command input fields, and which surface may write an input key (model, operator, retired):
   `src/commands/common-input-fields.ts` and `src/commands/input-audience.ts`
 
-Shared selector parsing and matching belongs in `@agent-device/selectors`; request cancellation and
-progress in `src/request`; cross-layer contracts in `src/contracts`; CLI flags in
-`src/commands/cli-grammar`; cross-surface schema composition in `src/cli-schema`.
+Shared selector parsing and matching belongs in `@agent-device/selectors`; request cancellation
+and progress in `@agent-device/capture-kit` (`request-cancel`, `request-progress`); cross-layer
+contracts in `@agent-device/contracts`; CLI flags in `src/commands/cli-grammar`; cross-surface schema
+composition in `src/cli-schema`.
 
 The enforced registries are self-declaring. A failing completeness, parity, coverage, timeout,
 layering, or construction gate means the new cell or path is unclassified; do not suppress or
@@ -112,8 +113,10 @@ cross-language rules change through golden tables under `contracts/fixtures/`.
   regenerate baselines to accept unrelated findings.
 - The first Node process after a newly signed Apple runner launches may block during Gatekeeper
   verification. Warm it with a throwaway `node -e 0` before measuring.
-- `DEVICE_IN_USE` normally means another session still owns the device. Follow the error's targeted
-  `close --session` hint instead of debugging the daemon.
+- `DEVICE_IN_USE` has two flavors. "already in use by session X" is this daemon — follow its
+  `close --session` hint. "owned by session X in workspace Y" is another worktree's device
+  claim — non-retriable; run the error's `device status`/`device release --stale` recovery,
+  never PID hunting.
 - A changing timeout failure set that passes in isolation is host contention. Reproduce the same
   test on `origin/main` under the same load before treating it as a regression.
 
@@ -123,7 +126,7 @@ The OS-neutral Apple runner lives under `packages/platform-apple/src/runner/`. F
 retry policy, or command typing, start at `runner-contract.ts`; transport stays below session/client
 behavior, and xctestrun build/cache logic stays outside request execution.
 
-Diagnostics use `src/utils/diagnostics.ts`. Request diagnostics belong in the session request log;
+Diagnostics use `@agent-device/capture-kit/diagnostics`. Request diagnostics belong in the session request log;
 session artifact paths come from `src/daemon/session-store.ts`. App/device logs remain in `app.log`;
 Apple runner and xcodebuild output remains in `runner.log`.
 

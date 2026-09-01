@@ -75,8 +75,10 @@ Host-global exclusive ownership of one local device by an open session or a sess
 command.
 
 **Device-claim policy**:
-A command's declared relationship to local device ownership, including observation, acquisition,
-release, and exclusive mutation.
+A command's observation, ownership, or exclusive-mutation rule.
+
+**Human-control hold**:
+A device-scoped pause on agent mutations during human operation.
 
 ### Commands and routing
 

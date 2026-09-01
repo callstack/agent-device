@@ -1182,7 +1182,7 @@ test('stale-lease cleanup does not signal a recycled runner pid (start time mism
   );
   const { adapter, treeKills, xcodebuildCleanups } = makeRecordingCleanupAdapter();
 
-  await prepareRunnerLeaseForStartup(device.id, adapter);
+  await prepareRunnerLeaseForStartup(device, adapter);
 
   assert.deepEqual(treeKills, [
     { pid: undefined, signal: 'SIGTERM' },
@@ -1201,7 +1201,7 @@ test('stale-lease cleanup signals the runner pid when its start time still match
   );
   const { adapter, treeKills } = makeRecordingCleanupAdapter();
 
-  await prepareRunnerLeaseForStartup(device.id, adapter);
+  await prepareRunnerLeaseForStartup(device, adapter);
 
   assert.deepEqual(treeKills, [
     { pid: 55_555, signal: 'SIGTERM' },
@@ -1221,7 +1221,7 @@ test('stale-lease cleanup re-verifies the pid before the SIGKILL escalation', as
   );
   const { adapter, treeKills } = makeRecordingCleanupAdapter();
 
-  await prepareRunnerLeaseForStartup(device.id, adapter);
+  await prepareRunnerLeaseForStartup(device, adapter);
 
   assert.deepEqual(treeKills, [
     { pid: 55_555, signal: 'SIGTERM' },
@@ -1237,7 +1237,7 @@ test('stale-lease cleanup without a recorded start time trusts only runner-shape
     pid === 55_555 ? 'node /usr/local/bin/opencode run --model gpt-high' : null,
   );
   const foreign = makeRecordingCleanupAdapter();
-  await prepareRunnerLeaseForStartup(device.id, foreign.adapter);
+  await prepareRunnerLeaseForStartup(device, foreign.adapter);
   assert.deepEqual(foreign.treeKills, [
     { pid: undefined, signal: 'SIGTERM' },
     { pid: undefined, signal: 'SIGKILL' },
@@ -1250,7 +1250,7 @@ test('stale-lease cleanup without a recorded start time trusts only runner-shape
       : null,
   );
   const runner = makeRecordingCleanupAdapter();
-  await prepareRunnerLeaseForStartup(device.id, runner.adapter);
+  await prepareRunnerLeaseForStartup(device, runner.adapter);
   assert.deepEqual(runner.treeKills, [
     { pid: 55_555, signal: 'SIGTERM' },
     { pid: 55_555, signal: 'SIGKILL' },
@@ -1263,7 +1263,7 @@ test('stale-lease cleanup skips a dead runner pid entirely', async () => {
   mockIsProcessAlive.mockImplementation((pid) => pid !== 999_999_999 && pid !== 55_555);
   const { adapter, treeKills } = makeRecordingCleanupAdapter();
 
-  await prepareRunnerLeaseForStartup(device.id, adapter);
+  await prepareRunnerLeaseForStartup(device, adapter);
 
   assert.deepEqual(treeKills, [
     { pid: undefined, signal: 'SIGTERM' },

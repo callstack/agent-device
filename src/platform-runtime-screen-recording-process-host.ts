@@ -12,7 +12,7 @@ import {
   readProcessStartTime,
   signalPidsBestEffort,
   waitForProcessExit,
-} from './utils/host-process.ts';
+} from '@agent-device/host-kit/process';
 
 const STOP_TIMEOUT_MS = 5_000;
 const FORCE_STOP_TIMEOUT_MS = 2_000;

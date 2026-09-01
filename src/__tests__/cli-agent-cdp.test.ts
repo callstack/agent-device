@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 
-vi.mock('../utils/exec.ts', () => ({
+vi.mock('@agent-device/host-kit/command', () => ({
   runCmdStreaming: vi.fn(),
 }));
 
-import { runCmdStreaming } from '../utils/exec.ts';
+import { runCmdStreaming } from '@agent-device/host-kit/command';
 import {
   AGENT_CDP_PACKAGE,
   buildAgentCdpNpmExecArgs,

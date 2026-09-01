@@ -6,6 +6,17 @@ import { fileURLToPath } from 'node:url';
 const UNIT_TEST_CONDITION = 'AGENT_DEVICE_RUNNER_UNIT_TESTS';
 const SOURCE_DIR = path.join('apple', 'runner');
 const OUTPUT_DIR = path.join('dist', 'apple', 'runner');
+const SNAPSHOT_PRESENTATION_SOURCE_DIR = path.join('apple', 'snapshot-presentation');
+const SNAPSHOT_PRESENTATION_OUTPUT_DIR = path.join('dist', 'apple', 'snapshot-presentation');
+const SNAPSHOT_PRESENTATION_RUNNER_MANIFEST = 'Package.runner.swift';
+const SNAPSHOT_PRESENTATION_DEVELOPMENT_DIR_NAMES = new Set([
+  'Tests',
+  'SnapshotPresentationConformance',
+  '.build',
+  '.swiftpm',
+  'UnitTests',
+  'xcuserdata',
+]);
 // Packaged-runner locations from before the apple-runner/ -> apple/runner/ move. `dist` ships
 // wholesale, so a stale tree left by an older build/checkout would double-ship into the npm
 // package (and inflate the bundle-size diff, which packages the base then the PR into one dist).
@@ -44,7 +55,35 @@ function packageAppleRunnerSource(options = {}) {
   };
 
   processDirectory(sourceRoot, options.checkOnly ? undefined : outputRoot, '', summary);
+  packageSnapshotPresentationSource(root, options, summary);
   return summary;
+}
+
+function packageSnapshotPresentationSource(root, options, summary) {
+  const sourceRoot = path.join(root, SNAPSHOT_PRESENTATION_SOURCE_DIR);
+  if (!fs.existsSync(sourceRoot)) {
+    throw new Error(`Apple snapshot presentation source not found at ${sourceRoot}`);
+  }
+  const outputRoot = path.join(root, SNAPSHOT_PRESENTATION_OUTPUT_DIR);
+  const manifestSource = requireSnapshotPresentationManifest(sourceRoot);
+  processDirectory(sourceRoot, options.checkOnly ? undefined : outputRoot, '', summary, {
+    validateSwift: false,
+    skipDirectoryNames: SNAPSHOT_PRESENTATION_DEVELOPMENT_DIR_NAMES,
+    skipFilePaths: new Set(['Package.swift', SNAPSHOT_PRESENTATION_RUNNER_MANIFEST]),
+  });
+  copySnapshotPresentationManifest(manifestSource, outputRoot, summary, options.checkOnly);
+}
+
+function requireSnapshotPresentationManifest(sourceRoot) {
+  const manifestSource = path.join(sourceRoot, SNAPSHOT_PRESENTATION_RUNNER_MANIFEST);
+  if (fs.existsSync(manifestSource)) return manifestSource;
+  throw new Error(`Apple snapshot presentation runner manifest not found at ${manifestSource}`);
+}
+
+function copySnapshotPresentationManifest(manifestSource, outputRoot, summary, checkOnly) {
+  if (checkOnly) return;
+  fs.copyFileSync(manifestSource, path.join(outputRoot, 'Package.swift'));
+  summary.copiedFiles += 1;
 }
 
 function prepareOutput(root, outputRoot, checkOnly) {
@@ -52,6 +91,7 @@ function prepareOutput(root, outputRoot, checkOnly) {
     return;
   }
   fs.rmSync(outputRoot, { recursive: true, force: true });
+  fs.rmSync(path.join(root, SNAPSHOT_PRESENTATION_OUTPUT_DIR), { recursive: true, force: true });
   for (const legacyDir of LEGACY_OUTPUT_DIRS) {
     fs.rmSync(path.join(root, legacyDir), { recursive: true, force: true });
   }
@@ -101,49 +141,55 @@ function consumeSkippedConditionalLine(state, line) {
   }
 }
 
-function processDirectory(sourceDir, outputDir, relativeDir, summary) {
+function processDirectory(sourceDir, outputDir, relativeDir, summary, options = {}) {
   if (outputDir) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
   const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
 
   for (const entry of entries) {
-    processDirectoryEntry(entry, sourceDir, outputDir, relativeDir, summary);
+    processDirectoryEntry(entry, sourceDir, outputDir, relativeDir, summary, options);
   }
 }
 
-function processDirectoryEntry(entry, sourceDir, outputDir, relativeDir, summary) {
+function processDirectoryEntry(entry, sourceDir, outputDir, relativeDir, summary, options) {
   const relativePath = path.join(relativeDir, entry.name);
-  if (shouldSkipEntry(entry, relativePath)) {
+  if (shouldSkipEntry(entry, relativePath, options)) {
     return;
   }
 
-  processIncludedEntry(entry, sourceDir, outputDir, relativePath, summary);
+  processIncludedEntry(entry, sourceDir, outputDir, relativePath, summary, options);
 }
 
-function processIncludedEntry(entry, sourceDir, outputDir, relativePath, summary) {
+function processIncludedEntry(entry, sourceDir, outputDir, relativePath, summary, options) {
   const sourcePath = path.join(sourceDir, entry.name);
   const outputPath = outputDir ? path.join(outputDir, entry.name) : undefined;
   if (entry.isDirectory()) {
-    processDirectory(sourcePath, outputPath, relativePath, summary);
+    processDirectory(sourcePath, outputPath, relativePath, summary, options);
     return;
   }
   if (!entry.isFile()) {
     return;
   }
-  processFile(sourcePath, outputPath, relativePath, summary);
+  processFile(sourcePath, outputPath, relativePath, summary, options);
 }
 
-function processFile(sourcePath, outputPath, relativePath, summary) {
+function processFile(sourcePath, outputPath, relativePath, summary, options) {
   if (outputPath) {
-    copyFile(sourcePath, outputPath, relativePath, summary);
+    copyFile(sourcePath, outputPath, relativePath, summary, options);
     return;
   }
-  validateFile(sourcePath, relativePath, summary);
+  validateFile(sourcePath, relativePath, summary, options);
 }
 
-function copyFile(sourcePath, outputPath, relativePath, summary) {
+function copyFile(sourcePath, outputPath, relativePath, summary, options) {
   if (path.extname(sourcePath) !== '.swift') {
+    fs.copyFileSync(sourcePath, outputPath);
+    summary.copiedFiles += 1;
+    return;
+  }
+
+  if (options.validateSwift === false) {
     fs.copyFileSync(sourcePath, outputPath);
     summary.copiedFiles += 1;
     return;
@@ -154,8 +200,11 @@ function copyFile(sourcePath, outputPath, relativePath, summary) {
   summary.copiedFiles += 1;
 }
 
-function validateFile(sourcePath, relativePath, summary) {
+function validateFile(sourcePath, relativePath, summary, options) {
   if (path.extname(sourcePath) !== '.swift') {
+    return undefined;
+  }
+  if (options.validateSwift === false) {
     return undefined;
   }
   return validateSwiftFile(sourcePath, relativePath, summary);
@@ -186,16 +235,21 @@ function assertNoShippedTestMethods(strippedContents, relativePath) {
   }
 }
 
-function shouldSkipEntry(entry, relativePath) {
-  return shouldSkipDirectory(entry) || shouldSkipFile(entry, relativePath);
+function shouldSkipEntry(entry, relativePath, options) {
+  return shouldSkipDirectory(entry, options) || shouldSkipFile(entry, relativePath, options);
 }
 
-function shouldSkipDirectory(entry) {
-  return entry.isDirectory() && SKIPPED_DIR_NAMES.has(entry.name);
+function shouldSkipDirectory(entry, options) {
+  return entry.isDirectory() && (options.skipDirectoryNames ?? SKIPPED_DIR_NAMES).has(entry.name);
 }
 
-function shouldSkipFile(entry, relativePath) {
-  return entry.isFile() && (isXcodeUserStateFile(entry) || isSkippedRootFile(entry, relativePath));
+function shouldSkipFile(entry, relativePath, options) {
+  return (
+    entry.isFile() &&
+    (isXcodeUserStateFile(entry) ||
+      isSkippedRootFile(entry, relativePath) ||
+      options.skipFilePaths?.has(relativePath) === true)
+  );
 }
 
 function isXcodeUserStateFile(entry) {

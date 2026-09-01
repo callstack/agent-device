@@ -2,7 +2,7 @@ import type { DaemonRequest } from './types.ts';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
-import { stripUndefined } from '../utils/parsing.ts';
+import { stripUndefined } from '@agent-device/kernel/record';
 import {
   DEFAULT_PROXY_LEASE_TTL_MS,
   findMissingProxyLeaseFields,

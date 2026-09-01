@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 private struct SnapshotPresentationConformanceFixture: Decodable {
@@ -107,7 +108,7 @@ extension RunnerTests {
       let presented: [PresentedNode]
       if testCase.projection == "raw" {
         presented = try XCTUnwrap(
-          SnapshotPresentation.presentRaw(acquisition, options: options).payload.nodes,
+          SnapshotPresentation.presentRaw(acquisition, options: options).nodes,
           testCase.name
         )
       } else {
@@ -116,7 +117,7 @@ extension RunnerTests {
             acquisition,
             options: options,
             policy: .cursorProjected
-          ).payload.nodes,
+          ).nodes,
           testCase.name
         )
       }

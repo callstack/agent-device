@@ -20,12 +20,12 @@ test('commands topic includes concise command catalog entries', async () => {
   );
   assert.doesNotMatch(usageText, /prepare ios-runner --platform ios\|macos/);
   assert.doesNotMatch(usageText, /metro prepare --public-base-url <url>/);
-  assert.doesNotMatch(usageText, /^  network dump/m);
+  assert.doesNotMatch(usageText, /^ {2}network dump/m);
   assert.doesNotMatch(usageText, /trigger-app-event <event> \[payloadJson\]/);
-  assert.doesNotMatch(usageText, /^  pan <x> <y> <dx> <dy> \[durationMs\]/m);
-  assert.doesNotMatch(usageText, /^  fling <up\|down\|left\|right>/m);
-  assert.doesNotMatch(usageText, /^  pinch <scale> \[x\] \[y\]/m);
-  assert.doesNotMatch(usageText, /^  rotate-gesture <degrees>/m);
+  assert.doesNotMatch(usageText, /^ {2}pan <x> <y> <dx> <dy> \[durationMs\]/m);
+  assert.doesNotMatch(usageText, /^ {2}fling <up\|down\|left\|right>/m);
+  assert.doesNotMatch(usageText, /^ {2}pinch <scale> \[x\] \[y\]/m);
+  assert.doesNotMatch(usageText, /^ {2}rotate-gesture <degrees>/m);
   assert.match(usageText, /orientation <orientation>/);
   assert.match(usageText, /record start \[path\] \| record stop/);
   assert.match(usageText, /trace start <path> \| trace stop <path>/);
@@ -165,6 +165,14 @@ test('usageForCommand resolves Maestro compatibility help topic', async () => {
   assert.match(help, /not a security sandbox/);
   assert.match(help, /0015-direct-maestro-engine\.md/);
   assert.doesNotMatch(help, /issues\/558/);
+});
+
+test('remote help documents lease-bound takeover and distinct host administration', async () => {
+  const help = await usageForCommand('remote');
+  if (help === null) throw new Error('Expected remote help text');
+  assert.match(help, /agent-device takeover --session remote-session/);
+  assert.match(help, /authenticated GET\/PUT\/DELETE requests/);
+  assert.match(help, /not forwarded by agent-device proxy/);
 });
 
 test('usageForCommand resolves workflow help topic', async () => {
@@ -438,7 +446,8 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /It does not create an instance/);
   assert.match(help, /Read the printed Device, App, Next, and workflow-note lines/);
   assert.match(help, /verification\/device\/app\/liveSession\/nextSteps\/notes/);
-  assert.match(help, /Do not run devices or apps as a pre-open catalog probe/);
+  assert.match(help, /Do not run devices as a pre-open catalog probe/);
+  assert.match(help, /Limrun is the exception for apps/);
   assert.match(help, /AWS Device Farm cannot install after allocation/);
   assert.match(help, /agent-device open com\.example\.app --remote-config \.\/remote-config\.json/);
   assert.match(help, /disconnect --remote-config \.\/remote-config\.json/);
@@ -464,6 +473,9 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /Multiple agents can share one proxy/);
   assert.match(help, /disconnect releases local connection state/);
   assert.match(help, /A busy direct-proxy device error means another agent owns the device/);
+  assert.match(help, /AGENT_DEVICE_HTTP_AUTH_HOOK configured treats HTTP requests as remote/);
+  assert.match(help, /host-path install sources are rejected/);
+  assert.match(help, /uploaded artifacts remain supported/);
   assert.match(help, /Limrun, BrowserStack, and AWS Device Farm through local provider profiles/);
   assert.match(help, /Limrun uses LIMRUN_API_KEY/);
   assert.match(help, /BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY/);
@@ -500,7 +512,11 @@ test('usageForCommand resolves physical-device help topic', async () => {
     help,
     /a stale iOS runner lease — its owner process dead, or its AGENT_DEVICE_STATE_DIR deleted — is reclaimed automatically/i,
   );
-  assert.match(help, /genuinely live owner whose state dir still exists still rejects/);
+  assert.match(
+    help,
+    /A live owner's runner is also reclaimed when the requesting daemon holds the host-global device claim/,
+  );
+  assert.match(help, /owners outside claim arbitration/);
 });
 
 test('usageForCommand resolves ios-system-ui help topic', async () => {
@@ -688,19 +704,19 @@ test('commands topic includes swipe and press series options', async () => {
 test('commands topic renders concise commands inline with descriptions', async () => {
   const help = await usageForCommand('commands');
   if (help === null) throw new Error('Expected commands help text');
-  assert.match(help, /Commands:[\s\S]*\n  boot\s{2,}Boot target device\/simulator/);
-  assert.match(help, /Commands:[\s\S]*\n  shutdown\s{2,}Shutdown target simulator\/emulator/);
-  assert.match(help, /  prepare\s{2,}Pre-warm platform helpers/);
-  assert.match(help, /  metro\s{2,}Prepare the dev server or reload apps/);
-  assert.match(help, /  perf\s{2,}Check frames, memory, or native profiles/);
-  assert.match(help, /  cdp\s{2,}Inspect CDP targets, JS heap, and leaks/);
-  assert.match(help, /  react-devtools\s{2,}Inspect components, hooks, and render profiles/);
-  assert.match(help, /  proxy\s{2,}Expose a local daemon through an HTTP tunnel/);
-  assert.match(help, /  batch --steps <json> \| --steps-file <path>\s{2,}Run multiple commands/);
-  assert.match(help, /  test <path-or-glob>\.\.\.\s{2,}Run replay test suites/);
-  assert.match(help, /  screenshot \[path\]\s{2,}Capture a screenshot/);
-  assert.match(help, /  session\s{2,}List sessions, show the state dir, or publish a script/);
-  assert.doesNotMatch(help, /  metro prepare[^\n]*--project-root/);
-  assert.doesNotMatch(help, /\n  batch\s{2,}Run multiple commands/);
+  assert.match(help, /Commands:[\s\S]*\n {2}boot\s{2,}Boot target device\/simulator/);
+  assert.match(help, /Commands:[\s\S]*\n {2}shutdown\s{2,}Shutdown target simulator\/emulator/);
+  assert.match(help, / {2}prepare\s{2,}Pre-warm platform helpers/);
+  assert.match(help, / {2}metro\s{2,}Prepare the dev server or reload apps/);
+  assert.match(help, / {2}perf\s{2,}Check frames, memory, or native profiles/);
+  assert.match(help, / {2}cdp\s{2,}Inspect CDP targets, JS heap, and leaks/);
+  assert.match(help, / {2}react-devtools\s{2,}Inspect components, hooks, and render profiles/);
+  assert.match(help, / {2}proxy\s{2,}Expose a local daemon through an HTTP tunnel/);
+  assert.match(help, / {2}batch --steps <json> \| --steps-file <path>\s{2,}Run multiple commands/);
+  assert.match(help, / {2}test <path-or-glob>\.\.\.\s{2,}Run replay test suites/);
+  assert.match(help, / {2}screenshot \[path\]\s{2,}Capture a screenshot/);
+  assert.match(help, / {2}session\s{2,}List sessions, show the state dir, or publish a script/);
+  assert.doesNotMatch(help, / {2}metro prepare[^\n]*--project-root/);
+  assert.doesNotMatch(help, /\n {2}batch\s{2,}Run multiple commands/);
   assert.doesNotMatch(help, /agent-device-proxy/);
 });

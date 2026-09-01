@@ -10,7 +10,7 @@ import type { XmlNode } from '@agent-device/xml';
  * enters through this object: process execution, diagnostics, retry, process
  * probes, locks, Apple foreground tooling, and physical-device control. The
  * package never imports root implementation files; the composition root
- * (`src/platforms/apple/core/runner-client.ts`) constructs the client with the
+ * (`packages/platform-apple/src/core/runner-client.ts`) constructs the client with the
  * real implementations exactly once per process.
  *
  * Signatures mirror the root utilities structurally, narrowed to what the
@@ -136,7 +136,7 @@ export type IosPhysicalDeviceRunnerControl = {
 };
 
 export type AppleRunnerHost = {
-  // Process execution (src/utils/exec.ts)
+  // Process execution (@agent-device/host-kit/command)
   runCmdStreaming(cmd: string, args: string[], options?: ExecStreamOptions): Promise<ExecResult>;
   runCmdSync(cmd: string, args: string[], options?: ExecOptions): ExecResult;
   runCmdBackground(
@@ -149,14 +149,14 @@ export type AppleRunnerHost = {
     message: string,
     extra?: Record<string, unknown> | ((result: ExecResult) => Record<string, unknown>),
   ): ExecResult;
-  // Diagnostics (src/utils/diagnostics.ts)
+  // Diagnostics (@agent-device/host-kit/diagnostics)
   emitDiagnostic(event: DiagnosticEventInput): void;
   withDiagnosticTimer<T>(
     phase: string,
     fn: () => Promise<T> | T,
     data?: Record<string, unknown>,
   ): Promise<T>;
-  // Retry (src/utils/retry.ts)
+  // Retry (@agent-device/host-kit/retry)
   retryWithPolicy<T>(
     fn: (context: RetryAttemptContext) => Promise<T>,
     policy?: RetryPolicy,
@@ -164,17 +164,17 @@ export type AppleRunnerHost = {
   ): Promise<T>;
   isEnvTruthy(value: string | undefined): boolean;
   deadlineFromTimeoutMs(timeoutMs: number, nowMs?: number): Deadline;
-  // Host process probes and signals (src/utils/host-process.ts)
+  // Host process probes and signals (@agent-device/host-kit/process)
   isProcessAlive(pid: number): boolean;
   isProcessGroupAlive(pid: number): boolean;
   readProcessStartTime(pid: number): string | null;
   readProcessCommand(pid: number): string | null;
   signalPidsBestEffort(pidsToSignal: readonly number[], signal: NodeJS.Signals): number;
   signalProcessGroupBestEffort(pid: number, signal: NodeJS.Signals): boolean;
-  // Project identity (src/utils/version.ts)
+  // Project identity (@agent-device/host-kit/version)
   findProjectRoot(): string;
   readVersion(root?: string): string;
-  // Locks (src/utils/process-lock.ts, src/utils/keyed-lock.ts)
+  // Locks (@agent-device/host-kit/file, @agent-device/kernel/keyed-lock)
   acquireProcessLock(params: {
     lockDirPath: string;
     owner: ProcessLockOwner;
@@ -188,30 +188,30 @@ export type AppleRunnerHost = {
     key: string,
     task: () => Promise<T>,
   ): Promise<T>;
-  // Atomic publish (src/utils/atomic-file.ts)
+  // Atomic publish (@agent-device/host-kit/file)
   publishFileSync(options: {
     destination: string;
     contents: string;
     mode?: number;
     publish?: 'replace' | 'link-exclusive';
   }): void;
-  // Owner liveness (src/utils/owner-identity.ts)
+  // Owner liveness (@agent-device/host-kit/process)
   classifyOwnerLiveness(params: {
     owner: { pid: number; startTime: string | null };
     stateDir?: string;
   }): OwnerLiveness;
-  // Memoization (src/utils/ttl-memo.ts)
+  // Memoization (@agent-device/kernel/ttl-memo)
   createTtlMemo<Key, Value>(options?: TtlMemoOptions): TtlMemo<Key, Value>;
-  // Parsing helpers (src/utils/source-value.ts, src/utils/parsing.ts)
+  // Parsing helpers (@agent-device/kernel/source-value, @agent-device/kernel/record)
   parseBooleanLiteral(value: string): boolean | undefined;
   isRecord(value: unknown): value is Record<string, unknown>;
-  // Simulator device-set isolation (src/utils/device-isolation.ts)
+  // Simulator device-set isolation (@agent-device/kernel/device-isolation)
   resolveIosSimulatorDeviceSetPath(flagValue: string | undefined): string | undefined;
-  // Request progress and cancellation (src/request/progress.ts, src/request/cancel.ts)
+  // Request progress and cancellation (@agent-device/host-kit/request)
   emitRequestProgress(event: RequestProgressEvent): void;
   getRequestSignal(requestId: string | undefined): AbortSignal | undefined;
   isRequestCanceled(requestId: string | undefined): boolean;
-  // Boot-failure classification (src/platforms/boot-diagnostics.ts)
+  // Boot-failure classification (@agent-device/provision-kit/boot-diagnostics)
   classifyBootFailure(input: {
     error?: unknown;
     message?: string;
@@ -220,21 +220,26 @@ export type AppleRunnerHost = {
     context?: { platform?: 'ios' | 'android'; phase?: 'boot' | 'connect' | 'transport' };
   }): BootFailureReason;
   bootFailureHint(reason: BootFailureReason): string;
-  // Apple foreground tooling (src/platforms/apple/core/tool-provider.ts)
+  // Apple foreground tooling (packages/platform-apple/src/core/tool-provider.ts)
   runAppleToolCommand(cmd: string, args: string[], options?: ExecOptions): Promise<ExecResult>;
   runXcrun(args: string[], options?: ExecOptions): Promise<ExecResult>;
   readApplePlistJson(
     plistPath: string,
     signal?: AbortSignal,
   ): Promise<Record<string, unknown> | null>;
-  // simctl argument shaping (src/platforms/apple/core/simctl.ts)
+  // simctl argument shaping (packages/platform-apple/src/core/simctl.ts)
   buildSimctlArgsForDevice(device: DeviceInfo, args: string[]): string[];
-  // Physical-device control routing (src/platforms/apple/core/physical-device-control.ts)
+  // Physical-device control routing (packages/platform-apple/src/core/physical-device-control.ts)
   resolveIosPhysicalDeviceControl(device: DeviceInfo): IosPhysicalDeviceRunnerControl;
-  // XML plist traversal (src/platforms/apple/core/plist-xml.ts)
+  // XML plist traversal (packages/platform-apple/src/core/plist-xml.ts)
   visitXmlPlistEntries(nodes: XmlNode[], visitor: (key: string, valueNode: XmlNode) => void): void;
-  // Daemon-owned lease owner state directory (src/platforms/apple/core/runner-owner-state.ts)
+  // Daemon-owned lease owner state directory (packages/platform-apple/src/core/runner-owner-state.ts)
   leaseOwnerStateDir(): string | undefined;
+  // Daemon-owned device-claim arbitration probe (packages/platform-apple/src/core/runner-owner-state.ts):
+  // true only while the embedding process holds the host-global local device
+  // claim for exactly this device (matched by canonical family/OS/id, never a
+  // bare id). Embedders without a claim store answer false.
+  hasDeviceClaimAuthority(device: DeviceInfo): boolean;
 };
 
 let boundHost: AppleRunnerHost | undefined;
@@ -350,6 +355,8 @@ export const visitXmlPlistEntries: AppleRunnerHost['visitXmlPlistEntries'] = (no
   requireHost().visitXmlPlistEntries(nodes, visitor);
 export const leaseOwnerStateDir: AppleRunnerHost['leaseOwnerStateDir'] = () =>
   requireHost().leaseOwnerStateDir();
+export const hasDeviceClaimAuthority: AppleRunnerHost['hasDeviceClaimAuthority'] = (device) =>
+  requireHost().hasDeviceClaimAuthority(device);
 
 /**
  * Deadline keeps its root call-site shape (`Deadline.fromTimeoutMs(...)`);

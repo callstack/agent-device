@@ -22,35 +22,33 @@ interface ProductDraft {
 
 interface LabStateContextValue {
   activeCategory: ProductCategory;
+  addToCart: (productId: string, quantity?: number) => void;
   cartCount: number;
   cartCounts: Record<string, number>;
   catalogProducts: typeof LAB_PRODUCTS;
+  decreaseProductQuantity: (productId: string) => void;
   detailDrafts: Record<string, ProductDraft>;
   diagnosticsExpanded: boolean;
   diagnosticsLoading: boolean;
   diagnosticsState: 'idle' | 'ready' | 'error';
+  dismissNotice: () => void;
   favoriteIds: string[];
   form: CheckoutFormState;
   formErrors: string[];
+  increaseProductQuantity: (productId: string) => void;
   isOnline: boolean;
   isRefreshing: boolean;
   lastSyncLabel: string;
+  loadDiagnostics: () => void;
   noticeVisible: boolean;
   notificationsEnabled: boolean;
   reducedMotionEnabled: boolean;
-  searchDraft: string;
-  submittedSummary: string | null;
-  toastMessage: string | null;
-  addToCart: (productId: string, quantity?: number) => void;
-  decreaseProductQuantity: (productId: string) => void;
-  dismissNotice: () => void;
-  increaseProductQuantity: (productId: string) => void;
-  loadDiagnostics: () => void;
+  refreshMetrics: () => void;
   resetForm: () => void;
   resetLabState: () => void;
-  refreshMetrics: () => void;
   retryDiagnostics: () => void;
   saveProductToCart: (productId: string) => void;
+  searchDraft: string;
   setActiveCategory: (value: ProductCategory) => void;
   setDiagnosticsExpanded: (value: boolean) => void;
   setIsOnline: (value: boolean) => void;
@@ -59,6 +57,8 @@ interface LabStateContextValue {
   setReducedMotionEnabled: (value: boolean) => void;
   setSearchDraft: (value: string) => void;
   submitOrder: () => void;
+  submittedSummary: string | null;
+  toastMessage: string | null;
   toggleFavorite: (productId: string) => void;
   updateForm: <K extends keyof CheckoutFormState>(field: K, value: CheckoutFormState[K]) => void;
 }

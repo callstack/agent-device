@@ -16,7 +16,7 @@ import type {
 import { AppError } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { DaemonMaestroRuntimeDependencies } from './daemon-runtime-port-observation.ts';
-import { stripUndefined } from '../../../utils/parsing.ts';
+import { stripUndefined } from '@agent-device/kernel/record';
 import {
   projectMaestroPublicOperation,
   type MaestroPublicOperation,

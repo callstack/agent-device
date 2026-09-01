@@ -8,8 +8,9 @@ import {
   isProcessAlive,
   readHostProcessIdentityObservations,
   readProcessCommand,
-} from '../../../src/utils/host-process.ts';
-import { readOwnedProcessRecordFile } from '../../../src/utils/owned-process-record.ts';
+  readOwnedProcessRecordFile,
+} from '@agent-device/host-kit/process';
+
 import { AppError } from '@agent-device/kernel/errors';
 import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
 import {

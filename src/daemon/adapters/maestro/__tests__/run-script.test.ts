@@ -19,7 +19,9 @@ output.object = { ready: true }
   );
 
   try {
-    expect(executeRunScriptFile({ scriptPath, env: { SERVER_PATH: 'local' } })).toEqual({
+    expect(
+      executeRunScriptFile({ scriptPath, env: { SERVER_PATH: 'local' }, publicNetworkOnly: false }),
+    ).toEqual({
       'output.text': 'local',
       'output.number': '42',
       'output.boolean': 'false',
@@ -36,9 +38,11 @@ test('executeRunScriptFile rejects output keys that cannot become replay variabl
   fs.writeFileSync(scriptPath, `output['nested.value'] = 'ambiguous'`);
 
   try {
-    expect(() => executeRunScriptFile({ scriptPath, env: {} })).toThrowError(AppError);
+    expect(() =>
+      executeRunScriptFile({ scriptPath, env: {}, publicNetworkOnly: false }),
+    ).toThrowError(AppError);
     try {
-      executeRunScriptFile({ scriptPath, env: {} });
+      executeRunScriptFile({ scriptPath, env: {}, publicNetworkOnly: false });
     } catch (error) {
       expect(error).toBeInstanceOf(AppError);
       expect((error as AppError).code).toBe('INVALID_ARGS');
@@ -56,7 +60,7 @@ test('executeRunScriptFile keeps recovery guidance separate from its bounded err
   fs.writeFileSync(scriptPath, `output.result = json('').value`);
 
   try {
-    executeRunScriptFile({ scriptPath, env: {} });
+    executeRunScriptFile({ scriptPath, env: {}, publicNetworkOnly: false });
     throw new Error('expected runScript to fail');
   } catch (error) {
     expect(error).toBeInstanceOf(AppError);
@@ -88,9 +92,27 @@ output.result = [
   );
 
   try {
-    expect(executeRunScriptFile({ scriptPath, env: {} })).toEqual({
+    expect(executeRunScriptFile({ scriptPath, env: {}, publicNetworkOnly: false })).toEqual({
       'output.result': 'false:false:2',
     });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('executeRunScriptFile blocks non-public HTTP destinations for remote requests', () => {
+  const root = mkdtempForTestSync('agent-device-maestro-run-script-');
+  const scriptPath = path.join(root, 'setup.js');
+  fs.writeFileSync(scriptPath, `output.result = http.post('http://127.0.0.1:8080')`);
+
+  try {
+    expect(() =>
+      executeRunScriptFile({
+        scriptPath,
+        env: {},
+        publicNetworkOnly: true,
+      }),
+    ).toThrow(/non-public address/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

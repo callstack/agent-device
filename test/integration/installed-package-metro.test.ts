@@ -8,7 +8,7 @@ import path from 'node:path';
 import type { Duplex } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { closeLoopbackServer, listenOnLoopback } from '../../src/__tests__/test-utils/loopback.ts';
-import { runCmd, runCmdSync } from '../../src/utils/exec.ts';
+import { runCmd, runCmdSync } from '@agent-device/host-kit/command';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SUBPROCESS_TIMEOUT_MS = 120_000;

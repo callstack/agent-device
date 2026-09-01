@@ -63,7 +63,8 @@ const COVERED_TREE: RawSnapshotNode[] = [
 const PROMOTABLE_TREE: RawSnapshotNode[] = [
   {
     index: 0,
-    depth: 0,
+    depth: 1,
+    parentIndex: 2,
     type: 'XCUIElementTypeCell',
     label: 'Account row',
     rect: { x: 10, y: 20, width: 300, height: 60 },
@@ -71,12 +72,19 @@ const PROMOTABLE_TREE: RawSnapshotNode[] = [
   },
   {
     index: 1,
-    depth: 1,
+    depth: 2,
     parentIndex: 0,
     type: 'XCUIElementTypeStaticText',
     label: 'Account',
     rect: { x: 24, y: 32, width: 80, height: 20 },
     hittable: false,
+  },
+  {
+    index: 2,
+    depth: 0,
+    type: 'XCUIElementTypeApplication',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+    hittable: true,
   },
 ];
 

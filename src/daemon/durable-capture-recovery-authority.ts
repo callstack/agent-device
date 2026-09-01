@@ -83,12 +83,70 @@ export async function acquireDurableCaptureRecoveryAuthorityBeforeDeadline<
   }, params.deadlineMs);
   timer.unref?.();
   const acquisition = acquireRecoveryAuthority(params, scope);
+  type RaceWinner =
+    | Readonly<{ kind: 'acquisition' }>
+    | Readonly<{ kind: 'acquisition-error' }>
+    | Readonly<{ kind: 'deadline'; error: DurableCaptureRecoveryDeadlineError }>
+    | Readonly<{ kind: 'cancellation'; error: unknown }>;
+  let raceWinner: RaceWinner | undefined;
+  const acquisitionForRace = acquisition.then(
+    (authority) => {
+      raceWinner ??= { kind: 'acquisition' };
+      return authority;
+    },
+    (error: unknown) => {
+      raceWinner ??= { kind: 'acquisition-error' };
+      throw error;
+    },
+  );
+  const deadlineForRace = deadline.catch((error: DurableCaptureRecoveryDeadlineError) => {
+    raceWinner ??= { kind: 'deadline', error };
+    throw error;
+  });
+  const cancellationForRace = cancellation.catch((error: unknown) => {
+    raceWinner ??= { kind: 'cancellation', error };
+    throw error;
+  });
   try {
-    return await Promise.race([acquisition, deadline, cancellation]);
+    return await Promise.race([acquisitionForRace, deadlineForRace, cancellationForRace]);
   } finally {
     clearTimeout(timer);
     stopListeningForCancellation();
-    void acquisition.catch(() => {});
+    if (raceWinner?.kind === 'deadline' || raceWinner?.kind === 'cancellation') {
+      const primaryError = raceWinner.error;
+      void acquisition
+        .then(
+          (authority) => disposeLateRecoveryAuthority(params, authority, primaryError),
+          () => {},
+        )
+        .catch(() => {});
+    } else {
+      void acquisition.catch(() => {});
+    }
+  }
+}
+
+async function disposeLateRecoveryAuthority<K extends string, H extends LiveResourceHandle<C>, C>(
+  params: DurableCaptureRecoveryAuthorityParams<K, H, C>,
+  authority: DurableCaptureRecoveryAuthority<K, H, C>,
+  primaryError: unknown,
+): Promise<void> {
+  try {
+    if (authority.reattached.status === 'active') {
+      await disposeLateAuthority(
+        params,
+        authority.reattached.handle,
+        'late_handle_cleanup_failed',
+        primaryError,
+      );
+    }
+  } finally {
+    await disposeLateAuthority(
+      params,
+      authority.control,
+      'late_control_cleanup_failed',
+      primaryError,
+    );
   }
 }
 
@@ -105,11 +163,14 @@ async function acquireRecoveryAuthority<K extends string, H extends LiveResource
     scope.signal.throwIfAborted();
     return { control, reattached };
   } catch (error) {
-    if (reattached?.status === 'active') {
-      await disposeLateAuthority(params, reattached.handle, 'late_handle_cleanup_failed', error);
-    }
-    if (control) {
-      await disposeLateAuthority(params, control, 'late_control_cleanup_failed', error);
+    try {
+      if (reattached?.status === 'active') {
+        await disposeLateAuthority(params, reattached.handle, 'late_handle_cleanup_failed', error);
+      }
+    } finally {
+      if (control) {
+        await disposeLateAuthority(params, control, 'late_control_cleanup_failed', error);
+      }
     }
     throw error;
   }

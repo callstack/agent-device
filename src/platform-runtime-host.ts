@@ -11,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
-import { runCmd, whichCmd } from './utils/exec.ts';
+import { runCmd, whichCmd } from '@agent-device/host-kit/command';
 
 export function createDeviceInventoryHost(): DeviceInventoryHost {
   return Object.freeze({
@@ -44,7 +44,7 @@ export function createDeviceInventoryHost(): DeviceInventoryHost {
     homeDirectory: os.homedir(),
     observations: Object.freeze({
       deviceBooted: async (device: DeviceInfo) => {
-        const { markSimulatorBooted } = await import('./platforms/apple/core/simulator.ts');
+        const { markSimulatorBooted } = await import('@agent-device/platform-apple/simulator');
         markSimulatorBooted(device);
       },
     }),

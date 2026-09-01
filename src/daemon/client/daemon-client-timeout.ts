@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmdSync } from '../../utils/exec.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+
 import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { resolveCommandTimeoutPolicy } from '../../core/command-descriptor/registry.ts';
@@ -21,8 +22,8 @@ import {
 
 const IOS_RUNNER_XCODEBUILD_KILL_PATTERNS = [
   'xcodebuild .*AgentDeviceRunnerUITests/RunnerTests/testCommand',
-  'xcodebuild .*AgentDeviceRunner\\.env\\.session-',
-  'xcodebuild build-for-testing .*apple/runner/AgentDeviceRunner/AgentDeviceRunner\\.xcodeproj',
+  String.raw`xcodebuild .*AgentDeviceRunner\.env\.session-`,
+  String.raw`xcodebuild build-for-testing .*apple/runner/AgentDeviceRunner/AgentDeviceRunner\.xcodeproj`,
 ];
 
 // `--platform` selectors that AFFIRMATIVELY name (or alias) an Apple device.

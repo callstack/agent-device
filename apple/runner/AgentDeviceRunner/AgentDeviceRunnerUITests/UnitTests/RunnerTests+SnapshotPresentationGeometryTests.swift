@@ -1,5 +1,6 @@
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   func testEffectiveGeometryIntersectsViewportAndAncestorClip() {

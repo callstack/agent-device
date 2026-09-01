@@ -13,7 +13,7 @@ import {
   type PlatformSelector,
 } from '@agent-device/kernel/device';
 import { buildSessionRecoveryHint, describeSessionDevice } from './session-recovery-hints.ts';
-import { shellQuoteIfNeeded } from '../utils/shell-quote.ts';
+import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
 import { hasLockableDeviceSelector, hasSelectorValue } from './device-selector-intent.ts';
 import { canOverrideLockPolicySelector } from './daemon-command-registry.ts';
 
@@ -115,8 +115,8 @@ function buildLockPolicyConflictMessage(
   const conflictList = conflicts.map(formatSessionSelectorConflict).join(', ');
   if (existingRef) {
     return (
-      `${req.command} is already bound to session "${existingRef.address}" on ${describeSessionDevice(existingRef.session)}, ` +
-      `but this request selected ${conflictList}.`
+      `Session "${existingRef.address}" is already bound to ${describeSessionDevice(existingRef.session)}, ` +
+      `but ${req.command} selected ${conflictList}.`
     );
   }
   const lockPlatform = req.meta?.lockPlatform;

@@ -4,7 +4,7 @@ import { SETTINGS_USAGE_OVERRIDE } from '@agent-device/contracts/settings';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { readLocationCoordinate } from '../../utils/location-coordinates.ts';
+import { readLocationCoordinate } from '@agent-device/kernel/location-coordinates';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { enumField, numberField, requiredField, stringField } from '../command-input.ts';
 import {

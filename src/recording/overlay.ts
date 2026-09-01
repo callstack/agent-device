@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runCmd } from '../utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { buildSwiftToolEnv, compileSwiftSourceFile } from '../utils/swift-cache.ts';
-import { findProjectRoot } from '../utils/version.ts';
-import { waitForPlayableVideo, waitForStableFile } from '../utils/video.ts';
+import { buildSwiftToolEnv, compileSwiftSourceFile } from './swift-cache.ts';
+import { findProjectRoot } from '@agent-device/host-kit/version';
+import { waitForPlayableVideo, waitForStableFile } from './video.ts';
 import {
   DEFAULT_RECORDING_EXPORT_QUALITY,
   type RecordingExportQuality,

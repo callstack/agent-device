@@ -1,5 +1,4 @@
-import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
-import type { AndroidSnapshotHelperArtifact } from '../../platforms/android/snapshot-helper-types.ts';
+import type { AndroidSnapshotHelperArtifact } from '@agent-device/platform-android/mechanics';
 import { fileURLToPath } from 'node:url';
 
 const SNAPSHOT_HELPER_PACKAGE = 'com.callstack.agentdevice.snapshothelper';
@@ -27,33 +26,6 @@ export const ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT: AndroidSnapshotHelperArti
   },
 };
 
-export function createAndroidSnapshotHelperExecutor(options: {
-  readonly exec: AndroidAdbExecutor;
-  readonly captureXml: () => string | Promise<string>;
-}): AndroidAdbExecutor {
-  return async (args, execOptions) => {
-    if (isAndroidSnapshotHelperVersionProbe(args)) {
-      return {
-        exitCode: 0,
-        stdout: `package:${SNAPSHOT_HELPER_PACKAGE} versionCode:999999`,
-        stderr: '',
-      };
-    }
-    if (isAndroidSnapshotHelperCapture(args)) {
-      return {
-        exitCode: 0,
-        stdout: androidSnapshotHelperOutput(await options.captureXml()),
-        stderr: '',
-      };
-    }
-    return await options.exec(args, execOptions);
-  };
-}
-
-function isAndroidSnapshotHelperCapture(args: readonly string[]): boolean {
-  return args[0] === 'shell' && args[1] === 'am' && args[2] === 'instrument';
-}
-
 export function androidSnapshotHelperOutput(xml: string): string {
   return [
     'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
@@ -68,29 +40,4 @@ export function androidSnapshotHelperOutput(xml: string): string {
     'INSTRUMENTATION_RESULT: ok=true',
     'INSTRUMENTATION_CODE: 0',
   ].join('\n');
-}
-
-function isAndroidSnapshotHelperVersionProbe(args: readonly string[]): boolean {
-  return args.includes('--show-versioncode') && args.includes(SNAPSHOT_HELPER_PACKAGE);
-}
-
-/**
- * Script-shaped variant of {@link createAndroidSnapshotHelperExecutor} for
- * `withFakeAdb` scripts: answers the helper version probe and capture
- * invocations, and returns `undefined` for everything else so the caller's
- * script keeps handling ordinary adb args. Keeping probe detection and the
- * versionCode reply here means a helper-protocol change has one source of
- * truth.
- */
-export function androidSnapshotHelperScriptResponse(
-  args: readonly string[],
-  captureXml: () => string,
-): string | undefined {
-  if (isAndroidSnapshotHelperVersionProbe(args)) {
-    return `package:${SNAPSHOT_HELPER_PACKAGE} versionCode:999999`;
-  }
-  if (isAndroidSnapshotHelperCapture(args)) {
-    return androidSnapshotHelperOutput(captureXml());
-  }
-  return undefined;
 }

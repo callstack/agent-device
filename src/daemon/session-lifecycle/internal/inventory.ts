@@ -1,0 +1,492 @@
+import {
+  commandRuntimeUseRequirements,
+  listRuntimeFactCommands,
+} from '../../../core/command-descriptor/registry.ts';
+import { listDeviceInventory } from '../../../request/device-inventory-context.ts';
+import { assertResolvedAppsFilter } from '@agent-device/contracts/device';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
+import {
+  isApplePlatform,
+  isIosFamily,
+  isMacOs,
+  matchesPlatformSelector,
+  publicPlatformString,
+  resolveAppleSimulatorSetPathForSelector,
+  type DeviceInfo,
+  type PlatformSelector,
+} from '@agent-device/kernel/device';
+import {
+  resolveAndroidSerialAllowlist,
+  resolveIosSimulatorDeviceSetPath,
+} from '@agent-device/kernel/device-isolation';
+import {
+  deviceClaimOwnerCannotRelease,
+  inspectDeviceClaims,
+} from '../../device-claim-inspection.ts';
+import { canonicalLocalDeviceKey } from '../../device-claim-paths.ts';
+import { deviceClaimIdentity } from '../../device-claims.ts';
+import type { DaemonRequest, DaemonResponse, SessionRef } from '../../types.ts';
+import { resolveSessionRunnerLogPath, SessionStore } from '../../session-store.ts';
+import {
+  requireSessionOrExplicitSelector,
+  resolveCommandDevice,
+  selectorTargetsSessionDevice,
+} from '../../session-device-resolution.ts';
+import { resolveSessionScope, sessionMatchesInventoryScope } from '../../session-routing.ts';
+import type {
+  BoundDeviceRuntime,
+  RuntimeFacts,
+  RuntimeOperationFact,
+} from '@agent-device/contracts/platform-runtime';
+import {
+  type PlatformRuntimeOperations,
+  appsRuntimeUse,
+} from '@agent-device/contracts/platform-runtime-operations';
+import { ensureAppsRuntimeReady, listAppsFromRuntime } from '../../apps-runtime.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../request-runtime-binding.ts';
+import type { ProviderAppCatalog, ProviderAppCatalogQuery } from '@agent-device/contracts/device';
+import { resolveLeaseScope } from '../../lease-context.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
+
+export type SessionInventoryCommandInput = Readonly<{
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  bindDevice?: BindDeviceRuntime;
+  providerAppCatalog?: ProviderAppCatalog;
+}>;
+
+export async function handleSessionInventoryCommands(
+  params: SessionInventoryCommandInput,
+): Promise<DaemonResponse | null> {
+  const { req, sessionName, sessionStore } = params;
+  switch (req.command) {
+    case 'session_list':
+      return sessionListInventoryResponse(req, sessionStore);
+    case 'devices':
+      return await devicesInventoryResponse(req);
+    case 'capabilities':
+      return await capabilitiesInventoryResponse({
+        req,
+        sessionName,
+        sessionStore,
+        inspectFacts: params.inspectFacts,
+      });
+    case 'apps':
+      return await handleAppsInventory({
+        req,
+        sessionName,
+        sessionStore,
+        bindDevice: params.bindDevice,
+        inspectFacts: params.inspectFacts,
+        providerAppCatalog: params.providerAppCatalog,
+      });
+    default:
+      return null;
+  }
+}
+
+function sessionListInventoryResponse(
+  req: DaemonRequest,
+  sessionStore: SessionStore,
+): DaemonResponse {
+  const scope = resolveSessionScope(req);
+  return {
+    ok: true,
+    data: {
+      sessions: sessionStore
+        .listRefs()
+        .filter((ref) => sessionMatchesInventoryScope(ref.session, scope))
+        .map((ref) => publicSessionInfo(ref, sessionStore)),
+    },
+  };
+}
+
+function publicSessionInfo({ address, session }: SessionRef, sessionStore: SessionStore) {
+  const sessionStateDir = sessionStore.resolveSessionDir(address);
+  return {
+    name: session.name,
+    address,
+    sessionStateDir,
+    runnerLogPath: resolveSessionRunnerLogPath(sessionStateDir),
+    platform: publicPlatformString(session.device),
+    ...(isApplePlatform(session.device.platform) && session.device.appleOs
+      ? { appleOs: session.device.appleOs }
+      : {}),
+    target: session.device.target ?? 'mobile',
+    surface: session.surface ?? 'app',
+    device: session.device.name,
+    id: session.device.id,
+    device_id: session.device.id,
+    createdAt: session.createdAt,
+    ...(isApplePlatform(session.device.platform) &&
+      !isMacOs(session.device) && {
+        device_udid: session.device.id,
+        ios_simulator_device_set: session.device.simulatorSetPath ?? null,
+      }),
+  };
+}
+
+async function devicesInventoryResponse(req: DaemonRequest): Promise<DaemonResponse> {
+  try {
+    const blockingClaims = blockingClaimOwnersByDevice();
+    return {
+      ok: true,
+      data: {
+        devices: (await resolveInventoryDevices(req)).map((device) => ({
+          ...publicDeviceInfo(device),
+          ...claimedByProjection(device, blockingClaims),
+        })),
+      },
+    };
+  } catch (error) {
+    const appErr = asAppError(error);
+    return {
+      ok: false,
+      error: {
+        code: appErr.code,
+        message: appErr.message,
+        ...(appErr.details ? { details: appErr.details } : {}),
+      },
+    };
+  }
+}
+
+function blockingClaimOwnersByDevice(): Map<string, { session: string; workspace: string }> {
+  const owners = new Map<string, { session: string; workspace: string }>();
+  for (const entry of inspectDeviceClaims({})) {
+    const claim = entry.claim;
+    if (!claim || deviceClaimOwnerCannotRelease(entry.classification)) continue;
+    owners.set(claim.deviceKey, {
+      session: claim.session,
+      workspace: claim.workspace,
+    });
+  }
+  return owners;
+}
+
+function claimedByProjection(
+  device: DeviceInfo,
+  owners: Map<string, { session: string; workspace: string }>,
+): { claimedBy?: { session: string; workspace: string } } {
+  const owner = owners.get(canonicalLocalDeviceKey(deviceClaimIdentity(device)));
+  return owner ? { claimedBy: owner } : {};
+}
+
+async function resolveInventoryDevices(req: DaemonRequest): Promise<DeviceInfo[]> {
+  const requestedPlatform = req.flags?.platform;
+  const devices = await listDeviceInventory(inventoryDeviceQuery(req, requestedPlatform));
+  return filterInventoryDevices(devices, req.flags?.platform, req.flags?.target);
+}
+
+function inventoryDeviceQuery(req: DaemonRequest, platform: PlatformSelector | undefined) {
+  const flags = req.flags;
+  return {
+    platform,
+    target: flags?.target,
+    deviceName: flags?.device,
+    udid: flags?.udid,
+    serial: flags?.serial,
+    iosSimulatorSetPath: inventoryIosSimulatorSetPath(
+      flags?.iosSimulatorDeviceSet,
+      platform,
+      flags?.target,
+    ),
+    androidSerialAllowlist: inventoryAndroidSerialAllowlist(flags?.androidDeviceAllowlist),
+  };
+}
+
+function inventoryIosSimulatorSetPath(
+  configuredPath: string | undefined,
+  platform: PlatformSelector | undefined,
+  target: DeviceInfo['target'],
+) {
+  return resolveAppleSimulatorSetPathForSelector({
+    simulatorSetPath: resolveIosSimulatorDeviceSetPath(configuredPath),
+    platform,
+    target,
+  });
+}
+
+function inventoryAndroidSerialAllowlist(configuredAllowlist: string | undefined) {
+  const allowlist = resolveAndroidSerialAllowlist(configuredAllowlist);
+  return allowlist ? Array.from(allowlist).sort() : undefined;
+}
+
+function filterInventoryDevices(
+  devices: DeviceInfo[],
+  platform: PlatformSelector | undefined,
+  target: DeviceInfo['target'],
+): DeviceInfo[] {
+  const platformFiltered = platform
+    ? devices.filter((device) => matchesRequestedPlatform(device, platform))
+    : devices;
+  return target
+    ? platformFiltered.filter((device) => (device.target ?? 'mobile') === target)
+    : platformFiltered;
+}
+
+async function capabilitiesInventoryResponse(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+}): Promise<DaemonResponse> {
+  const resolution = await resolveInventoryCommandDevice({
+    ...params,
+    ensureReady: false,
+    androidAvdSelection: 'include-stopped',
+  });
+  if ('response' in resolution) return resolution.response;
+  const { device } = resolution;
+  const sessionOwnedAppStateAvailable = isSessionOwnedAppStateAvailable(
+    device,
+    params.sessionStore.get(params.sessionName),
+    params.req.flags,
+  );
+  const facts = await inspectCapabilityFacts(device, params.inspectFacts);
+  return {
+    ok: true,
+    data: {
+      device: publicDeviceInfo(device),
+      availableCommands: listRuntimeFactCommands().filter((command) => {
+        // A session that already owns an app identity answers appstate itself, so it stays
+        // available even when the sessionless runtime probe cannot see a foreground app.
+        if (command === 'appstate' && sessionOwnedAppStateAvailable) return true;
+        return factOwnedCapabilityAvailable(command, facts);
+      }),
+    },
+  };
+}
+
+function isSessionOwnedAppStateAvailable(
+  device: DeviceInfo,
+  session: ReturnType<SessionStore['get']>,
+  flags: DaemonRequest['flags'],
+): boolean {
+  if (!session) return false;
+  if (!isIosFamily(device) && !isMacOs(device)) return false;
+  if (!selectorTargetsSessionDevice(flags, session)) return false;
+  return hasSessionAppIdentity(session) || hasMacSessionSurface(device, session);
+}
+
+function hasSessionAppIdentity(session: NonNullable<ReturnType<SessionStore['get']>>): boolean {
+  return Boolean(session.appName || session.appBundleId);
+}
+
+function hasMacSessionSurface(
+  device: DeviceInfo,
+  session: NonNullable<ReturnType<SessionStore['get']>>,
+): boolean {
+  return Boolean(
+    isMacOs(device) &&
+    session.surface !== undefined &&
+    session.surface !== 'app' &&
+    session.surface !== 'frontmost-app',
+  );
+}
+
+function factOwnedCapabilityAvailable(
+  command: string,
+  facts: RuntimeFacts<PlatformRuntimeOperations> | undefined,
+): boolean {
+  const declaredUses = commandRuntimeUseRequirements(command);
+  if (!declaredUses) return false;
+  if (!facts) return false;
+  // A request names exactly one action, so one fully admitted use is enough. An empty `required`
+  // is not one: `[].every` is vacuously true, and a plan that needs no operation must not read as
+  // proof that the device can run the command.
+  return declaredUses.some(
+    (required) =>
+      required.length > 0 && required.every((operation) => hasAvailableFact(facts, operation)),
+  );
+}
+
+/**
+ * Descriptor execution metadata is structurally validated as string arrays, not as keys of the
+ * concrete facts catalog. Keep the projection fail-closed when a descriptor names an operation the
+ * inspected owner does not state, instead of letting an arbitrary property lookup throw out of the
+ * whole `capabilities` response.
+ */
+function hasAvailableFact(
+  facts: RuntimeFacts<PlatformRuntimeOperations>,
+  operation: string,
+): boolean {
+  if (!Object.hasOwn(facts.operations, operation)) return false;
+  return (
+    (facts.operations as Readonly<Record<string, RuntimeOperationFact>>)[operation]?.available ===
+    true
+  );
+}
+
+async function handleAppsInventory(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  bindDevice?: BindDeviceRuntime;
+  providerAppCatalog?: ProviderAppCatalog;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+}): Promise<DaemonResponse> {
+  const { req, sessionName, sessionStore, bindDevice, inspectFacts } = params;
+  const providerCatalogResponse = await resolveProviderAppCatalogResponse(
+    req,
+    params.providerAppCatalog,
+  );
+  if (providerCatalogResponse) return providerCatalogResponse;
+  const resolution = await resolveInventoryCommandDevice({
+    req,
+    sessionName,
+    sessionStore,
+    ensureReady: false,
+    androidAvdSelection: 'include-stopped',
+  });
+  if ('response' in resolution) return resolution.response;
+  const { device } = resolution;
+  const appsFilter = assertResolvedAppsFilter(req.flags?.appsFilter);
+
+  const resolvedAndroidSerialAllowlist = resolveAndroidSerialAllowlist(
+    req.flags?.androidDeviceAllowlist,
+  );
+  const runtimeResolution = await resolveAppsRuntime({ device, inspectFacts, bindDevice });
+  if ('response' in runtimeResolution) return runtimeResolution.response;
+  const runtime = runtimeResolution.runtime;
+  const readyDevice = await ensureAppsRuntimeReady(runtime, {
+    serial: req.flags?.serial,
+    androidSerialAllowlist: resolvedAndroidSerialAllowlist
+      ? [...resolvedAndroidSerialAllowlist].sort()
+      : undefined,
+  });
+  const apps = await listAppsFromRuntime(runtime, readyDevice, appsFilter);
+  return appsInventoryResponse(apps);
+}
+
+async function resolveProviderAppCatalogResponse(
+  req: DaemonRequest,
+  providerAppCatalog: ProviderAppCatalog | undefined,
+): Promise<DaemonResponse | undefined> {
+  const query = resolveProviderAppCatalogQuery(req);
+  if (!providerAppCatalog || !query || !providerAppCatalog.supports(query.provider))
+    return undefined;
+  const apps = await providerAppCatalog.list(query, getRequestSignal(req.meta?.requestId));
+  return { ok: true, data: { apps: [...apps] } };
+}
+
+function resolveProviderAppCatalogQuery(req: DaemonRequest): ProviderAppCatalogQuery | undefined {
+  const leaseScope = resolveLeaseScope(req);
+  if (leaseScope.leaseId) return undefined;
+  const provider = leaseScope.leaseProvider;
+  if (!provider) return undefined;
+  const platform = req.flags?.platform;
+  if (platform !== 'android' && platform !== 'ios') return undefined;
+  return {
+    provider,
+    platform,
+    ...(req.internal?.publicNetworkOnly ? { publicNetworkOnly: true } : {}),
+  };
+}
+
+async function inspectCapabilityFacts(
+  device: DeviceInfo,
+  inspectFacts: InspectDeviceRuntimeFacts | undefined,
+): Promise<RuntimeFacts<PlatformRuntimeOperations> | undefined> {
+  if (!inspectFacts) return undefined;
+  try {
+    return await inspectFacts(device);
+  } catch {
+    // Capability projection is advisory. A provider facts failure must fail closed rather than
+    // reconstructing support from the retired capability matrix.
+    return undefined;
+  }
+}
+
+async function resolveAppsRuntime(params: {
+  device: DeviceInfo;
+  inspectFacts: InspectDeviceRuntimeFacts | undefined;
+  bindDevice: BindDeviceRuntime | undefined;
+}): Promise<{ response: DaemonResponse } | { runtime: BoundDeviceRuntime<typeof appsRuntimeUse> }> {
+  if (!params.inspectFacts) {
+    throw new AppError('COMMAND_FAILED', 'Device runtime facts inspection is unavailable.', {
+      reason: 'runtime-gateway-missing',
+    });
+  }
+  const facts = await params.inspectFacts(params.device);
+  const unavailable = [facts.operations.ensureReady, facts.operations.listApps].find(
+    (fact) => !fact.available,
+  );
+  if (unavailable && !unavailable.available) {
+    return {
+      response: {
+        ok: false,
+        error: {
+          code: 'UNSUPPORTED_OPERATION',
+          message: 'apps is not supported on this device',
+          ...(unavailable.hint ? { hint: unavailable.hint } : {}),
+        },
+      },
+    };
+  }
+  if (!params.bindDevice) {
+    throw new AppError('COMMAND_FAILED', 'Device runtime binding is unavailable.', {
+      reason: 'runtime-gateway-missing',
+    });
+  }
+  return { runtime: await params.bindDevice(params.device, appsRuntimeUse) };
+}
+
+function appsInventoryResponse(apps: readonly { id: string; name: string }[]): DaemonResponse {
+  return {
+    ok: true,
+    data: {
+      apps: apps.map((app) =>
+        app.name && app.name !== app.id ? `${app.name} (${app.id})` : app.id,
+      ),
+    },
+  };
+}
+
+async function resolveInventoryCommandDevice(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  ensureReady: boolean;
+  androidAvdSelection?: 'running-only' | 'include-stopped';
+}): Promise<{ device: DeviceInfo } | { response: DaemonResponse }> {
+  const { req, sessionName, sessionStore, ensureReady, androidAvdSelection } = params;
+  const session = sessionStore.get(sessionName);
+  const flags = req.flags ?? {};
+  const response = requireSessionOrExplicitSelector(req.command, session, flags);
+  if (response) return { response };
+
+  return {
+    device: await resolveCommandDevice({
+      session,
+      flags,
+      ensureReady,
+      androidAvdSelection,
+    }),
+  };
+}
+
+function publicDeviceInfo({
+  simulatorSetPath: _simulatorSetPath,
+  iosPhysicalDeviceBackend: _iosPhysicalDeviceBackend,
+  appleOs,
+  ...device
+}: DeviceInfo): Record<string, unknown> {
+  return {
+    ...device,
+    platform: publicPlatformString({ platform: device.platform, appleOs }),
+    ...(isApplePlatform(device.platform) && appleOs ? { appleOs } : {}),
+  };
+}
+
+function matchesRequestedPlatform(
+  device: DeviceInfo,
+  requestedPlatform: PlatformSelector | undefined,
+): boolean {
+  return matchesPlatformSelector(device, requestedPlatform);
+}

@@ -2,7 +2,7 @@ import { beforeAll, test } from 'vitest';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runCmd } from '../../utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/command';
 import { getRecordingOverlaySupportWarning } from '../overlay.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

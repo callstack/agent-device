@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { walkFiles } from '../lib/walk-files.ts';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 
 /**
  * Test-file size ratchet (AGENTS.md "Scope & shape": past 1,000 lines is architecture debt,
@@ -34,30 +34,29 @@ const TRIPWIRE_LINES = 1_000;
 // Exact current lengths. Lower a pin when its file shrinks; never raise one — extract instead.
 const PINNED_TEST_FILE_LINES: Readonly<Record<string, number>> = Object.freeze({
   'src/__tests__/remote-connection.test.ts': 2973,
-  'src/daemon/handlers/__tests__/snapshot-handler.test.ts': 2242,
+  'src/daemon/handlers/__tests__/snapshot-handler.test.ts': 2138,
   'src/commands/interaction/runtime/settle.test.ts': 2359,
-  'src/daemon/handlers/__tests__/session-replay-runtime-maestro.test.ts': 1963,
+  'src/daemon/replay/internal/__tests__/session-replay-runtime-maestro.test.ts': 1963,
   'packages/platform-apple/src/runner/__tests__/runner-session.test.ts': 1957,
-  'src/utils/__tests__/daemon-client.test.ts': 1873,
-  'src/utils/__tests__/output.test.ts': 1861,
-  'src/platforms/android/__tests__/snapshot.test.ts': 1445,
-  'packages/platform-apple/src/runner/__tests__/runner-client.test.ts': 1577,
+  'src/daemon/client/__tests__/daemon-client.test.ts': 1873,
+  'packages/platform-android/src/__tests__/snapshot.test.ts': 1435,
+  'packages/platform-apple/src/runner/__tests__/runner-client.test.ts': 1441,
   'src/__tests__/client.test.ts': 1592,
   'test/integration/provider-scenarios/android-lifecycle.test.ts': 1556,
-  'src/utils/__tests__/daemon-client-lifecycle.test.ts': 1414,
-  'packages/platform-apple/src/runner/__tests__/runner-command-retry.test.ts': 1325,
-  'src/__tests__/cli-client-commands.test.ts': 1317,
+  'src/daemon/client/__tests__/daemon-client-lifecycle.test.ts': 1409,
+  'packages/platform-apple/src/runner/__tests__/runner-command-retry.test.ts': 1280,
+  'src/__tests__/cli-client-commands.test.ts': 1304,
   'src/__tests__/cli-config.test.ts': 1282,
   'src/daemon/handlers/__tests__/find.test.ts': 1199,
-  'src/platforms/apple/core/__tests__/perf.test.ts': 1222,
+  'packages/platform-apple/src/core/__tests__/perf.test.ts': 1222,
   'src/mcp/__tests__/command-tools.test.ts': 1216,
-  'src/daemon/handlers/__tests__/session-replay-divergence.test.ts': 1136,
-  'src/platforms/apple/core/__tests__/apps.test.ts': 1210,
-  'src/daemon/handlers/__tests__/session-replay-repair-transaction.test.ts': 1208,
-  'src/daemon/handlers/__tests__/session-replay-target-verification-runtime.test.ts': 1182,
+  'src/daemon/replay/internal/__tests__/session-replay-divergence.test.ts': 1100,
+  'packages/platform-apple/src/core/__tests__/apps.test.ts': 1146,
+  'src/daemon/replay/internal/__tests__/session-replay-repair-transaction.test.ts': 1202,
+  'src/daemon/replay/internal/__tests__/session-replay-target-verification-runtime.test.ts': 1182,
   'src/__tests__/client-metro.test.ts': 1105,
   'src/__tests__/cli-network.test.ts': 1092,
-  'src/platforms/android/__tests__/snapshot-helper.test.ts': 1002,
+  'packages/platform-android/src/__tests__/snapshot-helper.test.ts': 1002,
 });
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..');
@@ -144,7 +143,7 @@ function baseLineCounts(paths: readonly string[]): ReadonlyMap<string, number | 
   const renamedFrom = new Map<string, string>();
   const renames = runCmdSync(
     'git',
-    ['diff', '--name-status', '--find-renames', '--diff-filter=R', base, 'HEAD', '--', '*.test.*'],
+    ['diff', '--name-status', '--find-renames', '--diff-filter=R', base, '--', '*.test.*'],
     { cwd: REPO_ROOT },
   );
   for (const line of renames.stdout.split('\n')) {

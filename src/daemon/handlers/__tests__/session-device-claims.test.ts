@@ -25,11 +25,12 @@ vi.mock('../../../platform-runtime-open-target.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../platform-runtime-open-target.ts')>();
   return { ...actual, resolveAndroidPackageForOpen: vi.fn() };
 });
-vi.mock('../../../platforms/android/ime-lifecycle.ts', () => ({
+vi.mock('@agent-device/platform-android/mechanics', () => ({
   activateAndroidTestIme: vi.fn(async () => ({ activated: false })),
   restoreAndroidTestIme: vi.fn(async () => ({ restored: false, reason: 'no-record' })),
+  stopAndroidSnapshotHelperSessionForDevice: vi.fn(async () => {}),
 }));
-vi.mock('../../../utils/host-process.ts', async (importOriginal) =>
+vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
   (await import('../../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
     importOriginal,
   ),
@@ -39,18 +40,20 @@ import { resolveTargetDevice } from '../../../core/dispatch-resolve.ts';
 import { ensureDeviceReady } from '../../device-ready.ts';
 import { applyRuntimeHintValues } from '../../../platform-runtime-runtime-hints.ts';
 import { resolveAndroidPackageForOpen } from '../../../platform-runtime-open-target.ts';
-import { activateAndroidTestIme } from '../../../platforms/android/ime-lifecycle.ts';
+import { activateAndroidTestIme } from '@agent-device/platform-android/mechanics';
 import {
   discoverReadyAndroidEmulators,
   dispatchApplicationLifecycleEffect,
 } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
-import { clearRequestCanceled, markRequestCanceled } from '../../../request/cancel.ts';
+import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import { acquireDeviceClaim as acquireProductionDeviceClaim } from '../../device-claims.ts';
 import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { SessionStore } from '../../session-store.ts';
-import { handleCloseCommand as handleProductionCloseCommand } from '../session-close.ts';
-import { handleOpenCommand as handleProductionOpenCommand } from '../session-open.ts';
+import {
+  handleSessionCloseCommands as handleProductionCloseCommand,
+  handleSessionOpenCommands as handleProductionOpenCommand,
+} from '../../session-lifecycle/index.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeAuthoringSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -59,7 +62,7 @@ import {
   bindLifecycleRuntime,
   inspectProviderLifecycleRuntimeFacts,
   inspectLifecycleRuntimeFacts,
-} from './application-lifecycle-runtime-harness.ts';
+} from '../../__tests__/application-lifecycle-runtime-harness.ts';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
@@ -181,7 +184,9 @@ test('failed local open after dispatch retains its device claim for recovery', a
       }),
     (error: unknown) => error === rejectionError,
   );
-  assert.equal(inspectDeviceClaims({ serial: android.id })[0]?.classification, 'live');
+  const retained = inspectDeviceClaims({ serial: android.id })[0];
+  assert.equal(retained?.classification, 'live');
+  assert.equal(typeof retained?.claim?.abandonedAtMs, 'number');
 });
 
 test('failed local runtime-hint setup retains its device claim before open dispatch', async () => {
@@ -269,6 +274,55 @@ test('cancellation after local device setup retains the device claim for recover
   } finally {
     clearRequestCanceled(requestId);
   }
+});
+
+test('a canceled attempt lets the next attempt of the same suite open the device', async () => {
+  const { store, stateDir } = setup();
+  const requestId = 'suite:1-gesture-pan-duration:attempt:1';
+  mockResolveTargetDevice.mockResolvedValue(android);
+  mockDispatch.mockResolvedValue(undefined);
+  markRequestCanceled(requestId);
+  try {
+    const timedOut = await handleOpenCommand({
+      req: {
+        command: 'open',
+        token: 'test',
+        session: 'suite:1-gesture-pan-duration:attempt-1',
+        positionals: ['Demo'],
+        flags: { platform: 'android' },
+        meta: { requestId },
+      },
+      sessionName: 'suite:1-gesture-pan-duration:attempt-1',
+      logPath: path.join(stateDir, 'daemon.log'),
+      sessionStore: store,
+    });
+    assert.equal(timedOut.ok, false);
+  } finally {
+    clearRequestCanceled(requestId);
+  }
+  assert.equal(store.get('suite:1-gesture-pan-duration:attempt-1'), undefined);
+
+  const retry = await handleOpenCommand({
+    req: {
+      command: 'open',
+      token: 'test',
+      session: 'suite:1-gesture-pan-duration:attempt-2',
+      positionals: ['Demo'],
+      flags: { platform: 'android' },
+    },
+    sessionName: 'suite:1-gesture-pan-duration:attempt-2',
+    logPath: path.join(stateDir, 'daemon.log'),
+    sessionStore: store,
+  });
+
+  assert.equal(retry.ok, true);
+  const claim = inspectDeviceClaims({ serial: android.id })[0]?.claim;
+  assert.equal(claim?.session, 'suite:1-gesture-pan-duration:attempt-2');
+  assert.equal(claim?.abandonedAtMs, undefined);
+  assert.equal(
+    store.get('suite:1-gesture-pan-duration:attempt-2')?.deviceClaim?.ownerToken,
+    claim?.ownerToken,
+  );
 });
 
 test('provider-owned open creates no host-local device claim from its selected owner', async () => {

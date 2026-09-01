@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 enum RunnerCommandLifecycleState: String {
   case notAccepted

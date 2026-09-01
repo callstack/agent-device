@@ -3,12 +3,12 @@ export const PRODUCT_CATEGORIES = ['All', 'Starter Kits', 'Produce', 'Bakery', '
 export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
 
 export interface LabProduct {
+  badge: string;
+  category: Exclude<ProductCategory, 'All'>;
   id: string;
   name: string;
-  category: Exclude<ProductCategory, 'All'>;
   price: string;
   subtitle: string;
-  badge: string;
 }
 
 export const LAB_PRODUCTS: LabProduct[] = [

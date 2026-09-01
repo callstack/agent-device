@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 
 function runCli(args: string[]): { status: number; stdout: string; stderr: string } {
   const result = runCmdSync(

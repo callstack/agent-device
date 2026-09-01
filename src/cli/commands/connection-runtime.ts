@@ -19,6 +19,7 @@ import {
   buildRemoteConnectionDaemonState,
   buildRemoteConnectionRequestMetadata,
   hashRemoteConfigFile,
+  mergeRemoteConnectionRequestMetadata,
   readRemoteConnectionState,
   writeRemoteConnectionState,
   type RemoteConnectionState,
@@ -33,9 +34,8 @@ import type { AgentDeviceClient, Lease } from '../../agent-device-client.ts';
 import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { readMetroPrepareKind } from '../../commands/metro/prepare-kind.ts';
-import { connectionProviderRequiresRemoteDaemon } from '../connection/provider-policy.ts';
+import { connectionProviderCapabilities } from '../connection/provider-policy.ts';
 import { readCloudDeviceFeatureProfileFields } from '../connection/profile-fields.ts';
-import { isCloudWebDriverProviderName } from '@agent-device/provider-webdriver';
 import type { PreviousLeaseReleaseNotice } from './connection-presentation.ts';
 
 const leaseDeferredCommands = new Set([
@@ -111,6 +111,12 @@ export async function materializeRemoteConnectionForCommand(options: {
       remoteConfig.profile,
     );
   const nextFlags = { ...mergedFlags, session: state.session };
+  const deferredAppSelection = connectionProviderCapabilities(
+    state.leaseProvider,
+  ).supportsDeferredAppSelection;
+  const initialApp =
+    deferredAppSelection && command === PUBLIC_COMMANDS.open ? options.positionals?.[0] : undefined;
+  if (deferredAppSelection) delete nextFlags.providerApp;
   let nextRuntime = selectCompatibleRuntime(state.runtime, nextFlags.platform) ?? options.runtime;
   let nextState = state;
   let changed = !existingState;
@@ -124,6 +130,7 @@ export async function materializeRemoteConnectionForCommand(options: {
       state,
       nextState,
       nextFlags,
+      initialApp,
       policy: leasePolicy,
     });
     nextState = materializedLease.state;
@@ -282,6 +289,7 @@ async function materializeLeaseForCommand(options: {
   state: RemoteConnectionState;
   nextState: RemoteConnectionState;
   nextFlags: CliFlags;
+  initialApp?: string;
   policy: ConnectionLeasePolicy;
 }): Promise<{
   state: RemoteConnectionState;
@@ -313,6 +321,7 @@ async function materializeLeaseForCommand(options: {
     leaseBackend,
     policy,
     nextFlags,
+    options.initialApp,
   );
   const lease = materializedLease.lease;
   nextFlags.leaseId = lease.leaseId;
@@ -351,13 +360,12 @@ function buildMaterializedLeaseState(
   leaseBackend: LeaseBackend,
   flags: CliFlags,
 ): RemoteConnectionState {
+  const connection = mergeRemoteConnectionRequestMetadata(lease, state);
   return {
     ...state,
     leaseId: lease.leaseId,
     leaseBackend,
-    leaseProvider: lease.leaseProvider ?? state.leaseProvider,
-    clientId: lease.clientId ?? state.clientId,
-    deviceKey: lease.deviceKey ?? state.deviceKey,
+    ...connection,
     platform: state.platform ?? flags.platform,
     target: state.target ?? flags.target,
     updatedAt: new Date().toISOString(),
@@ -377,12 +385,25 @@ type ConnectionLeasePolicy = {
 };
 
 function connectionLeasePolicyForState(state: RemoteConnectionState): ConnectionLeasePolicy {
-  if (state.leaseProvider === 'proxy') return PROXY_CONNECTION_LEASE_POLICY;
-  if (isCloudWebDriverProviderName(state.leaseProvider)) {
+  const capabilities = connectionProviderCapabilities(state.leaseProvider);
+  if (capabilities.leaseKind === 'proxy') {
+    return PROXY_CONNECTION_LEASE_POLICY;
+  }
+  if (capabilities.supportsDeferredAppSelection) {
+    return DEFERRED_APP_SELECTION_CONNECTION_LEASE_POLICY;
+  }
+  if (capabilities.usesCloudWebDriverLease) {
     return CLOUD_WEBDRIVER_CONNECTION_LEASE_POLICY;
   }
   return DEFAULT_CONNECTION_LEASE_POLICY;
 }
+
+const DEFERRED_APP_SELECTION_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
+  shouldAllocate: (command) =>
+    command !== PUBLIC_COMMANDS.apps && !leaseDeferredCommands.has(command),
+  ttlMs: () => undefined,
+  resolveLeaseState: async (options) => ({ state: options.state }),
+};
 
 const DEFAULT_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
   shouldAllocate: (command) => !leaseDeferredCommands.has(command),
@@ -502,9 +523,7 @@ export async function releaseRemoteConnectionLease(
     daemonAuthToken,
     daemonTransport: state.daemon?.transport,
     daemonServerMode: state.daemon?.serverMode,
-    leaseProvider: state.leaseProvider,
-    clientId: state.clientId,
-    deviceKey: state.deviceKey,
+    ...buildRemoteConnectionRequestMetadata(state),
   });
   return result;
 }
@@ -653,14 +672,13 @@ async function releaseAcquiredLeaseOnWriteFailure(
 ): Promise<void> {
   if (!lease) return;
   try {
+    const connection = mergeRemoteConnectionRequestMetadata(state, lease);
     await client.leases.release({
       tenant: state.tenant,
       runId: state.runId,
       leaseId: lease.leaseId,
       leaseBackend: state.leaseBackend ?? lease.backend,
-      leaseProvider: state.leaseProvider ?? lease.leaseProvider,
-      clientId: state.clientId ?? lease.clientId,
-      deviceKey: state.deviceKey ?? lease.deviceKey,
+      ...connection,
     });
   } catch {
     // Preserve the state-write failure; cleanup is best-effort.
@@ -757,7 +775,10 @@ function createRemoteConnectionStateFromFlags(
       'remote command requires runId in remote config or via --run-id <id>.',
     );
   }
-  if (!flags.daemonBaseUrl && connectionProviderRequiresRemoteDaemon(profile.leaseProvider)) {
+  if (
+    !flags.daemonBaseUrl &&
+    connectionProviderCapabilities(profile.leaseProvider).requiresRemoteDaemon
+  ) {
     throw new AppError(
       'INVALID_ARGS',
       'remote command requires daemonBaseUrl in remote config, config, env, or --daemon-base-url.',
@@ -790,15 +811,15 @@ async function allocateOrReuseLease(
   leaseBackend: LeaseBackend,
   policy: ConnectionLeasePolicy,
   flags: CliFlags,
+  initialApp?: string,
 ): Promise<{ lease: Lease; acquired: boolean }> {
+  const connection = buildRemoteConnectionRequestMetadata(state);
   if (state.leaseId && state.leaseBackend === leaseBackend) {
     const existing = await heartbeatOrAllocateLease(client, state.leaseId, {
       tenant: state.tenant,
       runId: state.runId,
       leaseBackend,
-      leaseProvider: state.leaseProvider,
-      clientId: state.clientId,
-      deviceKey: state.deviceKey,
+      ...connection,
       ttlMs: policy.ttlMs(state),
     });
     if (existing) return { lease: existing, acquired: false };
@@ -807,16 +828,14 @@ async function allocateOrReuseLease(
     tenant: state.tenant,
     runId: state.runId,
     leaseBackend,
-    leaseProvider: state.leaseProvider,
-    clientId: state.clientId,
-    deviceKey: state.deviceKey,
+    ...connection,
     ttlMs: policy.ttlMs(state),
     platform: state.platform ?? flags.platform,
     target: state.target ?? flags.target,
     device: flags.device,
     udid: flags.udid,
     serial: flags.serial,
-    providerApp: flags.providerApp,
+    providerApp: initialApp ?? flags.providerApp,
     providerOsVersion: flags.providerOsVersion,
     providerProject: flags.providerProject,
     providerBuild: flags.providerBuild,
@@ -958,14 +977,8 @@ async function heartbeatOrAllocateLease(
 ): Promise<Lease | undefined> {
   try {
     return await client.leases.heartbeat({
-      tenant: scope.tenant,
-      runId: scope.runId,
+      ...scope,
       leaseId,
-      leaseBackend: scope.leaseBackend,
-      leaseProvider: scope.leaseProvider,
-      clientId: scope.clientId,
-      deviceKey: scope.deviceKey,
-      ttlMs: scope.ttlMs,
     });
   } catch (error) {
     if (isInactiveLeaseError(error)) return undefined;

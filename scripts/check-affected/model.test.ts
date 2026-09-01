@@ -39,8 +39,8 @@ test('production source selects static/build gates and delegates tests to Vitest
   }
 });
 
-test('platform source additionally selects provider-integration', () => {
-  const result = ids(['src/platforms/apple/core/apps.ts']);
+test('platform package source additionally selects provider-integration', () => {
+  const result = ids(['packages/platform-apple/src/core/app-resolution.ts']);
   assert.ok(result.includes('provider-integration'));
   assert.ok(result.includes('coverage'));
   assert.ok(result.includes('vitest-related'));
@@ -70,7 +70,7 @@ test('root node-integration support modules select the node integration suite', 
 });
 
 test('android-adb stub test delegates project ownership to Vitest', () => {
-  const result = ids(['src/platforms/android/__tests__/notifications.test.ts']);
+  const result = ids(['packages/platform-android/src/__tests__/notifications.test.ts']);
   assert.ok(result.includes('vitest-related'));
 });
 
@@ -84,7 +84,7 @@ test('Swift runner change selects both XCUITest platform builds', () => {
     'replay-ios-device',
     'replay-macos',
   ]);
-  assert.ok(ids(['src/platforms/apple/core/Support.swift']).includes('swift-runner-ios'));
+  assert.ok(ids(['packages/platform-apple/src/core/Support.swift']).includes('swift-runner-ios'));
 });
 
 test('a runner XCTest source also selects the test-list and package-source check', () => {
@@ -121,6 +121,25 @@ test('Android helper change selects the android-helpers build', () => {
     'android-helpers',
     'replay-android',
   ]);
+});
+
+test('Android package test fixture selects the unit suite instead of failing open', () => {
+  const fixture =
+    'packages/platform-android/src/__tests__/test-utils/fixtures/android-helper-apk.fixture';
+  const result = plan([fixture]);
+  assert.equal(result.failOpen, false);
+  assert.deepEqual(result.checks, ['unit']);
+  assert.deepEqual(
+    result.reasons.filter((reason) => reason.rule === 'own:android-package-test-fixture'),
+    [
+      {
+        check: 'unit',
+        path: fixture,
+        rule: 'own:android-package-test-fixture',
+        detail: 'the Android package test fixture is consumed by the unit suite',
+      },
+    ],
+  );
 });
 
 test('MCP metadata change selects the mcp-metadata check', () => {

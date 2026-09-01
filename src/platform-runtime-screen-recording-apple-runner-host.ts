@@ -63,8 +63,9 @@ export async function retrieveAppleRunnerRecording(
 ): Promise<void> {
   signal?.throwIfAborted();
   const { resolveIosPhysicalDeviceControl } =
-    await import('./platforms/apple/core/physical-device-control.ts');
-  await resolveIosPhysicalDeviceControl(device).copyRunnerFile(device, remotePath, outputPath);
+    await import('@agent-device/platform-apple/physical-device');
+  const control = resolveIosPhysicalDeviceControl(device);
+  await control.copyRunnerFile(device, remotePath, outputPath);
   signal?.throwIfAborted();
 }
 
@@ -88,7 +89,8 @@ export async function captureAppleClockAnchor(
     ) {
       return undefined;
     }
-    const { runAppleRunnerCommand } = await import('./platforms/apple/core/runner-client.ts');
+    const { runAppleRunnerCommand } =
+      await import('@agent-device/platform-apple/runner/operations');
     const result = await runAppleRunnerCommand(
       device,
       { command: 'snapshot', appBundleId, interactiveOnly: true, depth: 1 },
@@ -100,7 +102,7 @@ export async function captureAppleClockAnchor(
       result.currentUptimeMs > 0
       ? { wallClockAtMs, uptimeMs: result.currentUptimeMs }
       : undefined;
-  } catch (_error) {
+  } catch {
     signal?.throwIfAborted();
     return undefined;
   }

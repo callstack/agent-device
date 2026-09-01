@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '../command-catalog.ts';
-import { isRecord } from '../utils/parsing.ts';
+import { isRecord } from '@agent-device/kernel/record';
 import type { DaemonRequest, DaemonResponseData } from './types.ts';
 
 const EVENT_LIST_PREVIEW_LIMIT = 5;

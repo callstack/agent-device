@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { emitDiagnostic } from '../../../src/utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { INTERNAL_COMMANDS } from '../../../src/command-catalog.ts';
 import { test } from 'vitest';
 import { assertRpcError, assertRpcOk } from './assertions.ts';

@@ -1,14 +1,14 @@
-import { readCommandMessage } from '../utils/success-text.ts';
+import { readCommandMessage } from '@agent-device/kernel/success-text';
 import type { CliOutput } from './command-contract.ts';
 
 export type CliOutputFormatter = (params: {
   input: Record<string, unknown>;
   result: unknown;
-}) => CliOutput;
+}) => CliOutput | Promise<CliOutput>;
 
-export function resultOutput<TResult>(
-  formatter: (result: TResult) => CliOutput,
-): CliOutputFormatter {
+export function resultOutput<TResult, TOutput extends CliOutput | Promise<CliOutput> = CliOutput>(
+  formatter: (result: TResult) => TOutput,
+): (params: { input: Record<string, unknown>; result: unknown }) => TOutput {
   return ({ result }) => formatter(result as TResult);
 }
 

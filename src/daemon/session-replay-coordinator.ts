@@ -5,8 +5,7 @@ import {
   type ReplayDivergenceResume,
   type ReplayRepairHint,
 } from '@agent-device/contracts/divergence';
-import type { DaemonResponse, SessionState } from './types.ts';
-import type { SessionStore } from './session-store.ts';
+import type { DaemonResponse, SessionRuntimeHints, SessionState } from './types.ts';
 import {
   armRepairStep,
   isUncommittedRepairSession,
@@ -19,18 +18,19 @@ import {
  * `ReplayCoordinator` (#1478 P4b): the single daemon-owned gateway a native `.ad` replay request
  * uses to reach the P4a `ReplaySessionTransaction` projection (`session-replay-transaction.ts`)
  * and the corrective-resume watermark. One instance is scoped to one locked replay request
- * (`sessionStore` + `sessionName`, ADR 0012 decision 6's "the repair transaction spans the whole
- * live session"); it owns every write this request performs against that session's repair
- * lifecycle — arming, demotion for a `--from` rerun, completion, hold-on-divergence stamping, the
- * `pendingRecordAndHeal` corrective watermark, and reap-tombstone clearing —
- * so `session-replay-runtime.ts` and `session-replay-resume.ts` reach neither the P4a projection
+ * (the request-bound read and mutation capabilities, ADR 0012 decision 6's "the repair
+ * transaction spans the whole live session"); it owns every write this request performs against
+ * that session's repair lifecycle — arming, demotion for a `--from` rerun, completion,
+ * hold-on-divergence stamping, the `pendingRecordAndHeal` corrective watermark, and reap-tombstone clearing —
+ * so the replay command and its resume helper reach neither the P4a projection
  * nor `session.pendingRecordAndHeal` directly.
  *
- * Close-time sequencing (`session-close.ts`, `session-close-script.ts`: the platform-close
- * receipt, the repair-armed check gating targeted platform close, and the terminal abort) is a
- * different capability with its own teardown ordering — commit/abort happen at teardown, not
- * during a replay request — and remains a direct `ReplaySessionTransaction` caller by design; see
- * the P4b PR description for the ownership split.
+ * Close-time sequencing (`session-lifecycle/internal/session-close.ts`,
+ * `session-lifecycle/internal/session-close-script.ts`: the platform-close receipt, the
+ * repair-armed check gating targeted platform close, and the terminal abort) is a different
+ * capability with its own teardown ordering — commit/abort happen at teardown, not during a
+ * replay request — and remains a direct `ReplaySessionTransaction` caller by design; see the
+ * P4b PR description for the ownership split.
  */
 
 /** Immutable read projection of the repair-transaction fields this coordinator's writers touch. */
@@ -46,7 +46,7 @@ export type ReplaySessionView = Readonly<{
 /**
  * The one capability the divergence-report chain (`session-replay-resume.ts`,
  * `session-replay-divergence.ts`, `session-replay-target-verification.ts`) needs from a
- * `ReplayCoordinator`, bound to the SAME instance the owning `runReplayScriptSource` call
+ * `ReplayCoordinator`, bound to the SAME instance the owning replay command call
  * created — never a second construction from a bare session name. Carries no `SessionStore`
  * and cannot name or reacquire a different session.
  */
@@ -93,20 +93,36 @@ export type ReplayCoordinator = {
   readonly resumeStamper: ReplayResumeStamper;
 };
 
+export type ReplaySessionStore = Readonly<{
+  get: () => Readonly<SessionState> | undefined;
+  lookup: () =>
+    | Readonly<{
+        address: string;
+        session: Readonly<SessionState>;
+      }>
+    | undefined;
+  getRuntimeHints: () => SessionRuntimeHints | undefined;
+  ensureSessionDir: () => string;
+}>;
+
+export type ReplaySessionMutationStore = Readonly<{
+  update: (mutate: (session: SessionState) => void) => boolean;
+  clearRepairTombstone: () => void;
+}>;
+
 export function createReplayCoordinator(params: {
-  sessionStore: SessionStore;
-  sessionName: string;
+  sessionStore: ReplaySessionStore;
+  mutationStore: ReplaySessionMutationStore;
 }): ReplayCoordinator {
-  const { sessionStore, sessionName } = params;
-  const current = (): SessionState | undefined => sessionStore.get(sessionName);
+  const { sessionStore, mutationStore } = params;
+  const current = (): Readonly<SessionState> | undefined => sessionStore.get();
 
   const resumeStamper: ReplayResumeStamper = {
     sessionExists: () => current() !== undefined,
     stampCorrectiveWatermark(watermarkParams): void {
-      const session = current();
-      if (!session) return;
-      stampPendingRecordAndHealWatermark({ session, ...watermarkParams });
-      sessionStore.set(sessionName, session);
+      mutationStore.update((session) => {
+        stampPendingRecordAndHealWatermark({ session, ...watermarkParams });
+      });
     },
   };
 
@@ -121,29 +137,25 @@ export function createReplayCoordinator(params: {
     },
 
     armStep(stepParams): void {
-      const session = current();
-      if (!session) return;
-      armRepairStep(session, {
-        saveScript: stepParams.saveScript,
-        force: stepParams.force,
-        sourcePath: stepParams.sourcePath,
-        healedSiblingPath: healedScriptSiblingPath(stepParams.sourcePath),
-        firstArm: stepParams.firstArm,
+      mutationStore.update((session) => {
+        armRepairStep(session, {
+          saveScript: stepParams.saveScript,
+          force: stepParams.force,
+          sourcePath: stepParams.sourcePath,
+          healedSiblingPath: healedScriptSiblingPath(stepParams.sourcePath),
+          firstArm: stepParams.firstArm,
+        });
       });
-      sessionStore.set(sessionName, session);
     },
 
     demoteForRerunIfArmed(): void {
-      const session = current();
-      if (!session || repairSessionBoundary(session) === undefined) return;
-      resetRepairCompletionForRerun(session);
+      if (repairSessionBoundary(current()) === undefined) return;
+      mutationStore.update(resetRepairCompletionForRerun);
     },
 
     markCompleteIfArmed(): void {
-      const session = current();
-      if (!session || repairSessionBoundary(session) === undefined) return;
-      markRepairTransactionComplete(session);
-      sessionStore.set(sessionName, session);
+      if (repairSessionBoundary(current()) === undefined) return;
+      mutationStore.update(markRepairTransactionComplete);
     },
 
     markSessionHeldIfArmed(response): DaemonResponse {
@@ -160,14 +172,16 @@ export function createReplayCoordinator(params: {
     },
 
     clearTombstone(): void {
-      sessionStore.clearRepairTombstone(sessionName);
+      mutationStore.clearRepairTombstone();
     },
 
     clearCorrectiveWatermarkIfExpected(expectedFrom): void {
-      const session = current();
-      if (!session || session.pendingRecordAndHeal?.expectedFrom !== expectedFrom) return;
-      clearPendingRecordAndHealWatermark(session);
-      sessionStore.set(sessionName, session);
+      if (current()?.pendingRecordAndHeal?.expectedFrom !== expectedFrom) return;
+      mutationStore.update((session) => {
+        if (session.pendingRecordAndHeal?.expectedFrom === expectedFrom) {
+          clearPendingRecordAndHealWatermark(session);
+        }
+      });
     },
 
     resumeStamper,

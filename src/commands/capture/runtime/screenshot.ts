@@ -1,7 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { validateScreenshotScale } from '@agent-device/contracts/capture';
-import { successText } from '../../../utils/success-text.ts';
-import { resizePngFileToScale } from '../../../utils/png-resize.ts';
+import { successText } from '@agent-device/kernel/success-text';
+import { resizePngFileToScale } from '@agent-device/capture-kit/png-resize';
 import type { ArtifactDescriptor } from '../../../io.ts';
 import type { RuntimeCommand, ScreenshotCommandOptions } from '../../runtime-types.ts';
 import { reserveCommandOutput } from '../../io-policy.ts';

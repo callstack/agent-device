@@ -17,9 +17,10 @@ import { sendRequest } from '../daemon-client-transport.ts';
 
 const { mockRunCmdSync } = vi.hoisted(() => ({ mockRunCmdSync: vi.fn() }));
 
-vi.mock('../../../utils/exec.ts', async () => {
-  const actual =
-    await vi.importActual<typeof import('../../../utils/exec.ts')>('../../../utils/exec.ts');
+vi.mock('@agent-device/host-kit/command', async () => {
+  const actual = await vi.importActual<typeof import('@agent-device/host-kit/command')>(
+    '@agent-device/host-kit/command',
+  );
   return { ...actual, runCmdSync: mockRunCmdSync };
 });
 

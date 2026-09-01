@@ -6,7 +6,10 @@ import { resolveDaemonPaths } from '../../daemon/config.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import {
   readActiveConnectionState,
+  buildRemoteConnectionRequestMetadata,
+  mergeRemoteConnectionRequestMetadata,
   readRemoteConnectionState,
+  remoteConnectionLeaseIdentityMatches,
   removeRemoteConnectionState,
   writeRemoteConnectionState,
   type RemoteConnectionState,
@@ -15,13 +18,13 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import {
   connectProviderNamesForError,
-  connectionProviderRequiresRemoteDaemon,
+  connectionProviderCapabilities,
   isConnectProviderName,
   type ConnectProvider,
 } from '../connection/provider-policy.ts';
 import {
   resolveConnectProviderProfile,
-  verifyConnectProvider,
+  verifyResolvedConnectProvider,
 } from '../connection/connect-provider-adapters.ts';
 import {
   hasDeferredMetroConfig,
@@ -32,7 +35,7 @@ import {
   stopReactDevtoolsCleanup,
 } from './connection-runtime.ts';
 import { writeCommandOutput } from './shared.ts';
-import { shellQuoteIfNeeded } from '../../utils/shell-quote.ts';
+import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { ClientCommandHandler } from './router-types.ts';
@@ -69,11 +72,7 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
     connection: connectionMetadata,
     daemon: context.daemon,
   });
-  const verification = await verifyConnectProvider({
-    provider: resolved.provider,
-    flags: connectFlags,
-    env: process.env,
-  });
+  const verification = await verifyResolvedConnectProvider(resolved);
   const state = buildConnectedState({
     flags: connectFlags,
     scope,
@@ -92,7 +91,7 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
   const runtimePreparation = buildRuntimePreparationNotice(connectFlags, state);
   const readiness = presentConnectReadiness(state, verification);
 
-  writeCommandOutput(
+  await writeCommandOutput(
     connectFlags,
     serializeConnectionState({ state, runtimePreparation, readiness, previousLeaseNotice }),
     () => renderConnectSuccess({ state, runtimePreparation, readiness, previousLeaseNotice }),
@@ -126,7 +125,7 @@ function readRequiredConnectScope(
   }
   if (
     !flags.daemonBaseUrl &&
-    connectionProviderRequiresRemoteDaemon(connectionMetadata?.leaseProvider)
+    connectionProviderCapabilities(connectionMetadata?.leaseProvider).requiresRemoteDaemon
   ) {
     throw new AppError(
       'INVALID_ARGS',
@@ -185,12 +184,12 @@ function buildConnectionLeaseBinding(
   RemoteConnectionState,
   'clientId' | 'deviceKey' | 'leaseBackend' | 'leaseId' | 'leaseProvider'
 > {
+  const connection = mergeRemoteConnectionRequestMetadata(connectionMetadata ?? {}, previous ?? {});
   return {
     leaseId: previous?.leaseId,
     leaseBackend: previous?.leaseBackend ?? resolveRequestedLeaseBackend(flags),
-    leaseProvider: connectionMetadata?.leaseProvider ?? previous?.leaseProvider,
-    clientId: connectionMetadata?.clientId ?? previous?.clientId,
-    deviceKey: previous?.deviceKey ?? connectionMetadata?.deviceKey,
+    ...connection,
+    deviceKey: previous?.deviceKey ?? connection.deviceKey,
   };
 }
 
@@ -241,18 +240,13 @@ function readRemoteConfigConnectionMetadata(
     cwd: process.cwd(),
     env: process.env,
   }).profile;
-  const metadata = {
-    leaseProvider: profile.leaseProvider,
-    clientId: profile.clientId,
-    deviceKey: profile.deviceKey,
-  };
-  return Object.values(metadata).some((value) => value !== undefined) ? metadata : undefined;
+  return buildRemoteConnectionRequestMetadata(profile);
 }
 
 export const disconnectCommand: ClientCommandHandler = async ({ flags, client }) => {
   const { session, stateDir, state } = readRequestedConnectionState(flags);
   if (!state) {
-    writeNoRemoteConnectionOutput(flags, session);
+    await writeNoRemoteConnectionOutput(flags, session);
     return true;
   }
   const connectedSession = state.session;
@@ -280,7 +274,7 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
     }
   }
   removeRemoteConnectionState({ stateDir, session: connectedSession });
-  writeCommandOutput(
+  await writeCommandOutput(
     flags,
     {
       connected: false,
@@ -299,12 +293,12 @@ export const connectionCommand: ClientCommandHandler = async ({ positionals, fla
   }
   const { session, state } = readRequestedConnectionState(flags);
   if (!state) {
-    writeNoRemoteConnectionOutput(flags, session);
+    await writeNoRemoteConnectionOutput(flags, session);
     return true;
   }
   const leasePreparation = buildLeasePreparationNotice(state);
   const runtimePreparation = buildRuntimePreparationNoticeFromState(state);
-  writeCommandOutput(flags, serializeConnectionState({ state, runtimePreparation }), () =>
+  await writeCommandOutput(flags, serializeConnectionState({ state, runtimePreparation }), () =>
     [
       `Configured remote session "${state.session}".`,
       `tenant=${state.tenant} runId=${state.runId} leaseId=${state.leaseId ?? 'pending'} backend=${state.leaseBackend ?? 'pending'}`,
@@ -386,8 +380,8 @@ function readRequestedConnectionState(flags: CliFlags): {
   };
 }
 
-function writeNoRemoteConnectionOutput(flags: CliFlags, session: string): void {
-  writeCommandOutput(
+async function writeNoRemoteConnectionOutput(flags: CliFlags, session: string): Promise<void> {
+  await writeCommandOutput(
     flags,
     { connected: false, session },
     () => `No remote connection for "${session}".`,
@@ -430,13 +424,12 @@ function optionalConnectionFieldsMatch(
   state: RemoteConnectionState,
   options: Parameters<typeof isCompatibleConnection>[1],
 ): boolean {
-  return [
+  const fieldsMatch = [
     [state.leaseBackend, options.desiredLeaseBackend],
     [state.platform, options.flags.platform],
     [state.target, options.flags.target],
-    [state.leaseProvider, options.connection?.leaseProvider],
-    [state.clientId, options.connection?.clientId],
   ].every(([left, right]) => right === undefined || left === right);
+  return fieldsMatch && remoteConnectionLeaseIdentityMatches(state, options.connection);
 }
 
 function isSameDaemonState(

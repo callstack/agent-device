@@ -59,6 +59,7 @@ function isAllowedCompositionImport(specifier: string): boolean {
     /^@agent-device\/contracts(?:\/|$)/.test(specifier) ||
     /^@agent-device\/platform-[^/]+$/.test(specifier) ||
     specifier === './platform-runtime-gateway.ts' ||
+    specifier === './platform-runtime-android-adb-host.ts' ||
     specifier === './platform-runtime-android-observation-host.ts' ||
     specifier === './platform-runtime-operation-host.ts' ||
     specifier === './platform-runtime-app-state-host.ts' ||

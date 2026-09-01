@@ -1,5 +1,7 @@
 export const DAEMON_HTTP_BASE_PATH = '/agent-device';
 export const DAEMON_HTTP_TENANT_HEADER = 'x-agent-device-tenant';
+export const DAEMON_HTTP_NETWORK_ACCESS_HEADER = 'x-agent-device-network-access';
+export const DAEMON_HTTP_PUBLIC_NETWORK_ACCESS = 'public-only';
 
 export function buildDaemonHttpBaseUrl(baseUrl: string): string {
   return buildDaemonHttpUrl(baseUrl, DAEMON_HTTP_BASE_PATH);

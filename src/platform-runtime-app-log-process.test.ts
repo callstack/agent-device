@@ -12,8 +12,12 @@ const processIdentity = vi.hoisted(() => ({
   startTime: 'Sun Aug 9 22:00:00 2026' as string | null,
 }));
 
-vi.mock('./utils/exec.ts', () => ({ runCmdBackground: exec.run }));
-vi.mock('./utils/host-process.ts', () => ({
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
+  runCmdBackground: exec.run,
+}));
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/process')>()),
   isProcessAlive: () => processIdentity.alive,
   readProcessCommand: () => processIdentity.command,
   readProcessStartTime: () => processIdentity.startTime,

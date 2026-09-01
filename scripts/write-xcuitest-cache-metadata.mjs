@@ -15,6 +15,14 @@ const USAGE =
   'Usage: write-xcuitest-cache-metadata.mjs <ios|macos|tvos|visionos> <derived> <destination>';
 
 const DEFAULT_IOS_RUNNER_APP_BUNDLE_ID = 'com.callstack.agentdevice.runner';
+const RUNNER_SOURCE_IGNORED_DIR_NAMES = new Set(['.build', '.swiftpm', 'xcuserdata']);
+const SNAPSHOT_PRESENTATION_SOURCE_IGNORED_DIR_NAMES = new Set([
+  '.build',
+  '.swiftpm',
+  'SnapshotPresentationConformance',
+  'Tests',
+  'xcuserdata',
+]);
 
 function isTruthy(value) {
   return ['1', 'true', 'TRUE', 'yes', 'YES', 'on', 'ON'].includes(String(value ?? ''));
@@ -49,11 +57,20 @@ function resolveRunnerTestBundleId() {
 }
 
 function computeRunnerSourceFingerprint() {
-  const runnerRoot = path.join(projectRoot, 'apple', 'runner', 'AgentDeviceRunner');
-  const files = collectRunnerSourceFiles(runnerRoot);
+  const sourceRoots = [
+    {
+      path: path.join(projectRoot, 'apple', 'runner', 'AgentDeviceRunner'),
+      ignoredDirectoryNames: RUNNER_SOURCE_IGNORED_DIR_NAMES,
+    },
+    {
+      path: path.join(projectRoot, 'apple', 'snapshot-presentation'),
+      ignoredDirectoryNames: SNAPSHOT_PRESENTATION_SOURCE_IGNORED_DIR_NAMES,
+    },
+  ];
+  const files = collectRunnerSourceFiles(sourceRoots);
   const hash = crypto.createHash('sha256');
   for (const file of files) {
-    hash.update(path.relative(runnerRoot, file));
+    hash.update(path.relative(projectRoot, file));
     hash.update('\0');
     hash.update(fs.readFileSync(file));
     hash.update('\0');
@@ -61,27 +78,29 @@ function computeRunnerSourceFingerprint() {
   return hash.digest('hex');
 }
 
-function collectRunnerSourceFiles(root) {
-  if (!fs.existsSync(root)) {
-    return [];
-  }
+function collectRunnerSourceFiles(roots) {
   const files = [];
-  const stack = [root];
-  while (stack.length > 0) {
-    const current = stack.pop();
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const fullPath = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name === 'xcuserdata') continue;
-        stack.push(fullPath);
-        continue;
-      }
-      if (entry.isFile() && isRunnerSourceFile(entry.name, fullPath)) {
-        files.push(fullPath);
+  for (const { path: root, ignoredDirectoryNames } of roots) {
+    if (!fs.existsSync(root)) {
+      continue;
+    }
+    const stack = [root];
+    while (stack.length > 0) {
+      const current = stack.pop();
+      for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+        const fullPath = path.join(current, entry.name);
+        if (entry.isDirectory()) {
+          if (ignoredDirectoryNames.has(entry.name)) continue;
+          stack.push(fullPath);
+          continue;
+        }
+        if (entry.isFile() && isRunnerSourceFile(entry.name, fullPath)) {
+          files.push(fullPath);
+        }
       }
     }
   }
-  return files.sort((a, b) => a.localeCompare(b));
+  return [...new Set(files)].sort((a, b) => a.localeCompare(b));
 }
 
 function isRunnerSourceFile(fileName, filePath) {

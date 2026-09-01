@@ -5,9 +5,9 @@
 Accepted. Amended after iOS snapshot capture was simplified to two public modes:
 regular interactive snapshots and raw diagnostic snapshots.
 
-The current implementation is owned by `RunnerTests+SnapshotCapturePlan.swift`. Capture plans
-declare their XCTest backend chain, and structured snapshot quality verdicts make degraded or
-recovered output observable end to end.
+The runner owns capture-plan acquisition and backend fallback. Host-side iOS validation, semantic
+presentation, and publication are owned by `@agent-device/capture-kit`; structured snapshot quality
+verdicts make degraded or recovered output observable end to end.
 
 ## Context
 
@@ -66,17 +66,19 @@ agents know the snapshot is degraded output rather than proof that the screen ha
 ## Host-side ownership boundary
 
 The shared TypeScript side has one snapshot-presentation facet. The neutral acquisition-to-presented
-carrier and clip-fold geometry contract live in `@agent-device/contracts/snapshot-presentation`; the
-host-side iOS post-wire policies and shared tree helpers live under `src/snapshot/snapshot-presentation/`.
-Platform-specific presentation adapters retain only the policy mechanics that cannot yet cross their
-runtime boundary. Daemon assembly owns only the ordering of capture, compaction, occlusion, and ref
-publication. It does not own the presentation vocabulary or a second geometry carrier.
+carrier and clip-fold geometry contract live in `@agent-device/contracts/snapshot-presentation`, while
+`@agent-device/capture-kit` owns host-side iOS planning, folding, projection, eligibility, semantic
+compaction, validation, and publication. Platform-specific presentation adapters retain only the
+policy mechanics that cannot yet cross their runtime boundary. Daemon assembly owns only the ordering
+of capture, compaction, occlusion, and ref publication. It does not own the presentation vocabulary
+or a second geometry carrier.
 
 Android acquisition remains in its platform module and adapts its raw hierarchy to the shared
 carrier. Swift keeps its runner-side `SnapshotPresentation` implementation because it consumes the
-capture-plan tier before the process boundary. The contract fixture under
-`contracts/fixtures/snapshot-presentation-conformance.json` is the shared proof between those
-runtimes; it does not imply that Swift and TypeScript share an implementation.
+capture-plan tier before the process boundary. The iOS engine fixture is the shared proof between
+those runtimes; it does not imply that Swift and TypeScript share an implementation.
+The macOS XCTest runner is the desktop-surface exception: its already-presented nodes bypass the iOS
+presentation engine and continue through neutral snapshot assembly.
 
 The same split now holds for the three remaining Wave 4 policies tracked by #1983, so
 `src/snapshot/` is the host-side owner of snapshot policy generally rather than of presentation
@@ -133,6 +135,14 @@ observation and interaction consumers — `selector-capture-runtime.ts`,
 session binding.
 
 New consumers must use the facet rather than add another daemon presentation path.
+
+The acquisition/presentation boundary has two explicit vocabularies. An acquired input is raw node
+evidence accompanied by its capture hint, viewport, lineage, and residue; the host engine folds and
+projects that evidence. A presented input is the runner's primary payload plus validation facts; the
+host engine validates it and performs semantic compaction once. Regular eligibility decides which
+nodes belong in the regular presentation, while publication adds refs and emits only the primary
+payload. An optional unscoped quality payload is validated for classification evidence and is never
+published.
 
 ## Regression Notes
 

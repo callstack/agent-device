@@ -8,7 +8,7 @@ import {
   listenHttpServer,
   listenNetServer,
 } from '../../../src/daemon/server/transport.ts';
-import { getRequestSignal } from '../../../src/request/cancel.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 import {
   closeLoopbackServer,
   skipWhenLoopbackUnavailable,

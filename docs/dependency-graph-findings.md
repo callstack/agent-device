@@ -76,9 +76,9 @@ type-only inversions, R7 pins SessionState field ownership, and the shared selec
 - Still outside every rule: **dynamic** import direction (0 inversions today, nothing watching),
   and anything inside a zone.
 
-## 0. Where the inversions ended up (and why 7 is the floor for now)
+## 0. Where the inversions ended up (and why 5 is the floor for now)
 
-61 → 7. The last pass moved four keystones, each of which was pinning a much larger set:
+The last pass moved four keystones, each of which was pinning a much larger set:
 
 | Keystone moved to `contracts/` | Unblocked |
 |---|---|
@@ -110,7 +110,7 @@ with `command`/`positionals` `Pick`ed from the wire so they cannot drift from it
 resolver already read only those three, in two spellings (the full type and a `Pick` of it); one
 narrow name replaced both.
 
-**The remaining 7 are positions, not debt** — each for a mechanical reason, not an appeal to an ADR:
+**The remaining 5 are positions, not debt** — each for a mechanical reason, not an appeal to an ADR:
 
 - **4 × `AgentDeviceClient`** (`commands/command-contract.ts`, `commands/command-surface.ts`,
   `commands/family/types.ts`, `mcp/command-tools.ts`). The facade cannot move below `commands/`
@@ -119,20 +119,14 @@ narrow name replaced both.
   zone-level type cycle, and breaking it means deciding where the projection registry belongs — a
   design call, not a file move. A narrower port does not exist either: 4 files *name* the facade,
   but 26 call sites use methods across 13 of its namespaces, so any port would re-declare it.
-- **2 × `DaemonCommandDescriptor`** (`core/command-descriptor/derive.ts`, `.../types.ts`). It is
-  *stated in terms of* the server-private `daemon/types.ts` `DaemonRequest` —
-  `refFrameEffect?: (req: DaemonRequest) => RefFrameEffect`,
-  `allowSessionlessDefaultDevice?: (req: DaemonRequest) => boolean` — so it cannot be declared below
-  the daemon. Having `core/` re-declare a parallel 13-field shape instead would trade one erased
-  edge for a second source of truth.
-- **1 × `DaemonCommandRoute`** (`commands/command-explain.ts`). It is
-  `keyof typeof DAEMON_ROUTE_HANDLERS` — *computed from* the daemon's handler table, so it cannot
-  exist below that table. `command-explain.ts` uses it to key an exhaustive
-  `Record<DaemonCommandRoute, string>` of owner files; a hand-written union in `contracts/` would
-  drop exactly that exhaustiveness.
+- **1 × `DaemonCommandRoute`** (`commands/command-explain.ts`). The union lives in core so
+  descriptors can name a route without importing the daemon, and the handler table covers it with
+  `satisfies Record<DaemonCommandRoute, …>`. `command-explain.ts` still type-imports the re-export
+  from `daemon-command-registry.ts` to key an exhaustive owner-file map; that remaining inversion
+  is the commands-zone consumer, not a second source of truth for the union.
 
-All three are argued at `TYPE_INVERSION_BASELINE` in `scripts/layering/check.ts`, next to the
-numbers they explain.
+All remaining inversions are argued at `TYPE_INVERSION_BASELINE` in `scripts/layering/check.ts`, next
+to the numbers they explain.
 
 ## 0b. The biggest structural finding is not an inversion
 
@@ -448,6 +442,16 @@ declarative syntax gains, and `ZONE_POLICIES` gets that syntax anyway:
 
 Worth re-evaluating if the monorepo migration happens — per-package ESLint configs change the
 calculus — or once `jsPlugins` is stable and the ratchet gap is addressable.
+
+## Terminal current-state note
+
+The measurements and R3 experiment above are historical audit evidence, not the current layering
+contract. After #2082, `src/platforms/` is retired: family implementations and family-owned tests
+live in their workspace packages, while the shared install-source tests live under
+`src/__tests__/`. Package-level R13 owns platform exports and consumer seams, R65 owns the daemon's
+complete concrete-platform ban, and `retired-platforms-zone` rejects every tracked file under the
+old path. Legacy `src/platforms` spellings remain only in deliberate negative fixtures and
+implementation-pattern checks so reintroduction fails closed.
 
 ## Suggested order from here
 

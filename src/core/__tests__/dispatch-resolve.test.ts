@@ -6,7 +6,7 @@ const { mockFindIosSimulatorInstalledApp, mockListAppleDevices } = vi.hoisted(()
   mockListAppleDevices: vi.fn(),
 }));
 
-vi.mock('../../platforms/apple/core/apps.ts', () => {
+vi.mock('@agent-device/platform-apple/app-resolution', () => {
   return {
     findIosSimulatorInstalledApp: mockFindIosSimulatorInstalledApp,
   };
@@ -242,8 +242,8 @@ test('platform-less resolution refuses to pick between equally booted devices', 
     async () => {
       try {
         await resolveTargetDeviceInContext({}, { appleSimulatorAppTarget: 'com.example.demo' });
-      } catch (thrown) {
-        return thrown;
+      } catch (error) {
+        return error;
       }
       throw new assert.AssertionError({
         message: 'expected ambiguous device resolution to refuse',
@@ -284,13 +284,13 @@ test('resolveTargetDevice refuses booted simulator selection when the requested 
   const error = await resolveTargetDevice(
     { platform: 'ios' },
     { appleSimulatorAppTarget: 'com.example.demo' },
-  ).catch((cause) => cause);
+  ).catch((error) => error);
 
   assert.ok(error instanceof AppError);
   assert.equal(error.code, 'APP_NOT_INSTALLED');
   assert.match(error.message, /No booted iOS simulator has com\.example\.demo installed/);
   // Keyed `devices`, not `candidates`: the find handler's element matches own
-  // that key with an incompatible shape (src/utils/error-candidates.ts).
+  // that key with an incompatible shape (@agent-device/kernel/errors).
   assert.equal(error.details?.candidates, undefined);
   assert.deepEqual(error.details?.devices, [
     { id: bootedSimulator.id, name: bootedSimulator.name },
@@ -305,7 +305,7 @@ test('resolveTargetDevice refuses ambiguous booted simulator app matches', async
   const error = await resolveTargetDevice(
     { platform: 'ios' },
     { appleSimulatorAppTarget: 'com.example.demo' },
-  ).catch((cause) => cause);
+  ).catch((error) => error);
 
   assert.ok(error instanceof AppError);
   assert.equal(error.code, 'AMBIGUOUS_MATCH');

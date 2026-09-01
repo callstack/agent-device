@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { runCmd, runCmdBackground } from '../src/utils/exec.ts';
+import { runCmd, runCmdBackground } from '@agent-device/host-kit/command';
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WRAPPER = path.join(REPOSITORY_ROOT, 'scripts', 'swift-toolchain-tmpdir.ts');

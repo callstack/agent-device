@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { findProjectRoot } from '../utils/version.ts';
+import { findProjectRoot } from '@agent-device/host-kit/version';
 
 // Any quoted, relative-path-shaped string literal is treated as a module
 // specifier, rather than matching the `import`/`export`/`from` grammar

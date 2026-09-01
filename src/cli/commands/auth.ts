@@ -9,7 +9,7 @@ export const authCommand: ClientCommandHandler = async ({ positionals, flags }) 
   const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
   if (subcommand === 'status') {
     const status = summarizeCliSession({ stateDir });
-    writeCommandOutput(flags, status, () => renderAuthStatus(status));
+    await writeCommandOutput(flags, status, () => renderAuthStatus(status));
     return true;
   }
   if (subcommand === 'login') {
@@ -28,12 +28,12 @@ export const authCommand: ClientCommandHandler = async ({ positionals, flags }) 
       expiresAt: login.session.expiresAt,
       agentTokenExpiresAt: login.expiresAt,
     };
-    writeCommandOutput(flags, data, () => 'Authenticated with cloud CLI session.');
+    await writeCommandOutput(flags, data, () => 'Authenticated with cloud CLI session.');
     return true;
   }
   if (subcommand === 'logout') {
     const removed = removeCliSession({ stateDir });
-    writeCommandOutput(flags, { authenticated: false, removed }, () =>
+    await writeCommandOutput(flags, { authenticated: false, removed }, () =>
       removed ? 'Removed stored cloud CLI session.' : 'No stored cloud CLI session.',
     );
     return true;

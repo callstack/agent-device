@@ -5,13 +5,17 @@ import imeCapture from './android-ime-capture.raw.json' with { type: 'json' };
 import qsShadeCapture from './android-qs-shade-capture.raw.json' with { type: 'json' };
 import {
   buildUiHierarchySnapshot,
+  parseUiHierarchyTree,
+  createAndroidSnapshotCapture,
+  buildAndroidSnapshotClickabilityEvidence,
   type AndroidUiHierarchy,
-} from '../../platforms/android/ui-hierarchy.ts';
+  type AndroidUiHierarchySnapshotOptions,
+} from '@agent-device/platform-android/mechanics';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
 /**
  * Reconstructs the `AndroidUiHierarchy` tree `buildUiHierarchySnapshot` expects
- * (see `platforms/android/ui-hierarchy.ts`) from a flat `RawSnapshotNode[]`
+ * (see `packages/platform-android/src/ui-hierarchy.ts`) from a flat `RawSnapshotNode[]`
  * fixture that carries `index`/`parentIndex` (the shape Android capture
  * fixtures already use throughout the test suite). Only the fields the walker
  * actually reads for its inclusion decisions
@@ -89,6 +93,27 @@ export function walkInteractiveOnlyAndroidFixture(rawNodes: RawSnapshotNode[]): 
   return buildUiHierarchySnapshot(tree, undefined, { raw: false, interactiveOnly: true }).nodes;
 }
 
+/** Runs Android helper XML through the package-owned projection and publication boundary. */
+export function parseUiHierarchy(
+  xml: string,
+  maxNodes: number | undefined,
+  options: AndroidUiHierarchySnapshotOptions,
+): ReturnType<typeof createAndroidSnapshotCapture> {
+  const built = buildUiHierarchySnapshot(parseUiHierarchyTree(xml), maxNodes, options);
+  const { sourceNodes: _sourceNodes, occlusionContext, ...snapshot } = built;
+  return createAndroidSnapshotCapture(
+    {
+      ...snapshot,
+      androidSnapshot: { backend: 'android-helper' },
+      quality: { state: 'healthy', backend: 'android-helper' },
+    },
+    {
+      clickability: buildAndroidSnapshotClickabilityEvidence(built),
+      occlusionContext,
+    },
+  );
+}
+
 /**
  * Real device capture (checkout-form fixture app, Gboard open, status bar
  * visible) archived at `~/.agent-device-bench/replay-runs/android-ime/raw-ime2.json`
@@ -96,7 +121,7 @@ export function walkInteractiveOnlyAndroidFixture(rawNodes: RawSnapshotNode[]): 
  * node (`status_bar_container`, `status_bar_contents`, ...), unlike a default
  * capture. Shared across the chrome-classification tests
  * (`core/__tests__/snapshot-chrome-android-statusbar.test.ts`) and the replay
- * divergence route test (`daemon/handlers/__tests__/session-replay-divergence.test.ts`)
+ * divergence route test (`daemon/replay/internal/__tests__/session-replay-divergence.test.ts`)
  * so both exercise the exact same real screen through `walkNonRawAndroidFixture`.
  */
 export const ANDROID_IME_CAPTURE_RAW_NODES: RawSnapshotNode[] = imeCapture;

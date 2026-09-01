@@ -3,7 +3,8 @@ import type { MaestroLeafSelector, MaestroRelationalSelectorFields } from './pro
 export type MaestroFlatSelector = MaestroLeafSelector & {
   [Key in keyof MaestroRelationalSelectorFields]?: never;
 };
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { matchesMaestroRegex } from './selector-regex.ts';
 import { extractNodeText, normalizeText } from './shared.ts';
 import { isMaestroNodeVisible } from './snapshot-policy.ts';
@@ -45,11 +46,13 @@ export function matchesMaestroTypedSelector(
 }
 
 export function filterVisibleMaestroMatches(params: {
-  nodes: SnapshotState['nodes'];
+  visibility: SnapshotVisibility;
   matches: SnapshotNode[];
   platform: MaestroPlatform;
 }): SnapshotNode[] {
-  return params.matches.filter((node) => isMaestroNodeVisible(node, params.nodes, params.platform));
+  return params.matches.filter((node) =>
+    isMaestroNodeVisible(node, params.visibility, params.platform),
+  );
 }
 
 function matchesMaestroSelectorValue(value: string | undefined, query: string): boolean {

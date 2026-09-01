@@ -1,4 +1,4 @@
-import { readVersion } from '../utils/version.ts';
+import { readVersion } from '@agent-device/host-kit/version';
 
 // See docs/adr/0006-daemon-rpc-protocol-version.md before changing this value.
 // Enforced, not just documented: `test/wire-compat/` digests the declarations

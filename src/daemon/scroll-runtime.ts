@@ -21,10 +21,10 @@ import {
   runScrollEdgePasses,
   type ScrollEdge,
   type ScrollEdgeState,
-} from '../utils/scroll-edge-state.ts';
-import { withSuccessText } from '../utils/success-text.ts';
+} from '../snapshot/scroll-edge-state.ts';
+import { withSuccessText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
-import { errorResponse } from './handlers/response.ts';
+import { errorResponse } from './response.ts';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
 import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
@@ -87,9 +87,7 @@ export async function resolveBoundScrollRuntime(
 
   const target = parseScrollTarget(directionInput);
   const options = resolveScrollExecutionOptions({ amount, pixels, durationMs }, target.edge);
-  const plan = resolveScrollRuntimePlan({
-    ...(target.edge === undefined ? {} : { edge: target.edge }),
-  });
+  const plan = resolveScrollRuntimePlan(target.edge === undefined ? {} : { edge: target.edge });
   const admission = {
     command: 'scroll',
     device: params.device,

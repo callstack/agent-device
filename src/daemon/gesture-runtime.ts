@@ -17,7 +17,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { DaemonCommandContext } from './context.ts';
-import type { DaemonFailureResponse } from './handlers/response.ts';
+import type { DaemonFailureResponse } from './response.ts';
 import {
   admitRuntimeOperations,
   admitRuntimeUse,

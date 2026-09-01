@@ -4,19 +4,19 @@ import type {
 } from '@agent-device/contracts/app-log-runtime';
 import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { AndroidAdbProcess } from './platforms/android/adb-executor.ts';
+import type { AndroidAdbProcess } from '@agent-device/platform-android/mechanics';
 import {
   createManagedAppLogProcesses,
   type ManagedAppLogCommand,
 } from './platform-runtime-app-log-process.ts';
+import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 export async function resolveAndroidAppLogProcessTransport(
   sessionsDir: string,
   device: DeviceInfo,
   local: AppLogProcessTransport,
 ): Promise<AppLogProcessTransport> {
-  const { resolveScopedAndroidAdbBackgroundTransport } =
-    await import('./platforms/android/adb-executor.ts');
+  const { resolveScopedAndroidAdbBackgroundTransport } = await loadAndroidMechanics();
   const transport = resolveScopedAndroidAdbBackgroundTransport(device);
   if (transport.mode === 'local') return local;
   if (!transport.spawn) return Object.freeze({ mode: 'transport-composed' });

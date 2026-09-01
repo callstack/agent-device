@@ -14,7 +14,7 @@
 // imports are `import type` (erased), and every implementation loads through a function-scoped
 // `await import`. That is precisely ADR-0019's "metadata-eager and implementation-lazy" property,
 // and a single static value import would silently destroy it while every other gate stayed green:
-// R3/R13 govern import DIRECTION (may this file reach that one at all), never evaluation WEIGHT.
+// R13 governs import DIRECTION (may this file reach that one at all), never evaluation WEIGHT.
 //
 // Entry files are repo-root-relative, and are the KEYS of the two records below. Keying by path
 // is what makes a duplicate row unwritable rather than merely discouraged: a repeated key in an
@@ -64,19 +64,19 @@ export type EagerClosureBudget = {
    * excluding just the entry turns the assertion into "this façade evaluates none of its own
    * mechanics", which is the actual ADR-0019 property.
    *
-   * Every package entry surface sets this true except the runner mechanics
-   * facet entries (see PLATFORM_MECHANICS_ENTRY_PREFIX below), whose closure
-   * IS the implementation.
+   * Every package entry surface sets this true except the runner mechanics and named Apple
+   * domain/mechanics facet entries (see the exceptions below), whose closure IS the implementation
+   * intentionally exposed through that subpath.
    * Hub rows set it false -- a hub is a CONSUMER of façades, not neutral vocabulary, and three of
-   * them legitimately hold the R3-permitted static platform seam that has not migrated yet.
+   * them legitimately hold R13-permitted static platform-package seams.
    */
   denyPlatformImplementations: boolean;
 };
 
 /**
- * A concrete platform implementation: the legacy daemon-owned `src/platforms/<family>/` tree, or
- * a private `@agent-device/platform-<family>` workspace package. ADR-0019 names both as "concrete
- * device mechanics" that platform-neutral code reaches only through contracts.
+ * A concrete platform implementation lives in a private `@agent-device/platform-<family>`
+ * workspace package. The retired `src/platforms/<family>/` spelling remains matched so a
+ * reintroduced legacy path cannot launder an eager edge past this guard.
  */
 export const PLATFORM_IMPLEMENTATION_PATTERNS: RegExp[] = [
   /[/\\]platforms[/\\](apple|android|harmonyos|vega|linux|web)[/\\]/,
@@ -106,28 +106,72 @@ export function discoverFacadeEntryFiles(repoRoot: string): string[] {
  */
 export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // --- @agent-device/ad-replay ---
-  'packages/ad-replay/src/index.ts': 58,
+  'packages/ad-replay/src/index.ts': 61,
 
   // --- @agent-device/ad-script ---
-  'packages/ad-script/src/index.ts': 37,
+  'packages/ad-script/src/index.ts': 41,
 
   // --- @agent-device/platform-apple/runner ---
   // #2040 extraction: the façade stays types/pure-helpers/bundle-ids; the whole
-  // client implementation loads only through the './client' subpath, which the
-  // root composition module reaches behind its consumers' dynamic imports.
+  // client implementation is package-internal and loads only behind consumers' dynamic imports.
   'packages/platform-apple/src/runner/index.ts': 13,
-  'packages/platform-apple/src/runner/client.ts': 46,
   'packages/platform-apple/src/runner/test-host.ts': 2,
 
   // --- @agent-device/capture-kit ---
   // R60 review: audio-probe split into descriptor/status/recovery/live-process modules (+3 files).
   'packages/capture-kit/src/index.ts': 32,
+  // #2190 keeps iOS snapshot planning behind its dedicated subpath instead of the broad root.
+  'packages/capture-kit/src/ios-snapshot-planning.ts': 1,
+  // #2191 keeps the iOS snapshot engine behind its dedicated subpath instead of the broad root.
+  'packages/capture-kit/src/ios-snapshot-engine/index.ts': 36,
+  'packages/capture-kit/src/png-resize.ts': 18,
+  'packages/capture-kit/src/png-rgb-difference.ts': 1,
+  'packages/capture-kit/src/png-size.ts': 3,
+  'packages/capture-kit/src/png-worker-client.ts': 10,
+  'packages/capture-kit/src/png.ts': 3,
+  'packages/capture-kit/src/screenshot-density.ts': 6,
+  'packages/capture-kit/src/screenshot-diff-pixels.ts': 1,
+  'packages/capture-kit/src/mobile-snapshot-semantics.ts': 10,
+  'packages/capture-kit/src/snapshot-desktop-projection.ts': 2,
+  'packages/capture-kit/src/snapshot-occlusion.ts': 10,
+  'packages/capture-kit/src/snapshot-quality-backend-capabilities.ts': 1,
+  'packages/capture-kit/src/snapshot-quality-verdict.ts': 2,
+
+  // --- @agent-device/host-kit ---
+  'packages/host-kit/src/archive.ts': 9,
+  'packages/host-kit/src/command.ts': 7,
+  'packages/host-kit/src/diagnostics.ts': 3,
+  // #2136 adds one intentionally eager synchronous module: file.ts must value-re-export the
+  // moved verified-file operations from the existing capability surface. The same module is
+  // already on these static closure paths, so each exact ratchet moves by one: host-kit/file,
+  // provision-kit/install-source, platform-android/mechanics, the Apple app-lifecycle, doctor,
+  // install-artifact, and runner-operations facades, and src/cli. This records deliberate
+  // ownership growth, not budget headroom.
+  'packages/host-kit/src/file.ts': 13,
+  'packages/host-kit/src/host-file.ts': 2,
+  'packages/host-kit/src/process.ts': 12,
+  'packages/host-kit/src/request.ts': 5,
+  'packages/host-kit/src/retry.ts': 6,
+  // #2139 keeps framing, lazy HTTP/body mechanics, and secret comparison behind one
+  // transport port without growing the CLI's eager closure.
+  'packages/host-kit/src/transport.ts': 4,
+  'packages/host-kit/src/version.ts': 4,
+
+  // --- @agent-device/provision-kit ---
+  'packages/provision-kit/src/app-resolution-cache.ts': 1,
+  'packages/provision-kit/src/boot-diagnostics.ts': 3,
+  'packages/provision-kit/src/install-artifact-archive-context.ts': 10,
+  'packages/provision-kit/src/install-source.ts': 26,
+  'packages/provision-kit/src/install-source-config.ts': 3,
+  'packages/provision-kit/src/install-source-network.ts': 3,
+  'packages/provision-kit/src/install-source-network-transport.ts': 1,
+  'packages/provision-kit/src/toolchain-probe.ts': 8,
 
   // --- @agent-device/contracts ---
   'packages/contracts/src/alert-contract.ts': 1,
   'packages/contracts/src/android-clipboard-support.ts': 1,
   // Added by #2041 (adb/IME cluster extraction): shared helper-artifact and touch-plan
-  // vocabulary moved out of src/platforms/android.
+  // vocabulary moved into the Android platform package.
   'packages/contracts/src/android-helper-artifacts.ts': 3,
   'packages/contracts/src/android-touch-plan.ts': 13,
   'packages/contracts/src/android-input-ownership.ts': 1,
@@ -151,6 +195,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/audio-probe-support.ts': 5,
   'packages/contracts/src/audio-runtime-plan.ts': 5,
   'packages/contracts/src/back-mode.ts': 1,
+  'packages/contracts/src/backend-diagnostics.ts': 1,
   'packages/contracts/src/boot-failure.ts': 1,
   'packages/contracts/src/click-button.ts': 3,
   'packages/contracts/src/clipboard.ts': 1,
@@ -185,6 +230,8 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/interaction-error.ts': 1,
   'packages/contracts/src/interaction-guarantees.ts': 1,
   'packages/contracts/src/interactor-types.ts': 1,
+  // #2190's iOS snapshot vocabulary has type-only imports and remains a one-module entry.
+  'packages/contracts/src/ios-snapshot.ts': 1,
   'packages/contracts/src/keyboard.ts': 1,
   'packages/contracts/src/logs-runtime-plan.ts': 5,
   'packages/contracts/src/managed-web-backend.ts': 1,
@@ -218,6 +265,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/settings.ts': 3,
   'packages/contracts/src/snapshot-presentation.ts': 2,
   'packages/contracts/src/snapshot-runtime.ts': 3,
+  'packages/contracts/src/snapshot-scope.ts': 1,
   'packages/contracts/src/snapshot-timeout-evidence.ts': 1,
   'packages/contracts/src/startup-recovery-fence.ts': 1,
   'packages/contracts/src/tv-remote.ts': 3,
@@ -235,27 +283,48 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/kernel/src/errors.ts': 2,
   // Added by #2041: keyed async lock moved from src/utils for the extracted IME lifecycle.
   'packages/kernel/src/keyed-lock.ts': 1,
+  'packages/kernel/src/numeric.ts': 1,
+  'packages/kernel/src/rect-center.ts': 2,
   'packages/kernel/src/rect.ts': 1,
+  'packages/kernel/src/device-isolation.ts': 1,
+  'packages/kernel/src/location-coordinates.ts': 3,
+  'packages/kernel/src/record.ts': 3,
+  'packages/kernel/src/scoped-provider.ts': 1,
+  'packages/kernel/src/screenshot-geometry.ts': 1,
+  'packages/kernel/src/source-value.ts': 3,
+  'packages/kernel/src/success-text.ts': 1,
+  'packages/kernel/src/ttl-memo.ts': 1,
   'packages/kernel/src/redaction.ts': 1,
+  'packages/kernel/src/scroll-indicator.ts': 1,
   'packages/kernel/src/snapshot.ts': 1,
 
   // --- @agent-device/maestro ---
-  'packages/maestro/src/index.ts': 105,
+  'packages/maestro/src/index.ts': 110,
 
   // --- @agent-device/platform-*: ADR-0019's metadata-eager/implementation-lazy façades. Each
   // evaluates only itself; every implementation sits behind a function-scoped `await import`.
   // A pin of 1 is the tightest statement of that property the walker can make.
   'packages/platform-android/src/index.ts': 1,
-  // Transitional #2041 subpaths for the extracted adb/IME cluster; the root shims re-export
-  // them, so their closures carry what src/platforms/android/adb-executor.ts et al. carried
-  // before the move. Deleted together with the shims once the perf/trace migration lands.
-  'packages/platform-android/src/adb-executor.ts': 10,
   'packages/platform-android/src/adb-host.ts': 1,
-  'packages/platform-android/src/ime-helper.ts': 6,
-  'packages/platform-android/src/ime-lifecycle.ts': 17,
+  // The named mechanics facet is intentionally implementation-eager once selected. Its exact
+  // closure is pinned so a future facade expansion is visible in review.
+  'packages/platform-android/src/mechanics.ts': 177,
 
   // --- @agent-device/platform-apple ---
   'packages/platform-apple/src/index.ts': 1,
+  'packages/platform-apple/src/app-lifecycle-facade.ts': 120,
+  'packages/platform-apple/src/app-resolution-facade.ts': 61,
+  'packages/platform-apple/src/debug-symbols-facade.ts': 24,
+  'packages/platform-apple/src/doctor-facade.ts': 101,
+  'packages/platform-apple/src/install-artifact-facade.ts': 42,
+  'packages/platform-apple/src/macos-facade.ts': 25,
+  'packages/platform-apple/src/perf-facade.ts': 60,
+  'packages/platform-apple/src/physical-device-facade.ts': 47,
+  'packages/platform-apple/src/runner-operations-facade.ts': 100,
+  'packages/platform-apple/src/runner-owner-facade.ts': 2,
+  'packages/platform-apple/src/simctl-facade.ts': 18,
+  'packages/platform-apple/src/simulator-facade.ts': 25,
+  'packages/platform-apple/src/tool-provider-facade.ts': 14,
 
   // --- @agent-device/platform-harmonyos ---
   'packages/platform-harmonyos/src/index.ts': 1,
@@ -276,12 +345,12 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/provider-webdriver/src/index.ts': 49,
 
   // --- @agent-device/replay-test ---
-  'packages/replay-test/src/index.ts': 19,
+  'packages/replay-test/src/index.ts': 20,
 
   // --- @agent-device/selectors ---
   'packages/selectors/src/ast.ts': 16,
   'packages/selectors/src/engine.ts': 19,
-  'packages/selectors/src/index.ts': 50,
+  'packages/selectors/src/index.ts': 54,
 
   // --- @agent-device/xml ---
   'packages/xml/src/index.ts': 3,
@@ -323,7 +392,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
  */
 export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // 363 -> 365 in #2004, which cuts per-invocation work and pays two modules for it:
-  // `src/utils/ttl-memo.ts` (version.ts now resolves the package version and the project root
+  // `@agent-device/kernel/ttl-memo` (version.ts now resolves the package version and the project root
   // once per process instead of re-reading package.json several times an invocation) and
   // `src/daemon/client/daemon-launch-spec.ts` (the launch-entry probe, split out of the 726-line
   // daemon-client-lifecycle.ts). Both run on the path every local command already takes, so
@@ -337,38 +406,44 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // readers), `input-audience.ts` (who may write a key), and `common-input-fields.ts` (the table
   // itself). Every command schema already evaluated all three concerns; the growth is three more
   // module records for the same code, with no new subtree behind any of them.
-  'src/cli.ts': 368,
+  // #2148 moves output-only CLI dependencies behind call-time imports and reduces the entry
+  // closure by two modules.
+  // #2146 splits one eagerly reached URL utility into its client and Metro owners.
+  'src/cli.ts': 379,
   'src/platform-runtime.ts': 47,
-  'src/core/command-descriptor/registry.ts': 67,
+  'src/core/command-descriptor/registry.ts': 71,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,
   'src/core/interactors/register-builtins.ts': 6,
   // R64 removes the perf plugin facet and keeps collector binding behind the selected runtime
   // operation. Teardown now owns only neutral durable-resource cleanup; platform collectors load
   // through the perf host when an admitted operation actually runs.
-  'src/daemon/session-teardown.ts': 60,
+  'src/daemon/session-teardown.ts': 68,
 });
 
 /**
- * The runner mechanics facet inside platform-apple (#2040). Its entry surfaces
- * ARE platform implementation, so the deny-platform assertion is meaningless
- * for them the same way it would be vacuous for a platform façade without the
- * entry-self-exclusion: the whole closure is the mechanics being exported.
- * Their weight stays pinned by the exact budgets.
+ * Mechanics facets inside platform packages. Their entry surfaces ARE platform implementation,
+ * so the deny-platform assertion is meaningless for them: the whole closure is the mechanics
+ * being exported. Their weight stays pinned by the exact budgets.
  */
-const PLATFORM_MECHANICS_ENTRY_PREFIX = 'packages/platform-apple/src/runner/';
+const PLATFORM_MECHANICS_ENTRY_PREFIXES = [
+  'packages/platform-apple/src/runner/',
+  'packages/platform-android/src/mechanics.ts',
+] as const;
 
-/**
- * Transitional #2041 entry surfaces: the extracted Android adb/IME cluster. Unlike the six
- * metadata-eager family façades, these subpaths ARE concrete platform implementation — the root
- * shims re-export them wholesale, exactly as the pre-extraction src modules loaded. They cannot
- * satisfy "evaluates none of its own mechanics"; their rows above pin the closure size instead.
- * Deleted together with the shims and subpaths once the perf/trace migration lands.
- */
-const TRANSITIONAL_PLATFORM_IMPLEMENTATION_SURFACES: ReadonlySet<string> = new Set([
-  'packages/platform-android/src/adb-executor.ts',
-  'packages/platform-android/src/adb-host.ts',
-  'packages/platform-android/src/ime-helper.ts',
-  'packages/platform-android/src/ime-lifecycle.ts',
+const APPLE_DOMAIN_MECHANICS_ENTRY_FILES: ReadonlySet<string> = new Set([
+  'packages/platform-apple/src/app-lifecycle-facade.ts',
+  'packages/platform-apple/src/app-resolution-facade.ts',
+  'packages/platform-apple/src/debug-symbols-facade.ts',
+  'packages/platform-apple/src/doctor-facade.ts',
+  'packages/platform-apple/src/install-artifact-facade.ts',
+  'packages/platform-apple/src/macos-facade.ts',
+  'packages/platform-apple/src/perf-facade.ts',
+  'packages/platform-apple/src/physical-device-facade.ts',
+  'packages/platform-apple/src/runner-operations-facade.ts',
+  'packages/platform-apple/src/runner-owner-facade.ts',
+  'packages/platform-apple/src/simctl-facade.ts',
+  'packages/platform-apple/src/simulator-facade.ts',
+  'packages/platform-apple/src/tool-provider-facade.ts',
 ]);
 
 function toRows(
@@ -382,8 +457,10 @@ function toRows(
     kind,
     denyPlatformImplementations:
       kind === 'facade' &&
-      !entryFile.startsWith(PLATFORM_MECHANICS_ENTRY_PREFIX) &&
-      !TRANSITIONAL_PLATFORM_IMPLEMENTATION_SURFACES.has(entryFile),
+      !PLATFORM_MECHANICS_ENTRY_PREFIXES.some((prefix) =>
+        prefix.endsWith('/') ? entryFile.startsWith(prefix) : entryFile === prefix,
+      ) &&
+      !APPLE_DOMAIN_MECHANICS_ENTRY_FILES.has(entryFile),
   }));
 }
 

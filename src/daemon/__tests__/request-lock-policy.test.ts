@@ -142,7 +142,7 @@ test('rejects existing-session selector conflicts under request lock policy', ()
         },
         ref(IOS_SESSION),
       ),
-    /--serial=emulator-5554/i,
+    /Session "qa-ios" is already bound to apple device "iPhone 16" \(SIM-001\), but snapshot selected --serial=emulator-5554/i,
   );
 });
 

@@ -1,17 +1,18 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import { findNodeByRef, normalizeRef, type SnapshotNode } from '@agent-device/kernel/snapshot';
-import { annotationLocalIdentity, readNodeLocalIdentity } from '@agent-device/ad-script';
+import {
+  annotationLocalIdentity,
+  buildAncestryChain,
+  buildIndexMap,
+  filterIdentitySet,
+  readNodeLocalIdentity,
+} from '@agent-device/ad-script';
 import {
   WAIT_LANDMARK_MISMATCH_REASON,
   type TargetAnnotationV1,
   type WaitLandmarkMismatchEvidence,
 } from '@agent-device/contracts/replay';
-import {
-  buildAncestryChain,
-  buildIndexMap,
-  filterIdentitySet,
-} from '../../../replay/target-evidence-tree.ts';
 import type { PublicPlatform } from '@agent-device/kernel/device';
 import { checkWaitText, type SelectorChainMatchList } from '@agent-device/selectors';
 import {

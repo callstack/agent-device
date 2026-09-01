@@ -2,11 +2,12 @@ import type {
   AndroidBlockingDialogFocus,
   AndroidObservationAdapter,
 } from '@agent-device/contracts/android-observation';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { sleep } from '@agent-device/host-kit/retry';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { centerOfRect, type SnapshotNode } from '@agent-device/kernel/snapshot';
-import { sleep } from '../utils/timeouts.ts';
-import { isSnapshotNodeInteractionBlocked } from '../snapshot/snapshot-occlusion.ts';
+
+import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
 import { expireRefFrame } from './ref-frame.ts';
 import type { SessionState } from './types.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';

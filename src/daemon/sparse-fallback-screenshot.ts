@@ -1,5 +1,5 @@
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import { isSparseSnapshotQualityVerdict } from '../snapshot-quality/verdict.ts';
+import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { contextFromFlags } from './context.ts';
 import { captureScreenshotArtifact } from './screenshot-runtime.ts';
 import {

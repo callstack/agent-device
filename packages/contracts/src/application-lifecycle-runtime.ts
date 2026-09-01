@@ -156,6 +156,11 @@ export type PrepareAppleRunnerResult = Readonly<{
   failureReason?: string;
 }>;
 
+/** Controls whether an opportunistic runner session prewarm also proves readiness. */
+export type AppleRunnerSessionPrewarmOptions = Readonly<{
+  healthCheck?: boolean;
+}>;
+
 /** Individual semantic operations exposed by the application lifecycle runtime facet. */
 export type ApplicationLifecycleRuntimeOperations = Readonly<{
   resolveOpenTarget(input: OpenTargetResolutionInput): Promise<OpenTargetResolution>;
@@ -260,6 +265,7 @@ export type AppleApplicationTools = Readonly<{
     execution: ApplicationLifecycleExecution,
     signal: AbortSignal,
     propagateError: boolean,
+    options?: AppleRunnerSessionPrewarmOptions,
   ): Promise<void>;
   notifyRunnerAppRelaunched(
     device: DeviceInfo,

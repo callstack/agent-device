@@ -117,6 +117,42 @@ modules and edges, plus 88 dynamic/type-only edges dependency-cruiser fails to r
   inversion.
 - `cycles[]` — each with `kind` (`value` / `type` / `dynamic`) and its node path.
 
+## Declared-authority overlay
+
+The report also carries `edgeAuthorities[]`, aligned with `edges[]`. Each entry is a compact list
+of labels, so a collapsed edge may carry more than one label. The labels are derived from exact
+roots, exports, and named live-state symbols in `scripts/layering/architecture-ownership.ts`:
+
+- `vocabulary` — the target is a declared contract facade root.
+- `capability` — the target is a declared capability root and the import names a declared export.
+- `live-state-shape` — the edge names the exact `SessionState` type from `src/daemon/types.ts`.
+- `live-state-authority` — the edge names the exact `SessionStore` class from
+  `src/daemon/session-store.ts`.
+- `executable-policy` — the source is under a declared executable-policy root.
+- `ordinary` — no declared authority evidence matches the edge.
+
+`edges[][2]` remains the independent import-kind code (`0` value, `1` type-only, `2` dynamic), and
+`authorityCounts` reports stable counts of labels across the collapsed edges. This is a report-only
+overlay: it reports declared authority, not behavioral ownership quality, safe removability, or a
+composite score/pass threshold.
+
+For reproducible inspection outside the repository's `.tmp` directory:
+
+```sh
+pnpm depgraph --out /tmp/agent-device-2128-depgraph.json
+jq '{generated, authorityCounts}' /tmp/agent-device-2128-depgraph.json
+jq -r '
+  . as $graph
+  | range(0; ($graph.edges | length)) as $i
+  | select($graph.edgeAuthorities[$i] != ["ordinary"])
+  | [($graph.edgeAuthorities[$i] | join("+")),
+     $graph.nodes[$graph.edges[$i][0]].id,
+     $graph.nodes[$graph.edges[$i][1]].id,
+     ["value", "type", "dynamic"][$graph.edges[$i][2]]]
+  | @tsv
+' /tmp/agent-device-2128-depgraph.json
+```
+
 Bit `2` means the target is reachable from the source at distance >= 2 over value edges. That is
 module reachability, not removability — see the caveats above. Treat it as a question ("why is
 this imported directly as well?"), never as an instruction.

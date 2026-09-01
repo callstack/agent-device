@@ -17,8 +17,8 @@ import type {
 } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { isKeyboardAction, type KeyboardAction } from '../utils/keyboard-actions.ts';
-import { successText } from '../utils/success-text.ts';
+import { isKeyboardAction, type KeyboardAction } from '../core/keyboard-actions.ts';
+import { successText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
 import {
   admitRuntimeUse,
@@ -26,7 +26,7 @@ import {
   type RuntimeAdmissionRequest,
 } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
-import type { DaemonFailureResponse } from './handlers/response.ts';
+import type { DaemonFailureResponse } from './response.ts';
 
 type KeyboardRuntimeAction = 'status' | 'dismiss' | 'enter';
 

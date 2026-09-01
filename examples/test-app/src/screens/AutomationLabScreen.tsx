@@ -130,8 +130,8 @@ export function AutomationLabScreen(props: {
       <ScreenTitle
         badge="E2E"
         subtitle="Durable outcomes for simulator commands that need app-visible evidence."
-        title="Automation lab"
         testID="automation-title"
+        title="Automation lab"
       />
       <SectionCard title="Runtime state">
         <StateRow label="Window" testID="automation-window" value={windowMode} />

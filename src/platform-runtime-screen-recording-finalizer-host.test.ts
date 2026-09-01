@@ -7,7 +7,7 @@ const video = vi.hoisted(() => ({
   isPlayable: vi.fn(async () => true),
 }));
 const telemetry = vi.hoisted(() => vi.fn(() => '/tmp/capture.telemetry.json'));
-vi.mock('./utils/video.ts', () => ({
+vi.mock('./recording/video.ts', () => ({
   waitForStableFile: video.stable,
   waitForPlayableVideo: video.playable,
   isPlayableVideo: video.isPlayable,

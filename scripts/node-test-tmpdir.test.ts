@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { runCmd, runCmdBackground } from '../src/utils/exec.ts';
+import { runCmd, runCmdBackground } from '@agent-device/host-kit/command';
 import {
   liveRunDirectoryConsumers,
   pruneAbandonedRunDirectories,
@@ -318,7 +318,7 @@ test('a run whose owner alone was killed keeps its directory while a child still
     `import fs from 'node:fs';
 import os from 'node:os';
 import { test } from 'node:test';
-import { runCmdDetached } from '../src/utils/exec.ts';
+import { runCmdDetached } from '@agent-device/host-kit/command';
 
 test('probe starts a long-lived detached child that inherits TMPDIR, then waits to be killed', async () => {
   const childPid = runCmdDetached(process.execPath, ['-e', 'setTimeout(() => {}, 60_000)']);

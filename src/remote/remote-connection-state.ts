@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resolveRemoteConfigPath, resolveRemoteConfigProfile } from './remote-config-core.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { publishFileSync } from '../utils/atomic-file.ts';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { publishFileSync } from '@agent-device/host-kit/file';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { LeaseBackend, SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import {
@@ -170,9 +170,31 @@ export function resolveRemoteConnectionDefaults(options: {
 }
 
 export function buildRemoteConnectionRequestMetadata(
-  state: RemoteConnectionState,
+  state: RemoteConnectionRequestMetadata,
 ): RemoteConnectionRequestMetadata | undefined {
   return leaseScopeToConnectionMetadata(leaseScopeFromOptions(state));
+}
+
+export function mergeRemoteConnectionRequestMetadata(
+  primary: RemoteConnectionRequestMetadata,
+  fallback: RemoteConnectionRequestMetadata,
+): RemoteConnectionRequestMetadata {
+  return {
+    leaseProvider: primary.leaseProvider ?? fallback.leaseProvider,
+    clientId: primary.clientId ?? fallback.clientId,
+    deviceKey: primary.deviceKey ?? fallback.deviceKey,
+  };
+}
+
+export function remoteConnectionLeaseIdentityMatches(
+  state: RemoteConnectionState,
+  metadata: RemoteConnectionRequestMetadata | undefined,
+): boolean {
+  if (!metadata) return true;
+  return (
+    (metadata.leaseProvider === undefined || state.leaseProvider === metadata.leaseProvider) &&
+    (metadata.clientId === undefined || state.clientId === metadata.clientId)
+  );
 }
 
 export function hashRemoteConfigFile(configPath: string): string {
@@ -261,7 +283,7 @@ function sanitizeDaemonBaseUrl(value: string | undefined): string | undefined {
   const url = new URL(value);
   url.username = '';
   url.password = '';
-  for (const key of [...url.searchParams.keys()]) {
+  for (const key of Array.from(url.searchParams.keys())) {
     if (/(auth|key|password|secret|token)/i.test(key)) {
       url.searchParams.delete(key);
     }

@@ -3,11 +3,11 @@ import { appEventRuntimeUse } from '@agent-device/contracts/platform-runtime-ope
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { parseTriggerAppEventArgs, resolveAppEventUrl } from '../core/app-events.ts';
-import { successText } from '../utils/success-text.ts';
+import { successText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
-import type { DaemonFailureResponse } from './handlers/response.ts';
+import type { DaemonFailureResponse } from './response.ts';
 
 /**
  * What the admit-then-bind step reports: either the refusal an unadmitted cell produced, or the

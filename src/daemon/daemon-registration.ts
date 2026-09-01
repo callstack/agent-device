@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { ownerIdentityDiffers, type OwnerIdentity } from '../utils/owner-identity.ts';
+import { ownerIdentityDiffers, type OwnerIdentity } from '@agent-device/host-kit/process';
 import { resolveDaemonPaths } from './config.ts';
 
 /**

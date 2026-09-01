@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { readSnapshotQualityVerdict } from '../verdict.ts';
-import { renderSnapshotQualityWarnings } from '../warnings.ts';
+import { readSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
+import { renderSnapshotQualityWarnings } from '../../snapshot/snapshot-presentation/quality-warnings.ts';
 
 const sharedRecoveryReason =
   'iOS XCTest snapshot failed while serializing the accessibility tree. Error kAXErrorIllegalArgument getting snapshot for element <AXUIElementRef 0x1>';

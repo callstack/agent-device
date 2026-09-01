@@ -7,7 +7,7 @@ import { buildCommandUsageText, buildUsageText, helpTopicIds } from './cli-help.
 import { listCliCommandNames } from '../command-catalog.ts';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
 import { findCommandMetadata, isCommandName } from '../commands/command-metadata.ts';
-import { readVersion } from '../utils/version.ts';
+import { readVersion } from '@agent-device/host-kit/version';
 
 // Help is the agent-facing contract, and agents copy its example lines verbatim, so an example the
 // CLI schema rejects is a broken command surface — not a docs nit (#1765: `help react-native`

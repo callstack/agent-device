@@ -25,8 +25,7 @@ import {
  * underscores, leading with a letter or underscore. Canonical here because
  * `env KEY=VALUE` directive parsing is script grammar; the sibling
  * `vars.ts` (runtime `${VAR}` resolution) imports it directly, and
- * `src/replay/recorded-input.ts` imports it from this package's façade
- * rather than duplicating the rule.
+ * `recorded-input.ts` imports it directly rather than duplicating the rule.
  */
 export const REPLAY_VAR_KEY_RE = /^[A-Z_][A-Z0-9_]*$/;
 

@@ -13,10 +13,7 @@ import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { dispatchSwipeViaRuntime } from '../handlers/interaction-gesture.ts';
 import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
 import { createRequestRuntimeBindings } from '../request-runtime-binding.ts';
-import {
-  createLocalLinuxToolProvider,
-  withLinuxToolProvider,
-} from '../../platforms/linux/tool-provider.ts';
+import { createLocalLinuxToolProvider, withLinuxToolProvider } from '@agent-device/platform-linux';
 import {
   unavailableBindDevice,
   unavailableBindExactDevice,
@@ -103,6 +100,20 @@ test('request handler chain routes trace commands to the record-trace family', a
 
   assert.equal(response?.ok, true);
   assert.equal(response?.data?.trace, 'started');
+});
+
+test('request handler chain forwards the deferred provider app catalog to inventory', async () => {
+  const req = makeRequest('apps');
+  req.flags = { platform: 'android', leaseProvider: 'limrun' };
+  const response = await runRequestHandlerChain({
+    ...makeChainParams(req),
+    providerAppCatalog: {
+      supports: (provider) => provider === 'limrun',
+      list: async () => ['Example.apk'],
+    },
+  });
+
+  assert.deepEqual(response, { ok: true, data: { apps: ['Example.apk'] } });
 });
 
 // R61 put `react-native dismiss-overlay` behind the owner's own `tapPoint` admission, and the
@@ -193,7 +204,7 @@ test('duration-less public coordinate swipe retains Linux drag behavior', async 
   sessionStore.set('linux-swipe', makeSession('linux-swipe', { device: LINUX_DEVICE }));
   const drags: number[][] = [];
   let captureCount = 0;
-  const provider = createLocalLinuxToolProvider({
+  const provider = await createLocalLinuxToolProvider({
     accessibility: {
       captureTree: async () => {
         captureCount += 1;

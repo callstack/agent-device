@@ -4,7 +4,7 @@ import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel
 import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '../response.ts';
 
 /** The tree a mutating find resolves its target against, plus what the capture disclosed. */
 export type FindTargetTree = {

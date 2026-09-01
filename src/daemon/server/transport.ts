@@ -8,10 +8,11 @@ import {
   markRequestCanceled,
   registerRequestAbort,
   resolveRequestTrackingId,
-} from '../../request/cancel.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { consumeTextLines } from '../../utils/line-stream.ts';
-import { withRequestProgressSink } from '../../request/progress.ts';
+  withRequestProgressSink,
+} from '@agent-device/host-kit/request';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { consumeTextLines } from '@agent-device/host-kit/transport';
+
 import {
   serializeDaemonProgressEnvelope,
   serializeDaemonResponseEnvelope,
@@ -84,8 +85,8 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
               : undefined,
             async () => await handleRequest(req),
           );
-        } catch (err) {
-          response = { ok: false, error: normalizeError(err) };
+        } catch (error) {
+          response = { ok: false, error: normalizeError(error) };
         } finally {
           inFlightRequests -= 1;
           if (requestAbortRegistration) {

@@ -12,11 +12,12 @@ import { contextFromFlags } from '../context.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { recordIfSession } from './snapshot-session.ts';
-import { errorResponse, type DaemonFailureResponse } from './response.ts';
+import { errorResponse, type DaemonFailureResponse } from '../response.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { readLocationCoordinate } from '../../utils/location-coordinates.ts';
-import { successText, withSuccessText } from '../../utils/success-text.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { readLocationCoordinate } from '@agent-device/kernel/location-coordinates';
+import { successText, withSuccessText } from '@agent-device/kernel/success-text';
+
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { admitRuntimeUse } from '../runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../snapshot-runtime-capture-input.ts';

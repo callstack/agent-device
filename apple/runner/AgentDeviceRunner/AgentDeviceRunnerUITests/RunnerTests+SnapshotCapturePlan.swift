@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 // MARK: - Snapshot capture plans (ADR 0004)
 //
@@ -30,21 +31,6 @@ struct SnapshotQuality: Codable {
   var timing: SnapshotCaptureTiming? = nil
 }
 
-/// How much of the merged-element set the custom-action pass actually read. An
-/// unread element renders exactly like one with no actions, so a partial pass
-/// has to say so — otherwise absence reads as proof of absence.
-struct SnapshotCustomActionCoverage: Codable {
-  let read: Int
-  let candidates: Int
-  /// Elements whose action list was clipped by the per-element output caps. A
-  /// clipped list looks complete, so it is disclosed on the same principle as
-  /// an unread element.
-  let truncated: Int
-  /// The pass stopped early because an earlier read is still hung. Distinct from
-  /// a budget stop: the remedy is waiting, not scrolling.
-  let blocked: Bool
-}
-
 enum SnapshotXCTestChannelPlanState: Equatable {
   case normal
   case deferredToIndependentBackend
@@ -72,19 +58,26 @@ enum SnapshotCaptureTerminalPolicy {
 
 struct SnapshotBackendCapture {
   let payload: DataPayload
-  /// Set by the private AX backend when the ladder accepted a shallower depth than requested.
   let effectiveDepth: Int?
-  /// Set by the private AX backend when the capture asked for custom actions.
   var customActions: SnapshotCustomActionCoverage? = nil
-  /// Broad presentation used only by the quality classifier when a scope narrows publication.
-  /// A legitimate missing scope is an empty healthy projection, not backend failure evidence.
   var qualityPayload: DataPayload? = nil
-  /// Set by the capture plan after measuring acquisition and presentation separately. Direct
-  /// presentation fixtures do not claim a plan timing.
   var timing: SnapshotCaptureTiming? = nil
 }
 
 extension RunnerTests {
+  static func makeSnapshotBackendCapture(
+    from result: AgentDeviceSnapshotPresentation.SnapshotPresentationResult
+  ) -> SnapshotBackendCapture {
+    SnapshotBackendCapture(
+      payload: DataPayload(nodes: result.nodes, truncated: result.truncated),
+      effectiveDepth: result.effectiveDepth,
+      customActions: result.customActions,
+      qualityPayload: result.qualityNodes.map {
+        DataPayload(nodes: $0, truncated: result.truncated)
+      }
+    )
+  }
+
   static let sparseRecoveryTruncatedNodeThreshold = 8
   /// Umbrella wall-clock budget for one capture plan. Individual backends bound themselves,
   /// but chained recovery tiers must never stack past the 30s main-thread watchdog: when the
@@ -496,14 +489,19 @@ extension RunnerTests {
     let presented: SnapshotBackendCapture
     do {
       presented = try timer.measure(.presentation) {
-        guard let capture = try SnapshotPresentation.present(acquisition, options: options) else {
+        guard let result = try SnapshotPresentation.present(acquisition, options: options) else {
+          NSLog(
+            "AGENT_DEVICE_RUNNER_SNAPSHOT_PROJECTION_MISMATCH requested=%@ acquired=%@",
+            hint.projection.rawValue,
+            acquisition.hint.projection.rawValue
+          )
           throw Self.snapshotProjectionMismatchFailure(
             kind,
             requested: hint.projection,
             acquired: acquisition.hint.projection
           )
         }
-        return capture
+        return Self.makeSnapshotBackendCapture(from: result)
       }
     } catch let failure as SnapshotPresentationFailure {
       return SnapshotBackendAttempt(
@@ -648,6 +646,10 @@ extension RunnerTests {
       message: Self.legacyQualityMessage(quality) ?? payload.message,
       nodes: payload.nodes,
       truncated: payload.truncated == true || state != "healthy" || capture.effectiveDepth != nil,
+      qualityPayload: capture.qualityPayload.flatMap { quality in
+        guard let nodes = quality.nodes else { return nil }
+        return SnapshotQualityPayload(nodes: nodes, truncated: quality.truncated == true)
+      },
       snapshotQuality: quality,
       runnerFatal: payload.runnerFatal,
       runnerFatalReason: payload.runnerFatalReason
@@ -884,6 +886,29 @@ extension RunnerTests {
     XCTAssertEqual(payload.nodes?.count, 1)
   }
 
+  func testSnapshotQualityCarriesUnscopedQualityPayload() {
+    let quality = DataPayload(
+      nodes: [planTestNode(index: 0, type: "Application", label: "App")],
+      truncated: false
+    )
+    let capture = SnapshotBackendCapture(
+      payload: quality,
+      effectiveDepth: nil,
+      qualityPayload: quality
+    )
+
+    let payload = stampedSnapshotPayload(
+      capture,
+      backend: .recursiveTree,
+      state: "healthy",
+      reason: nil
+    )
+
+    XCTAssertEqual(payload.qualityPayload?.nodes.count, 1)
+    XCTAssertEqual(payload.qualityPayload?.truncated, false)
+    XCTAssertNil(payload.qualityPayload?.scope)
+  }
+
   func testDirectPresentationDoesNotClaimPlanTiming() {
     let options = PresentationOptions(
       interactiveOnly: false,
@@ -891,7 +916,7 @@ extension RunnerTests {
       scope: nil,
       raw: true
     )
-    let capture = SnapshotPresentation.presentRaw(
+    let result = SnapshotPresentation.presentRaw(
       SnapshotAcquisition(
         hint: SnapshotPresentation.captureHint(for: options),
         nodes: [],
@@ -901,6 +926,7 @@ extension RunnerTests {
       ),
       options: options
     )
+    let capture = Self.makeSnapshotBackendCapture(from: result)
 
     let payload = stampedSnapshotPayload(
       capture,

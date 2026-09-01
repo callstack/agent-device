@@ -8,7 +8,9 @@ vi.mock('../request/device-inventory-context.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../request/device-inventory-context.ts')>()),
   listLocalDeviceInventory: listBootedIosSimulators,
 }));
-vi.mock('../platforms/apple/core/app-resolution.ts', () => ({ detectSoleRunningIosSimulatorApp }));
+vi.mock('@agent-device/platform-apple/app-resolution', () => ({
+  detectSoleRunningIosSimulatorApp,
+}));
 
 import { IOS_DEVICE, IOS_SIMULATOR } from '../__tests__/test-utils/device-fixtures.ts';
 import { buildIosOpenCommandHint, resolveSoleForegroundIosApp } from './ios-app-session-hint.ts';

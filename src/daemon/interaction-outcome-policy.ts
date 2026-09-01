@@ -2,7 +2,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import { isMobilePlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { collectKeyboardChromeRefs } from '../core/snapshot-chrome.ts';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import { contextFromFlags, type DaemonCommandContext } from './context.ts';
 import type { SessionState } from './types.ts';

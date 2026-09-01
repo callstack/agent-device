@@ -11,7 +11,7 @@ import type { FileInputRef } from '../../../io.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { assertResolvedAppsFilter } from '../app-inventory-contract.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { successText } from '../../../utils/success-text.ts';
+import { successText } from '@agent-device/kernel/success-text';
 import { resolveCommandInput } from '../../io-policy.ts';
 import {
   toBackendResult,

@@ -135,7 +135,7 @@ test('a replay --from continuation on a reaped repair session gets REPAIR_SESSIO
   const scriptPath = path.join(root, 'flow.ad');
   fs.writeFileSync(scriptPath, 'open "Demo"\nclick id="a"\n');
 
-  // Compute the plan digest exactly as runReplayScriptSource does (a real agent
+  // Compute the plan digest exactly as runReplayCommand does (a real agent
   // takes it from the divergence report's resume.planDigest).
   const flags = { platform: 'ios' as const };
   const digest = inspectAdReplay(fs.readFileSync(scriptPath, 'utf8'), {

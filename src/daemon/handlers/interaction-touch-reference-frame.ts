@@ -2,12 +2,11 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../session-store.ts';
 import { getSnapshotReferenceFrame } from '../touch-reference-frame.ts';
 import type { SessionState } from '../types.ts';
-import type { ContextFromFlags } from './interaction-common.ts';
-import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
+import type { CaptureSnapshotForSession, ContextFromFlags } from '../interaction/index.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 
 async function resolveDirectTouchReferenceFrame(params: {

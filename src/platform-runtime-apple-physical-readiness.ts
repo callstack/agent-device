@@ -6,8 +6,9 @@ export function createApplePhysicalReadinessHost(): DeviceReadinessRuntimeHost['
       signal.throwIfAborted();
       try {
         const { resolveIosPhysicalDeviceControl } =
-          await import('./platforms/apple/core/physical-device-control.ts');
-        await resolveIosPhysicalDeviceControl(device).ensureReady(device, signal);
+          await import('@agent-device/platform-apple/physical-device');
+        const control = resolveIosPhysicalDeviceControl(device);
+        await control.ensureReady(device, signal);
         signal.throwIfAborted();
       } catch (error) {
         signal.throwIfAborted();

@@ -1,0 +1,1170 @@
+{
+  "version": 1,
+  "viewport": { "x": 0, "y": 0, "width": 320, "height": 240 },
+  "cases": [
+    {
+      "name": "nested ancestor clips and actionability",
+      "swift": true,
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": null,
+      "scope": null,
+      "foldPolicy": "cursor-projected",
+      "truncated": false,
+      "residue": [],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "ScrollView",
+          "label": "Outer",
+          "rect": { "x": 16, "y": 20, "width": 180, "height": 180 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 1,
+          "parentIndex": 0
+        },
+        {
+          "index": 2,
+          "type": "ScrollView",
+          "label": "Inner",
+          "rect": { "x": 80, "y": 60, "width": 100, "height": 80 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 2,
+          "parentIndex": 1
+        },
+        {
+          "index": 3,
+          "type": "Button",
+          "label": "Partially visible",
+          "rect": { "x": 150, "y": 110, "width": 100, "height": 60 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 3,
+          "parentIndex": 2
+        },
+        {
+          "index": 4,
+          "type": "Button",
+          "label": "Escaped child",
+          "rect": { "x": 190, "y": 110, "width": 20, "height": 20 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 3,
+          "parentIndex": 2
+        }
+      ],
+      "expected": {
+        "outcome": "success",
+        "truncated": false,
+        "residue": [],
+        "nodes": [
+          {
+            "index": 0,
+            "type": "Application",
+            "label": "App",
+            "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+            "depth": 0,
+            "parentIndex": null,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 1,
+            "type": "ScrollView",
+            "label": "Outer",
+            "rect": { "x": 16, "y": 20, "width": 180, "height": 180 },
+            "depth": 1,
+            "parentIndex": 0,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 2,
+            "type": "ScrollView",
+            "label": "Inner",
+            "rect": { "x": 80, "y": 60, "width": 100, "height": 80 },
+            "depth": 2,
+            "parentIndex": 1,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 3,
+            "type": "Button",
+            "label": "Partially visible",
+            "rect": { "x": 150, "y": 110, "width": 30, "height": 30 },
+            "depth": 3,
+            "parentIndex": 2,
+            "hittable": true,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "viewport edge remains positively actionable",
+      "swift": true,
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": null,
+      "scope": null,
+      "foldPolicy": "cursor-projected",
+      "truncated": false,
+      "residue": [],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Edge",
+          "rect": { "x": 300, "y": 100, "width": 40, "height": 40 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 1,
+          "parentIndex": 0
+        }
+      ],
+      "expected": {
+        "outcome": "success",
+        "truncated": false,
+        "residue": [],
+        "nodes": [
+          {
+            "index": 0,
+            "type": "Application",
+            "label": "App",
+            "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+            "depth": 0,
+            "parentIndex": null,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 1,
+            "type": "Button",
+            "label": "Edge",
+            "rect": { "x": 300, "y": 100, "width": 20, "height": 40 },
+            "depth": 1,
+            "parentIndex": 0,
+            "hittable": true,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "geometryless cursor nodes keep independent descendants",
+      "swift": false,
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": null,
+      "scope": null,
+      "foldPolicy": "cursor-projected",
+      "truncated": false,
+      "residue": [],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "Other",
+          "label": "No frame",
+          "enabled": true,
+          "hittable": false,
+          "depth": 1,
+          "parentIndex": 0
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Child",
+          "rect": { "x": 20, "y": 20, "width": 40, "height": 40 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 2,
+          "parentIndex": 1
+        }
+      ],
+      "expected": {
+        "outcome": "success",
+        "truncated": false,
+        "residue": [],
+        "nodes": [
+          {
+            "index": 0,
+            "type": "Application",
+            "label": "App",
+            "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+            "depth": 0,
+            "parentIndex": null,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 1,
+            "type": "Other",
+            "label": "No frame",
+            "rect": null,
+            "depth": 1,
+            "parentIndex": 0,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 2,
+            "type": "Button",
+            "label": "Child",
+            "rect": { "x": 20, "y": 20, "width": 40, "height": 40 },
+            "depth": 2,
+            "parentIndex": 1,
+            "hittable": true,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "plain viewport keeps child visibility independent",
+      "swift": true,
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": null,
+      "scope": null,
+      "foldPolicy": "plain-viewport",
+      "truncated": false,
+      "residue": [],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "ScrollView",
+          "label": "Scroll",
+          "rect": { "x": 0, "y": 100, "width": 320, "height": 40 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 1,
+          "parentIndex": 0
+        },
+        {
+          "index": 2,
+          "type": "StaticText",
+          "label": "Outside scroll clip",
+          "rect": { "x": 10, "y": 200, "width": 80, "height": 20 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 2,
+          "parentIndex": 1
+        }
+      ],
+      "expected": {
+        "outcome": "success",
+        "truncated": false,
+        "residue": [],
+        "nodes": [
+          {
+            "index": 0,
+            "type": "Application",
+            "label": "App",
+            "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+            "depth": 0,
+            "parentIndex": null,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 1,
+            "type": "ScrollView",
+            "label": "Scroll",
+            "rect": { "x": 0, "y": 100, "width": 320, "height": 40 },
+            "depth": 1,
+            "parentIndex": 0,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 2,
+            "type": "StaticText",
+            "label": "Outside scroll clip",
+            "rect": { "x": 10, "y": 200, "width": 80, "height": 20 },
+            "depth": 2,
+            "parentIndex": 1,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "raw projection preserves reported geometry",
+      "swift": true,
+      "projection": "raw",
+      "interactiveOnly": true,
+      "depth": null,
+      "scope": null,
+      "foldPolicy": "cursor-projected",
+      "truncated": false,
+      "residue": [],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "ScrollView",
+          "label": "Outer",
+          "rect": { "x": 16, "y": 20, "width": 180, "height": 180 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 1,
+          "parentIndex": 0
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Escaped child",
+          "rect": { "x": 210, "y": 80, "width": 100, "height": 40 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 2,
+          "parentIndex": 1
+        }
+      ],
+      "expected": {
+        "outcome": "success",
+        "truncated": false,
+        "residue": [],
+        "nodes": [
+          {
+            "index": 0,
+            "type": "Application",
+            "label": "App",
+            "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+            "depth": 0,
+            "parentIndex": null,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 1,
+            "type": "ScrollView",
+            "label": "Outer",
+            "rect": { "x": 16, "y": 20, "width": 180, "height": 180 },
+            "depth": 1,
+            "parentIndex": 0,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 2,
+            "type": "Button",
+            "label": "Escaped child",
+            "rect": { "x": 210, "y": 80, "width": 100, "height": 40 },
+            "depth": 2,
+            "parentIndex": 1,
+            "hittable": true,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "raw unscoped depth uses the acquisition frontier",
+      "swift": true,
+      "projection": "raw",
+      "interactiveOnly": false,
+      "depth": 1,
+      "scope": null,
+      "foldPolicy": "cursor-projected",
+      "truncated": false,
+      "residue": [],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "ScrollView",
+          "label": "Outer",
+          "rect": { "x": 16, "y": 20, "width": 180, "height": 180 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 1,
+          "parentIndex": 0
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Deep child",
+          "rect": { "x": 20, "y": 40, "width": 80, "height": 40 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 2,
+          "parentIndex": 1
+        }
+      ],
+      "expected": {
+        "outcome": "success",
+        "truncated": false,
+        "residue": [],
+        "nodes": [
+          {
+            "index": 0,
+            "type": "Application",
+            "label": "App",
+            "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+            "depth": 0,
+            "parentIndex": null,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 1,
+            "type": "ScrollView",
+            "label": "Outer",
+            "rect": { "x": 16, "y": 20, "width": 180, "height": 180 },
+            "depth": 1,
+            "parentIndex": 0,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "scope reroots wrappers and regular depth",
+      "swift": true,
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": 1,
+      "scope": "Target",
+      "foldPolicy": "cursor-projected",
+      "truncated": false,
+      "residue": [],
+      "qualityLabels": ["App", "Wrapper", "Target", "Save"],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "Other",
+          "label": "Wrapper",
+          "rect": { "x": 10, "y": 10, "width": 200, "height": 100 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 1,
+          "parentIndex": 0
+        },
+        {
+          "index": 2,
+          "type": "Other",
+          "label": "Target",
+          "rect": { "x": 10, "y": 10, "width": 200, "height": 100 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 2,
+          "parentIndex": 1
+        },
+        {
+          "index": 3,
+          "type": "Button",
+          "label": "Save",
+          "rect": { "x": 20, "y": 20, "width": 80, "height": 40 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 3,
+          "parentIndex": 2
+        }
+      ],
+      "expected": {
+        "outcome": "success",
+        "truncated": false,
+        "residue": [],
+        "nodes": [
+          {
+            "index": 0,
+            "type": "Other",
+            "label": "Target",
+            "rect": { "x": 10, "y": 10, "width": 200, "height": 100 },
+            "depth": 0,
+            "parentIndex": null,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 1,
+            "type": "Button",
+            "label": "Save",
+            "rect": { "x": 20, "y": 20, "width": 80, "height": 40 },
+            "depth": 1,
+            "parentIndex": 0,
+            "hittable": true,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "scope depth zero retains only the matched root",
+      "swift": true,
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": 0,
+      "scope": "Target",
+      "foldPolicy": "cursor-projected",
+      "truncated": false,
+      "residue": [],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "Other",
+          "label": "Target",
+          "rect": { "x": 10, "y": 10, "width": 200, "height": 100 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 1,
+          "parentIndex": 0
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Save",
+          "rect": { "x": 20, "y": 20, "width": 80, "height": 40 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 2,
+          "parentIndex": 1
+        }
+      ],
+      "expected": {
+        "outcome": "success",
+        "truncated": false,
+        "residue": [],
+        "nodes": [
+          {
+            "index": 0,
+            "type": "Other",
+            "label": "Target",
+            "rect": { "x": 10, "y": 10, "width": 200, "height": 100 },
+            "depth": 0,
+            "parentIndex": null,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "raw scope depth counts source depth",
+      "swift": true,
+      "projection": "raw",
+      "interactiveOnly": false,
+      "depth": 1,
+      "scope": "Target",
+      "foldPolicy": "cursor-projected",
+      "truncated": false,
+      "residue": [],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "Other",
+          "label": "Target",
+          "rect": { "x": 10, "y": 10, "width": 200, "height": 100 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 1,
+          "parentIndex": 0
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Save",
+          "rect": { "x": 20, "y": 20, "width": 80, "height": 40 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 2,
+          "parentIndex": 1
+        },
+        {
+          "index": 3,
+          "type": "StaticText",
+          "label": "Too deep",
+          "rect": { "x": 20, "y": 70, "width": 80, "height": 20 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 3,
+          "parentIndex": 1
+        }
+      ],
+      "expected": {
+        "outcome": "success",
+        "truncated": false,
+        "residue": [],
+        "nodes": [
+          {
+            "index": 0,
+            "type": "Other",
+            "label": "Target",
+            "rect": { "x": 10, "y": 10, "width": 200, "height": 100 },
+            "depth": 0,
+            "parentIndex": null,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 1,
+            "type": "Button",
+            "label": "Save",
+            "rect": { "x": 20, "y": 20, "width": 80, "height": 40 },
+            "depth": 1,
+            "parentIndex": 0,
+            "hittable": true,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "hidden scroll content becomes directional hints",
+      "swift": true,
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": null,
+      "scope": null,
+      "foldPolicy": "cursor-projected",
+      "truncated": false,
+      "residue": [],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "ScrollView",
+          "label": "Scroll",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 100 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 1,
+          "parentIndex": 0
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Above",
+          "rect": { "x": 10, "y": -40, "width": 40, "height": 20 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 2,
+          "parentIndex": 1
+        },
+        {
+          "index": 3,
+          "type": "Button",
+          "label": "Visible",
+          "rect": { "x": 10, "y": 10, "width": 40, "height": 20 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 2,
+          "parentIndex": 1
+        },
+        {
+          "index": 4,
+          "type": "Button",
+          "label": "Below",
+          "rect": { "x": 10, "y": 110, "width": 40, "height": 20 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 2,
+          "parentIndex": 1
+        }
+      ],
+      "expected": {
+        "outcome": "success",
+        "truncated": false,
+        "residue": [],
+        "nodes": [
+          {
+            "index": 0,
+            "type": "Application",
+            "label": "App",
+            "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+            "depth": 0,
+            "parentIndex": null,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 1,
+            "type": "ScrollView",
+            "label": "Scroll",
+            "rect": { "x": 0, "y": 0, "width": 320, "height": 100 },
+            "depth": 1,
+            "parentIndex": 0,
+            "hittable": false,
+            "hiddenContentAbove": true,
+            "hiddenContentBelow": true
+          },
+          {
+            "index": 2,
+            "type": "Button",
+            "label": "Visible",
+            "rect": { "x": 10, "y": 10, "width": 40, "height": 20 },
+            "depth": 2,
+            "parentIndex": 1,
+            "hittable": true,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "interactive only compacts semantic representatives",
+      "swift": false,
+      "projection": "regular",
+      "interactiveOnly": true,
+      "depth": null,
+      "scope": null,
+      "foldPolicy": "cursor-projected",
+      "truncated": false,
+      "residue": [],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "Table",
+          "label": "Settings",
+          "rect": { "x": 0, "y": 40, "width": 320, "height": 200 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 1,
+          "parentIndex": 0
+        },
+        {
+          "index": 2,
+          "type": "Cell",
+          "label": "General",
+          "rect": { "x": 16, "y": 80, "width": 288, "height": 52 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 2,
+          "parentIndex": 1
+        },
+        {
+          "index": 3,
+          "type": "Button",
+          "label": "General",
+          "rect": { "x": 16, "y": 80, "width": 288, "height": 52 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 3,
+          "parentIndex": 2
+        },
+        {
+          "index": 4,
+          "type": "StaticText",
+          "label": "General",
+          "rect": { "x": 16, "y": 80, "width": 288, "height": 52 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 4,
+          "parentIndex": 3
+        }
+      ],
+      "expected": {
+        "outcome": "success",
+        "truncated": false,
+        "residue": [],
+        "nodes": [
+          {
+            "index": 0,
+            "type": "Application",
+            "label": "App",
+            "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+            "depth": 0,
+            "parentIndex": null,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 1,
+            "type": "Table",
+            "label": "Settings",
+            "rect": { "x": 0, "y": 40, "width": 320, "height": 200 },
+            "depth": 1,
+            "parentIndex": 0,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 2,
+            "type": "Cell",
+            "label": "General",
+            "rect": { "x": 16, "y": 80, "width": 288, "height": 52 },
+            "depth": 2,
+            "parentIndex": 1,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "unavailable hittability fails closed",
+      "swift": false,
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": null,
+      "scope": null,
+      "foldPolicy": "cursor-projected",
+      "truncated": false,
+      "residue": [{ "kind": "unavailable-fact", "fact": "hittability" }],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Maybe actionable",
+          "rect": { "x": 20, "y": 20, "width": 80, "height": 40 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 1,
+          "parentIndex": 0
+        }
+      ],
+      "expected": {
+        "outcome": "success",
+        "truncated": false,
+        "residue": [{ "kind": "unavailable-fact", "fact": "hittability" }],
+        "nodes": [
+          {
+            "index": 0,
+            "type": "Application",
+            "label": "App",
+            "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+            "depth": 0,
+            "parentIndex": null,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 1,
+            "type": "Button",
+            "label": "Maybe actionable",
+            "rect": { "x": 20, "y": 20, "width": 80, "height": 40 },
+            "depth": 1,
+            "parentIndex": 0,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "malformed parent is a typed failure",
+      "swift": false,
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": null,
+      "scope": null,
+      "foldPolicy": "cursor-projected",
+      "truncated": false,
+      "residue": [],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Broken",
+          "rect": { "x": 20, "y": 20, "width": 80, "height": 40 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 1,
+          "parentIndex": 99
+        }
+      ],
+      "expected": {
+        "outcome": "failure",
+        "error": {
+          "code": "IOS_SNAPSHOT_ENGINE_FAILED",
+          "reason": "malformed-graph"
+        },
+        "nodes": []
+      }
+    },
+    {
+      "name": "missing viewport is a typed failure",
+      "swift": false,
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": null,
+      "scope": null,
+      "foldPolicy": "cursor-projected",
+      "viewportEvidence": { "kind": "missing", "reason": "not-provided" },
+      "truncated": false,
+      "residue": [{ "kind": "missing-viewport", "reason": "not-provided" }],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        }
+      ],
+      "expected": {
+        "outcome": "failure",
+        "error": {
+          "code": "IOS_SNAPSHOT_ENGINE_FAILED",
+          "reason": "missing-viewport"
+        },
+        "nodes": []
+      }
+    },
+    {
+      "name": "invalid viewport is a typed failure",
+      "swift": false,
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": null,
+      "scope": null,
+      "foldPolicy": "cursor-projected",
+      "viewportEvidence": {
+        "kind": "reported",
+        "rect": { "x": 0, "y": 0, "width": 0, "height": 240 }
+      },
+      "truncated": false,
+      "residue": [],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        }
+      ],
+      "expected": {
+        "outcome": "failure",
+        "error": {
+          "code": "IOS_SNAPSHOT_ENGINE_FAILED",
+          "reason": "invalid-viewport"
+        },
+        "nodes": []
+      }
+    },
+    {
+      "name": "residue and truncation survive publication",
+      "swift": true,
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": null,
+      "scope": null,
+      "foldPolicy": "cursor-projected",
+      "truncated": true,
+      "residue": [
+        {
+          "kind": "provider-pruned",
+          "fields": ["scope", "nodes"]
+        },
+        {
+          "kind": "truncated",
+          "dimension": "payload",
+          "limit": 2000
+        }
+      ],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Continue",
+          "rect": { "x": 20, "y": 20, "width": 100, "height": 44 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 1,
+          "parentIndex": 0
+        }
+      ],
+      "expected": {
+        "outcome": "success",
+        "truncated": true,
+        "residue": [
+          {
+            "kind": "provider-pruned",
+            "fields": ["scope", "nodes"]
+          },
+          {
+            "kind": "truncated",
+            "dimension": "payload",
+            "limit": 2000
+          }
+        ],
+        "nodes": [
+          {
+            "index": 0,
+            "type": "Application",
+            "label": "App",
+            "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+            "depth": 0,
+            "parentIndex": null,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 1,
+            "type": "Button",
+            "label": "Continue",
+            "rect": { "x": 20, "y": 20, "width": 100, "height": 44 },
+            "depth": 1,
+            "parentIndex": 0,
+            "hittable": true,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          }
+        ]
+      }
+    }
+  ]
+}

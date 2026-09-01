@@ -256,10 +256,33 @@ test('setup metadata script matches expected iOS simulator cache metadata', asyn
       path.join(projectRoot, 'apple', 'runner', 'AgentDeviceRunner', 'Runner.swift'),
       'final class Runner {}\n',
     );
+    const runnerUnitTest = path.join(
+      projectRoot,
+      'apple',
+      'runner',
+      'AgentDeviceRunner',
+      'AgentDeviceRunnerUITests',
+      'UnitTests',
+      'Invariant.swift',
+    );
+    fs.mkdirSync(path.dirname(runnerUnitTest), { recursive: true });
+    fs.writeFileSync(runnerUnitTest, 'unit-one\n');
+    const ignoredSharedSource = path.join(
+      projectRoot,
+      'apple',
+      'snapshot-presentation',
+      'Tests',
+      'Ignored.swift',
+    );
+    fs.mkdirSync(path.dirname(ignoredSharedSource), { recursive: true });
+    fs.writeFileSync(ignoredSharedSource, 'ignored-one\n');
     const { writeXcuitestCacheMetadata } = await import(
       `${pathToFileURL(scriptPath).href}?case=${Date.now()}`
     );
-    writeXcuitestCacheMetadata(['ios', derivedRoot, 'generic/platform=iOS Simulator'], projectRoot);
+    const firstMetadata = writeXcuitestCacheMetadata(
+      ['ios', derivedRoot, 'generic/platform=iOS Simulator'],
+      projectRoot,
+    );
 
     const actual = JSON.parse(
       fs.readFileSync(path.join(derivedRoot, '.agent-device-runner-cache.json'), 'utf8'),
@@ -269,6 +292,20 @@ test('setup metadata script matches expected iOS simulator cache metadata', asyn
       resolveExpectedRunnerCacheMetadata(iosSimulator, projectRoot);
 
     assert.deepEqual(actualComparable, expectedComparable);
+
+    fs.writeFileSync(ignoredSharedSource, 'ignored-two\n');
+    const secondMetadata = writeXcuitestCacheMetadata(
+      ['ios', derivedRoot, 'generic/platform=iOS Simulator'],
+      projectRoot,
+    );
+    assert.equal(secondMetadata.runnerSourceFingerprint, firstMetadata.runnerSourceFingerprint);
+
+    fs.writeFileSync(runnerUnitTest, 'unit-two\n');
+    const thirdMetadata = writeXcuitestCacheMetadata(
+      ['ios', derivedRoot, 'generic/platform=iOS Simulator'],
+      projectRoot,
+    );
+    assert.notEqual(thirdMetadata.runnerSourceFingerprint, secondMetadata.runnerSourceFingerprint);
   });
 }, 15_000);
 

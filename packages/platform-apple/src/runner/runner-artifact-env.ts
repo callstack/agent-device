@@ -41,7 +41,7 @@ export async function prepareXctestrunWithEnv(
   const configuredEnvDir = options.iosXctestEnvDir?.trim();
   const dir = configuredEnvDir ? path.resolve(configuredEnvDir) : path.dirname(xctestrunPath);
   fs.mkdirSync(dir, { recursive: true });
-  const safeSuffix = suffix.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const safeSuffix = suffix.replaceAll(/[^a-zA-Z0-9._-]/g, '_');
   const tmpJsonPath = path.join(dir, `AgentDeviceRunner.env.${safeSuffix}.json`);
   const tmpXctestrunPath = path.join(dir, `AgentDeviceRunner.env.${safeSuffix}.xctestrun`);
   const parsed = await readXctestrunPlist(xctestrunPath);
@@ -76,10 +76,10 @@ async function readXctestrunPlist(xctestrunPath: string): Promise<XctestrunPlist
       throw new Error('Root must be an object');
     }
     return raw as XctestrunPlist;
-  } catch (err) {
+  } catch (error) {
     throw new AppError('COMMAND_FAILED', 'Failed to parse xctestrun JSON', {
       xctestrunPath,
-      error: String(err),
+      error: String(error),
     });
   }
 }

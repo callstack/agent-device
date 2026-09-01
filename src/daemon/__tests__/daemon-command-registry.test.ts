@@ -6,7 +6,9 @@ import {
   canRunReplayScopedAction,
   getDaemonCommandRoute,
   getSessionCommandKind,
+  isHumanControlMutation,
   isLeaseAdmissionExempt,
+  resolveSessionlessLeaseAdmissionExemption,
   shouldBlockForInvalidRecording,
   shouldGuardAndroidBlockingDialog,
   shouldLockSessionExecution,
@@ -18,6 +20,7 @@ import {
 import type { DaemonRequest } from '../types.ts';
 
 test('daemon command registry owns specialized handler routes', () => {
+  assert.equal(getDaemonCommandRoute(INTERNAL_COMMANDS.humanControl), 'humanControl');
   for (const command of [
     INTERNAL_COMMANDS.leaseAllocate,
     INTERNAL_COMMANDS.leaseHeartbeat,
@@ -80,6 +83,20 @@ test('daemon command registry preserves request admission traits', () => {
   assert.equal(shouldValidateSessionSelector(INTERNAL_COMMANDS.leaseAllocate), true);
   assert.equal(isLeaseAdmissionExempt(PUBLIC_COMMANDS.open), false);
   assert.equal(shouldLockSessionExecution(PUBLIC_COMMANDS.open), true);
+  assert.deepEqual(
+    resolveSessionlessLeaseAdmissionExemption({
+      ...makeRequest(PUBLIC_COMMANDS.apps),
+      flags: { platform: 'android', leaseProvider: 'limrun' },
+    }),
+    { kind: 'provider-app-catalog', provider: 'limrun' },
+  );
+  assert.equal(
+    resolveSessionlessLeaseAdmissionExemption({
+      ...makeRequest(PUBLIC_COMMANDS.apps),
+      flags: { platform: 'android', leaseProvider: 'limrun', leaseId: 'lease-a' },
+    }),
+    undefined,
+  );
 });
 
 test('daemon command registry preserves replay and recording traits', () => {
@@ -247,6 +264,54 @@ test('every lease-route command skips sessionless provider-device resolution', (
       'skip',
       `${command} must not resolve a provider device sessionless`,
     );
+  }
+});
+
+test('takeover passes lease admission and uses the normal execution lock', () => {
+  assert.equal(isLeaseAdmissionExempt(INTERNAL_COMMANDS.humanControl), false);
+  assert.equal(shouldLockSessionExecution(INTERNAL_COMMANDS.humanControl), true);
+});
+
+test('human-control admission derives existing semantics and treats unclassified requests as mutations', () => {
+  for (const command of [
+    'snapshot',
+    'screenshot',
+    'get',
+    'is',
+    'logs',
+    'network',
+    'events',
+    'audio',
+    'trace',
+    'devices',
+    'apps',
+    'appstate',
+    'doctor',
+    'human_control',
+    'lease_heartbeat',
+  ]) {
+    assert.equal(isHumanControlMutation(makeRequest(command)), false, command);
+  }
+  for (const [command, positionals] of [
+    ['clipboard', ['read']],
+    ['keyboard', ['status']],
+    ['alert', ['get']],
+    ['find', ['text', 'Save', 'get', 'text']],
+  ] as const) {
+    assert.equal(isHumanControlMutation(makeRequest(command, [...positionals])), false, command);
+  }
+  for (const [command, positionals] of [
+    ['clipboard', ['write', 'value']],
+    ['clipboard', []],
+    ['keyboard', ['dismiss']],
+    ['alert', ['accept']],
+    ['find', ['text', 'Save', 'click']],
+    ['click', []],
+    ['viewport', []],
+    ['lease_release', []],
+    ['future-command', []],
+  ] as const) {
+    assert.equal(isHumanControlMutation(makeRequest(command, [...positionals])), true, command);
   }
 });
 

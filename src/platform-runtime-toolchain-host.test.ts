@@ -7,7 +7,7 @@ const toolchains = vi.hoisted(() => ({
   harmonyPrepares: 0,
 }));
 
-vi.mock('./platforms/android/sdk.ts', () => {
+vi.mock('@agent-device/platform-android/mechanics', () => {
   toolchains.androidEvaluations += 1;
   return {
     ensureAndroidSdkPathConfigured: async () => {
@@ -16,7 +16,7 @@ vi.mock('./platforms/android/sdk.ts', () => {
   };
 });
 
-vi.mock('./platforms/harmonyos/hdc.ts', () => {
+vi.mock('@agent-device/platform-harmonyos', () => {
   toolchains.harmonyEvaluations += 1;
   return {
     ensureHarmonyToolchainPathConfigured: async () => {

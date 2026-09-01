@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import { loadNodeHttpRequester } from '../utils/node-http.ts';
+import { loadNodeHttpRequester } from '@agent-device/host-kit/transport';
 import type { DaemonArtifact, DaemonRequest, DaemonResponse } from '../daemon/types.ts';
 import {
   buildDaemonHttpAuthHeaders,

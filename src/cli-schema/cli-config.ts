@@ -2,17 +2,17 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { mergeDefinedFlags } from '../utils/merge-flags.ts';
+import { mergeDefinedFlags } from './merge-flags.ts';
 import { type FlagKey } from '../commands/cli-grammar/flag-types.ts';
-import { expandUserHomePath, resolveUserPath } from '../utils/path-resolution.ts';
+import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
 import {
   getConfigurableOptionSpecs,
   getOptionSpec,
   parseOptionValueFromSource,
 } from './option-schema.ts';
-import { parseInstallSourceConfig } from '../utils/install-source-config.ts';
+import { parseInstallSourceConfig } from '@agent-device/provision-kit/install-source-config';
 import { RETIRED_SCREENSHOT_MAX_SIZE } from '@agent-device/contracts/capture';
-import type { EnvMap } from '../utils/env-map.ts';
+import { type EnvMap } from '@agent-device/kernel/source-value';
 
 export function resolveConfigBackedFlagDefaults(options: {
   command: string | null;

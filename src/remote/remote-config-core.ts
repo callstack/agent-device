@@ -9,8 +9,8 @@ import {
   type ResolvedRemoteConfigProfile,
 } from './remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveUserPath } from '../utils/path-resolution.ts';
-import { parseSourceValue } from '../utils/source-value.ts';
+import { resolveUserPath } from '@agent-device/host-kit/file';
+import { parseSourceValue } from '@agent-device/kernel/source-value';
 
 // Deliberately narrower than `resolveRemoteConfigProfile`: this reads only
 // what the config *file itself* declares, with no ambient environment

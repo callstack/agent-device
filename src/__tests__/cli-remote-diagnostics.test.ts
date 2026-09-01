@@ -176,5 +176,5 @@ test('an unfetchable remote record says so instead of naming a path', async (t) 
 });
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }

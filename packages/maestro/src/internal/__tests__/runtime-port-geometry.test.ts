@@ -101,6 +101,37 @@ test('scrollUntilVisible matches Maestro swipeFromCenter endpoints for an app-si
   });
 });
 
+test('one scroll operation reuses one canonical node map and viewport scan', () => {
+  const snapshot = {
+    createdAt: 0,
+    nodes: [
+      {
+        index: 0,
+        ref: '@e1',
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 402, height: 874 },
+      },
+      {
+        index: 1,
+        ref: '@e2',
+        parentIndex: 0,
+        type: 'ScrollView',
+        rect: { x: 0, y: 0, width: 402, height: 800 },
+      },
+    ],
+  };
+  const materialized = { contexts: 0, nodeMaps: 0, viewportRects: 0 };
+
+  expect(
+    resolveMaestroScrollableGesture(snapshot, { id: 'missing' }, 'down', 601, 'ios', {
+      onVisibilityContextCreated: () => materialized.contexts++,
+      onNodeMapBuilt: () => materialized.nodeMaps++,
+      onViewportRectsCollected: () => materialized.viewportRects++,
+    }),
+  ).toBeDefined();
+  expect(materialized).toEqual({ contexts: 1, nodeMaps: 1, viewportRects: 1 });
+});
+
 test('excludes an in-viewport Android scrollable that is hidden from the user', () => {
   const snapshot = {
     createdAt: 0,

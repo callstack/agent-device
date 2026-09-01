@@ -27,12 +27,9 @@ if (daemonPid !== null) {
     killTimeoutMs: DAEMON_KILL_TIMEOUT_MS,
     expectedStartTime: info?.processStartTime,
   });
-  const { cleanupRunnerLeasesForOwner, runnerLeaseCleanupAdapter } =
-    await import('../src/platforms/apple/core/runner-client.ts');
-  await cleanupRunnerLeasesForOwner(
-    { pid: daemonPid, startTime: info?.processStartTime },
-    runnerLeaseCleanupAdapter,
-  );
+  const { cleanupRunnerLeasesForOwner } =
+    await import('@agent-device/platform-apple/runner/operations');
+  await cleanupRunnerLeasesForOwner({ pid: daemonPid, startTime: info?.processStartTime });
 }
 
 removeIfPresent(paths.infoPath);

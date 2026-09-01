@@ -6,8 +6,9 @@ import {
   waitForDaemonExit,
   type DaemonProcessIdentity,
 } from './daemon-process.ts';
-import { isProcessAlive } from '../utils/host-process.ts';
-import { sleep } from '../utils/timeouts.ts';
+import { isProcessAlive } from '@agent-device/host-kit/process';
+import { sleep } from '@agent-device/host-kit/retry';
+
 import type { DaemonPaths } from './config.ts';
 import { readRegisteredDaemonIdentity } from './daemon-registration.ts';
 import type { DeviceClaimRecord, ProviderReleaseRecord } from './daemon-shutdown-report.ts';

@@ -3,10 +3,11 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { randomUUID } from 'node:crypto';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { readNodeHttpRequestBody } from '../utils/node-http.ts';
-import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
+import { readNodeHttpRequestBody, timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import {
   DAEMON_HTTP_BASE_PATH,
+  DAEMON_HTTP_NETWORK_ACCESS_HEADER,
+  DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpUrl,
@@ -334,6 +335,9 @@ function buildUpstreamHeaders(
   }
   if (route === '/rpc' && !headers.has('content-type')) {
     headers.set('content-type', 'application/json');
+  }
+  if (route === '/rpc') {
+    headers.set(DAEMON_HTTP_NETWORK_ACCESS_HEADER, DAEMON_HTTP_PUBLIC_NETWORK_ACCESS);
   }
   for (const [name, value] of Object.entries(buildDaemonHttpAuthHeaders(upstreamToken))) {
     headers.set(name, value);

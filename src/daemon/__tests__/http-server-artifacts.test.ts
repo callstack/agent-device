@@ -9,7 +9,7 @@ import {
   trackDownloadableArtifact,
 } from '../artifact-tracking.ts';
 import type { DaemonResponse } from '../types.ts';
-import { runCmdSync, withCommandExecutorOverride } from '../../utils/exec.ts';
+import { runCmdSync, withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import {
   closeLoopbackServer,
   listenOnLoopback,

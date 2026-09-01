@@ -9,7 +9,7 @@ import type { RunnerSession } from '../runner-session-types.ts';
 // Fabricated runner sessions, leases, background children, and transport
 // payloads shared by the runner-session tests. The child pids here are made up
 // (`4242`): nothing in a test may deliver a real signal to them, so the owning
-// tests mock the signal seam in `src/utils/host-process.ts` — see
+// tests mock the signal seam in `@agent-device/host-kit/process` — see
 // `src/__tests__/hermetic-signal-setup.ts` and #1824.
 
 export function makeRunnerSession(overrides: Partial<RunnerSession> = {}): RunnerSession {
@@ -150,7 +150,7 @@ type OwnerLivenessVerdict =
   | 'owner-state-dir-gone'
   | 'unknown';
 
-// classifyOwnerLiveness's real default (src/utils/owner-identity.ts) calls its
+// classifyOwnerLiveness's real default (@agent-device/host-kit/process) calls its
 // OWN direct imports of isProcessAlive/readProcessStartTime rather than going
 // through the package host, so overriding those two host slots does not reach
 // it. This double is built over the SAME mocks a suite configures for them, so

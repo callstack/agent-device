@@ -1,18 +1,18 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  hasCachedAppleRunnerArtifact,
-  prewarmAppleRunnerCache,
-} from '../../../platforms/apple/core/runner-client.ts';
 import { isActiveProviderDevice } from '../../../provider-device-runtime.ts';
 import { handleDoctorCommand } from '../session-doctor.ts';
 import { createHostDiagnostics } from '../../../platform-runtime-host-diagnostics.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type { DaemonResponse } from '../../types.ts';
 
-vi.mock('../../../platforms/apple/core/runner-client.ts', () => ({
-  hasCachedAppleRunnerArtifact: vi.fn(async () => false),
-  prewarmAppleRunnerCache: vi.fn(),
+const { mockAppleRunnerWarmupCheck } = vi.hoisted(() => ({
+  mockAppleRunnerWarmupCheck: vi.fn(),
+}));
+
+vi.mock('@agent-device/platform-apple/doctor', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/platform-apple/doctor')>()),
+  appleRunnerWarmupCheck: mockAppleRunnerWarmupCheck,
 }));
 vi.mock('../session-doctor-device.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../session-doctor-device.ts')>();
@@ -32,8 +32,6 @@ vi.mock('../../../provider-device-runtime.ts', () => ({
   isActiveProviderDevice: vi.fn(() => false),
 }));
 
-const mockHasCachedArtifact = vi.mocked(hasCachedAppleRunnerArtifact);
-const mockPrewarmCache = vi.mocked(prewarmAppleRunnerCache);
 const mockIsActiveProviderDevice = vi.mocked(isActiveProviderDevice);
 
 async function withMockedPlatform<T>(platform: NodeJS.Platform, fn: () => Promise<T>): Promise<T> {
@@ -56,9 +54,8 @@ const IOS_SIMULATOR: DeviceInfo = {
 };
 
 beforeEach(() => {
-  mockHasCachedArtifact.mockReset();
-  mockHasCachedArtifact.mockResolvedValue(false);
-  mockPrewarmCache.mockReset();
+  mockAppleRunnerWarmupCheck.mockReset();
+  mockAppleRunnerWarmupCheck.mockResolvedValue(undefined);
   mockIsActiveProviderDevice.mockReset();
   mockIsActiveProviderDevice.mockReturnValue(false);
 });
@@ -92,26 +89,35 @@ function readCheck(response: DaemonResponse | null, id: string): Record<string, 
 }
 
 test('doctor warms the iOS runner cache in the background when the artifact is missing', async () => {
+  mockAppleRunnerWarmupCheck.mockResolvedValue({
+    id: 'ios-runner-cache',
+    status: 'pass',
+    summary: 'iOS runner build started in the background',
+  });
   const response = await withMockedPlatform('darwin', () =>
     runDoctorWithSessionDevice(IOS_SIMULATOR),
   );
 
   expect(response?.ok).toBe(true);
-  expect(mockPrewarmCache).toHaveBeenCalledTimes(1);
+  expect(mockAppleRunnerWarmupCheck).toHaveBeenCalledTimes(1);
   const check = readCheck(response, 'ios-runner-cache');
   expect(check?.status).toBe('pass');
   expect(String(check?.summary)).toMatch(/background/i);
 });
 
 test('doctor reports a cached iOS runner artifact without rebuilding', async () => {
-  mockHasCachedArtifact.mockResolvedValue(true);
+  mockAppleRunnerWarmupCheck.mockResolvedValue({
+    id: 'ios-runner-cache',
+    status: 'pass',
+    summary: 'iOS runner artifact cached',
+  });
 
   const response = await withMockedPlatform('darwin', () =>
     runDoctorWithSessionDevice(IOS_SIMULATOR),
   );
 
   expect(response?.ok).toBe(true);
-  expect(mockPrewarmCache).not.toHaveBeenCalled();
+  expect(mockAppleRunnerWarmupCheck).toHaveBeenCalledTimes(1);
   const check = readCheck(response, 'ios-runner-cache');
   expect(String(check?.summary)).toMatch(/cached/i);
 });
@@ -126,7 +132,11 @@ test('doctor skips the runner warmup for non-simulator devices', async () => {
   );
 
   expect(response?.ok).toBe(true);
-  expect(mockPrewarmCache).not.toHaveBeenCalled();
+  expect(mockAppleRunnerWarmupCheck).toHaveBeenCalledTimes(1);
+  expect(mockAppleRunnerWarmupCheck).toHaveBeenCalledWith(
+    expect.objectContaining({ kind: 'device' }),
+    expect.any(Object),
+  );
   expect(readCheck(response, 'ios-runner-cache')).toBeNull();
 });
 
@@ -136,7 +146,8 @@ test('doctor skips the runner warmup on non-macOS hosts', async () => {
   );
 
   expect(response?.ok).toBe(true);
-  expect(mockPrewarmCache).not.toHaveBeenCalled();
+  expect(mockAppleRunnerWarmupCheck).toHaveBeenCalledTimes(1);
+  expect(mockAppleRunnerWarmupCheck).toHaveBeenCalledWith(IOS_SIMULATOR, expect.any(Object));
   expect(readCheck(response, 'ios-runner-cache')).toBeNull();
 });
 
@@ -148,6 +159,7 @@ test('doctor skips the runner warmup for provider-backed devices', async () => {
   );
 
   expect(response?.ok).toBe(true);
-  expect(mockPrewarmCache).not.toHaveBeenCalled();
+  expect(mockAppleRunnerWarmupCheck).toHaveBeenCalledTimes(1);
+  expect(mockAppleRunnerWarmupCheck).toHaveBeenCalledWith(IOS_SIMULATOR, expect.any(Object));
   expect(readCheck(response, 'ios-runner-cache')).toBeNull();
 });

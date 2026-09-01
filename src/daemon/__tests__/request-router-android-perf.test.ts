@@ -7,7 +7,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type {
   AndroidAdbExecutor,
   AndroidAdbProvider,
-} from '../../platforms/android/adb-executor.ts';
+} from '@agent-device/platform-android/mechanics';
 import {
   createPlatformRuntimeGateway,
   createRequestPlatformProviders,

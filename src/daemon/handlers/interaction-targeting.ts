@@ -1,4 +1,4 @@
-import { resolveRectCenter } from '../../utils/rect-center.ts';
+import { resolveRectCenter } from '@agent-device/kernel/rect-center';
 
 export function parseCoordinateTarget(positionals: string[]): { x: number; y: number } | null {
   if (positionals.length < 2) return null;

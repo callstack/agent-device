@@ -76,17 +76,17 @@ export const WEB_PLATFORM_COVERAGE = {
     'web inventory returns the established browser target',
   ),
   [C.capabilities]: contract(
-    'src/daemon/handlers/__tests__/session-capabilities.test.ts',
+    'src/daemon/session-lifecycle/internal/__tests__/session-capabilities.test.ts',
     'capabilities omits apps when $label runtime facts deny the operation',
     'web capability projection reflects runtime-owned unsupported operations',
   ),
   [C.doctor]: contract(
-    'src/platforms/web/__tests__/doctor.test.ts',
+    'packages/platform-web/src/__tests__/doctor.test.ts',
     'web doctor lifecycle check reports live managed Chrome process count',
     'web doctor reports managed browser lifecycle evidence',
   ),
   [C.apps]: contract(
-    'src/daemon/handlers/__tests__/session-capabilities.test.ts',
+    'src/daemon/session-lifecycle/internal/__tests__/session-capabilities.test.ts',
     'capabilities omits apps when $label runtime facts deny the operation',
     'web runtime facts keep native app inventory unavailable',
   ),
@@ -122,7 +122,7 @@ export const WEB_PLATFORM_COVERAGE = {
   ),
   [C.network]: live('network dump returns the fixture GET request and requested headers'),
   [C.audio]: contract(
-    'src/daemon/handlers/__tests__/session-audio.test.ts',
+    'src/daemon/session-observability/internal/__tests__/session-audio.test.ts',
     'audio probe forwards daemon millisecond timing to the web query operation',
     'web audio probe forwards typed duration and bucket values',
   ),
@@ -171,7 +171,7 @@ export const WEB_PLATFORM_COVERAGE = {
     'web runtime facts keep Apple runner preparation unavailable',
   ),
   [C.batch]: contract(
-    'src/daemon/handlers/__tests__/session-devices-batch-runtime.test.ts',
+    'src/daemon/session-lifecycle/internal/__tests__/session-devices-batch-runtime.test.ts',
     'batch step forwards the parent web platform selector to each invoked step',
     'batch re-invokes each step through the normal dispatcher with no platform branch, so a web selector threads through unchanged',
   ),

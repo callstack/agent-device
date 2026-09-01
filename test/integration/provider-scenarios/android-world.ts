@@ -7,14 +7,14 @@ import { PassThrough } from 'node:stream';
 import type {
   AndroidAdbProcess,
   AndroidAdbProvider,
-} from '../../../src/platforms/android/adb-executor.ts';
+} from '@agent-device/platform-android/mechanics';
 import type { DeviceInventoryRequest } from '../../../src/core/dispatch-resolve.ts';
 import { ANDROID_IME_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-ime-helper.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
   androidSnapshotHelperOutput,
 } from '../../../src/__tests__/test-utils/android-snapshot-helper.ts';
-import { runCmd, runCmdBackground } from '../../../src/utils/exec.ts';
+import { runCmd, runCmdBackground } from '@agent-device/host-kit/command';
 import { validPng } from './assertions.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import {
@@ -274,10 +274,10 @@ function argsStartWith(args: string[], prefix: string[]): boolean {
 // The real device shell unwraps a single-quoted argument (and collapses the
 // `'\''` escape back to `'`) before `cmd` ever sees it, so this harness has
 // to mirror that unwrap to keep modelling what the device actually receives
-// — the inverse of the quoting in src/utils/shell-quote.ts.
+// — the inverse of the quoting in @agent-device/host-kit/command.
 function unquoteAndroidShellArg(value: string): string {
   if (!value.startsWith("'") || !value.endsWith("'") || value.length < 2) return value;
-  return value.slice(1, -1).replaceAll("'\\''", "'");
+  return value.slice(1, -1).replaceAll(String.raw`'\''`, "'");
 }
 
 function androidDeviceAvailabilityAdbResult(
@@ -705,8 +705,8 @@ function installFakeHostAdbGuard(): { argsLogPath: string; restore: () => void }
     adbPath,
     [
       '#!/bin/sh',
-      'printf "%s\\n" "$*" >> "$AGENT_DEVICE_TEST_ADB_ARGS_FILE"',
-      'printf "host adb must not be used in Provider scenario tests\\n" >&2',
+      String.raw`printf "%s\n" "$*" >> "$AGENT_DEVICE_TEST_ADB_ARGS_FILE"`,
+      String.raw`printf "host adb must not be used in Provider scenario tests\n" >&2`,
       'exit 99',
       '',
     ].join('\n'),
@@ -796,7 +796,7 @@ function createScriptedLogcatExecutable(tempRoot: string): string {
     executable,
     [
       '#!/bin/sh',
-      'printf "I/AgentDevice(4242): provider logcat\\n"',
+      String.raw`printf "I/AgentDevice(4242): provider logcat\n"`,
       `printf '%s\\n' '04-01 10:00:15.000 D/Network(4242): ${networkEntry}'`,
       'trap \'test -n "$child" && kill "$child" 2>/dev/null; exit 0\' INT TERM',
       'while :; do sleep 10 & child=$!; wait "$child"; done',

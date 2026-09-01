@@ -5,11 +5,16 @@ import type {
   OwnedProcessRecordWriter,
 } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import type {
+  CaptureSnapshotInput,
+  SnapshotResult,
+  SnapshotRuntimeHost,
+} from '@agent-device/contracts/snapshot-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
-import { runCmd, whichCmd } from './utils/exec.ts';
+import { runCmd, whichCmd } from '@agent-device/host-kit/command';
 import { openAppLogOutput, readAppLogOutputTail } from './platform-runtime-app-log-output.ts';
 import { createManagedAppLogProcesses } from './platform-runtime-app-log-process.ts';
 import { createNetworkRuntimeHost } from './platform-runtime-network-host.ts';
@@ -30,12 +35,22 @@ import { createAppleApplicationTools } from './platform-runtime-apple-applicatio
 import { createAndroidApplicationTools } from './platform-runtime-android-application-tools.ts';
 import { createLocalApplicationInteractorHost } from './platform-runtime-local-application-interactors.ts';
 import { createApplicationResourceLifecycle } from './platform-runtime-application-resources.ts';
-import { createSnapshotRuntimeHost } from './snapshot/snapshot-desktop-surface.ts';
+
+export { createSnapshotRuntimeHost } from './snapshot/snapshot-desktop-surface.ts';
+
+export async function loadMacOsSurfaceSnapshot(
+  options: CaptureSnapshotInput['options'],
+  signal?: AbortSignal,
+): Promise<SnapshotResult> {
+  const { captureMacOsSurfaceSnapshot } = await import('@agent-device/platform-apple/macos');
+  return await captureMacOsSurfaceSnapshot(options ?? {}, signal);
+}
 
 export function createPlatformRuntimeHost(options: {
   sessionsDir: string;
   resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
   shutdownLoaders: DeviceShutdownRuntimeLoaders;
+  snapshot: SnapshotRuntimeHost;
   ownedProcesses?: OwnedProcessRecordWriter;
 }): PlatformRuntimeHost {
   const processes = createManagedAppLogProcesses(options.sessionsDir);
@@ -111,7 +126,7 @@ export function createPlatformRuntimeHost(options: {
     screenRecording: createScreenRecordingRuntimeHost({ ownedProcesses: options.ownedProcesses }),
     audioProbe: createAudioProbeRuntimeHost({ ownedProcesses: options.ownedProcesses }),
     perf: createPerfRuntimeHost(),
-    snapshot: createSnapshotRuntimeHost(),
+    snapshot: options.snapshot,
     localInteractors: createLocalApplicationInteractorHost(),
     appleApplications,
     androidApplications,

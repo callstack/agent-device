@@ -4,12 +4,12 @@ import { expect, test } from 'vitest';
 import { noMaestroIncludeSources } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { executeMaestroFlow, inspectMaestroFlow } from '@agent-device/maestro';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../types.ts';
-import { PNG } from '../../../../utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
-} from '../../../../utils/diagnostics.ts';
+} from '@agent-device/host-kit/diagnostics';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
 import { makeBaseRequest, makeDependencies, makeSnapshot } from './daemon-runtime-port-fixtures.ts';
@@ -249,6 +249,8 @@ test('uses an observation as the baseline for a later mutation barrier', async (
     hierarchyCaptures: 2,
     screenshotCaptures: 0,
     tapRetries: 0,
+    settleLatches: 1,
+    settleTimeouts: 0,
   });
   expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
 });

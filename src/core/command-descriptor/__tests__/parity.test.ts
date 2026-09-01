@@ -30,6 +30,7 @@ import {
 const DAEMON_FUNCTION_TRAITS = [
   'allowSessionlessDefaultDevice',
   'skipSessionlessProviderDevice',
+  'sessionlessLeaseAdmissionExemption',
 ] as const;
 
 // Public commands that intentionally have no daemon route — they live only in the
@@ -104,12 +105,16 @@ test('derived daemon descriptors preserve closure traits by presence and behavio
     const live = liveByCommand.get(derived.command);
     assert.ok(live, `${derived.command} present in hand table`);
     for (const trait of DAEMON_FUNCTION_TRAITS) {
-      const derivedFn = derived[trait] as ((req: DaemonRequest) => boolean) | undefined;
-      const liveFn = live[trait] as ((req: DaemonRequest) => boolean) | undefined;
+      const derivedFn = derived[trait] as ((req: DaemonRequest) => unknown) | undefined;
+      const liveFn = live[trait] as ((req: DaemonRequest) => unknown) | undefined;
       assert.equal(typeof derivedFn, typeof liveFn, `${derived.command} ${trait} presence`);
       if (typeof liveFn === 'function' && typeof derivedFn === 'function') {
         for (const request of sampleRequests(derived.command)) {
-          assert.equal(derivedFn(request), liveFn(request), `${derived.command} ${trait} behavior`);
+          assert.deepEqual(
+            derivedFn(request),
+            liveFn(request),
+            `${derived.command} ${trait} behavior`,
+          );
         }
       }
     }
@@ -253,6 +258,18 @@ test('recordsSessionAction is explicit on every raw descriptor and drives daemon
 });
 
 test('recordingEffect resolves request-sensitive observation and mutation subcommands', () => {
+  assert.equal(
+    resolveCommandRecordingEffect({ command: 'clipboard', positionals: ['read'], flags: {} }),
+    'observes-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({
+      command: 'clipboard',
+      positionals: ['write', 'text'],
+      flags: {},
+    }),
+    'mutates-app',
+  );
   assert.equal(
     resolveCommandRecordingEffect({ command: 'keyboard', positionals: ['status'], flags: {} }),
     'observes-app',

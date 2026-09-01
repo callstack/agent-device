@@ -1,10 +1,15 @@
 import path from 'node:path';
+import { PLATFORMS } from '@agent-device/kernel/device';
+import { parseSync } from 'oxc-parser';
+import { visitAst } from './layering-ast.ts';
 
 export type ImportEdge = {
   spec: string;
   dynamic: boolean;
   typeOnly: boolean;
   line: number;
+  /** Named symbols imported from the target; empty for side-effect, namespace, and dynamic imports. */
+  symbols: readonly string[];
 };
 
 export type ResolvedImportEdge = ImportEdge & {
@@ -35,15 +40,12 @@ const TARGET_DAG_RANK = new Map([
   ['ad-script', 1],
   ['contracts', 1],
   ['maestro', 1],
-  ['platforms', 1],
   ['recording', 1],
-  ['replay', 1],
   ['replay-test', 1],
   ['request', 1],
   ['screenshot-diff', 1],
   ['selectors', 1],
   ['snapshot', 1],
-  ['snapshot-quality', 1],
   ['utils', 1],
   ['core', 2],
   ['cli-schema', 3],
@@ -51,7 +53,6 @@ const TARGET_DAG_RANK = new Map([
   ['mcp', 3],
   ['ai-sdk', 4],
   ['client', 4],
-  ['compat', 4],
   ['daemon-server', 4],
   ['metro', 4],
   ['remote', 4],
@@ -89,13 +90,10 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   // importer and concrete-platform authority; giving them a spine rank would duplicate that seam.
   'platform-runtime',
   'kernel',
+  'host-kit',
   'capture-kit',
-  'platform-apple',
-  'platform-android',
-  'platform-harmonyos',
-  'platform-vega',
-  'platform-linux',
-  'platform-web',
+  'provision-kit',
+  ...PLATFORMS.map((family) => `platform-${family}`),
   'provider-webdriver',
   'provider-limrun',
   'xml',
@@ -109,37 +107,112 @@ export function classifyZone(zone: string): ZoneClassification {
   return 'unclassified';
 }
 
-function scanDynamicImports(line: string, lineNo: number): ImportEdge[] {
-  const edges: ImportEdge[] = [];
-  const re = /import\s*\(\s*['"]([^'"]+)['"]/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(line))) {
-    edges.push({ spec: match[1]!, dynamic: true, typeOnly: false, line: lineNo });
+function sourceLine(source: string, offset: number | null | undefined): number {
+  const start = typeof offset === 'number' && offset >= 0 ? offset : 0;
+  return source.slice(0, start).split('\n').length;
+}
+
+function literalSpecifier(node: unknown): string | undefined {
+  if (node === null || typeof node !== 'object') return undefined;
+  const record = node as Record<string, unknown>;
+  if (record.type === 'Literal' && typeof record.value === 'string') return record.value;
+  if (record.type === 'TemplateLiteral') {
+    const expressions = record.expressions;
+    const quasis = record.quasis;
+    if (!Array.isArray(expressions) || expressions.length > 0 || !Array.isArray(quasis)) {
+      return undefined;
+    }
+    const quasi = quasis[0];
+    if (quasi === null || typeof quasi !== 'object') return undefined;
+    const value = (quasi as Record<string, unknown>).value;
+    if (value === null || typeof value !== 'object') return undefined;
+    const cooked = (value as Record<string, unknown>).cooked;
+    return typeof cooked === 'string' ? cooked : undefined;
   }
+  if (
+    record.type === 'ParenthesizedExpression' ||
+    record.type === 'TSAsExpression' ||
+    record.type === 'TSTypeAssertion' ||
+    record.type === 'TSSatisfiesExpression' ||
+    record.type === 'TSNonNullExpression'
+  ) {
+    return literalSpecifier(record.expression);
+  }
+  if (record.type === 'BinaryExpression' && record.operator === '+') {
+    const left = literalSpecifier(record.left);
+    const right = literalSpecifier(record.right);
+    return left === undefined || right === undefined ? undefined : left + right;
+  }
+  return undefined;
+}
+
+function scanDynamicImports(source: string): ImportEdge[] {
+  const edges: ImportEdge[] = [];
+  const parsed = parseSync('layering-imports.ts', source);
+  visitAst(parsed.program, (node) => {
+    if (node.type !== 'ImportExpression') return;
+    const spec = literalSpecifier(node.source);
+    if (spec === undefined) return;
+    edges.push({
+      spec,
+      dynamic: true,
+      typeOnly: false,
+      line: sourceLine(source, node.start as number | undefined),
+      symbols: [],
+    });
+  });
   return edges;
 }
 
 function scanSideEffectImport(line: string, lineNo: number): ImportEdge | null {
   const match = /^\s*import\s+['"]([^'"]+)['"]/.exec(line);
-  return match ? { spec: match[1]!, dynamic: false, typeOnly: false, line: lineNo } : null;
+  return match
+    ? { spec: match[1]!, dynamic: false, typeOnly: false, line: lineNo, symbols: [] }
+    : null;
+}
+
+function withoutImportComments(statement: string): string {
+  return statement.replaceAll(
+    /(["'])(?:\\.|(?!\1)[^\\\r\n])*?\1|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g,
+    (match) => (match.startsWith('/*') ? ' ' : match.startsWith('//') ? '\n' : match),
+  );
+}
+
+type NamedSpecifier = { name: string; typeOnly: boolean };
+type ParsedNamedSpecifiers = { index: number; specifiers: NamedSpecifier[] };
+
+function parseNamedSpecifiers(statement: string): ParsedNamedSpecifiers | null {
+  const named = /\{([\s\S]*?)\}/.exec(statement);
+  if (!named) return null;
+
+  const specifiers: NamedSpecifier[] = [];
+  for (const specifier of named[1]!.split(',')) {
+    const trimmed = specifier.trim();
+    const typeOnly = /^type\b/.test(trimmed);
+    const sourceName = trimmed.replace(/^type\s+/, '');
+    const name = /^[A-Za-z_$][\w$]*/.exec(sourceName)?.[0];
+    if (name) specifiers.push({ name, typeOnly });
+  }
+  return { index: named.index, specifiers };
+}
+
+function importedSymbols(statement: string): string[] {
+  const parsed = parseNamedSpecifiers(statement);
+  return [...new Set(parsed?.specifiers.map(({ name }) => name) ?? [])];
 }
 
 function statementIsTypeOnly(statement: string): boolean {
   if (/^\s*(?:import|export)\s+type\b/.test(statement)) return true;
-  const named = /\{([\s\S]*?)\}/.exec(statement);
-  if (!named) return false;
+  const parsed = parseNamedSpecifiers(statement);
+  if (!parsed) return false;
   const prefix = statement
-    .slice(0, named.index)
+    .slice(0, parsed.index)
     .replace(/^\s*(?:import|export)\s+/, '')
     .trim()
     .replace(/,$/, '')
     .trim();
   if (prefix.length > 0) return false;
-  const specifiers = named[1]!
-    .split(',')
-    .map((specifier) => specifier.trim())
-    .filter(Boolean);
-  return specifiers.length > 0 && specifiers.every((specifier) => /^type\b/.test(specifier));
+  return parsed.specifiers.length > 0 && parsed.specifiers.every(({ typeOnly }) => typeOnly);
 }
 
 function scanFromImport(lines: string[], index: number): ImportEdge | null {
@@ -151,19 +224,28 @@ function scanFromImport(lines: string[], index: number): ImportEdge | null {
   if (start < 0) return null;
 
   const statement = lines.slice(start, index + 1).join('\n');
+  const normalizedStatement = withoutImportComments(statement);
   return {
     spec: fromMatch[1]!,
     dynamic: false,
-    typeOnly: statementIsTypeOnly(statement),
+    typeOnly: statementIsTypeOnly(normalizedStatement),
     line: start + 1,
+    symbols: importedSymbols(normalizedStatement),
   };
 }
 
 export function parseImports(source: string): ImportEdge[] {
   const lines = source.split('\n');
+  const dynamicImports = scanDynamicImports(source);
+  const dynamicImportsByLine = new Map<number, ImportEdge[]>();
+  for (const edge of dynamicImports) {
+    const lineEdges = dynamicImportsByLine.get(edge.line) ?? [];
+    lineEdges.push(edge);
+    dynamicImportsByLine.set(edge.line, lineEdges);
+  }
   const edges: ImportEdge[] = [];
   for (let index = 0; index < lines.length; index++) {
-    edges.push(...scanDynamicImports(lines[index]!, index + 1));
+    edges.push(...(dynamicImportsByLine.get(index + 1) ?? []));
     const sideEffect = scanSideEffectImport(lines[index]!, index + 1);
     if (sideEffect) {
       edges.push(sideEffect);

@@ -79,6 +79,6 @@ security boundary): if present and it doesn't match, the broadcast is dropped an
 Switching the active IME is machine-global, not session-scoped. A crashed daemon that switched the
 IME and never restored it leaves the device with an invisible keyboard -- on a real device, this
 means the user cannot type anywhere until they manually reset their IME in Settings. The TS-side
-lifecycle (`src/platforms/android/ime-lifecycle.ts`) persists the previously active IME to disk
+lifecycle (`packages/platform-android/src/ime-lifecycle.ts`) persists the previously active IME to disk
 before switching, restores it on session close/teardown, and best-effort restores any orphaned
 switch left behind by a previous crashed daemon on startup.

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { publishFileSync } from '../utils/atomic-file.ts';
+import { publishFileSync } from '@agent-device/host-kit/file';
 
 const SHUTDOWN_REPORT_FILE = 'daemon-shutdown.json';
 

@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 /// Reported facts for one private-AX element, read once so every consumer describes a node the
 /// same way.
@@ -143,7 +144,7 @@ extension RunnerTests {
       options: PresentationOptions(
         interactiveOnly: interactiveOnly, depth: nil, scope: nil, raw: false),
       policy: .cursorProjected
-    ).payload.nodes ?? []
+    ).nodes
   }
 
   func testPrivateAXRegularPresentationProjectsToViewportAndKeepsScrollHint() throws {

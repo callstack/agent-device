@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { SessionAction } from '@agent-device/contracts/session';
-import { canonicalJson } from './canonical-json.ts';
+import { canonicalJson } from '@agent-device/kernel/collections';
 
 /**
  * ADR 0012 decision 4 / migration step 5: `planDigest` is SHA-256 over the

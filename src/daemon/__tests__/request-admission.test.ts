@@ -4,6 +4,12 @@ import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts'
 import { LeaseRegistry } from '../lease-registry.ts';
 import { assertRequestLeaseAdmission } from '../request-admission.ts';
 import type { DaemonRequest } from '../types.ts';
+import type { ProviderAppCatalog } from '@agent-device/contracts/device';
+
+const limrunAppCatalog: ProviderAppCatalog = {
+  supports: (provider) => provider === 'limrun',
+  list: async () => [],
+};
 
 function makeRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
   return {
@@ -118,6 +124,44 @@ test('non-close commands on a tenant-isolated session still require a lease id',
       ),
     /tenant isolation requires lease id/,
   );
+});
+
+test.each(['bogus', 'proxy', 'browserstack'])(
+  'sessionless apps for non-catalog provider %s still requires a tenant lease',
+  (leaseProvider) => {
+    const registry = new LeaseRegistry();
+
+    assert.throws(
+      () =>
+        assertRequestLeaseAdmission(
+          makeRequest({
+            command: 'apps',
+            flags: { platform: 'ios', leaseProvider },
+            meta: { tenantId: 'tenant-a', runId: 'run-1', sessionIsolation: 'tenant' },
+          }),
+          registry,
+          undefined,
+        ),
+      /tenant isolation requires lease id/,
+    );
+  },
+);
+
+test('sessionless apps admits a provider declared by the runtime app catalog', () => {
+  const registry = new LeaseRegistry();
+
+  const result = assertRequestLeaseAdmission(
+    makeRequest({
+      command: 'apps',
+      flags: { platform: 'ios', leaseProvider: 'limrun' },
+      meta: { tenantId: 'tenant-a', runId: 'run-1', sessionIsolation: 'tenant' },
+    }),
+    registry,
+    undefined,
+    { providerAppCatalog: limrunAppCatalog },
+  );
+
+  assert.equal(result, undefined);
 });
 
 test('close still admits and heartbeats a real active lease', () => {

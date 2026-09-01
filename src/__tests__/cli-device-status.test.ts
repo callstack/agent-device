@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import { readCurrentOwnerIdentity } from '../utils/owner-identity.ts';
+import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { runCliCapture } from './cli-capture.ts';
 import { publishDaemonRegistration } from './test-utils/device-claim-store.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
-vi.mock('../utils/host-process.ts', async (importOriginal) =>
+vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
   (await import('./test-utils/host-process-mock.ts')).pinOwnProcessStartTime(importOriginal),
 );
 

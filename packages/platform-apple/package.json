@@ -7,7 +7,9 @@
   "dependencies": {
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
+    "@agent-device/provision-kit": "workspace:*",
     "@agent-device/xml": "workspace:*"
   },
   "exports": {
@@ -15,17 +17,65 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./app-lifecycle": {
+      "types": "./src/app-lifecycle-facade.ts",
+      "default": "./src/app-lifecycle-facade.ts"
+    },
+    "./app-resolution": {
+      "types": "./src/app-resolution-facade.ts",
+      "default": "./src/app-resolution-facade.ts"
+    },
+    "./debug-symbols": {
+      "types": "./src/debug-symbols-facade.ts",
+      "default": "./src/debug-symbols-facade.ts"
+    },
+    "./doctor": {
+      "types": "./src/doctor-facade.ts",
+      "default": "./src/doctor-facade.ts"
+    },
+    "./install-artifact": {
+      "types": "./src/install-artifact-facade.ts",
+      "default": "./src/install-artifact-facade.ts"
+    },
+    "./macos": {
+      "types": "./src/macos-facade.ts",
+      "default": "./src/macos-facade.ts"
+    },
+    "./perf": {
+      "types": "./src/perf-facade.ts",
+      "default": "./src/perf-facade.ts"
+    },
+    "./physical-device": {
+      "types": "./src/physical-device-facade.ts",
+      "default": "./src/physical-device-facade.ts"
+    },
     "./runner": {
       "types": "./src/runner/index.ts",
       "default": "./src/runner/index.ts"
     },
-    "./runner/client": {
-      "types": "./src/runner/client.ts",
-      "default": "./src/runner/client.ts"
+    "./runner/operations": {
+      "types": "./src/runner-operations-facade.ts",
+      "default": "./src/runner-operations-facade.ts"
     },
     "./runner/test-host": {
       "types": "./src/runner/test-host.ts",
       "default": "./src/runner/test-host.ts"
+    },
+    "./runner-owner": {
+      "types": "./src/runner-owner-facade.ts",
+      "default": "./src/runner-owner-facade.ts"
+    },
+    "./simctl": {
+      "types": "./src/simctl-facade.ts",
+      "default": "./src/simctl-facade.ts"
+    },
+    "./simulator": {
+      "types": "./src/simulator-facade.ts",
+      "default": "./src/simulator-facade.ts"
+    },
+    "./tool-provider": {
+      "types": "./src/tool-provider-facade.ts",
+      "default": "./src/tool-provider-facade.ts"
     }
   }
 }

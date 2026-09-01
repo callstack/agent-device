@@ -34,9 +34,9 @@ vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => 
     clearRuntimeHintValues: vi.fn(async () => {}),
   };
 });
-vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/runner-client.ts')>();
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
   return {
     ...actual,
     prepareIosRunner: vi.fn(async () => ({
@@ -51,44 +51,41 @@ vi.mock('../../../platforms/apple/core/runner-client.ts', async (importOriginal)
     stopIosRunnerSession: vi.fn(async () => {}),
   };
 });
-vi.mock('../../../platforms/apple/os/macos/helper.ts', async (importOriginal) => {
+vi.mock('@agent-device/platform-apple/macos', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-apple/macos')>();
+  return {
+    ...actual,
+    runMacOsAlertAction: vi.fn(async () => {}),
+  };
+});
+vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../platforms/apple/os/macos/helper.ts')>();
-  return { ...actual, runMacOsAlertAction: vi.fn(async () => {}) };
+    await importOriginal<typeof import('@agent-device/platform-apple/app-resolution')>();
+  return {
+    ...actual,
+    resolveIosApp: vi.fn(async () => undefined),
+    resolveIosSimulatorDeepLinkBundleId: vi.fn(async () => undefined),
+  };
 });
 vi.mock('../../../platform-runtime-open-target.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../platform-runtime-open-target.ts')>();
   return { ...actual, resolveAndroidPackageForOpen: vi.fn(async () => undefined) };
 });
-vi.mock('../../../platforms/android/ime-lifecycle.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/android/ime-lifecycle.ts')>();
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
   return {
     ...actual,
     activateAndroidTestIme: vi.fn(async () => ({ activated: false })),
     restoreAndroidTestIme: vi.fn(async () => ({ restored: false, reason: 'no-record' })),
   };
 });
-vi.mock('../../../platforms/apple/core/simulator.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/apple/core/simulator.ts')>();
-  return { ...actual, getSimulatorState: vi.fn(async () => null) };
-});
-vi.mock('../../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })) };
 });
 vi.mock('../../materialized-path-registry.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../materialized-path-registry.ts')>();
   return { ...actual, cleanupRetainedMaterializedPathsForSession: vi.fn(async () => {}) };
-});
-vi.mock('../../../platforms/apple/core/apps.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/apple/core/apps.ts')>();
-  return {
-    ...actual,
-    resolveIosApp: vi.fn(async () => undefined),
-    resolveIosSimulatorDeepLinkBundleId: vi.fn(async () => undefined),
-  };
 });
 
 import * as path from 'node:path';
@@ -108,14 +105,14 @@ import {
   notifyIosRunnerAppRelaunched,
   scheduleIosRunnerIdleStop,
   stopIosRunnerSession,
-} from '../../../platforms/apple/core/runner-client.ts';
-import { runMacOsAlertAction } from '../../../platforms/apple/os/macos/helper.ts';
-import { resolveAndroidPackageForOpen } from '../../../platform-runtime-open-target.ts';
-import { runCmd } from '../../../utils/exec.ts';
+} from '@agent-device/platform-apple/runner/operations';
+import { runMacOsAlertAction } from '@agent-device/platform-apple/macos';
 import {
   resolveIosApp,
   resolveIosSimulatorDeepLinkBundleId,
-} from '../../../platforms/apple/core/apps.ts';
+} from '@agent-device/platform-apple/app-resolution';
+import { resolveAndroidPackageForOpen } from '../../../platform-runtime-open-target.ts';
+import { runCmd } from '@agent-device/host-kit/command';
 import { dispatchApplicationLifecycleEffect } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
 
 export const mockLifecycleDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
@@ -199,6 +196,7 @@ export function makeSessionStore(): SessionStore {
 export function makeSession(name: string, device: SessionState['device']): SessionState {
   return {
     name,
+    sessionScope: { kind: 'named-local' },
     device,
     createdAt: Date.now(),
     actions: [],

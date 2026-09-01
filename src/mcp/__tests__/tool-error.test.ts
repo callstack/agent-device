@@ -5,7 +5,7 @@ import { formatToolErrorText, normalizeToolError } from '../tool-error.ts';
 
 // #1597: an MCP-connected agent reads this text, not the CLI's stderr — the
 // candidate refs must render here too, unconditionally, same as
-// printHumanError (src/utils/output.ts, src/utils/__tests__/output.test.ts).
+// printHumanError (src/commands/output/error.ts, src/commands/output/error.test.ts).
 test('formatToolErrorText lists AMBIGUOUS_MATCH candidates capped with a "+N more" marker', () => {
   const err = new AppError(
     'AMBIGUOUS_MATCH',

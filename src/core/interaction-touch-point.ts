@@ -4,7 +4,7 @@ import {
   areRectsApproximatelyEqual,
   normalizeRect,
   resolveRectCenter,
-} from '../utils/rect-center.ts';
+} from '@agent-device/kernel/rect-center';
 import { isSemanticTouchTarget } from './touch-semantics.ts';
 
 export type InteractionTouchPointResolution =

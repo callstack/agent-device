@@ -52,6 +52,72 @@ test('parseImports distinguishes value, type-only, dynamic, and value re-export 
   );
 });
 
+test('parseImports detects multiline dynamic imports', () => {
+  const edges = parseImports(['void import(', "  '../multiline.ts'", ');'].join('\n'));
+
+  assert.deepEqual(edges, [
+    { spec: '../multiline.ts', dynamic: true, typeOnly: false, line: 1, symbols: [] },
+  ]);
+});
+
+test('parseImports resolves constant-template dynamic imports', () => {
+  const edges = parseImports('void import(`../template.ts`);');
+
+  assert.deepEqual(edges, [
+    { spec: '../template.ts', dynamic: true, typeOnly: false, line: 1, symbols: [] },
+  ]);
+});
+
+test('parseImports retains named source symbols without changing edge-kind detection', () => {
+  const edges = parseImports(
+    [
+      "import { value as localValue, type TypeA } from './named.ts';",
+      "import type { TypeB as RenamedType } from './types.ts';",
+      "export { reExport as publicName } from './re-export.ts';",
+      "export type { ExportedType } from './exported-types.ts';",
+      "import * as namespace from './namespace.ts';",
+      "void import('./dynamic.ts');",
+    ].join('\n'),
+  );
+
+  assert.deepEqual(
+    edges.map(({ spec, dynamic, typeOnly, symbols }) => ({ spec, dynamic, typeOnly, symbols })),
+    [
+      {
+        spec: './named.ts',
+        dynamic: false,
+        typeOnly: false,
+        symbols: ['value', 'TypeA'],
+      },
+      { spec: './types.ts', dynamic: false, typeOnly: true, symbols: ['TypeB'] },
+      { spec: './re-export.ts', dynamic: false, typeOnly: false, symbols: ['reExport'] },
+      { spec: './exported-types.ts', dynamic: false, typeOnly: true, symbols: ['ExportedType'] },
+      { spec: './namespace.ts', dynamic: false, typeOnly: false, symbols: [] },
+      { spec: './dynamic.ts', dynamic: true, typeOnly: false, symbols: [] },
+    ],
+  );
+});
+
+test('parseImports ignores comments inside named bindings', () => {
+  const edges = parseImports(
+    [
+      "import { /* exact, declared */ SessionStore /* authority */ } from './store.ts';",
+      'import /* shape */ {',
+      '  // exact declaration',
+      '  type SessionState as State,',
+      "} from './types.ts';",
+    ].join('\n'),
+  );
+
+  assert.deepEqual(
+    edges.map(({ spec, typeOnly, symbols }) => ({ spec, typeOnly, symbols })),
+    [
+      { spec: './store.ts', typeOnly: false, symbols: ['SessionStore'] },
+      { spec: './types.ts', typeOnly: true, symbols: ['SessionState'] },
+    ],
+  );
+});
+
 test('value cycles fail while type-only and dynamic cycles stay outside the graph', () => {
   const valueCycle = resolveImportEdges(
     new Map([
@@ -75,7 +141,7 @@ test('value cycles fail while type-only and dynamic cycles stay outside the grap
 test('back-edge identities follow the documented target spine', () => {
   const edges = resolveImportEdges(
     new Map([
-      ['src/platforms/apple.ts', "import '../core/platform-plugin.ts';"],
+      ['src/contracts/result.ts', "import '../core/platform-plugin.ts';"],
       ['src/core/platform-plugin.ts', 'export const plugin = true;'],
       ['src/commands/help.ts', "import '../cli/parser.ts';"],
       ['src/cli/parser.ts', 'export const parser = true;'],
@@ -85,7 +151,7 @@ test('back-edge identities follow the documented target spine', () => {
   const actual = collectBackEdges(edges);
   assert.deepEqual(actual, {
     'commands -> cli': ['src/commands/help.ts -> src/cli/parser.ts'],
-    'platforms -> core': ['src/platforms/apple.ts -> src/core/platform-plugin.ts'],
+    'contracts -> core': ['src/contracts/result.ts -> src/core/platform-plugin.ts'],
   });
 });
 
@@ -182,12 +248,12 @@ test('classifyZone separates the ranked spine from intentionally-unranked zones'
   assert.equal(classifyZone('daemon-server'), 'ranked');
   assert.equal(classifyZone('(root)'), 'unranked');
   assert.equal(classifyZone('platform-runtime'), 'unranked');
+  assert.equal(classifyZone('platforms'), 'unclassified');
   assert.equal(classifyZone('utils'), 'ranked');
   // Every satellite zone joined the spine; only the composition root stays out, because R2
   // forbids daemon/ from importing commands/ so the files that wire them cannot be ranked.
   assert.equal(classifyZone('mcp'), 'ranked');
   assert.equal(classifyZone('snapshot'), 'ranked');
-  assert.equal(classifyZone('snapshot-quality'), 'ranked');
   // A zone that is neither ranked nor listed peripheral must be flagged, never
   // silently treated as back-edge-free.
   assert.equal(classifyZone('not-a-real-zone'), 'unclassified');
@@ -198,7 +264,8 @@ test('every production zone is deliberately classified as ranked or unranked', (
   // deliberate ranked-vs-peripheral decision here instead of silently escaping
   // spine back-edge detection. If this fails, add the new zone to TARGET_DAG_RANK
   // (ranked spine) or UNRANKED_ZONES (root/peripheral) in model.ts.
-  assert.deepEqual(unclassifiedZones(listSourceFiles()), []);
+  const productionFiles = listSourceFiles();
+  assert.deepEqual(unclassifiedZones(productionFiles), []);
 
   // The classification must also stay honest to the tree: every zone the model
   // names is a real production zone, so the docs cannot list a spine or peripheral
@@ -246,13 +313,16 @@ test('session-state writes are found by field, and non-daemon or undeclared name
       // a runner session outside the daemon is a different type that happens to share a name
       ['src/platforms/apple/runner-session.ts', 'session.refFrameState = 1;'],
       // a local that is not a declared SessionState field
-      ['src/daemon/handlers/session-audio.ts', 'session.somethingElse = 1;'],
+      ['src/daemon/session-observability/internal/session-audio.ts', 'session.somethingElse = 1;'],
       // reads and comparisons are not writes
       ['src/daemon/handlers/find.ts', "if (session.refFrameState === 'active') return;"],
       // a write into a sub-object is not a write to the field itself
-      ['src/daemon/handlers/session-open.ts', 'session.refFrameState.inner = 1;'],
+      ['src/daemon/handlers/session-probe.ts', 'session.refFrameState.inner = 1;'],
       // a different binding that happens to have a matching property
-      ['src/daemon/handlers/session-close.ts', "other.refFrameState = 'expired';"],
+      [
+        'src/daemon/session-lifecycle/internal/session-close.ts',
+        "other.refFrameState = 'expired';",
+      ],
     ]),
     ['refFrameState', 'snapshotGeneration'],
   );
@@ -416,7 +486,7 @@ test('largestTypeCycleSize counts type-only cycles and ignores dynamic ones', ()
   ]);
 
   // A loop closed through a DYNAMIC import is excluded on purpose: a lazy seam is not a
-  // comprehension barrier, and R3 relies on dynamic imports existing. With no non-dynamic edge at
+  // comprehension barrier. With no non-dynamic edge at
   // all no file enters the walk, so the floor here is 0 rather than 1 — specified, not incidental.
   const dynamicCycle = resolveImportEdges(
     new Map(

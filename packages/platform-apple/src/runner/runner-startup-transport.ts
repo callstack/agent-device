@@ -373,11 +373,11 @@ async function tryRunnerEndpoints(
         Math.min(RUNNER_CONNECT_REQUEST_TIMEOUT_MS, remainingMs),
         signal,
       );
-    } catch (err) {
-      if (signal?.aborted || isRequestCanceledError(err)) {
+    } catch (error) {
+      if (signal?.aborted || isRequestCanceledError(error)) {
         throw createRequestCanceledError();
       }
-      onError(endpoint, err);
+      onError(endpoint, error);
     }
   }
   return null;
@@ -399,11 +399,11 @@ async function tryRunnerSimulatorEndpoint(
   try {
     const simResponse = await postCommandViaSimulator(device, port, command, remainingMs, signal);
     return new Response(simResponse.body, { status: simResponse.status });
-  } catch (err) {
-    if (signal?.aborted || isRequestCanceledError(err)) {
+  } catch (error) {
+    if (signal?.aborted || isRequestCanceledError(error)) {
       throw createRequestCanceledError();
     }
-    onError(err);
+    onError(error);
     return null;
   }
 }

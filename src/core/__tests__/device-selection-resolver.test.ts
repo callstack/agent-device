@@ -18,7 +18,7 @@ import {
 
 const mockFindIosSimulatorInstalledApp = vi.hoisted(() => vi.fn());
 
-vi.mock('../../platforms/apple/core/apps.ts', () => ({
+vi.mock('@agent-device/platform-apple/app-resolution', () => ({
   findIosSimulatorInstalledApp: mockFindIosSimulatorInstalledApp,
 }));
 

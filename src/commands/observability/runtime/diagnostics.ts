@@ -9,7 +9,7 @@ import type {
 } from '../../../backend.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { requireIntInRange } from '../../../utils/validation.ts';
+import { requireIntInRange } from '../../../core/validation.ts';
 import { formatLogsResult, formatNetworkResult, formatPerfResult } from './diagnostics-format.ts';
 import type {
   DiagnosticsLogsCommandResult,

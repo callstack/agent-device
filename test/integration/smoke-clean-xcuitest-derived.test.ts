@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const scriptPath = path.join(repoRoot, 'scripts', 'clean-xcuitest-derived.mjs');
@@ -128,5 +128,5 @@ function runCleanXcuitest(homeDir: string, ...args: Array<string | { allowFailur
 }
 
 function escapeRegExp(value: string) {
-  return value.replaceAll(/[\\^$.*+?()[\]{}|]/g, '\\$&');
+  return value.replaceAll(/[\\^$.*+?()[\]{}|]/g, String.raw`\$&`);
 }

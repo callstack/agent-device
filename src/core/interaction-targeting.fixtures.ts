@@ -3,7 +3,8 @@ import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 export const EQUIVALENT_WRAPPER_CHAIN_NODES: RawSnapshotNode[] = [
   {
     index: 0,
-    depth: 0,
+    depth: 1,
+    parentIndex: 3,
     type: 'XCUIElementTypeCell',
     label: 'Chat',
     rect: { x: 10, y: 20, width: 300, height: 60 },
@@ -26,6 +27,13 @@ export const EQUIVALENT_WRAPPER_CHAIN_NODES: RawSnapshotNode[] = [
     label: 'Chat',
     rect: { x: 24, y: 32, width: 80, height: 20 },
     hittable: false,
+  },
+  {
+    index: 3,
+    depth: 0,
+    type: 'XCUIElementTypeApplication',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+    hittable: true,
   },
 ];
 

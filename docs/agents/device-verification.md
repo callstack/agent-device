@@ -38,11 +38,13 @@ failed verification attempts.
 - Use a purpose-specific session name for experiments, and an isolated `--state-dir` under
   `/private/tmp` when you need cleanup isolation beyond the current worktree's default daemon.
 - Track opened sessions in working notes; close each one before the final response.
-- If `close` is blocked by stale daemon metadata, inspect processes first with
-  `ps -ax | rg "agent-device|xcodebuild test-without-building"`. Stop only exact stale PIDs belonging
-  to this verification run, then `pnpm clean:daemon`.
-- If cleanup cannot be completed, report the remaining session name, state dir, PIDs, and metadata
-  paths as a blocker.
+- If `close` is blocked or ownership looks stuck, inspect it with
+  `agent-device device status --stale` (daemonless), stop the owning daemon with
+  `agent-device daemon stop --state-dir <dir>` (add `--clean` to remove retained runners), and
+  release provably dead owners with `agent-device device release --stale`. Do not hunt PIDs with
+  `ps`/`kill`.
+- If cleanup cannot be completed, report the remaining session name, state dir, and the
+  `device status --stale` output as a blocker.
 
 ## Sandboxed environments
 

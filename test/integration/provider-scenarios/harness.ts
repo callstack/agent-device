@@ -22,7 +22,8 @@ import { trackDownloadableArtifact } from '../../../src/daemon/artifact-tracking
 import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
 import { SessionStore } from '../../../src/daemon/session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../../src/daemon/types.ts';
-import { runCmdBackground } from '../../../src/utils/exec.ts';
+import { runCmdBackground } from '@agent-device/host-kit/command';
+import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.ts';
 import type {
   DeviceInventoryProvider,
@@ -37,7 +38,7 @@ import { createHostDiagnostics } from '../../../src/platform-runtime-host-diagno
 import type { PlatformRuntimeProviderRegistration } from '../../../src/platform-runtime-gateway.ts';
 import { createProviderPlatformRuntimeRegistrations } from '../../../src/provider-device-runtimes.ts';
 import { unavailableDeviceRuntimeGateway } from '../../../src/daemon/__tests__/test-device-runtime-gateway.ts';
-import { createOwnedProcessRecordStore } from '../../../src/utils/owned-process-record.ts';
+
 import { openWebSessionNames } from '../../../src/daemon/web-session-names.ts';
 
 const PROVIDER_SCENARIO_TOKEN = 'provider-scenario-token';
@@ -263,10 +264,7 @@ async function removeProviderScenarioTempDir(dir: string): Promise<void> {
   }
 }
 
-export function restoreEnv(key: string, previous: string | undefined): void {
-  if (previous === undefined) delete process.env[key];
-  else process.env[key] = previous;
-}
+export { restoreEnv } from '../../../src/__tests__/test-utils/env.ts';
 
 export function likelyPlayableMp4Container(): Buffer {
   return Buffer.concat([atom('ftyp', Buffer.from('isom0000isom')), atom('moov')]);

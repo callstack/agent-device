@@ -6,7 +6,7 @@ import {
   type SnapshotNode,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { decodePngAsync, encodePngAsync } from '../utils/png-worker-client.ts';
+import { decodePngAsync, encodePngAsync } from '@agent-device/capture-kit/png-worker-client';
 import { analyzeReactNativeOverlay } from '../core/react-native-overlay.ts';
 import {
   findNearestAncestor,

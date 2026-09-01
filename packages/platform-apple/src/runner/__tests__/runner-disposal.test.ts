@@ -3,6 +3,8 @@ import { IOS_SIMULATOR, MACOS_DEVICE, TVOS_SIMULATOR } from './device-fixtures.t
 import type { ExecResult } from '../host.ts';
 import type { RunnerSession } from '../runner-session-types.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
+import { makeRunnerLease } from './runner-session-fixtures.ts';
+import { mkdtempForTestSync } from './tmp-dir.ts';
 
 const { mockCleanupTempFile } = vi.hoisted(() => ({
   mockCleanupTempFile: vi.fn(),
@@ -13,7 +15,13 @@ vi.mock('../runner-io.ts', async (importOriginal) => {
   return { ...actual, cleanupTempFile: mockCleanupTempFile };
 });
 
-import { abortRunnerSessionsAndPrepProcesses } from '../runner-disposal.ts';
+import { abortRunnerSessionsAndPrepProcesses, disposeRunnerSession } from '../runner-disposal.ts';
+import {
+  currentRunnerLeaseOwnerToken,
+  releaseRunnerLease,
+  withRunnerLeaseLock,
+  writeRunnerLease,
+} from '../runner-lease.ts';
 
 const mockIsProcessAlive = vi.fn();
 const mockIsProcessGroupAlive = vi.fn();
@@ -23,6 +31,9 @@ const mockSignalPidsBestEffort = vi.fn();
 const mockSignalProcessGroupBestEffort = vi.fn();
 
 beforeEach(() => {
+  process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR = mkdtempForTestSync(
+    'agent-device-runner-disposal-test-',
+  );
   appleRunnerTestHost.update({
     isProcessAlive: mockIsProcessAlive,
     isProcessGroupAlive: mockIsProcessGroupAlive,
@@ -106,9 +117,79 @@ test.each([IOS_SIMULATOR, TVOS_SIMULATOR])(
   },
 );
 
+test('simulator disposal terminates runner container apps while it still owns the on-disk lease', async () => {
+  vi.useRealTimers();
+  mockIsProcessAlive.mockReturnValue(false);
+  const lease = makeRunnerLease({ deviceId: IOS_SIMULATOR.id, ownerToken: 'owner-disposal-own' });
+  const session = makeRunnerSession(IOS_SIMULATOR, Promise.resolve(execResult()), { lease });
+  writeRunnerLease(lease);
+
+  await disposeRunnerSession(session, { graceful: false, waitTimeoutMs: 1 });
+
+  expect(simulatorTerminateCalls()).not.toEqual([]);
+});
+
+test('simulator disposal skips container-app termination after a foreign takeover replaced the lease', async () => {
+  vi.useRealTimers();
+  mockIsProcessAlive.mockReturnValue(false);
+  const session = makeRunnerSession(IOS_SIMULATOR, Promise.resolve(execResult()), {
+    lease: makeRunnerLease({ deviceId: IOS_SIMULATOR.id, ownerToken: 'owner-disposal-loser' }),
+  });
+  // The successor's runner lives in the same container bundles on the shared
+  // simulator; terminating them here would stop the new owner's runner.
+  writeRunnerLease(
+    makeRunnerLease({ deviceId: IOS_SIMULATOR.id, ownerToken: 'owner-disposal-successor' }),
+  );
+
+  await disposeRunnerSession(session, { graceful: false, waitTimeoutMs: 1 });
+
+  expect(simulatorTerminateCalls()).toEqual([]);
+  expect(mockCleanupTempFile).toHaveBeenCalledWith(session.xctestrunPath);
+});
+
+test('disposal serializes behind a successor reclaim window and never terminates its runner', async () => {
+  vi.useRealTimers();
+  mockIsProcessAlive.mockReturnValue(false);
+  const loserLease = makeRunnerLease({
+    deviceId: IOS_SIMULATOR.id,
+    ownerToken: 'owner-toctou-loser',
+  });
+  const session = makeRunnerSession(IOS_SIMULATOR, Promise.resolve(execResult()), {
+    lease: loserLease,
+  });
+  writeRunnerLease(loserLease);
+
+  let disposal: Promise<void> | undefined;
+  let disposalSettled = false;
+  await withRunnerLeaseLock(IOS_SIMULATOR.id, async () => {
+    // The successor's critical section: loser disposal starting now must not
+    // pass its ownership check inside this window — the on-disk lease still
+    // names the loser, but the takeover below is already in flight.
+    disposal = disposeRunnerSession(session, { graceful: false, waitTimeoutMs: 1 }).then(() => {
+      disposalSettled = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(disposalSettled).toBe(false);
+    expect(simulatorTerminateCalls()).toEqual([]);
+    releaseRunnerLease(loserLease);
+    writeRunnerLease(
+      makeRunnerLease({ deviceId: IOS_SIMULATOR.id, ownerToken: 'owner-toctou-successor' }),
+    );
+  });
+  await disposal;
+
+  expect(simulatorTerminateCalls()).toEqual([]);
+  expect(currentRunnerLeaseOwnerToken(IOS_SIMULATOR.id)).toBe('owner-toctou-successor');
+});
+
+function simulatorTerminateCalls(): unknown[] {
+  return mockRunXcrun.mock.calls.filter(([args]) => (args as string[]).includes('terminate'));
+}
+
 function makeRunnerSession(
   device: RunnerSession['device'],
   testPromise: Promise<ExecResult>,
+  overrides: Partial<RunnerSession> = {},
 ): RunnerSession {
   return {
     sessionId: `${device.id}:8123:test`,
@@ -120,6 +201,7 @@ function makeRunnerSession(
     testPromise,
     child: { pid: 42, exitCode: null },
     ready: true,
+    ...overrides,
   };
 }
 

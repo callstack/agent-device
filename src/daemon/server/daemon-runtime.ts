@@ -22,21 +22,31 @@ import { clearDaemonShutdownReport, writeDaemonShutdownReport } from '../daemon-
 import { createRequestHandler } from '../request-router.ts';
 import { stopSessionAppLog, teardownSessionResources } from '../session-teardown.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
-import { runtimeHintValues } from '../handlers/session-runtime.ts';
+import { runtimeHintValues } from '../session-runtime.ts';
 import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn, SessionState } from '../types.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
 import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
-import { reconcileOrphanedDeviceClaims, type DeviceClaimReconciler } from '../device-claims.ts';
-import { createDeviceClaimReconciler } from '../device-claim-reconciliation.ts';
+import {
+  processOwnsActiveDeviceClaim,
+  reconcileOrphanedDeviceClaims,
+  type DeviceClaimReconciler,
+} from '../device-claims.ts';
+import { createOwnerScopedDeviceClaimReconciler } from '../device-claim-owner-recovery.ts';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
 import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
-} from '../../utils/diagnostics.ts';
-import { isEnvTruthy } from '../../utils/retry.ts';
+} from '@agent-device/host-kit/diagnostics';
+import {
+  createOwnedProcessRecordStore,
+  type OwnedProcessRecordStore,
+  reapOwnedProcessRecordsAtStartup,
+} from '@agent-device/host-kit/process';
+import { isEnvTruthy, sleep } from '@agent-device/host-kit/retry';
+
 import {
   acquireDaemonLock,
   parseIntegerEnv,
@@ -53,9 +63,12 @@ import {
   listenNetServer,
   type DaemonServer,
 } from './transport.ts';
-import { prewarmPngWorker, terminatePngWorker } from '../../utils/png-worker-client.ts';
-import { sleep } from '../../utils/timeouts.ts';
-import { configureAppleRunnerLeaseOwnerStateDir } from '../../platform-runtime-apple-runner-owner.ts';
+import { prewarmPngWorker, terminatePngWorker } from '@agent-device/capture-kit/png-worker-client';
+
+import {
+  configureAppleRunnerDeviceClaimAuthorityProbe,
+  configureAppleRunnerLeaseOwnerStateDir,
+} from '../../platform-runtime-apple-runner-owner.ts';
 import {
   cleanupManagedWebRuntimeOrphans,
   platformResourceCleanup,
@@ -70,15 +83,10 @@ import { createDaemonRecoveryPlatformScope } from '../platform-request-scope.ts'
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
 import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
-import {
-  createOwnedProcessRecordStore,
-  type OwnedProcessRecordStore,
-} from '../../utils/owned-process-record.ts';
-import { reapOwnedProcessRecordsAtStartup } from '../../utils/owned-process-reaper.ts';
 
 const DAEMON_SESSION_TEARDOWN_TIMEOUT_MS = 5_000;
 export const SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS = 11_000;
-// Mirrors AGENT_BROWSER_TIMEOUT_MS in platforms/web/agent-browser-provider.ts: the ceiling that
+// Mirrors AGENT_BROWSER_TIMEOUT_MS in @agent-device/platform-web: the ceiling that
 // module already places on one `agent-browser` CLI call, so the race below never gives up on the
 // web-close step while the close it started is still running within its own enforced limit.
 export const WEB_BROWSER_SESSION_TEARDOWN_BUDGET_MS = 30_000;
@@ -252,6 +260,7 @@ export async function startDaemonRuntime(
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
   await configureAppleRunnerLeaseOwnerStateDir(baseDir);
+  await configureAppleRunnerDeviceClaimAuthorityProbe(processOwnsActiveDeviceClaim);
 
   const sessionStore = new SessionStore(sessionsDir);
   const ownedProcessRecords = createOwnedProcessRecordStore({
@@ -320,6 +329,7 @@ export async function startDaemonRuntime(
     },
   });
   const cloudArtifactProvider = providerRuntimeProviders.cloudArtifactProvider;
+  const providerAppCatalog = providerRuntimeProviders.providerAppCatalog;
   const deviceInventoryGateways = createPlatformDeviceInventoryGateways(
     providerRuntimeProviders.deviceInventorySource,
   );
@@ -331,6 +341,7 @@ export async function startDaemonRuntime(
     leaseRegistry,
     leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
     cloudArtifactProvider,
+    providerAppCatalog,
     deviceInventoryGateways,
     deviceRuntimeGateway,
     appLogAdmissionLedger,
@@ -443,8 +454,10 @@ export async function startDaemonRuntime(
     if (startHttpServer) {
       const httpServer = await createDaemonHttpServer({
         handleRequest,
+        leaseRegistry,
         token,
         retainArtifacts,
+        env,
         // #1801: the same record `DaemonError.logPath` names, addressed by its
         // locator so a remote caller can fetch what it cannot read by path.
         resolveRequestDiagnosticsPath: (ref) =>
@@ -486,6 +499,7 @@ export async function startDaemonRuntime(
   if (!acquireDaemonLock(baseDir, lockPath, lockData)) {
     stderr.write('Daemon lock is held by another process; exiting.\n');
     await configureAppleRunnerLeaseOwnerStateDir(undefined);
+    await configureAppleRunnerDeviceClaimAuthorityProbe(undefined);
     exit(0);
     return null;
   }
@@ -551,10 +565,7 @@ export async function startDaemonRuntime(
     // written before it is lost — including reconciliation diagnostics.
     await reconcileDeviceClaimsForDaemonStartup(
       logPath,
-      createDeviceClaimReconciler({
-        gateway: deviceRuntimeGateway,
-        scope: createDaemonRecoveryPlatformScope(),
-      }),
+      createOwnerScopedDeviceClaimReconciler(createDaemonRecoveryPlatformScope()),
       baseDir,
     );
     // Arms the initial idle-reap timer: a daemon that starts and never
@@ -567,6 +578,7 @@ export async function startDaemonRuntime(
     removeInfo(infoPath);
     releaseDaemonLock(lockPath);
     await configureAppleRunnerLeaseOwnerStateDir(undefined);
+    await configureAppleRunnerDeviceClaimAuthorityProbe(undefined);
     exit(1);
     return null;
   }
@@ -632,6 +644,7 @@ export async function startDaemonRuntime(
     removeInfo(infoPath);
     releaseDaemonLock(lockPath);
     await configureAppleRunnerLeaseOwnerStateDir(undefined);
+    await configureAppleRunnerDeviceClaimAuthorityProbe(undefined);
     exit(shutdownOptions.exitCode ?? 0);
   };
 

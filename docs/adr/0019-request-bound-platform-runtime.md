@@ -19,11 +19,19 @@ R65. The per-command cutover table was retired after completion as required by s
 enforces the permanent facts-only admission and runtime-proof invariants without naming historical
 routes or handler functions.
 
+The #2082 extraction completes the physical ownership boundary: all six platform-family
+implementations and their family-owned tests live behind private package exports, `src/platforms`
+is retired, and the former R3 folder seam is gone. R13 now owns concrete platform-package import
+direction and implementation laziness; the `retired-platforms-zone` gate rejects any attempt to
+recreate the old root path.
+
 ## Rules at a glance
 
-- Daemon device-execution code depends on platform-neutral contracts. Concrete device mechanics
-  live in private `@agent-device/platform-*` packages and are value-imported only by the root
-  composition module.
+- Daemon device-execution code depends on platform-neutral contracts. Concrete device mechanics for
+  the six canonical families live in private `@agent-device/platform-*` packages; each family owns
+  its implementation and family-specific tests, while shared install-source tests are root-owned
+  under `src/__tests__/`. The root composition module and R13-governed named consumer facades are
+  the only production static value-import sites.
 - The platform registry is **metadata-eager and implementation-lazy**. Cheap family identity,
   inventory entrypoints, and static fact declarations may load at composition time; platform
   mechanics and process-lived helper managers load only when discovery or the first binding for that
@@ -105,23 +113,24 @@ provider resolver table and wrapper ordering; only the canonical root may load i
 lazy until a request enters a provider scope. Daemon device-execution modules import the canonical
 root interface or runtime contracts only.
 Shared runtime interfaces and neutral data types live in `@agent-device/contracts`. In production,
-only that composition module or its one R13-governed private implementation submodule may import a
-concrete platform package; reusable types do not leak through type-only platform imports. Platform
-packages may import contracts, kernel/domain packages,
+only that composition module, its one R13-governed private implementation submodule, or the
+R13-governed consumer seams under `src/core/interactors/` may statically import concrete platform
+package roots; approved runtime hosts use deferred or type-only root imports, and named Apple
+facades expose only their governed domain seam. Reusable types do not leak through type-only
+platform imports. Platform packages may import contracts, kernel/domain packages,
 and explicitly injected host capabilities; they may not import daemon requests or responses, mutable
 session state, command catalogs/grammar, root implementation files, sibling platform packages, or raw
 process primitives outside the shared host-command port. R13 applies these rules to static, type-only,
 dynamic, and re-export edges; package-owned tests may import their own public façade. Contracts may
 depend on kernel vocabulary but never on concrete platform packages or daemon implementation types.
 
-Transitional exception (#2041): the Android adb/IME transport cluster (`adb-executor`,
-`ime-lifecycle`, `ime-helper`) lives in `@agent-device/platform-android` behind four registered
-subpaths, with its raw host primitives injected through the package's `adb-host` port by root
-composition wiring. Live root runtime, core interactor, SDK, and test-support consumers still import
-the old root paths, so R13 names an explicit shim table: each subpath is importable only by its root
-re-export shim (plus the host-binding, the helper-install module the binding reaches, and the
-cluster's own tests under `src/platforms/android/__tests__/`). Delete the shims and narrow this table
-only after those consumers move; the table growing is drift, not precedent.
+The Android family mechanics now live entirely in `@agent-device/platform-android`. Its root façade
+remains metadata-only and lazy; the package exports exactly two implementation facets: `./mechanics`
+for named Android behavior consumed by root/core/SDK code and package-owned tests, and `./adb-host`
+for the host port bound only by `src/platform-runtime-android-adb-host.ts`. The old
+`src/platforms/android` family tree and root shims are deleted. R13 enumerates these two facets and
+rejects any additional Android subpath or daemon production import, so package closure and host
+authority stay explicit rather than being restored through compatibility paths.
 
 Durable-capture mechanics shared by more than one implementation live in the private
 `@agent-device/capture-kit` workspace package, with the enforced direction
@@ -132,20 +141,71 @@ platform-common package, and it preserves the package façades' implementation-l
 Its introduction carries the normal workspace-package compliance surface: `check:affected`
 selection, R11/R13 package enumeration, and the composite typecheck project list.
 
+> **Amendment (#2082): the substrate below the platform families.** Retiring the shared
+> `src/utils` and `src/platforms` root surfaces (so the family trees can move behind their
+> exports maps) forces every shared file onto a declared domain owner, and the paragraph above
+> is amended to name that layout rather than let capture-kit absorb it:
+>
+> - `@agent-device/host-kit` owns mechanics that act on the host machine, and nothing else. Each
+>   export is one narrow capability port, not a category barrel: `command` (running host
+>   commands), `process` (observing and owning host processes), `diagnostics`, `retry`
+>   (deadline/backoff/sleep), `archive` (bounded extraction and byte limits), `file` (atomic
+>   publishes, locks, path resolution), `request` (request-scoped cancellation and progress),
+>   `transport` (line framing, lazy HTTP/body mechanics, and constant-time secret comparison),
+>   and `version` (the installed version off disk). Modules under `src/internal/` are reachable
+>   only through a port, and a port may only hold mechanics a consumer of that capability
+>   needs — the eager-closure row per port is what keeps that honest.
+> - A helper that touches no process, file, or environment is not host mechanics and does not
+>   belong here: pure record readers, config-source values, result text, memoization, async
+>   scoping, coordinate validation, and device-scope parsing live in `@agent-device/kernel`
+>   beside its other primitives.
+> - `@agent-device/capture-kit` owns capture, snapshot, and recording behavior — PNG tooling,
+>   screenshot density and pixel diffing, snapshot occlusion, mobile snapshot semantics,
+>   quality verdicts and backend capability tables. Snapshot *behavior* is capture domain, not
+>   contracts vocabulary, and host mechanics are host-kit's, not capture-kit's.
+> - `@agent-device/provision-kit` owns the provisioning domain — everything that gets a device
+>   and app ready to run: install-artifact acquisition (local paths, archives, guarded network
+>   downloads), host toolchain readiness probing, device boot-failure classification, and
+>   app-resolution caching. Platform packages may import provision-kit; provision-kit may not
+>   import a platform package or be imported by capture-kit (both directions planted red in the
+>   layering suite).
+> - The enforced direction is `kernel < contracts < host-kit < capture-kit < provision-kit <
+>   platform/provider/daemon`.
+> - Contracts stays vocabulary, plan models, and pure classification with no process,
+>   filesystem, or timer mechanics (the existing planted-red gate); platform-specific parsing
+>   stays with its family package and reaches legacy callers through composition, never by a
+>   family importing another owner's internals.
+>
+> Enforcement: each substrate package's exported subpaths are pinned in
+> `package-boundaries.test.ts` (widening fails the gate), the contracts mechanics gate stays
+> planted red, and the `retired-platforms-zone` rule rejects every production, test, or fixture
+> file under the former `src/platforms` path.
+
+The Apple package root is composition-only: it exposes the inventory module, runtime module,
+shutdown loader, and platform plugin. Synchronous consumers use named domain facets instead of a
+second compatibility surface on the root.
+
 The Apple XCUITest runner client is a durable platform-owned implementation facet colocated
 inside `packages/platform-apple` as the `src/runner/` subtree (#2040) — Apple mechanics belong to
-the Apple package. R13 models the facet by enumeration rather than by exception sprawl: the family
-exports its root façade plus exactly the `./runner`, `./runner/client`, and `./runner/test-host`
-subpaths; the `./runner` façade subpath is the seam through which daemon and root consumers reach
-runner mechanics directly today; the host-bound `./runner/client` factory has one composition root
-and `./runner/test-host` one vitest installer; the facet owns its cache files and usbmux sockets
-(the ambient-host rule exempts exactly that subtree), while raw process primitives stay banned —
-host authority still enters through one focused injected port (`AppleRunnerHost`: process
-execution, diagnostics, retry, probes, locks, foreground Apple tooling, physical-device control)
-constructed by exactly one composition root. No current issue owns migrating the runner's direct
-consumers behind the composition gateway; if such a migration retires them, the `./runner` seam
-narrows with it, but the facet itself is the intended ownership model, not a temporary exception.
-The declaration mechanism stays apple-specific until another family needs a mechanics facet.
+the Apple package. R13 models the package by enumeration rather than by exception sprawl: the family
+exports its root façade plus thirteen named domain/mechanics facades — `./app-lifecycle`,
+`./app-resolution`, `./debug-symbols`, `./doctor`, `./install-artifact`, `./macos`,
+`./perf`, `./physical-device`, `./runner-owner`, `./runner/operations`, `./simctl`, `./simulator`, and
+`./tool-provider` — as well as exactly the `./runner` and `./runner/test-host`
+subpaths. The named facades replace root-only access for synchronous domain consumers without a
+broad compatibility barrel; R13 pins the exact export set and allowed consumer seams. The
+`./runner` façade subpath is the seam through which daemon and root consumers reach runner mechanics
+directly today; the host-bound runner client stays package-internal and `./runner/test-host` has one
+vitest installer; the facet owns its cache files and usbmux sockets (the
+ambient-host rule exempts exactly that subtree), while raw process primitives stay banned — host
+authority still enters through one focused injected port (`AppleRunnerHost`: process execution,
+diagnostics, retry, probes, locks, foreground Apple tooling, physical-device control) constructed by
+exactly one composition root. No current issue owns migrating the runner's direct consumers behind
+the composition gateway; if such a migration retires them, the `./runner` seam narrows with it, but
+the facet itself is the intended ownership model, not a temporary exception.
+Mechanics-facet declarations are explicit per family: the Apple runner and Android mechanics/host
+facets are enumerated above, and a new family adds its own named facet only with an owning consumer
+and evidence.
 
 Canonical family, `AppleOS`, public-leaf, and selector identity remain declared in
 `@agent-device/kernel/device`. Platform-module metadata references one canonical family; during
@@ -640,6 +700,31 @@ removed against package bytes added; net growth is exceptional and each contribu
 named and justified individually. Contract modules stay vocabulary-thin under the existing
 capture-kit rule; per-unit type inflation is size growth and is reviewed as such.
 
+#### W5 Android family accounting (PR #2117)
+
+The W5 exact-head size report at `9fa2778` against `437465f37` reported these rounded CI values:
+
+| Metric             | Original baseline | W5 head | W5 delta |
+| ------------------ | ----------------: | ------: | -------: |
+| Raw JavaScript     |          2.48 MB | 2.49 MB | +8.2 kB  |
+| Gzipped JavaScript |         835.0 kB | 831.2 kB | -3.9 kB |
+| npm tarball        |         958.5 kB | 959.6 kB | +1.1 kB |
+| npm unpacked       |          3.32 MB | 3.33 MB | +9.0 kB  |
+
+At source level, the moved Android production tree accounts for 456,492 B removed from
+`src/platforms/android` versus 475,413 B in changed package targets, a +18,921 B relocation
+delta; the new root host/facade seam adds 19,978 B. The published +9.0 kB unpacked result is the
+package result, not a source-byte estimate. The increase is attributable to the named `mechanics`
+closure, the injected root host composition, and preserving deferred helper loading while root
+chunks are removed or repartitioned. The largest packed increase is the mechanics chunk; it is
+offset by deletion or shrinkage of the superseded root Android chunks.
+
+A smaller design that retained root re-export shims, a broad barrel, or ambient filesystem/process
+access would reduce gross source movement but violate this ADR's package-closure,
+no-compatibility-shim, named-facet, host-injection, and implementation-lazy constraints. This is
+exceptional W5 accounting, not reusable checkpoint headroom; after rebasing on #2116, the
+combined-family CI size result remains the authoritative current measurement.
+
 Raw per-unit parity, planted-red, and size evidence belongs in #1739 and its PRs; this ADR retains
 the decision, the evidence tiers, and the rule that each unit must justify exceptional growth
 without treating checkpoint budget as an allowance.
@@ -705,11 +790,12 @@ belongs to its domain: test-IME restoration is durable device state with marker-
 helper stops follow the owning platform module's lifecycle policy, and close-time cleanup consumes
 neutral owner services.
 
-R65 is the end-state enforcement: its planted-red AST tests reject every dependency edge — static,
+R65 is the daemon-side end-state enforcement: its planted-red AST tests reject every dependency edge — static,
 dynamic, re-export, and type-only — from production `src/daemon/**` modules (test files excluded,
 matching the layering scanner's scope) to `src/platforms/**` and concrete
-`@agent-device/platform-*` packages. The daemon has been removed from the R3 seam, so platform
-freedom is structurally enforced rather than periodically measured.
+`@agent-device/platform-*` packages. R13 governs concrete package imports across the whole tree,
+while `retired-platforms-zone` prevents the old root seam from being recreated; platform freedom is
+therefore structurally enforced rather than periodically measured.
 
 ## Relationship to prior decisions
 

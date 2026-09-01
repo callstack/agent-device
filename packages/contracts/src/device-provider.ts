@@ -24,7 +24,9 @@ export type DeviceLease = {
 
 export type LeaseLifecycleContext = {
   flags?: Readonly<Record<string, unknown>>;
+  initialApp?: string;
   cwd?: string;
+  publicNetworkOnly?: boolean;
   /** Request-bound cancellation (explicit cancel or client disconnect). */
   signal?: AbortSignal;
   /**
@@ -65,4 +67,20 @@ export type ProviderDeviceInventorySource = Readonly<{
     request: Readonly<ProviderDeviceInventoryRequest>,
     signal: AbortSignal,
   ): Promise<ProviderDeviceInventoryOutcome>;
+}>;
+
+export type ProviderAppCatalogQuery = Readonly<{
+  provider: string;
+  platform: 'android' | 'ios';
+  publicNetworkOnly?: boolean;
+}>;
+
+export type ProviderAppCatalogHandler = (
+  query: ProviderAppCatalogQuery,
+  signal?: AbortSignal,
+) => Promise<readonly string[]>;
+
+export type ProviderAppCatalog = Readonly<{
+  supports(provider: string): boolean;
+  list: ProviderAppCatalogHandler;
 }>;

@@ -1,7 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { SCREENSHOT_ACTION_FLAG_KEYS } from '@agent-device/contracts/capture';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DaemonRequest, SessionRuntimeHints, SessionState } from './types.ts';
 import { applyRecordedSaveScriptFlags } from './session-script-publication-capability.ts';
 import { repairSessionBoundary } from './session-replay-transaction.ts';
@@ -10,7 +10,7 @@ import { inferFillText } from './action-utils.ts';
 import {
   recordedInputPlaceholder,
   validateRecordedInputVariableName,
-} from '../replay/recorded-input.ts';
+} from '@agent-device/ad-script';
 import {
   parameterizeRecordedFillPayload,
   parameterizeRecordedFillTargetEvidence,
@@ -95,6 +95,31 @@ export function recordActionEntry(
     },
   });
   return action;
+}
+
+type SessionActionStore = { recordAction(session: SessionState, entry: RecordActionEntry): void };
+
+/**
+ * Record a session action if a session is active. No-op when session is undefined.
+ *
+ * By default the recorded positionals/flags mirror the request; pass `overrides` to
+ * record a different set (e.g. resolved positionals or stripped public flags).
+ */
+export function recordSessionAction(
+  sessionStore: SessionActionStore,
+  session: SessionState | undefined,
+  req: DaemonRequest,
+  command: string,
+  result: Record<string, unknown> | undefined,
+  overrides?: { positionals?: string[]; flags?: CommandFlags },
+): void {
+  if (!session) return;
+  sessionStore.recordAction(session, {
+    command,
+    positionals: overrides?.positionals ?? req.positionals ?? [],
+    flags: overrides?.flags ?? ((req.flags ?? {}) as CommandFlags),
+    result: result ?? {},
+  });
 }
 
 type FillLiteral = { literal: string; placeholder: string };
@@ -269,7 +294,7 @@ function replaceFillText(positionals: string[], placeholder: string): string[] {
  * absent: it is flow timing/synchronisation, not observation, so it always
  * records. A mutating `find … click|fill|focus|type` never reaches a caller of
  * `isInteractiveObservation` (it records through `recordSessionAction`,
- * `handlers/handler-utils.ts`), so `find` here always means a read-only
+ * `session-action-recorder.ts`), so `find` here always means a read-only
  * sub-action; `diff` is likewise absent because only `snapshot` is classified
  * at the snapshot-runtime call site.
  */
@@ -282,7 +307,7 @@ const OBSERVATION_ONLY_COMMANDS: ReadonlySet<string> = new Set(['snapshot', 'get
  * Two facts, ANDed, and the second is the one that matters:
  *  1. the command is observation-only (above); and
  *  2. it is NOT a replay plan step (`internal.replayPlanStep`, stamped by
- *     `invokeResolvedReplayAction`, `handlers/session-replay-action-runtime.ts`).
+ *     `invokeResolvedReplayAction`, `daemon/replay/internal/session-replay-action-runtime.ts`).
  *
  * (2) is why this is a PROVENANCE rule, not a command-class rule. Replayed
  * plan steps dispatch through the ordinary request path and land in

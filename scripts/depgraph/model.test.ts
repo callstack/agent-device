@@ -5,8 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { listSourceFiles, TYPE_INVERSION_BASELINE } from '../layering/check.ts';
+import { ARCHITECTURE_OWNERSHIP } from '../layering/architecture-ownership.ts';
 import { resolveImportEdges } from '../layering/model.ts';
 import {
+  AUTHORITY_LABELS,
+  authorityLabelsForEdge,
   buildGraph,
   collapseEdges,
   collectCycles,
@@ -17,6 +20,162 @@ import {
 function sources(entries: Record<string, string>): Map<string, string> {
   return new Map(Object.entries(entries));
 }
+
+function authorityWorkspaceTargets(): Map<string, string> {
+  return new Map([
+    ['@agent-device/contracts/client', 'packages/contracts/src/facades/client.ts'],
+    ['@agent-device/contracts/capture', 'packages/contracts/src/facades/capture.ts'],
+    ['@agent-device/contracts/replay', 'packages/contracts/src/facades/replay.ts'],
+    ['@agent-device/contracts/progress', 'packages/contracts/src/facades/progress.ts'],
+  ]);
+}
+
+function authorityFixture(): Map<string, string> {
+  return sources({
+    'src/core/vocabulary-consumer.ts': [
+      "import type { ClientShape } from '@agent-device/contracts/client';",
+      "import type { CaptureShape } from '@agent-device/contracts/capture';",
+      "import type { ReplayShape } from '@agent-device/contracts/replay';",
+      "import type { ProgressShape } from '@agent-device/contracts/progress';",
+    ].join('\n'),
+    'src/daemon/capability-consumer.ts': [
+      "import { createRequestRuntimeBindings } from './request-runtime-binding.ts';",
+      "import { isSessionRecording } from './session-script-publication-capability.ts';",
+    ].join('\n'),
+    'src/daemon/state-consumer.ts': [
+      "import type { SessionState } from './types.ts';",
+      "import { SessionStore } from './session-store.ts';",
+    ].join('\n'),
+    'src/daemon/type-consumer.ts': "import type { SessionStore } from './session-store.ts';\n",
+    'src/snapshot/policy-consumer.ts': [
+      "import type { SessionState } from '../daemon/types.ts';",
+      "import type { SessionRef } from '../daemon/types.ts';",
+      "import './ordinary-target.ts';",
+    ].join('\n'),
+    'src/daemon/ordinary-consumer.ts': [
+      "import { SessionState } from './session-state.ts';",
+      "import { createRequestRuntimeBindingsExtra } from './request-runtime-binding.ts';",
+    ].join('\n'),
+    'src/daemon/types.ts':
+      'export type SessionState = { name: string };\nexport type SessionRef = unknown;\n',
+    'src/daemon/session-store.ts': 'export class SessionStore {}\n',
+    'src/daemon/request-runtime-binding.ts': 'export function createRequestRuntimeBindings() {}\n',
+    'src/daemon/session-script-publication-capability.ts':
+      'export function isSessionRecording() {}\n',
+    'src/daemon/session-state.ts': 'export const SessionState = 1;\n',
+    'src/snapshot/ordinary-target.ts': 'export const ordinary = 1;\n',
+    'packages/contracts/src/facades/client.ts': 'export type ClientShape = string;\n',
+    'packages/contracts/src/facades/capture.ts': 'export type CaptureShape = string;\n',
+    'packages/contracts/src/facades/replay.ts': 'export type ReplayShape = string;\n',
+    'packages/contracts/src/facades/progress.ts': 'export type ProgressShape = string;\n',
+  });
+}
+
+function graphEdge(
+  graph: ReturnType<typeof buildGraph>,
+  from: string,
+  to: string,
+): { kind: string; labels: readonly string[] } {
+  const index = graph.edges.findIndex((edge) => edge.from === from && edge.to === to);
+  assert.notEqual(index, -1, `${from} -> ${to} was not found`);
+  return { kind: graph.edges[index]!.kind, labels: graph.edgeAuthorities[index]! };
+}
+
+test('authority overlay uses declared roots and symbols, keeps kind separate, and collapses labels', () => {
+  const files = authorityFixture();
+  const graph = buildGraph(files, resolveImportEdges(files, authorityWorkspaceTargets()));
+
+  assert.deepEqual(
+    graphEdge(graph, 'src/core/vocabulary-consumer.ts', 'packages/contracts/src/facades/client.ts'),
+    { kind: 'type', labels: ['vocabulary'] },
+  );
+  assert.deepEqual(
+    graphEdge(graph, 'src/daemon/capability-consumer.ts', 'src/daemon/request-runtime-binding.ts'),
+    { kind: 'value', labels: ['capability'] },
+  );
+  assert.deepEqual(graphEdge(graph, 'src/daemon/state-consumer.ts', 'src/daemon/types.ts'), {
+    kind: 'type',
+    labels: ['live-state-shape'],
+  });
+  assert.deepEqual(
+    graphEdge(graph, 'src/daemon/state-consumer.ts', 'src/daemon/session-store.ts'),
+    { kind: 'value', labels: ['live-state-authority'] },
+  );
+  assert.deepEqual(graphEdge(graph, 'src/daemon/type-consumer.ts', 'src/daemon/session-store.ts'), {
+    kind: 'type',
+    labels: ['live-state-authority'],
+  });
+  assert.deepEqual(
+    graphEdge(graph, 'src/snapshot/policy-consumer.ts', 'src/snapshot/ordinary-target.ts'),
+    { kind: 'value', labels: ['executable-policy'] },
+  );
+  assert.deepEqual(
+    graphEdge(graph, 'src/daemon/ordinary-consumer.ts', 'src/daemon/session-state.ts'),
+    { kind: 'value', labels: ['ordinary'] },
+  );
+  assert.deepEqual(
+    graphEdge(graph, 'src/daemon/ordinary-consumer.ts', 'src/daemon/request-runtime-binding.ts'),
+    { kind: 'value', labels: ['ordinary'] },
+  );
+
+  const stateEdges = resolveImportEdges(files, authorityWorkspaceTargets()).filter(
+    (edge) =>
+      edge.file === 'src/snapshot/policy-consumer.ts' && edge.target === 'src/daemon/types.ts',
+  );
+  assert.equal(stateEdges.length, 2, 'the fixture must exercise raw same-pair imports');
+  assert.deepEqual(graphEdge(graph, 'src/snapshot/policy-consumer.ts', 'src/daemon/types.ts'), {
+    kind: 'type',
+    labels: ['live-state-shape', 'executable-policy'],
+  });
+  assert.deepEqual(graph.edgeAuthorities.length, graph.edges.length);
+  assert.deepEqual(Object.keys(graph.authorityCounts), AUTHORITY_LABELS);
+  assert.deepEqual(graph.authorityCounts, {
+    vocabulary: 4,
+    capability: 2,
+    'live-state-shape': 2,
+    'live-state-authority': 2,
+    'executable-policy': 2,
+    ordinary: 2,
+  });
+  assert.equal(authorityLabelsForEdge(stateEdges[0]!).includes('live-state-shape'), true);
+});
+
+test('live-state labels follow shared declarations and reject lookalike targets', () => {
+  for (const declaration of ARCHITECTURE_OWNERSHIP.liveState) {
+    assert.deepEqual(
+      authorityLabelsForEdge({
+        file: 'src/core/live-state-consumer.ts',
+        target: declaration.root,
+        spec: `./${declaration.root.split('/').at(-1)}`,
+        dynamic: false,
+        typeOnly: true,
+        line: 1,
+        symbols: [...declaration.exports],
+        fromZone: 'core',
+        toZone: 'daemon-server',
+      }),
+      [declaration.kind],
+    );
+  }
+
+  const sessionState = ARCHITECTURE_OWNERSHIP.liveState.find(
+    ({ kind }) => kind === 'live-state-shape',
+  )!;
+  assert.deepEqual(
+    authorityLabelsForEdge({
+      file: 'src/core/live-state-consumer.ts',
+      target: 'src/daemon/session-state.ts',
+      spec: './session-state.ts',
+      dynamic: false,
+      typeOnly: true,
+      line: 1,
+      symbols: [...sessionState.exports],
+      fromZone: 'core',
+      toZone: 'daemon-server',
+    }),
+    ['ordinary'],
+  );
+});
 
 test('collapseEdges keeps one edge per pair at the strongest kind', () => {
   const edges = resolveImportEdges(
@@ -235,13 +394,32 @@ test('build.ts writes the default path and a summary consistent with the JSON', 
     zones: { id: string; rank: number | null }[];
     nodes: unknown[];
     edges: [number, number, number, number][];
+    edgeAuthorities: string[][];
+    authorityCounts: Record<string, number>;
     typeInversions: Record<string, number>;
   };
 
   // Wire shape: the fields a consumer queries. A rename here is a breaking change for any script
   // following README.md, so it is pinned rather than assumed.
+  for (const field of [
+    'generated',
+    'zones',
+    'zoneEdges',
+    'nodes',
+    'edges',
+    'cycles',
+    'typeInversions',
+  ]) {
+    assert.ok(field in payload, `legacy payload field ${field} disappeared`);
+  }
   assert.equal(payload.nodes.length, payload.generated.files);
   assert.equal(payload.edges.length, payload.generated.edges);
+  assert.equal(payload.edgeAuthorities.length, payload.edges.length);
+  assert.equal(
+    payload.edges.every((edge) => edge.length === 4),
+    true,
+  );
+  assert.deepEqual(Object.keys(payload.authorityCounts), AUTHORITY_LABELS);
   assert.ok(payload.zones.length > 0);
   assert.ok(Object.keys(payload.typeInversions).length > 0);
 

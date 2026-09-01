@@ -21,9 +21,9 @@ function lanes(file: string): CheckId[] {
 
 test('a TypeScript-only Apple change selects the iOS and macOS lanes without a Swift build', () => {
   for (const file of [
-    'src/platforms/apple/core/apps.ts',
+    'packages/platform-apple/src/core/app-resolution.ts',
     'packages/platform-apple/src/runtime.ts',
-    'src/platforms/apple/os/macos/desktop.ts',
+    'packages/platform-apple/src/os/macos/desktop-scroll.ts',
   ]) {
     assert.deepEqual(lanes(file), ['replay-ios', 'replay-ios-device', 'replay-macos'], file);
     assert.ok(
@@ -32,7 +32,7 @@ test('a TypeScript-only Apple change selects the iOS and macOS lanes without a S
       ),
     );
   }
-  assert.deepEqual(lanes('src/snapshot/snapshot-presentation/ios/action-shelf.ts'), [...IOS]);
+  assert.deepEqual(lanes('packages/capture-kit/src/ios-snapshot-engine/action-shelf.ts'), [...IOS]);
   assert.deepEqual(lanes('test/integration/replays/macos/01-desktop.ad'), ['replay-macos']);
 });
 
@@ -75,7 +75,7 @@ test('shared runtime surface owns every device lane', () => {
     'packages/kernel/src/errors.ts',
     'src/daemon/android-system-dialog.ts', // naming convention in a shared dir, not a boundary
     'test/integration/smoke-daemon-clean.test.ts',
-    'src/platforms/install-source.ts',
+    'packages/provision-kit/src/install-source.ts',
   ]) {
     assert.equal(deviceLaneLeaf(file), 'shared', file);
     assert.deepEqual(lanes(file), [
@@ -91,7 +91,7 @@ test('shared runtime surface owns every device lane', () => {
 });
 
 test('another family owns only its own lanes, so an Android-only change carries no iOS check', () => {
-  assert.deepEqual(lanes('src/platforms/android/perf.ts'), ['replay-android']);
+  assert.deepEqual(lanes('packages/platform-android/src/perf.ts'), ['replay-android']);
   assert.deepEqual(lanes('packages/platform-android/src/inventory.ts'), ['replay-android']);
   assert.deepEqual(lanes('android/snapshot-helper/src/main/java/X.java'), [
     'android-helpers',
@@ -104,15 +104,15 @@ test('another family owns only its own lanes, so an Android-only change carries 
   assert.deepEqual(lanes('test/integration/android-emulator-e2e/live-runner.ts'), [
     'replay-android',
   ]);
-  assert.deepEqual(lanes('src/platforms/linux/snapshot.ts'), [
+  assert.deepEqual(lanes('packages/platform-linux/src/snapshot.ts'), [
     'replay-linux',
     'linux-command-evidence',
   ]);
   assert.deepEqual(lanes('linux/atspi-dump.py'), ['replay-linux', 'linux-command-evidence']);
-  assert.deepEqual(lanes('src/platforms/web/provider.ts'), ['web-smoke']);
+  assert.deepEqual(lanes('packages/platform-web/src/provider.ts'), ['web-smoke']);
   assert.deepEqual(lanes('test/integration/smoke-web-platform.test.ts'), ['web-smoke']);
   // Families with no CI lane fall through to the static gates only.
-  assert.deepEqual(lanes('src/platforms/harmonyos/hdc.ts'), []);
+  assert.deepEqual(lanes('packages/platform-harmonyos/src/hdc.ts'), []);
   assert.deepEqual(lanes('packages/platform-vega/src/index.ts'), []);
 });
 
@@ -129,7 +129,7 @@ test('unit tests under src/ and packages/*/src own no lane', () => {
   for (const file of [
     'src/daemon/selectors.test.ts',
     'src/__tests__/contracts/interaction-guarantees.test.ts',
-    'src/platforms/apple/__tests__/apps.test.ts',
+    'packages/platform-apple/src/core/__tests__/apps.test.ts',
     'packages/platform-apple/src/runtime.test.ts',
   ]) {
     assert.ok(isUnitTest(file), file);
@@ -147,9 +147,9 @@ test('unit tests under src/ and packages/*/src own no lane', () => {
 });
 
 test('a mixed tree is shared, and two Apple leaves are still Apple', () => {
-  assert.equal(deviceLaneLeaf('src/platforms/apple/os/macos/x.ts'), 'apple');
+  assert.equal(deviceLaneLeaf('packages/platform-apple/src/os/macos/x.ts'), 'apple');
   assert.equal(deviceLaneLeaf('test/integration/android-emulator-e2e/ios/x.ts'), 'shared');
-  assert.deepEqual(deviceLanesFor('src/platforms/apple/os/macos/x.ts').lanes, [
+  assert.deepEqual(deviceLanesFor('packages/platform-apple/src/os/macos/x.ts').lanes, [
     'replay-ios',
     'replay-ios-device',
     'replay-macos',
@@ -187,7 +187,7 @@ test('a tooling change beside an Android-only change still fails open to the ful
     'scripts/check-affected/device-lanes.ts',
     'packages/platform-android/package.json',
   ]) {
-    const plan = selectChecks({ changedFiles: ['src/platforms/android/perf.ts', tooling] });
+    const plan = selectChecks({ changedFiles: ['packages/platform-android/src/perf.ts', tooling] });
     assert.equal(plan.failOpen, true, tooling);
     assert.ok(plan.checks.includes('swift-runner-ios'), tooling);
     assert.ok(plan.checks.includes('replay-ios'), tooling);

@@ -10,7 +10,7 @@ import {
 } from './resumable-upload.ts';
 import { receiveUpload } from './upload.ts';
 import { sendRestJsonError } from './http-errors.ts';
-import { readNodeHttpRequestBody } from '../utils/node-http.ts';
+import { readNodeHttpRequestBody } from '@agent-device/host-kit/transport';
 
 const DIRECT_UPLOAD_PATH_PREFIX = '/upload/direct/';
 

@@ -4,9 +4,9 @@ import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { SessionStore } from '../session-store.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { resetAndroidSnapshotHelperInstallCache } from '../../platforms/android/snapshot-helper-install.ts';
+import { resetAndroidSnapshotHelperInstallCache } from '@agent-device/platform-android/mechanics';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../__tests__/test-utils/android-snapshot-helper.ts';
-import type { AndroidAdbProvider } from '../../platforms/android/adb-executor.ts';
+import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 import {
   createPlatformRuntimeGateway,
   createRequestPlatformProviders,

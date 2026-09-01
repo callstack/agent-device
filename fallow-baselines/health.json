@@ -89,11 +89,6 @@
         "count": 1
       }
     },
-    "src/utils/result-serialization.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "src/core/batch.ts": {
       "complexity_moderate": {
         "count": 1
@@ -176,7 +171,7 @@
         "count": 1
       }
     },
-    "src/daemon/handlers/__tests__/session-appstate-input-perf.test.ts": {
+    "src/daemon/handlers/__tests__/session-appstate-input.test.ts": {
       "crap_high": {
         "count": 3
       },
@@ -189,22 +184,22 @@
         "count": 2
       }
     },
-    "src/daemon/handlers/__tests__/session-devices-batch-runtime.test.ts": {
+    "src/daemon/session-lifecycle/internal/__tests__/session-devices-batch-runtime.test.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/daemon/handlers/__tests__/session-logs.test.ts": {
+    "src/daemon/session-observability/internal/__tests__/session-logs.test.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/daemon/handlers/__tests__/session-open-runtime.test.ts": {
+    "src/daemon/session-lifecycle/internal/__tests__/session-open-runtime.test.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/daemon/handlers/__tests__/session-test-runner.test.ts": {
+    "src/daemon/replay/internal/__tests__/session-test-runner.test.ts": {
       "crap_high": {
         "count": 1
       },
@@ -230,22 +225,22 @@
         "count": 1
       }
     },
-    "src/daemon/handlers/session-inventory.ts": {
+    "src/daemon/session-lifecycle/internal/inventory.ts": {
       "complexity_moderate": {
         "count": 1
       }
     },
-    "src/daemon/handlers/session-observability.ts": {
+    "src/daemon/session-observability/internal/session-observability.ts": {
       "crap_moderate": {
         "count": 2
       }
     },
-    "src/daemon/handlers/session-open-surface.ts": {
+    "src/daemon/session-lifecycle/internal/session-open-surface.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/daemon/handlers/session-open.ts": {
+    "src/daemon/session-lifecycle/internal/session-open.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -255,7 +250,7 @@
         "count": 1
       }
     },
-    "src/daemon/handlers/session-runtime.ts": {
+    "src/daemon/session-runtime.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -336,37 +331,32 @@
         "count": 2
       }
     },
-    "src/platforms/android/app-parsers.ts": {
+    "packages/platform-android/src/app-parsers.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/platforms/android/manifest.ts": {
+    "packages/platform-android/src/manifest.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/platforms/android/scroll-hints.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/platforms/android/ui-hierarchy.ts": {
+    "packages/platform-android/src/ui-hierarchy.ts": {
       "crap_moderate": {
         "count": 2
       }
     },
-    "src/platforms/apple/core/app-resolution.ts": {
+    "packages/platform-apple/src/core/app-resolution.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/platforms/apple/core/app-settings.ts": {
+    "packages/platform-apple/src/core/app-settings.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/platforms/apple/core/perf.ts": {
+    "packages/platform-apple/src/core/perf.ts": {
       "complexity_high": {
         "count": 1
       },
@@ -374,7 +364,7 @@
         "count": 1
       }
     },
-    "src/platforms/apple/core/screenshot-status-bar.ts": {
+    "packages/platform-apple/src/core/screenshot-status-bar.ts": {
       "complexity_moderate": {
         "count": 1
       },
@@ -382,17 +372,17 @@
         "count": 2
       }
     },
-    "src/platforms/apple/core/screenshot.ts": {
+    "packages/platform-apple/src/core/screenshot.ts": {
       "complexity_moderate": {
         "count": 1
       }
     },
-    "src/platforms/apple/os/macos/helper.ts": {
+    "packages/platform-apple/src/os/macos/helper.ts": {
       "crap_high": {
         "count": 1
       }
     },
-    "src/platforms/boot-diagnostics.ts": {
+    "packages/provision-kit/src/boot-diagnostics.ts": {
       "complexity_critical": {
         "count": 1
       },
@@ -400,12 +390,12 @@
         "count": 1
       }
     },
-    "src/platforms/linux/atspi-bridge.ts": {
+    "packages/platform-linux/src/atspi-bridge.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/platforms/linux/input-actions.ts": {
+    "packages/platform-linux/src/input-actions.ts": {
       "complexity_moderate": {
         "count": 1
       }
@@ -481,9 +471,14 @@
         "count": 1
       }
     },
-    "src/utils/output.ts": {
+    "src/commands/output/snapshot.ts": {
       "crap_moderate": {
-        "count": 2
+        "count": 1
+      }
+    },
+    "src/commands/output/diff.ts": {
+      "crap_moderate": {
+        "count": 1
       }
     },
     "src/utils/retry.ts": {
@@ -491,7 +486,7 @@
         "count": 1
       }
     },
-    "src/utils/scroll-edge-state.ts": {
+    "src/snapshot/scroll-edge-state.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -504,12 +499,12 @@
         "count": 1
       }
     },
-    "src/utils/text-surface.ts": {
+    "src/snapshot/snapshot-presentation/text-surface.ts": {
       "crap_high": {
         "count": 1
       }
     },
-    "src/utils/update-check.ts": {
+    "src/cli/update-check.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -564,13 +559,12 @@
     "src/daemon/client/daemon-client.ts:high impact",
     "src/cli/parser/args.ts:high impact",
     "src/daemon/lease-context.ts:high impact",
-    "src/daemon/handlers/session-replay-heal.ts:high impact",
-    "src/utils/output.ts:high impact",
+    "src/daemon/replay/internal/session-replay-heal.ts:high impact",
     "src/daemon/context.ts:high impact",
     "src/daemon/handlers/session.ts:complexity",
     "src/replay/script-utils.ts:high impact",
     "packages/selectors/src/internal/predicates.ts:high impact",
-    "src/platforms/boot-diagnostics.ts:complexity",
+    "packages/provision-kit/src/boot-diagnostics.ts:complexity",
     "src/compat/maestro/support.ts:high impact",
     "src/daemon/session-routing.ts:high impact",
     "src/daemon/handlers/session-state.ts:complexity",
@@ -581,23 +575,22 @@
     "src/utils/timeouts.ts:high impact",
     "src/commands/interaction/output.ts:high impact",
     "src/snapshot/snapshot-lines.ts:high impact",
-    "src/utils/result-serialization.ts:high impact",
     "src/utils/rect-center.ts:high impact",
-    "src/platforms/apple/core/app-launch.ts:complexity",
+    "packages/platform-apple/src/core/app-launch.ts:complexity",
     "src/utils/parsing.ts:high impact",
     "src/daemon/daemon-command-registry.ts:high impact",
     "src/replay/script.ts:complexity",
     "src/daemon/handlers/session-doctor-output.ts:high impact",
-    "src/platforms/apple/core/perf-xml.ts:high impact",
+    "packages/platform-apple/src/core/perf-xml.ts:high impact",
     "src/daemon/daemon-process.ts:high impact",
-    "src/utils/screenshot-result.ts:high impact",
-    "src/platforms/web/json-utils.ts:high impact",
-    "src/platforms/android/settings.ts:complexity",
-    "src/utils/text-surface.ts:high impact",
+    "src/client/screenshot-result.ts:high impact",
+    "packages/platform-web/src/json-utils.ts:high impact",
+    "packages/platform-android/src/settings.ts:complexity",
+    "src/snapshot/snapshot-presentation/text-surface.ts:high impact",
     "src/daemon/handlers/session-test-sharding.ts:high impact",
-    "src/daemon/handlers/session-replay-runtime.ts:complexity",
-    "src/platforms/apple/core/debug-symbols/utils.ts:high impact",
-    "src/platforms/linux/snapshot.ts:high impact",
+    "src/daemon/replay/internal/native-command.ts:complexity",
+    "packages/platform-apple/src/core/debug-symbols/utils.ts:high impact",
+    "packages/platform-linux/src/snapshot.ts:high impact",
     "src/core/interaction-targeting.ts:high impact",
     "packages/maestro/src/internal/runtime-targets.ts:high impact",
     "src/utils/source-value.ts:high impact",
@@ -609,13 +602,13 @@
     "packages/provider-webdriver/src/webdriver-utils.ts:high impact",
     "src/utils/keyed-lock.ts:high impact",
     "src/daemon/request-progress-protocol.ts:high impact",
-    "src/replay/test/reporters/format.ts:high impact",
-    "src/daemon/handlers/session-test-infrastructure.ts:high impact",
+    "src/cli/replay-test/reporters/format.ts:high impact",
+    "src/daemon/replay/internal/session-test-infrastructure.ts:high impact",
     "src/daemon/handlers/session-test-artifacts.ts:high impact",
-    "src/platforms/android/app-parsers.ts:high impact",
+    "packages/platform-android/src/app-parsers.ts:high impact",
     "src/daemon/server/http-server.ts:complexity",
-    "src/platforms/android/ui-hierarchy.ts:high impact",
-    "src/platforms/android/sdk.ts:high impact",
+    "packages/platform-android/src/ui-hierarchy.ts:high impact",
+    "packages/platform-android/src/sdk.ts:high impact",
     "src/daemon/client/daemon-client-lifecycle.ts:complexity",
     "src/client/client-companion-tunnel-worker.ts:complexity"
   ]

@@ -16,15 +16,15 @@ import { resolveInstallSource } from '../install-source-resolution.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { resolveInstallFromSourceResultTarget } from '../../utils/result-serialization.ts';
-import { withSuccessText } from '../../utils/success-text.ts';
-import { recordSessionAction } from './handler-utils.ts';
-import { resolveCommandDevice } from './session-device-utils.ts';
+import { resolveInstallFromSourceResultTarget } from '../result-serialization.ts';
+import { withSuccessText } from '@agent-device/kernel/success-text';
+import { recordSessionAction } from '../session-action-recorder.ts';
+import { resolveCommandDevice } from '../session-device-resolution.ts';
 import {
   requireRuntimeBinding,
   requireRuntimeFacts,
   unavailableRuntimeOperationResponse,
-} from './session-runtime-admission.ts';
+} from '../session-runtime-admission.ts';
 
 type Retention = Readonly<{ enabled: boolean; ttlMs?: number }>;
 type InstallFromSourceResult = Readonly<{

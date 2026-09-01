@@ -265,7 +265,7 @@ test('screenshot events preserve only the requested client filename', () => {
     durationMs: 123,
     requestedFileName: 'requested-shot.png',
   });
-  assert.equal(JSON.stringify(event).includes('C:\\workspace'), false);
+  assert.equal(JSON.stringify(event).includes(String.raw`C:\workspace`), false);
 });
 
 test('screenshot filenames are bounded for durable event rendering', () => {

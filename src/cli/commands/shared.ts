@@ -1,12 +1,12 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import { printJson } from '../../utils/output.ts';
 
-export function writeCommandOutput(
+export async function writeCommandOutput(
   flags: CliFlags,
   data: unknown,
   renderHuman?: () => string | null | undefined,
-): void {
+): Promise<void> {
   if (flags.json) {
+    const { printJson } = await import('../../commands/output/json.ts');
     printJson({ success: true, data });
     return;
   }

@@ -17,12 +17,23 @@ import {
   resolveRunnerPlatformName,
   resolveRunnerSdkName,
 } from './apple-runner-platform.ts';
-import { resolveAppleRunnerSourceRoot } from './runner-source.ts';
+import {
+  resolveAppleRunnerSourceRoot,
+  resolveAppleSnapshotPresentationSourceRoot,
+} from './runner-source.ts';
 
 const DEFAULT_IOS_RUNNER_APP_BUNDLE_ID = 'com.callstack.agentdevice.runner';
 const RUNNER_DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'apple-runner');
 export const RUNNER_CACHE_METADATA_FILE = '.agent-device-runner-cache.json';
 const RUNNER_CACHE_SCHEMA_VERSION = 2;
+const RUNNER_SOURCE_IGNORED_DIR_NAMES = new Set(['.build', '.swiftpm', 'xcuserdata']);
+const SNAPSHOT_PRESENTATION_SOURCE_IGNORED_DIR_NAMES = new Set([
+  '.build',
+  '.swiftpm',
+  'SnapshotPresentationConformance',
+  'Tests',
+  'xcuserdata',
+]);
 const RUNNER_SANDBOX_BUILD_ARGS = [
   '-IDEPackageSupportDisableManifestSandbox=1',
   '-IDEPackageSupportDisablePluginExecutionSandbox=1',
@@ -243,33 +254,43 @@ type RunnerSourceFingerprintCacheEntry = {
 const runnerSourceFingerprintCache = new Map<string, RunnerSourceFingerprintCacheEntry>();
 
 function computeRunnerSourceFingerprint(projectRoot: string): string {
-  const runnerRoot = resolveAppleRunnerSourceRoot(projectRoot);
-  const files = collectRunnerSourceFiles(runnerRoot);
-  const fileStatsFingerprint = computeRunnerSourceFileStatsFingerprint(runnerRoot, files);
-  const cached = runnerSourceFingerprintCache.get(runnerRoot);
+  const sourceRoots = [
+    {
+      path: resolveAppleRunnerSourceRoot(projectRoot),
+      ignoredDirectoryNames: RUNNER_SOURCE_IGNORED_DIR_NAMES,
+    },
+    {
+      path: resolveAppleSnapshotPresentationSourceRoot(projectRoot),
+      ignoredDirectoryNames: SNAPSHOT_PRESENTATION_SOURCE_IGNORED_DIR_NAMES,
+    },
+  ];
+  const files = collectRunnerSourceFiles(sourceRoots);
+  const fileStatsFingerprint = computeRunnerSourceFileStatsFingerprint(projectRoot, files);
+  const cacheKey = JSON.stringify(sourceRoots.map(({ path: sourcePath }) => sourcePath));
+  const cached = runnerSourceFingerprintCache.get(cacheKey);
   if (cached?.fileStatsFingerprint === fileStatsFingerprint) {
     return cached.sourceFingerprint;
   }
   const hash = crypto.createHash('sha256');
   for (const file of files) {
-    const relativePath = path.relative(runnerRoot, file);
+    const relativePath = path.relative(projectRoot, file);
     hash.update(relativePath);
     hash.update('\0');
     hash.update(fs.readFileSync(file));
     hash.update('\0');
   }
   const sourceFingerprint = hash.digest('hex');
-  runnerSourceFingerprintCache.set(runnerRoot, { fileStatsFingerprint, sourceFingerprint });
+  runnerSourceFingerprintCache.set(cacheKey, { fileStatsFingerprint, sourceFingerprint });
   return sourceFingerprint;
 }
 
 function computeRunnerSourceFileStatsFingerprint(
-  runnerRoot: string,
+  projectRoot: string,
   files: readonly string[],
 ): string {
   const hash = crypto.createHash('sha256');
   for (const file of files) {
-    const relativePath = path.relative(runnerRoot, file);
+    const relativePath = path.relative(projectRoot, file);
     const stat = fs.statSync(file);
     hash.update(relativePath);
     hash.update('\0');
@@ -281,27 +302,46 @@ function computeRunnerSourceFileStatsFingerprint(
   return hash.digest('hex');
 }
 
-function collectRunnerSourceFiles(root: string): string[] {
-  if (!fs.existsSync(root)) {
-    return [];
-  }
+type RunnerSourceRoot = Readonly<{
+  path: string;
+  ignoredDirectoryNames: ReadonlySet<string>;
+}>;
+
+function collectRunnerSourceFiles(roots: readonly RunnerSourceRoot[]): string[] {
+  return [
+    ...new Set(
+      roots.flatMap(({ path: sourcePath, ignoredDirectoryNames }) =>
+        collectRunnerSourceFilesUnderRoot(sourcePath, ignoredDirectoryNames),
+      ),
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+}
+
+function collectRunnerSourceFilesUnderRoot(
+  root: string,
+  ignoredDirectoryNames: ReadonlySet<string>,
+): string[] {
+  return fs.existsSync(root)
+    ? collectRunnerSourceFilesInDirectory(root, ignoredDirectoryNames)
+    : [];
+}
+
+function collectRunnerSourceFilesInDirectory(
+  directory: string,
+  ignoredDirectoryNames: ReadonlySet<string>,
+): string[] {
   const files: string[] = [];
-  const stack = [root];
-  while (stack.length > 0) {
-    const current = stack.pop() as string;
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const fullPath = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name === 'xcuserdata') continue;
-        stack.push(fullPath);
-        continue;
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (!ignoredDirectoryNames.has(entry.name)) {
+        files.push(...collectRunnerSourceFilesInDirectory(fullPath, ignoredDirectoryNames));
       }
-      if (entry.isFile() && isRunnerSourceFile(entry.name, fullPath)) {
-        files.push(fullPath);
-      }
+    } else if (entry.isFile() && isRunnerSourceFile(entry.name, fullPath)) {
+      files.push(fullPath);
     }
   }
-  return files.sort((a, b) => a.localeCompare(b));
+  return files;
 }
 
 function isRunnerSourceFile(fileName: string, filePath: string): boolean {
@@ -352,7 +392,7 @@ export function resolveRunnerSigningBuildSettings(
   const teamId = env.AGENT_DEVICE_IOS_TEAM_ID?.trim() || '';
   const configuredIdentity = env.AGENT_DEVICE_IOS_SIGNING_IDENTITY?.trim() || '';
   const profile = env.AGENT_DEVICE_IOS_PROVISIONING_PROFILE?.trim() || '';
-  const args = ['CODE_SIGN_STYLE=Automatic'];
+  const args = [`CODE_SIGN_STYLE=${profile ? 'Manual' : 'Automatic'}`];
   if (teamId) {
     args.push(`DEVELOPMENT_TEAM=${teamId}`);
   }

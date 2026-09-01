@@ -1,0 +1,498 @@
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { containsPoint } from '@agent-device/kernel/rect';
+import {
+  buildFillFailureDetails,
+  isSensitiveFillDiagnosticNode,
+  type AndroidFillVerification,
+  type AndroidFillVerificationNode,
+  type FillFailureDetails,
+} from './fill-diagnostics.ts';
+import { sleep } from './adb.ts';
+import { getAndroidKeyboardState } from './device-input-state.ts';
+import { isAndroidInputMethodOwnedNode } from '@agent-device/contracts/android-input-ownership';
+import { captureAndroidUiHierarchyXml } from './snapshot.ts';
+import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
+import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
+import type {
+  FillUnconfirmedVerification,
+  FillVerificationTarget,
+} from '@agent-device/contracts/interactor-types';
+
+export type { AndroidFillVerification } from './fill-diagnostics.ts';
+
+type AndroidFillVerificationCandidate = AndroidFillVerificationNode & {
+  editText: boolean;
+  // Helper-only fact: the node's dump text is its HINT, so the field itself is empty.
+  hintShowing: boolean;
+};
+
+type AndroidTextAtPointInspection = {
+  targetInput: AndroidFillVerificationCandidate | null;
+  actualInput: AndroidFillVerificationCandidate | null;
+};
+
+type AndroidTextAtPointScan = {
+  focusedEdit: AndroidFillVerificationCandidate | null;
+  editAtPoint: AndroidFillVerificationCandidate | null;
+  anyAtPoint: AndroidFillVerificationCandidate | null;
+};
+
+type AndroidFillVerificationContext = {
+  activeInputMethodPackage?: string | null;
+};
+
+export async function verifyAndroidFilledText(
+  device: DeviceInfo,
+  x: number,
+  y: number,
+  expected: string,
+  helper: AndroidHelperSessionOptions = {},
+): Promise<AndroidFillVerification> {
+  const verificationDelaysMs = [0, 150, 350];
+  let lastVerification: AndroidFillVerification | null = null;
+  let stableVerification: AndroidFillVerification | null = null;
+  const context = await readAndroidFillVerificationContext(device);
+
+  for (const delayMs of verificationDelaysMs) {
+    if (delayMs > 0) {
+      await sleep(delayMs);
+    }
+    const verification = await inspectAndroidFilledText(device, x, y, expected, context, helper);
+    lastVerification = verification;
+    if (verification.reason === 'ime_capture') {
+      return verification;
+    }
+    if (verification.ok) {
+      stableVerification = verification;
+    } else {
+      stableVerification = null;
+    }
+  }
+
+  return (
+    stableVerification ??
+    lastVerification ?? {
+      ok: false,
+      actual: null,
+      reason: 'text_mismatch',
+      targetInput: null,
+      actualInput: null,
+    }
+  );
+}
+
+export async function readAndroidTextAtPoint(
+  device: DeviceInfo,
+  x: number,
+  y: number,
+  helper: AndroidHelperSessionOptions = {},
+): Promise<string | null> {
+  return readAndroidTextAtPointInHierarchy(
+    await captureAndroidUiHierarchyXml(device, helper),
+    x,
+    y,
+  );
+}
+
+async function readAndroidFillTargetAtPoint(
+  device: DeviceInfo,
+  x: number,
+  y: number,
+  helper: AndroidHelperSessionOptions,
+): Promise<AndroidFillVerificationNode | null> {
+  const context = await readAndroidFillVerificationContext(device);
+  return inspectAndroidTextAtPointInHierarchy(
+    await captureAndroidUiHierarchyXml(device, helper),
+    x,
+    y,
+    context,
+  ).targetInput;
+}
+
+export async function readAndroidFillTargetBeforeMutation(
+  device: DeviceInfo,
+  x: number,
+  y: number,
+  helper: AndroidHelperSessionOptions = {},
+): Promise<AndroidFillVerification['targetInput']> {
+  try {
+    return await readAndroidFillTargetAtPoint(device, x, y, helper);
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_fill_pre_action_target_capture_failed',
+      data: { error: error instanceof Error ? error.message : String(error) },
+    });
+    return null;
+  }
+}
+
+export function completeAndroidFillVerification(
+  expected: string,
+  beforeTarget: AndroidFillVerification['targetInput'],
+  verification: AndroidFillVerification | null,
+): FillUnconfirmedVerification | undefined {
+  if (verification?.ok) return undefined;
+  const unconfirmed = verification
+    ? buildAndroidFillUnconfirmedVerification(expected, beforeTarget, verification)
+    : null;
+  if (unconfirmed) return unconfirmed;
+  throw new AppError(
+    'COMMAND_FAILED',
+    androidFillFailureMessage(verification),
+    androidFillFailureDetails(expected, verification),
+  );
+}
+
+export function buildAndroidFillUnconfirmedVerification(
+  requested: string,
+  beforeTarget: AndroidFillVerification['targetInput'],
+  verification: AndroidFillVerification,
+): FillUnconfirmedVerification | null {
+  const afterTarget = verification.targetInput;
+  const actualInput = verification.actualInput;
+  if (
+    // The unconfirmed soft-success exists for app-owned formatting that prevents raw equality.
+    // Nothing formats the EMPTY value (#2063): residual text after a clear is a failed clear,
+    // and the soft-success would also skip the second, bigger delete burst.
+    requested.length === 0 ||
+    verification.reason === 'ime_capture' ||
+    !beforeTarget ||
+    !afterTarget ||
+    !actualInput ||
+    isSensitiveFillDiagnosticNode(beforeTarget) ||
+    isSensitiveFillDiagnosticNode(afterTarget) ||
+    isSensitiveFillDiagnosticNode(actualInput) ||
+    !sameAndroidFillTarget(beforeTarget, afterTarget) ||
+    !sameAndroidFillTarget(beforeTarget, actualInput) ||
+    beforeTarget.text === verification.actual
+  ) {
+    return null;
+  }
+  const target = toFillVerificationTarget(beforeTarget);
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'android_fill_verification_unconfirmed',
+    data: { target },
+  });
+  return {
+    verification: 'unconfirmed',
+    requested,
+    before: beforeTarget.text,
+    after: verification.actual,
+    target,
+  };
+}
+
+export function verifyAndroidFilledTextInHierarchy(
+  xml: string,
+  x: number,
+  y: number,
+  expected: string,
+  context: AndroidFillVerificationContext = {},
+): AndroidFillVerification {
+  const inspection = inspectAndroidTextAtPointInHierarchy(xml, x, y, context);
+  if (isAndroidImeCapture(inspection)) {
+    return {
+      ok: false,
+      actual: inspection.actualInput?.text ?? null,
+      reason: 'ime_capture',
+      targetInput: inspection.targetInput,
+      actualInput: inspection.actualInput,
+    };
+  }
+
+  return (
+    maskedAndroidFillVerification(inspection, expected) ??
+    textAndroidFillVerification(inspection, expected)
+  );
+}
+
+export function readAndroidTextAtPointInHierarchy(
+  xml: string,
+  x: number,
+  y: number,
+): string | null {
+  // Reads are point-targeted: a focused sibling may be a different app field or an IME
+  // composing surface, so it must not override the node that contains the requested point.
+  return inspectAndroidTextAtPointInHierarchy(xml, x, y).targetInput?.text ?? null;
+}
+
+export function androidFillFailureMessage(verification: AndroidFillVerification | null): string {
+  if (verification?.reason === 'ime_capture') {
+    return 'Android fill input was captured by the active keyboard instead of the app field';
+  }
+  if (verification?.reason === 'masked_unverified') {
+    return 'Android fill verification could not confirm masked text value';
+  }
+  return 'Android fill verification failed';
+}
+
+export function androidFillFailureDetails(
+  expected: string,
+  verification: AndroidFillVerification | null,
+): FillFailureDetails {
+  const details = buildFillFailureDetails(expected, verification);
+  if (verification?.reason === 'ime_capture') {
+    details.hint =
+      'The focused input belongs to the Android keyboard/IME, not the app field. Disable handwriting/stylus input or switch to a standard IME, then retry fill.';
+  }
+  return details;
+}
+
+async function inspectAndroidFilledText(
+  device: DeviceInfo,
+  x: number,
+  y: number,
+  expected: string,
+  context: AndroidFillVerificationContext,
+  helper: AndroidHelperSessionOptions,
+): Promise<AndroidFillVerification> {
+  // Each delay samples the live hierarchy again — settling is what the samples observe, so they
+  // share the helper session but never a capture.
+  return verifyAndroidFilledTextInHierarchy(
+    await captureAndroidUiHierarchyXml(device, helper),
+    x,
+    y,
+    expected,
+    context,
+  );
+}
+
+function inspectAndroidTextAtPointInHierarchy(
+  xml: string,
+  x: number,
+  y: number,
+  context: AndroidFillVerificationContext = {},
+): AndroidTextAtPointInspection {
+  const scan: AndroidTextAtPointScan = {
+    focusedEdit: null,
+    editAtPoint: null,
+    anyAtPoint: null,
+  };
+
+  for (const node of androidUiNodes(xml)) {
+    const candidate = androidFillCandidateFromNode(node, context);
+    if (candidate) updateAndroidTextAtPointScan(scan, candidate, x, y);
+  }
+
+  return androidTextAtPointInspection(scan);
+}
+
+function isAndroidImeCapture(inspection: AndroidTextAtPointInspection): boolean {
+  const { targetInput, actualInput } = inspection;
+  if (!targetInput || !actualInput) return false;
+  if (actualInput === targetInput) return false;
+  return actualInput.inputMethodOwned && !targetInput.inputMethodOwned;
+}
+
+function maskedAndroidFillVerification(
+  inspection: AndroidTextAtPointInspection,
+  expected: string,
+): AndroidFillVerification | null {
+  const actualInput = inspection.actualInput;
+  if (!actualInput || !isMaskedAndroidInput(actualInput)) return null;
+  const actual = actualInput.text ?? null;
+  const valueLength = Array.from(observedAndroidValue(actualInput)).length;
+  const expectedLength = Array.from(expected).length;
+  // A masked value only ever compares by length. The empty expectation accepts an observed
+  // masked node with an empty VALUE: a masked field WITH content dumps its bullet run, so
+  // emptiness is honest evidence — matching iOS, where clearing a secure field succeeds
+  // unverified rather than failing after the clear worked.
+  const matched =
+    expectedLength === 0 ? valueLength === 0 : valueLength > 0 && valueLength === expectedLength;
+  return {
+    ok: matched,
+    actual,
+    reason: matched ? undefined : 'masked_unverified',
+    masked: true,
+    targetInput: inspection.targetInput,
+    actualInput,
+  };
+}
+
+function textAndroidFillVerification(
+  inspection: AndroidTextAtPointInspection,
+  expected: string,
+): AndroidFillVerification {
+  const actualInput = inspection.actualInput;
+  return {
+    // An observed input node is required before any match: an empty expectation accepts an
+    // empty VALUE, and "no input at all" (wrong point, lost focus) must never read as one —
+    // three empty samples of nothing would report a clear that never touched an app field.
+    ok:
+      actualInput !== null &&
+      isAcceptableAndroidFillMatch(observedAndroidValue(actualInput), expected),
+    // Raw dump text, for diagnostics — the hint-collapsed VALUE is only for matching.
+    actual: actualInput?.text ?? null,
+    reason: 'text_mismatch',
+    targetInput: inspection.targetInput,
+    actualInput,
+  };
+}
+
+/**
+ * An observed input's VALUE. The dump `text` is not it in two cases the verifiers must agree
+ * on: an absent attribute is the empty value, and hint-only text is too — an empty field's
+ * `getText()` returns its HINT on modern Android (the placeholder-as-value trap the Apple
+ * runner solves with `treatingPlaceholderAsEmpty`); the helper's hint-showing fact is the only
+ * way to tell that apart from a real value equal to the hint string (#2063).
+ */
+function observedAndroidValue(input: AndroidFillVerificationCandidate): string {
+  if (input.hintShowing) return '';
+  return input.text ?? '';
+}
+
+function isAcceptableAndroidFillMatch(value: string, expected: string): boolean {
+  if (value === expected) {
+    return true;
+  }
+  if (expected.length === 0) {
+    // The clear request (#2063) matched exactly above or not at all; whitespace never
+    // normalizes into emptiness.
+    return false;
+  }
+  const normalizedValue = normalizeFillVerificationText(value);
+  const normalizedExpected = normalizeFillVerificationText(expected);
+  if (!normalizedValue || !normalizedExpected) {
+    return false;
+  }
+  if (normalizedValue === normalizedExpected) {
+    return true;
+  }
+  if (isSentenceAutocapitalizeMatch(normalizedValue, normalizedExpected)) {
+    return true;
+  }
+  return false;
+}
+
+function normalizeFillVerificationText(value: string): string {
+  return value.replaceAll(/\s+/g, ' ').trim();
+}
+
+function isSentenceAutocapitalizeMatch(actual: string, expected: string): boolean {
+  if (actual.length !== expected.length || actual.length === 0) return false;
+  if (actual.slice(1) !== expected.slice(1)) return false;
+  const actualFirst = actual[0];
+  const expectedFirst = expected[0];
+  if (!actualFirst || !expectedFirst) return false;
+  return (
+    expectedFirst.toLowerCase() === expectedFirst && actualFirst === expectedFirst.toUpperCase()
+  );
+}
+
+function androidFillCandidateFromNode(
+  node: AndroidUiNodeMetadata,
+  context: AndroidFillVerificationContext,
+): AndroidFillVerificationCandidate | null {
+  if (!node.rect) return null;
+  const text = node.text ?? '';
+  const area = Math.max(1, node.rect.width * node.rect.height);
+  return {
+    text: text || null,
+    className: node.className,
+    resourceId: node.resourceId,
+    packageName: node.packageName,
+    rect: node.rect,
+    focused: node.focused ?? false,
+    password: node.password === true,
+    inputMethodOwned: isAndroidInputMethodOwnedNode({
+      packageName: node.packageName,
+      resourceId: node.resourceId,
+      activeInputMethodPackage: context.activeInputMethodPackage,
+    }),
+    area,
+    editText: isEditTextClass(node.className ?? ''),
+    hintShowing: node.hintShowing === true,
+  };
+}
+
+async function readAndroidFillVerificationContext(
+  device: DeviceInfo,
+): Promise<AndroidFillVerificationContext> {
+  try {
+    const state = await getAndroidKeyboardState(device);
+    return { activeInputMethodPackage: state.inputMethodPackage };
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_fill_verification_input_method_probe_failed',
+      data: {
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+    return {};
+  }
+}
+
+function updateAndroidTextAtPointScan(
+  scan: AndroidTextAtPointScan,
+  candidate: AndroidFillVerificationCandidate,
+  x: number,
+  y: number,
+): void {
+  const atPoint = containsPoint(candidate.rect, x, y);
+  if (atPoint && candidate.editText) {
+    scan.editAtPoint = smallerAndroidFillCandidate(scan.editAtPoint, candidate);
+  }
+  if (candidate.focused && candidate.editText) {
+    scan.focusedEdit = smallerAndroidFillCandidate(scan.focusedEdit, candidate);
+    return;
+  }
+  if (atPoint && candidate.text) {
+    scan.anyAtPoint = smallerAndroidFillCandidate(scan.anyAtPoint, candidate);
+  }
+}
+
+function smallerAndroidFillCandidate<T extends AndroidFillVerificationCandidate>(
+  current: T | null,
+  next: T,
+): T {
+  return current && current.area < next.area ? current : next;
+}
+
+function androidTextAtPointInspection(scan: AndroidTextAtPointScan): AndroidTextAtPointInspection {
+  const targetInput = scan.editAtPoint ?? scan.anyAtPoint;
+  const focusedInput = scan.focusedEdit?.text ? scan.focusedEdit : null;
+  return {
+    targetInput,
+    actualInput: focusedInput ?? targetInput,
+  };
+}
+
+function isEditTextClass(className: string): boolean {
+  const lower = className.toLowerCase();
+  return lower.includes('edittext') || lower.includes('textfield');
+}
+
+function isMaskedAndroidInput(node: AndroidFillVerificationNode): boolean {
+  return isSensitiveFillDiagnosticNode(node);
+}
+
+function sameAndroidFillTarget(
+  before: AndroidFillVerificationNode,
+  after: AndroidFillVerificationNode,
+): boolean {
+  if (before.resourceId || after.resourceId) {
+    return before.resourceId === after.resourceId && before.packageName === after.packageName;
+  }
+  return (
+    before.className === after.className &&
+    before.packageName === after.packageName &&
+    before.rect.x === after.rect.x &&
+    before.rect.y === after.rect.y &&
+    before.rect.width === after.rect.width &&
+    before.rect.height === after.rect.height
+  );
+}
+
+function toFillVerificationTarget(node: AndroidFillVerificationNode): FillVerificationTarget {
+  return {
+    resourceId: node.resourceId,
+    className: node.className,
+    packageName: node.packageName,
+    rect: node.rect,
+  };
+}

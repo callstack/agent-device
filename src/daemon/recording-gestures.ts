@@ -7,7 +7,7 @@ import {
   resolveGestureOffsetMs,
   resolveTapVisualizationOffsetMs,
 } from './recording-timing.ts';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { DEFAULT_MOBILE_SCROLL_DURATION_MS } from '@agent-device/contracts/scroll-command';
 import {
   type ScrollDirection,

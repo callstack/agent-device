@@ -24,6 +24,9 @@ export type {
   DeviceLease,
   LeaseLifecycleContext,
   LeaseLifecycleProvider,
+  ProviderAppCatalog,
+  ProviderAppCatalogHandler,
+  ProviderAppCatalogQuery,
   ProviderDeviceInventoryOutcome,
   ProviderDeviceInventorySource,
 } from '../device-provider.ts';

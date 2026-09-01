@@ -18,7 +18,7 @@ test('help longpress prints command help and skips daemon dispatch', async () =>
   assert.equal(result.calls.length, 0);
   assert.match(
     result.stdout,
-    /Usage:\n  agent-device longpress <x y\|@ref\|selector> \[durationMs\]/,
+    /Usage:\n {2}agent-device longpress <x y\|@ref\|selector> \[durationMs\]/,
   );
 });
 
@@ -28,7 +28,7 @@ test('help long-press resolves to longpress help and skips daemon dispatch', asy
   assert.equal(result.calls.length, 0);
   assert.match(
     result.stdout,
-    /Usage:\n  agent-device longpress <x y\|@ref\|selector> \[durationMs\]/,
+    /Usage:\n {2}agent-device longpress <x y\|@ref\|selector> \[durationMs\]/,
   );
   assert.doesNotMatch(result.stdout, /agent-device long-press/);
 });
@@ -37,7 +37,7 @@ test('appstate --help prints command help and skips daemon dispatch', async () =
   const result = await runCliCapture(['appstate', '--help']);
   assert.equal(result.code, 0);
   assert.equal(result.calls.length, 0);
-  assert.match(result.stdout, /Usage:\n  agent-device appstate/);
+  assert.match(result.stdout, /Usage:\n {2}agent-device appstate/);
   assert.doesNotMatch(result.stdout, /Global flags:/);
   assert.doesNotMatch(result.stdout, /Global Flags:/);
 });
@@ -175,7 +175,10 @@ test('help physical-device documents the runner/daemon lifecycle detail moved ou
     result.stdout,
     /a stale iOS runner lease — its owner process dead, or its AGENT_DEVICE_STATE_DIR deleted — is reclaimed automatically/i,
   );
-  assert.match(result.stdout, /genuinely live owner whose state dir still exists still rejects/);
+  assert.match(
+    result.stdout,
+    /A live owner's runner is also reclaimed when the requesting daemon holds the host-global device claim/,
+  );
 });
 
 test('help workflow documents ref lifetime and snapshot diff guarantees (#1051)', async () => {

@@ -4,8 +4,9 @@ import { verifyLimrunConnection } from '@agent-device/provider-limrun';
 import { AppError } from '@agent-device/kernel/errors';
 import { providerWebDriver } from '../../provider-webdriver.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
-import type { EnvMap } from '../../utils/env-map.ts';
-import { readVersion } from '../../utils/version.ts';
+import { readVersion } from '@agent-device/host-kit/version';
+import { type EnvMap } from '@agent-device/kernel/source-value';
+
 import { resolveCloudConnectProfile } from './cloud-profile.ts';
 import { resolveCloudWebDriverConnectProfile } from './cloud-webdriver-profile.ts';
 import { resolveLimrunConnectProfile } from './limrun-profile.ts';
@@ -111,13 +112,10 @@ export async function resolveConnectProviderProfile(options: {
   return { ...profile, provider };
 }
 
-export async function verifyConnectProvider(options: {
-  provider?: ConnectProvider;
-  flags: CliFlags;
-  env?: EnvMap;
-}): Promise<ConnectVerification> {
-  const env = options.env ?? process.env;
-  if (!options.provider) {
+export async function verifyResolvedConnectProvider(
+  resolved: ResolvedConnectProfile,
+): Promise<ConnectVerification> {
+  if (!resolved.provider) {
     return {
       service: 'remote provider',
       status: 'configured',
@@ -125,9 +123,9 @@ export async function verifyConnectProvider(options: {
         'Remote connection profile loaded. Access is checked by the first remote command.',
     };
   }
-  return await CONNECT_PROVIDER_ADAPTERS[options.provider].verify({
-    flags: options.flags,
-    env,
+  return await CONNECT_PROVIDER_ADAPTERS[resolved.provider].verify({
+    flags: resolved.flags,
+    env: process.env,
   });
 }
 

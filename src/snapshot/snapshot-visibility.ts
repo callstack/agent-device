@@ -1,4 +1,4 @@
-import { buildMobileSnapshotPresentation } from './mobile-snapshot-semantics.ts';
+import { buildMobileSnapshotPresentation } from '@agent-device/capture-kit/mobile-snapshot-semantics';
 import {
   usesMobileSnapshotPresentation,
   type SnapshotState,

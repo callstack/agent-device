@@ -2,6 +2,7 @@ import {
   AMBIGUOUS_MATCH_SAMPLE,
   APP_NOT_INSTALLED_SAMPLE,
   BROWSERSTACK_CONNECT_SAMPLE,
+  DEVICE_CLAIM_IN_USE_SAMPLE,
   DEVICE_IN_USE_SAMPLE,
   FOREGROUND_SNAPSHOT_FAILURE_SAMPLE,
   MERGED_CARD_ACTIONS_SAMPLE,
@@ -573,6 +574,28 @@ Use the output already shown to determine whether the feed-search UI is present,
       { id: 'noClose', pattern: /(?:^|\n)agent-device\s+close\b/i },
       { id: 'noReopen', pattern: /(?:^|\n)agent-device\s+open\b/i },
       { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
+    ],
+  },
+  {
+    id: 'sample-output-device-claim-inspects-owner',
+    docs: ['--help:first30', 'debugging'],
+    recovery: { code: 'DEVICE_IN_USE', sample: DEVICE_CLAIM_IN_USE_SAMPLE },
+    task: quiz(
+      DEVICE_CLAIM_IN_USE_SAMPLE,
+      'A different worktree owns this device and you must not interrupt it. What command should run next?',
+    ),
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [
+      {
+        id: 'runsDeviceStatus',
+        pattern:
+          /(?:^|\n)agent-device\s+device\s+status\s+--platform\s+android\s+--serial\s+emulator-5554\b/i,
+      },
+    ],
+    forbidden: [
+      { id: 'noRetryOpen', pattern: /(?:^|\n)agent-device\s+open\b/i },
+      { id: 'noForeignClose', pattern: /(?:^|\n)agent-device\s+close\b/i },
+      { id: 'noPidHunting', pattern: /(?:^|\n)\s*(?:ps|kill|pkill)\b/i },
     ],
   },
   {

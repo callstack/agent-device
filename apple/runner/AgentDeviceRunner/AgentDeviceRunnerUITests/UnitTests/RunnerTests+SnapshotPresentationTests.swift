@@ -1,5 +1,6 @@
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   func testSnapshotPresentationPreservesCurrentWireShape() throws {
@@ -48,14 +49,14 @@ extension RunnerTests {
         raw: true
       )
     ))
-    let nodes = try XCTUnwrap(capture.payload.nodes)
+    let nodes = capture.nodes
     let encoded = try encoder.encode(nodes)
 
     XCTAssertEqual(
       String(decoding: encoded, as: UTF8.self),
       #"[{"actions":["Open menu"],"depth":2,"enabled":true,"focused":true,"hiddenContentAbove":true,"hiddenContentBelow":true,"hittable":true,"identifier":"continue-button","index":3,"label":"Continue","parentIndex":1,"rect":{"height":44,"width":100,"x":10,"y":20},"selected":true,"type":"Button","value":"Ready"}]"#
     )
-    XCTAssertEqual(capture.payload.truncated, true)
+    XCTAssertEqual(capture.truncated, true)
     XCTAssertEqual(capture.effectiveDepth, 4)
     XCTAssertEqual(capture.customActions?.read, 1)
     XCTAssertEqual(capture.customActions?.candidates, 2)
@@ -114,7 +115,7 @@ extension RunnerTests {
           nodes: acquired, truncated: false, effectiveDepth: nil,
           viewport: CGRect(x: 0, y: 0, width: 1_000, height: 1_000)),
         options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
-      ).payload.nodes
+      ).nodes
     )
     let interactive = try XCTUnwrap(
       try SnapshotPresentation.presentRegular(
@@ -125,7 +126,7 @@ extension RunnerTests {
           nodes: acquired, truncated: false, effectiveDepth: nil,
           viewport: CGRect(x: 0, y: 0, width: 1_000, height: 1_000)),
         options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false)
-      ).payload.nodes
+      ).nodes
     )
 
     XCTAssertEqual(
@@ -148,7 +149,7 @@ extension RunnerTests {
             interactiveOnly: false, customActions: false),
           nodes: acquired, truncated: false, effectiveDepth: nil, viewport: .infinite),
         options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: true)
-      ).payload.nodes
+      ).nodes
     )
     XCTAssertEqual(raw.map(\.index), Array(0...10))
     XCTAssertEqual(raw.last?.depth, 2)
@@ -182,9 +183,9 @@ extension RunnerTests {
       acquisition,
       options: PresentationOptions(
         interactiveOnly: false, depth: nil, scope: nil, raw: false)
-    ).payload.nodes
+    ).nodes
 
-    XCTAssertEqual(presented?.compactMap(\.label), ["App"])
+    XCTAssertEqual(presented.compactMap(\.label), ["App"])
   }
 
   func testRegularPresentationPublishesEffectiveRectWhileRawKeepsReportedFrame() throws {
@@ -213,7 +214,7 @@ extension RunnerTests {
           viewport: viewport
         ),
         options: regularOptions
-      ).payload.nodes
+      ).nodes
     )
     let regularButton = try XCTUnwrap(regular.first { $0.label == "Partially clipped" })
     XCTAssertEqual(regularButton.rect.x, 350)
@@ -233,7 +234,7 @@ extension RunnerTests {
           viewport: .infinite
         ),
         options: rawOptions
-      ).payload.nodes
+      ).nodes
     )
     let rawButton = try XCTUnwrap(raw.first { $0.label == "Partially clipped" })
     XCTAssertEqual(rawButton.rect.x, 350)
@@ -294,14 +295,14 @@ extension RunnerTests {
       raw: false
     )
     let capture = try XCTUnwrap(try SnapshotPresentation.present(acquisition, options: options))
-    let nodes = try XCTUnwrap(capture.payload.nodes)
+    let nodes = capture.nodes
 
     XCTAssertEqual(nodes.map(\.label), [nil, "Child"])
     XCTAssertEqual(nodes.map(\.identifier), ["scope-root", nil])
     XCTAssertEqual(nodes.map(\.index), [0, 1])
     XCTAssertEqual(nodes.map(\.depth), [0, 1])
     XCTAssertEqual(nodes.map(\.parentIndex), [nil, 0])
-    XCTAssertEqual(capture.qualityPayload?.nodes?.count, 6)
+    XCTAssertEqual(capture.qualityNodes?.count, 6)
 
     let raw = try XCTUnwrap(
       SnapshotPresentation.presentRaw(
@@ -320,7 +321,7 @@ extension RunnerTests {
           scope: "scope-root",
           raw: true
         )
-      ).payload.nodes
+      ).nodes
     )
     XCTAssertEqual(raw.map(\.type), ["Other", "StaticText", "Image"])
     XCTAssertEqual(raw.map(\.depth), [0, 1, 1])
@@ -339,8 +340,12 @@ extension RunnerTests {
         raw: false
       )
     ))
-    XCTAssertEqual(missing.payload.nodes?.count, 0)
-    XCTAssertNil(RunnerTests.sparsePayloadReason(try XCTUnwrap(missing.qualityPayload)))
+    XCTAssertEqual(missing.nodes.count, 0)
+    XCTAssertNil(
+      RunnerTests.sparsePayloadReason(
+        DataPayload(nodes: missing.qualityNodes, truncated: missing.truncated)
+      )
+    )
   }
 
   /// #1797 D4: a backend that answers a `--raw` request with a regular capture (or the reverse)
@@ -383,8 +388,8 @@ extension RunnerTests {
       regularAcquisition, options: regularRequest)
     XCTAssertNil(regularCaptureForRawRequest)
     XCTAssertNil(rawCaptureForRegularRequest)
-    XCTAssertEqual(rawCapture?.payload.nodes?.count, 2)
-    XCTAssertEqual(regularCapture?.payload.nodes?.count, 2)
+    XCTAssertEqual(rawCapture?.nodes.count, 2)
+    XCTAssertEqual(regularCapture?.nodes.count, 2)
   }
 
   /// The one derivation every backend reads. Non-vacuity: returning the request's own depth for a
@@ -486,8 +491,8 @@ extension RunnerTests {
     XCTAssertFalse(
       SnapshotPresentation.shouldAcquireChildren(
         for: hint, rawDepth: 2, regularPresentedDepth: 1))
-    XCTAssertEqual(capture.payload.nodes?.map(\.label), ["App", "Save"])
-    XCTAssertEqual(capture.payload.nodes?.map(\.depth), [0, 1])
+    XCTAssertEqual(capture.nodes.map(\.label), ["App", "Save"])
+    XCTAssertEqual(capture.nodes.map(\.depth), [0, 1])
   }
 
   /// #1797 P1: an eligible parent outside the viewport is removed by the shared visibility fold,
@@ -558,7 +563,7 @@ extension RunnerTests {
       viewport: viewport
     )
     let presented = try XCTUnwrap(
-      SnapshotPresentation.present(acquisition, options: options)?.payload.nodes)
+      SnapshotPresentation.present(acquisition, options: options)?.nodes)
 
     XCTAssertEqual(presented.map(\.label), ["App", "Projected child"])
     XCTAssertEqual(presented.map(\.depth), [0, 1])

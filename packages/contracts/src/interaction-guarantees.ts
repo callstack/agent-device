@@ -161,14 +161,14 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
     kind: 'runtime',
     via: 'src/core/interaction-touch-point.ts#resolveInteractionTouchPoint',
   },
-  // #1542: the base decision is isNodeVisibleOnScreen (bulk accessibility
+  // #1542: the base decision is the contracts-owned snapshot visibility resolver (bulk accessibility
   // tree), but throwIfOffscreenInteractionTarget is the actual end-to-end
   // enforcement point — on iOS (local, non-provider sessions only) a would-be
   // refusal is re-checked against a live, tree-independent read via the
   // optional AgentDeviceBackend.confirmOffscreenTargetVisible hook before
   // erroring, and a confirmed rescue re-targets the action at the LIVE rect,
   // not the bulk one. Every other platform, and any backend that omits the
-  // hook, refuses on isNodeVisibleOnScreen's verdict unchanged — this is a
+  // hook, refuses on the visibility resolver's verdict unchanged — this is a
   // rescue-only override, never a way to relax a genuine refusal.
   offscreen: {
     kind: 'runtime',

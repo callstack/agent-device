@@ -21,7 +21,7 @@ import {
   type FilesystemBoundaryFixture,
 } from '../../__tests__/test-utils/filesystem-boundary-faults.ts';
 
-vi.mock('../../utils/host-process.ts', async (importOriginal) =>
+vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
   (await import('../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
     importOriginal,
   ),

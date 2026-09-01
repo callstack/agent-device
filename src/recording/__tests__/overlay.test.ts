@@ -3,10 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../../utils/exec.ts', async () => {
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const fs = await import('node:fs');
   const path = await import('node:path');
   return {
+    ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
     runCmd: vi.fn(async (cmd: string, args: string[]) => {
       if (cmd === 'xcrun') {
         const outputPath = args[args.indexOf('-o') + 1]!;
@@ -22,14 +23,14 @@ vi.mock('../../utils/exec.ts', async () => {
   };
 });
 
-vi.mock('../../utils/video.ts', () => ({
+vi.mock('../video.ts', () => ({
   waitForStableFile: vi.fn(async () => {}),
   waitForPlayableVideo: vi.fn(async () => {}),
 }));
 
 import { buildRecordingScriptPathCandidates, overlayRecordingTouches } from '../overlay.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '../../utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/command';
 
 function helperScriptArgs(): string[] {
   const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== 'xcrun');

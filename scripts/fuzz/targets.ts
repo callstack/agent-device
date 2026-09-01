@@ -52,7 +52,7 @@ export const FUZZ_TARGETS: readonly FuzzTarget[] = [
       'id=com.example:id/button[2]',
       'role=button and is=enabled',
       'text~=partial',
-      'label="quoted \\"inner\\" value"',
+      String.raw`label="quoted \"inner\" value"`,
       '@e1',
       'text=🚀',
       'text=',

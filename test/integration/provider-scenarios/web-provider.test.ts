@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { WEB_DESKTOP_DEVICE } from '../../../src/__tests__/test-utils/device-fixtures.ts';
-import type { WebProvider } from '../../../src/platforms/web/provider.ts';
+import type { WebProvider } from '@agent-device/platform-web';
 import { createProviderScenarioHarness } from './harness.ts';
 
 test('web provider is scoped through the request router and dispatch path', async () => {

@@ -8,8 +8,8 @@ import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 // `scroll` still executes through legacy platform dispatch; screenshot and click bind their fake
 // at the facts/bind seam below instead (ADR 0019).
-vi.mock('../../platforms/android/window-state.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/android/window-state.ts')>();
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
   return {
     ...actual,
     getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
@@ -26,7 +26,7 @@ import {
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { PNG } from '../../utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { makeSession as makeBaseSession } from '../../__tests__/test-utils/session-factories.ts';
@@ -447,7 +447,7 @@ test('screenshot --overlay-refs captures a fresh snapshot when the session has n
   expect(runtime.binds).toHaveLength(1);
 });
 
-test('screenshot --overlay-refs uses interactive iOS presentation for row-like other nodes', async () => {
+test('screenshot --overlay-refs uses presented iOS runner rows for overlay refs', async () => {
   const screenshotPath = path.join(os.tmpdir(), `agent-device-overlay-ios-${Date.now()}.png`);
   const { handler, sessionStore, runtime } = screenshotRouter(makeIosSession('default'), {
     onCapture: (input) => writeSolidPng(input.outPath, 402, 874),
@@ -490,7 +490,7 @@ test('screenshot --overlay-refs uses interactive iOS presentation for row-like o
           index: 4,
           depth: 2,
           parentIndex: 2,
-          type: 'Other',
+          type: 'Cell',
           label: 'Receipt missing details, Receipt scanning failed. Enter details manually.',
           rect: { x: 8, y: 367, width: 386, height: 64 },
         },
@@ -522,7 +522,13 @@ test('screenshot --overlay-refs uses interactive iOS presentation for row-like o
   expect(runtime.captureSnapshot.mock.calls[0]?.[0].options).toMatchObject({
     interactiveOnly: true,
   });
-  expect(sessionStore.get('default')?.snapshot?.nodes[4]?.type).toBe('Cell');
+  expect(sessionStore.get('default')?.snapshot?.producer).toBe('apple-runner');
+  expect(
+    sessionStore.get('default')?.snapshot?.nodes.find((node) => node.ref === 'e5'),
+  ).toMatchObject({
+    type: 'Cell',
+    label: 'Receipt missing details, Receipt scanning failed. Enter details manually.',
+  });
 });
 
 test('screenshot --overlay-refs uses a fresh snapshot instead of stale session snapshot', async () => {

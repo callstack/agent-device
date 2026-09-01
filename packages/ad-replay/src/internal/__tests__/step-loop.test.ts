@@ -11,10 +11,10 @@ import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
  * terminal-close suppression) is engine-private — never re-exported by the
  * façade (`packages/ad-replay/src/index.ts`) — so these tests exercise it
  * only through `runAdReplay` itself, the same way the daemon's own
- * `session-replay-runtime.ts` (`runReplayScriptSource`) does. The equivalent
- * daemon-level assertions (full `SessionStore`/`runReplayScriptSource` round
+ * `src/daemon/replay/internal/native-command.ts` (`runReplayCommand`) does. The equivalent
+ * daemon-level assertions (full `SessionStore`/`runReplayCommand` round
  * trip, including the `--keep-session` live-session postcondition) live in
- * `src/daemon/handlers/__tests__/session-replay-runtime-keep-session.test.ts`
+ * `src/daemon/replay/internal/__tests__/session-replay-runtime-keep-session.test.ts`
  * (renamed from `session-replay-terminal-lifecycle.test.ts` by the #1555
  * structural-quality review — see that file's own header for the rationale);
  * this file covers the SAME suppression decision at the cheaper,

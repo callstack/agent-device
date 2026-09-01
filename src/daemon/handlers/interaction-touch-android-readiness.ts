@@ -3,7 +3,8 @@ import {
   type AndroidBlockingDialogReadinessResult,
 } from '../android-system-dialog.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
-import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
+import { readRefMutationFrame } from '../ref-frame.ts';
+import { refMutationAdmissionResponse } from '../interaction/index.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 
 /**
@@ -51,10 +52,14 @@ export async function runWithAndroidDialogReadinessCheck<TResult>(
   // and re-resolve and continue under their own policy.
   if (options.refContext && readiness.status === 'recovered') {
     const abort = refMutationAdmissionResponse({
-      session,
       ref: options.refContext.ref,
       mintedGeneration: options.refContext.mintedGeneration,
       staleRefsWarning: options.refContext.staleRefsWarning,
+      frame: readRefMutationFrame({
+        session,
+        ref: options.refContext.ref,
+        mintedGeneration: options.refContext.mintedGeneration,
+      }),
     });
     if (abort) return { aborted: true, response: abort };
   }

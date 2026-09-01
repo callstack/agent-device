@@ -1,4 +1,4 @@
-import { parseTimeout } from '../utils/parse-timeout.ts';
+import { parseTimeout } from './parse-timeout.ts';
 import {
   detectUnknownSelectorKeyToken,
   isRoleHintWord,
@@ -28,7 +28,7 @@ export function parseWaitPositionals(args: string[]): WaitParsed | null {
   if (firstArg === undefined) return null;
   const sleepMs = parseTimeout(firstArg);
   if (sleepMs !== null) return { kind: 'sleep', durationMs: sleepMs };
-  const timeoutMs = parseTimeout(args[args.length - 1]);
+  const timeoutMs = parseTimeout(args.at(-1));
   if (firstArg === 'text') return parseTextKeyword(args, timeoutMs);
   if (firstArg === 'stable') return parseStableKeyword(args);
   if (firstArg.startsWith('@')) return { kind: 'ref', rawRef: firstArg, timeoutMs };

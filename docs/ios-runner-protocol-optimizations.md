@@ -28,8 +28,8 @@ Acceptance criteria:
 
 iOS simulator validation:
 
-- Unit: `pnpm exec vitest run src/platforms/ios/__tests__/runner-command-retry.test.ts`.
-- Unit bundle: `pnpm exec vitest run src/platforms/ios/__tests__/runner-client.test.ts src/platforms/ios/__tests__/runner-session.test.ts src/platforms/ios/__tests__/runner-command-retry.test.ts src/platforms/ios/__tests__/runner-provider.test.ts`.
+- Unit: `pnpm exec vitest run packages/platform-apple/src/runner/__tests__/runner-command-retry.test.ts`.
+- Unit bundle: `pnpm exec vitest run packages/platform-apple/src/runner/__tests__/runner-client.test.ts packages/platform-apple/src/runner/__tests__/runner-session.test.ts packages/platform-apple/src/runner/__tests__/runner-command-retry.test.ts packages/platform-apple/src/runner/__tests__/runner-provider.test.ts`.
 - Build: `pnpm build:xcuitest`.
 - Manual sim smoke after build:
   - `pnpm build`

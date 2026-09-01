@@ -87,8 +87,8 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
   {
     id: 'snapshot-occlusion',
     label: 'Snapshot occlusion (covered/not-covered) decisions',
-    mutate: ['src/snapshot/snapshot-occlusion.ts'],
-    owns: ['src/snapshot/snapshot-occlusion.ts'],
+    mutate: ['packages/capture-kit/src/snapshot-occlusion.ts'],
+    owns: ['packages/capture-kit/src/snapshot-occlusion.ts'],
   },
 ];
 

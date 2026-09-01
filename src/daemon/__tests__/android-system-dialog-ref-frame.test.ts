@@ -2,11 +2,12 @@ import { test, expect, vi } from 'vitest';
 
 // ADR 0014: Android blocking-dialog recovery is itself device-mutating, so its
 // recovery tap must cross the side-effect seam and expire the ref frame.
-vi.mock('../../platforms/android/snapshot.ts', () => ({ snapshotAndroid: vi.fn() }));
-vi.mock('../../platforms/android/adb.ts', () => ({ runAndroidAdb: vi.fn() }));
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
+  return { ...actual, snapshotAndroid: vi.fn(), runAndroidAdb: vi.fn() };
+});
 
-import { snapshotAndroid } from '../../platforms/android/snapshot.ts';
-import { runAndroidAdb } from '../../platforms/android/adb.ts';
+import { runAndroidAdb, snapshotAndroid } from '@agent-device/platform-android/mechanics';
 import { recoverAndroidBlockingSystemDialog as recoverOwnedAndroidBlockingSystemDialog } from '../android-system-dialog.ts';
 import { androidObservation } from '../../platform-runtime.ts';
 import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';

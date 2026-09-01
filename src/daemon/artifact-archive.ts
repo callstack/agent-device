@@ -1,8 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { extractArchiveSafely } from '../utils/archive-extraction.ts';
-import type { ArchiveManifestEntry } from '../utils/archive-safety.ts';
+import { extractArchiveSafely, type ArchiveManifestEntry } from '@agent-device/host-kit/archive';
 
 export async function extractTarInstallableArtifact(params: {
   archivePath: string;

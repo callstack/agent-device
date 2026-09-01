@@ -16,10 +16,13 @@ import type { SessionStore } from '../session-store.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from '../runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../snapshot-runtime-capture-input.ts';
-import { successText } from '../../utils/success-text.ts';
-import { errorResponse, type DaemonFailureResponse } from './response.ts';
-import { recordSessionAction } from './handler-utils.ts';
-import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
+import { successText } from '@agent-device/kernel/success-text';
+import { errorResponse, type DaemonFailureResponse } from '../response.ts';
+import { recordSessionAction } from '../session-action-recorder.ts';
+import {
+  requireSessionOrExplicitSelector,
+  resolveCommandDevice,
+} from '../session-device-resolution.ts';
 
 type ClipboardAction = 'read' | 'write';
 

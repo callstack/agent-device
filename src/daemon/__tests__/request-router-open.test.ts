@@ -9,21 +9,41 @@ import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { replayScriptSourceBundleFor } from '../../__tests__/test-utils/replay-script-source.ts';
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
-vi.mock('../../utils/host-process.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../utils/host-process.ts')>();
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
 });
-// Opening a session runs the owned-lease cleanup, which pattern-kills stale
-// xcodebuild runners with a real `pkill -f`. The session id here is fabricated,
-// so on a host with a live Apple runner that write would reach a process this
-// test does not own; stub the tool seam the way the runner tests stub the
-// signal seam (#1824).
-vi.mock('../../platforms/apple/core/tool-provider.ts', async (importOriginal) => {
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../platforms/apple/core/tool-provider.ts')>();
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
   return {
     ...actual,
-    runAppleToolCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    detachIosSimulatorRunnerSessionsForShutdown: vi.fn(async () => {}),
+    notifyIosRunnerAppRelaunched: vi.fn(async () => {}),
+    prewarmAppleRunnerCache: vi.fn(async () => {}),
+    prewarmIosRunnerSession: vi.fn(async () => {}),
+    prepareIosRunner: vi.fn(async () => ({
+      runner: { currentUptimeMs: 42 },
+      connectMs: 0,
+      healthCheckMs: 0,
+    })),
+    resolveRunnerAppBundleId: vi.fn(() => 'com.callstack.agentdevice.runner'),
+    scheduleIosRunnerIdleStop: vi.fn(),
+    stopIosRunnerSession: vi.fn(async () => {}),
+    stopAllIosRunnerSessions: vi.fn(async () => {}),
+  };
+});
+vi.mock('@agent-device/platform-apple/app-lifecycle', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/platform-apple/app-lifecycle')>();
+  return { ...actual, closeIosApp: vi.fn(async () => {}) };
+});
+vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/platform-apple/app-resolution')>();
+  return {
+    ...actual,
+    resolveIosApp: vi.fn(async (_device, app) => app),
   };
 });
 
@@ -43,6 +63,17 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
+import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
+import {
+  createOwnedProcessRecordStore,
+  isProcessAlive,
+  readProcessCommand,
+  readProcessStartTime,
+} from '@agent-device/host-kit/process';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { resolveDaemonPaths } from '../config.ts';
+import { screenRecordingDurableResource } from '../screen-recording-session-resource.ts';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
@@ -331,6 +362,10 @@ test('open stores admitted lease metadata on the session', async () => {
   );
 
   expect(response.ok).toBe(true);
+  expect(sessionStore.get('tenant-a:default')?.sessionScope).toEqual({
+    kind: 'tenant',
+    id: 'tenant-a',
+  });
   expect(sessionStore.get('tenant-a:default')?.lease).toEqual({
     leaseId: lease.leaseId,
     tenantId: 'tenant-a',
@@ -608,4 +643,138 @@ test('router allows pre-open requests for different devices to proceed concurren
   expect(firstResponse.ok).toBe(true);
   expect(secondResponse.ok).toBe(true);
   expect(maxActiveEnsures).toBe(2);
+});
+
+// The dead owner's recorded recorder must still run as an orphan: recovery
+// then takes the descriptor-cleanup path — the one that terminates it and
+// clears the owned-process store it was composed with. A plain sleeper with
+// its real observed command and start time satisfies the exact match.
+async function spawnOrphanRecorder() {
+  const child = spawn('sleep', ['120'], { stdio: 'ignore' });
+  await new Promise((resolve) => child.once('spawn', resolve));
+  const pid = child.pid ?? 0;
+  const marker = {
+    pid,
+    startTime: readProcessStartTime(pid) ?? '',
+    command: readProcessCommand(pid) ?? '',
+  };
+  expect(pid).toBeGreaterThan(0);
+  expect(marker.startTime.length).toBeGreaterThan(0);
+  expect(marker.command.length).toBeGreaterThan(0);
+  return { child, marker };
+}
+
+function ownedStoreFor(stateDir: string) {
+  const paths = resolveDaemonPaths(stateDir);
+  return createOwnedProcessRecordStore({
+    stateDir: paths.baseDir,
+    sessionsDir: paths.sessionsDir,
+    resolveSessionDir: (sessionId) => path.join(paths.sessionsDir, sessionId),
+  });
+}
+
+function seedForeignRecordingOwner(
+  foreignStateDir: string,
+  device: DeviceInfo,
+  marker: { pid: number; startTime: string; command: string },
+) {
+  const foreignSessionDir = path.join(resolveDaemonPaths(foreignStateDir).sessionsDir, 'shared');
+  const resourcePath = screenRecordingDurableResource.store.resolvePath(foreignSessionDir);
+  screenRecordingDurableResource.store.write(
+    resourcePath,
+    createDurableResourceEnvelope({
+      resourceKind: 'screen-recording',
+      sessionId: 'shared',
+      device: { id: device.id, family: 'apple', appleOs: 'ios', kind: 'simulator' },
+      owner: { kind: 'local-family', family: 'apple' },
+      fence: { token: 'open-recovery-fence', generation: 1 },
+      lifecycle: 'open',
+      descriptor: {
+        version: 1,
+        body: {
+          backend: 'simctl',
+          outputPath: path.join(foreignSessionDir, 'recording.mp4'),
+          processes: [marker],
+        },
+      },
+    }),
+  );
+  ownedStoreFor(foreignStateDir).replace({ kind: 'session', sessionId: 'shared' }, [
+    { ...marker, purpose: 'simctl-screen-recording' },
+  ]);
+  return { foreignSessionDir, resourcePath };
+}
+
+function seedDeadForeignClaim(claimsDir: string, device: DeviceInfo, foreignStateDir: string) {
+  const deviceKey = `local:apple:ios:${device.id}`;
+  fs.writeFileSync(
+    path.join(claimsDir, `${crypto.createHash('sha256').update(deviceKey).digest('hex')}.json`),
+    JSON.stringify({
+      schemaVersion: 1,
+      deviceKey,
+      device: { platform: 'ios', id: device.id, name: device.name, kind: 'simulator' },
+      session: 'shared',
+      workspace: '/worktrees/dead',
+      stateDir: foreignStateDir,
+      ownerPid: 999_999_999,
+      ownerStartTime: 'old-start-time',
+      ownerToken: 'open-recovery-token',
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    }),
+  );
+}
+
+test('open reconciles a foreign dead owner through that owner state dir, never the daemon store', async () => {
+  // #2168 acquire-path wiring: the router must hand open-time claim
+  // reconciliation the owner-scoped reconciler. With the caller-scoped
+  // reconciler this test goes red — the foreign recording recovery runs
+  // against the daemon's own gateway and store instead of the dead owner's.
+  const sessionStore = makeSessionStore('agent-device-router-open-recovery-');
+  const device = makeIosDevice('SIM-FOREIGN-RECOVERY');
+  mockResolveTargetDevice.mockResolvedValue(device);
+  const claimsDir = mkdtempForTestSync('agent-device-router-open-claims-');
+  const foreignStateDir = mkdtempForTestSync('agent-device-router-open-foreign-');
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+  const orphan = await spawnOrphanRecorder();
+
+  try {
+    const { foreignSessionDir, resourcePath } = seedForeignRecordingOwner(
+      foreignStateDir,
+      device,
+      orphan.marker,
+    );
+    const daemonStateDir = sessionStore.resolveDaemonStateDir();
+    ownedStoreFor(daemonStateDir).replace({ kind: 'session', sessionId: 'shared' }, [
+      { pid: process.pid, startTime: 'live-marker', command: 'live-probe', purpose: 'test-probe' },
+    ]);
+    const liveRecordPath = path.join(
+      resolveDaemonPaths(daemonStateDir).sessionsDir,
+      'shared',
+      'owned-processes.json',
+    );
+    const liveRecordBefore = fs.readFileSync(liveRecordPath, 'utf8');
+    seedDeadForeignClaim(claimsDir, device, foreignStateDir);
+
+    const response = await createOpenHandler(sessionStore)(
+      openRequest('takeover', { platform: 'ios' }, 'req-open-foreign-recovery'),
+    );
+
+    expect(response.ok).toBe(true);
+    const settled = screenRecordingDurableResource.store.read(resourcePath);
+    expect(settled).toMatchObject({ status: 'decoded', envelope: { lifecycle: 'completed' } });
+    expect(fs.existsSync(path.join(foreignSessionDir, 'owned-processes.json'))).toBe(false);
+    expect(fs.readFileSync(liveRecordPath, 'utf8')).toBe(liveRecordBefore);
+    expect(isProcessAlive(orphan.marker.pid)).toBe(false);
+    expect(inspectDeviceClaims({ udid: device.id })[0]?.claim?.session).toBe('takeover');
+  } finally {
+    try {
+      orphan.child.kill('SIGKILL');
+    } catch {}
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+    fs.rmSync(foreignStateDir, { recursive: true, force: true });
+  }
 });

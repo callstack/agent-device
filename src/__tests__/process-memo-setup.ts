@@ -1,6 +1,6 @@
 import { afterEach } from 'vitest';
 
-import { resetAllProcessMemosForTests } from '../utils/ttl-memo.ts';
+import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 
 afterEach(() => {
   resetAllProcessMemosForTests();

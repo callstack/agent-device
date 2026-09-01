@@ -3,8 +3,8 @@ import path from 'node:path';
 import type { TraceCommandResult } from '@agent-device/contracts/recording';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { recordSessionAction } from './handler-utils.ts';
-import { errorResponse } from './response.ts';
+import { recordSessionAction } from '../session-action-recorder.ts';
+import { errorResponse } from '../response.ts';
 
 export function handleTraceCommand(params: {
   req: DaemonRequest;

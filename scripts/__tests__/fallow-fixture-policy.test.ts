@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
 import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
-import { runCmd } from '../../src/utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/command';
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const FALLOW_CLI = path.join(REPOSITORY_ROOT, 'node_modules', 'fallow', 'bin', 'fallow');

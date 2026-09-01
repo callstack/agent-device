@@ -2,7 +2,7 @@ import { expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const resolveAndroidApp = vi.hoisted(() => vi.fn());
-vi.mock('./platforms/android/app-deployment-resolution.ts', () => ({
+vi.mock('@agent-device/platform-android/mechanics', () => ({
   resolveAndroidApp,
   withAndroidAppResolutionCacheInvalidated: async <Result>(
     _device: DeviceInfo,

@@ -46,6 +46,12 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('package', 'Published package (publint, attw, clean-install resolution)', 'check:package'),
   gate('integration-node', 'Node integration smoke', 'test:integration:node'),
   gate('macos-coverage', 'macOS command coverage manifest', 'test:integration:macos-coverage'),
+  gate(
+    'ios-snapshot-differential',
+    'iOS snapshot Swift/TypeScript differential',
+    'test:ios-snapshot-differential',
+    false,
+  ),
   {
     id: 'vitest-related',
     label: 'Tests related by Vitest module graph',

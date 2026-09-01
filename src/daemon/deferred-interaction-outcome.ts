@@ -2,7 +2,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 import { isApplePlatform, isMobilePlatform } from '@agent-device/kernel/device';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { sleep } from '../utils/timeouts.ts';
+import { sleep } from '@agent-device/host-kit/retry';
 import {
   captureAndroidFreshnessRecoveredAttempt,
   clearAndroidSnapshotFreshness,
@@ -59,8 +59,7 @@ const INTERACTION_CHANGE_RECHECK_DELAY_MS = 500;
  * post-gesture stabilization) and each marker keeps its own eligibility gate,
  * so callers do not pre-filter — an ineligible action simply marks nothing.
  */
-export function markDeferredInteractionOutcome(params: {
-  session: SessionState;
+export type DeferredInteractionOutcomeMark = {
   command: string;
   /** Action used for freshness/stabilization eligibility; defaults to `command`. */
   action?: string;
@@ -69,7 +68,11 @@ export function markDeferredInteractionOutcome(params: {
   /** True only when no post-action observation already proved the interaction landed. */
   scheduleOutcomeRetry?: boolean;
   androidFreshnessBaseline?: SnapshotState | undefined;
-}): void {
+};
+
+export function markDeferredInteractionOutcome(
+  params: DeferredInteractionOutcomeMark & { session: SessionState },
+): void {
   const {
     session,
     command,

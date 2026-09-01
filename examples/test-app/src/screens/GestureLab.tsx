@@ -360,8 +360,8 @@ export function GestureLab() {
   return (
     <SectionCard
       subtitle={`Image target for pan, pinch, rotate, and fling. ${changeStatusLabel}`}
-      title="Gesture lab"
       testID="gesture-lab-card"
+      title="Gesture lab"
     >
       <View style={styles.dragRow} testID="drag-gesture-fixture">
         <GestureDetector gesture={holdDragGesture}>

@@ -7,7 +7,7 @@ import type {
   ResolvedRemoteConfigProfile,
 } from '../../remote/remote-config-schema.ts';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
-import type { EnvMap } from '../../utils/env-map.ts';
+import { type EnvMap } from '@agent-device/kernel/source-value';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { profileToCliFlags } from '../remote-config-flags.ts';
 

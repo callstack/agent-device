@@ -18,7 +18,7 @@ import {
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import fs from 'node:fs';
 import { vi, type Mock } from 'vitest';
-import { PNG } from '../../utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { unavailableDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
 import {

@@ -5,12 +5,12 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { reconcileOrphanedDeviceClaims } from '../device-claims.ts';
 import { resolveDeviceClaimPath } from '../device-claim-paths.ts';
-import { acquireProcessLock } from '../../utils/process-lock.ts';
-import { readCurrentOwnerIdentity } from '../../utils/owner-identity.ts';
+import { acquireProcessLock } from '@agent-device/host-kit/file';
+import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { publishDaemonRegistration } from '../../__tests__/test-utils/device-claim-store.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../../utils/host-process.ts', async (importOriginal) =>
+vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
   (await import('../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
     importOriginal,
   ),

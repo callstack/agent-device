@@ -58,5 +58,5 @@ export function buildIosDeviceConsoleLaunchArgs(deviceId: string, appBundleId: s
 }
 
 function escapePredicateString(value: string): string {
-  return value.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+  return value.replaceAll('\\', String.raw`\\`).replaceAll('"', String.raw`\"`);
 }

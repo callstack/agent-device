@@ -15,7 +15,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdStreaming, runCmdSync } from '@agent-device/host-kit/command';
 import { parseScriptArgs } from '../lib/cli-args.ts';
 import { laneEnvelope } from '../lib/lane-envelope.ts';
 import {

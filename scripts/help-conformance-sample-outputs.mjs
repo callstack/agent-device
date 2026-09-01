@@ -3,7 +3,7 @@
 // exact text the CLI would print for it. Every `output` is pinned to the real
 // renderer by scripts/__tests__/help-conformance-sample-outputs.test.ts, which
 // rebuilds it through src/commands/interaction/output.ts or
-// src/utils/output.ts printHumanError — a rendering change fails that test
+// src/commands/output/error.ts printHumanError — a rendering change fails that test
 // instead of silently leaving the benchmark grading against stale output.
 
 export function sampleText(sample) {
@@ -72,8 +72,8 @@ hint: The UI kept changing for the whole settle budget (animation, carousel, or 
 
 // Recovered snapshot: the private-ax fallback fired but still exposed
 // actionable refs. Warning wording is renderSnapshotQualityWarnings
-// (src/snapshot-quality/warnings.ts); lines are the structured snapshot
-// renderer (src/utils/output.ts formatSnapshotText).
+// (src/snapshot/snapshot-presentation/quality-warnings.ts); lines are the structured snapshot
+// renderer (src/commands/output/snapshot.ts formatSnapshotText).
 export const PRIVATE_AX_RECOVERY_SAMPLE = {
   command: 'agent-device snapshot -i',
   output: `Snapshot: 2 nodes
@@ -83,8 +83,7 @@ Detected an overly complex or slow accessibility tree. Fell back to the private-
 };
 
 // DEVICE_IN_USE from buildDeviceInUseBySessionError
-// (src/daemon/handlers/session-open.ts) — the parity test drives that exact
-// producer.
+// (src/daemon/session-recovery-hints.ts) — the parity test drives that exact producer.
 export const DEVICE_IN_USE_SAMPLE = {
   command: `agent-device press 'label="Place order"' --settle`,
   output: `Error (DEVICE_IN_USE): Device is already in use by session "checkout".
@@ -101,7 +100,7 @@ Hint: Inspect the owner with: agent-device device status --platform android --se
 };
 
 // ADR 0014 mutation rejection from
-// src/daemon/handlers/interaction-ref-policy.ts: a pinned ref minted from a
+// src/daemon/interaction/index.ts: a pinned ref minted from a
 // superseded generation is rejected before dispatch. The daemon strips the
 // `~s5` pin at the boundary (interaction-touch-targets.ts), so the message
 // names the plain ref; the hint is the precise resolveRefStalenessWarning.
@@ -115,8 +114,7 @@ Hint: Ref @e12 was minted from snapshot s5 but the session's ref frame is now s7
 // — the parity test drives that exact producer. The by-design rejection
 // instead of silent disambiguation: #1597 made the candidate refs (ref, role,
 // label/identifier — the same compact rendering as snapshot -i) print
-// unconditionally via formatErrorCandidateLines
-// (src/utils/error-candidates.ts), capped at AMBIGUOUS_MATCH_CANDIDATE_LIMIT (5) with a
+// unconditionally by the output owners, capped at AMBIGUOUS_MATCH_CANDIDATE_LIMIT (5) with a
 // "+N more" marker. Here all 3 candidates share the identical "Follow" label,
 // so the printed refs still cannot be told apart from this output alone —
 // the agent must re-observe or narrow, not guess which @ref is the right row.
@@ -131,7 +129,7 @@ Candidates:
 };
 
 // APP_NOT_INSTALLED from buildAppNotInstalledError
-// (src/platforms/apple/core/app-resolution.ts) — the parity test drives that
+// (packages/platform-apple/src/core/app-resolution.ts) — the parity test drives that
 // exact producer; the hint is defaultHintForCode('APP_NOT_INSTALLED').
 export const APP_NOT_INSTALLED_SAMPLE = {
   command: 'agent-device open Shoply --platform ios',

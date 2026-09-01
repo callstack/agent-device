@@ -30,9 +30,9 @@ import {
   isMacOs,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from '../../platforms/apple/alert.ts';
+import { applePlugin } from '@agent-device/platform-apple';
 import { type DispatchContext } from '../../core/dispatch-context.ts';
-import { getRequestSignal } from '../../request/cancel.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { unavailableDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
@@ -83,6 +83,9 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
     // these suites exercise are the shipped ones rather than a fixture's imitation of them. The
     // runner underneath is the suite's own mock.
     const runnerOptions = { signal: requestSignal };
+    const appleInteractor = isApplePlatform(device.platform)
+      ? await applePlugin.createInteractor(device, runnerOptions)
+      : undefined;
     const alertOptions = (input: AlertRuntimeInput) => ({
       ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
       ...(input.appBundleId === undefined ? {} : { appBundleId: input.appBundleId }),
@@ -101,16 +104,16 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
           captureSnapshotWithoutActiveApp: captureSnapshot,
           captureScreenshot,
           setSetting,
-          ...(isApplePlatform(device.platform)
+          ...(appleInteractor
             ? {
                 readAlert: async (input: AlertRuntimeInput) =>
-                  await readAppleAlert(device, runnerOptions, alertOptions(input)),
+                  await appleInteractor.readAlert(alertOptions(input)),
                 awaitAlert: async (input: AlertRuntimeInput) =>
-                  await awaitAppleAlert(device, runnerOptions, alertOptions(input)),
+                  await appleInteractor.awaitAlert(alertOptions(input)),
                 acceptAlert: async (input: AlertRuntimeInput) =>
-                  await actOnAppleAlert(device, runnerOptions, 'accept', alertOptions(input)),
+                  await appleInteractor.acceptAlert(alertOptions(input)),
                 dismissAlert: async (input: AlertRuntimeInput) =>
-                  await actOnAppleAlert(device, runnerOptions, 'dismiss', alertOptions(input)),
+                  await appleInteractor.dismissAlert(alertOptions(input)),
               }
             : {}),
         },

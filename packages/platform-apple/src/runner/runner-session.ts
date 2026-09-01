@@ -54,6 +54,7 @@ import {
   runnerLeaseCleanupAdapter,
   RUNNER_INVALIDATE_WAIT_TIMEOUT_MS,
   stopRunnerPrepProcesses,
+  type RunnerDisposalOptions,
 } from './runner-disposal.ts';
 import { enrichRunnerFailureFromLog } from './runner-failure-diagnostics.ts';
 import {
@@ -161,7 +162,7 @@ async function startRunnerSessionWithLease(
   }
   assertRunnerSessionMayStart(options.expectedRunnerSessionId);
   await measureRunnerStartupStep(startupTimings, 'cleanup_stale_xcodebuild', async () => {
-    await prepareRunnerLeaseForStartup(device.id, runnerLeaseCleanupAdapter, logicalLeaseContext);
+    await prepareRunnerLeaseForStartup(device, runnerLeaseCleanupAdapter, logicalLeaseContext);
   });
   await measureRunnerStartupStep(startupTimings, 'ensure_booted', async () => {
     await ensureBootedIfNeeded(device);
@@ -263,6 +264,7 @@ async function startRunnerSessionWithLease(
     await disposeRunnerSession(session, {
       graceful: false,
       waitTimeoutMs: RUNNER_INVALIDATE_WAIT_TIMEOUT_MS,
+      leaseLockHeld: true,
     });
     throw createRequestCanceledError();
   }
@@ -272,6 +274,7 @@ async function startRunnerSessionWithLease(
     await stopRunnerSessionInternal(device.id, session, {
       graceful: false,
       waitTimeoutMs: RUNNER_INVALIDATE_WAIT_TIMEOUT_MS,
+      leaseLockHeld: true,
     });
     throw error;
   }
@@ -452,7 +455,7 @@ export async function invalidateRunnerSession(
 async function stopRunnerSessionInternal(
   deviceId: string,
   sessionOverride?: RunnerSession,
-  options: { graceful?: boolean; waitTimeoutMs?: number } = {},
+  options: RunnerDisposalOptions = {},
 ): Promise<void> {
   const session = sessionOverride ?? runnerSessions.get(deviceId);
   if (!session) return;
@@ -521,7 +524,7 @@ export async function stopIosRunnerSession(deviceId: string): Promise<void> {
   cancelIosRunnerIdleStop(deviceId);
   await withRunnerSessionLock(deviceId, async () => {
     await withRunnerLeaseLock(deviceId, async () => {
-      await stopRunnerSessionInternal(deviceId);
+      await stopRunnerSessionInternal(deviceId, undefined, { leaseLockHeld: true });
       await cleanupOwnedIosRunnerLease(deviceId);
     });
   });

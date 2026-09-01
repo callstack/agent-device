@@ -20,12 +20,13 @@ import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { openCliOutput } from '../../src/commands/management/output.ts';
 import { NEVER_SETTLED_HINT } from '../../src/commands/interaction/runtime/settle.ts';
 import { buildAmbiguousMatchError } from '../../src/daemon/handlers/find-match-resolution.ts';
-import { refMutationAdmissionResponse } from '../../src/daemon/handlers/interaction-ref-policy.ts';
-import { buildDeviceInUseBySessionError } from '../../src/daemon/handlers/session-open.ts';
+import { refMutationAdmissionResponse } from '../../src/daemon/interaction/index.ts';
+import { buildDeviceInUseBySessionError } from '../../src/daemon/session-recovery-hints.ts';
 import { buildDeviceClaimConflictError } from '../../src/daemon/device-claim-conflict.ts';
+import { readRefMutationFrame } from '../../src/daemon/ref-frame.ts';
 import { resolveRefStalenessWarning } from '../../src/daemon/session-snapshot.ts';
 import type { SessionState } from '../../src/daemon/types.ts';
-import { buildAppNotInstalledError } from '../../src/platforms/apple/core/app-resolution.ts';
+import { buildAppNotInstalledError } from '@agent-device/platform-apple/app-resolution';
 import {
   presentConnectReadiness,
   renderConnectSuccess,
@@ -34,8 +35,9 @@ import type { ConnectVerification } from '../../src/cli/connection/connect-provi
 import type { RemoteConnectionState } from '../../src/remote/remote-connection-state.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import { renderSnapshotQualityWarnings } from '../../src/snapshot-quality/warnings.ts';
-import { formatSnapshotText, printHumanError } from '../../src/utils/output.ts';
+import { renderSnapshotQualityWarnings } from '../../src/snapshot/snapshot-presentation/quality-warnings.ts';
+import { printHumanError } from '../../src/commands/output/error.ts';
+import { formatSnapshotText } from '../../src/commands/output/snapshot.ts';
 
 // The production renderer behind each captured sample in
 // scripts/help-conformance-sample-outputs.mjs, as data rather than as one test
@@ -53,7 +55,7 @@ export type SampleProducer = {
   producer: string;
   sample: CapturedSample;
   /** The sample's text rebuilt from production code, ready to compare. */
-  render: () => string;
+  render: () => string | Promise<string>;
 };
 
 const formatPress = (result: Record<string, unknown>) =>
@@ -63,7 +65,7 @@ const formatFill = (result: Record<string, unknown>) =>
   interactionCliOutputFormatters.fill({ input: {}, result }).text;
 
 /** The `Error (CODE): …` + `Hint: …` text printHumanError writes to stderr. */
-function renderHumanError(error: AppError): string {
+async function renderHumanError(error: AppError): Promise<string> {
   const lines: string[] = [];
   const originalWrite = process.stderr.write;
   process.stderr.write = ((chunk: string | Uint8Array) => {
@@ -71,7 +73,7 @@ function renderHumanError(error: AppError): string {
     return true;
   }) as typeof process.stderr.write;
   try {
-    printHumanError(normalizeError(error));
+    await printHumanError(normalizeError(error));
   } finally {
     process.stderr.write = originalWrite;
   }
@@ -90,8 +92,8 @@ type ErrorResponse = {
 };
 
 /** Renders a daemon error response the way the CLI prints it for a human. */
-function renderErrorResponse(response: ErrorResponse): string {
-  return renderHumanError(
+async function renderErrorResponse(response: ErrorResponse): Promise<string> {
+  return await renderHumanError(
     new AppError(
       response.error.code as ConstructorParameters<typeof AppError>[0],
       response.error.message,
@@ -198,7 +200,7 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     name: 'PRIVATE_AX_RECOVERY_SAMPLE',
     producer: 'the snapshot renderer and the snapshot-quality warning',
     sample: PRIVATE_AX_RECOVERY_SAMPLE,
-    render: () => {
+    render: async () => {
       const nodes = [
         {
           index: 1,
@@ -290,19 +292,21 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     name: 'FOREGROUND_SNAPSHOT_FAILURE_SAMPLE',
     producer: 'the open success renderer with a failed composed snapshot',
     sample: FOREGROUND_SNAPSHOT_FAILURE_SAMPLE,
-    render: () => {
+    render: async () => {
       const warning =
         'The session is open, but the initial interactive snapshot failed (COMMAND_FAILED: capture failed). Run: agent-device snapshot -i';
       return (
-        openCliOutput({
-          session: 'default',
-          warnings: [warning],
-          initialSnapshotError: {
-            code: 'COMMAND_FAILED',
-            message: 'capture failed',
-          },
-          identifiers: { session: 'default' },
-        }).text ?? ''
+        (
+          await openCliOutput({
+            session: 'default',
+            warnings: [warning],
+            initialSnapshotError: {
+              code: 'COMMAND_FAILED',
+              message: 'capture failed',
+            },
+            identifiers: { session: 'default' },
+          })
+        ).text ?? ''
       );
     },
   },
@@ -310,7 +314,7 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     name: 'MERGED_CARD_ACTIONS_SAMPLE',
     producer: "the snapshot renderer with --actions naming a merged element's custom actions",
     sample: MERGED_CARD_ACTIONS_SAMPLE,
-    render: () => {
+    render: async () => {
       // A Bluesky-style feed item merged into one Link node: its Reply/Repost/
       // menu controls are AX custom actions, not child nodes, so they only
       // surface when --actions is passed through to the renderer.
@@ -352,12 +356,11 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
           actions: ['Reply', 'Repost', 'Open post options menu'],
         },
       ];
-      return (
-        snapshotCliOutput({
-          result: { nodes, backend: 'xctest', truncated: false },
-          interactiveOnly: true,
-        }).text ?? ''
-      ).trimEnd();
+      const output = await snapshotCliOutput({
+        result: { nodes, backend: 'xctest', truncated: false },
+        interactiveOnly: true,
+      });
+      return (output.text ?? '').trimEnd();
     },
   },
   {
@@ -426,6 +429,7 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
         ref: '@e12',
         mintedGeneration: 5,
         staleRefsWarning: resolveRefStalenessWarning({ session, ref: '@e12', mintedGeneration: 5 }),
+        frame: readRefMutationFrame({ session, ref: '@e12', mintedGeneration: 5 }),
       });
       assertErrorResponse(response, 'a superseded pin');
       return renderErrorResponse(response);

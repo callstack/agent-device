@@ -18,8 +18,7 @@ import {
 import { issueSettleRefs } from '../session-snapshot.ts';
 import type { RecordedTargetCapture } from '../session-target-evidence.ts';
 import type { SessionState } from '../types.ts';
-import type { InteractionHandlerParams } from './interaction-common.ts';
-import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
+import type { CaptureSnapshotForSession, InteractionRouteInput } from '../interaction/index.ts';
 import {
   readSnapshotNodesReferenceFrame,
   resolveDirectTouchReferenceFrameSafely,
@@ -287,7 +286,7 @@ function composeResponseWarning(
 export type TargetedTouchResult = PressCommandResult | LongPressCommandResult | HoverCommandResult;
 
 export async function buildTargetedTouchResponsePayloads(params: {
-  params: InteractionHandlerParams & {
+  params: InteractionRouteInput & {
     captureSnapshotForSession: CaptureSnapshotForSession;
   };
   session: SessionState;

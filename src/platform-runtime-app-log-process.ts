@@ -14,15 +14,16 @@ import { decodeAppLogProcessMarker } from '@agent-device/capture-kit';
 import type { DeviceIdentity } from '@agent-device/kernel/device';
 import fs from 'node:fs';
 import path from 'node:path';
-import { runCmdBackground } from './utils/exec.ts';
+import { openVerifiedFileForRead } from '@agent-device/host-kit/file';
+import { runCmdBackground } from '@agent-device/host-kit/command';
 import {
   isProcessAlive,
   readProcessCommand,
   readProcessStartTime,
   waitForProcessExit,
-} from './utils/host-process.ts';
-import { requireManagedSessionArtifactPath } from './utils/managed-session-artifact-path.ts';
-import { openVerifiedFileForRead } from './utils/verified-file.ts';
+} from '@agent-device/host-kit/process';
+
+import { requireManagedSessionArtifactPath } from './daemon/managed-session-artifact-path.ts';
 
 const APP_LOG_PID_FILENAME = 'app-log.pid';
 

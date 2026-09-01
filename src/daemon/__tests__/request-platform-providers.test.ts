@@ -13,12 +13,9 @@ import {
   makeSession,
 } from '../../__tests__/test-utils/session-factories.ts';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../__tests__/test-utils/device-inventory-gateways.ts';
-import {
-  createLocalAppleToolProvider,
-  runXcrun,
-} from '../../platforms/apple/core/tool-provider.ts';
-import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
-import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
+import { createLocalAppleToolProvider, runXcrun } from '@agent-device/platform-apple/tool-provider';
+import type { AndroidAdbExecutor } from '@agent-device/platform-android/mechanics';
+import { resolveWebProvider, type WebProvider } from '@agent-device/platform-web';
 import {
   resolveAppleRunnerScreenRecordingTransport,
   type AppleRunnerScreenRecordingTransport,
@@ -240,7 +237,7 @@ test('request platform provider scope applies web provider only for web sessions
         },
       },
     },
-    async () => await resolveWebProvider().open('https://example.test'),
+    async () => await (await resolveWebProvider()).open('https://example.test'),
   );
 
   assert.deepEqual(calls, ['web-session:agent-browser-chrome', 'open:https://example.test']);
@@ -354,7 +351,7 @@ test('request platform provider scope follows explicit web selector', async () =
             },
           },
         },
-        async () => await resolveWebProvider().snapshot(),
+        async () => await (await resolveWebProvider()).snapshot(),
       ),
   );
 

@@ -49,7 +49,7 @@ test('get attrs fails closed on the same ambiguous selector (readUnique row)', a
     .getAttrs(selector(AMBIGUOUS_SELECTOR), { session: 'default' })
     .then(
       () => null,
-      (thrown: unknown) => thrown,
+      (error: unknown) => error,
     );
 
   assert.ok(error instanceof AppError, 'get attrs must refuse rather than guess a duplicate');
@@ -63,7 +63,7 @@ test('is fails closed on the same ambiguous selector (readUnique row)', async ()
     .is({ session: 'default', predicate: 'visible', selector: AMBIGUOUS_SELECTOR })
     .then(
       () => null,
-      (thrown: unknown) => thrown,
+      (error: unknown) => error,
     );
 
   assert.ok(error instanceof AppError, 'is must refuse rather than answer about one duplicate');

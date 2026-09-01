@@ -104,7 +104,7 @@ async function recoverSimulatorTraffic(
 }
 
 function buildPredicate(appBundleId: string): string {
-  const value = appBundleId.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+  const value = appBundleId.replaceAll('\\', String.raw`\\`).replaceAll('"', String.raw`\"`);
   return [
     `subsystem == "${value}"`,
     `subsystem CONTAINS "${value}"`,
