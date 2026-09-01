@@ -25,7 +25,6 @@ import type { W3CPointerAction, WebDriverClient, WebDriverWindowRect } from './w
 import { touchPointer } from './webdriver-gestures.ts';
 import { scrollFrameFromWebDriverSource } from './webdriver-scroll-frame.ts';
 import { parseWebDriverSource } from './webdriver-source.ts';
-import { captureWebDriverIosSnapshot } from './webdriver-ios-snapshot.ts';
 import { setWebDriverOrientation } from './webdriver-orientation.ts';
 
 /**
@@ -305,6 +304,7 @@ class WebDriverInteractor implements Interactor {
   async snapshot(options?: SnapshotOptions): Promise<SnapshotResult> {
     this.requireSupport('snapshot');
     if (this.backend === 'xctest') {
+      const { captureWebDriverIosSnapshot } = await import('./webdriver-ios-snapshot.ts');
       return await captureWebDriverIosSnapshot(this.client, options, this.targetId);
     }
     // Spelled as a correlated pair per channel so the SnapshotProvenance union accepts it.
