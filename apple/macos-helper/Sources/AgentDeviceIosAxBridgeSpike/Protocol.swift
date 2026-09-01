@@ -32,6 +32,7 @@ struct SpikeRect: Encodable {
 
 struct SpikeNode: Encodable {
   let id: String
+  let type: String?
   let parentId: String?
   let role: String?
   let subrole: String?

@@ -51,6 +51,7 @@ function toRawSnapshotNode(
   return {
     index,
     ...optionalParent(node.parentId, nodeIndexes),
+    ...optionalString(node, 'type'),
     ...optionalString(node, 'role'),
     ...optionalString(node, 'subrole'),
     ...optionalString(node, 'label'),
@@ -78,7 +79,7 @@ function optionalParent(
 
 function optionalString(
   node: RawAcquisition['nodes'][number],
-  key: 'role' | 'subrole' | 'label' | 'value' | 'identifier',
+  key: 'type' | 'role' | 'subrole' | 'label' | 'value' | 'identifier',
 ): Partial<RawSnapshotNode> {
   return node[key] === undefined ? {} : { [key]: node[key] };
 }

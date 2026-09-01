@@ -36,6 +36,7 @@ export type SpikeRect = Readonly<{
 
 export type RawAcquiredNode = Readonly<{
   id: string;
+  type?: string;
   parentId?: string;
   role?: string;
   subrole?: string;

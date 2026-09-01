@@ -62,6 +62,7 @@ Acquisition samples retain the raw node payload, viewport evidence, target gener
 - Restored: **true**
 - Simulator state before experiment: Shutdown
 - Private/preboot preference keys are experimental only; they were applied to this shutdown disposable Simulator and the original plist bytes were restored.
+- Simulator deletion was not observed by this run; only shutdown and plist restoration are claimed.
 - /Users/michal/Library/Developer/CoreSimulator/Devices/793B72F6-02C9-4BCD-BEC9-1B3EB42A7ED4/data/Library/Preferences/com.apple.Accessibility.plist: existed=true, beforeSha256=fbc67ebbd3aa0079a4b4afff4181280731fbb8faaca2ffc623393a8d9c26a436, afterSha256=1b0bc929597307d4b0acd5b7ccf86d93dae01b36c3930ccc2ef69eba12b09610
   - Changes: AccessibilityEnabled: undefined -> true; ApplicationAccessibilityEnabled: undefined -> true; AutomationEnabled: undefined -> true; IgnoreAXServerEntitlements: undefined -> true
 - /Users/michal/Library/Developer/CoreSimulator/Devices/793B72F6-02C9-4BCD-BEC9-1B3EB42A7ED4/data/Library/Preferences/com.apple.UIAutomation.plist: existed=true, beforeSha256=db8995177327a963486dd0607260f0fad74ad10d9dec6c2f5abdbaf0dbd00b2c, afterSha256=db8995177327a963486dd0607260f0fad74ad10d9dec6c2f5abdbaf0dbd00b2c

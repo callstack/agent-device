@@ -8,7 +8,12 @@ test('prototype presentation creates the #2190 acquired carrier without semantic
     targetId: 'simulator:test',
     targetGeneration: 'generation-1',
     nodes: [
-      { id: 'root', role: 'AXApplication', enabled: true },
+      {
+        id: 'root',
+        type: 'XCUIElementTypeApplication',
+        role: 'AXApplication',
+        enabled: true,
+      },
       { id: 'child', parentId: 'root', role: 'AXWindow' },
     ],
     viewport: { kind: 'missing', reason: 'not-provided' },
@@ -18,6 +23,7 @@ test('prototype presentation creates the #2190 acquired carrier without semantic
   const result = presentAcquisitionForMeasurement(raw);
   assert.equal(result.acquisition.producer, 'simulator-ax-bridge');
   assert.equal(result.acquisition.nodes.length, 2);
+  assert.equal(result.acquisition.nodes[0]?.type, 'XCUIElementTypeApplication');
   assert.equal(result.acquisition.nodes[1]?.parentIndex, 0);
   assert.equal('hittable' in result.acquisition.nodes[0]!, false);
   assert.equal(result.measurement.nodeCount, 2);

@@ -157,6 +157,7 @@ private func appendRawNode(
   state.nodes.append(
     SpikeNode(
       id: id,
+      type: nil,
       parentId: parentId,
       role: axString(element, kAXRoleAttribute as String),
       subrole: axString(element, kAXSubroleAttribute as String),

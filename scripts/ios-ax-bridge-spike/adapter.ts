@@ -200,14 +200,14 @@ function controlFailureKind(
   return 'transport-failure';
 }
 
-type ControlSnapshot = {
+export type ControlSnapshot = Readonly<{
   nodes: RawAcquiredNode[];
   targetGeneration: string | null;
   truncated: boolean;
   viewport: { kind: 'missing'; reason: 'not-provided' };
-};
+}>;
 
-function readControlSnapshot(value: unknown): ControlSnapshot | undefined {
+export function readControlSnapshot(value: unknown): ControlSnapshot | undefined {
   const snapshot = findSnapshotRecord(value);
   if (!snapshot || !Array.isArray(snapshot.nodes)) return undefined;
   const nodes = snapshot.nodes.flatMap((rawNode) => toRawNode(rawNode));
@@ -266,6 +266,7 @@ function toRawNode(value: unknown): RawAcquiredNode[] {
 function rawNodeFacts(node: Record<string, unknown>): Partial<RawAcquiredNode> {
   return {
     ...optionalParent(node.parentIndex),
+    ...optionalString(node, 'type'),
     ...optionalString(node, 'role'),
     ...optionalString(node, 'subrole'),
     ...optionalString(node, 'label'),
@@ -289,7 +290,7 @@ function readGeneration(snapshot: Record<string, unknown>): string | null {
 
 function optionalString(
   recordValue: Record<string, unknown>,
-  key: 'role' | 'subrole' | 'label' | 'value' | 'identifier',
+  key: 'type' | 'role' | 'subrole' | 'label' | 'value' | 'identifier',
 ): Partial<RawAcquiredNode> {
   return typeof recordValue[key] === 'string' ? { [key]: recordValue[key] } : {};
 }

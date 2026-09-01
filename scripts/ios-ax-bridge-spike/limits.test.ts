@@ -6,7 +6,7 @@ const acquisition = {
   targetId: 'simulator:test',
   targetGeneration: 'generation-1',
   nodes: [
-    { id: 'n0', role: 'AXApplication' },
+    { id: 'n0', type: 'XCUIElementTypeApplication', role: 'AXApplication' },
     { id: 'n1', parentId: 'n0', role: 'AXWindow', frame: { x: 0, y: 0, width: 100, height: 200 } },
   ],
   viewport: { kind: 'reported', rect: { x: 0, y: 0, width: 100, height: 200 } },
@@ -17,7 +17,10 @@ const acquisition = {
 test('accepts a raw tree and reports structural depth without publishing it on nodes', () => {
   const result = validateRawAcquisition(acquisition, DEFAULT_SPIKE_LIMITS);
   assert.equal(result.ok, true);
-  if (result.ok) assert.equal(result.maxTraversalDepth, 1);
+  if (result.ok) {
+    assert.equal(result.maxTraversalDepth, 1);
+    assert.equal(result.acquisition.nodes[0]?.type, 'XCUIElementTypeApplication');
+  }
   assert.equal('depth' in acquisition.nodes[0], false);
   assert.equal('hittable' in acquisition.nodes[0], false);
 });

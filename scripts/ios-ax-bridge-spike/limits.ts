@@ -12,6 +12,7 @@ export const DEFAULT_SPIKE_LIMITS: ResourceLimits = Object.freeze({
 
 const NODE_KEYS = new Set([
   'id',
+  'type',
   'parentId',
   'role',
   'subrole',
@@ -144,7 +145,7 @@ function nodeFactCode(value: Record<string, unknown>): string | undefined {
 }
 
 function optionalStringCode(value: Record<string, unknown>): string | undefined {
-  for (const key of ['role', 'subrole', 'label', 'value', 'identifier'] as const) {
+  for (const key of ['type', 'role', 'subrole', 'label', 'value', 'identifier'] as const) {
     if (value[key] !== undefined && typeof value[key] !== 'string') return `${key}-invalid`;
   }
   return undefined;
