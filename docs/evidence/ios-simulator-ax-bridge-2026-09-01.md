@@ -1,12 +1,18 @@
 # iOS Simulator AX bridge spike
 
-- Decision: **NO-GO**
-- Status: **completed**
+- Decision: **INCONCLUSIVE — public AX NO-GO; guest AX bridge requires the full corpus**
+- Status: **reopened after candidate-coverage correction**
 - Revision: 5ad244596c73f0884a48eb6445da3262d7eecb87 (takeover/2209-valid-evidence)
 - Target: AgentDevice-2209-Takeover (F578F08D-BEA1-4A56-8A4B-C92B040FBA94, com.apple.CoreSimulator.SimRuntime.iOS-26-2)
 - Generated: 2026-09-01T14:27:51.339Z
 - Corpus: states=warm, screens=quiet, list, samples=20
 - Corpus coverage: **decisive-early-stop**
+
+The generated run originally reported an overall NO-GO. That verdict was too broad: the
+`private-coresimulator-ax` adapter returned `private-tool-unavailable` solely because no
+`--private-tool` path was supplied. It did not discover, build, or execute a private candidate.
+The gzipped JSON remains the immutable original run; the correction and independent live probe
+below are intentionally recorded separately.
 
 ## Environment and limits
 
@@ -24,7 +30,7 @@ Target: arm64-apple-macosx26.0
 | Candidate | Mechanism | App surface | System surface | Lifecycle | Main limitation |
 |---|---|---|---|---|---|
 | public-macos-ax | public macOS ApplicationServices AX | observed in successful cells | not exercised | framed protocol | list evidence is flatter and has different identifier coverage (depth 1 vs 4; identifiers 42 vs 11) |
-| private-coresimulator-ax | external/private CoreSimulator AX tool | unsupported before corpus | unsupported before corpus | framed protocol contract only | private interface/tool compatibility |
+| private-coresimulator-ax | external/private CoreSimulator AX tool | not exercised in the generated corpus | not exercised | framed protocol contract only | the run supplied no tool, so it cannot support a viability verdict |
 | xctest-control | #2189 XCTest runner control | observed in successful cells | not exercised | existing runner lifecycle | control, not a host-side AX bridge |
 
 ## Raw acquisition and prototype presentation results
@@ -48,6 +54,36 @@ Every acquisition sample retains timing, resource, readiness, and failure eviden
 - private-coresimulator-ax/protocol-probe:private-coresimulator-ax: ok=false, failure=unsupported-mechanism, code=private-tool-unavailable, nodes=0, duration=0.0 ms, CPU=– ms, memory=– B, response=0 B
 - stderr public-macos-ax/protocol-probe:public-macos-ax: [ios-ax-spike] capture id=protocol-probe:public-macos-ax candidate=public-macos-ax screen=unprepared-surface
 - stderr private-coresimulator-ax/protocol-probe:private-coresimulator-ax: empty
+
+`private-tool-unavailable` is setup evidence, not mechanism evidence. In the adapter at this
+revision, omitting `--private-tool` or naming a path that does not exist constructs this response
+without starting a process.
+
+## Post-run candidate audit
+
+An independent audit on 2026-09-01 used the official idb v1.5.2 arm64 release
+(`idb-companion.macos-arm64.tar.gz`, SHA-256
+`f17b718a513931705542a7fbfa9cfc11895ee191562c9ffd2343cf7f8254bc08`), including its bundled
+`Resources/SimulatorFrameworkBridge`, on macOS 27.0 (26A5421a), Xcode 27.0 (27A5252f), and a booted
+iOS 27.0 iPhone 17 Pro Simulator. Settings was foregrounded; the read used
+`ui describe-all --api axbridge-persistent --format complete --profile` with label, identifier,
+frame, and type. No `.xctest` bundle, test runner, or agent-device runner was started.
+
+- Backend reported: `axbridge-exclusive` (the persistent guest bridge's held session).
+- First successful read: 167 elements, not truncated, one Mach round trip, 49,313 response bytes,
+  956.0 ms total including bridge startup, and 56.9 ms guest read time.
+- Six subsequent reads returned the same 167-element, non-truncated tree with one Mach round trip.
+  Total profile time ranged from 39.9 to 53.7 ms (p50 43.6 ms); guest read time ranged from 30.9 to
+  39.4 ms.
+- A prior attempt against a black/unready Simulator failed with an explicit frontmost-application
+  resolution error. Foregrounding Settings on a healthy Simulator separated target readiness from
+  bridge availability.
+- The companion was stopped after the audit and removed its temporary directory.
+
+This audit proves that a compatible, no-XCTest guest AX mechanism exists, runs on the current host,
+returns a detailed batched tree, and has enough warm latency headroom to justify the full #2192
+corpus. It does not prove the remaining system-surface, lifecycle, cancellation, stale-generation,
+relaunch, or multi-screen acceptance cells, so it is not a production GO by itself.
 
 ## Independent positive-control evidence
 
@@ -78,13 +114,19 @@ Every acquisition sample retains timing, resource, readiness, and failure eviden
 
 - public-macos-ax warm/quiet acquisition missed the 75/150 ms target.
 - public-macos-ax warm/list acquisition missed the 75/150 ms target.
-- private-coresimulator-ax protocol probe returned unsupported-mechanism/private-tool-unavailable.
+- The generated private candidate result only proved that no tool path was supplied.
+- The post-run idb audit disproved the claim that a compatible private mechanism was unavailable
+  and passed the warm latency threshold on one detailed Settings screen.
+- The overall verdict is therefore inconclusive. Public AX remains NO-GO; the idb-style persistent
+  guest bridge is GO for full-corpus evaluation, not yet GO for production.
 
 ## Next interface boundary
 
-- Keep any future bridge behind the #2190 acquisition adapter and preserve raw facts until a separate GO evidence run proves fidelity, lifecycle, and latency.
+- Adapt the idb-style persistent guest reader behind the #2190 acquisition boundary and run every
+  remaining #2192 state and screen cell while preserving raw facts.
 
 ## Production boundary
 
 - No production backend selection, fallback, runner-demand, open/relaunch, proxy, XCTest interaction, or public CLI changes were made.
-- A production bridge should not start until this report has a GO result; this run is the #2192 boundary.
+- Production routing remains blocked until the guest bridge passes the full correctness, lifecycle,
+  and latency corpus. The original zero-cell private result must not be used to close #2192.
