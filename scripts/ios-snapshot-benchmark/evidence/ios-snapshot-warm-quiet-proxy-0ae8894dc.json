@@ -21,6 +21,12 @@
     "os": "darwin 27.0.0",
     "arch": "arm64"
   },
+  "host": {
+    "model": "MacBook Pro",
+    "modelIdentifier": "Mac16,8",
+    "cpu": "Apple M4 Pro",
+    "cpuCores": 12
+  },
   "target": {
     "platform": "ios",
     "kind": "simulator",

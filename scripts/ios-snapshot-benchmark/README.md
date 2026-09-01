@@ -36,7 +36,7 @@ The cells mean:
 - `warm`: app, daemon, runner, and target are prepared once; each sample is a fresh CLI snapshot.
 - `relaunch`: the same prepared tooling is retained while each sample launches a new app process.
 
-Every sample keeps daemon duration and fresh-process wall time separately, the first-tree status, response bytes, target generation, and typed failure details. The raw JSON is validated against `raw-result.schema.v1.json`; the adjacent Markdown is a human-readable summary.
+Every sample keeps daemon duration and fresh-process wall time separately, the first-tree status, response bytes, target generation, and typed failure details. Each raw result also records the typed host model, model identifier, CPU, and core count needed to compare performance baselines. The raw JSON is validated against `raw-result.schema.v1.json`; the adjacent Markdown is a human-readable summary.
 
 Each local cell is admitted only after the simulator state, verified daemon identity, app process generation, and exact fixture anchor are checked. A mismatch stops the run with a typed cell-state or fixture-anchor reason. Derived data is cleared only below the benchmark-owned state directory.
 
@@ -61,14 +61,14 @@ pnpm bench:ios-snapshot -- \
 The conditioner is semantics-preserving at zero packet loss. Non-zero loss is an explicit failure experiment, not a successful baseline.
 
 The complete exact-head corpus from `bench-golden-v2` (iPhone 17 Pro, iOS 27.0) is retained under
-[`evidence/`](./evidence/) from revision `955ed760e4563f181db91ffe719ba74e827e21bf`:
+[`evidence/`](./evidence/) from revision `71fb2483f30d90e615e949601c836aeebbf450c5`:
 
-- [`ios-snapshot-cold-local-955ed760e.json`](./evidence/ios-snapshot-cold-local-955ed760e.json)
+- [`ios-snapshot-cold-local-71fb2483f.json`](./evidence/ios-snapshot-cold-local-71fb2483f.json)
   covers cold-cold and cold lifecycle cells across all six screens with 10 samples per cell.
-- [`ios-snapshot-warm-relaunch-local-955ed760e.json`](./evidence/ios-snapshot-warm-relaunch-local-955ed760e.json)
+- [`ios-snapshot-warm-relaunch-local-71fb2483f.json`](./evidence/ios-snapshot-warm-relaunch-local-71fb2483f.json)
   covers warm and relaunch lifecycle cells across all six screens with 20 samples per cell and
   includes package-size measurements.
-- [`ios-snapshot-proxy-955ed760e.json`](./evidence/ios-snapshot-proxy-955ed760e.json) covers
+- [`ios-snapshot-proxy-71fb2483f.json`](./evidence/ios-snapshot-proxy-71fb2483f.json) covers
   persistent-client and fresh-process CLI cells at RTT 0, 20, and 80 ms with 20 samples per cell.
 
 Each JSON file is the schema-validated raw result from the commit named in its `revision` field;
