@@ -100,6 +100,34 @@ test('legacy iOS sparse recovery retries a full snapshot', async () => {
   expect(boundCapture.mock.calls[1]?.[0]?.options).toMatchObject({ interactiveOnly: false });
 });
 
+test('legacy iOS sparse recovery recognizes Appium application element types', async () => {
+  const { runtime } = makeCaptureRuntime('selector-appium-sparse-recovery');
+  boundCapture
+    .mockResolvedValueOnce({
+      backend: 'xctest',
+      producer: 'appium-source',
+      nodes: [{ index: 0, type: 'XCUIElementTypeApplication' }],
+    })
+    .mockResolvedValueOnce({
+      backend: 'xctest',
+      producer: 'appium-source',
+      nodes: [{ index: 0, type: 'XCUIElementTypeButton', label: 'Recovered' }],
+    });
+
+  const result = await runtime.capture({
+    flags: { snapshotInteractiveOnly: true },
+    recovery: {
+      legacyIosSparse: {
+        query: 'Search',
+        shouldScope: false,
+      },
+    },
+  });
+
+  expect(result.snapshot.nodes[0]?.label).toBe('Recovered');
+  expect(boundCapture).toHaveBeenCalledTimes(2);
+});
+
 test('legacy iOS sparse recovery rethrows full snapshot failure when scoping is disabled', async () => {
   const { runtime } = makeCaptureRuntime('selector-legacy-sparse-rethrow');
   boundCapture

@@ -60,7 +60,7 @@ test('runtime snapshot preserves unknown hierarchy completeness for engine-owned
 test('runtime snapshot uses the Appium sparse-tree disclosure for Appium acquisition', async () => {
   const device = createSnapshotOnlyDevice({
     snapshot: {
-      nodes: [{ ref: 'e1', index: 0, type: 'Application', depth: 0 }],
+      nodes: [{ ref: 'e1', index: 0, type: 'XCUIElementTypeApplication', depth: 0 }],
       backend: 'xctest',
       producer: 'appium-source',
       createdAt: 1,

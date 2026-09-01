@@ -1,4 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import { normalizeType } from '@agent-device/contracts/snapshot';
 import type { BackendSnapshotResult } from '../backend.ts';
 import {
   buildSnapshotPresentationKey,
@@ -318,5 +319,5 @@ function updateSessionSnapshot(params: {
 function isLegacySparseIosInteractiveSnapshot(snapshot: SnapshotState): boolean {
   if (snapshot.snapshotQuality) return false;
   if (snapshot.backend !== 'xctest' || snapshot.nodes.length !== 1) return false;
-  return snapshot.nodes[0]?.type === 'Application';
+  return normalizeType(snapshot.nodes[0]?.type ?? '') === 'application';
 }

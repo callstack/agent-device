@@ -115,7 +115,9 @@ test('cloud iOS engine-presented snapshot survives daemon publication', async ()
     assert.ok(data.warnings?.some((warning) => warning.includes('hittability evidence')));
     assert.equal(data.truncated, undefined);
     assert.equal(
-      data.nodes?.some((node) => node.type === 'StaticText' && node.label === 'Team Standup'),
+      data.nodes?.some(
+        (node) => node.type === 'XCUIElementTypeStaticText' && node.label === 'Team Standup',
+      ),
       false,
     );
     assert.equal(

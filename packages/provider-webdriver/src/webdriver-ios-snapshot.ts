@@ -73,7 +73,6 @@ export function acquireWebDriverIosSnapshot(
     customActions: options?.customActions,
   });
   const plan = iosSnapshotEngine.plan(request, APPIUM_PRODUCER);
-  assertAppiumAcquisitionPlan(plan);
   const sourceFacts = parseWebDriverSourceFacts(source, { mode: 'facts' });
   const viewport = resolveIosViewportEvidenceFromRoots(sourceFacts.roots) ?? {
     kind: 'missing' as const,
@@ -119,19 +118,6 @@ function residueForSource(viewport: IosViewportEvidence): readonly IosAcquisitio
     residue.push({ kind: 'missing-viewport', reason: viewport.reason });
   }
   return residue;
-}
-
-function assertAppiumAcquisitionPlan(plan: IosSnapshotPlan): void {
-  if (
-    plan.narrowing.depth !== null ||
-    plan.narrowing.scope !== null ||
-    plan.narrowing.interactiveOnly
-  ) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Appium page source cannot narrow acquisition; requested options must remain engine-owned',
-    );
-  }
 }
 
 function warningsForResidue(residue: readonly IosAcquisitionResidue[]): { warnings?: string[] } {

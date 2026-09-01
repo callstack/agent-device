@@ -8,6 +8,7 @@ import {
   type SnapshotDiagnosticsSummary,
 } from '@agent-device/contracts/capture';
 import { AppError } from '@agent-device/kernel/errors';
+import { normalizeType } from '@agent-device/contracts/snapshot';
 import type {
   SnapshotNode,
   SnapshotState,
@@ -288,7 +289,7 @@ function buildSparseIosInteractiveWarnings(params: {
   }
 
   const root = params.snapshot.nodes[0];
-  if (root?.type !== 'Application') return [];
+  if (!isApplicationRoot(root)) return [];
 
   if (params.snapshot.producer === 'appium-source') {
     return [
@@ -302,6 +303,11 @@ function buildSparseIosInteractiveWarnings(params: {
   return [
     'iOS interactive snapshot exposed only the application root. XCTest accessibility queries can fail to enumerate some simulator UI trees even when screenshots and direct gestures still work. Use screenshot as visual truth, try a scoped/full snapshot for diagnostics, and prefer direct selectors when known.',
   ];
+}
+
+function isApplicationRoot(node: SnapshotNode | undefined): boolean {
+  if (!node) return false;
+  return normalizeType(node.type ?? '') === 'application';
 }
 
 const MERGED_LEAF_MIN_SEGMENTS = 10;
