@@ -147,10 +147,11 @@ export default defineConfig({
             // The Bundle Size lane's PR-comment path: spawns the real script against a
             // stubbed fetch, so it needs no network; pins retry/reconcile/fatal outcomes.
             'scripts/__tests__/size-report-post-comment.test.ts',
-            // Package attribution models npm-pack output. Keep it in the fast lane so every new
-            // package path remains accounted for.
+            // Package attribution is a pure npm-pack manifest model. Keep it in the fast lane so
+            // every new package path remains accounted for without building an archive.
             'scripts/__tests__/size-report-package.test.ts',
             'scripts/ios-snapshot-benchmark/*.test.ts',
+            'scripts/ios-ax-bridge-spike/*.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
             'test/ci/upload-artifact-hidden-paths.test.ts',
