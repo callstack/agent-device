@@ -2,9 +2,10 @@
 
 ## Status
 
-Accepted (2026-09-01). The local managed-device slice and the upstream Simlock dependencies gate
-implementation. This ADR owns the architecture and safety invariants; contracts, registries,
-schemas, CLI help, and conformance tests become the executable sources of truth.
+Accepted (2026-09-01). The local managed-device slice and the upstream dependencies tracked in
+[Simlock #70](https://github.com/callstackincubator/simlock/issues/70) gate implementation. This ADR
+owns the architecture and safety invariants; contracts, registries, schemas, CLI help, and
+conformance tests become the executable sources of truth.
 
 ## 1. Context
 
