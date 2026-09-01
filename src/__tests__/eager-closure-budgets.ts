@@ -159,6 +159,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/provision-kit/src/boot-diagnostics.ts': 3,
   'packages/provision-kit/src/install-artifact-archive-context.ts': 10,
   'packages/provision-kit/src/install-source.ts': 26,
+  'packages/provision-kit/src/install-source-config.ts': 3,
   'packages/provision-kit/src/install-source-network.ts': 3,
   'packages/provision-kit/src/install-source-network-transport.ts': 1,
   'packages/provision-kit/src/toolchain-probe.ts': 8,

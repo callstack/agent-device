@@ -28,6 +28,10 @@
       "types": "./src/install-source.ts",
       "default": "./src/install-source.ts"
     },
+    "./install-source-config": {
+      "types": "./src/install-source-config.ts",
+      "default": "./src/install-source-config.ts"
+    },
     "./install-source-network": {
       "types": "./src/install-source-network.ts",
       "default": "./src/install-source-network.ts"

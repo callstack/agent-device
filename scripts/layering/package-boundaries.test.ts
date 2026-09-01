@@ -487,6 +487,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/provision-kit/boot-diagnostics',
     '@agent-device/provision-kit/install-artifact-archive-context',
     '@agent-device/provision-kit/install-source',
+    '@agent-device/provision-kit/install-source-config',
     '@agent-device/provision-kit/install-source-network',
     '@agent-device/provision-kit/install-source-network-transport',
     '@agent-device/provision-kit/toolchain-probe',

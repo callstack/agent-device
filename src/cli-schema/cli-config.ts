@@ -10,7 +10,7 @@ import {
   getOptionSpec,
   parseOptionValueFromSource,
 } from './option-schema.ts';
-import { parseInstallSourceConfig } from '../utils/install-source-config.ts';
+import { parseInstallSourceConfig } from '@agent-device/provision-kit/install-source-config';
 import { RETIRED_SCREENSHOT_MAX_SIZE } from '@agent-device/contracts/capture';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 
