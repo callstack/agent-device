@@ -245,7 +245,7 @@ async function captureAppleRunnerSnapshot(
     throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.');
   }
   return {
-    nodes: presentAppleRunnerSnapshot(device.id, options, result),
+    nodes: isMacOs(device) ? nodes : presentAppleRunnerSnapshot(device.id, options, result),
     truncated: result.truncated ?? false,
     backend: 'xctest' as const,
     producer: 'apple-runner' as const,

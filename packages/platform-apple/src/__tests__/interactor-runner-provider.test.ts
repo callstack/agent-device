@@ -3,7 +3,7 @@ import type { Interactor, RunnerContext } from '@agent-device/contracts/interact
 import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { IOS_SIMULATOR } from './device-fixtures.ts';
+import { IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import type {
   AppleRunnerCommandOptions,
   AppleRunnerProvider,
@@ -253,6 +253,19 @@ test('snapshot publishes runner presentation through the engine and drops its qu
     ['Application', 'Table', 'Cell'],
   );
   assert.equal('qualityPayload' in result, false);
+});
+
+test('macOS app snapshots preserve runner nodes outside the iOS presentation engine', async () => {
+  const nodes = [{ index: 0, type: 'Application', label: 'System Settings' }];
+  const interactor = createAppleInteractor(
+    MACOS_DEVICE,
+    {},
+    { runCommand: async () => ({ nodes }) },
+  );
+
+  const result = await interactor.snapshot({ interactiveOnly: true });
+
+  assert.deepEqual(result.nodes, nodes);
 });
 
 test('snapshot reports typed runner presentation failures', async () => {
