@@ -105,11 +105,19 @@ export function pressFixtureTarget(context: CliContext, selector: string): CliRe
   return runCli(context, ['click', selector]);
 }
 
+export function scrollFixtureSetup(context: CliContext): CliResult {
+  return runCli(context, ['scroll', 'bottom']);
+}
+
 export async function pressFixtureTargetAsync(
   context: CliContext,
   selector: string,
 ): Promise<CliResult> {
   return await runCliAsync(context, ['click', selector]);
+}
+
+export async function scrollFixtureSetupAsync(context: CliContext): Promise<CliResult> {
+  return await runCliAsync(context, ['scroll', 'bottom']);
 }
 
 export async function closeSessionAsync(context: CliContext): Promise<void> {

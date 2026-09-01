@@ -7,6 +7,7 @@ import {
   formatCliFailure,
   openFixture,
   pressFixtureTarget,
+  scrollFixtureSetup,
   snapshotFixture,
   snapshotHasAnchor,
   type CliContext,
@@ -146,6 +147,8 @@ function admitOpenedFixture(context: CliContext, options: CellAdmissionOptions):
   );
   requireAnchor(observed, options.fixture);
   if (options.fixture.setupAction === 'open-alert') {
+    const scrolled = scrollFixtureSetup(context);
+    requireCommandSuccess(scrolled, `${options.fixture.id} setup scroll`, 'cell-state');
     const setup = pressFixtureTarget(context, 'id="automation-open-alert"');
     requireCommandSuccess(setup, `${options.fixture.id} setup action`, 'cell-state');
     const prepared = snapshotFixture(context);
