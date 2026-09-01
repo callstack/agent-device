@@ -77,6 +77,8 @@ Android acquisition remains in its platform module and adapts its raw hierarchy 
 carrier. Swift keeps its runner-side `SnapshotPresentation` implementation because it consumes the
 capture-plan tier before the process boundary. The iOS engine fixture is the shared proof between
 those runtimes; it does not imply that Swift and TypeScript share an implementation.
+The macOS XCTest runner is the desktop-surface exception: its already-presented nodes bypass the iOS
+presentation engine and continue through neutral snapshot assembly.
 
 The same split now holds for the three remaining Wave 4 policies tracked by #1983, so
 `src/snapshot/` is the host-side owner of snapshot policy generally rather than of presentation

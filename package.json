@@ -117,7 +117,7 @@
     "maestro:conformance": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/maestro-conformance/format-generated-json.test.mjs packages/maestro/test/conformance/verify.test.ts packages/maestro/test/conformance/differential/engine-process.test.ts packages/maestro/test/conformance/differential/report-output.test.ts packages/maestro/test/conformance/differential/run.test.ts packages/maestro/test/conformance/differential/invariants.test.ts",
     "maestro:conformance:regenerate": "node --experimental-strip-types scripts/maestro-conformance/regenerate.mjs",
     "maestro:conformance:differential": "node --experimental-strip-types packages/maestro/test/conformance/differential/run.ts",
-    "test:ios-snapshot-differential": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/ios-snapshot-differential.test.ts",
+    "test:ios-snapshot-differential": "node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts swift test --package-path apple/snapshot-presentation && node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/ios-snapshot-differential.test.ts",
     "size": "node scripts/size-report.mjs",
     "perf": "node --experimental-strip-types scripts/perf/run.ts",
     "mutation:run": "node --experimental-strip-types scripts/mutation/run.ts",

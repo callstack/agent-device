@@ -447,7 +447,7 @@ test('screenshot --overlay-refs captures a fresh snapshot when the session has n
   expect(runtime.binds).toHaveLength(1);
 });
 
-test('screenshot --overlay-refs uses interactive iOS presentation for row-like other nodes', async () => {
+test('screenshot --overlay-refs uses presented iOS runner rows for overlay refs', async () => {
   const screenshotPath = path.join(os.tmpdir(), `agent-device-overlay-ios-${Date.now()}.png`);
   const { handler, sessionStore, runtime } = screenshotRouter(makeIosSession('default'), {
     onCapture: (input) => writeSolidPng(input.outPath, 402, 874),
@@ -522,7 +522,13 @@ test('screenshot --overlay-refs uses interactive iOS presentation for row-like o
   expect(runtime.captureSnapshot.mock.calls[0]?.[0].options).toMatchObject({
     interactiveOnly: true,
   });
-  expect(sessionStore.get('default')?.snapshot?.nodes[4]?.type).toBe('Cell');
+  expect(sessionStore.get('default')?.snapshot?.producer).toBe('apple-runner');
+  expect(
+    sessionStore.get('default')?.snapshot?.nodes.find((node) => node.ref === 'e5'),
+  ).toMatchObject({
+    type: 'Cell',
+    label: 'Receipt missing details, Receipt scanning failed. Enter details manually.',
+  });
 });
 
 test('screenshot --overlay-refs uses a fresh snapshot instead of stale session snapshot', async () => {

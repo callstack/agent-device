@@ -178,3 +178,58 @@ test('runner cache metadata fingerprints shared snapshot presentation sources', 
 
   assert.notEqual(after, before);
 });
+
+test('runner cache metadata ignores development-only SwiftPM trees but keeps runner unit tests', () => {
+  const root = mkdtempForTestSync('agent-device-runner-cache-source-roots-');
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ version: '0.0.0' }));
+
+  const runnerRoot = path.join(root, 'apple', 'runner', 'AgentDeviceRunner');
+  const runnerUnitTest = path.join(
+    runnerRoot,
+    'AgentDeviceRunnerUITests',
+    'UnitTests',
+    'Invariant.swift',
+  );
+  const sharedRoot = path.join(root, 'apple', 'snapshot-presentation');
+  fs.mkdirSync(path.dirname(runnerUnitTest), { recursive: true });
+  fs.mkdirSync(path.join(sharedRoot, 'Sources'), { recursive: true });
+  fs.writeFileSync(path.join(runnerRoot, 'Runner.swift'), 'runner\n');
+  fs.writeFileSync(runnerUnitTest, 'unit-one\n');
+  fs.writeFileSync(path.join(sharedRoot, 'Sources', 'Presentation.swift'), 'shared\n');
+
+  for (const directory of [
+    'Tests',
+    'SnapshotPresentationConformance',
+    '.build',
+    '.swiftpm',
+    'xcuserdata',
+  ]) {
+    const file = path.join(sharedRoot, directory, 'Ignored.swift');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, 'ignored-one\n');
+  }
+
+  const before = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, root).runnerSourceFingerprint;
+  for (const directory of [
+    'Tests',
+    'SnapshotPresentationConformance',
+    '.build',
+    '.swiftpm',
+    'xcuserdata',
+  ]) {
+    fs.writeFileSync(path.join(sharedRoot, directory, 'Ignored.swift'), 'ignored-two\n');
+  }
+  const afterIgnoredChanges = resolveExpectedRunnerCacheMetadata(
+    IOS_SIMULATOR,
+    root,
+  ).runnerSourceFingerprint;
+  assert.equal(afterIgnoredChanges, before);
+
+  fs.writeFileSync(runnerUnitTest, 'unit-two\n');
+  const afterRunnerTestChange = resolveExpectedRunnerCacheMetadata(
+    IOS_SIMULATOR,
+    root,
+  ).runnerSourceFingerprint;
+  assert.notEqual(afterRunnerTestChange, afterIgnoredChanges);
+});

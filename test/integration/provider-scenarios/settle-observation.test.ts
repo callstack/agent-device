@@ -456,6 +456,9 @@ test('Provider-backed integration modal-dismiss press --settle attaches the unch
 // July 2026, org.reactnavigation.playground rne://stack-prevent-remove Input
 // screen; `snapshot -i --json` before and after `fill @e6 "hello" --settle`,
 // with the 31-key block reduced to 2 representative keys and rects rounded).
+// The retained TextField frames are normalized to the visible content frame after trimming, and
+// the left candidate-bar height is rounded from 69 to 68; those are intentional fixture
+// adjustments, not raw capture claims.
 // The load-bearing real-world facts they preserve:
 // - The keyboard renders in its OWN window; the "Next keyboard" and "Dictate"
 //   candidate-bar buttons are SIBLINGS of the [Keyboard] container's wrapper,
