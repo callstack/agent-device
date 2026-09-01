@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {
   parseLocalStates,
@@ -7,6 +5,11 @@ import {
   parseScreenIds,
 } from '../ios-snapshot-benchmark/definitions.ts';
 import { resolveRepoRoot } from '../ios-snapshot-benchmark/host.ts';
+import {
+  assertBenchmarkOwner,
+  assertOwnedDerivedPath,
+  createBenchmarkStateRoot,
+} from '../ios-snapshot-benchmark/state-ownership.ts';
 import type { CandidateId, ResourceLimits } from './types.ts';
 import { DEFAULT_SPIKE_LIMITS } from './limits.ts';
 
@@ -58,11 +61,7 @@ export function parseConfig(argv: readonly string[]): SpikeConfig {
   const screens = parseScreens(parsed.values.get('--screen'));
   const candidates = parseCandidates(parsed.values.get('--candidate'));
   const samples = parseSamples(parsed.values.get('--samples'), states);
-  const stateDir = resolvePath(
-    parsed.values.get('--state-dir'),
-    fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-ios-ax-spike-')),
-  );
-  fs.mkdirSync(stateDir, { recursive: true });
+  const { stateDir, derivedPath } = resolveOwnedStatePaths(parsed.values);
   return {
     repoRoot: resolveRepoRoot(),
     udid: required(parsed.values, '--udid'),
@@ -71,10 +70,7 @@ export function parseConfig(argv: readonly string[]): SpikeConfig {
     ...optionalValue(parsed.values.get('--private-tool'), 'privateTool'),
     ...optionalValue(parsed.values.get('--helper-path'), 'helperPath'),
     stateDir,
-    derivedPath: resolvePath(
-      parsed.values.get('--derived-path'),
-      path.join(stateDir, 'derived-data'),
-    ),
+    derivedPath,
     outputPath: resolvePath(
       parsed.values.get('--out'),
       path.join(stateDir, 'ios-simulator-ax-bridge-spike.v1.json'),
@@ -87,6 +83,26 @@ export function parseConfig(argv: readonly string[]): SpikeConfig {
     applyPreferences: parsed.booleans.has('--apply-preferences'),
     keepDevice: parsed.booleans.has('--keep-device'),
   };
+}
+
+function resolveOwnedStatePaths(values: ReadonlyMap<string, string>): {
+  stateDir: string;
+  derivedPath: string;
+} {
+  const stateDir = values.has('--state-dir')
+    ? resolvePath(values.get('--state-dir'), '')
+    : createBenchmarkStateRoot();
+  const derivedPath = resolvePath(
+    values.get('--derived-path'),
+    path.join(stateDir, 'derived-data'),
+  );
+  try {
+    assertBenchmarkOwner(stateDir);
+    assertOwnedDerivedPath(derivedPath, stateDir);
+  } catch (error) {
+    throw new SpikeConfigurationError(error instanceof Error ? error.message : String(error));
+  }
+  return { stateDir, derivedPath };
 }
 
 function parseArguments(argv: readonly string[]): {

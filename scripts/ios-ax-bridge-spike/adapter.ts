@@ -40,19 +40,19 @@ export type AdapterOptions = Readonly<{
 
 export function createPublicMacOsAxAdapter(options: AdapterOptions): AcquisitionAdapter {
   const limits = options.limits ?? DEFAULT_SPIKE_LIMITS;
-  const helperPath =
-    options.helperPath ??
-    path.join(
-      options.repoRoot,
-      'apple',
-      'macos-helper',
-      '.build',
-      'out',
-      'Products',
-      'Release',
-      'agent-device-ios-ax-bridge-spike',
-    );
+  const helperPath = options.helperPath ?? defaultPublicMacOsAxHelperPath(options.repoRoot);
   return framedAdapter('public-macos-ax', helperPath, limits);
+}
+
+export function defaultPublicMacOsAxHelperPath(repoRoot: string): string {
+  return path.join(
+    repoRoot,
+    'apple',
+    'macos-helper',
+    '.build',
+    'release',
+    'agent-device-ios-ax-bridge-spike',
+  );
 }
 
 export function createPrivateCoreSimulatorAxAdapter(options: AdapterOptions): AcquisitionAdapter {

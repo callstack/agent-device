@@ -27,9 +27,9 @@ function renderSpikeMarkdown(report: SpikeReport): string {
     '',
     '| Candidate | Mechanism | App surface | System surface | Lifecycle | Main limitation |',
     '|---|---|---|---|---|---|',
-    `| public-macos-ax | public macOS ApplicationServices AX | ${surfaceStatus(report, 'public-macos-ax')} | ${surfaceStatus(report, 'public-macos-ax')} | framed protocol | host Accessibility permission and Xcode 27 DeviceHub surface |`,
-    `| private-coresimulator-ax | external/private CoreSimulator AX tool | ${surfaceStatus(report, 'private-coresimulator-ax')} | ${surfaceStatus(report, 'private-coresimulator-ax')} | framed protocol contract only | private interface/tool compatibility |`,
-    `| xctest-control | #2189 XCTest runner control | ${surfaceStatus(report, 'xctest-control')} | ${surfaceStatus(report, 'xctest-control')} | existing runner lifecycle | control, not a host-side AX bridge |`,
+    `| public-macos-ax | public macOS ApplicationServices AX | ${surfaceStatus(report, 'public-macos-ax', 'app')} | ${surfaceStatus(report, 'public-macos-ax', 'system')} | framed protocol | host Accessibility permission and whole-Simulator process-tree breadth |`,
+    `| private-coresimulator-ax | external/private CoreSimulator AX tool | ${surfaceStatus(report, 'private-coresimulator-ax', 'app')} | ${surfaceStatus(report, 'private-coresimulator-ax', 'system')} | framed protocol contract only | private interface/tool compatibility |`,
+    `| xctest-control | #2189 XCTest runner control | ${surfaceStatus(report, 'xctest-control', 'app')} | ${surfaceStatus(report, 'xctest-control', 'system')} | existing runner lifecycle | control, not a host-side AX bridge |`,
     '',
     '## Raw acquisition and prototype presentation results',
     '',
@@ -137,11 +137,22 @@ function renderCellRow(cell: SpikeCell): string {
   return `| ${cell.candidate} | ${cell.state} | ${cell.screen} | ${acquisition.length} | ${summary(acquisition, 'wallClockMs')} | ${summary(acquisition, 'firstLookMs')} | ${summary(presentation, 'wallClockMs')} | ${formatNumber(median(nodeCounts))} | ${failures} |`;
 }
 
-function surfaceStatus(report: SpikeReport, candidate: SpikeCell['candidate']): string {
-  if (report.cells.some((cell) => cell.candidate === candidate)) return 'observed in cells';
-  if (report.protocolProbes.some((probe) => probe.candidate === candidate))
-    return 'protocol probe only';
-  return 'not observed (run stopped)';
+function surfaceStatus(
+  report: SpikeReport,
+  candidate: SpikeCell['candidate'],
+  surface: 'app' | 'system',
+): string {
+  const cells = report.cells.filter(
+    (cell) =>
+      cell.candidate === candidate &&
+      (surface === 'system' ? cell.screen === 'system-surface' : cell.screen !== 'system-surface'),
+  );
+  if (cells.some((cell) => cell.acquisitionSamples.some((sample) => sample.ok))) {
+    return 'observed in successful cells';
+  }
+  if (cells.length > 0) return 'failed in cells';
+  if (report.config.candidates.includes(candidate)) return 'not exercised';
+  return 'not selected';
 }
 
 function preferenceLines(report: SpikeReport): string[] {

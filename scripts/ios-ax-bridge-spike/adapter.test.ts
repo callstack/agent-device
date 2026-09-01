@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { readControlSnapshot } from './adapter.ts';
+import { defaultPublicMacOsAxHelperPath, readControlSnapshot } from './adapter.ts';
+
+test('public AX adapter resolves the SwiftPM release product', () => {
+  assert.equal(
+    defaultPublicMacOsAxHelperPath('/repo'),
+    '/repo/apple/macos-helper/.build/release/agent-device-ios-ax-bridge-spike',
+  );
+});
 
 test('control mapping preserves the producer raw node type', () => {
   const result = readControlSnapshot({

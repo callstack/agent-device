@@ -173,7 +173,7 @@ function candidateAvailabilityReasons(cells: readonly SpikeCell[]): string[] {
   }
   if (cells.some(hasUnsupportedPublicAx)) {
     reasons.push(
-      'The public macOS AX mechanism was unsupported or unreadable on the Xcode 27 host surface.',
+      'The public macOS AX mechanism was unsupported or unreadable on the host Simulator surface.',
     );
   }
   return reasons;

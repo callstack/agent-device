@@ -65,20 +65,19 @@ test('admits only an exact semantic anchor from snapshot node fields', () => {
 });
 
 test('recognizes the first-install deep-link confirmation as a setup prompt', () => {
+  for (const node of [
+    { role: 'alert', label: 'Open in “Agent Device Tester”?' },
+    { type: 'Alert', label: 'Open in “Agent Device Tester”?' },
+  ]) {
+    assert.equal(
+      hasDeepLinkConfirmation({
+        data: { results: [{ data: { snapshot: { nodes: [node] } } }] },
+      }),
+      true,
+    );
+  }
   assert.equal(
-    hasDeepLinkConfirmation({
-      data: {
-        results: [
-          {
-            data: {
-              snapshot: {
-                nodes: [{ role: 'alert', label: 'Open in “Agent Device Tester”?' }],
-              },
-            },
-          },
-        ],
-      },
-    }),
+    hasDeepLinkConfirmation({ data: { message: 'Open in “Agent Device Tester”?' } }),
     true,
   );
   assert.equal(

@@ -4,19 +4,17 @@ import { performance } from 'node:perf_hooks';
 import {
   classifyFailure,
   openFixture,
-  pressFixtureTarget,
-  snapshotFixture,
   type CliContext,
 } from '../ios-snapshot-benchmark/command.ts';
-import { screenFixture, sampleMinimumForState } from '../ios-snapshot-benchmark/definitions.ts';
 import {
-  BenchmarkInfrastructureError,
-  bootSimulator,
-  clearDerivedData,
-  shutdownSimulator,
-  stopDaemon,
-  terminateApp,
-} from '../ios-snapshot-benchmark/lifecycle.ts';
+  admitReadyCell,
+  admitSuccessfulSample,
+  prepareCellState,
+  prepareSampleState,
+  type CellAdmissionOptions,
+} from '../ios-snapshot-benchmark/cell-admission.ts';
+import { screenFixture, sampleMinimumForState } from '../ios-snapshot-benchmark/definitions.ts';
+import { BenchmarkInfrastructureError, stopDaemon } from '../ios-snapshot-benchmark/lifecycle.ts';
 import { appendSamples, makeRequest, type CapturedResponse } from './sample-evidence.ts';
 import type { AcquisitionAdapter, AdapterOptions } from './adapter.ts';
 import type { SpikeConfig } from './config.ts';
@@ -54,44 +52,37 @@ async function runCell(
 ): Promise<SpikeCell> {
   const fixture = screenFixture(screen);
   const context = contextFor(config, adapter.candidate, state, screen);
+  const admission: CellAdmissionOptions = {
+    repoRoot: config.repoRoot,
+    stateDir: config.stateDir,
+    derivedPath: context.derivedPath,
+    udid: config.udid,
+    samples: config.samples,
+    state,
+    fixture,
+  };
   const acquisitionSamples: SpikeSample[] = [];
   const presentationSamples: SpikeSample[] = [];
   try {
+    prepareCellState(admission);
     if (state === 'warm') {
-      const preparationMs = prepareSample(config, context, fixture, state);
-      const requests = Array.from({ length: config.samples }, (_, index) =>
-        makeRequest(config, adapter.candidate, state, screen, index),
-      );
-      const captured = await captureBatch(adapter, requests);
-      captured.forEach((item, index) =>
-        appendSamples(
-          adapter.candidate,
-          state,
-          screen,
-          index,
-          item,
-          preparationMs,
-          acquisitionSamples,
-          presentationSamples,
-        ),
+      await collectWarmSamples(
+        config,
+        adapter,
+        context,
+        admission,
+        acquisitionSamples,
+        presentationSamples,
       );
     } else {
-      for (let index = 0; index < config.samples; index += 1) {
-        const preparationMs = prepareSample(config, context, fixture, state);
-        const request = makeRequest(config, adapter.candidate, state, screen, index);
-        const captured = await capture(adapter, request);
-        appendSamples(
-          adapter.candidate,
-          state,
-          screen,
-          index,
-          captured,
-          preparationMs,
-          acquisitionSamples,
-          presentationSamples,
-        );
-        closeSession(context);
-      }
+      await collectNonWarmSamples(
+        config,
+        adapter,
+        context,
+        admission,
+        acquisitionSamples,
+        presentationSamples,
+      );
     }
     return {
       candidate: adapter.candidate,
@@ -107,94 +98,85 @@ async function runCell(
   }
 }
 
-function prepareSample(
+async function collectWarmSamples(
   config: SpikeConfig,
+  adapter: AcquisitionAdapter,
   context: CliContext,
-  fixture: ReturnType<typeof screenFixture>,
-  state: SpikeConfig['states'][number],
-): number {
-  prepareSimulator(config, context, fixture, state);
-  const started = performance.now();
-  openReadyFixture(context, fixture, state);
-  return performance.now() - started;
+  admission: CellAdmissionOptions,
+  acquisitionSamples: SpikeSample[],
+  presentationSamples: SpikeSample[],
+): Promise<void> {
+  const preparationStarted = performance.now();
+  admitReadyCell(context, admission);
+  const preparationMs = performance.now() - preparationStarted;
+  const requests = Array.from({ length: config.samples }, (_, index) =>
+    makeRequest(config, adapter.candidate, admission.state, admission.fixture.id, index),
+  );
+  const captured = await captureBatch(adapter, requests);
+  captured.forEach((item, index) =>
+    appendSamples(
+      adapter.candidate,
+      admission.state,
+      admission.fixture.id,
+      index,
+      item,
+      preparationMs,
+      acquisitionSamples,
+      presentationSamples,
+    ),
+  );
 }
 
-function prepareSimulator(
+async function collectNonWarmSamples(
   config: SpikeConfig,
+  adapter: AcquisitionAdapter,
   context: CliContext,
-  fixture: ReturnType<typeof screenFixture>,
-  state: SpikeConfig['states'][number],
-): void {
-  if (state === 'cold-cold') return prepareColdCold(config, context);
-  bootSimulator(config.udid);
-  if (state === 'cold') prepareCold(config, fixture);
-}
-
-function prepareColdCold(config: SpikeConfig, context: CliContext): void {
-  shutdownSimulator(config.udid);
-  stopDaemon(config.repoRoot, config.stateDir);
-  clearDerivedData(context.derivedPath);
-  bootSimulator(config.udid);
-}
-
-function prepareCold(config: SpikeConfig, fixture: ReturnType<typeof screenFixture>): void {
-  stopDaemon(config.repoRoot, config.stateDir);
-  terminateApp(config.udid, fixture.app);
-}
-
-function openReadyFixture(
-  context: CliContext,
-  fixture: ReturnType<typeof screenFixture>,
-  state: SpikeConfig['states'][number],
-): void {
-  const opened = openFixture(context, fixture, { relaunch: requiresRelaunch(state) });
-  if (!opened.ok) {
-    throw preparationError(opened, `open ${fixture.id}`, context, openArguments(fixture, state));
+  admission: CellAdmissionOptions,
+  acquisitionSamples: SpikeSample[],
+  presentationSamples: SpikeSample[],
+): Promise<void> {
+  let appPid: number | undefined;
+  for (let index = 0; index < config.samples; index += 1) {
+    if (index > 0) prepareSampleState(admission);
+    const preparationStarted = performance.now();
+    const opened = openFixture(context, admission.fixture, { relaunch: true });
+    if (!opened.ok) {
+      throw preparationError(
+        opened,
+        `open ${admission.fixture.id}`,
+        context,
+        openArguments(admission.fixture),
+      );
+    }
+    appPid = admitSuccessfulSample(context, admission, opened, appPid);
+    const preparationMs = performance.now() - preparationStarted;
+    const request = makeRequest(
+      config,
+      adapter.candidate,
+      admission.state,
+      admission.fixture.id,
+      index,
+    );
+    const captured = await capture(adapter, request);
+    appendSamples(
+      adapter.candidate,
+      admission.state,
+      admission.fixture.id,
+      index,
+      captured,
+      preparationMs,
+      acquisitionSamples,
+      presentationSamples,
+    );
   }
-  if (fixture.setupAction === 'open-alert') prepareAlert(context, fixture);
 }
 
-function requiresRelaunch(state: SpikeConfig['states'][number]): boolean {
-  return state === 'relaunch' || state === 'warm';
-}
-
-function openArguments(
-  fixture: ReturnType<typeof screenFixture>,
-  state: SpikeConfig['states'][number],
-): string[] {
-  return [
-    'open',
-    fixture.app,
-    ...relaunchArguments(state),
-    ...launchUrlArguments(fixture),
-    '--foreground',
-  ];
-}
-
-function relaunchArguments(state: SpikeConfig['states'][number]): string[] {
-  return requiresRelaunch(state) ? ['--relaunch'] : [];
+function openArguments(fixture: ReturnType<typeof screenFixture>): string[] {
+  return ['open', fixture.app, '--relaunch', ...launchUrlArguments(fixture), '--foreground'];
 }
 
 function launchUrlArguments(fixture: ReturnType<typeof screenFixture>): string[] {
   return fixture.launchUrl ? ['--launch-url', fixture.launchUrl] : [];
-}
-
-function prepareAlert(context: CliContext, fixture: ReturnType<typeof screenFixture>): void {
-  const pressed = pressFixtureTarget(context, 'id="automation-open-alert"');
-  if (!pressed.ok) {
-    throw preparationError(pressed, `prepare alert ${fixture.id}`, context, [
-      'click',
-      'id="automation-open-alert"',
-    ]);
-  }
-  const observed = snapshotFixture(context);
-  if (!observed.ok) {
-    throw preparationError(observed, `observe alert ${fixture.id}`, context, [
-      'batch',
-      '--steps',
-      JSON.stringify([{ command: 'snapshot', input: { interactiveOnly: true } }]),
-    ]);
-  }
 }
 
 async function capture(
