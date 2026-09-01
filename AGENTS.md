@@ -15,7 +15,7 @@ task procedures only when needed:
 | Adding or changing a CLI flag | `docs/agents/cli-flags.md` |
 | Opening or reviewing a PR | `docs/agents/pull-requests.md` |
 | Running against a real device | `docs/agents/device-verification.md` |
-| Issues, PRDs, and triage labels | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
+| Writing issues or PRDs, and triage labels | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
 | Web backend setup or diagnostics | `docs/agents/web-backend.md` |
 
 Versioned CLI help is the source of truth for command behavior. Start workflow planning with
