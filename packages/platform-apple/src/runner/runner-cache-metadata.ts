@@ -289,28 +289,28 @@ function computeRunnerSourceFileStatsFingerprint(
 }
 
 function collectRunnerSourceFiles(roots: readonly string[]): string[] {
+  return [...new Set(roots.flatMap(collectRunnerSourceFilesUnderRoot))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+}
+
+function collectRunnerSourceFilesUnderRoot(root: string): string[] {
+  return fs.existsSync(root) ? collectRunnerSourceFilesInDirectory(root) : [];
+}
+
+function collectRunnerSourceFilesInDirectory(directory: string): string[] {
   const files: string[] = [];
-  for (const root of roots) {
-    if (!fs.existsSync(root)) {
-      continue;
-    }
-    const stack = [root];
-    while (stack.length > 0) {
-      const current = stack.pop() as string;
-      for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-        const fullPath = path.join(current, entry.name);
-        if (entry.isDirectory()) {
-          if (entry.name === 'xcuserdata') continue;
-          stack.push(fullPath);
-          continue;
-        }
-        if (entry.isFile() && isRunnerSourceFile(entry.name, fullPath)) {
-          files.push(fullPath);
-        }
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name !== 'xcuserdata') {
+        files.push(...collectRunnerSourceFilesInDirectory(fullPath));
       }
+    } else if (entry.isFile() && isRunnerSourceFile(entry.name, fullPath)) {
+      files.push(fullPath);
     }
   }
-  return [...new Set(files)].sort((a, b) => a.localeCompare(b));
+  return files;
 }
 
 function isRunnerSourceFile(fileName: string, filePath: string): boolean {
