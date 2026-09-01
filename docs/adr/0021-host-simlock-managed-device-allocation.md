@@ -116,17 +116,25 @@ mirrors Simlock's queue, provisioning, lease, cleanup, health, or capacity state
 decides whether a device is reusable.
 
 Each logical requester is a restart-stable allocation lane; concurrent leases use distinct lanes.
-Retries reuse the same attempt key and return the same durable outcome. Disconnect, request timeout,
-or abort abandons only the caller's wait. Only explicit cancellation or authorized supersession
-terminalizes the durable request, and an uncertain result is always reconciled through Simlock
-lookup.
+Replaying the same attempt key returns the same durable outcome, including a refusal. Disconnect,
+request timeout, or abort abandons only the caller's wait. A request terminalizes through explicit
+cancellation, authorized supersession, or a stored allocation outcome that can no longer publish a
+grant. Capacity, disk, validation, and provisioning failures are terminal for that attempt even
+while any device settlement remains capacity-bearing. An uncertain result is always reconciled
+through Simlock lookup.
 
-Replacing an attempt on the same lane requires agent-device to fence the old binding, drain admitted
-commands, complete canonical session teardown, and prove no runner can still mutate the device.
-Simlock then atomically supersedes exactly the expected prior generation and installs the replacement
-attempt. Replays return the same outcome; stale generations or different replacement payloads fail
-without mutation. This permits capacity-one crash healing without letting a new key revoke live
-work.
+A terminal failure is never re-evaluated under the same attempt key. Retrying after a retriable
+capacity refusal uses a new key after `retryAfterMs`; retrying a disk refusal uses a new key only
+after operator remediation. Simlock admits that key as the next generation without supersession
+because the prior generation can never grant. A nonterminal prior generation still requires
+authorized supersession.
+
+Replacing a nonterminal attempt or live binding on the same lane requires agent-device to fence the
+old binding, drain admitted commands, complete canonical session teardown, and prove no runner can
+still mutate the device. Simlock then atomically supersedes exactly the expected prior generation
+and installs the replacement attempt. Replays return the same outcome; stale generations or
+different replacement payloads fail without mutation. This permits capacity-one crash healing
+without letting a new key revoke live work.
 
 Host asks Simlock for fail-fast allocation. Capacity refusal maps to retriable ADR 0010
 `details.reason: "simulator-capacity"` with `retryAfterMs`; Host adds no second queue. Simlock performs
