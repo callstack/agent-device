@@ -14,8 +14,9 @@ const lifecycle: LifecycleEvidence = {
 };
 
 const preferences: PreferenceEvidence = {
-  applied: false,
+  applied: true,
   restored: true,
+  fixtureLaunchCompatible: true,
   simulatorStateBefore: 'Shutdown',
   diffs: [],
 };
@@ -28,7 +29,50 @@ test('fails closed when a bridge has no readable corpus cells', () => {
     },
   ]);
   assert.equal(result.decision, 'NO-GO');
-  assert.ok(result.reasons.some((reason) => reason.includes('public-macos-ax produced no cells')));
+  assert.ok(result.reasons.some((reason) => reason.includes('unsupported-mechanism/permission')));
+});
+
+test('does not let failed samples contribute fabricated zero latency', () => {
+  const cell = readableCell('public-macos-ax', 'warm', 'list');
+  const failed = {
+    ...cell.acquisitionSamples[0]!,
+    ok: false,
+    firstTree: 'not-observed' as const,
+    firstLookMs: 0,
+    metrics: { ...cell.acquisitionSamples[0]!.metrics!, durationMs: 0 },
+    failure: { kind: 'timeout' as const, code: 'batch-duration-limit' },
+  };
+  const result = decideSpike(
+    [{ ...cell, acquisitionSamples: [failed, ...cell.acquisitionSamples.slice(1)] }],
+    lifecycle,
+    preferences,
+    DEFAULT_SPIKE_LIMITS,
+    'completed',
+    [{ candidate: 'public-macos-ax' }],
+  );
+  assert.equal(result.decision, 'NO-GO');
+  assert.ok(result.reasons.some((reason) => reason.includes('duration bound')));
+  assert.ok(result.reasons.some((reason) => reason.includes('not produce 20 readable samples')));
+});
+
+test('reports a decisive partial corpus failure instead of replacing it with completeness', () => {
+  const cell = readableCell('public-macos-ax', 'warm', 'list');
+  const slow = {
+    ...cell,
+    acquisitionSamples: cell.acquisitionSamples.map((sample) => ({
+      ...sample,
+      metrics: { ...sample.metrics!, durationMs: 1_000 },
+    })),
+  };
+  const result = decideSpike([slow], lifecycle, preferences, DEFAULT_SPIKE_LIMITS, 'completed', [
+    { candidate: 'public-macos-ax' },
+  ]);
+  assert.equal(result.decision, 'NO-GO');
+  assert.ok(result.reasons.some((reason) => reason.includes('warm acquisition')));
+  assert.equal(
+    result.reasons.some((reason) => reason.includes('required corpus')),
+    false,
+  );
 });
 
 test('selects one complete viable bridge without requiring every candidate to pass', () => {

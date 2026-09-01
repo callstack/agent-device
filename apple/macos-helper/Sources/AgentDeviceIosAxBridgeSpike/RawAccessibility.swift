@@ -49,7 +49,11 @@ func capturePublicAccessibility(request: SpikeRequest) -> SpikeCapture {
       observedTargetGeneration: generation
     )
   }
-  guard let traversalRoot = firstDescendant(window, subrole: "iOSContentGroup") else {
+  guard let traversalRoot = firstDescendant(
+    window,
+    subrole: "iOSContentGroup",
+    maxDepth: request.limits.maxTraversalDepth
+  ) else {
     return unsupportedCapture(
       code: "target-simulator-content-unavailable",
       observedTargetGeneration: generation
@@ -137,14 +141,25 @@ private func targetWindow(_ windows: [AXUIElement], name: String?) -> AXUIElemen
   guard let name else { return windows.first }
   return windows.first { window in
     guard let title = axString(window, kAXTitleAttribute as String) else { return false }
-    return title == name || title.hasPrefix("\(name) –")
+    return title == name || title.hasPrefix("\(name) ")
   }
 }
 
-private func firstDescendant(_ element: AXUIElement, subrole: String) -> AXUIElement? {
-  if axString(element, kAXSubroleAttribute as String) == subrole { return element }
-  for child in axChildren(element) {
-    if let match = firstDescendant(child, subrole: subrole) { return match }
+private func firstDescendant(
+  _ element: AXUIElement,
+  subrole: String,
+  maxDepth: Int
+) -> AXUIElement? {
+  var queue: [(AXUIElement, Int)] = [(element, 0)]
+  var visited: [AXUIElement] = []
+  while !queue.isEmpty {
+    let (candidate, depth) = queue.removeFirst()
+    if visited.contains(where: { CFEqual($0, candidate) }) { continue }
+    visited.append(candidate)
+    if axString(candidate, kAXSubroleAttribute as String) == subrole { return candidate }
+    if depth < maxDepth {
+      queue.append(contentsOf: axChildren(candidate).map { ($0, depth + 1) })
+    }
   }
   return nil
 }

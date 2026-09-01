@@ -57,7 +57,8 @@ export async function runFramedBatch(
     let stdoutBytes = 0;
     let stderr = '';
     let settled = false;
-    const timer = setTimeout(() => finish('timeout', 'batch-duration-limit'), limits.maxDurationMs);
+    const batchDurationMs = limits.maxDurationMs * requests.length;
+    const timer = setTimeout(() => finish('timeout', 'batch-duration-limit'), batchDurationMs);
 
     const finish = (kind?: SpikeFailureKind, code?: string): void => {
       if (settled) return;
@@ -75,6 +76,7 @@ export async function runFramedBatch(
                 {
                   requestBytes: requestBytesFor(request, encodedRequests),
                   responseBytes: stdoutBytes,
+                  durationMs: batchDurationMs,
                 },
               ),
             );

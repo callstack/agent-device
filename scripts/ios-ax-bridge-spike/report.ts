@@ -1,14 +1,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { gzipSync } from 'node:zlib';
 import type { SpikeCell, SpikeReport, SpikeSample } from './types.ts';
 
 export function writeSpikeReport(outputPath: string, report: SpikeReport): void {
+  const compact = compactReportEvidence(report);
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-  fs.writeFileSync(outputPath, `${JSON.stringify(report)}\n`);
-  fs.writeFileSync(outputPath.replace(/\.json$/u, '.md'), renderSpikeMarkdown(report));
+  fs.writeFileSync(outputPath, gzipSync(`${JSON.stringify(compact)}\n`, { level: 9 }));
+  fs.writeFileSync(markdownPath(outputPath), renderSpikeMarkdown(compact));
 }
 
-function renderSpikeMarkdown(report: SpikeReport): string {
+export function markdownPath(outputPath: string): string {
+  return outputPath.replace(/\.json(?:\.gz)?$/u, '.md');
+}
+
+export function renderSpikeMarkdown(report: SpikeReport): string {
   const lines = [
     '# iOS Simulator AX bridge spike',
     '',
@@ -18,6 +24,7 @@ function renderSpikeMarkdown(report: SpikeReport): string {
     `- Target: ${report.target.name} (${report.target.udid}, ${report.target.runtime})`,
     `- Generated: ${report.generatedAt}`,
     `- Corpus: states=${report.config.states.join(', ')}, screens=${report.config.screens.join(', ')}, samples=${report.config.requestedSamples}`,
+    `- Corpus coverage: **${report.corpusCoverage}**`,
     '',
     '## Environment and limits',
     '',
@@ -27,7 +34,7 @@ function renderSpikeMarkdown(report: SpikeReport): string {
     '',
     '| Candidate | Mechanism | App surface | System surface | Lifecycle | Main limitation |',
     '|---|---|---|---|---|---|',
-    `| public-macos-ax | public macOS ApplicationServices AX | ${surfaceStatus(report, 'public-macos-ax', 'app')} | ${surfaceStatus(report, 'public-macos-ax', 'system')} | framed protocol | exact Simulator content surface, but complex trees exceed the latency budget |`,
+    `| public-macos-ax | public macOS ApplicationServices AX | ${surfaceStatus(report, 'public-macos-ax', 'app')} | ${surfaceStatus(report, 'public-macos-ax', 'system')} | framed protocol | ${publicAxLimitation(report)} |`,
     `| private-coresimulator-ax | external/private CoreSimulator AX tool | ${surfaceStatus(report, 'private-coresimulator-ax', 'app')} | ${surfaceStatus(report, 'private-coresimulator-ax', 'system')} | framed protocol contract only | private interface/tool compatibility |`,
     `| xctest-control | #2189 XCTest runner control | ${surfaceStatus(report, 'xctest-control', 'app')} | ${surfaceStatus(report, 'xctest-control', 'system')} | existing runner lifecycle | control, not a host-side AX bridge |`,
     '',
@@ -36,6 +43,8 @@ function renderSpikeMarkdown(report: SpikeReport): string {
     '| Candidate | State | Screen | N | Acquisition p50/p95 ms | First look p95 ms | Presentation p50/p95 ms | Nodes | Failures |',
     '|---|---|---|---:|---:|---:|---:|---:|---:|',
     ...report.cells.map(renderCellRow),
+    '',
+    ...fidelityLines(report),
     '',
     'Every acquisition sample retains timing, resource, readiness, and failure evidence; the first successful sample in each cell also retains one raw node-tree exemplar with viewport, target generation, truncation, and residue. Presentation samples measure only construction of the #2190 acquired carrier; they do not apply visibility, hittability, scope, depth, or semantic compaction.',
     '',
@@ -52,6 +61,7 @@ function renderSpikeMarkdown(report: SpikeReport): string {
     '',
     `- Applied: **${report.preferenceEvidence.applied}**`,
     `- Restored: **${report.preferenceEvidence.applied ? report.preferenceEvidence.restored : 'not required'}**`,
+    `- Fixture launch compatible: **${report.preferenceEvidence.fixtureLaunchCompatible ?? 'not exercised'}**`,
     `- Simulator state before experiment: ${report.preferenceEvidence.simulatorStateBefore}`,
     preferenceExperimentLine(report),
     ...preferenceLines(report),
@@ -134,7 +144,10 @@ function renderCellRow(cell: SpikeCell): string {
   const nodeCounts = readable.flatMap((sample) =>
     typeof sample.metrics?.nodeCount === 'number' ? [sample.metrics.nodeCount] : [],
   );
-  return `| ${cell.candidate} | ${cell.state} | ${cell.screen} | ${acquisition.length} | ${summary(acquisition, 'wallClockMs')} | ${summary(acquisition, 'firstLookMs')} | ${summary(presentation, 'wallClockMs')} | ${formatNumber(median(nodeCounts))} | ${failures} |`;
+  return `| ${cell.candidate} | ${cell.state} | ${cell.screen} | ${acquisition.length} | ${summary(readable, 'wallClockMs')} | ${summary(readable, 'firstLookMs')} | ${summary(
+    presentation.filter((sample) => sample.ok),
+    'wallClockMs',
+  )} | ${formatNumber(median(nodeCounts))} | ${failures} |`;
 }
 
 function surfaceStatus(
@@ -151,6 +164,8 @@ function surfaceStatus(
     return 'observed in successful cells';
   }
   if (cells.length > 0) return 'failed in cells';
+  const probe = report.protocolProbes.find((item) => item.candidate === candidate);
+  if (probe?.failure?.kind === 'unsupported-mechanism') return 'unsupported before corpus';
   if (report.candidates.includes(candidate)) return 'not exercised';
   return 'not selected';
 }
@@ -163,9 +178,74 @@ function preferenceLines(report: SpikeReport): string[] {
 }
 
 function preferenceExperimentLine(report: SpikeReport): string {
-  return report.preferenceEvidence.applied
+  return report.preferenceEvidence.applied && report.preferenceEvidence.restored
     ? '- Private/preboot preference keys are experimental only; they were applied to this shutdown disposable Simulator and the original plist bytes were restored.'
-    : '- No private/preboot preference keys were applied in this run.';
+    : report.preferenceEvidence.applied
+      ? '- Private/preboot preference keys were applied, but restoration was not proven.'
+      : '- No private/preboot preference keys were applied in this run.';
+}
+
+function publicAxLimitation(report: SpikeReport): string {
+  const publicList = exemplar(report, 'public-macos-ax', 'list');
+  const controlList = exemplar(report, 'xctest-control', 'list');
+  if (!publicList || !controlList) return 'fidelity and latency remain unproven';
+  const publicDepth = treeDepth(publicList);
+  const controlDepth = treeDepth(controlList);
+  const publicIdentifiers = publicList.filter((node) => node.identifier).length;
+  const controlIdentifiers = controlList.filter((node) => node.identifier).length;
+  return `list evidence is substantially flatter and has different identifier coverage (depth ${publicDepth} vs ${controlDepth}; identifiers ${publicIdentifiers} vs ${controlIdentifiers})`;
+}
+
+function compactReportEvidence(report: SpikeReport): SpikeReport {
+  return {
+    ...report,
+    cells: report.cells.map((cell) => ({
+      ...cell,
+      acquisitionSamples: cell.acquisitionSamples.map((sample, index) =>
+        index === 0 || sample.stderr === undefined ? sample : withoutStderr(sample),
+      ),
+      presentationSamples: cell.presentationSamples.map((sample) => withoutStderr(sample)),
+    })),
+  };
+}
+
+function withoutStderr(sample: SpikeSample): SpikeSample {
+  const { stderr: _stderr, ...rest } = sample;
+  return rest;
+}
+
+function fidelityLines(report: SpikeReport): string[] {
+  const lines = ['Raw exemplar fidelity (public AX vs XCTest control):'];
+  for (const screen of report.config.screens) {
+    const publicNodes = exemplar(report, 'public-macos-ax', screen);
+    const controlNodes = exemplar(report, 'xctest-control', screen);
+    if (!publicNodes || !controlNodes) continue;
+    lines.push(
+      `- ${screen}: nodes ${publicNodes.length}/${controlNodes.length}; depth ${treeDepth(publicNodes)}/${treeDepth(controlNodes)}; identifiers ${publicNodes.filter((node) => node.identifier).length}/${controlNodes.filter((node) => node.identifier).length}.`,
+    );
+  }
+  return lines.length === 1 ? ['Raw exemplar fidelity comparison was not available.'] : lines;
+}
+
+function exemplar(
+  report: SpikeReport,
+  candidate: SpikeCell['candidate'],
+  screen: SpikeCell['screen'],
+): NonNullable<SpikeSample['acquisition']>['nodes'] | undefined {
+  return report.cells
+    .find((cell) => cell.candidate === candidate && cell.screen === screen)
+    ?.acquisitionSamples.find((sample) => sample.acquisition)?.acquisition?.nodes;
+}
+
+function treeDepth(nodes: NonNullable<SpikeSample['acquisition']>['nodes']): number {
+  const depthById = new Map<string, number>();
+  let maximum = 0;
+  for (const node of nodes) {
+    const depth = node.parentId ? (depthById.get(node.parentId) ?? 0) + 1 : 0;
+    depthById.set(node.id, depth);
+    maximum = Math.max(maximum, depth);
+  }
+  return maximum;
 }
 
 function summary(samples: readonly SpikeSample[], key: 'wallClockMs' | 'firstLookMs'): string {

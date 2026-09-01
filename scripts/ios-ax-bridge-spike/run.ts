@@ -11,16 +11,16 @@ import { decideSpike } from './decision.ts';
 import { runLifecycleProbes } from './lifecycle.ts';
 import {
   applyPrebootPreferences,
-  type PlistSnapshot,
   readSimulatorState,
   restorePrebootPreferences,
 } from './preferences.ts';
-import { writeSpikeReport } from './report.ts';
+import { markdownPath, writeSpikeReport } from './report.ts';
 import { createAdapterOptions, runSpikeCells } from './runner.ts';
 import { readGitRevision, readTarget, readToolchain } from '../ios-snapshot-benchmark/host.ts';
 import { runDeepButtonControls } from '../ios-snapshot-benchmark/deep-control.ts';
 import { deepButtonFixtureEvidence } from '../ios-snapshot-benchmark/deep-button.ts';
 import { bootSimulator, shutdownSimulator } from '../ios-snapshot-benchmark/lifecycle.ts';
+import { screenFixture } from '../ios-snapshot-benchmark/definitions.ts';
 import type { AcquisitionAdapter } from './adapter.ts';
 import { SPIKE_ISSUE, SPIKE_PARENT, SPIKE_PREREQUISITES, SPIKE_SCHEMA_VERSION } from './types.ts';
 import type {
@@ -58,7 +58,7 @@ async function main(argv: readonly string[]): Promise<void> {
   const report = createReport(runConfig, metadata, lifecycle, evidence, decision);
   writeSpikeReport(config.outputPath, report);
   process.stdout.write(
-    `Decision: ${report.decision}\nRaw: ${config.outputPath}\nMarkdown: ${config.outputPath.replace(/\.json$/u, '.md')}\n`,
+    `Decision: ${report.decision}\nRaw: ${config.outputPath}\nMarkdown: ${markdownPath(config.outputPath)}\n`,
   );
   if (evidence.status === 'stopped') process.exitCode = 2;
 }
@@ -74,26 +74,13 @@ type SpikeRunEvidence = Readonly<{
 }>;
 
 async function executeSpikeRun(config: SpikeConfig): Promise<SpikeRunEvidence> {
-  const collected = await collectSpikeEvidence(config);
-  const cleanup = cleanupPreferences(
-    config,
-    collected.preferenceEvidence,
-    collected.preferenceSnapshots,
-  );
-  return {
-    ...collected,
-    preferenceEvidence: cleanup.evidence,
-    ...(cleanup.stop ? { status: 'stopped' as const, stop: cleanup.stop } : {}),
-  };
+  return collectSpikeEvidence(config);
 }
 
-type CollectedSpikeEvidence = SpikeRunEvidence & {
-  preferenceSnapshots: readonly PlistSnapshot[];
-};
+type CollectedSpikeEvidence = SpikeRunEvidence;
 
 async function collectSpikeEvidence(config: SpikeConfig): Promise<CollectedSpikeEvidence> {
   let preferenceEvidence = initialPreferenceEvidence(config.udid);
-  let preferenceSnapshots: readonly PlistSnapshot[] = [];
   let cells: Awaited<ReturnType<typeof runSpikeCells>> = [];
   let protocolProbes: SpikeResponse[] = [];
   let protocolProbeLogs: SpikeReport['protocolProbeLogs'] = [];
@@ -102,19 +89,19 @@ async function collectSpikeEvidence(config: SpikeConfig): Promise<CollectedSpike
   let stop: SpikeReport['stop'];
   try {
     positiveControl = runDeepButtonControls(config.repoRoot);
-    const applied = preparePreferences(config);
-    preferenceEvidence = applied.evidence;
-    preferenceSnapshots = applied.snapshots;
+    preferenceEvidence = runPreferenceExperiment(config);
     const adapters = createAdapters(config);
-    if (config.applyPreferences) bootSimulator(config.udid);
+    bootSimulator(config.udid);
+    primeFixtureApps(config);
     const probes = await runProtocolProbes(config, adapters);
     protocolProbes = probes.responses;
     protocolProbeLogs = probes.logs;
-    cells = await runSpikeCells(config, adapters);
+    cells = await runSpikeCells(config, supportedAdapters(adapters, protocolProbes));
   } catch (error) {
     status = 'stopped';
     stop = stopForError(error);
   }
+  if (!config.keepDevice) shutdownSimulator(config.udid);
   return {
     status,
     ...(stop ? { stop } : {}),
@@ -123,37 +110,56 @@ async function collectSpikeEvidence(config: SpikeConfig): Promise<CollectedSpike
     protocolProbeLogs,
     preferenceEvidence,
     positiveControl,
-    preferenceSnapshots,
   };
 }
 
-function preparePreferences(config: SpikeConfig): {
-  evidence: PreferenceEvidence;
-  snapshots: readonly PlistSnapshot[];
-} {
-  if (!config.applyPreferences) {
-    return { evidence: initialPreferenceEvidence(config.udid), snapshots: [] };
+function primeFixtureApps(config: SpikeConfig): void {
+  const apps = new Set(config.screens.map((screen) => screenFixture(screen).app));
+  for (const app of apps) {
+    if (!tryPrimeFixtureApp(config.udid, app))
+      throw new Error(`Failed to prime ${app} after booting the restored disposable Simulator.`);
   }
-  shutdownSimulator(config.udid);
-  return applyPrebootPreferences(config.udid);
 }
 
-function cleanupPreferences(
-  config: SpikeConfig,
-  evidence: PreferenceEvidence,
-  snapshots: readonly PlistSnapshot[],
-): { evidence: PreferenceEvidence; stop?: SpikeReport['stop'] } {
+function runPreferenceExperiment(config: SpikeConfig): PreferenceEvidence {
   if (!config.applyPreferences) {
-    if (!config.keepDevice) shutdownSimulator(config.udid);
-    return { evidence };
+    return initialPreferenceEvidence(config.udid);
   }
+  shutdownSimulator(config.udid);
+  const applied = applyPrebootPreferences(config.udid);
+  let fixtureLaunchCompatible = false;
+  let restored = false;
   try {
+    bootSimulator(config.udid);
+    fixtureLaunchCompatible = tryPrimeFixtureApp(
+      config.udid,
+      screenFixture(config.screens[0]!).app,
+    );
     shutdownSimulator(config.udid);
-    return {
-      evidence: { ...evidence, restored: restorePrebootPreferences(config.udid, snapshots) },
-    };
-  } catch (error) {
-    return { evidence, stop: stopForError(error) };
+  } finally {
+    try {
+      if (readSimulatorState(config.udid) !== 'Shutdown') shutdownSimulator(config.udid);
+    } finally {
+      restored = restorePrebootPreferences(config.udid, applied.snapshots);
+    }
+  }
+  return {
+    ...applied.evidence,
+    fixtureLaunchCompatible,
+    restored,
+  };
+}
+
+function tryPrimeFixtureApp(udid: string, app: string): boolean {
+  try {
+    execFileSync('xcrun', ['simctl', 'launch', udid, app], {
+      encoding: 'utf8',
+      timeout: 60_000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -194,6 +200,7 @@ function createReport(
     lifecycle,
     positiveControl: evidence.positiveControl,
     status: evidence.status,
+    corpusCoverage: corpusCoverage(config),
     cells: evidence.cells,
     decision: decision.decision,
     decisionReasons: decision.reasons,
@@ -253,7 +260,7 @@ function protocolProbeRequest(
     candidate,
     simulatorUdid: config.udid,
     state: 'warm',
-    screen: 'quiet',
+    screen: 'unprepared-surface',
     appBundleId: config.appBundleId,
     ...(config.targetWindowName === undefined ? {} : { targetWindowName: config.targetWindowName }),
     ...(config.targetProcessId === undefined ? {} : { targetProcessId: config.targetProcessId }),
@@ -282,10 +289,40 @@ function initialPreferenceEvidence(udid: string): PreferenceEvidence {
   }
   return {
     applied: false,
-    restored: true,
+    restored: false,
+    fixtureLaunchCompatible: null,
     simulatorStateBefore,
     diffs: [],
   };
+}
+
+function supportedAdapters(
+  adapters: readonly AcquisitionAdapter[],
+  probes: readonly SpikeResponse[],
+): readonly AcquisitionAdapter[] {
+  return adapters.filter((adapter) => {
+    if (adapter.candidate === 'xctest-control') return true;
+    const probe = probes.find((candidate) => candidate.candidate === adapter.candidate);
+    return probe?.failure?.kind !== 'unsupported-mechanism';
+  });
+}
+
+function corpusCoverage(config: SpikeConfig): SpikeReport['corpusCoverage'] {
+  const fullStates = ['cold-cold', 'cold', 'warm', 'relaunch'];
+  const fullScreens = [
+    'quiet',
+    'list',
+    'nested-scroll',
+    'alert',
+    'system-surface',
+    'xctest-stress',
+  ];
+  return fullStates.every((state) =>
+    config.states.includes(state as SpikeConfig['states'][number]),
+  ) &&
+    fullScreens.every((screen) => config.screens.includes(screen as SpikeConfig['screens'][number]))
+    ? 'full'
+    : 'decisive-early-stop';
 }
 
 function commandText(command: string, args: readonly string[]): string {

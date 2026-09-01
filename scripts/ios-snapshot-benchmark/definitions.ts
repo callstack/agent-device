@@ -15,7 +15,7 @@ const FIXTURE_APP_ID = 'com.callstack.agentdevicelab';
 const FIXTURE_SCHEME = 'agent-device-test-app://';
 const IOS_SETTINGS_APP_ID = 'com.apple.Preferences';
 
-const SCREEN_FIXTURES: readonly ScreenFixture[] = [
+export const SCREEN_FIXTURES: readonly ScreenFixture[] = [
   {
     id: 'quiet',
     label: 'Quiet inert surface',
@@ -61,6 +61,8 @@ const SCREEN_FIXTURES: readonly ScreenFixture[] = [
   },
 ];
 
+export const LOCAL_STATES: readonly LocalState[] = ['cold-cold', 'cold', 'warm', 'relaunch'];
+
 export function screenFixture(id: ScreenId): ScreenFixture {
   const fixture = SCREEN_FIXTURES.find((candidate) => candidate.id === id);
   if (!fixture) throw new Error(`Unknown screen fixture: ${id}`);
@@ -84,7 +86,7 @@ export function parseLocalStates(value: string | undefined): LocalState[] {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean) as LocalState[];
-  const valid = new Set<LocalState>(['cold-cold', 'cold', 'warm', 'relaunch']);
+  const valid = new Set<LocalState>(LOCAL_STATES);
   const unknown = states.filter((state) => !valid.has(state));
   if (unknown.length > 0) throw new Error(`Unknown --state value: ${unknown.join(', ')}`);
   if (states.length === 0) throw new Error('--state requires at least one cell.');

@@ -17,7 +17,7 @@ function request(id: string): SpikeRequest {
   };
 }
 
-function childScript(mode: 'healthy' | 'malformed' | 'crash' | 'hang'): {
+function childScript(mode: 'healthy' | 'delayed' | 'malformed' | 'crash' | 'hang'): {
   file: string;
   args: string[];
 } {
@@ -53,9 +53,10 @@ function childScript(mode: 'healthy' | 'malformed' | 'crash' | 'hang'): {
     let input = '';
     process.stdin.setEncoding('utf8');
     process.stdin.on('data', (chunk) => { input += chunk; });
-    process.stdin.on('end', () => {
+    process.stdin.on('end', async () => {
       for (const line of input.split('\\n').filter(Boolean)) {
         const request = JSON.parse(line);
+        if (${JSON.stringify(mode)} === 'delayed') await new Promise((resolve) => setTimeout(resolve, 100));
         process.stdout.write(JSON.stringify({ ...${response}, id: request.id, candidate: request.candidate }) + '\\n');
       }
     });
@@ -69,6 +70,18 @@ test('uses one framed response per request and keeps diagnostics on stderr', asy
   assert.deepEqual(
     result.responses.map((response) => response.id),
     ['one', 'two'],
+  );
+  assert.equal(
+    result.responses.every((response) => response.ok),
+    true,
+  );
+});
+
+test('budgets a framed batch per request rather than timing the whole batch as one request', async () => {
+  const result = await runFramedBatch(
+    childScript('delayed'),
+    [request('one'), request('two'), request('three')],
+    { limits: { ...DEFAULT_SPIKE_LIMITS, maxDurationMs: 200 } },
   );
   assert.equal(
     result.responses.every((response) => response.ok),

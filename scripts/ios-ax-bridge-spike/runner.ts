@@ -106,9 +106,7 @@ async function collectWarmSamples(
   acquisitionSamples: SpikeSample[],
   presentationSamples: SpikeSample[],
 ): Promise<void> {
-  const preparationStarted = performance.now();
   admitReadyCell(context, admission);
-  const preparationMs = performance.now() - preparationStarted;
   const requests = Array.from({ length: config.samples }, (_, index) =>
     makeRequest(config, adapter.candidate, admission.state, admission.fixture.id, index),
   );
@@ -120,7 +118,7 @@ async function collectWarmSamples(
       admission.fixture.id,
       index,
       item,
-      preparationMs,
+      0,
       acquisitionSamples,
       presentationSamples,
     ),
@@ -138,7 +136,7 @@ async function collectNonWarmSamples(
   let appPid: number | undefined;
   for (let index = 0; index < config.samples; index += 1) {
     if (index > 0) prepareSampleState(admission);
-    const preparationStarted = performance.now();
+    const launchStarted = performance.now();
     const opened = openFixture(context, admission.fixture, { relaunch: true });
     if (!opened.ok) {
       throw preparationError(
@@ -148,8 +146,8 @@ async function collectNonWarmSamples(
         openArguments(admission.fixture),
       );
     }
+    const preparationMs = performance.now() - launchStarted;
     appPid = admitSuccessfulSample(context, admission, opened, appPid);
-    const preparationMs = performance.now() - preparationStarted;
     const request = makeRequest(
       config,
       adapter.candidate,

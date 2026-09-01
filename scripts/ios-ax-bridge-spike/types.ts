@@ -84,7 +84,7 @@ export type SpikeRequest = Readonly<{
   candidate: CandidateId;
   simulatorUdid: string;
   state: LocalState;
-  screen: ScreenId;
+  screen: ScreenId | 'unprepared-surface';
   appBundleId: string;
   targetWindowName?: string;
   targetProcessId?: number;
@@ -179,6 +179,7 @@ export type PlistDiff = Readonly<{
 export type PreferenceEvidence = Readonly<{
   applied: boolean;
   restored: boolean;
+  fixtureLaunchCompatible: boolean | null;
   simulatorStateBefore: string;
   diffs: readonly PlistDiff[];
 }>;
@@ -202,6 +203,7 @@ export type SpikeReport = Readonly<{
   target: Target;
   limits: ResourceLimits;
   status: 'completed' | 'stopped';
+  corpusCoverage: 'full' | 'decisive-early-stop';
   candidates: readonly CandidateId[];
   config: Readonly<{
     states: readonly LocalState[];

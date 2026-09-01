@@ -5,6 +5,7 @@ import type {
   ResourceLimits,
   SpikeCell,
 } from './types.ts';
+import { LOCAL_STATES, SCREEN_FIXTURES } from '../ios-snapshot-benchmark/definitions.ts';
 
 export function decideSpike(
   cells: readonly SpikeCell[],
@@ -35,9 +36,13 @@ function statusReasons(status: 'completed' | 'stopped'): string[] {
 }
 
 function preferenceReasons(preferences: PreferenceEvidence): string[] {
-  return preferences.applied && !preferences.restored
-    ? ['The task-owned Simulator preference experiment was not restored.']
-    : [];
+  if (!preferences.applied)
+    return ['The required task-owned Simulator preference experiment was not run.'];
+  if (!preferences.restored)
+    return ['The task-owned Simulator preference experiment was not restored.'];
+  if (preferences.fixtureLaunchCompatible === false)
+    return ['The task-owned Simulator preference experiment prevented the fixture from launching.'];
+  return [];
 }
 
 function bridgeRouteReasons(
@@ -50,14 +55,17 @@ function bridgeRouteReasons(
       const candidateCells = cells.filter((cell) => cell.candidate === candidate);
       const candidateProbes = probes.filter((probe) => probe.candidate === candidate);
       if (candidateCells.length === 0 && candidateProbes.length === 0) return [];
+      const coreReasons = [
+        ...probeReasons(candidateProbes),
+        ...candidateDecisionReasons(candidateCells, limits),
+      ];
       return [
         {
           candidate,
-          reasons: [
-            ...probeReasons(candidateProbes),
-            ...candidateCompletenessReasons(candidate, candidateCells),
-            ...candidateDecisionReasons(candidateCells, limits),
-          ],
+          reasons:
+            coreReasons.length > 0
+              ? coreReasons
+              : candidateCompletenessReasons(candidate, candidateCells),
         },
       ];
     },
@@ -79,15 +87,8 @@ function probeReasons(
   );
 }
 
-const REQUIRED_STATES = ['cold-cold', 'cold', 'warm', 'relaunch'] as const;
-const REQUIRED_SCREENS = [
-  'quiet',
-  'list',
-  'nested-scroll',
-  'alert',
-  'system-surface',
-  'xctest-stress',
-] as const;
+const REQUIRED_STATES = LOCAL_STATES;
+const REQUIRED_SCREENS = SCREEN_FIXTURES.map((fixture) => fixture.id);
 
 function candidateCompletenessReasons(
   candidate: Exclude<CandidateId, 'xctest-control'>,
@@ -141,7 +142,9 @@ function sampleShapeReasons(cell: SpikeCell): string[] {
       `${cell.candidate} ${cell.state}/${cell.screen} did not produce ${cell.sampleMinimum} readable samples.`,
     );
   }
-  if (samples.some((sample) => ['unreadable', 'empty'].includes(sample.firstTree))) {
+  if (
+    samples.some((sample) => ['unreadable', 'empty', 'not-observed'].includes(sample.firstTree))
+  ) {
     reasons.push(
       `${cell.candidate} ${cell.state}/${cell.screen} has unreadable or empty first-tree evidence.`,
     );
@@ -173,6 +176,14 @@ function resourceReasons(cell: SpikeCell, limits: ResourceLimits): string[] {
     ],
   ] as const;
   const reasons: string[] = [];
+  if (
+    cell.acquisitionSamples.some(
+      (sample) =>
+        sample.failure?.kind === 'timeout' || sample.failure?.code === 'batch-duration-limit',
+    )
+  ) {
+    reasons.push(`${cell.candidate} ${cell.state}/${cell.screen} exceeded the duration bound.`);
+  }
   for (const [label, limit, readValue] of checks) {
     if (cell.acquisitionSamples.some((sample) => exceedsLimit(readValue(sample), limit))) {
       reasons.push(`${cell.candidate} ${cell.state}/${cell.screen} exceeded the ${label} bound.`);
@@ -182,7 +193,10 @@ function resourceReasons(cell: SpikeCell, limits: ResourceLimits): string[] {
 }
 
 function latencyReasons(cell: SpikeCell): string[] {
-  const firstLook = finite(cell.acquisitionSamples.map((sample) => sample.firstLookMs));
+  const successful = cell.acquisitionSamples.filter(
+    (sample) => sample.ok && sample.firstTree === 'readable',
+  );
+  const firstLook = finite(successful.map((sample) => sample.firstLookMs));
   const firstLookTarget = {
     'cold-cold': { limit: 5_000, label: 'cold-cold first look missed the 5 second target.' },
     cold: { limit: 1_500, label: 'cold prepared first look missed the 1.5 second target.' },
@@ -193,7 +207,7 @@ function latencyReasons(cell: SpikeCell): string[] {
   if (firstLookTarget && percentile(firstLook, 95) >= firstLookTarget.limit) {
     reasons.push(`${cell.candidate} ${firstLookTarget.label}`);
   }
-  const acquisition = finite(cell.acquisitionSamples.map((sample) => sample.metrics?.durationMs));
+  const acquisition = finite(successful.map((sample) => sample.metrics?.durationMs));
   if (
     cell.state === 'warm' &&
     (percentile(acquisition, 50) >= 75 || percentile(acquisition, 95) >= 150)

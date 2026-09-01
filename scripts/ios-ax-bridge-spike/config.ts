@@ -74,7 +74,7 @@ export function parseConfig(argv: readonly string[]): SpikeConfig {
     derivedPath,
     outputPath: resolvePath(
       parsed.values.get('--out'),
-      path.join(stateDir, 'ios-simulator-ax-bridge-spike.v1.json'),
+      path.join(stateDir, 'ios-simulator-ax-bridge-spike.v1.json.gz'),
     ),
     screens,
     states,
