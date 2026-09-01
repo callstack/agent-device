@@ -3,11 +3,11 @@
   "issue": "#2192",
   "parent": "#2188",
   "prerequisites": ["#2189", "#2190"],
-  "generatedAt": "2026-09-01T07:40:59.071Z",
+  "generatedAt": "2026-09-01T07:42:38.929Z",
   "revision": {
-    "commit": "a1c250b5cf63ee387935b17d3f81edc9f69abb97",
+    "commit": "590705e193fb65421b5faffa7573cc1108bbf972",
     "branch": "codex/2192-ios-ax-bridge-spike",
-    "dirty": true
+    "dirty": false
   },
   "toolchain": {
     "node": "v26.7.0",
@@ -50,12 +50,12 @@
       },
       "metrics": {
         "requestBytes": 395,
-        "responseBytes": 331,
+        "responseBytes": 332,
         "nodeCount": 0,
         "maxTraversalDepth": 0,
-        "cpuMs": 3.015999999999999,
-        "memoryBytes": 9011200,
-        "durationMs": 37.457958
+        "cpuMs": 2.9109999999999996,
+        "memoryBytes": 9076736,
+        "durationMs": 27.875416
       }
     },
     {
@@ -99,7 +99,7 @@
         "path": "/Users/michal/Library/Developer/CoreSimulator/Devices/793B72F6-02C9-4BCD-BEC9-1B3EB42A7ED4/data/Library/Preferences/com.apple.Accessibility.plist",
         "existedBefore": true,
         "beforeSha256": "fbc67ebbd3aa0079a4b4afff4181280731fbb8faaca2ffc623393a8d9c26a436",
-        "afterSha256": "725b6bb8efe60c8c6d5768aebcec0b9f6af5cee185f0430a7d1ab62953428147",
+        "afterSha256": "1b0bc929597307d4b0acd5b7ccf86d93dae01b36c3930ccc2ef69eba12b09610",
         "changes": [
           {
             "key": "AccessibilityEnabled",
@@ -190,6 +190,6 @@
   "stop": {
     "category": "infrastructure",
     "message": "open quiet failed during fixture preparation (exit 1; code=COMMAND_FAILED; reason=none; diagnostic=Simulator device failed to open agent-device-test-app:///inert.)",
-    "command": "/opt/homebrew/Cellar/node/26.7.0/bin/node bin/agent-device.mjs open com.callstack.agentdevicelab --launch-url agent-device-test-app:///inert --foreground --state-dir /var/folders/pn/0s6xww5x5tj2brz0nrvlx96w0000gn/T/agent-device-ios-ax-spike-n3rBW5 --session ax-spike-public-macos-ax-cold-cold-quiet --platform ios --udid 793B72F6-02C9-4BCD-BEC9-1B3EB42A7ED4 --ios-xctest-derived-data-path /var/folders/pn/0s6xww5x5tj2brz0nrvlx96w0000gn/T/agent-device-ios-ax-spike-n3rBW5/derived-data/public-macos-ax/cold-cold/quiet --json"
+    "command": "/opt/homebrew/Cellar/node/26.7.0/bin/node bin/agent-device.mjs open com.callstack.agentdevicelab --launch-url agent-device-test-app:///inert --foreground --state-dir /var/folders/pn/0s6xww5x5tj2brz0nrvlx96w0000gn/T/agent-device-ios-ax-spike-YnARfy --session ax-spike-public-macos-ax-cold-cold-quiet --platform ios --udid 793B72F6-02C9-4BCD-BEC9-1B3EB42A7ED4 --ios-xctest-derived-data-path /var/folders/pn/0s6xww5x5tj2brz0nrvlx96w0000gn/T/agent-device-ios-ax-spike-YnARfy/derived-data/public-macos-ax/cold-cold/quiet --json"
   }
 }
