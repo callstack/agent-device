@@ -4,6 +4,7 @@ import { bootSimulator, shutdownSimulator } from '../ios-snapshot-benchmark/life
 import type { SpikeConfig } from './config.ts';
 import {
   applyPrebootPreferences,
+  type PlistSnapshot,
   readSimulatorState,
   restorePrebootPreferences,
 } from './preferences.ts';
@@ -13,8 +14,15 @@ export function runPreferenceExperiment(config: SpikeConfig): PreferenceEvidence
   if (!config.applyPreferences) return initialPreferenceEvidence(config.udid);
   shutdownSimulator(config.udid);
   const applied = applyPrebootPreferences(config.udid);
-  let fixtureLaunchCompatible = false;
-  let restored = false;
+  return exerciseAppliedPreferences(config, applied.evidence, applied.snapshots);
+}
+
+function exerciseAppliedPreferences(
+  config: SpikeConfig,
+  evidence: PreferenceEvidence,
+  snapshots: readonly PlistSnapshot[],
+): PreferenceEvidence {
+  let fixtureLaunchCompatible: boolean;
   try {
     bootSimulator(config.udid);
     fixtureLaunchCompatible = tryPrimeFixtureApp(
@@ -23,19 +31,21 @@ export function runPreferenceExperiment(config: SpikeConfig): PreferenceEvidence
     );
   } catch {
     fixtureLaunchCompatible = false;
-  } finally {
-    try {
-      if (readSimulatorState(config.udid) !== 'Shutdown') shutdownSimulator(config.udid);
-    } catch {
-      restored = false;
-    }
-    try {
-      restored = restorePrebootPreferences(config.udid, applied.snapshots);
-    } catch {
-      restored = false;
-    }
   }
-  return { ...applied.evidence, fixtureLaunchCompatible, restored };
+  return {
+    ...evidence,
+    fixtureLaunchCompatible,
+    restored: restorePreferences(config.udid, snapshots),
+  };
+}
+
+function restorePreferences(udid: string, snapshots: readonly PlistSnapshot[]): boolean {
+  try {
+    if (readSimulatorState(udid) !== 'Shutdown') shutdownSimulator(udid);
+    return restorePrebootPreferences(udid, snapshots);
+  } catch {
+    return false;
+  }
 }
 
 export function primeFixtureApps(config: SpikeConfig): void {

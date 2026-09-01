@@ -85,11 +85,10 @@ async function collectSpikeEvidence(config: SpikeConfig): Promise<CollectedSpike
   let protocolProbes: SpikeResponse[] = [];
   let protocolProbeLogs: SpikeReport['protocolProbeLogs'] = [];
   let positiveControl = deepButtonFixtureEvidence();
-  let status: SpikeReport['status'] = 'completed';
-  let stop: SpikeReport['stop'];
   try {
     positiveControl = runDeepButtonControls(config.repoRoot);
     preferenceEvidence = runPreferenceExperiment(config);
+    assertPreferenceRestored(config, preferenceEvidence);
     const adapters = createAdapters(config);
     bootSimulator(config.udid);
     primeFixtureApps(config);
@@ -97,20 +96,57 @@ async function collectSpikeEvidence(config: SpikeConfig): Promise<CollectedSpike
     protocolProbes = probes.responses;
     protocolProbeLogs = probes.logs;
     cells = await runSpikeCells(config, supportedAdapters(adapters, protocolProbes));
+    return collectedEvidence(
+      'completed',
+      cells,
+      protocolProbes,
+      protocolProbeLogs,
+      preferenceEvidence,
+      positiveControl,
+    );
   } catch (error) {
-    status = 'stopped';
-    stop = stopForError(error);
+    return {
+      ...collectedEvidence(
+        'stopped',
+        cells,
+        protocolProbes,
+        protocolProbeLogs,
+        preferenceEvidence,
+        positiveControl,
+      ),
+      stop: stopForError(error),
+    };
+  } finally {
+    cleanupDevice(config);
   }
-  if (!config.keepDevice) shutdownSimulator(config.udid);
+}
+
+function collectedEvidence(
+  status: SpikeReport['status'],
+  cells: SpikeReport['cells'],
+  protocolProbes: SpikeResponse[],
+  protocolProbeLogs: SpikeReport['protocolProbeLogs'],
+  preferenceEvidence: PreferenceEvidence,
+  positiveControl: SpikeReport['positiveControl'],
+): CollectedSpikeEvidence {
   return {
     status,
-    ...(stop ? { stop } : {}),
     cells,
     protocolProbes,
     protocolProbeLogs,
     preferenceEvidence,
     positiveControl,
   };
+}
+
+function assertPreferenceRestored(config: SpikeConfig, evidence: PreferenceEvidence): void {
+  if (config.applyPreferences && !evidence.restored) {
+    throw new Error('The task-owned Simulator preference experiment was not restored.');
+  }
+}
+
+function cleanupDevice(config: SpikeConfig): void {
+  if (!config.keepDevice) shutdownSimulator(config.udid);
 }
 
 function stopForError(error: unknown): SpikeReport['stop'] {

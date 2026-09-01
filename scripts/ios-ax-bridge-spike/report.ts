@@ -15,7 +15,7 @@ export function markdownPath(outputPath: string): string {
   return replaced === outputPath ? `${outputPath}.md` : replaced;
 }
 
-export function renderSpikeMarkdown(report: SpikeReport): string {
+function renderSpikeMarkdown(report: SpikeReport): string {
   const lines = [
     '# iOS Simulator AX bridge spike',
     '',
