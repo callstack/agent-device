@@ -2,13 +2,16 @@
 
 This bounded harness supplies the decision evidence for [#2192](https://github.com/callstack/agent-device/issues/2192). It compares host-side public macOS AX, an explicitly configured private CoreSimulator AX tool, and the #2189 XCTest control baseline behind one framed acquisition adapter. It does not select a production backend or change daemon, runner, open, relaunch, proxy, interaction, or public CLI behavior.
 
-Build the repository and the macOS helper first:
+Build the repository and the repository-only spike helper first:
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm build
 pnpm build:ios-ax-bridge-spike
 ```
+
+The rejected helper remains under this spike tooling package so it is reproducible without entering
+the distributed `apple/macos-helper` package or npm artifact.
 
 Use a newly created, task-owned iOS Simulator. Xcode 27 hosts should target the DeviceHub process explicitly when using the public candidate:
 

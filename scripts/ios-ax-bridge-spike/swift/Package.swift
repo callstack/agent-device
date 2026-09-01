@@ -2,17 +2,17 @@
 import PackageDescription
 
 let package = Package(
-  name: "agent-device-macos-helper",
+  name: "agent-device-ios-ax-bridge-spike",
   platforms: [.macOS(.v13)],
   products: [
     .executable(
-      name: "agent-device-macos-helper",
-      targets: ["AgentDeviceMacOSHelper"]
+      name: "agent-device-ios-ax-bridge-spike",
+      targets: ["AgentDeviceIosAxBridgeSpike"]
     ),
   ],
   targets: [
     .executableTarget(
-      name: "AgentDeviceMacOSHelper"
+      name: "AgentDeviceIosAxBridgeSpike"
     ),
   ]
 )

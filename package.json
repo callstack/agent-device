@@ -106,7 +106,7 @@
     "package:android-ime-helper": "AGENT_DEVICE_ANDROID_HELPER=ime sh ./scripts/package-android-helper.sh $(node -p \"require('./package.json').version\") .tmp/android-ime-helper",
     "package:android-ime-helper:npm": "rm -rf android/ime-helper/dist && AGENT_DEVICE_ANDROID_HELPER=ime sh ./scripts/package-android-helper.sh $(node -p \"require('./package.json').version\") android/ime-helper/dist",
     "build:macos-helper": "node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts swift build -c release --package-path apple/macos-helper",
-    "build:ios-ax-bridge-spike": "node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts swift build -c release --package-path apple/macos-helper --product agent-device-ios-ax-bridge-spike",
+    "build:ios-ax-bridge-spike": "node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts swift build -c release --package-path scripts/ios-ax-bridge-spike/swift --product agent-device-ios-ax-bridge-spike",
     "build:macos-helper:clean": "node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts swift package --package-path apple/macos-helper clean && pnpm build:macos-helper",
     "build:package": "pnpm build && pnpm build:xcuitest:ios && pnpm build:xcuitest:macos && pnpm build:xcuitest:tvos && pnpm build:xcuitest:visionos && pnpm build:macos-helper:clean && pnpm package:apple-runner:npm && pnpm build:android",
     "package:npm": "pnpm build:package && pnpm check:package",

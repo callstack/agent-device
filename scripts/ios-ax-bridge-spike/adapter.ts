@@ -47,8 +47,9 @@ export function createPublicMacOsAxAdapter(options: AdapterOptions): Acquisition
 export function defaultPublicMacOsAxHelperPath(repoRoot: string): string {
   return path.join(
     repoRoot,
-    'apple',
-    'macos-helper',
+    'scripts',
+    'ios-ax-bridge-spike',
+    'swift',
     '.build',
     'release',
     'agent-device-ios-ax-bridge-spike',
