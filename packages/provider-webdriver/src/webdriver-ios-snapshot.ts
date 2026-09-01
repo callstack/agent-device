@@ -26,16 +26,11 @@ import { parseWebDriverSourceFacts, type WebDriverSourceRootFact } from './webdr
 
 const APPIUM_PRODUCER = IOS_SNAPSHOT_PRODUCER_CAPABILITIES['appium-source'];
 const iosSnapshotEngine = createIosSnapshotEngine();
-const RESIDUE_WARNINGS: Partial<Record<IosAcquisitionResidue['kind'], string>> = {
+const RESIDUE_WARNINGS = {
   'missing-viewport':
     'Appium page source does not provide a valid viewport; regular snapshot presentation is unavailable.',
   truncated: 'Appium page source is truncated; the snapshot hierarchy may be incomplete.',
-  'provider-pruned':
-    'Appium page source is provider-pruned; the snapshot hierarchy may be incomplete.',
-  'stale-generation':
-    'Appium snapshot generation is stale; the snapshot may not describe the current target.',
-  'fallback-source': 'Appium snapshot used a fallback source; snapshot fidelity may be reduced.',
-};
+} satisfies Pick<Record<IosAcquisitionResidue['kind'], string>, 'missing-viewport' | 'truncated'>;
 
 export type WebDriverIosSnapshotAcquisition = Readonly<{
   request: IosSnapshotRequest;
@@ -171,7 +166,10 @@ function warningForResidue(entry: IosAcquisitionResidue): string | undefined {
       ? 'Appium page source does not provide hittability evidence; regular snapshot nodes are not actionable.'
       : `Appium page source does not provide ${entry.fact} evidence.`;
   }
-  return RESIDUE_WARNINGS[entry.kind];
+  if (entry.kind === 'missing-viewport' || entry.kind === 'truncated') {
+    return RESIDUE_WARNINGS[entry.kind];
+  }
+  return undefined;
 }
 
 function stripRefs(nodes: readonly SnapshotNode[]): RawSnapshotNode[] {

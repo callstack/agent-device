@@ -86,7 +86,15 @@ function appendSourceNode(
   const index = nodes.length;
   const rect = rectFromAttributes(xmlNode.attributes);
   nodes.push(
-    sourceNodeFromAttributes(index, xmlNode.name, xmlNode.attributes, parentIndex, depth, mode),
+    sourceNodeFromAttributes(
+      index,
+      xmlNode.name,
+      xmlNode.attributes,
+      parentIndex,
+      depth,
+      mode,
+      rect,
+    ),
   );
   if (parentIndex === undefined) {
     sourceRoots.push({
@@ -105,8 +113,8 @@ function sourceNodeFromAttributes(
   parentIndex: number | undefined,
   depth: number,
   mode: WebDriverSourceParseMode,
+  rect: RawSnapshotNode['rect'],
 ): RawSnapshotNode {
-  const rect = rectFromAttributes(attrs);
   return {
     index,
     type,
