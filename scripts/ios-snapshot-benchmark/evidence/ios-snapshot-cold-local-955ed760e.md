@@ -2,6 +2,7 @@
 
 - Status: **completed**
 - Revision: 955ed760e4563f181db91ffe719ba74e827e21bf
+- Host: MacBook Pro (Mac16,8; Apple M4 Pro, 12 cores)
 - Target: bench-golden-v2 (7E76ECA9-D40C-4833-A711-F870F8CE9363, com.apple.CoreSimulator.SimRuntime.iOS-27-0)
 - Generated: 2026-09-01T14:32:03.733Z
 
