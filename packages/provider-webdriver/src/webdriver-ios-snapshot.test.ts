@@ -33,8 +33,17 @@ test('Appium iOS snapshots acquire facts and publish regular output through the 
   assert.equal(result.nodes?.find((node) => node.label === 'Continue')?.hittable, false);
   assert.equal(source.mock.calls.length, 1);
   assert.ok(result.warnings?.some((warning) => warning.includes('hittability evidence')));
-  assert.equal(JSON.stringify(result).includes('iosSnapshot'), false);
-  assert.equal(JSON.stringify(result).includes('apple-runner'), false);
+  assert.deepEqual(Object.keys(result).sort(), [
+    'backend',
+    'nodes',
+    'producer',
+    'truncated',
+    'warnings',
+  ]);
+  assert.equal(
+    result.nodes?.every((node) => !('ref' in node)),
+    true,
+  );
 });
 
 test('Appium iOS options become an engine plan and engine-owned projection', () => {
@@ -102,10 +111,11 @@ test('Appium iOS regular presentation fails typed when page source has no viewpo
   ]);
   assert.throws(
     () => publishWebDriverIosSnapshot(acquired),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.details?.reason === 'missing-viewport' &&
-      !('iosSnapshotEngine' in (error.details ?? {})),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.deepEqual(error.details, { reason: 'missing-viewport', field: 'viewport' });
+      return true;
+    },
   );
 });
 

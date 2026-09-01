@@ -269,6 +269,26 @@ test('iOS WebDriver interactor routes snapshots through the acquisition adapter'
   assert.equal(result.nodes?.[0]?.type, 'XCUIElementTypeApplication');
 });
 
+test('Android WebDriver interactor keeps legacy-derived source facts at its call site', async () => {
+  const source = vi.fn(
+    async () =>
+      '<hierarchy rotation="0"><android.widget.Button bounds="[0,0][100,40]" displayed="true" enabled="true" /></hierarchy>',
+  );
+  const interactor = createWebDriverInteractor({
+    client: { source } as unknown as WebDriverClient,
+    backend: 'android',
+    capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
+  });
+
+  const result = await interactor.snapshot();
+
+  assert.equal(result.backend, 'android');
+  assert.equal(result.nodes?.[0]?.type, 'hierarchy');
+  assert.equal(result.nodes?.[1]?.type, 'android.widget.Button');
+  assert.equal(result.nodes?.[1]?.hittable, true);
+  assert.equal(source.mock.calls.length, 1);
+});
+
 async function runFill(world: ReturnType<typeof createTextEntryWorld>) {
   vi.useFakeTimers();
   try {
