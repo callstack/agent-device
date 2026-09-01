@@ -34,14 +34,14 @@ const TRIPWIRE_LINES = 1_000;
 // Exact current lengths. Lower a pin when its file shrinks; never raise one — extract instead.
 const PINNED_TEST_FILE_LINES: Readonly<Record<string, number>> = Object.freeze({
   'src/__tests__/remote-connection.test.ts': 2973,
-  'src/daemon/handlers/__tests__/snapshot-handler.test.ts': 2138,
+  'src/daemon/handlers/__tests__/snapshot-handler.test.ts': 2120,
   'src/commands/interaction/runtime/settle.test.ts': 2359,
   'src/daemon/replay/internal/__tests__/session-replay-runtime-maestro.test.ts': 1963,
   'packages/platform-apple/src/runner/__tests__/runner-session.test.ts': 1957,
   'src/daemon/client/__tests__/daemon-client.test.ts': 1873,
   'packages/platform-android/src/__tests__/snapshot.test.ts': 1435,
   'packages/platform-apple/src/runner/__tests__/runner-client.test.ts': 1441,
-  'src/__tests__/client.test.ts': 1592,
+  'src/__tests__/client.test.ts': 1554,
   'test/integration/provider-scenarios/android-lifecycle.test.ts': 1556,
   'src/daemon/client/__tests__/daemon-client-lifecycle.test.ts': 1409,
   'packages/platform-apple/src/runner/__tests__/runner-command-retry.test.ts': 1280,
