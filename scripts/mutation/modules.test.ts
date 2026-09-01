@@ -78,14 +78,17 @@ test('the shard matrix slices only the modules that declare shards', () => {
 });
 
 test('a kernel test is reachable only under root or package src', () => {
-  // Load-bearing for where `test-file-size-ratchet.test.ts` lives. It measures the
-  // repository's own files and git history, neither of which Stryker's sandbox copy can
-  // answer, so it sits in `scripts/__tests__/` (explicitly included by `unit-core`) and
-  // this predicate is what keeps it out of every mutation lane. Widening the pattern to
-  // scripts/ would silently pull it back in and fail every dry run.
+  // Load-bearing for where repository-structure gates live. They measure the repository's own
+  // tracked files and Git history, which Stryker's sandbox copy cannot answer, so they sit in
+  // `scripts/__tests__/` (explicitly included by `unit-core`) and this predicate keeps them out of
+  // every mutation lane. Widening the pattern to scripts/ would silently pull them back in and
+  // fail every dry run.
   assert.ok(isKernelTestFile('src/daemon/__tests__/ref-frame.test.ts'));
   assert.ok(isKernelTestFile('packages/selectors/src/parse.test.ts'));
   assert.ok(!isKernelTestFile('scripts/__tests__/test-file-size-ratchet.test.ts'));
+  assert.ok(!isKernelTestFile('scripts/__tests__/eager-closure-budgets.test.ts'));
+  assert.ok(fs.existsSync(path.join(repoRoot, 'scripts/__tests__/eager-closure-budgets.test.ts')));
+  assert.ok(!fs.existsSync(path.join(repoRoot, 'src/__tests__/eager-closure-budgets.test.ts')));
   assert.ok(!isKernelTestFile('test/integration/daemon.test.ts'));
   assert.ok(!isKernelTestFile('src/daemon/ref-frame.ts'));
 });

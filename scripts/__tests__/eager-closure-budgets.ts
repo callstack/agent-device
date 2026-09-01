@@ -4,7 +4,8 @@
 // implementation-lazy and is explicit that a startup-time threshold alone is not a substitute for
 // preserving the loading shape (`docs/adr/0019-request-bound-platform-runtime.md`): "the tracking
 // issue owns the exact probe and planted-red procedure." #1950 built the AST-level walker
-// (`eager-import-closure.fixtures.ts`); #1959/#1969 fixed two more instances of the regression
+// (`src/__tests__/eager-import-closure.fixtures.ts`); #1959/#1969 fixed two more instances of the
+// regression
 // class by hand. This table generalizes the proof: every package entry surface gets an exact pin
 // on how many repo modules importing it evaluates, plus a standing assertion that the closure
 // never reaches a concrete platform implementation before discovery/binding selects one.
@@ -22,7 +23,7 @@
 // enforced by the compiler instead of by a runtime check that a `Set` conversion would hide.
 
 import path from 'node:path';
-import { facadeEntryFiles } from '../../scripts/layering/package-boundaries.ts';
+import { facadeEntryFiles } from '../layering/package-boundaries.ts';
 
 export type EagerClosureBudget = {
   /** Stable label for test names and failure messages -- the entry's repo-relative path. */

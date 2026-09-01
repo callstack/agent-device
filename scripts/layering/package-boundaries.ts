@@ -270,7 +270,7 @@ export function rootExternalDependencyRanges(repoRoot: string): Map<string, stri
  * directory.
  *
  * The single owner of that question. R11's façade gates and the ADR-0019 eager-closure budget
- * table (`src/__tests__/eager-closure-budgets.ts`) both consume this, so the two cannot drift
+ * table (`scripts/__tests__/eager-closure-budgets.ts`) both consume this, so the two cannot drift
  * into disagreeing about what counts as a façade — a gate that scanned a narrower set would
  * silently exempt files the other one covers, which is exactly the hole #1960 review found (a
  * one-level `readdir` missed both nested façade files and the six `packages/platform-*`

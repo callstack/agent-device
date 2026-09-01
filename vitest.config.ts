@@ -128,6 +128,7 @@ export default defineConfig({
             // by a classifier that has to recognise it — see KERNEL_TEST_FILE_RE in
             // scripts/mutation/modules.ts.
             'scripts/__tests__/test-file-size-ratchet.test.ts',
+            'scripts/__tests__/eager-closure-budgets.test.ts',
             'scripts/__tests__/agent-setup-startup-contract.test.ts',
             'scripts/__tests__/npm-skills-exclusion.test.ts',
             'scripts/__tests__/simulator-skills-contract.test.ts',

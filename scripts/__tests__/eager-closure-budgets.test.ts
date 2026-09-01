@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { eagerClosureGraphOf } from './eager-import-closure.fixtures.ts';
+import { eagerClosureGraphOf } from '../../src/__tests__/eager-import-closure.fixtures.ts';
 import {
   classifyBudget,
   describeClosurePressure,
@@ -22,7 +22,8 @@ import {
  * ADR-0019 requires platform-package façades to stay implementation-lazy and is explicit that a
  * startup threshold alone is not a substitute for preserving the loading shape: "the tracking
  * issue owns the exact probe and planted-red procedure." #1950 built the walker this file reuses
- * (`eager-import-closure.fixtures.ts`, AST-level: static value edges plus top-level dynamic
+ * (`src/__tests__/eager-import-closure.fixtures.ts`, AST-level: static value edges plus top-level
+ * dynamic
  * imports, type-only erased) and proved the planted-red procedure on one file. This is that
  * probe, generalized to every workspace-package entry surface plus designated hub modules.
  *
