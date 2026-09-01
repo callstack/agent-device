@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 /// Reported facts for one private-AX element, read once so every consumer describes a node the
 /// same way.

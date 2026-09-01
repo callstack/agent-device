@@ -41,6 +41,15 @@ test('package apple runner source strips unit-test blocks without mutating check
       path.join(root, 'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj'),
     ),
   );
+  assert.ok(fs.existsSync(path.join(root, 'dist/apple/snapshot-presentation/Package.swift')));
+  assert.ok(
+    fs.existsSync(
+      path.join(
+        root,
+        'dist/apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/Package.swift',
+      ),
+    ),
+  );
   assert.equal(fs.existsSync(path.join(root, 'dist/apple/runner/README.md')), false);
   assert.equal(fs.existsSync(path.join(root, 'dist/apple/runner/.build/cache.txt')), false);
   assert.equal(
@@ -204,6 +213,12 @@ function writeStripFixtureTree(root: string): void {
     root,
     'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/xcuserdata/user.xcuserstate',
     'state\n',
+  );
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.swift', 'package\n');
+  writeFixtureFile(
+    root,
+    'apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/Package.swift',
+    'package source\n',
   );
   writeFixtureFile(
     root,

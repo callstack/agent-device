@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   // MARK: - Blocking System Modal Snapshot

@@ -1,3 +1,5 @@
+import AgentDeviceSnapshotPresentation
+
 // MARK: - Wire Models
 
 enum CommandType: String, Codable {
@@ -276,25 +278,4 @@ struct ErrorPayload: Codable {
   var code: String?
   let message: String
   var hint: String?
-}
-
-struct SnapshotRect: Codable {
-  let x: Double
-  let y: Double
-  let width: Double
-  let height: Double
-}
-
-struct PresentationOptions {
-  let interactiveOnly: Bool
-  let depth: Int?
-  let scope: String?
-  let raw: Bool
-  /// Internal daemon ask: capture with this backend first regardless of channel
-  /// health ("private-ax"). Same-backend evidence probes (tap-outcome
-  /// corroboration) must be captured the way their baseline was.
-  var preferredBackend: String? = nil
-  /// Read UIAccessibilityCustomActions for merged leaves. Opt-in: each element
-  /// costs its own AX round trip (see RunnerAXSnapshotBridge).
-  var customActions: Bool = false
 }

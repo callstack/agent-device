@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 private struct SnapshotPresentationConformanceFixture: Decodable {

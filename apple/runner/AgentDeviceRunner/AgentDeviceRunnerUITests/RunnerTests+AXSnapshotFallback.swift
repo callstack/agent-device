@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   private static let privateAXSnapshotMaxNodes = 5_000
