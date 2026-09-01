@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
-import type { GitRevision, Target, Toolchain } from './types.ts';
+import type { GitRevision, HostIdentity, Target, Toolchain } from './types.ts';
 
 export function readToolchain(): Toolchain {
   return {
@@ -12,6 +12,29 @@ export function readToolchain(): Toolchain {
     os: `${os.platform()} ${os.release()}`,
     arch: os.arch(),
   };
+}
+
+export function readHostIdentity(): HostIdentity {
+  return parseHardwareProfile(commandText('system_profiler', ['SPHardwareDataType']));
+}
+
+export function parseHardwareProfile(output: string): HostIdentity {
+  const fields = new Map<string, string>();
+  for (const line of output.split('\n')) {
+    const match = /^\s*([^:]+):\s*(.+?)\s*$/u.exec(line);
+    if (match) fields.set(match[1]!, match[2]!);
+  }
+  const model = requiredHardwareField(fields, 'Model Name');
+  const modelIdentifier = requiredHardwareField(fields, 'Model Identifier');
+  const cpu = fields.get('Chip') ?? fields.get('Processor Name');
+  if (!cpu) throw new Error('system_profiler did not report a Mac CPU.');
+  const coreText = requiredHardwareField(fields, 'Total Number of Cores');
+  const coreMatch = /^(\d+)\b/u.exec(coreText);
+  const cpuCores = Number(coreMatch?.[1]);
+  if (!Number.isSafeInteger(cpuCores) || cpuCores < 1) {
+    throw new Error(`system_profiler reported an invalid core count: ${coreText}`);
+  }
+  return { model, modelIdentifier, cpu, cpuCores };
 }
 
 export function readGitRevision(repoRoot: string): GitRevision {
@@ -55,6 +78,12 @@ function commandText(command: string, args: string[], cwd?: string): string {
 
 function commandVersion(command: string, args: string[]): string {
   return commandText(command, args) || 'unavailable';
+}
+
+function requiredHardwareField(fields: Map<string, string>, name: string): string {
+  const value = fields.get(name);
+  if (!value) throw new Error(`system_profiler did not report ${name}.`);
+  return value;
 }
 
 function parseSimctlDevices(

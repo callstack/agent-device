@@ -62,6 +62,13 @@ test('admits only an exact semantic anchor from snapshot node fields', () => {
   assert.equal(snapshotHasAnchor(payload, 'Automation lab'), true);
   assert.equal(snapshotHasAnchor(payload, 'secondary value'), true);
   assert.equal(snapshotHasAnchor(payload, 'Automation'), false);
+  assert.equal(
+    snapshotHasAnchor(
+      { results: [{ data: { snapshot: { nodes: [{ label: 'Automation lab' }] } } }] },
+      'Automation lab',
+    ),
+    true,
+  );
 });
 
 test('recognizes the first-install deep-link confirmation as a setup prompt', () => {

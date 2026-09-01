@@ -13,6 +13,7 @@
     "generatedAt",
     "revision",
     "toolchain",
+    "host",
     "target",
     "config",
     "status",
@@ -56,6 +57,17 @@
         "simctl": { "type": "string", "minLength": 1 },
         "os": { "type": "string", "minLength": 1 },
         "arch": { "type": "string", "minLength": 1 }
+      }
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "modelIdentifier", "cpu", "cpuCores"],
+      "properties": {
+        "model": { "type": "string", "minLength": 1 },
+        "modelIdentifier": { "type": "string", "minLength": 1 },
+        "cpu": { "type": "string", "minLength": 1 },
+        "cpuCores": { "type": "integer", "minimum": 1 }
       }
     },
     "target": {

@@ -262,7 +262,7 @@ function readSnapshot(
 
 function readSnapshotRecord(payload: unknown): Record<string, unknown> | undefined {
   const record = asRecord(payload);
-  const data = asRecord(record?.data);
+  const data = asRecord(record?.data) ?? record;
   const batchResults = Array.isArray(data?.results) ? data.results : [];
   const firstResult = asRecord(batchResults[0]);
   const stepData = asRecord(firstResult?.data) ?? data;

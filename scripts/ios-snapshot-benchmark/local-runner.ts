@@ -45,13 +45,13 @@ async function runCell(options: CellAdmissionOptions): Promise<Measurement> {
   let appPid: number | undefined;
   try {
     prepareCellState(options);
-    appPid = admitReadyCell(context, options);
+    appPid = await admitReadyCell(context, options);
     const samples: RawSample[] = [];
     for (let index = 0; index < options.samples; index += 1) {
       if (index > 0) prepareSampleState(options);
       const result = runMeasuredCommand(context, options);
       if (result.ok) {
-        appPid = admitSuccessfulSample(context, options, result, appPid);
+        appPid = await admitSuccessfulSample(context, options, result, appPid);
         cleanupSuccessfulSample(context, options);
       }
       samples.push(sampleFromCli(result, measuredOperation(options.state), index));

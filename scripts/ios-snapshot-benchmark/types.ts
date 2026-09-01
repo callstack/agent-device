@@ -99,6 +99,13 @@ export type Toolchain = {
   arch: string;
 };
 
+export type HostIdentity = {
+  model: string;
+  modelIdentifier: string;
+  cpu: string;
+  cpuCores: number;
+};
+
 export type GitRevision = {
   commit: string;
   branch: string;
@@ -175,6 +182,7 @@ export type BenchmarkResult = {
   generatedAt: string;
   revision: GitRevision;
   toolchain: Toolchain;
+  host: HostIdentity;
   target: Target;
   config: {
     warmSampleMinimum: number;

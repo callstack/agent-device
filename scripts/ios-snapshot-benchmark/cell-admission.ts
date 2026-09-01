@@ -3,19 +3,21 @@ import { resolveDaemonPaths } from '../../src/daemon/config.ts';
 import { readDaemonInfo } from '../../src/daemon/client/daemon-client-metadata.ts';
 import { isAgentDeviceDaemonProcess } from '../../src/daemon/daemon-process.ts';
 import {
-  classifyFailure,
-  formatCliFailure,
   openFixture,
   pressFixtureTarget,
   scrollFixtureSetup,
   snapshotFixture,
-  snapshotHasAnchor,
   type CliContext,
   type CliResult,
 } from './command.ts';
 import {
+  fixtureOperationFromCli,
+  prepareFixture,
+  requireFixtureAnchor,
+  requireFixtureOperationSuccess,
+} from './fixture-admission.ts';
+import {
   BenchmarkCellAdmissionError,
-  BenchmarkContentionError,
   bootSimulator,
   readRunningAppPids,
   readSimulatorState,
@@ -66,41 +68,49 @@ export function prepareSampleState(options: CellAdmissionOptions): void {
   assertReadyState(options);
 }
 
-export function admitReadyCell(
+export async function admitReadyCell(
   context: CliContext,
   options: CellAdmissionOptions,
-): number | undefined {
+): Promise<number | undefined> {
   if (options.state !== 'warm' && options.state !== 'relaunch') return undefined;
   const opened = openFixture(context, options.fixture, { relaunch: true });
-  requireCommandSuccess(opened, `${options.state} ${options.fixture.id} setup`, 'cell-state');
-  return admitOpenedFixture(context, options);
+  requireFixtureOperationSuccess(
+    fixtureOperationFromCli(opened, `${options.state} ${options.fixture.id} setup`),
+    `${options.state} ${options.fixture.id} setup`,
+    'cell-state',
+  );
+  return await admitOpenedFixture(context, options);
 }
 
-export function admitSuccessfulSample(
+export async function admitSuccessfulSample(
   context: CliContext,
   options: CellAdmissionOptions,
   result: CliResult,
   previousAppPid: number | undefined,
-): number | undefined {
+): Promise<number | undefined> {
   if (!result.ok) return previousAppPid;
   if (options.state === 'warm') {
     return admitWarmSample(options, result, previousAppPid);
   }
-  return admitNonWarmSample(context, options, previousAppPid);
+  return await admitNonWarmSample(context, options, previousAppPid);
 }
 
 export function cleanupSuccessfulSample(context: CliContext, options: CellAdmissionOptions): void {
   if (options.state !== 'relaunch' || options.fixture.setupAction !== 'open-alert') return;
   const dismissed = pressFixtureTarget(context, 'label="Cancel"');
-  requireCommandSuccess(dismissed, `${options.fixture.id} sample cleanup`, 'cell-state');
+  requireFixtureOperationSuccess(
+    fixtureOperationFromCli(dismissed, 'agent-device click label="Cancel"'),
+    `${options.fixture.id} sample cleanup`,
+    'cell-state',
+  );
 }
 
-function admitNonWarmSample(
+async function admitNonWarmSample(
   context: CliContext,
   options: CellAdmissionOptions,
   previousAppPid: number | undefined,
-): number {
-  const appPid = admitOpenedFixture(context, options);
+): Promise<number> {
+  const appPid = await admitOpenedFixture(context, options);
   if (options.state !== 'relaunch') return appPid;
   if (previousAppPid === appPid) {
     throw new BenchmarkCellAdmissionError(
@@ -129,7 +139,7 @@ function admitWarmSample(
   previousAppPid: number | undefined,
 ): number {
   assertReadyState(options);
-  requireAnchor(result, options.fixture.anchorText);
+  requireFixtureAnchor(result.payload, options.fixture, 'sample');
   const appPid = assertAppRunning(options.udid, options.fixture.app);
   if (previousAppPid !== undefined && appPid !== previousAppPid) {
     throw new BenchmarkCellAdmissionError(
@@ -141,30 +151,24 @@ function admitWarmSample(
   return appPid;
 }
 
-function admitOpenedFixture(context: CliContext, options: CellAdmissionOptions): number {
+async function admitOpenedFixture(
+  context: CliContext,
+  options: CellAdmissionOptions,
+): Promise<number> {
   assertSimulatorState(options.udid, 'Booted');
   assertDaemonRunning(options.stateDir);
   assertAppRunning(options.udid, options.fixture.app);
-  const observed = snapshotFixture(context);
-  requireCommandSuccess(
-    observed,
-    `${options.fixture.id} semantic anchor observation`,
-    'fixture-anchor',
-  );
-  requireAnchor(observed, options.fixture.anchorText);
-  if (options.fixture.setupAction === 'open-alert') {
-    const scrolled = scrollFixtureSetup(context);
-    requireCommandSuccess(scrolled, `${options.fixture.id} setup scroll`, 'cell-state');
-    const setup = pressFixtureTarget(context, 'id="automation-open-alert"');
-    requireCommandSuccess(setup, `${options.fixture.id} setup action`, 'cell-state');
-    const prepared = snapshotFixture(context);
-    requireCommandSuccess(
-      prepared,
-      `${options.fixture.id} post-setup semantic anchor observation`,
-      'fixture-anchor',
-    );
-    requireAnchor(prepared, options.fixture.postSetupAnchorText ?? options.fixture.anchorText);
-  }
+  await prepareFixture(options.fixture, {
+    observe: () =>
+      fixtureOperationFromCli(snapshotFixture(context), 'agent-device batch --steps snapshot'),
+    scrollToBottom: () =>
+      fixtureOperationFromCli(scrollFixtureSetup(context), 'agent-device scroll bottom'),
+    openAlert: () =>
+      fixtureOperationFromCli(
+        pressFixtureTarget(context, 'id="automation-open-alert"'),
+        'agent-device click id="automation-open-alert"',
+      ),
+  });
   const appPid = assertAppRunning(options.udid, options.fixture.app);
   return appPid;
 }
@@ -229,26 +233,4 @@ function assertAppRunning(udid: string, appId: string): number {
     );
   }
   return pids[0]!;
-}
-
-function requireAnchor(result: CliResult, anchorText: string): void {
-  if (!snapshotHasAnchor(result.payload, anchorText)) {
-    throw new BenchmarkCellAdmissionError(
-      'fixture-anchor',
-      `Fixture did not expose the exact anchor ${JSON.stringify(anchorText)}.`,
-      'agent-device snapshot',
-    );
-  }
-}
-
-function requireCommandSuccess(
-  result: CliResult,
-  operation: string,
-  reason: 'cell-state' | 'fixture-anchor',
-): void {
-  if (result.ok) return;
-  const failure = classifyFailure(result.payload, result);
-  const message = formatCliFailure(operation, failure, result);
-  if (failure.code === 'DEVICE_IN_USE') throw new BenchmarkContentionError(message, operation);
-  throw new BenchmarkCellAdmissionError(reason, message, operation);
 }

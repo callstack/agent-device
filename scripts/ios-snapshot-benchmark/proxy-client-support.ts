@@ -3,7 +3,11 @@ import { performance } from 'node:perf_hooks';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { buildDaemonHttpBaseUrl } from '../../src/daemon/http-contract.ts';
-import { BenchmarkContentionError, BenchmarkInfrastructureError } from './lifecycle.ts';
+import {
+  BenchmarkCellAdmissionError,
+  BenchmarkContentionError,
+  BenchmarkInfrastructureError,
+} from './lifecycle.ts';
 import {
   classifyFailure,
   closeSessionAsync,
@@ -11,6 +15,11 @@ import {
   type CliContext,
   type CliResult,
 } from './command.ts';
+import {
+  fixtureOperationFromClient,
+  prepareFixture,
+  requireFixtureAnchor,
+} from './fixture-admission.ts';
 import { type NetworkConditioner, type ProxyRpcRecord } from './proxy-conditioner.ts';
 import type { ProxyStartup } from './proxy-process.ts';
 import { asRecord } from './result-values.ts';
@@ -18,7 +27,10 @@ import type { Failure, ProxyNetwork, RawSample, ScreenFixture } from './types.ts
 
 export type AgentClient = {
   apps: { open(options: Record<string, unknown>): Promise<unknown> };
-  interactions: { click(options: Record<string, unknown>): Promise<unknown> };
+  interactions: {
+    click(options: Record<string, unknown>): Promise<unknown>;
+    scroll(options: Record<string, unknown>): Promise<unknown>;
+  };
   batch: { run(options: Record<string, unknown>): Promise<Record<string, unknown>> };
   sessions: { close(): Promise<unknown> };
   leases: {
@@ -105,23 +117,39 @@ export async function openClientFixture(
     relaunch: true,
     foreground: true,
   });
-  if (fixture.setupAction === 'open-alert') {
-    await client.interactions.scroll({
-      direction: 'bottom',
-      platform: 'ios',
-      udid,
-    });
-    await client.interactions.click({
-      target: { kind: 'selector', selector: 'id="automation-open-alert"' },
-      platform: 'ios',
-      udid,
-    });
-  }
+  await prepareFixture(fixture, {
+    observe: async () =>
+      fixtureOperationFromClient(
+        await client.batch.run(snapshotBatchOptions()),
+        'agent-device client batch --steps snapshot',
+      ),
+    scrollToBottom: async () =>
+      fixtureOperationFromClient(
+        await client.interactions.scroll({
+          direction: 'bottom',
+          platform: 'ios',
+          udid,
+        }),
+        'agent-device client scroll bottom',
+      ),
+    openAlert: async () =>
+      fixtureOperationFromClient(
+        await client.interactions.click({
+          target: { kind: 'selector', selector: 'id="automation-open-alert"' },
+          platform: 'ios',
+          udid,
+        }),
+        'agent-device client click id="automation-open-alert"',
+      ),
+  });
 }
 
 export async function captureClientSample(
   client: AgentClient,
-  options: Pick<ProxyClientOptions, 'conditioner'> & { network: ProxyNetwork },
+  options: Pick<ProxyClientOptions, 'conditioner'> & {
+    fixture: ScreenFixture;
+    network: ProxyNetwork;
+  },
   index: number,
 ): Promise<RawSample> {
   const startedAt = new Date().toISOString();
@@ -132,8 +160,17 @@ export async function captureClientSample(
       steps: [{ command: 'snapshot', input: { interactiveOnly: true } }],
     });
     const record = lastRecord(options.conditioner.recordsSince(mark));
-    return buildSuccessfulClientSample(result, options.network, record, index, startedAt, started);
+    return buildSuccessfulClientSample(
+      result,
+      options.fixture,
+      options.network,
+      record,
+      index,
+      startedAt,
+      started,
+    );
   } catch (error) {
+    if (error instanceof BenchmarkCellAdmissionError) throw error;
     const record = lastRecord(options.conditioner.recordsSince(mark));
     return buildFailedClientSample(options.network, record, error, index, startedAt, started);
   }
@@ -141,6 +178,7 @@ export async function captureClientSample(
 
 function buildSuccessfulClientSample(
   result: Record<string, unknown>,
+  fixture: ScreenFixture,
   network: ProxyNetwork,
   record: ProxyRpcRecord | undefined,
   index: number,
@@ -150,6 +188,10 @@ function buildSuccessfulClientSample(
   const first = firstClientResult(result);
   const snapshot = snapshotFromClientResult(first);
   const nodeCount = readNodeCount(snapshot);
+  const succeeded = clientSampleSucceeded(record);
+  if (succeeded) {
+    requireFixtureAnchor(result, fixture, 'sample', 'agent-device client batch --steps snapshot');
+  }
   return {
     ...sampleTiming(index, startedAt, started),
     ...daemonDurationFields(first),
@@ -157,7 +199,7 @@ function buildSuccessfulClientSample(
     ...nodeFields(nodeCount),
     targetGeneration: targetGeneration(snapshot),
     firstTree: firstTreeForClient(nodeCount),
-    ok: clientSampleSucceeded(record),
+    ok: succeeded,
     outlier: false,
     ...clientFailureFields(network, record),
   };
@@ -383,4 +425,8 @@ function readRequiredString(value: Record<string, unknown>, key: string): string
 
 function readNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function snapshotBatchOptions(): Record<string, unknown> {
+  return { steps: [{ command: 'snapshot', input: { interactiveOnly: true } }] };
 }
