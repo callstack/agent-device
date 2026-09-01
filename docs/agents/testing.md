@@ -129,7 +129,7 @@ whether tests distinguish changed decision logic. Do not infer redundancy from l
 Run `pnpm depgraph affected` before touching a high-fan-in module:
 
 ```sh
-pnpm depgraph affected packages/capture-kit/src/exec.ts
+pnpm depgraph affected packages/host-kit/src/command.ts
 pnpm depgraph affected src/daemon/ref-frame.ts --json --limit 25
 ```
 

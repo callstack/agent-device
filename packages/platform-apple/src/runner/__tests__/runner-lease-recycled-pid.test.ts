@@ -41,8 +41,8 @@ import {
  * pinning the read is the point rather than a workaround.
  */
 
-// Process execution goes through utils/exec.ts, never node:child_process
-// directly (AGENTS.md hard rule) — including in tests.
+// Process execution goes through @agent-device/host-kit/command, never node:child_process
+// directly — including in tests.
 let child: ExecBackgroundResult | undefined;
 let previousLeaseDir: string | undefined;
 

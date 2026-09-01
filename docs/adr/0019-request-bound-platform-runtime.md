@@ -635,8 +635,8 @@ The final gates passed:
 - `pnpm check:layering` passed 131 structural/model tests and scanned 1,157 production source files.
   R11 owns 17 workspace packages behind 39 exported subpaths with no root back-imports; R13 keeps six
   private implementation-lazy platform packages above capture-kit behind one canonical composition
-  root and its single private provider-composition implementation submodule; R14
-  and R15 retain one typed route for `logs` and `network` with no legacy route.
+  root and its single private provider-composition implementation submodule; the historical R14
+  and R15 rules retained one typed route for `logs` and `network` with no legacy route.
 - Six local inventory/runtime owners, all enumerated Apple leaf/kind cells, and the production
   BrowserStack, AWS Device Farm, and Limrun provider modes remain covered. Provider ownership and
   inventory are fail-closed; exact-owner recovery and provider-authoritative tests prove there is no

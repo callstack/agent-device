@@ -308,6 +308,7 @@ function reExportSources(source: string): string[] {
   return [...found];
 }
 
+// These `src/utils` paths are in-memory arbitrary parser fixtures, not live repository paths.
 test('double-quoted and re-export routes into packages are not invisible to R11', () => {
   // The scanner is the layering parser, so quote style and statement form
   // cannot carve out a bypass: a double-quoted import, a re-export, and a
@@ -337,6 +338,7 @@ test('double-quoted and re-export routes into packages are not invisible to R11'
   assert.equal(checkPackageInternalSites(kernel, packageEscape, ALL).length, 1);
 });
 
+// This `src/utils` path is another in-memory arbitrary parser fixture, not a live repository path.
 test('a package file importing root src is a violation', () => {
   const sites = specifierSites(
     'packages/kernel/src/errors.ts',
@@ -390,6 +392,7 @@ test('a cross-package import needs a workspace:* declaration and an exported sub
 });
 
 test('a root src file tunnelling into packages/*/src relatively is a violation', () => {
+  // This `src/utils` path is an in-memory arbitrary parser fixture, not a live repository path.
   const sites = specifierSites(
     'src/utils/exec.ts',
     "import { AppError } from '../../packages/kernel/src/errors.ts';",

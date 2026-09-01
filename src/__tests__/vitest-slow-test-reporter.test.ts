@@ -4,7 +4,7 @@ import { classifySlowTest, reportSlowTests } from '../../scripts/vitest-slow-tes
 
 const base = {
   root: '/repo',
-  moduleId: '/repo/src/utils/__tests__/example.test.ts',
+  moduleId: '/repo/src/__tests__/example.test.ts',
   name: 'does a thing',
   fullName: 'group > does a thing',
 };
@@ -20,7 +20,7 @@ test('over-budget unit tests enter the warn band; 2x budget enforces', () => {
   const fail = classifySlowTest({ ...base, durationMs: 5_100 });
   assert.ok(fail);
   assert.equal(fail.enforce, true);
-  assert.equal(fail.key, 'src/utils/__tests__/example.test.ts :: group does a thing');
+  assert.equal(fail.key, 'src/__tests__/example.test.ts :: group does a thing');
 });
 
 test('integration paths get the larger budget', () => {

@@ -86,6 +86,7 @@ test('zoneBreakdown and rankByFanIn order by weight, then name', () => {
 });
 
 test('commandsReaching follows the dynamic import a route uses to load its handler', () => {
+  // These are in-memory arbitrary paths for graph traversal, not repository ownership metadata.
   const edges = edgesOf({
     'src/daemon/handlers/session.ts':
       "import { helper } from '../../utils/helper.ts';\nexport const h = helper;",
@@ -169,6 +170,7 @@ test('the real guarantee matrix contributes module-qualified rows', () => {
   );
 });
 
+// These parser inputs are arbitrary paths, not references to repository ownership metadata.
 test('a flag keeps its value whichever side of the path it is on', () => {
   const expected = { file: 'src/utils/exec.ts', json: true, limit: 25 };
   assert.deepEqual(parseInvocation(['src/utils/exec.ts', '--json', '--limit', '25']), expected);
@@ -190,6 +192,7 @@ test('parseInvocation rejects a missing path, a second path, and a non-positive 
 });
 
 test('text output bounds every list and says what it hid', () => {
+  // This is an arbitrary report input used to exercise formatting, not a live source path.
   const text = formatBlastRadius(
     {
       file: 'src/utils/exec.ts',

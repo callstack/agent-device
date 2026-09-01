@@ -56,8 +56,9 @@ raw edge count reads higher.
 
 What moved: the platform-plugin contract and its four facet tags, `NetworkEntry`, the
 click-button / recording-export-quality / interactor-types / runner-lease-context vocabularies,
-and 16 internal modules out of `(root)`; `utils` joined the spine at rank 1 after its two upward
-files moved to the zones they were reaching for. Three new gate scopes keep it: R6 ratchets
+and 16 internal modules out of `(root)`; the historical audit reported that `utils` joined the
+spine at rank 1 after its two upward files moved to the zones they were reaching for. Three new
+gate scopes keep it: R6 ratchets
 type-only inversions, R7 pins SessionState field ownership, and the shared selector checks in
 `selectors/` are covered by their own tests.
 

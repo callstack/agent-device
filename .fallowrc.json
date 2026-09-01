@@ -17,7 +17,7 @@
     "src/bin.ts",
     "src/client/companion-tunnel.ts",
     "src/daemon.ts",
-    "src/utils/png-worker.ts",
+    "packages/capture-kit/src/png-worker.ts",
     "scripts/patch-xcuitest-runner-icon.ts",
     "scripts/runner-request-count/run.ts",
     "packages/capture-kit/src/ios-snapshot-engine/replay.ts",

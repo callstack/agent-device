@@ -52,7 +52,8 @@ Normative summary of the proposal; contracts and rationale below.
 The codebase has grown four parallel event vocabularies, each with its own emit call, shape,
 redaction discipline, and sink (inventoried 2026-07-24):
 
-1. **Diagnostics** (`src/utils/diagnostics.ts`). ~155 distinct stringly-typed `phase` values across
+1. **Diagnostics** (`packages/host-kit/src/internal/diagnostics.ts`).
+   ~155 distinct stringly-typed `phase` values across
    ~70 files, an `AsyncLocalStorage` request scope entered in exactly three places (CLI pre-parse,
    daemon per-request in `request-router.ts`, daemon fatal catch-all), an in-memory buffer plus a
    `phaseCounts` tally, and debug-mode live streaming to the per-request ndjson file (after
@@ -134,9 +135,9 @@ Consumers derive kind sets from traits: `RUNNER_ROUND_TRIP_PHASES` becomes
 deliberately do not, preserving today's cost semantics). A parity test pins the derived sets so a
 trait edit is a reviewed decision, not a drift.
 
-The catalog lives in `contracts` (ranked, kernel-adjacent) so every zone — including unranked
-peripherals and `utils` — may import it without a layering back-edge. The journal runtime evolves
-in place in `src/utils/diagnostics.ts`, keeping all existing import directions legal.
+The catalog lives in `contracts` (ranked, kernel-adjacent) so every zone may import it without a
+layering back-edge. The journal runtime evolves in place in
+`packages/host-kit/src/internal/diagnostics.ts`, keeping all existing import directions legal.
 
 ### 2. One journal, explicit sinks, defined scope model
 
@@ -361,7 +362,7 @@ gets built.
   field is either numeric, an enum imported from the owning registry (command names, error codes,
   flag keys), or a hash — and that no open-string field exists; adding one is a failing gate, not
   a review comment.
-- Layering: `scripts/layering/check.ts` stays green — catalog in `contracts`, runtime in `utils`,
+- Layering: `scripts/layering/check.ts` stays green — catalog in `contracts`, runtime in `host-kit`,
   no new back-edges.
 
 ## Migration plan

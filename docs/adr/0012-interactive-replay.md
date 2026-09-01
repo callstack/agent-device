@@ -1251,7 +1251,7 @@ both `.ad` and Maestro paths) grounds the same conclusions from the caller's sea
   `--json`. Structurally: replay's success payload (`{ replayed, healed, session, artifactPaths }`,
   `session-replay-runtime.ts:186-195`) has no `message` field, so the generic CLI success path prints
   nothing (`writeGenericCliOutput` → `readCommandMessage` → `writeCommandOutput`,
-  `src/cli/commands/generic.ts:68-71`, `src/utils/success-text.ts:12-14`,
+  `src/cli/commands/generic.ts:68-71`, `packages/kernel/src/success-text.ts:12-14`,
   `src/cli/commands/shared.ts:4-15`). An agent pays a verification turn just to learn what happened.
 - **Failure output today is step + action + selector + a generic hint — no screen evidence.** The live
   divergence hit was pure app state: the RN example app persists navigation state, so relaunch+deeplink

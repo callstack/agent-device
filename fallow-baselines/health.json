@@ -466,11 +466,6 @@
         "count": 1
       }
     },
-    "src/utils/exec.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/commands/output/snapshot.ts": {
       "crap_moderate": {
         "count": 1
@@ -481,20 +476,7 @@
         "count": 1
       }
     },
-    "src/utils/retry.ts": {
-      "complexity_high": {
-        "count": 1
-      }
-    },
     "src/snapshot/scroll-edge-state.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "src/utils/source-value.ts": {
-      "complexity_high": {
-        "count": 1
-      },
       "crap_moderate": {
         "count": 1
       }
@@ -570,14 +552,13 @@
     "src/daemon/handlers/session-state.ts:complexity",
     "src/commands/cli-grammar/common.ts:high impact",
     "src/snapshot/snapshot-presentation/tree.ts:high impact",
-    "src/utils/success-text.ts:high impact",
+    "packages/kernel/src/success-text.ts:high impact",
     "src/cli.ts:complexity",
-    "src/utils/timeouts.ts:high impact",
     "src/commands/interaction/output.ts:high impact",
     "src/snapshot/snapshot-lines.ts:high impact",
-    "src/utils/rect-center.ts:high impact",
+    "packages/kernel/src/rect-center.ts:high impact",
     "packages/platform-apple/src/core/app-launch.ts:complexity",
-    "src/utils/parsing.ts:high impact",
+    "packages/kernel/src/record.ts:high impact",
     "src/daemon/daemon-command-registry.ts:high impact",
     "src/replay/script.ts:complexity",
     "src/daemon/handlers/session-doctor-output.ts:high impact",
@@ -593,14 +574,13 @@
     "packages/platform-linux/src/snapshot.ts:high impact",
     "src/core/interaction-targeting.ts:high impact",
     "packages/maestro/src/internal/runtime-targets.ts:high impact",
-    "src/utils/source-value.ts:high impact",
+    "packages/kernel/src/source-value.ts:high impact",
     "src/request/cancel.ts:high impact",
     "src/commands/interaction/selectors.ts:untested risk",
     "packages/selectors/src/internal/build.ts:high impact",
     "src/kernel/redaction.ts:high impact",
-    "src/utils/rect-visibility.ts:high impact",
     "packages/provider-webdriver/src/webdriver-utils.ts:high impact",
-    "src/utils/keyed-lock.ts:high impact",
+    "packages/kernel/src/keyed-lock.ts:high impact",
     "src/daemon/request-progress-protocol.ts:high impact",
     "src/cli/replay-test/reporters/format.ts:high impact",
     "src/daemon/replay/internal/session-test-infrastructure.ts:high impact",

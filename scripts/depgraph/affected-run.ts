@@ -1,6 +1,6 @@
 // `pnpm depgraph affected <path>` — the blast radius of one file in one query.
 //
-//   pnpm depgraph affected src/utils/exec.ts
+//   pnpm depgraph affected packages/host-kit/src/command.ts
 //   pnpm depgraph affected src/daemon/ref-frame.ts --json --limit 20
 //
 // Answers, from the sources of truth rather than a second copy of them:

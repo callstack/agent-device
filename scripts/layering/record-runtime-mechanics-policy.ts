@@ -65,7 +65,7 @@ function isDaemonRecordMechanicImport(imported: string): boolean {
     imported === 'node:fs' ||
     imported.includes('/platforms/') ||
     imported.includes('/provider-') ||
-    imported.includes('/utils/exec') ||
+    imported === '@agent-device/host-kit/command' ||
     imported.includes('/recording/overlay')
   );
 }

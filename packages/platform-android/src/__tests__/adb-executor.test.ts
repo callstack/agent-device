@@ -485,8 +485,8 @@ test('the local adb executor flags transient transport failures retriable', asyn
 
 test('the local adb executor classifies exec-layer timeouts as a wedged adb server', async () => {
   mockRunCmd.mockClear();
-  // Shape of createTimeoutError in utils/exec.ts: no stderr to classify, the
-  // structured `timeoutMs` detail is the signal.
+  // Shape of `createTimeoutError` in `packages/host-kit/src/internal/exec.ts`: no
+  // stderr to classify, the structured `timeoutMs` detail is the signal.
   mockRunCmd.mockRejectedValueOnce(
     new AppError('COMMAND_FAILED', 'adb timed out after 10000ms', {
       cmd: 'adb',
