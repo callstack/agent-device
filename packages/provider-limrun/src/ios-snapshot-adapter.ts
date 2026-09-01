@@ -14,10 +14,13 @@ import {
   presentIosSnapshot,
 } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { AppError } from '@agent-device/kernel/errors';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import type { LimrunIosSession } from './ios.ts';
 import { flattenIosTree, type IosTreeNode } from './snapshot.ts';
 
 const LIMRUN_IOS_PRODUCER = IOS_SNAPSHOT_PRODUCER_CAPABILITIES['limrun-ios-tree'];
+type LimrunRect = NonNullable<IosTreeNode['frame']>;
+type NumericRect = Readonly<{ x: number; y: number; width: number; height: number }>;
 
 export async function captureLimrunIosSnapshot(
   session: Pick<LimrunIosSession, 'client' | 'instanceId'>,
@@ -32,8 +35,9 @@ export async function captureLimrunIosSnapshot(
   });
   const plan = planIosSnapshot(request, LIMRUN_IOS_PRODUCER);
   const treeJson = await session.client.elementTree();
-  const nodes = flattenIosTree(JSON.parse(treeJson) as IosTreeNode | IosTreeNode[]);
-  const viewport = readLimrunViewport(session.client.deviceInfo);
+  const parsed = JSON.parse(treeJson) as IosTreeNode | IosTreeNode[];
+  const nodes = flattenIosTree(parsed);
+  const viewport = readLimrunViewport(parsed, session.client.deviceInfo);
   const residue = limrunAcquisitionResidue(plan.evidence.hittability, viewport);
   const hint = { ...plan.hint, acquisitionIntent: 'full' as const };
   const acquisition: IosSnapshotAcquisition = {
@@ -58,22 +62,73 @@ export async function captureLimrunIosSnapshot(
       ...(warnings.length > 0 ? { warnings } : {}),
     };
   } catch (error) {
-    throwLimrunSnapshotError(error);
+    throwLimrunSnapshotError(error, residue);
   }
 }
 
 function readLimrunViewport(
+  tree: IosTreeNode | IosTreeNode[],
+  deviceInfo: { screenWidth?: number; screenHeight?: number } | undefined,
+): IosViewportEvidence {
+  const treeRect = readLimrunTreeViewport(tree);
+  if (treeRect) return { kind: 'derived', rect: treeRect };
+
+  return readLimrunDeviceInfoViewport(deviceInfo);
+}
+
+function readLimrunTreeViewport(tree: IosTreeNode | IosTreeNode[]): Rect | undefined {
+  const roots = Array.isArray(tree) ? tree : [tree];
+  return roots
+    .filter(isLimrunViewportRoot)
+    .map(readLimrunNodeRect)
+    .filter((rect): rect is Rect => rect !== undefined)
+    .sort((left, right) => rectArea(right) - rectArea(left))[0];
+}
+
+function isLimrunViewportRoot(node: IosTreeNode): boolean {
+  const type = (node.elementType ?? node.type ?? node.role ?? '').toLowerCase();
+  return type === 'application' || type === 'window';
+}
+
+function readLimrunNodeRect(node: IosTreeNode): Rect | undefined {
+  const rect = node.rect ?? node.frame;
+  if (!isPositiveFiniteRect(rect)) return undefined;
+  return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+}
+
+function readLimrunDeviceInfoViewport(
   deviceInfo: { screenWidth?: number; screenHeight?: number } | undefined,
 ): IosViewportEvidence {
   const width = deviceInfo?.screenWidth;
   const height = deviceInfo?.screenHeight;
-  if (typeof width !== 'number' || typeof height !== 'number') {
+  if (width === undefined || height === undefined) {
     return { kind: 'missing', reason: 'not-provided' };
   }
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+  if (!isPositiveFiniteNumber(width) || !isPositiveFiniteNumber(height)) {
     return { kind: 'missing', reason: 'invalid' };
   }
   return { kind: 'reported', rect: { x: 0, y: 0, width, height } };
+}
+
+function isPositiveFiniteRect(rect: LimrunRect | undefined): rect is NumericRect {
+  return (
+    isFiniteNumber(rect?.x) &&
+    isFiniteNumber(rect?.y) &&
+    isPositiveFiniteNumber(rect?.width) &&
+    isPositiveFiniteNumber(rect?.height)
+  );
+}
+
+function isPositiveFiniteNumber(value: number | undefined): value is number {
+  return isFiniteNumber(value) && value > 0;
+}
+
+function isFiniteNumber(value: number | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function rectArea(rect: Rect): number {
+  return rect.width * rect.height;
 }
 
 function limrunAcquisitionResidue(
@@ -97,21 +152,35 @@ function limrunSnapshotWarnings(residue: readonly IosAcquisitionResidue[]): stri
       'Limrun iOS snapshots do not provide hittability evidence; regular snapshots will not mark nodes actionable.',
     );
   }
-  const missingViewport = residue.find((entry) => entry.kind === 'missing-viewport');
-  if (missingViewport) {
-    warnings.push(
-      `Limrun iOS snapshots did not provide a valid viewport (${missingViewport.reason}); raw output is available, but regular presentation requires viewport evidence.`,
-    );
-  }
+  const viewportWarning = limrunViewportWarning(residue);
+  if (viewportWarning) warnings.push(viewportWarning);
   return warnings;
 }
 
-function throwLimrunSnapshotError(error: unknown): never {
+function limrunViewportWarning(residue: readonly IosAcquisitionResidue[]): string | undefined {
+  const missingViewport = residue.find((entry) => entry.kind === 'missing-viewport');
+  return missingViewport
+    ? `Limrun iOS snapshots did not provide a valid viewport (${missingViewport.reason}); retry with --raw to inspect the acquired tree, while regular presentation requires viewport evidence.`
+    : undefined;
+}
+
+function throwLimrunSnapshotError(
+  error: unknown,
+  residue: readonly IosAcquisitionResidue[],
+): never {
   if (!(error instanceof IosSnapshotEngineError)) throw error;
+  const hint =
+    error.reason === 'missing-viewport' || error.reason === 'invalid-viewport'
+      ? limrunViewportWarning(residue)
+      : undefined;
   throw new AppError(
     'COMMAND_FAILED',
     error.message,
-    { reason: error.reason, iosSnapshotEngine: { details: error.details } },
+    {
+      reason: error.reason,
+      iosSnapshotEngine: { details: error.details },
+      ...(hint ? { hint } : {}),
+    },
     error,
   );
 }

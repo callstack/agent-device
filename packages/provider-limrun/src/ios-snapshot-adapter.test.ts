@@ -11,16 +11,23 @@ import {
   limrunSnapshotTree,
 } from './ios-snapshot-adapter.fixtures.ts';
 
-test('uses Limrun deviceInfo as the reported engine viewport without passing presentation options to elementTree', async () => {
-  const session = createLimrunSnapshotSession();
+test('derives the current engine viewport from the tree before the cached deviceInfo', async () => {
+  const session = createLimrunSnapshotSession(limrunSnapshotTree(), { width: 240, height: 320 });
   const elementTree = vi.fn(session.client.elementTree);
   const result = await captureLimrunIosSnapshot(
     { ...session, client: { ...session.client, elementTree } },
-    { scope: 'Target', depth: 1, interactiveOnly: true },
+    { interactiveOnly: false },
   );
 
   expect(elementTree).toHaveBeenCalledWith();
-  expect(result.nodes?.map((node) => node.label)).toEqual(['Target', 'Save', 'Save']);
+  expect(result.nodes?.[0]?.rect).toEqual({ x: 0, y: 0, width: 320, height: 240 });
+  expect(result.nodes?.map((node) => node.label)).toEqual([
+    'App',
+    'Settings',
+    'Target',
+    'Save',
+    'Save',
+  ]);
   expect(result.nodes?.find((node) => node.label === 'Save')?.hittable).toBe(false);
   expect(result.warnings).toContain(
     'Limrun iOS snapshots do not provide hittability evidence; regular snapshots will not mark nodes actionable.',
@@ -74,18 +81,34 @@ test('regular Limrun presentation never infers hittability from an enabled recta
 });
 
 test('regular presentation fails with a typed viewport error while raw output discloses the missing evidence', async () => {
-  const session = createLimrunSnapshotSession(limrunSnapshotTree(), { width: 0, height: 240 });
+  const tree = limrunSnapshotTree();
+  tree.frame = undefined;
+  const session = createLimrunSnapshotSession(tree, { width: 0, height: 240 });
 
   await expect(captureLimrunIosSnapshot(session)).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
-    details: { reason: 'invalid-viewport' },
+    details: {
+      reason: 'invalid-viewport',
+      hint: 'Limrun iOS snapshots did not provide a valid viewport (invalid); retry with --raw to inspect the acquired tree, while regular presentation requires viewport evidence.',
+    },
   });
 
   const raw = await captureLimrunIosSnapshot(session, { raw: true });
   expect(raw.nodes).toHaveLength(5);
   expect(raw.warnings).toContain(
-    'Limrun iOS snapshots did not provide a valid viewport (invalid); raw output is available, but regular presentation requires viewport evidence.',
+    'Limrun iOS snapshots did not provide a valid viewport (invalid); retry with --raw to inspect the acquired tree, while regular presentation requires viewport evidence.',
   );
+});
+
+test('falls back to valid Limrun deviceInfo when the tree has no viewport root frame', async () => {
+  const tree = limrunSnapshotTree();
+  tree.frame = undefined;
+
+  const result = await captureLimrunIosSnapshot(
+    createLimrunSnapshotSession(tree, { width: 240, height: 320 }),
+  );
+
+  expect(result.nodes).toHaveLength(5);
 });
 
 test('the Limrun acquired result keeps provider provenance and SDK screen dimensions', async () => {
