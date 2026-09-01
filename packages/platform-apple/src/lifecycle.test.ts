@@ -96,6 +96,38 @@ test('starts an unawaited physical iOS first-open runner without a redundant hea
   });
 });
 
+test('preserves runner health proof for an unawaited physical iOS open in an existing session', async () => {
+  const signal = new AbortController().signal;
+  const events: string[] = [];
+  const interactor = {
+    open: vi.fn(async () => {
+      events.push('open');
+    }),
+  } as unknown as Interactor;
+  const baseHost = platformRuntimeHostFixture();
+  const prewarmRunnerSession = vi.fn(async () => {
+    events.push('prewarm');
+  });
+  const host = {
+    ...baseHost,
+    localInteractors: { resolve: async () => interactor },
+    appleApplications: {
+      ...baseHost.appleApplications,
+      prewarmRunnerSession,
+    },
+  } as unknown as PlatformRuntimeHost;
+  const lifecycle = bindAppleApplicationLifecycle({ host, device, signal });
+
+  await lifecycle.openApplication({
+    ...openInput(),
+    hasExistingSession: true,
+    relaunch: false,
+  });
+
+  expect(events).toEqual(['open', 'prewarm']);
+  expect(prewarmRunnerSession).toHaveBeenCalledWith(device, {}, signal, false);
+});
+
 test('preserves the health check when physical iOS runner prewarm is awaited', async () => {
   const signal = new AbortController().signal;
   const events: string[] = [];

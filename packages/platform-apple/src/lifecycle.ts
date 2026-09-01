@@ -409,6 +409,7 @@ function isUnawaitedPhysicalIosOpen(device: DeviceInfo, input: OpenApplicationIn
   return (
     device.kind === 'device' &&
     device.appleOs === 'ios' &&
+    !input.hasExistingSession &&
     !input.relaunch &&
     !input.prewarmRunnerBeforeOpen
   );
