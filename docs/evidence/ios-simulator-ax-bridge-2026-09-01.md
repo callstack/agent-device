@@ -22,7 +22,7 @@ Target: arm64-apple-macosx27.0.0
 
 - #2190 exact live prerequisite head: `bce60b56fb5c5c8d57247e0946fa1fd540e292a1` (`codex/refactor/ios-snapshot-contracts`, PR #2203).
 - #2189 exact foundation used for this evidence: `e90b7763c8023857a054954ac200a95825ffae12`.
-- Current integrated #2189 prerequisite head: `747a939adbdf15332463736241ab140180b41d9f` (`codex/2189-ios-snapshot-baselines`, PR #2204). This prerequisite-only update followed the evidence revision; the run produced no acquisition cells or latency claims.
+- Current integrated #2189 prerequisite head: `e9b1fc523278645a0d96e696db02779566bc57f2` (`codex/2189-ios-snapshot-baselines`, PR #2204). This prerequisite-only update followed the evidence revision; the run produced no acquisition cells or latency claims.
 - The fixture dependency install completed with `pnpm test-app:install`; that command installs the example app dependencies and does not produce an iOS `.app`.
 - Direct fixture build command:
   `xcodebuild -workspace examples/test-app/ios/AgentDeviceTester.xcworkspace -scheme AgentDeviceTester -configuration Debug -sdk iphonesimulator -destination id=793B72F6-02C9-4BCD-BEC9-1B3EB42A7ED4 -derivedDataPath .tmp/ios-ax-app-derived CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build`
