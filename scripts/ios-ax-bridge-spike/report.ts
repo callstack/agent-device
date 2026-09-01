@@ -37,7 +37,7 @@ function renderSpikeMarkdown(report: SpikeReport): string {
     '|---|---|---|---:|---:|---:|---:|---:|---:|',
     ...report.cells.map(renderCellRow),
     '',
-    'Acquisition samples retain the raw node payload, viewport evidence, target generation, truncation, residue, and resource metrics. Presentation samples measure only construction of the #2190 acquired carrier; they do not apply visibility, hittability, scope, depth, or semantic compaction.',
+    'Every acquisition sample retains timing, resource, readiness, and failure evidence; the first successful sample in each cell also retains one raw node-tree exemplar with viewport, target generation, truncation, and residue. Presentation samples measure only construction of the #2190 acquired carrier; they do not apply visibility, hittability, scope, depth, or semantic compaction.',
     '',
     '## Direct protocol probes',
     '',
@@ -51,9 +51,9 @@ function renderSpikeMarkdown(report: SpikeReport): string {
     '## Preference experiment',
     '',
     `- Applied: **${report.preferenceEvidence.applied}**`,
-    `- Restored: **${report.preferenceEvidence.restored}**`,
+    `- Restored: **${report.preferenceEvidence.applied ? report.preferenceEvidence.restored : 'not required'}**`,
     `- Simulator state before experiment: ${report.preferenceEvidence.simulatorStateBefore}`,
-    '- Private/preboot preference keys are experimental only; they were applied to this shutdown disposable Simulator and the original plist bytes were restored.',
+    preferenceExperimentLine(report),
     ...preferenceLines(report),
     '',
     '## Lifecycle, cancellation, and recovery',
@@ -160,6 +160,12 @@ function preferenceLines(report: SpikeReport): string[] {
     `- ${diff.path}: existed=${diff.existedBefore}, beforeSha256=${diff.beforeSha256 ?? 'missing'}, afterSha256=${diff.afterSha256 ?? 'missing'}`,
     `  - Changes: ${diff.changes.length === 0 ? 'none' : diff.changes.map((change) => `${change.key}: ${JSON.stringify(change.before)} -> ${JSON.stringify(change.after)}`).join('; ')}`,
   ]);
+}
+
+function preferenceExperimentLine(report: SpikeReport): string {
+  return report.preferenceEvidence.applied
+    ? '- Private/preboot preference keys are experimental only; they were applied to this shutdown disposable Simulator and the original plist bytes were restored.'
+    : '- No private/preboot preference keys were applied in this run.';
 }
 
 function summary(samples: readonly SpikeSample[], key: 'wallClockMs' | 'firstLookMs'): string {
