@@ -239,6 +239,7 @@ struct DataPayload: Codable {
   var items: [String]?
   var nodes: [PresentedNode]?
   var truncated: Bool?
+  var qualityPayload: SnapshotQualityPayload? = nil
   var snapshotQuality: SnapshotQuality?
   var gestureStartUptimeMs: Double?
   var gestureEndUptimeMs: Double?
@@ -272,6 +273,31 @@ struct DataPayload: Codable {
   var completedSteps: Int?
   var failedStepIndex: Int?
   var sequenceResults: [SequenceStepResult]?
+}
+
+struct SnapshotQualityPayload: Codable {
+  let nodes: [PresentedNode]
+  let truncated: Bool
+  let scope: String?
+
+  init(nodes: [PresentedNode], truncated: Bool) {
+    self.nodes = nodes
+    self.truncated = truncated
+    self.scope = nil
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case nodes
+    case truncated
+    case scope
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(nodes, forKey: .nodes)
+    try container.encode(truncated, forKey: .truncated)
+    try container.encodeNil(forKey: .scope)
+  }
 }
 
 struct ErrorPayload: Codable {

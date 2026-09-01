@@ -22,11 +22,12 @@ import { coveredAndroidReplacementNodeIndexes } from '../snapshot/android-replac
 import { scopeSnapshotNodes } from '@agent-device/capture-kit/snapshot-desktop-projection';
 import { normalizeSnapshotTree, pruneGroupNodes } from '../core/snapshot-tree-ingestion.ts';
 import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
+import { IOS_SNAPSHOT_PRODUCER_CAPABILITIES } from '@agent-device/capture-kit/ios-snapshot-planning';
 
 /**
- * The ONE daemon presentation of a captured tree (ADR 0004 / #1797 "compaction layer"): normalize,
- * group prune, iOS interactive presentation, post-wire scope for backends that do not scope in
- * their own projection, occlusion annotation, refs. Every consumer of a captured tree — the
+ * The ONE daemon assembly of a captured tree (ADR 0004 / #1797): normalize, group prune,
+ * post-wire scope for backends that do not scope in their own projection, occlusion annotation,
+ * refs. Every consumer of a captured tree — the
  * snapshot command, selector captures, settle observation, Android blocking-dialog recovery —
  * goes through here, so no two call sites can disagree about what a snapshot contains.
  *
@@ -53,7 +54,7 @@ export function buildSnapshotState(
   const normalizedNodes = normalizeSnapshotTree(
     snapshotRaw ? backendAnnotatedNodes : pruneGroupNodes(backendAnnotatedNodes),
   );
-  const presentableNodes = shouldPresentIosInteractiveSnapshot(data?.backend, flags)
+  const presentableNodes = shouldPresentIosInteractiveSnapshot(data, flags)
     ? presentIosInteractiveSnapshot(normalizedNodes)
     : normalizedNodes;
   const scopedNodes =
@@ -120,15 +121,28 @@ function backendScopesAfterWire(backend: SnapshotBackend | undefined): boolean {
 }
 
 function shouldPresentIosInteractiveSnapshot(
-  backend: SnapshotBackend | undefined,
+  provenance: SnapshotStateProvenance,
   flags:
     | (Pick<CommandFlags, 'snapshotDepth' | 'snapshotInteractiveOnly' | 'snapshotRaw'> &
         Partial<Pick<CommandFlags, 'snapshotScope'>>)
     | undefined,
 ): boolean {
   return (
-    backend === 'xctest' && flags?.snapshotInteractiveOnly === true && flags.snapshotRaw !== true
+    provenance.backend === 'xctest' &&
+    iosSnapshotPresentationStage(provenance) === 'acquired' &&
+    flags?.snapshotInteractiveOnly === true &&
+    flags.snapshotRaw !== true
   );
+}
+
+function iosSnapshotPresentationStage(
+  provenance: SnapshotStateProvenance,
+): 'acquired' | 'presented' | undefined {
+  if (provenance.backend !== 'xctest') return undefined;
+  if (provenance.producer === undefined) return 'acquired';
+  return IOS_SNAPSHOT_PRODUCER_CAPABILITIES[
+    provenance.producer as 'apple-runner' | 'appium-source' | 'limrun-ios-tree'
+  ].stage;
 }
 
 function isAndroidComparisonSafeSnapshot(

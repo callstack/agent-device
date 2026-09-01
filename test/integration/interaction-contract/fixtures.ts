@@ -1,4 +1,4 @@
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { makeSnapshotState } from '../../../src/__tests__/test-utils/snapshot-builders.ts';
 
 /**
@@ -333,6 +333,12 @@ export function dragEndpointsSnapshot(): SnapshotState {
       hittable: false,
     },
   ]);
+}
+
+export function runnerPresentedDragEndpointsNodes(): RawSnapshotNode[] {
+  return dragEndpointsSnapshot()
+    .nodes.filter((node) => node.index !== 3)
+    .map(({ ref: _ref, ...node }) => node);
 }
 
 /**

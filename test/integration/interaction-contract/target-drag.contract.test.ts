@@ -11,6 +11,7 @@ import {
   coveredButtonSnapshot,
   dragEndpointsSnapshot,
   fullyTiledParentSnapshot,
+  runnerPresentedDragEndpointsNodes,
 } from './fixtures.ts';
 import { createContractDevice } from './runtime-harness.ts';
 import {
@@ -146,7 +147,7 @@ test(scenario('errorTaxonomy'), async () => {
 test(
   scenario('responseConstruction'),
   async () => {
-    const nodes = dragEndpointsSnapshot().nodes;
+    const nodes = runnerPresentedDragEndpointsNodes();
     await withIosContractDaemon(
       [
         runnerGestureViewportEntry(),

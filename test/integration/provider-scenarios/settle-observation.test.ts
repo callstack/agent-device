@@ -511,7 +511,7 @@ const FILL_BEFORE_NODES = [
     depth: 4,
     parentIndex: 4,
     type: 'TextField',
-    rect: { x: 12, y: 129, width: 377, height: 41 },
+    rect: { x: 12, y: 145, width: 377, height: 25 },
   },
   {
     index: 6,
@@ -616,7 +616,7 @@ const FILL_SETTLED_NODES = [
     label: 'Next keyboard',
     value: 'Polski',
     hittable: true,
-    rect: { x: 8, y: 806, width: 68, height: 69 },
+    rect: { x: 8, y: 806, width: 68, height: 68 },
   },
   {
     index: 10,
@@ -666,7 +666,7 @@ const FILL_SETTLED_NODES = [
     type: 'TextField',
     label: 'hello',
     value: 'hello',
-    rect: { x: 12, y: 129, width: 377, height: 41 },
+    rect: { x: 12, y: 145, width: 377, height: 25 },
   },
   {
     index: 16,

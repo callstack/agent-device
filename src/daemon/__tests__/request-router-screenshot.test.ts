@@ -490,7 +490,7 @@ test('screenshot --overlay-refs uses interactive iOS presentation for row-like o
           index: 4,
           depth: 2,
           parentIndex: 2,
-          type: 'Other',
+          type: 'Cell',
           label: 'Receipt missing details, Receipt scanning failed. Enter details manually.',
           rect: { x: 8, y: 367, width: 386, height: 64 },
         },

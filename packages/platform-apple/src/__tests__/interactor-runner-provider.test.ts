@@ -180,6 +180,118 @@ test('snapshot over the injected transport keeps the shared xctest result shape'
   assert.equal(result.nodes?.length, 2);
 });
 
+test('snapshot publishes runner presentation through the engine and drops its quality view', async () => {
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    {},
+    {
+      runCommand: async () => ({
+        nodes: [
+          {
+            index: 0,
+            depth: 0,
+            type: 'Application',
+            label: 'App',
+            rect: { x: 0, y: 0, width: 390, height: 844 },
+          },
+          {
+            index: 1,
+            depth: 1,
+            parentIndex: 0,
+            type: 'Table',
+            label: 'Settings',
+            rect: { x: 0, y: 40, width: 390, height: 804 },
+          },
+          {
+            index: 2,
+            depth: 2,
+            parentIndex: 1,
+            type: 'Cell',
+            label: 'General',
+            rect: { x: 16, y: 80, width: 358, height: 52 },
+          },
+          {
+            index: 3,
+            depth: 3,
+            parentIndex: 2,
+            type: 'Button',
+            label: 'General',
+            rect: { x: 16, y: 80, width: 358, height: 52 },
+            hittable: true,
+          },
+          {
+            index: 4,
+            depth: 4,
+            parentIndex: 3,
+            type: 'StaticText',
+            label: 'General',
+            rect: { x: 16, y: 80, width: 358, height: 52 },
+          },
+        ],
+        truncated: false,
+        snapshotQuality: { state: 'healthy', backend: 'tree' },
+        qualityPayload: {
+          nodes: [
+            {
+              index: 0,
+              type: 'Application',
+              label: 'App',
+              rect: { x: 0, y: 0, width: 390, height: 844 },
+            },
+          ],
+          truncated: false,
+          scope: null,
+        },
+      }),
+    },
+  );
+
+  const result = await interactor.snapshot({ interactiveOnly: true });
+
+  assert.deepEqual(
+    result.nodes?.map((node) => node.type),
+    ['Application', 'Table', 'Cell'],
+  );
+  assert.equal('qualityPayload' in result, false);
+});
+
+test('snapshot reports typed runner presentation failures', async () => {
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    {},
+    { runCommand: async () => ({ nodes: [{ index: 0, type: 'Application' }] }) },
+  );
+
+  await assert.rejects(
+    interactor.snapshot(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'COMMAND_FAILED' &&
+      error.details?.reason === 'missing-viewport',
+  );
+});
+
+test('snapshot rejects a scoped quality payload at the runner boundary', async () => {
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    {},
+    {
+      runCommand: async () => ({
+        nodes: [{ index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } }],
+        qualityPayload: { nodes: [], truncated: false, scope: 'Settings' },
+      }),
+    },
+  );
+
+  await assert.rejects(
+    interactor.snapshot(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'COMMAND_FAILED' &&
+      error.details?.reason === 'invalid-quality-payload',
+  );
+});
+
 test('snapshot accepts only structured healthy empty scope results', async () => {
   const healthyEmptyProvider: AppleRunnerProvider = {
     runCommand: async () => ({

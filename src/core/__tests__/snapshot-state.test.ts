@@ -136,6 +136,22 @@ test('buildSnapshotState applies iOS interactive presentation for xctest snapsho
   ]);
 });
 
+test('buildSnapshotState leaves Apple runner presentation to the engine', () => {
+  const nodes = [
+    { index: 0, depth: 0, type: 'Application', label: 'Settings' },
+    { index: 1, depth: 1, parentIndex: 0, type: 'Table', label: 'Settings' },
+    { index: 2, depth: 2, parentIndex: 1, type: 'Cell', label: 'General' },
+    { index: 3, depth: 3, parentIndex: 2, type: 'Button', label: 'General' },
+  ];
+
+  const state = buildSnapshotState(
+    { nodes, backend: 'xctest', producer: 'apple-runner' },
+    { snapshotInteractiveOnly: true },
+  );
+
+  expect(state.nodes.map((node) => node.type)).toEqual(['Application', 'Table', 'Cell', 'Button']);
+});
+
 test('buildSnapshotState marks content covered by floating overlays as visible but blocked', () => {
   const state = buildSnapshotState(
     {
