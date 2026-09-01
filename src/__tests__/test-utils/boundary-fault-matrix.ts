@@ -193,7 +193,7 @@ export const BOUNDARY_FAULT_MATRIX = {
   'optional-optimization-failure': {
     mutation: {
       kind: 'covered',
-      evidence: ['src/daemon/handlers/__tests__/interaction-touch-direct-ios.test.ts'],
+      evidence: ['src/daemon/interaction/internal/__tests__/interaction-touch-direct-ios.test.ts'],
       invariants: ['best-effort-degradation'],
     },
     read: {

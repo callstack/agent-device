@@ -4,7 +4,7 @@ import type { InteractionGuarantee } from '@agent-device/contracts/interaction-g
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { ref } from '../../../src/commands/interaction/runtime/selector-read-utils.ts';
 import { scenarioName } from './coverage-manifest.ts';
-import { buildInteractionResponseData } from '../../../src/daemon/handlers/interaction-touch-response.ts';
+import { buildInteractionResponseData } from '../../../src/daemon/interaction/internal/interaction-touch-response.ts';
 import { NATIVE_REF_COVERAGE } from './native-ref.coverage.ts';
 import {
   closedDrawerSnapshot,

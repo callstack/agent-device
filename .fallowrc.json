@@ -182,17 +182,30 @@
     },
     {
       "comment": "Daemon route handlers are reached only through the dynamic `import()` table in request-handler-chain.ts, which --production analysis cannot follow to a consumer.",
-      "file": "src/daemon/handlers/{human-control,lease,session,snapshot,react-native,record-trace,find,interaction}.ts",
+      "file": "src/daemon/handlers/{human-control,lease,session,snapshot,react-native,record-trace}.ts",
       "exports": [
         "handleHumanControlCommand",
         "handleLeaseCommands",
         "handleSessionCommands",
         "handleSnapshotCommands",
         "handleReactNativeCommands",
-        "handleRecordTraceCommands",
+        "handleRecordTraceCommands"
+      ]
+    },
+    {
+      "comment": "The interaction facade exposes #2178's named route inputs and deferred handlers, plus the existing ref mutation response consumed by help conformance. Fallow's production graph cannot follow the request-handler-chain dynamic imports, so this exact list is the facade contract.",
+      "file": "src/daemon/interaction/index.ts",
+      "exports": [
+        "FindRouteInput",
+        "refMutationAdmissionResponse",
         "handleFindCommands",
         "handleInteractionCommands"
       ]
+    },
+    {
+      "comment": "The #2178 route implementations are reached only through the interaction facade's deferred delegates; Fallow's production graph cannot follow those dynamic imports. Keep this exemption limited to the two route entrypoints.",
+      "file": "src/daemon/interaction/internal/{find,interaction}.ts",
+      "exports": ["handleFindCommands", "handleInteractionCommands"]
     },
     {
       "comment": "Dedicated CLI command handlers are reached only through the dynamic `import()` table `dedicatedCliCommandHandlerLoaders` in src/cli/commands/router.ts, which --production analysis cannot follow to a consumer. Same shape as the daemon route-handler entry above; that table is what enumerates this list, so add/remove here whenever a loader is added/removed.",

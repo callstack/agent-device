@@ -761,7 +761,7 @@ works" and "healed scripts are always valid":
   steps are re-executed during the repair replay; only if recording is armed from the start do they land
   in `session.actions` with fresh `target-v1` evidence. Arming late yields a hybrid healed script (an
   annotated corrective step glued to a bare, unannotated prefix) that re-diverges on its own next replay
-  (`src/daemon/handlers/interaction-common.ts:64-65` attaches evidence only when `recordSession` was
+  (`src/daemon/interaction/internal/interaction-common.ts:64-65` attaches evidence only when `recordSession` was
   true when the step ran).
 - **R2 — `--from` continuation only; never re-run the full replay on the same session.** After a
   divergence at step N and the corrective action, the agent must continue with `replay --from k
@@ -803,7 +803,7 @@ works" and "healed scripts are always valid":
   instead of leaving it to agent judgment.
 - **R4 — corrective actions must materialize to selector form; the writer fails loudly on a bare `@ref`
   cross-session export.** A `press @e12` normally resolves a `selectorChain` at runtime
-  (`src/daemon/handlers/interaction-touch-targets.ts`), which `buildOptimizedActions`
+  (`src/daemon/interaction/internal/interaction-touch-targets.ts`), which `buildOptimizedActions`
   (`src/daemon/session-script-writer.ts:69-83`) rewrites to a selector line. If no `selectorChain` was
   captured, the writer must refuse to emit a bare `@ref` line into a persisted `.ad` — a session-bound
   ref will not resolve in a fresh run. It **fails loudly**: an error surfaced to the user with a non-zero

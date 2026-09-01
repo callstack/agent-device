@@ -10,11 +10,10 @@ import { noActiveSessionError } from './response.ts';
 import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
-import { contextFromFlags } from './context.ts';
+import { contextFromFlags, type BoundContextFromFlags } from './context.ts';
 import { ensureDeviceReady } from './device-ready.ts';
-import { readTextForNode } from './interaction/index.ts';
+import { readTextForNode } from './selector-text-runtime.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
-import type { ContextFromFlags } from './interaction/index.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
@@ -35,7 +34,7 @@ export type SelectorRuntimeParams = {
   sessionName: string;
   logPath?: string;
   sessionStore: SessionStore;
-  contextFromFlags?: ContextFromFlags;
+  contextFromFlags?: BoundContextFromFlags;
   // Filled by the capture runtime with the snapshot each selector command actually consumed;
   // sessionless routes disclose from here because no session record stores the capture.
   consumedSnapshot?: { state?: SnapshotState };
@@ -140,7 +139,7 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
   // `get text` and read-only `find … get text` — construct a bound backend, so there is no second
   // read path to choose between and nothing reaches the retired `read` dispatch.
   const { req, session, device, logPath, sessionName, sessionStore } = params;
-  const resolveContextFromFlags: ContextFromFlags =
+  const resolveContextFromFlags: BoundContextFromFlags =
     params.contextFromFlags ??
     ((flags, appBundleId, traceLogPath) =>
       contextFromFlags(logPath ?? '', flags, appBundleId, traceLogPath));

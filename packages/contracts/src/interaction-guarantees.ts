@@ -143,7 +143,7 @@ const PARENT_OWNED_TOUCH_POINT_GAP_ISSUE = 'https://github.com/callstack/agent-d
 // (interaction-response-construction-guard.test.ts) keeps new branches on it.
 const SHARED_RESPONSE_CONSTRUCTION: GuaranteeEnforcement = {
   kind: 'runtime',
-  via: 'src/daemon/handlers/interaction-touch-response.ts#buildInteractionResponseData',
+  via: 'src/daemon/interaction/internal/interaction-touch-response.ts#buildInteractionResponseData',
 };
 
 // The two runtime tree paths (selector and ref resolution) run the SAME shared
@@ -183,7 +183,7 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
   responseIdentity: {
     kind: 'runtime',
-    via: 'src/daemon/handlers/interaction-touch-targets.ts#interactionResultExtra',
+    via: 'src/daemon/interaction/internal/interaction-touch-targets.ts#interactionResultExtra',
   },
   verifyEvidence: {
     kind: 'runtime',
@@ -271,7 +271,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       responseConstruction: {
         kind: 'runtime',
-        via: 'src/daemon/handlers/interaction-gesture-response.ts#gestureResponseData',
+        via: 'src/daemon/interaction/internal/interaction-gesture-response.ts#gestureResponseData',
       },
       responseIdentity: {
         kind: 'runtime',
@@ -340,7 +340,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
       responseIdentity: {
         kind: 'runtime',
-        via: 'src/daemon/handlers/interaction-touch-targets.ts#interactionResultExtra',
+        via: 'src/daemon/interaction/internal/interaction-touch-targets.ts#interactionResultExtra',
       },
       verifyEvidence: {
         kind: 'delegated',
@@ -464,7 +464,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/daemon/handlers/interaction-touch-response.ts#buildInteractionResponseData',
+        via: 'src/daemon/interaction/internal/interaction-touch-response.ts#buildInteractionResponseData',
       },
     },
   },

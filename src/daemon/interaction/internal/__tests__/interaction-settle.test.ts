@@ -1,7 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { legacyDispatchCapture } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
-import { handleInteractionCommands } from '../../../handlers/interaction.ts';
+import { createInteractionRuntime, handleInteractionCommands } from '../../index.ts';
 import type { SessionStore } from '../../../session-store.ts';
 import type { SessionState } from '../../../types.ts';
 import type { SnapshotBackend } from '@agent-device/kernel/snapshot';
@@ -10,7 +10,6 @@ import { setSessionSnapshot } from '../../../session-snapshot.ts';
 import { activateCompleteRefFrame } from '../../../ref-frame.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { createInteractionRuntime } from '../../index.ts';
 import {
   clearRequestAbortRegistration,
   registerRequestAbort,
@@ -21,7 +20,7 @@ import {
   mockFillPoint,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '../../../handlers/__tests__/interaction-get-runtime-fixture.ts';
+} from '../../../__tests__/interaction-get-runtime-fixture.ts';
 
 // #1101 --settle daemon response shape: the settle payload (diff + settled +
 // refsGeneration) rides the wire response through the shared builder, and a
@@ -30,14 +29,6 @@ import {
 // beyond a few poll ticks.
 
 const mockCaptureSnapshotForSession = vi.hoisted(() => vi.fn());
-
-vi.mock('../../index.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../index.ts')>();
-  return {
-    ...actual,
-    captureSnapshotForSession: mockCaptureSnapshotForSession,
-  };
-});
 
 const BEFORE_NODES = [
   { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
@@ -220,6 +211,7 @@ test('press --settle responds with the settled diff, refsGeneration, and activat
     sessionName,
     sessionStore,
     contextFromFlags,
+    captureSnapshotForSession: mockCaptureSnapshotForSession,
     ...getRuntimeBindings(),
   });
 
@@ -296,6 +288,7 @@ test('press --settle on a removals-only diff attaches the unchanged interactive 
     sessionName,
     sessionStore,
     contextFromFlags,
+    captureSnapshotForSession: mockCaptureSnapshotForSession,
     ...getRuntimeBindings(),
   });
 
@@ -332,6 +325,7 @@ test('press --settle rejects an expired-frame ref before dispatch or observation
     sessionName,
     sessionStore,
     contextFromFlags,
+    captureSnapshotForSession: mockCaptureSnapshotForSession,
     ...getRuntimeBindings(),
   });
 
@@ -371,6 +365,7 @@ test('a settle observation without a diff leaves ref staleness untouched', async
     sessionName,
     sessionStore,
     contextFromFlags,
+    captureSnapshotForSession: mockCaptureSnapshotForSession,
     ...getRuntimeBindings(),
   });
 
@@ -432,6 +427,7 @@ test('a stalled settle capture receives its deadline signal and leaves the inter
     sessionName,
     sessionStore,
     contextFromFlags,
+    captureSnapshotForSession: mockCaptureSnapshotForSession,
     ...getRuntimeBindings(),
   });
 
@@ -461,6 +457,7 @@ test('bare timeout without --settle stays compatible', async () => {
     sessionName,
     sessionStore,
     contextFromFlags,
+    captureSnapshotForSession: mockCaptureSnapshotForSession,
     ...getRuntimeBindings(),
   });
 
@@ -485,6 +482,7 @@ test('settle-specific tuning flags without --settle are rejected', async () => {
     sessionName,
     sessionStore,
     contextFromFlags,
+    captureSnapshotForSession: mockCaptureSnapshotForSession,
     ...getRuntimeBindings(),
   });
 
@@ -509,6 +507,7 @@ test('fill @ref --settle carries the settle payload on the ref wire shape', asyn
     sessionName,
     sessionStore,
     contextFromFlags,
+    captureSnapshotForSession: mockCaptureSnapshotForSession,
     ...getRuntimeBindings(),
   });
 

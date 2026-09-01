@@ -89,16 +89,16 @@ test('commandsReaching follows the dynamic import a route uses to load its handl
   const edges = edgesOf({
     'src/daemon/handlers/session.ts':
       "import { helper } from '../../utils/helper.ts';\nexport const h = helper;",
-    'src/daemon/handlers/find.ts': 'export const f = 1;',
+    'src/daemon/interaction/index.ts': 'export const f = 1;',
     'src/utils/helper.ts': 'export const helper = 1;',
     'src/daemon/chain.ts': [
       "export const routes = { session: () => import('./handlers/session.ts'),",
-      "  find: () => import('./handlers/find.ts') };",
+      "  find: () => import('./interaction/index.ts') };",
     ].join('\n'),
   });
   const chains = [
     { command: 'open', route: 'session', entry: 'src/daemon/handlers/session.ts' },
-    { command: 'find', route: 'find', entry: 'src/daemon/handlers/find.ts' },
+    { command: 'find', route: 'find', entry: 'src/daemon/interaction/index.ts' },
   ];
 
   assert.deepEqual(
@@ -107,7 +107,9 @@ test('commandsReaching follows the dynamic import a route uses to load its handl
   );
   // The entry module itself counts as part of its own chain.
   assert.deepEqual(
-    commandsReaching('src/daemon/handlers/find.ts', chains, edges).map((chain) => chain.command),
+    commandsReaching('src/daemon/interaction/index.ts', chains, edges).map(
+      (chain) => chain.command,
+    ),
     ['find'],
   );
 });

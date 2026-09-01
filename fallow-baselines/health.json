@@ -138,22 +138,22 @@
         "count": 1
       }
     },
-    "src/daemon/handlers/__tests__/interaction-touch.test.ts": {
+    "src/daemon/interaction/internal/__tests__/interaction-touch.test.ts": {
       "crap_moderate": {
         "count": 2
       }
     },
-    "src/daemon/handlers/__tests__/interaction-touch-press.test.ts": {
+    "src/daemon/interaction/internal/__tests__/interaction-touch-press.test.ts": {
       "crap_moderate": {
         "count": 3
       }
     },
-    "src/daemon/handlers/__tests__/interaction-touch-press-admission.test.ts": {
+    "src/daemon/interaction/internal/__tests__/interaction-touch-press-admission.test.ts": {
       "crap_moderate": {
         "count": 2
       }
     },
-    "src/daemon/handlers/__tests__/interaction-touch-response.test.ts": {
+    "src/daemon/interaction/internal/__tests__/interaction-touch-response.test.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -207,7 +207,7 @@
         "count": 1
       }
     },
-    "src/daemon/handlers/find.ts": {
+    "src/daemon/interaction/internal/find.ts": {
       "complexity_moderate": {
         "count": 1
       },
@@ -215,7 +215,7 @@
         "count": 1
       }
     },
-    "src/daemon/handlers/interaction-touch-reference-frame.ts": {
+    "src/daemon/interaction/internal/interaction-touch-reference-frame.ts": {
       "crap_moderate": {
         "count": 1
       }

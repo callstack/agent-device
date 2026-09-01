@@ -15,12 +15,12 @@ import {
   checkFindArgs,
   isReadOnlyFindAction,
 } from '@agent-device/selectors';
-import { refSnapshotFlagGuardResponse } from './interaction/index.ts';
-import { parseVersionedRefPositional } from './handlers/interaction-touch-targets.ts';
+import { refSnapshotFlagGuardResponse } from './ref-snapshot-flag-policy.ts';
+import { parseVersionedRefPositional } from './ref-positionals.ts';
 import {
   describeAndroidEscapeSurface,
   detectAndroidEscapeSurface,
-} from './handlers/interaction-android-escape.ts';
+} from './android-foreground-surface.ts';
 import {
   buildFindRecordResult,
   buildGetRecordResult,
@@ -34,7 +34,7 @@ import {
 import type { RecordedTargetCapture } from './session-target-evidence.ts';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';
-import { withSystemSurfaceDisclosure } from './handlers/system-surface-disclosure.ts';
+import { withSystemSurfaceDisclosure } from './system-surface-disclosure.ts';
 import {
   createBoundSelectorRuntime,
   createSelectorRuntimeForDevice,

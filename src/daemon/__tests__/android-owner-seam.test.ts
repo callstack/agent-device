@@ -6,8 +6,8 @@ import {
   ensureAndroidBlockingSystemDialogReady,
   recoverAndroidBlockingSystemDialog,
 } from '../android-system-dialog.ts';
-import { detectAndroidEscapeSurface } from '../handlers/interaction-android-escape.ts';
-import { resolveDirectTouchReferenceFrameSafely } from '../handlers/interaction-touch-reference-frame.ts';
+import { detectAndroidEscapeSurface } from '../android-foreground-surface.ts';
+import { resolveDirectTouchReferenceFrameSafely } from '../interaction/internal/interaction-touch-reference-frame.ts';
 import { SessionStore } from '../session-store.ts';
 
 test('provider-owned Android sessions bypass local observation and recovery', async () => {

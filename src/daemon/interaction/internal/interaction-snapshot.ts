@@ -4,7 +4,7 @@ import type { DaemonCommandContext } from '../../context.ts';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { snapshotOptionsToFlags } from '../../../backend-snapshot-options.ts';
 import type {
-  ContextFromFlags,
+  BoundContextFromFlags,
   InteractionSessionView,
   InteractionSnapshotOptions,
 } from './types.ts';
@@ -18,7 +18,7 @@ export type InteractionSnapshotCapture = (params: {
 export async function captureInteractionSnapshot(params: {
   session: InteractionSessionView;
   flags: CommandFlags | undefined;
-  contextFromFlags: ContextFromFlags;
+  contextFromFlags: BoundContextFromFlags;
   options: InteractionSnapshotOptions;
   capture: InteractionSnapshotCapture;
   publishSnapshot: (snapshot: SnapshotState) => void;

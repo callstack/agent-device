@@ -23,8 +23,8 @@ const DAEMON_ROUTE_OWNER_FILES = {
   snapshot: 'src/daemon/handlers/snapshot.ts',
   reactNative: 'src/daemon/handlers/react-native.ts',
   recordTrace: 'src/daemon/handlers/record-trace.ts',
-  find: 'src/daemon/handlers/find.ts',
-  interaction: 'src/daemon/handlers/interaction.ts',
+  find: 'src/daemon/interaction/index.ts',
+  interaction: 'src/daemon/interaction/index.ts',
   generic: 'src/daemon/request-generic-dispatch.ts',
 } as const satisfies Record<DaemonCommandRoute, string>;
 

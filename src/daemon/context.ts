@@ -11,6 +11,12 @@ import type { DaemonRequest } from './types.ts';
 
 export type DaemonCommandContext = DispatchContext & ScreenshotRuntimeFlags;
 
+export type BoundContextFromFlags = (
+  flags: CommandFlags | undefined,
+  appBundleId?: string,
+  traceLogPath?: string,
+) => DaemonCommandContext;
+
 // Flat compatibility mapper: keeping each CLI flag visible here makes request
 // context drift easier to spot than splitting the same optional fields apart.
 // fallow-ignore-next-line complexity

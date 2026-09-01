@@ -76,6 +76,7 @@ import {
 } from './model.ts';
 import {
   checkDaemonModularityRatchets,
+  checkRetiredInteractionPaths,
   checkRetiredSessionLifecyclePaths,
   checkRetiredSessionObservabilityPaths,
   daemonModularitySummary,
@@ -589,6 +590,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     ...checkDaemonModularityRatchets(context.edges, context.typeCycleMembers),
     ...checkRetiredSessionLifecyclePaths(context.sourceFiles),
     ...checkRetiredSessionObservabilityPaths(context.sourceFiles),
+    ...checkRetiredInteractionPaths(context.sourceFiles),
   ],
   'daemon-platform-boundary': (context) =>
     checkDaemonPlatformBoundary([...context.sources].map(([path, source]) => ({ path, source }))),

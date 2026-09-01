@@ -12,12 +12,12 @@ import { test } from 'vitest';
 // is assigned anything other than the shared builder's output, so a new
 // branch cannot regress without tripping CI.
 
-const HANDLERS_DIR = path.resolve(import.meta.dirname, '../../../handlers');
+const INTERACTION_INTERNAL_DIR = path.resolve(import.meta.dirname, '..');
 const BUILDER_FILE = 'interaction-touch-response.ts';
 
 function touchHandlerSourceFiles(): string[] {
   return fs
-    .readdirSync(HANDLERS_DIR)
+    .readdirSync(INTERACTION_INTERNAL_DIR)
     .filter(
       (file) =>
         (file.startsWith('interaction-touch') || file === 'interaction-common.ts') &&
@@ -59,7 +59,7 @@ test('interaction responses are only constructed by buildInteractionResponseData
   );
   const offenders: string[] = [];
   for (const file of files) {
-    const source = fs.readFileSync(path.join(HANDLERS_DIR, file), 'utf8');
+    const source = fs.readFileSync(path.join(INTERACTION_INTERNAL_DIR, file), 'utf8');
     for (const offender of findHandRolledResponseData(source)) {
       offenders.push(`${file}: responseData = ${offender}...`);
     }

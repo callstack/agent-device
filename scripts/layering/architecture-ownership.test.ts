@@ -4,6 +4,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import {
   ARCHITECTURE_OWNERSHIP,
+  INTERACTION_RETIRED_HANDLER_PATHS,
   matchesDeclaredRoot,
   SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS,
   SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS,
@@ -70,6 +71,13 @@ test('session lifecycle retires its handler-owned helper paths', () => {
 test('session observability retires its handler-owned paths', () => {
   const tracked = new Set(listTrackedTypeScriptFiles(repoRoot));
   for (const retiredPath of SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS) {
+    assert.equal(tracked.has(retiredPath), false, `retired path was restored: ${retiredPath}`);
+  }
+});
+
+test('interaction retires its handler-owned implementation paths', () => {
+  const tracked = new Set(listTrackedTypeScriptFiles(repoRoot));
+  for (const retiredPath of INTERACTION_RETIRED_HANDLER_PATHS) {
     assert.equal(tracked.has(retiredPath), false, `retired path was restored: ${retiredPath}`);
   }
 });

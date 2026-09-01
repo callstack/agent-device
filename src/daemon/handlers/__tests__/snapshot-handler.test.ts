@@ -4,7 +4,7 @@ import {
   getRuntimeBindings,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from './interaction-get-runtime-fixture.ts';
+} from '../../__tests__/interaction-get-runtime-fixture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../snapshot.ts';

@@ -92,11 +92,11 @@ const DAEMON_ROUTE_HANDLERS = {
     run: runRecordTraceHandler,
   }),
   find: defineDaemonRoute({
-    load: () => import('./handlers/find.ts'),
+    load: () => import('./interaction/index.ts'),
     run: runFindHandler,
   }),
   interaction: defineDaemonRoute({
-    load: () => import('./handlers/interaction.ts'),
+    load: () => import('./interaction/index.ts'),
     run: runInteractionHandler,
   }),
   generic: defineDaemonRoute({
@@ -255,7 +255,7 @@ async function runRecordTraceHandler(
 }
 
 async function runFindHandler(
-  { handleFindCommands }: typeof import('./handlers/find.ts'),
+  { handleFindCommands }: typeof import('./interaction/index.ts'),
   params: RequestHandlerChainParams,
 ): Promise<DaemonResponse> {
   return expectHandlerResponse(
@@ -274,7 +274,7 @@ async function runFindHandler(
 }
 
 async function runInteractionHandler(
-  { handleInteractionCommands }: typeof import('./handlers/interaction.ts'),
+  { handleInteractionCommands }: typeof import('./interaction/index.ts'),
   params: RequestHandlerChainParams,
 ): Promise<DaemonResponse> {
   return expectHandlerResponse(

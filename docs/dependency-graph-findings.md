@@ -70,7 +70,7 @@ type-only inversions, R7 pins SessionState field ownership, and the shared selec
   gates for the next major.
 - The **ADR 0017 parameterization boundary is exactly where the ADR says it is**:
   `daemon/parameterized-recorded-fill.ts` has precisely two dependents — the response boundary
-  (`handlers/interaction-common.ts`, step 3) and the recorder boundary
+  (`daemon/interaction/internal/interaction-common.ts`, step 3) and the recorder boundary
   (`session-action-recorder.ts`, step 4). The two-pass structure is two call sites, not a scattered
   concern.
 - Still outside every rule: **dynamic** import direction (0 inversions today, nothing watching),
@@ -358,7 +358,7 @@ candidate facet, and each facet retired is a branch deleted in every command tha
 **This is not a defect list** — importing `kernel/errors.ts` directly is clearer than inheriting it
 through a sibling. It earns its keep per file: `daemon/server/daemon-runtime.ts` gets 18 of its 32
 imports from one neighbour, `handlers/session-open.ts` 17 of 30, `handlers/session.ts` 17 of 32,
-`handlers/find.ts` 16 of 20. A file whose neighbour already provides two-thirds of what it imports
+`daemon/interaction/internal/find.ts` 16 of 20. A file whose neighbour already provides two-thirds of what it imports
 is usually doing its neighbour's job too — the same orchestrator smell as §5, from the other side.
 
 ## 6. R2 is right, and the duplication it forces now has a home

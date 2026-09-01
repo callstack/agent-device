@@ -7,8 +7,8 @@ import {
   createInteractionRuntime,
   readSettleRequest,
   settleFlagGuardResponse,
-  type ContextFromFlags,
 } from './interaction/index.ts';
+import type { BoundContextFromFlags } from './context.ts';
 import { issueSettleRefs } from './session-snapshot.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
@@ -56,7 +56,7 @@ type GenericSettleContext = {
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
-  contextFromFlags: ContextFromFlags;
+  contextFromFlags: BoundContextFromFlags;
 };
 
 /**

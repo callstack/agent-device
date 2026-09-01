@@ -3,33 +3,6 @@ import type { SettleParams } from '@agent-device/contracts/interaction';
 import type { DaemonResponse } from '../../types.ts';
 import { interactionErrorResponse } from './interaction-response.ts';
 
-const REF_UNSUPPORTED_FLAG_MAP: ReadonlyArray<[keyof CommandFlags, string]> = [
-  ['snapshotDepth', '--depth'],
-  ['snapshotScope', '--scope'],
-  ['snapshotRaw', '--raw'],
-];
-
-export function refSnapshotFlagGuardResponse(
-  command: 'press' | 'fill' | 'get' | 'longpress' | 'hover',
-  flags: CommandFlags | undefined,
-): DaemonResponse | null {
-  const unsupported = unsupportedRefSnapshotFlags(flags);
-  if (unsupported.length === 0) return null;
-  return interactionErrorResponse(
-    'INVALID_ARGS',
-    `${command} @ref does not support ${unsupported.join(', ')}.`,
-  );
-}
-
-export function unsupportedRefSnapshotFlags(flags: CommandFlags | undefined): string[] {
-  if (!flags) return [];
-  const unsupported: string[] = [];
-  for (const [key, label] of REF_UNSUPPORTED_FLAG_MAP) {
-    if (flags[key] !== undefined) unsupported.push(label);
-  }
-  return unsupported;
-}
-
 export function settleFlagGuardResponse(
   command: string,
   flags: CommandFlags | undefined,

@@ -9,7 +9,7 @@ import {
   getRuntimeBindings,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from './interaction-get-runtime-fixture.ts';
+} from '../../__tests__/interaction-get-runtime-fixture.ts';
 
 vi.mock('../snapshot-capture.ts', () => ({
   captureSnapshot: vi.fn(),
