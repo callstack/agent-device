@@ -28,6 +28,8 @@ test('WebDriver source facts do not fill absent provider attributes', () => {
   assert.equal(node?.label, 'Continue');
   assert.equal(node?.identifier, 'Continue');
   assert.equal('enabled' in (node ?? {}), false);
+  assert.equal('selected' in (node ?? {}), false);
+  assert.equal('focused' in (node ?? {}), false);
   assert.equal('visibleToUser' in (node ?? {}), false);
   assert.equal('hittable' in (node ?? {}), false);
 });
@@ -64,12 +66,12 @@ test('legacy WebDriver parsing keeps Android source booleans and ignores iOS hin
   assert.equal(node?.hittable, false);
 });
 
-test('WebDriver source facts expose provider truncation without publishing wrapper nodes', () => {
+test('WebDriver source facts preserve roots without claiming hierarchy completeness', () => {
   const facts = parseWebDriverSourceFacts(
     '<AppiumAUT truncated="true"><XCUIElementTypeApplication x="0" y="0" width="390" height="844" /></AppiumAUT>',
   );
 
-  assert.equal(facts.truncated, true);
+  assert.equal('truncated' in facts, false);
   assert.deepEqual(facts.roots, [
     {
       type: 'XCUIElementTypeApplication',

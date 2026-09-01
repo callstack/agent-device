@@ -31,7 +31,7 @@ test('Appium iOS snapshots acquire facts and publish regular output through the 
       ['XCUIElementTypeButton', 'Continue', 1],
     ],
   );
-  assert.equal(result.nodes?.find((node) => node.label === 'Continue')?.hittable, false);
+  assert.equal(result.nodes?.find((node) => node.label === 'Continue')?.hittable, undefined);
   assert.equal(source.mock.calls.length, 1);
   assert.ok(result.warnings?.some((warning) => warning.includes('hittability evidence')));
   assert.deepEqual(Object.keys(result).sort(), [
@@ -85,6 +85,22 @@ test('Appium iOS options become an engine plan and engine-owned projection', () 
   assert.deepEqual(published.publication.comparisonIdentity.lineage, {});
 });
 
+test('Appium regular presentation omits unavailable hittability while raw preserves supplied facts', async () => {
+  const source =
+    '<AppiumAUT><XCUIElementTypeApplication x="0" y="0" width="390" height="844">' +
+    '<XCUIElementTypeButton name="Continue" x="24" y="700" width="160" height="48" hittable="true" />' +
+    '</XCUIElementTypeApplication></AppiumAUT>';
+
+  const regular = await captureWebDriverIosSnapshot({ source: async () => source });
+  const regularButton = regular.nodes?.find((node) => node.label === 'Continue');
+  assert.equal(regularButton?.hittable, undefined);
+  assert.equal('hittable' in (regularButton ?? {}), false);
+
+  const raw = await captureWebDriverIosSnapshot({ source: async () => source }, { raw: true });
+  assert.equal(raw.nodes?.find((node) => node.label === 'Continue')?.hittable, true);
+  assert.ok(raw.warnings?.some((warning) => warning.includes('does not guarantee')));
+});
+
 test('Appium iOS interactive requests stay provider-unpruned and use engine presentation', () => {
   const acquired = acquireWebDriverIosSnapshot(SOURCE, { interactiveOnly: true }, 'ios-1');
 
@@ -95,7 +111,10 @@ test('Appium iOS interactive requests stay provider-unpruned and use engine pres
     published.result.nodes?.some((node) => node.label === 'Continue'),
     true,
   );
-  assert.equal(published.result.nodes?.find((node) => node.label === 'Continue')?.hittable, false);
+  assert.equal(
+    published.result.nodes?.find((node) => node.label === 'Continue')?.hittable,
+    undefined,
+  );
 });
 
 test('Appium iOS regular presentation fails typed when page source has no viewport', () => {
@@ -109,6 +128,7 @@ test('Appium iOS regular presentation fails typed when page source has no viewpo
   });
   assert.deepEqual(acquired.input.acquisition.residue, [
     { kind: 'unavailable-fact', fact: 'hittability' },
+    { kind: 'unavailable-fact', fact: 'acquisition-depth' },
     { kind: 'missing-viewport', reason: 'not-provided' },
   ]);
   assert.throws(
@@ -147,15 +167,12 @@ test('Appium iOS regular presentation fails typed when root geometry is invalid'
   );
 });
 
-test('Appium iOS truncation is typed and disclosed at response level', async () => {
-  const result = await captureWebDriverIosSnapshot(
-    { source: async () => SOURCE.replace('<AppiumAUT>', '<AppiumAUT truncated="true">') },
-    { raw: true },
-  );
+test('Appium iOS hierarchy limits are typed and disclosed at response level', async () => {
+  const result = await captureWebDriverIosSnapshot({ source: async () => SOURCE }, { raw: true });
 
-  assert.equal(result.truncated, true);
+  assert.equal(result.truncated, false);
   assert.deepEqual(result.warnings, [
-    'Appium page source does not provide hittability evidence; the capture carries no hittability fact.',
-    'Appium page source is truncated; the snapshot hierarchy may be incomplete.',
+    'Appium page source does not guarantee hittability evidence; regular presentation treats it as unavailable.',
+    'Appium page source does not report hierarchy completeness; depth- or child-limited nodes may be absent.',
   ]);
 });

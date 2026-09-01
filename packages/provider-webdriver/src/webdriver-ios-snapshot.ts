@@ -16,6 +16,7 @@ import type {
   IosSnapshotPlan,
   IosSnapshotPublication,
   IosSnapshotRequest,
+  IosSnapshotFact,
   IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
 import type { SnapshotOptions, SnapshotResult } from '@agent-device/contracts/interactor-types';
@@ -29,8 +30,13 @@ const iosSnapshotEngine = createIosSnapshotEngine();
 const RESIDUE_WARNINGS = {
   'missing-viewport':
     'Appium page source does not provide a valid viewport; regular snapshot presentation is unavailable.',
-  truncated: 'Appium page source is truncated; the snapshot hierarchy may be incomplete.',
-} satisfies Pick<Record<IosAcquisitionResidue['kind'], string>, 'missing-viewport' | 'truncated'>;
+} satisfies Pick<Record<IosAcquisitionResidue['kind'], string>, 'missing-viewport'>;
+const UNAVAILABLE_FACT_WARNINGS: Partial<Record<IosSnapshotFact, string>> = {
+  'acquisition-depth':
+    'Appium page source does not report hierarchy completeness; depth- or child-limited nodes may be absent.',
+  hittability:
+    'Appium page source does not guarantee hittability evidence; regular presentation treats it as unavailable.',
+};
 
 export type WebDriverIosSnapshotAcquisition = Readonly<{
   request: IosSnapshotRequest;
@@ -71,11 +77,11 @@ export function acquireWebDriverIosSnapshot(
     kind: 'missing' as const,
     reason: 'not-provided' as const,
   };
-  const residue = residueForSource(sourceFacts.truncated, viewport);
+  const residue = residueForSource(viewport);
   const common = {
     producer: 'appium-source' as const,
     nodes: sourceFacts.nodes,
-    truncated: sourceFacts.truncated,
+    truncated: false,
     viewport,
     lineage: targetId ? { targetId } : {},
     residue,
@@ -110,15 +116,14 @@ export function publishWebDriverIosSnapshot(
   return { acquisition, publication, result };
 }
 
-function residueForSource(
-  truncated: boolean,
-  viewport: IosViewportEvidence,
-): readonly IosAcquisitionResidue[] {
-  const residue: IosAcquisitionResidue[] = [{ kind: 'unavailable-fact', fact: 'hittability' }];
+function residueForSource(viewport: IosViewportEvidence): readonly IosAcquisitionResidue[] {
+  const residue: IosAcquisitionResidue[] = [
+    { kind: 'unavailable-fact', fact: 'hittability' },
+    { kind: 'unavailable-fact', fact: 'acquisition-depth' },
+  ];
   if (viewport.kind === 'missing') {
     residue.push({ kind: 'missing-viewport', reason: viewport.reason });
   }
-  if (truncated) residue.push({ kind: 'truncated', dimension: 'nodes' });
   return residue;
 }
 
@@ -133,11 +138,9 @@ function warningsForResidue(residue: readonly IosAcquisitionResidue[]): { warnin
 
 function warningForResidue(entry: IosAcquisitionResidue): string | undefined {
   if (entry.kind === 'unavailable-fact') {
-    return entry.fact === 'hittability'
-      ? 'Appium page source does not provide hittability evidence; the capture carries no hittability fact.'
-      : undefined;
+    return UNAVAILABLE_FACT_WARNINGS[entry.fact];
   }
-  if (entry.kind === 'missing-viewport' || entry.kind === 'truncated') {
+  if (entry.kind === 'missing-viewport') {
     return RESIDUE_WARNINGS[entry.kind];
   }
   return undefined;

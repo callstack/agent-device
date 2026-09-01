@@ -236,6 +236,10 @@ test('unavailable hittability never becomes regular actionability', () => {
   const acquired = publishIosSnapshot({ stage: 'acquired', acquisition: unavailable }, request);
   assert.equal(
     acquired.payload.nodes.find((node) => node.label === 'Partially visible')?.hittable,
+    undefined,
+  );
+  assert.equal(
+    'hittable' in (acquired.payload.nodes.find((node) => node.label === 'Partially visible') ?? {}),
     false,
   );
 

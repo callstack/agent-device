@@ -8,8 +8,6 @@ export type WebDriverSourceParseMode = 'facts' | 'legacy-derived';
 export type WebDriverSourceFacts = Readonly<{
   nodes: RawSnapshotNode[];
   roots: readonly WebDriverSourceRootFact[];
-  /** True only when the source explicitly marks the hierarchy as truncated. */
-  truncated: boolean;
 }>;
 
 export type WebDriverSourceRootFact = Readonly<{
@@ -36,7 +34,7 @@ export function parseWebDriverSourceFacts(
   for (const root of roots) {
     appendSourceNodes(nodes, root, undefined, 0, mode, sourceRoots);
   }
-  return { nodes, roots: sourceRoots, truncated: hasExplicitTruncationMarker(roots) };
+  return { nodes, roots: sourceRoots };
 }
 
 function appendSourceNodes(
@@ -150,20 +148,19 @@ function sourceStateFacts(
   const enabled = booleanAttribute(attrs.enabled);
   const visibleToUser = booleanAttribute(attrs.displayed ?? attrs.visible);
   return {
-    ...optionalBooleanFact('enabled', enabled, false),
-    selected: booleanAttribute(attrs.selected),
-    focused: booleanAttribute(attrs.focused),
-    ...optionalBooleanFact('visibleToUser', visibleToUser, false),
+    ...optionalBooleanFact('enabled', enabled),
+    ...optionalBooleanFact('selected', booleanAttribute(attrs.selected)),
+    ...optionalBooleanFact('focused', booleanAttribute(attrs.focused)),
+    ...optionalBooleanFact('visibleToUser', visibleToUser),
     ...reportedHittabilityFact(attrs.hittable),
   };
 }
 
 function optionalBooleanFact(
-  key: 'enabled' | 'visibleToUser',
+  key: 'enabled' | 'selected' | 'focused' | 'visibleToUser',
   value: boolean | undefined,
-  defaultWhenAbsent: boolean,
-): Partial<RawSnapshotNode> {
-  return defaultWhenAbsent || value !== undefined ? { [key]: value ?? true } : {};
+): Partial<Pick<RawSnapshotNode, 'enabled' | 'selected' | 'focused' | 'visibleToUser'>> {
+  return value === undefined ? {} : { [key]: value };
 }
 
 function reportedHittabilityFact(
@@ -171,14 +168,6 @@ function reportedHittabilityFact(
 ): Partial<Pick<RawSnapshotNode, 'hittable'>> {
   const reportedHittable = booleanAttribute(reported);
   return reportedHittable === undefined ? {} : { hittable: reportedHittable };
-}
-
-function hasExplicitTruncationMarker(nodes: readonly XmlNode[]): boolean {
-  return nodes.some(
-    (node) =>
-      booleanAttribute(node.attributes.truncated) === true ||
-      hasExplicitTruncationMarker(node.children),
-  );
 }
 
 function rectFromAttributes(attrs: Record<string, string>): RawSnapshotNode['rect'] | undefined {
