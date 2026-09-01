@@ -22,6 +22,9 @@ export function appendSamples(
 ): void {
   const acquiredAt = new Date().toISOString();
   const status = firstTreeStatus(captured.response);
+  const keepRawExemplar =
+    captured.response.acquisition !== undefined &&
+    acquisitionSamples.every((sample) => sample.acquisition === undefined);
   acquisitionSamples.push({
     index: index + 1,
     candidate,
@@ -35,7 +38,7 @@ export function appendSamples(
     firstLookMs: preparationMs + captured.wallClockMs,
     firstTree: status,
     ok: captured.response.ok,
-    ...(captured.response.acquisition ? { acquisition: captured.response.acquisition } : {}),
+    ...(keepRawExemplar ? { acquisition: captured.response.acquisition } : {}),
     metrics: captured.response.metrics,
     ...(captured.stderr ? { stderr: captured.stderr } : {}),
     ...(captured.response.failure ? { failure: captured.response.failure } : {}),
@@ -130,7 +133,6 @@ function successfulPresentationSample(
     firstTree: status,
     ok: true,
     ...(captured.stderr ? { stderr: captured.stderr } : {}),
-    acquisition: captured.response.acquisition,
     presentation: presented.measurement,
   };
 }
