@@ -103,6 +103,20 @@ test('WebDriver source facts classify invalid root geometry', () => {
   ]);
 });
 
+test('WebDriver source facts do not call partial root geometry invalid', () => {
+  const facts = parseWebDriverSourceFacts(
+    '<AppiumAUT><XCUIElementTypeApplication x="0" y="0" /></AppiumAUT>',
+    { mode: 'facts' },
+  );
+
+  assert.deepEqual(facts.roots, [
+    {
+      type: 'XCUIElementTypeApplication',
+      rectStatus: 'not-provided',
+    },
+  ]);
+});
+
 test('WebDriver scroll frame prefers visible scrollable containers', () => {
   assert.deepEqual(
     scrollFrameFromWebDriverSource(

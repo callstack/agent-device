@@ -218,10 +218,9 @@ function rectStatus(
   attrs: Record<string, string>,
   rect: RawSnapshotNode['rect'],
 ): WebDriverSourceRootFact['rectStatus'] {
-  const hasGeometryAttribute = ['bounds', 'x', 'y', 'width', 'height'].some(
-    (name) => attrs[name] !== undefined,
-  );
-  if (!hasGeometryAttribute) return 'not-provided';
+  const hasBoundsAttribute = attrs.bounds !== undefined;
+  const hasCompleteRect = ['x', 'y', 'width', 'height'].every((name) => attrs[name] !== undefined);
+  if (!hasBoundsAttribute && !hasCompleteRect) return 'not-provided';
   return isPositiveRect(rect) ? 'reported' : 'invalid';
 }
 

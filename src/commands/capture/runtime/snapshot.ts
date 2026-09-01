@@ -224,6 +224,7 @@ function snapshotTruncationForResult(snapshot: SnapshotState): boolean | undefin
   if (snapshot.truncated !== undefined) return snapshot.truncated;
   if (snapshot.backend !== 'xctest' || snapshot.producer === undefined) return false;
   const capability = IOS_SNAPSHOT_PRODUCER_CAPABILITIES[snapshot.producer];
+  if (!capability) return false;
   const acquisitionDepthUnknown =
     capability.stage === 'acquired' &&
     capability.presentationOwner === 'ios-snapshot-engine' &&
@@ -288,6 +289,15 @@ function buildSparseIosInteractiveWarnings(params: {
 
   const root = params.snapshot.nodes[0];
   if (root?.type !== 'Application') return [];
+
+  if (params.snapshot.producer === 'appium-source') {
+    return [
+      'Appium page source exposed only the application root. Descendants may be absent from the acquired hierarchy; use snapshot --raw to inspect the source and verify the app accessibility tree.',
+    ];
+  }
+  if (params.snapshot.producer !== undefined && params.snapshot.producer !== 'apple-runner') {
+    return [];
+  }
 
   return [
     'iOS interactive snapshot exposed only the application root. XCTest accessibility queries can fail to enumerate some simulator UI trees even when screenshots and direct gestures still work. Use screenshot as visual truth, try a scoped/full snapshot for diagnostics, and prefer direct selectors when known.',

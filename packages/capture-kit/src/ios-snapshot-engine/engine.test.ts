@@ -295,14 +295,12 @@ test('unavailable hittability never becomes regular actionability', () => {
     residue: [{ kind: 'unavailable-fact' as const, fact: 'hittability' as const }],
   } satisfies IosSnapshotAcquisition;
   const acquired = publishIosSnapshot({ stage: 'acquired', acquisition: unavailable }, request);
-  assert.equal(
-    acquired.payload.nodes.find((node) => node.label === 'Partially visible')?.hittable,
-    undefined,
+  const partiallyVisible = acquired.payload.nodes.find(
+    (node) => node.label === 'Partially visible',
   );
-  assert.equal(
-    'hittable' in (acquired.payload.nodes.find((node) => node.label === 'Partially visible') ?? {}),
-    false,
-  );
+  assert.ok(partiallyVisible);
+  assert.equal(partiallyVisible.hittable, undefined);
+  assert.equal('hittable' in partiallyVisible, false);
 
   const available = publishIosSnapshot(acquiredInput(request, nestedNodes()), request);
   const presented: IosSnapshotInput = {

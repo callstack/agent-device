@@ -213,7 +213,7 @@ test('Appium iOS hierarchy limits are typed and disclosed at response level', as
 
   assert.equal(result.truncated, undefined);
   assert.deepEqual(result.warnings, [
-    'Appium page source does not guarantee hittability evidence; absent hittable means no evidence, not false. Regular output omits reported hittable: true without evidence; raw preserves provider-reported values.',
+    'Appium page source does not guarantee hittability evidence; absent hittable means no evidence, not false. Regular output omits reported hittable: true without evidence but preserves reported false; raw preserves provider-reported values.',
     'Appium page source does not report hierarchy completeness; provider-side depth or child limits may omit nodes.',
   ]);
 });

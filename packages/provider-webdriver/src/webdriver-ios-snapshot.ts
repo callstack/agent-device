@@ -36,7 +36,7 @@ const UNAVAILABLE_FACT_WARNINGS = {
   'acquisition-depth':
     'Appium page source does not report hierarchy completeness; provider-side depth or child limits may omit nodes.',
   hittability:
-    'Appium page source does not guarantee hittability evidence; absent hittable means no evidence, not false. Regular output omits reported hittable: true without evidence; raw preserves provider-reported values.',
+    'Appium page source does not guarantee hittability evidence; absent hittable means no evidence, not false. Regular output omits reported hittable: true without evidence but preserves reported false; raw preserves provider-reported values.',
 } satisfies Record<WebDriverUnavailableFact, string>;
 
 export type WebDriverIosSnapshotAcquisition = Readonly<{
@@ -73,6 +73,7 @@ export function acquireWebDriverIosSnapshot(
     customActions: options?.customActions,
   });
   const plan = iosSnapshotEngine.plan(request, APPIUM_PRODUCER);
+  assertAppiumAcquisitionPlan(plan);
   const sourceFacts = parseWebDriverSourceFacts(source, { mode: 'facts' });
   const viewport = resolveIosViewportEvidenceFromRoots(sourceFacts.roots) ?? {
     kind: 'missing' as const,
@@ -118,6 +119,19 @@ function residueForSource(viewport: IosViewportEvidence): readonly IosAcquisitio
     residue.push({ kind: 'missing-viewport', reason: viewport.reason });
   }
   return residue;
+}
+
+function assertAppiumAcquisitionPlan(plan: IosSnapshotPlan): void {
+  if (
+    plan.narrowing.depth !== null ||
+    plan.narrowing.scope !== null ||
+    plan.narrowing.interactiveOnly
+  ) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Appium page source cannot narrow acquisition; requested options must remain engine-owned',
+    );
+  }
 }
 
 function warningsForResidue(residue: readonly IosAcquisitionResidue[]): { warnings?: string[] } {

@@ -57,6 +57,23 @@ test('runtime snapshot preserves unknown hierarchy completeness for engine-owned
   assert.equal(result.truncated, undefined);
 });
 
+test('runtime snapshot uses the Appium sparse-tree disclosure for Appium acquisition', async () => {
+  const device = createSnapshotOnlyDevice({
+    snapshot: {
+      nodes: [{ ref: 'e1', index: 0, type: 'Application', depth: 0 }],
+      backend: 'xctest',
+      producer: 'appium-source',
+      createdAt: 1,
+    },
+  });
+
+  const result = await device.capture.snapshot({ session: 'default', interactiveOnly: true });
+
+  assert.equal(result.warnings?.length, 1);
+  assert.match(result.warnings?.[0] ?? '', /^Appium page source exposed only/);
+  assert.doesNotMatch(result.warnings?.[0] ?? '', /XCTest|simulator/);
+});
+
 test('runtime snapshot forwards interactive capture options', async () => {
   let observedOptions: BackendSnapshotOptions | undefined;
   const device = createAgentDevice({

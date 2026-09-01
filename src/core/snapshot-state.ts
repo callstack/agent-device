@@ -141,18 +141,20 @@ function iosSnapshotPresentationStage(
 ): 'acquired' | 'presented' | undefined {
   if (provenance.backend !== 'xctest') return undefined;
   if (provenance.producer === undefined) return 'acquired';
-  return IOS_SNAPSHOT_PRODUCER_CAPABILITIES[
-    provenance.producer as 'apple-runner' | 'appium-source' | 'limrun-ios-tree'
-  ].stage;
+  return iosSnapshotCapabilities(provenance)?.stage;
 }
 
 function iosSnapshotPresentationOwner(
   provenance: SnapshotStateProvenance,
 ): 'ios-snapshot-engine' | 'snapshot-state' | undefined {
+  return iosSnapshotCapabilities(provenance)?.presentationOwner;
+}
+
+function iosSnapshotCapabilities(provenance: SnapshotStateProvenance) {
   if (provenance.backend !== 'xctest' || provenance.producer === undefined) return undefined;
   return IOS_SNAPSHOT_PRODUCER_CAPABILITIES[
     provenance.producer as 'apple-runner' | 'appium-source' | 'limrun-ios-tree'
-  ].presentationOwner;
+  ];
 }
 
 function isAndroidComparisonSafeSnapshot(
