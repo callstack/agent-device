@@ -61,8 +61,8 @@ pnpm bench:ios-snapshot -- \
 The conditioner is semantics-preserving at zero packet loss. Non-zero loss is an explicit failure experiment, not a successful baseline.
 
 The reviewed exact-head warm/quiet outputs are retained under [`evidence/`](./evidence/):
-`ios-snapshot-warm-quiet-local-e9b1fc523.json` and
-`ios-snapshot-warm-quiet-proxy-e9b1fc523.json`, with adjacent Markdown summaries. Each JSON file
+`ios-snapshot-warm-quiet-local-0ae8894dc.json` and
+`ios-snapshot-warm-quiet-proxy-0ae8894dc.json`, with adjacent Markdown summaries. Each JSON file
 is the schema-validated raw result from the commit named in its `revision` field.
 
 ## Package-size evidence

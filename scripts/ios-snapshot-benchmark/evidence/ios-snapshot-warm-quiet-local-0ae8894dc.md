@@ -1,14 +1,13 @@
 # iOS snapshot convergence benchmark
 
 - Status: **completed**
-- Revision: e9b1fc523278645a0d96e696db02779566bc57f2
+- Revision: 0ae8894dc5c6e5a63ad9a2499e7e10686f65edda
 - Target: bench-golden-v1 (A149E1A0-1BBE-4F0E-B981-7E261206D043, com.apple.CoreSimulator.SimRuntime.iOS-27-0)
-- Generated: 2026-09-01T09:43:55.880Z
+- Generated: 2026-09-01T10:40:05.497Z
 
 | State | Screen | Transport | Execution | N | Wall median | Wall p95 | Daemon median | Response median | Failures |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
-| warm | quiet | proxy | persistent-client | 20 | 48.9 | 70.6 | 45.0 | 1920.0 | 0 |
-| warm | quiet | proxy | fresh-process-cli | 20 | 143.9 | 183.2 | 49.0 | 1920.0 | 0 |
+| warm | quiet | local | fresh-process-cli | 20 | 143.5 | 156.8 | 45.0 | 4002.0 | 0 |
 
 ## Package size
 
