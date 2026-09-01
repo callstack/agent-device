@@ -50,3 +50,24 @@ test('rejects non-loopback upstreams before binding the conditioner', async () =
     /must be an HTTP 127\.0\.0\.1 URL with a port/,
   );
 });
+
+test('does not forward unsupported paths upstream', async () => {
+  const upstream = http.createServer((_request, response) => response.end('unexpected'));
+  await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  const address = upstream.address();
+  assert.ok(address && typeof address !== 'string');
+  const conditioner = await createNetworkConditioner({
+    upstreamBaseUrl: `http://127.0.0.1:${address.port}`,
+    network: { rttMs: 0, bandwidthKbps: null, packetLossPercent: 0, seed: 1 },
+  });
+  try {
+    const response = await fetch(`${conditioner.baseUrl}/unsupported`);
+    assert.equal(response.status, 404);
+    assert.equal(await response.text(), 'Not found');
+  } finally {
+    await conditioner.close();
+    await new Promise<void>((resolve, reject) =>
+      upstream.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});

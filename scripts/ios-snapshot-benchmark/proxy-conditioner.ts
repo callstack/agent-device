@@ -20,9 +20,13 @@ export type NetworkConditioner = {
 };
 
 const UPSTREAM_FAILURE_BODY = JSON.stringify({ error: 'upstream request failed' });
+const RPC_PATH = '/agent-device/rpc';
+const HEALTH_PATH = '/agent-device/health';
+
+type ConditionerPath = typeof RPC_PATH | typeof HEALTH_PATH;
 
 type RequestContext = {
-  route: URL;
+  path: ConditionerPath;
   method: string;
   headers: IncomingMessage['headers'];
   isRpc: boolean;
@@ -71,6 +75,11 @@ async function forwardRequest(
   random: () => number,
 ): Promise<void> {
   const context = await readRequestContext(request, records);
+  if (!context) {
+    response.statusCode = 404;
+    response.end('Not found');
+    return;
+  }
   if (dropRequest(context, response, options.network, records, random)) return;
   await waitForNetwork(options.network, context.body.byteLength);
   try {
@@ -83,15 +92,16 @@ async function forwardRequest(
 async function readRequestContext(
   request: IncomingMessage,
   records: ProxyRpcRecord[],
-): Promise<RequestContext> {
-  const route = new URL(request.url ?? '/', 'http://conditioner.invalid');
-  const isRpc = route.pathname.endsWith('/rpc');
+): Promise<RequestContext | null> {
+  const requestUrl = new URL(request.url ?? '/', 'http://conditioner.invalid');
+  const path = resolveConditionerPath(requestUrl);
+  if (!path) return null;
   return {
-    route,
+    path,
     method: request.method ?? 'GET',
     headers: request.headers,
-    isRpc,
-    sequence: isRpc ? records.length + 1 : 0,
+    isRpc: path === RPC_PATH,
+    sequence: path === RPC_PATH ? records.length + 1 : 0,
     body: await readBody(request),
   };
 }
@@ -115,7 +125,7 @@ async function sendRequest(
   options: { upstreamPort: string; network: ProxyNetwork },
   records: ProxyRpcRecord[],
 ): Promise<void> {
-  const upstream = await fetch(buildTargetUrl(options.upstreamPort, context.route), {
+  const upstream = await fetch(buildTargetUrl(options.upstreamPort, context.path), {
     method: context.method,
     headers: forwardHeaders(context.headers),
     ...(context.body.byteLength > 0 ? { body: context.body, duplex: 'half' } : {}),
@@ -163,8 +173,16 @@ function copyHeader(response: ServerResponse, name: string, upstream: Response):
   if (value) response.setHeader(name, value);
 }
 
-function buildTargetUrl(upstreamPort: string, route: URL): string {
-  return `http://127.0.0.1:${upstreamPort}${route.pathname}${route.search}`;
+function buildTargetUrl(upstreamPort: string, path: ConditionerPath): string {
+  const upstreamPath = path === RPC_PATH ? RPC_PATH : HEALTH_PATH;
+  return `http://127.0.0.1:${upstreamPort}${upstreamPath}`;
+}
+
+function resolveConditionerPath(requestUrl: URL): ConditionerPath | undefined {
+  if (requestUrl.search.length > 0) return undefined;
+  if (requestUrl.pathname === RPC_PATH) return RPC_PATH;
+  if (requestUrl.pathname === HEALTH_PATH) return HEALTH_PATH;
+  return undefined;
 }
 
 function readLocalUpstreamPort(upstreamBaseUrl: string): string {
