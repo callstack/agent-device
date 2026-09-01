@@ -72,12 +72,16 @@ The complete exact-head corpus from `bench-golden-v2` (iPhone 17 Pro, iOS 27.0) 
   persistent-client and fresh-process CLI cells at RTT 0, 20, and 80 ms with 20 samples per cell.
 
 Each JSON file is the schema-validated raw result from the commit named in its `revision` field;
-each has an adjacent Markdown summary. The earlier warm/quiet artifacts remain retained for
-historical comparison.
+each has an adjacent Markdown summary. Superseded pre-admission captures are not part of the
+published corpus.
 
 ## Package-size evidence
 
-`pnpm size --json .tmp/size.json --markdown .tmp/size.md` measures bundled JavaScript, packed tarball, packed unpacked tree, and the package tree after a clean `npm install` into an isolated consumer. The iOS harness includes those three package measurements unless `--skip-package-size` is supplied.
+`pnpm size --json .tmp/size.json --markdown .tmp/size.md` prepares the same Apple and Android
+publish assets used by `pnpm build:package`, then measures bundled JavaScript, packed tarball,
+packed unpacked tree, and the package tree after a clean `npm install` into an isolated consumer.
+The report rejects packages missing either Android helper or containing benchmark/build scripts.
+The iOS harness includes those three package measurements unless `--skip-package-size` is supplied.
 
 ## Permanent deep-button control
 

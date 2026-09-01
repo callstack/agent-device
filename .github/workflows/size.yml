@@ -43,7 +43,21 @@ jobs:
       - name: Preserve report scripts
         run: |
           mkdir -p /tmp/agent-device-size-report
-          cp scripts/size-report*.mjs /tmp/agent-device-size-report/
+          cp scripts/size-report*.mjs scripts/prepare-publish-assets.mjs /tmp/agent-device-size-report/
+
+      - name: Install Android helper toolchain
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"
+          fi
+          if [ ! -x "$SDKMANAGER" ]; then
+            echo "sdkmanager not found under $SDK_ROOT" >&2
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
 
       # dist is fully determined by the base commit, so reuse it across PR runs
       # against the same base. Startup medians are still measured fresh on this
