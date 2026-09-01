@@ -1,13 +1,6 @@
 import { spawn } from 'node:child_process';
 import { BenchmarkInfrastructureError, stopDaemon } from './lifecycle.ts';
-import { asRecord, readString } from './result-values.ts';
-
-export type ProxyStartup = {
-  proxyBaseUrl: string;
-  agentDeviceBaseUrl: string;
-  token: string;
-  stateDir: string;
-};
+import { findProxyStartup, type ProxyStartup } from './proxy-startup.ts';
 
 export type ProxyProcess = ProxyStartup & { stop(): Promise<void> };
 
@@ -100,29 +93,6 @@ async function terminateChild(child: ReturnType<typeof spawn>): Promise<void> {
   await waitForExit(child);
 }
 
-function findProxyStartup(output: string): ProxyStartup | undefined {
-  for (const line of output.split('\n')) {
-    const startup = parseProxyStartup(line);
-    if (startup) return startup;
-  }
-  return undefined;
-}
-
-function parseProxyStartup(line: string): ProxyStartup | undefined {
-  const record = asRecord(asRecord(parseJson(line))?.data);
-  if (!record) return undefined;
-  const values = ['proxyBaseUrl', 'agentDeviceBaseUrl', 'token', 'stateDir'].map((key) =>
-    readString(record[key]),
-  );
-  if (values.some((value) => value === undefined)) return undefined;
-  return {
-    proxyBaseUrl: values[0]!,
-    agentDeviceBaseUrl: values[1]!,
-    token: values[2]!,
-    stateDir: values[3]!,
-  };
-}
-
 function isCleanExit(code: number | null, signal: NodeJS.Signals | null): boolean {
   return code === 0 && signal === null;
 }
@@ -139,12 +109,4 @@ function waitForExit(child: ReturnType<typeof spawn>): Promise<void> {
       resolve();
     });
   });
-}
-
-function parseJson(value: string): unknown {
-  try {
-    return JSON.parse(value.trim());
-  } catch {
-    return undefined;
-  }
 }
