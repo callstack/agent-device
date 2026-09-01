@@ -1,52 +1,47 @@
 # iOS Simulator AX bridge spike
 
 - Decision: **NO-GO**
-- Status: **stopped**
-- Revision: 590705e193fb65421b5faffa7573cc1108bbf972 (codex/2192-ios-ax-bridge-spike)
-- Target: AgentDevice-2192-AX-20260901 (793B72F6-02C9-4BCD-BEC9-1B3EB42A7ED4, com.apple.CoreSimulator.SimRuntime.iOS-27-0)
-- Generated: 2026-09-01T07:42:38.929Z
-- Corpus: states=cold-cold, cold, warm, relaunch, screens=quiet, list, nested-scroll, alert, system-surface, xctest-stress, samples=20
+- Status: **completed**
+- Revision: 6d561b372088b7d13a908565f0255a6d77ff87ce (takeover/2209-valid-evidence)
+- Target: AgentDevice-2209-Takeover (F578F08D-BEA1-4A56-8A4B-C92B040FBA94, com.apple.CoreSimulator.SimRuntime.iOS-26-2)
+- Generated: 2026-09-01T12:14:03.698Z
+- Corpus: states=warm, screens=quiet, list, samples=20
 
 ## Environment and limits
 
-- Node: v26.7.0
-- pnpm: 11.19.0
-- Xcode: Xcode 27.0; Build version 27A5252f
-- simctl: @(#)PROGRAM:simctl  PROJECT:CoreSimulator-1171.6
-- Swift: Apple Swift version 6.4 (swiftlang-6.4.0.33.1 clang-2100.3.33.1)
-Target: arm64-apple-macosx27.0.0
-- OS: darwin 27.0.0; arch=arm64
+- Node: v26.1.0
+- pnpm: 11.21.0
+- Xcode: Xcode 26.2; Build version 17C52
+- simctl: @(#)PROGRAM:simctl  PROJECT:CoreSimulator-1155.4
+- Swift: Apple Swift version 6.2.3 (swiftlang-6.2.3.3.21 clang-1700.6.3.2)
+Target: arm64-apple-macosx26.0
+- OS: darwin 25.5.0; arch=arm64
 - Bounds: request=65536 B, response=4194304 B, nodes=1500, traversal=12, CPU=2000 ms, memory=268435456 B, duration=5000 ms
-
-## Dependency and fixture provenance
-
-- #2190 exact live prerequisite head: `bce60b56fb5c5c8d57247e0946fa1fd540e292a1` (`codex/refactor/ios-snapshot-contracts`, PR #2203).
-- #2189 exact foundation used for this evidence: `e90b7763c8023857a054954ac200a95825ffae12`.
-- Current integrated #2189 prerequisite head: `8820e0ab4e899a2e64da3cce47898c192c99065d` (`codex/2189-ios-snapshot-baselines`, PR #2204). This prerequisite-only update followed the evidence revision; the run produced no acquisition cells or latency claims.
-- The fixture dependency install completed with `pnpm test-app:install`; that command installs the example app dependencies and does not produce an iOS `.app`.
-- Direct fixture build command:
-  `xcodebuild -workspace examples/test-app/ios/AgentDeviceTester.xcworkspace -scheme AgentDeviceTester -configuration Debug -sdk iphonesimulator -destination id=793B72F6-02C9-4BCD-BEC9-1B3EB42A7ED4 -derivedDataPath .tmp/ios-ax-app-derived CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build`
-- The build stopped at `expo-modules-jsi@56.0.10` `JavaScriptRuntime.swift:219:35` with `a C function pointer can only be formed from a reference to a 'func' or a literal closure`; retrying with `SWIFT_VERSION=5.9` produced the same compiler error. No installable `AgentDeviceTester.app` was produced.
-- The fixture run therefore stopped before cell acquisition; no latency result is claimed for the four requested states or six requested screens.
 
 ## Candidate fidelity and limitation matrix
 
 | Candidate | Mechanism | App surface | System surface | Lifecycle | Main limitation |
 |---|---|---|---|---|---|
-| public-macos-ax | public macOS ApplicationServices AX | protocol probe only | protocol probe only | framed protocol | host Accessibility permission and Xcode 27 DeviceHub surface |
-| private-coresimulator-ax | external/private CoreSimulator AX tool | protocol probe only | protocol probe only | framed protocol contract only | private interface/tool compatibility |
-| xctest-control | #2189 XCTest runner control | not observed (run stopped) | not observed (run stopped) | existing runner lifecycle | control, not a host-side AX bridge |
+| public-macos-ax | public macOS ApplicationServices AX | observed in successful cells | not exercised | framed protocol | exact Simulator content surface, but complex trees exceed the latency budget |
+| private-coresimulator-ax | external/private CoreSimulator AX tool | failed in cells | not exercised | framed protocol contract only | private interface/tool compatibility |
+| xctest-control | #2189 XCTest runner control | observed in successful cells | not exercised | existing runner lifecycle | control, not a host-side AX bridge |
 
 ## Raw acquisition and prototype presentation results
 
 | Candidate | State | Screen | N | Acquisition p50/p95 ms | First look p95 ms | Presentation p50/p95 ms | Nodes | Failures |
 |---|---|---|---:|---:|---:|---:|---:|---:|
+| public-macos-ax | warm | quiet | 20 | 42.9/123.1 | 34430.6/34510.8 | 0.0/0.2 | 4.0 | 0 |
+| public-macos-ax | warm | list | 20 | 5002.8/5002.8 | 31035.4/31035.4 | 0.0/1.6 | 114.0 | 16 |
+| private-coresimulator-ax | warm | quiet | 20 | 0.1/0.1 | 31115.5/31115.5 | 0.0/0.0 | – | 20 |
+| private-coresimulator-ax | warm | list | 20 | 0.0/0.0 | 30479.5/30479.5 | 0.0/0.0 | – | 20 |
+| xctest-control | warm | quiet | 20 | 450.3/958.9 | 26852.6/27361.2 | 0.0/0.0 | 4.0 | 0 |
+| xctest-control | warm | list | 20 | 569.2/828.8 | 36422.0/36681.6 | 0.0/0.5 | 31.0 | 0 |
 
-Acquisition samples retain the raw node payload, viewport evidence, target generation, truncation, residue, and resource metrics. Presentation samples measure only construction of the #2190 acquired carrier; they do not apply visibility, hittability, scope, depth, or semantic compaction.
+Every acquisition sample retains timing, resource, readiness, and failure evidence; the first successful sample in each cell also retains one raw node-tree exemplar with viewport, target generation, truncation, and residue. Presentation samples measure only construction of the #2190 acquired carrier; they do not apply visibility, hittability, scope, depth, or semantic compaction.
 
 ## Direct protocol probes
 
-- public-macos-ax/protocol-probe:public-macos-ax: ok=false, failure=unsupported-mechanism, code=host-accessibility-permission, nodes=0, duration=27.9 ms, CPU=2.9 ms, memory=9076736 B, response=332 B
+- public-macos-ax/protocol-probe:public-macos-ax: ok=true, failure=none, code=none, nodes=114, duration=2907.0 ms, CPU=33.4 ms, memory=11632640 B, response=28586 B
 - private-coresimulator-ax/protocol-probe:private-coresimulator-ax: ok=false, failure=unsupported-mechanism, code=private-tool-unavailable, nodes=0, duration=0.0 ms, CPU=– ms, memory=– B, response=0 B
 - stderr public-macos-ax/protocol-probe:public-macos-ax: [ios-ax-spike] capture id=protocol-probe:public-macos-ax candidate=public-macos-ax screen=quiet
 - stderr private-coresimulator-ax/protocol-probe:private-coresimulator-ax: empty
@@ -58,15 +53,10 @@ Acquisition samples retain the raw node payload, viewport evidence, target gener
 
 ## Preference experiment
 
-- Applied: **true**
-- Restored: **true**
-- Simulator state before experiment: Shutdown
-- Private/preboot preference keys are experimental only; they were applied to this shutdown disposable Simulator and the original plist bytes were restored.
-- Simulator deletion was not observed by this run; only shutdown and plist restoration are claimed.
-- /Users/michal/Library/Developer/CoreSimulator/Devices/793B72F6-02C9-4BCD-BEC9-1B3EB42A7ED4/data/Library/Preferences/com.apple.Accessibility.plist: existed=true, beforeSha256=fbc67ebbd3aa0079a4b4afff4181280731fbb8faaca2ffc623393a8d9c26a436, afterSha256=1b0bc929597307d4b0acd5b7ccf86d93dae01b36c3930ccc2ef69eba12b09610
-  - Changes: AccessibilityEnabled: undefined -> true; ApplicationAccessibilityEnabled: undefined -> true; AutomationEnabled: undefined -> true; IgnoreAXServerEntitlements: undefined -> true
-- /Users/michal/Library/Developer/CoreSimulator/Devices/793B72F6-02C9-4BCD-BEC9-1B3EB42A7ED4/data/Library/Preferences/com.apple.UIAutomation.plist: existed=true, beforeSha256=db8995177327a963486dd0607260f0fad74ad10d9dec6c2f5abdbaf0dbd00b2c, afterSha256=db8995177327a963486dd0607260f0fad74ad10d9dec6c2f5abdbaf0dbd00b2c
-  - Changes: none
+- Applied: **false**
+- Restored: **not required**
+- Simulator state before experiment: Booted
+- No private/preboot preference keys were applied in this run.
 
 ## Lifecycle, cancellation, and recovery
 
@@ -78,11 +68,16 @@ Acquisition samples retain the raw node payload, viewport evidence, target gener
 
 ## Decision rationale
 
-- The live run stopped before the full corpus completed.
-- public-macos-ax protocol probe returned unsupported-mechanism/host-accessibility-permission.
+- public-macos-ax did not complete the required corpus (22 cells missing).
+- public-macos-ax warm/list did not produce 20 readable samples.
+- public-macos-ax warm acquisition missed the 75/150 ms target.
 - private-coresimulator-ax protocol probe returned unsupported-mechanism/private-tool-unavailable.
-- public-macos-ax produced no cells.
-- private-coresimulator-ax produced no cells.
+- private-coresimulator-ax did not complete the required corpus (22 cells missing).
+- private-coresimulator-ax warm/quiet did not produce 20 readable samples.
+- private-coresimulator-ax warm/quiet has unreadable or empty first-tree evidence.
+- private-coresimulator-ax warm/list did not produce 20 readable samples.
+- private-coresimulator-ax warm/list has unreadable or empty first-tree evidence.
+- The private CoreSimulator AX mechanism has no configured tool on this host.
 
 ## Next interface boundary
 
@@ -92,8 +87,3 @@ Acquisition samples retain the raw node payload, viewport evidence, target gener
 
 - No production backend selection, fallback, runner-demand, open/relaunch, proxy, XCTest interaction, or public CLI changes were made.
 - A production bridge should not start until this report has a GO result; this run is the #2192 boundary.
-
-## Stop condition
-
-- infrastructure: open quiet failed during fixture preparation (exit 1; code=COMMAND_FAILED; reason=none; diagnostic=Simulator device failed to open agent-device-test-app:///inert.)
-- Command: /opt/homebrew/Cellar/node/26.7.0/bin/node bin/agent-device.mjs open com.callstack.agentdevicelab --launch-url agent-device-test-app:///inert --foreground --state-dir /var/folders/pn/0s6xww5x5tj2brz0nrvlx96w0000gn/T/agent-device-ios-ax-spike-YnARfy --session ax-spike-public-macos-ax-cold-cold-quiet --platform ios --udid 793B72F6-02C9-4BCD-BEC9-1B3EB42A7ED4 --ios-xctest-derived-data-path /var/folders/pn/0s6xww5x5tj2brz0nrvlx96w0000gn/T/agent-device-ios-ax-spike-YnARfy/derived-data/public-macos-ax/cold-cold/quiet --json
