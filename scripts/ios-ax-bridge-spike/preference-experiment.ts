@@ -59,7 +59,7 @@ function tryPrimeFixtureApp(udid: string, app: string): boolean {
   }
 }
 
-function initialPreferenceEvidence(udid: string): PreferenceEvidence {
+export function initialPreferenceEvidence(udid: string): PreferenceEvidence {
   let simulatorStateBefore = 'unknown';
   try {
     simulatorStateBefore = readSimulatorState(udid);

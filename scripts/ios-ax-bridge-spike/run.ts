@@ -11,7 +11,11 @@ import { decideSpike } from './decision.ts';
 import { runLifecycleProbes } from './lifecycle.ts';
 import { markdownPath, writeSpikeReport } from './report.ts';
 import { corpusCoverage } from './corpus-coverage.ts';
-import { primeFixtureApps, runPreferenceExperiment } from './preference-experiment.ts';
+import {
+  initialPreferenceEvidence,
+  primeFixtureApps,
+  runPreferenceExperiment,
+} from './preference-experiment.ts';
 import { createAdapterOptions, runSpikeCells } from './runner.ts';
 import { readGitRevision, readTarget, readToolchain } from '../ios-snapshot-benchmark/host.ts';
 import { runDeepButtonControls } from '../ios-snapshot-benchmark/deep-control.ts';
