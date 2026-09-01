@@ -109,6 +109,10 @@ export function scrollFixtureToBottom(context: CliContext): CliResult {
   return runCli(context, ['scroll', 'bottom', '--settle']);
 }
 
+export async function scrollFixtureToBottomAsync(context: CliContext): Promise<CliResult> {
+  return await runCliAsync(context, ['scroll', 'bottom', '--settle']);
+}
+
 export async function pressFixtureTargetAsync(
   context: CliContext,
   selector: string,

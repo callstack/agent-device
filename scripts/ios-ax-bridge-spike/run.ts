@@ -186,7 +186,12 @@ function createReport(
     lifecycle,
     positiveControl: evidence.positiveControl,
     status: evidence.status,
-    corpusCoverage: corpusCoverage(config.states, config.screens, evidence.cells),
+    corpusCoverage: corpusCoverage(
+      config.states,
+      config.screens,
+      evidence.cells,
+      config.candidates,
+    ),
     cells: evidence.cells,
     decision: decision.decision,
     decisionReasons: decision.reasons,

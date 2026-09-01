@@ -41,8 +41,8 @@ function renderSpikeMarkdown(report: SpikeReport): string {
     '',
     '## Raw acquisition and prototype presentation results',
     '',
-    '| Candidate | State | Screen | Readable/attempted | Acquisition p50/p95 ms | First look p95 ms | Presentation p50/p95 ms | Nodes | Failures |',
-    '|---|---|---|---:|---:|---:|---:|---:|---:|',
+    '| Candidate | State | Screen | Readable/attempted | Wall p50/p95 ms | Gated duration p50/p95 ms | First look p95 ms | Presentation p50/p95 ms | Nodes | Failures |',
+    '|---|---|---|---:|---:|---:|---:|---:|---:|---:|',
     ...report.cells.map(renderCellRow),
     '',
     ...fidelityLines(report),
@@ -145,10 +145,19 @@ function renderCellRow(cell: SpikeCell): string {
   const nodeCounts = readable.flatMap((sample) =>
     typeof sample.metrics?.nodeCount === 'number' ? [sample.metrics.nodeCount] : [],
   );
-  return `| ${cell.candidate} | ${cell.state} | ${cell.screen} | ${readable.length}/${acquisition.length} | ${summary(readable, 'wallClockMs')} | ${summary(readable, 'firstLookMs')} | ${summary(
+  return `| ${cell.candidate} | ${cell.state} | ${cell.screen} | ${readable.length}/${acquisition.length} | ${summary(readable, 'wallClockMs')} | ${metricSummary(readable)} | ${summary(readable, 'firstLookMs')} | ${summary(
     presentation.filter((sample) => sample.ok),
     'wallClockMs',
   )} | ${formatNumber(median(nodeCounts))} | ${failures} |`;
+}
+
+function metricSummary(samples: readonly SpikeSample[]): string {
+  const values = samples.flatMap((sample) =>
+    sample.metrics && Number.isFinite(sample.metrics.durationMs) ? [sample.metrics.durationMs] : [],
+  );
+  return values.length === 0
+    ? '–'
+    : `${formatNumber(median(values))}/${formatNumber(percentile(values, 95))}`;
 }
 
 function surfaceStatus(

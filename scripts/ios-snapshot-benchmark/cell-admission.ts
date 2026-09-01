@@ -89,6 +89,22 @@ export function admitSuccessfulSample(
   return admitNonWarmSample(context, options, previousAppPid);
 }
 
+export function admitStableWarmSample(
+  options: CellAdmissionOptions,
+  previousAppPid: number,
+): number {
+  assertReadyState(options);
+  const appPid = assertAppRunning(options.udid, options.fixture.app);
+  if (appPid !== previousAppPid) {
+    throw new BenchmarkCellAdmissionError(
+      'cell-state',
+      `Warm cell ${options.fixture.id} changed app PID from ${String(previousAppPid)} to ${String(appPid)}.`,
+      'agent-device batch --steps snapshot',
+    );
+  }
+  return appPid;
+}
+
 function admitNonWarmSample(
   context: CliContext,
   options: CellAdmissionOptions,

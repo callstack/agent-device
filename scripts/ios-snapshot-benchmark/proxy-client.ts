@@ -2,6 +2,7 @@ import path from 'node:path';
 import {
   openFixtureAsync,
   pressFixtureTargetAsync,
+  scrollFixtureToBottomAsync,
   sampleFromCli,
   snapshotFixtureAsync,
 } from './command.ts';
@@ -140,6 +141,8 @@ async function prepareFreshCliFixture(
   fixture: ScreenFixture,
 ): Promise<void> {
   if (fixture.setupAction !== 'open-alert') return;
+  const scrolled = await scrollFixtureToBottomAsync(context);
+  if (!scrolled.ok) throw setupFailure('fresh CLI alert setup scroll', scrolled);
   const pressed = await pressFixtureTargetAsync(context, 'id="automation-open-alert"');
   if (!pressed.ok) throw setupFailure('fresh CLI alert setup', pressed);
 }

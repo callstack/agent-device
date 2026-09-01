@@ -104,12 +104,13 @@ function failedPresentationSample(
   captured: CapturedResponse,
   status: SpikeSample['firstTree'],
 ): SpikeSample {
+  const startedAt = new Date().toISOString();
   return {
     index: index + 1,
     candidate,
     state,
     screen,
-    startedAt: captured.startedAt,
+    startedAt,
     finishedAt: new Date().toISOString(),
     operation: 'presentation',
     wallClockMs: 0,
@@ -136,13 +137,14 @@ function successfulPresentationSample(
   captured: CapturedResponse,
   status: SpikeSample['firstTree'],
 ): SpikeSample {
+  const startedAt = new Date().toISOString();
   const presented = presentAcquisitionForMeasurement(captured.response.acquisition!);
   return {
     index: index + 1,
     candidate,
     state,
     screen,
-    startedAt: captured.startedAt,
+    startedAt,
     finishedAt: new Date().toISOString(),
     operation: 'presentation',
     wallClockMs: presented.measurement.durationMs,

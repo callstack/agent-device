@@ -8,6 +8,7 @@ import {
 } from '../ios-snapshot-benchmark/command.ts';
 import {
   admitReadyCell,
+  admitStableWarmSample,
   admitSuccessfulSample,
   prepareCellState,
   prepareSampleState,
@@ -106,9 +107,11 @@ async function collectWarmSamples(
   acquisitionSamples: SpikeSample[],
   presentationSamples: SpikeSample[],
 ): Promise<void> {
-  admitReadyCell(context, admission);
+  let appPid = admitReadyCell(context, admission);
+  if (appPid === undefined)
+    throw new BenchmarkInfrastructureError('Warm admission returned no app PID.');
   for (let index = 0; index < config.samples; index += 1) {
-    if (index > 0) prepareSampleState(admission);
+    if (index > 0) appPid = admitStableWarmSample(admission, appPid);
     const request = makeRequest(
       config,
       adapter.candidate,

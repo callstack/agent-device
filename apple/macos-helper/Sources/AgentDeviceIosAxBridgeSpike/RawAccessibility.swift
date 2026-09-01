@@ -10,6 +10,12 @@ private struct RawTraversalState {
   var hitDepthLimit = false
 }
 
+private struct RootSearchResult {
+  let element: AXUIElement
+  let depth: Int
+  let visitedCount: Int
+}
+
 func capturePublicAccessibility(request: SpikeRequest) -> SpikeCapture {
   guard request.version == 1, request.candidate == "public-macos-ax" else {
     return unsupportedCapture(code: "candidate-not-supported")
@@ -49,7 +55,7 @@ func capturePublicAccessibility(request: SpikeRequest) -> SpikeCapture {
       observedTargetGeneration: generation
     )
   }
-  guard let traversalRoot = firstDescendant(
+  guard let rootSearch = firstDescendant(
     window,
     subrole: "iOSContentGroup",
     maxDepth: request.limits.maxTraversalDepth,
@@ -60,13 +66,15 @@ func capturePublicAccessibility(request: SpikeRequest) -> SpikeCapture {
       observedTargetGeneration: generation
     )
   }
+  let traversalRoot = rootSearch.element
+  let traversalLimits = remainingLimits(request.limits, after: rootSearch)
 
   var state = RawTraversalState()
   _ = appendRawNode(
     traversalRoot,
     parentId: nil,
     depth: 0,
-    limits: request.limits,
+    limits: traversalLimits,
     state: &state
   )
   let viewport = axRect(traversalRoot).map {
@@ -151,18 +159,34 @@ private func firstDescendant(
   subrole: String,
   maxDepth: Int,
   maxNodes: Int
-) -> AXUIElement? {
+) -> RootSearchResult? {
   var queue: [(AXUIElement, Int)] = [(element, 0)]
   var visited = Set<ObjectIdentifier>()
+  var retained: [AXUIElement] = []
   while !queue.isEmpty && visited.count < maxNodes {
     let (candidate, depth) = queue.removeFirst()
     if !visited.insert(ObjectIdentifier(candidate)).inserted { continue }
-    if axString(candidate, kAXSubroleAttribute as String) == subrole { return candidate }
+    retained.append(candidate)
+    if axString(candidate, kAXSubroleAttribute as String) == subrole {
+      return RootSearchResult(element: candidate, depth: depth, visitedCount: visited.count)
+    }
     if depth < maxDepth {
       queue.append(contentsOf: axChildren(candidate).map { ($0, depth + 1) })
     }
   }
   return nil
+}
+
+private func remainingLimits(_ limits: SpikeLimits, after search: RootSearchResult) -> SpikeLimits {
+  SpikeLimits(
+    maxRequestBytes: limits.maxRequestBytes,
+    maxResponseBytes: limits.maxResponseBytes,
+    maxNodes: max(1, limits.maxNodes - search.visitedCount + 1),
+    maxTraversalDepth: max(0, limits.maxTraversalDepth - search.depth),
+    maxCpuMs: limits.maxCpuMs,
+    maxMemoryBytes: limits.maxMemoryBytes,
+    maxDurationMs: limits.maxDurationMs
+  )
 }
 
 private func targetApplication(request: SpikeRequest) -> NSRunningApplication? {

@@ -88,9 +88,12 @@ function probeReasons(
 }
 
 function isReadinessProbeFailure(code: string | undefined): boolean {
-  return ['target-application-unavailable', 'target-simulator-window-unavailable'].includes(
-    code ?? '',
-  );
+  return [
+    'target-application-unavailable',
+    'target-has-no-accessibility-windows',
+    'target-simulator-window-unavailable',
+    'target-simulator-content-unavailable',
+  ].includes(code ?? '');
 }
 
 const REQUIRED_STATES = LOCAL_STATES;

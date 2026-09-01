@@ -13,7 +13,12 @@ import {
 import type { CandidateId, ResourceLimits } from './types.ts';
 import { DEFAULT_SPIKE_LIMITS } from './limits.ts';
 
-class SpikeConfigurationError extends Error {}
+class SpikeConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SpikeConfigurationError';
+  }
+}
 
 export type SpikeConfig = Readonly<{
   repoRoot: string;

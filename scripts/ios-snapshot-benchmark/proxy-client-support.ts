@@ -18,7 +18,10 @@ import type { Failure, ProxyNetwork, RawSample, ScreenFixture } from './types.ts
 
 export type AgentClient = {
   apps: { open(options: Record<string, unknown>): Promise<unknown> };
-  interactions: { click(options: Record<string, unknown>): Promise<unknown> };
+  interactions: {
+    click(options: Record<string, unknown>): Promise<unknown>;
+    scroll(options: Record<string, unknown>): Promise<unknown>;
+  };
   batch: { run(options: Record<string, unknown>): Promise<Record<string, unknown>> };
   sessions: { close(): Promise<unknown> };
   leases: {
@@ -106,6 +109,12 @@ export async function openClientFixture(
     foreground: true,
   });
   if (fixture.setupAction === 'open-alert') {
+    await client.interactions.scroll({
+      direction: 'bottom',
+      settle: true,
+      platform: 'ios',
+      udid,
+    });
     await client.interactions.click({
       target: { kind: 'selector', selector: 'id="automation-open-alert"' },
       platform: 'ios',

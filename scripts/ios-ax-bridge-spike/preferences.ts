@@ -129,7 +129,7 @@ export function applyPrebootPreferences(udid: string): {
   return {
     snapshots,
     evidence: {
-      applied: diffs.some((diff) => diff.changes.length > 0),
+      applied: true,
       restored: false,
       simulatorStateBefore,
       diffs,
