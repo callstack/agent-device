@@ -19,6 +19,7 @@ export type SpikeConfig = Readonly<{
   repoRoot: string;
   udid: string;
   appBundleId: string;
+  targetWindowName?: string;
   targetProcessId?: number;
   privateTool?: string;
   helperPath?: string;

@@ -8,6 +8,7 @@ struct SpikeRequest: Decodable {
   let state: String
   let screen: String
   let appBundleId: String
+  let targetWindowName: String?
   let targetProcessId: Int32?
   let expectedTargetGeneration: String?
   let limits: SpikeLimits

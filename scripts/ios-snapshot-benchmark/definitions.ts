@@ -44,6 +44,7 @@ const SCREEN_FIXTURES: readonly ScreenFixture[] = [
     launchUrl: `${FIXTURE_SCHEME}/automation`,
     anchorText: 'Automation lab',
     setupAction: 'open-alert',
+    setupAnchorText: 'Automation confirmation',
   },
   {
     id: 'system-surface',

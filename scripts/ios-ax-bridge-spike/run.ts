@@ -44,8 +44,9 @@ function reportFailure(error: unknown): void {
 async function main(argv: readonly string[]): Promise<void> {
   const config = parseConfig(argv);
   const metadata = readMetadata(config);
+  const runConfig = { ...config, targetWindowName: metadata.target.name };
   const lifecycle = await runLifecycleProbes();
-  const evidence = await executeSpikeRun(config);
+  const evidence = await executeSpikeRun(runConfig);
   const decision = decideSpike(
     evidence.cells,
     lifecycle,
@@ -54,7 +55,7 @@ async function main(argv: readonly string[]): Promise<void> {
     evidence.status,
     evidence.protocolProbes,
   );
-  const report = createReport(config, metadata, lifecycle, evidence, decision);
+  const report = createReport(runConfig, metadata, lifecycle, evidence, decision);
   writeSpikeReport(config.outputPath, report);
   process.stdout.write(
     `Decision: ${report.decision}\nRaw: ${config.outputPath}\nMarkdown: ${config.outputPath.replace(/\.json$/u, '.md')}\n`,
@@ -254,6 +255,7 @@ function protocolProbeRequest(
     state: 'warm',
     screen: 'quiet',
     appBundleId: config.appBundleId,
+    ...(config.targetWindowName === undefined ? {} : { targetWindowName: config.targetWindowName }),
     ...(config.targetProcessId === undefined ? {} : { targetProcessId: config.targetProcessId }),
     limits: config.limits,
   };

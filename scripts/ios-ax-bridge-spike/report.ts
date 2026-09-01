@@ -151,7 +151,7 @@ function surfaceStatus(
     return 'observed in successful cells';
   }
   if (cells.length > 0) return 'failed in cells';
-  if (report.config.candidates.includes(candidate)) return 'not exercised';
+  if (report.candidates.includes(candidate)) return 'not exercised';
   return 'not selected';
 }
 

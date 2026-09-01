@@ -58,6 +58,7 @@ export function makeRequest(
     state,
     screen,
     appBundleId: config.appBundleId,
+    ...(config.targetWindowName === undefined ? {} : { targetWindowName: config.targetWindowName }),
     ...(config.targetProcessId === undefined ? {} : { targetProcessId: config.targetProcessId }),
     limits: config.limits,
   };

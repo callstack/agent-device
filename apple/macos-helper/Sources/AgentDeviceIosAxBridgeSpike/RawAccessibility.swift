@@ -43,16 +43,28 @@ func capturePublicAccessibility(request: SpikeRequest) -> SpikeCapture {
       observedTargetGeneration: generation
     )
   }
+  guard let window = targetWindow(windows, name: request.targetWindowName) else {
+    return unsupportedCapture(
+      code: "target-simulator-window-unavailable",
+      observedTargetGeneration: generation
+    )
+  }
+  guard let traversalRoot = firstDescendant(window, subrole: "iOSContentGroup") else {
+    return unsupportedCapture(
+      code: "target-simulator-content-unavailable",
+      observedTargetGeneration: generation
+    )
+  }
 
   var state = RawTraversalState()
   _ = appendRawNode(
-    applicationElement,
+    traversalRoot,
     parentId: nil,
     depth: 0,
     limits: request.limits,
     state: &state
   )
-  let viewport = windows.compactMap { axRect($0) }.first.map {
+  let viewport = axRect(traversalRoot).map {
     SpikeViewport(
       kind: "reported",
       rect: $0,
@@ -119,6 +131,22 @@ func capturePublicAccessibility(request: SpikeRequest) -> SpikeCapture {
     failure: nil,
     maxTraversalDepth: state.maxDepth
   )
+}
+
+private func targetWindow(_ windows: [AXUIElement], name: String?) -> AXUIElement? {
+  guard let name else { return windows.first }
+  return windows.first { window in
+    guard let title = axString(window, kAXTitleAttribute as String) else { return false }
+    return title == name || title.hasPrefix("\(name) –")
+  }
+}
+
+private func firstDescendant(_ element: AXUIElement, subrole: String) -> AXUIElement? {
+  if axString(element, kAXSubroleAttribute as String) == subrole { return element }
+  for child in axChildren(element) {
+    if let match = firstDescendant(child, subrole: subrole) { return match }
+  }
+  return nil
 }
 
 private func targetApplication(request: SpikeRequest) -> NSRunningApplication? {

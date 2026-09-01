@@ -20,8 +20,7 @@ export function decideSpike(
   const reasons = [
     ...statusReasons(status),
     ...preferenceReasons(preferences),
-    ...probeReasons(protocolProbes),
-    ...bridgeCandidateReasons(cells, limits),
+    ...bridgeRouteReasons(cells, protocolProbes, limits),
     ...lifecycleReasons(lifecycle),
   ];
   const uniqueReasons = [...new Set(reasons)];
@@ -41,30 +40,68 @@ function preferenceReasons(preferences: PreferenceEvidence): string[] {
     : [];
 }
 
+function bridgeRouteReasons(
+  cells: readonly SpikeCell[],
+  probes: readonly { candidate: CandidateId; failure?: { kind: string; code?: string } }[],
+  limits: ResourceLimits,
+): string[] {
+  const evaluated = (['public-macos-ax', 'private-coresimulator-ax'] as const).flatMap(
+    (candidate) => {
+      const candidateCells = cells.filter((cell) => cell.candidate === candidate);
+      const candidateProbes = probes.filter((probe) => probe.candidate === candidate);
+      if (candidateCells.length === 0 && candidateProbes.length === 0) return [];
+      return [
+        {
+          candidate,
+          reasons: [
+            ...probeReasons(candidateProbes),
+            ...candidateCompletenessReasons(candidate, candidateCells),
+            ...candidateDecisionReasons(candidateCells, limits),
+          ],
+        },
+      ];
+    },
+  );
+  if (evaluated.some((candidate) => candidate.reasons.length === 0)) return [];
+  if (evaluated.length === 0) return ['No bridge candidate produced evidence.'];
+  return evaluated.flatMap((candidate) => candidate.reasons);
+}
+
 function probeReasons(
   probes: readonly { candidate: CandidateId; failure?: { kind: string; code?: string } }[],
 ): string[] {
-  const reasons: string[] = [];
-  for (const probe of probes) {
-    if (!probe.failure) continue;
-    reasons.push(
-      `${probe.candidate} protocol probe returned ${probe.failure.kind}/${probe.failure.code ?? 'no-code'}.`,
-    );
-  }
-  return reasons;
+  return probes.flatMap((probe) =>
+    probe.failure
+      ? [
+          `${probe.candidate} protocol probe returned ${probe.failure.kind}/${probe.failure.code ?? 'no-code'}.`,
+        ]
+      : [],
+  );
 }
 
-function bridgeCandidateReasons(cells: readonly SpikeCell[], limits: ResourceLimits): string[] {
-  const reasons: string[] = [];
-  for (const candidate of ['public-macos-ax', 'private-coresimulator-ax'] as const) {
-    const candidateCells = cells.filter((cell) => cell.candidate === candidate);
-    if (candidateCells.length === 0) {
-      reasons.push(`${candidate} produced no cells.`);
-      continue;
-    }
-    reasons.push(...candidateDecisionReasons(candidateCells, limits));
-  }
-  return reasons;
+const REQUIRED_STATES = ['cold-cold', 'cold', 'warm', 'relaunch'] as const;
+const REQUIRED_SCREENS = [
+  'quiet',
+  'list',
+  'nested-scroll',
+  'alert',
+  'system-surface',
+  'xctest-stress',
+] as const;
+
+function candidateCompletenessReasons(
+  candidate: Exclude<CandidateId, 'xctest-control'>,
+  cells: readonly SpikeCell[],
+): string[] {
+  if (cells.length === 0) return [`${candidate} produced no cells.`];
+  const observed = new Set(cells.map((cell) => `${cell.state}/${cell.screen}`));
+  const missing = REQUIRED_STATES.flatMap((state) =>
+    REQUIRED_SCREENS.flatMap((screen) =>
+      observed.has(`${state}/${screen}`) ? [] : [`${state}/${screen}`],
+    ),
+  );
+  if (missing.length === 0) return [];
+  return [`${candidate} did not complete the required corpus (${missing.length} cells missing).`];
 }
 
 function lifecycleReasons(lifecycle: LifecycleEvidence): string[] {

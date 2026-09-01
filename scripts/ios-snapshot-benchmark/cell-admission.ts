@@ -7,6 +7,7 @@ import {
   formatCliFailure,
   openFixture,
   pressFixtureTarget,
+  scrollFixtureToBottom,
   snapshotFixture,
   snapshotHasAnchor,
   type CliContext,
@@ -146,6 +147,8 @@ function admitOpenedFixture(context: CliContext, options: CellAdmissionOptions):
   );
   requireAnchor(observed, options.fixture);
   if (options.fixture.setupAction === 'open-alert') {
+    const scrolled = scrollFixtureToBottom(context);
+    requireCommandSuccess(scrolled, `${options.fixture.id} setup scroll`, 'cell-state');
     const setup = pressFixtureTarget(context, 'id="automation-open-alert"');
     requireCommandSuccess(setup, `${options.fixture.id} setup action`, 'cell-state');
     const prepared = snapshotFixture(context);
@@ -154,7 +157,11 @@ function admitOpenedFixture(context: CliContext, options: CellAdmissionOptions):
       `${options.fixture.id} post-setup semantic anchor observation`,
       'fixture-anchor',
     );
-    requireAnchor(prepared, options.fixture);
+    requireAnchorText(
+      prepared,
+      options.fixture.setupAnchorText ?? options.fixture.anchorText,
+      options.fixture.id,
+    );
   }
   const appPid = assertAppRunning(options.udid, options.fixture.app);
   return appPid;
@@ -223,10 +230,14 @@ function assertAppRunning(udid: string, appId: string): number {
 }
 
 function requireAnchor(result: CliResult, fixture: ScreenFixture): void {
-  if (!snapshotHasAnchor(result.payload, fixture.anchorText)) {
+  requireAnchorText(result, fixture.anchorText, fixture.id);
+}
+
+function requireAnchorText(result: CliResult, anchorText: string, fixtureId: string): void {
+  if (!snapshotHasAnchor(result.payload, anchorText)) {
     throw new BenchmarkCellAdmissionError(
       'fixture-anchor',
-      `Fixture ${fixture.id} did not expose the exact anchor ${JSON.stringify(fixture.anchorText)}.`,
+      `Fixture ${fixtureId} did not expose the exact anchor ${JSON.stringify(anchorText)}.`,
       'agent-device snapshot',
     );
   }

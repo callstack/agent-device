@@ -86,6 +86,7 @@ export type SpikeRequest = Readonly<{
   state: LocalState;
   screen: ScreenId;
   appBundleId: string;
+  targetWindowName?: string;
   targetProcessId?: number;
   expectedTargetGeneration?: string;
   limits: ResourceLimits;

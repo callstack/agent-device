@@ -38,6 +38,7 @@ export type ScreenFixture = {
   launchUrl?: string;
   anchorText: string;
   setupAction?: 'open-alert';
+  setupAnchorText?: string;
 };
 
 export type Failure = {
