@@ -42,6 +42,21 @@ test('runtime snapshot captures nodes and updates the session baseline', async (
   assert.equal(stored?.snapshot?.nodes[0]?.label, 'Home');
 });
 
+test('runtime snapshot preserves unknown hierarchy completeness for engine-owned iOS acquisition', async () => {
+  const device = createSnapshotOnlyDevice({
+    snapshot: {
+      nodes: [],
+      backend: 'xctest',
+      producer: 'appium-source',
+      createdAt: 1,
+    },
+  });
+
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.equal(result.truncated, undefined);
+});
+
 test('runtime snapshot forwards interactive capture options', async () => {
   let observedOptions: BackendSnapshotOptions | undefined;
   const device = createAgentDevice({

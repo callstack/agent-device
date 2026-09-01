@@ -28,15 +28,15 @@ const APPIUM_PRODUCER = IOS_SNAPSHOT_PRODUCER_CAPABILITIES['appium-source'];
 const iosSnapshotEngine = createIosSnapshotEngine();
 const RESIDUE_WARNINGS = {
   'missing-viewport':
-    'Appium page source does not provide valid viewport evidence; regular snapshots fail closed. Use snapshot --raw to inspect the acquired tree.',
-} satisfies Pick<Record<IosAcquisitionResidue['kind'], string>, 'missing-viewport'>;
+    'Appium page source does not provide valid viewport evidence; this raw tree cannot be validated for viewport-relative regular presentation. Regular snapshots fail closed.',
+} satisfies Record<'missing-viewport', string>;
 type WebDriverUnavailableFact = 'acquisition-depth' | 'hittability';
 
 const UNAVAILABLE_FACT_WARNINGS = {
   'acquisition-depth':
     'Appium page source does not report hierarchy completeness; provider-side depth or child limits may omit nodes.',
   hittability:
-    'Appium page source does not guarantee hittability evidence; absent hittable means no evidence, not false. Raw output preserves any provider-reported value.',
+    'Appium page source does not guarantee hittability evidence; absent hittable means no evidence, not false. Regular output omits reported hittable: true without evidence; raw preserves provider-reported values.',
 } satisfies Record<WebDriverUnavailableFact, string>;
 
 export type WebDriverIosSnapshotAcquisition = Readonly<{
@@ -130,15 +130,19 @@ function warningsForResidue(residue: readonly IosAcquisitionResidue[]): { warnin
 }
 
 function warningForResidue(entry: IosAcquisitionResidue): string | undefined {
-  if (entry.kind === 'unavailable-fact') {
-    return entry.fact === 'acquisition-depth' || entry.fact === 'hittability'
-      ? UNAVAILABLE_FACT_WARNINGS[entry.fact]
-      : undefined;
+  switch (entry.kind) {
+    case 'unavailable-fact':
+      return entry.fact === 'acquisition-depth' || entry.fact === 'hittability'
+        ? UNAVAILABLE_FACT_WARNINGS[entry.fact]
+        : undefined;
+    case 'missing-viewport':
+      return RESIDUE_WARNINGS[entry.kind];
+    case 'provider-pruned':
+    case 'truncated':
+    case 'stale-generation':
+    case 'fallback-source':
+      return undefined;
   }
-  if (entry.kind === 'missing-viewport') {
-    return RESIDUE_WARNINGS[entry.kind];
-  }
-  return undefined;
 }
 
 function stripRefs(nodes: readonly SnapshotNode[]): RawSnapshotNode[] {

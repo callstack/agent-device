@@ -159,7 +159,7 @@ test('Appium iOS raw presentation discloses missing viewport without failing', a
     result.nodes?.some((node) => node.label === 'Continue'),
     true,
   );
-  assert.ok(result.warnings?.some((warning) => warning.includes('snapshot --raw to inspect')));
+  assert.ok(result.warnings?.some((warning) => warning.includes('cannot be validated')));
 });
 
 test('Appium iOS does not promote a non-viewport root rectangle to viewport evidence', () => {
@@ -213,7 +213,7 @@ test('Appium iOS hierarchy limits are typed and disclosed at response level', as
 
   assert.equal(result.truncated, undefined);
   assert.deepEqual(result.warnings, [
-    'Appium page source does not guarantee hittability evidence; absent hittable means no evidence, not false. Raw output preserves any provider-reported value.',
+    'Appium page source does not guarantee hittability evidence; absent hittable means no evidence, not false. Regular output omits reported hittable: true without evidence; raw preserves provider-reported values.',
     'Appium page source does not report hierarchy completeness; provider-side depth or child limits may omit nodes.',
   ]);
 });

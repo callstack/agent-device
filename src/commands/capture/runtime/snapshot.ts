@@ -25,6 +25,7 @@ import { buildSnapshotVisibility } from '../../../snapshot/snapshot-visibility.t
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../../core/android-system-surface-disclosure.ts';
 import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';
 import { now } from '../../runtime-common.ts';
+import { IOS_SNAPSHOT_PRODUCER_CAPABILITIES } from '@agent-device/capture-kit/ios-snapshot-planning';
 import type {
   DiffSnapshotCommandOptions,
   RuntimeCommand,
@@ -221,7 +222,14 @@ function snapshotAppFields(capture: SnapshotCapture): {
 
 function snapshotTruncationForResult(snapshot: SnapshotState): boolean | undefined {
   if (snapshot.truncated !== undefined) return snapshot.truncated;
-  return snapshot.backend === 'xctest' && snapshot.producer === 'appium-source' ? undefined : false;
+  if (snapshot.backend !== 'xctest' || snapshot.producer === undefined) return false;
+  const capability = IOS_SNAPSHOT_PRODUCER_CAPABILITIES[snapshot.producer];
+  const acquisitionDepthUnknown =
+    capability.stage === 'acquired' &&
+    capability.presentationOwner === 'ios-snapshot-engine' &&
+    (capability.acquisitionDepth.rawTraversal.kind === 'incomplete' ||
+      capability.acquisitionDepth.regularPresented.kind === 'incomplete');
+  return acquisitionDepthUnknown ? undefined : false;
 }
 
 function buildSnapshotWarnings(params: {
