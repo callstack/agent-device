@@ -58,6 +58,7 @@ export async function allocateLease(
     platform: 'ios',
     target: 'mobile',
     udid: options.udid,
+    deviceKey: `ios:mobile:${options.udid}`,
   });
 }
 
