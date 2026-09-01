@@ -60,7 +60,7 @@ export function checkRetiredSessionLifecyclePaths(
   const restoredPaths = sourceFiles.filter(
     (file) =>
       SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS.some((retiredPath) => retiredPath === file) ||
-      /^src\/daemon\/handlers\/session-open(?:-[^/]+)?\.ts$/.test(file),
+      /^src\/daemon\/handlers\/session-(?:open|close)(?:-[^/]+)?\.ts$/.test(file),
   );
   return restoredPaths.map((file) => ({
     rule: 'R10 daemon-modularity',

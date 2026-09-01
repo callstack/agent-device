@@ -50,8 +50,10 @@ import { acquireDeviceClaim as acquireProductionDeviceClaim } from '../../device
 import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { SessionStore } from '../../session-store.ts';
-import { handleCloseCommand as handleProductionCloseCommand } from '../session-close.ts';
-import { handleSessionOpenCommands as handleProductionOpenCommand } from '../../session-lifecycle/index.ts';
+import {
+  handleSessionCloseCommands as handleProductionCloseCommand,
+  handleSessionOpenCommands as handleProductionOpenCommand,
+} from '../../session-lifecycle/index.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeAuthoringSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { AppError } from '@agent-device/kernel/errors';

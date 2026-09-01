@@ -18,8 +18,10 @@ const DAEMON_REPLAY_FACADE = {
 const DAEMON_SESSION_LIFECYCLE_FACADE = {
   root: 'src/daemon/session-lifecycle/index.ts',
   exports: [
+    'SessionCloseCommandInput',
     'SessionInventoryCommandInput',
     'SessionOpenCommandInput',
+    'handleSessionCloseCommands',
     'handleSessionInventoryCommands',
     'handleSessionOpenCommands',
   ],
@@ -63,9 +65,9 @@ export const LOGICAL_MODULE_POLICIES = [
     name: 'daemon-replay',
     roots: ['src/daemon/replay/'],
     forbiddenTargetRoots: [
-      'src/daemon/handlers/session-close.ts',
       'src/daemon/handlers/record-runtime.ts',
       'src/daemon/session-store.ts',
+      'src/daemon/session-lifecycle/',
     ],
     facade: DAEMON_REPLAY_FACADE,
   },

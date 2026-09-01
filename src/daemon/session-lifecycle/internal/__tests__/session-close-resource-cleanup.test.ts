@@ -5,7 +5,7 @@ import {
   encodeDurableDescriptor,
   hostAudioProbeDescriptorCodec,
 } from '@agent-device/capture-kit';
-import { audioProbeResourceStore } from '../../audio-probe-resource-store.ts';
+import { audioProbeResourceStore } from '../../../audio-probe-resource-store.ts';
 import {
   sessionCloseShutdownFixture,
   type SessionState,

@@ -2,10 +2,10 @@ import { vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import { SessionStore } from '../../../session-store.ts';
+import type { DaemonRequest, DaemonResponse, SessionState } from '../../../types.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
@@ -41,7 +41,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
     stopAndroidSnapshotHelperSessionForDevice: vi.fn(async () => {}),
   };
 });
-vi.mock('../../../recording/video.ts', () => ({
+vi.mock('../../../../recording/video.ts', () => ({
   waitForStableFile: vi.fn(async () => {}),
   isPlayableVideo: vi.fn(async () => true),
 }));
@@ -50,10 +50,10 @@ import {
   mockBindDeviceRuntime,
   mockInspectDeviceRuntimeFacts,
   mockShutdownTargetRuntime,
-} from './session-command-harness.ts';
-import { teardownSessionResources as teardownProductionSessionResources } from '../../session-teardown.ts';
-import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
-import { LeaseRegistry } from '../../lease-registry.ts';
+} from '../../../handlers/__tests__/session-command-harness.ts';
+import { teardownSessionResources as teardownProductionSessionResources } from '../../../session-teardown.ts';
+import { platformResourceCleanup } from '../../../../platform-runtime-resource-cleanup.ts';
+import { LeaseRegistry } from '../../../lease-registry.ts';
 import { runCmd } from '@agent-device/host-kit/command';
 import {
   flushDiagnosticsToSessionFile,
@@ -65,9 +65,9 @@ import {
 } from '@agent-device/platform-android/mechanics';
 import { stopIosRunnerSession } from '@agent-device/platform-apple/runner/operations';
 import { cleanupAppleXctracePerfCapture } from '@agent-device/platform-apple/perf';
-import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
-import { acquireDeviceClaim } from '../../device-claims.ts';
-import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
+import { WEB_DESKTOP_DEVICE } from '../../../../__tests__/test-utils/device-fixtures.ts';
+import { acquireDeviceClaim } from '../../../device-claims.ts';
+import { inspectDeviceClaims } from '../../../device-claim-inspection.ts';
 
 import {
   type DeviceBinding,
@@ -78,9 +78,9 @@ import {
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { screenRecordingResourceStore } from '../../screen-recording-resource-store.ts';
-import { lifecycleRuntimeFacts } from '../../__tests__/application-lifecycle-runtime-harness.ts';
-import { dispatchApplicationLifecycleEffect } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
+import { screenRecordingResourceStore } from '../../../screen-recording-resource-store.ts';
+import { lifecycleRuntimeFacts } from '../../../__tests__/application-lifecycle-runtime-harness.ts';
+import { dispatchApplicationLifecycleEffect } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
 
 export type { DeviceBinding, PlatformRuntimeOperations, SessionState };
 

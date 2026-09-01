@@ -176,9 +176,9 @@ export class SessionStore {
    * teardown finalize step for a session (idle-reap or daemon shutdown).
    *
    * BLOCKER 3: unlike the explicit `close --save-script` path
-   * (`session-close-script.ts`), teardown never runs `close`'s handler — but
-   * the source plan's terminal `close` was already skipped-while-armed (Fix
-   * 3), so a COMPLETE transaction's auto-commit here must record the same
+   * (`session-lifecycle/internal/session-close-script.ts`), teardown never runs `close`'s
+   * handler — but the source plan's terminal `close` was already skipped-while-armed (Fix 3),
+   * so a COMPLETE transaction's auto-commit here must record the same
    * synthetic finalize `close` first, or the auto-committed healed `.ad`
    * would be missing its own terminal `close` (not self-contained, unlike an
    * explicit close's commit).
@@ -220,8 +220,8 @@ export class SessionStore {
 
   /**
    * BLOCKER 3: mirrors the explicit close script's finalize-`close` recording
-   * (`session-close-script.ts`) for the auto-commit path, which never routes
-   * through `close`'s handler. Only recorded when this teardown is actually
+   * (`session-lifecycle/internal/session-close-script.ts`) for the auto-commit path, which never
+   * routes through `close`'s handler. Only recorded when this teardown is actually
    * about to attempt a commit (COMPLETE, not yet COMMITTED) — an aborted
    * (incomplete) transaction's write is a no-op regardless, so there is
    * nothing to make self-contained.
@@ -317,7 +317,8 @@ export class SessionStore {
   }
 
   // Daemon state dir (parent of the `sessions/` dir), matching daemonPaths.baseDir. Called via
-  // sessionStore.resolveDaemonStateDir() in session-open.ts and session-close.ts.
+  // sessionStore.resolveDaemonStateDir() in session-lifecycle/internal/session-open.ts and
+  // session-lifecycle/internal/session-close.ts.
   resolveDaemonStateDir(): string {
     return path.dirname(this.sessionsDir);
   }

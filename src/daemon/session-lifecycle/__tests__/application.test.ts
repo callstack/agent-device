@@ -12,18 +12,25 @@ vi.mock('../index.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../index.ts')>();
   return {
     ...actual,
+    handleSessionCloseCommands: vi.fn(actual.handleSessionCloseCommands),
     handleSessionInventoryCommands: vi.fn(actual.handleSessionInventoryCommands),
     handleSessionOpenCommands: vi.fn(actual.handleSessionOpenCommands),
   };
 });
 
 import { handleSessionCommands } from '../../handlers/session.ts';
-import { handleSessionInventoryCommands, handleSessionOpenCommands } from '../index.ts';
+import {
+  handleSessionCloseCommands,
+  handleSessionInventoryCommands,
+  handleSessionOpenCommands,
+} from '../index.ts';
 
+const mockHandleSessionCloseCommands = vi.mocked(handleSessionCloseCommands);
 const mockHandleSessionInventoryCommands = vi.mocked(handleSessionInventoryCommands);
 const mockHandleSessionOpenCommands = vi.mocked(handleSessionOpenCommands);
 
 beforeEach(() => {
+  mockHandleSessionCloseCommands.mockClear();
   mockHandleSessionInventoryCommands.mockClear();
   mockHandleSessionOpenCommands.mockClear();
 });
@@ -105,6 +112,33 @@ test('open routes only its lifecycle input through the public facade', async () 
   );
   expect(forwarded).toMatchObject({
     req: expect.objectContaining({ command: 'open' }),
+    sessionName: 'default',
+    logPath: '/tmp/agent-device-session-lifecycle-route.log',
+  });
+});
+
+test('close routes only its lifecycle input through the public facade', async () => {
+  const expected: DaemonResponse = { ok: true, data: { session: 'default' } };
+  mockHandleSessionCloseCommands.mockImplementationOnce(async () => expected);
+
+  await expect(run('close')).resolves.toEqual(expected);
+
+  const forwarded = mockHandleSessionCloseCommands.mock.calls.at(-1)?.[0];
+  expect(Object.keys(forwarded ?? {}).sort()).toEqual(
+    [
+      'bindDevice',
+      'inspectFacts',
+      'leaseLifecycleProvider',
+      'leaseRegistry',
+      'logPath',
+      'platformResourceCleanup',
+      'req',
+      'sessionName',
+      'sessionStore',
+    ].sort(),
+  );
+  expect(forwarded).toMatchObject({
+    req: expect.objectContaining({ command: 'close' }),
     sessionName: 'default',
     logPath: '/tmp/agent-device-session-lifecycle-route.log',
   });

@@ -319,7 +319,10 @@ test('session-state writes are found by field, and non-daemon or undeclared name
       // a write into a sub-object is not a write to the field itself
       ['src/daemon/handlers/session-probe.ts', 'session.refFrameState.inner = 1;'],
       // a different binding that happens to have a matching property
-      ['src/daemon/handlers/session-close.ts', "other.refFrameState = 'expired';"],
+      [
+        'src/daemon/session-lifecycle/internal/session-close.ts',
+        "other.refFrameState = 'expired';",
+      ],
     ]),
     ['refFrameState', 'snapshotGeneration'],
   );

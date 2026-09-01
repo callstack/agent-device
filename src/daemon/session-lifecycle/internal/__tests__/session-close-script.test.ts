@@ -6,16 +6,16 @@ import {
   authoringPublication,
   makeIosSession,
   makeRepairCompleteSession,
-} from '../../../__tests__/test-utils/session-factories.ts';
-import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest } from '../../types.ts';
+} from '../../../../__tests__/test-utils/session-factories.ts';
+import { SessionStore } from '../../../session-store.ts';
+import type { DaemonRequest } from '../../../types.ts';
 import {
   buildRetriableRepairCloseFailureResponse,
   commitRepairScriptBeforeClose,
   finalizeOrdinaryCloseScript,
 } from '../session-close-script.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
-import { flushSessionEventLogWrites } from '../../session-event-log.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { flushSessionEventLogWrites } from '../../../session-event-log.ts';
 
 const roots: string[] = [];
 

@@ -5,7 +5,7 @@ import type { LeaseRegistry } from '../lease-registry.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 import { runReplayCommand, runReplayTestCommand, type ReplaySession } from '../replay/index.ts';
-import { handleCloseCommand } from './session-close.ts';
+import { handleSessionCloseCommands } from '../session-lifecycle/index.ts';
 import { createReplayTestVideoOwner } from './session-replay-video-owner.ts';
 import type { SessionCommandHandler } from './session-command-input.ts';
 
@@ -122,7 +122,7 @@ type ReplayTestSessionCleanupParams = Readonly<{
 async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): Promise<void> {
   const { req, sessionName, logPath, sessionStore } = params;
   if (!sessionStore.get(sessionName)) return;
-  const closeResponse = await handleCloseCommand({
+  const closeResponse = await handleSessionCloseCommands({
     req: {
       token: req.token,
       session: sessionName,

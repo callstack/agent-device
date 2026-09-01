@@ -1,26 +1,29 @@
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { LeaseLifecycleProvider, TargetShutdownResult } from '@agent-device/contracts/device';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { SessionStore } from '../session-store.ts';
+import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import { SessionStore } from '../../session-store.ts';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
-import { resolveCommandDevice } from '../session-device-resolution.ts';
-import { errorResponse } from '../response.ts';
-import { expireRefFrame } from '../ref-frame.ts';
-import type { LeaseRegistry } from '../lease-registry.ts';
-import { releaseSessionLease } from '../lease-lifecycle.ts';
+import { resolveCommandDevice } from '../../session-device-resolution.ts';
+import { errorResponse } from '../../response.ts';
+import { expireRefFrame } from '../../ref-frame.ts';
+import type { LeaseRegistry } from '../../lease-registry.ts';
+import { releaseSessionLease } from '../../lease-lifecycle.ts';
 import {
   hasRepairPlatformCloseReceipt,
   isRepairArmedSession,
   recordRepairPlatformClose,
-} from '../session-replay-transaction.ts';
-import { isAuthoringArmedSession } from '../session-script-publication-capability.ts';
-import type { SessionCleanupFailure } from '../session-teardown.ts';
-import { isWebSession } from '../web-session-names.ts';
-import { clearDeviceClaim } from '../device-claims.ts';
-import { applicationLifecycleExecutionFromRequest } from '../application-lifecycle-execution.ts';
-import { hasRuntimeTransportHints } from '../session-runtime.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
+} from '../../session-replay-transaction.ts';
+import { isAuthoringArmedSession } from '../../session-script-publication-capability.ts';
+import type { SessionCleanupFailure } from '../../session-teardown.ts';
+import { isWebSession } from '../../web-session-names.ts';
+import { clearDeviceClaim } from '../../device-claims.ts';
+import { applicationLifecycleExecutionFromRequest } from '../../application-lifecycle-execution.ts';
+import { hasRuntimeTransportHints } from '../../session-runtime.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../request-runtime-binding.ts';
 import {
   buildRetriableRepairCloseFailureResponse,
   commitRepairScriptBeforeClose,
@@ -35,6 +38,18 @@ import {
 import { closeCleanupError, runSessionCloseTeardown } from './session-close-lifecycle-teardown.ts';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 
+export type SessionCloseCommandInput = Readonly<{
+  req: DaemonRequest;
+  sessionName: string;
+  logPath: string;
+  sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  bindDevice?: BindDeviceRuntime;
+  platformResourceCleanup?: PlatformResourceCleanup;
+}>;
+
 function toRepairPlatformCloseFailure(error: unknown): AppError {
   if (error instanceof AppError) return error;
   const detail = error instanceof Error ? error.message : String(error);
@@ -43,25 +58,12 @@ function toRepairPlatformCloseFailure(error: unknown): AppError {
   });
 }
 
-function requirePlatformCleanup(
-  cleanup: PlatformResourceCleanup | undefined,
-): PlatformResourceCleanup {
-  if (!cleanup) {
-    throw new AppError(
-      'INTERNAL_ERROR',
-      'Platform resource cleanup was not supplied by root runtime composition',
-    );
-  }
-  return cleanup;
-}
-
-function buildRepairPlatformCloseReceipt(req: DaemonRequest): string {
-  return JSON.stringify(req.positionals ?? []);
-}
-
 type RepairClosePreparation =
   | { repairArmed: boolean; healedScriptPath?: string; aborted?: boolean }
   | { response: DaemonResponse };
+
+const shouldDispatchPlatformClose = (req: DaemonRequest, session: SessionState): boolean =>
+  (req.positionals?.length ?? 0) > 0 || isWebSession(session);
 
 async function prepareRepairClose(params: {
   req: DaemonRequest;
@@ -72,7 +74,7 @@ async function prepareRepairClose(params: {
 }): Promise<RepairClosePreparation> {
   const { req, session, logPath, sessionStore, lifecycle } = params;
   const repairArmed = isRepairArmedSession(session);
-  const closeReceipt = buildRepairPlatformCloseReceipt(req);
+  const closeReceipt = JSON.stringify(req.positionals ?? []);
   if (repairArmed && !hasRepairPlatformCloseReceipt(session, closeReceipt)) {
     const platformCloseError = await dispatchTargetedPlatformClose({
       req,
@@ -186,17 +188,9 @@ function assertTerminalRecordingCloseAllowed(req: DaemonRequest, session: Sessio
   );
 }
 
-export async function handleCloseCommand(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath: string;
-  sessionStore: SessionStore;
-  leaseRegistry: LeaseRegistry;
-  leaseLifecycleProvider?: LeaseLifecycleProvider;
-  inspectFacts?: InspectDeviceRuntimeFacts;
-  bindDevice?: BindDeviceRuntime;
-  platformResourceCleanup?: PlatformResourceCleanup;
-}): Promise<DaemonResponse> {
+export async function handleSessionCloseCommands(
+  params: SessionCloseCommandInput,
+): Promise<DaemonResponse> {
   const { req, sessionName, logPath, sessionStore, leaseRegistry, leaseLifecycleProvider } = params;
   const session = sessionStore.get(sessionName);
   if (!session) {
@@ -208,10 +202,17 @@ export async function handleCloseCommand(params: {
     });
   }
   assertTerminalRecordingCloseAllowed(req, session);
-  if (req.internal?.closeAppOnly === true && !req.positionals?.[0]) {
+  const app = req.positionals?.[0];
+  if (req.internal?.closeAppOnly === true && !app) {
     return errorResponse('INVALID_ARGS', 'App-only close requires an app target');
   }
-  const platformResourceCleanup = requirePlatformCleanup(params.platformResourceCleanup);
+  if (!params.platformResourceCleanup) {
+    throw new AppError(
+      'INTERNAL_ERROR',
+      'Platform resource cleanup was not supplied by root runtime composition',
+    );
+  }
+  const platformResourceCleanup = params.platformResourceCleanup;
   const admission = await admitCloseRuntime({
     device: session.device,
     clearRuntimeHints:
@@ -225,12 +226,13 @@ export async function handleCloseCommand(params: {
   // Teardown can restore durable IME state, terminate an app, or shut down a target. All are
   // mutating leaves, so invalidate the frame before the first teardown phase, not after dispatch.
   expireRefFrame(session);
-  if (req.internal?.closeAppOnly === true) {
+  if (req.internal?.closeAppOnly === true && app) {
     return await closeAppWithoutEndingSession({
       req,
       session,
       logPath,
       lifecycle: admission.runtime,
+      app,
     });
   }
   const repair = await prepareRepairClose({
@@ -388,12 +390,9 @@ async function closeAppWithoutEndingSession(params: {
   session: SessionState;
   logPath: string;
   lifecycle: CloseRuntime | CloseRuntimeWithRuntimeHintClear;
+  app: string;
 }): Promise<DaemonResponse> {
-  const { req, session, logPath, lifecycle } = params;
-  const app = req.positionals?.[0];
-  if (!app) {
-    return errorResponse('INVALID_ARGS', 'App-only close requires an app target');
-  }
+  const { req, session, logPath, lifecycle, app } = params;
   const platformCloseError = await dispatchTargetedPlatformClose({
     req,
     session,
@@ -410,14 +409,6 @@ async function closeAppWithoutEndingSession(params: {
   };
 }
 
-function shouldDispatchPlatformClose(req: DaemonRequest, session: SessionState): boolean {
-  return hasCloseTarget(req) || isWebSession(session);
-}
-
-function hasCloseTarget(req: DaemonRequest): boolean {
-  return (req.positionals?.length ?? 0) > 0;
-}
-
 async function closeWithoutSession(params: {
   req: DaemonRequest;
   logPath: string;
@@ -425,9 +416,8 @@ async function closeWithoutSession(params: {
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
   const { req, logPath, inspectFacts, bindDevice } = params;
-  if (!req.positionals || req.positionals.length === 0) {
+  if (!req.positionals || req.positionals.length === 0)
     return errorResponse('SESSION_NOT_FOUND', 'No active session');
-  }
   const device = await resolveCommandDevice({
     session: undefined,
     flags: req.flags,

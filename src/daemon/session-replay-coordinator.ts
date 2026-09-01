@@ -25,11 +25,12 @@ import {
  * so the replay command and its resume helper reach neither the P4a projection
  * nor `session.pendingRecordAndHeal` directly.
  *
- * Close-time sequencing (`session-close.ts`, `session-close-script.ts`: the platform-close
- * receipt, the repair-armed check gating targeted platform close, and the terminal abort) is a
- * different capability with its own teardown ordering — commit/abort happen at teardown, not
- * during a replay request — and remains a direct `ReplaySessionTransaction` caller by design; see
- * the P4b PR description for the ownership split.
+ * Close-time sequencing (`session-lifecycle/internal/session-close.ts`,
+ * `session-lifecycle/internal/session-close-script.ts`: the platform-close receipt, the
+ * repair-armed check gating targeted platform close, and the terminal abort) is a different
+ * capability with its own teardown ordering — commit/abort happen at teardown, not during a
+ * replay request — and remains a direct `ReplaySessionTransaction` caller by design; see the
+ * P4b PR description for the ownership split.
  */
 
 /** Immutable read projection of the repair-transaction fields this coordinator's writers touch. */

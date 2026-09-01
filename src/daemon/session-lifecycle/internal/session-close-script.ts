@@ -1,21 +1,34 @@
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
-import type { SessionStore } from '../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { recordSessionAction } from './handler-utils.ts';
-import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../session-script-publication-state.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
+import type { SessionStore } from '../../session-store.ts';
+import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../../session-script-publication-state.ts';
 import {
   effectiveWriteForce,
   isSessionScriptPublished,
   markCloseGeneratedPublicationDone,
-} from '../session-script-publication-capability.ts';
-import { abortRepairTransaction, isRepairArmedSession } from '../session-replay-transaction.ts';
+} from '../../session-script-publication-capability.ts';
+import { abortRepairTransaction, isRepairArmedSession } from '../../session-replay-transaction.ts';
 
 export type RepairCloseCommit =
   | { kind: 'not-armed' }
   | { kind: 'committed'; path?: string }
   | { kind: 'aborted' }
   | { kind: 'failed'; error: AppError };
+
+function recordCloseAction(
+  sessionStore: SessionStore,
+  session: SessionState,
+  req: DaemonRequest,
+): void {
+  sessionStore.recordAction(session, {
+    command: 'close',
+    positionals: req.positionals ?? [],
+    flags: (req.flags ?? {}) as CommandFlags,
+    result: { session: session.name, ...successText(`Closed: ${session.name}`) },
+  });
+}
 
 export function commitRepairScriptBeforeClose(
   sessionStore: SessionStore,
@@ -25,10 +38,7 @@ export function commitRepairScriptBeforeClose(
   if (!isRepairArmedSession(session)) return { kind: 'not-armed' };
 
   const actionsBeforeClose = session.actions.length;
-  recordSessionAction(sessionStore, session, req, 'close', {
-    session: session.name,
-    ...successText(`Closed: ${session.name}`),
-  });
+  recordCloseAction(sessionStore, session, req);
   const alreadyPublished = isSessionScriptPublished(session);
   const result = sessionStore.writeSessionLog(session, {
     force: effectiveWriteForce(session, req.flags?.force),
@@ -72,16 +82,12 @@ export function finalizeOrdinaryCloseScript(params: {
 }): AppError | undefined {
   const { req, session, sessionStore, platformCloseError } = params;
   if (!platformCloseError) {
-    recordSessionAction(sessionStore, session, req, 'close', {
-      session: session.name,
-      ...successText(`Closed: ${session.name}`),
-    });
+    recordCloseAction(sessionStore, session, req);
   }
   // The recorded close action already armed target/force through the recorder's flag ingress.
   // On a platform-close failure that action was never recorded, so the log still publishes to the
   // session default rather than the request's explicit path — the lifecycle armed by `open` is
   // what authorizes the write, and it is untouched by that failure.
-
   try {
     const result = sessionStore.writeSessionLog(session, {
       force: effectiveWriteForce(session, req.flags?.force),

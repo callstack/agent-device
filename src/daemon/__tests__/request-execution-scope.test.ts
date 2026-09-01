@@ -23,7 +23,7 @@ import { resolveSessionRequestLogPath } from '../session-store.ts';
 import type { DaemonRequest } from '../types.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
-import { handleCloseCommand } from '../handlers/session-close.ts';
+import { handleSessionCloseCommands } from '../session-lifecycle/index.ts';
 
 const TEST_ROOT = mkdtempForTestSync('agent-device-request-execution-scope-');
 const LOG_PATH = path.join(TEST_ROOT, 'diagnostics.log');
@@ -761,7 +761,7 @@ test('runLocked rejects a request canceled while waiting for its execution lock'
 // succeeded, `open` never ran, so the daemon never allocated a lease or
 // created a session) reaches `close`'s own SESSION_NOT_FOUND outcome
 // through the real tenant-scoping + locked-admission pipeline, rather than
-// throwing the generic tenant-isolation error before `handleCloseCommand`
+// throwing the generic tenant-isolation error before `handleSessionCloseCommands`
 // ever runs. No provider is touched — there is nothing to release.
 test('router: deferred tenant connect with no daemon session closes as SESSION_NOT_FOUND without touching the provider', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
@@ -780,7 +780,7 @@ test('router: deferred tenant connect with no daemon session closes as SESSION_N
   expect(scope.sessionName).toBe('tenant-a:default');
 
   const response = await scope.runLocked(async () =>
-    handleCloseCommand({
+    handleSessionCloseCommands({
       req: scope.req,
       sessionName: scope.sessionName,
       logPath: scope.requestLogPath,
@@ -798,7 +798,7 @@ test('router: deferred tenant connect with no daemon session closes as SESSION_N
 });
 
 // The same deferred connection, but with an app-target `close <app>`. This
-// must not reach `handleCloseCommand` at all — an app-target close with no
+// must not reach `handleSessionCloseCommands` at all — an app-target close with no
 // session resolves its device straight from flags, so it stays behind full
 // lease/tenant admission (the router rejects it before dispatch).
 test('router: deferred tenant connect still refuses an app-target close before dispatch', async () => {

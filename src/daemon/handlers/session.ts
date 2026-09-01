@@ -2,10 +2,10 @@ import type { DaemonResponse } from '../types.ts';
 import { handleReleaseMaterializedPathsCommand } from './session-app-source-deployment.ts';
 import { handleRuntimeCommand } from './session-runtime-command.ts';
 import { handleKeyboardCommand, handleAppEventCommand } from './session-selector-dispatch.ts';
-import { handleCloseCommand } from './session-close.ts';
 import { handleSessionAppDeploymentCommand } from './session-app-deployment-route.ts';
 import { runBatchCommands } from './session-batch.ts';
 import {
+  handleSessionCloseCommands,
   handleSessionInventoryCommands,
   handleSessionOpenCommands,
 } from '../session-lifecycle/index.ts';
@@ -22,6 +22,7 @@ import type {
   SessionCommandParams,
 } from './session-command-input.ts';
 import type {
+  SessionCloseCommandInput,
   SessionInventoryCommandInput,
   SessionOpenCommandInput,
 } from '../session-lifecycle/index.ts';
@@ -42,6 +43,19 @@ const handleSessionOpenCommandGroup: SessionCommandHandler = (params) =>
     bindDevice: params.bindDevice,
     reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
   } satisfies SessionOpenCommandInput);
+
+const handleSessionCloseCommandGroup: SessionCommandHandler = (params) =>
+  handleSessionCloseCommands({
+    req: params.req,
+    sessionName: params.sessionName,
+    logPath: params.logPath,
+    sessionStore: params.sessionStore,
+    leaseRegistry: params.leaseRegistry,
+    leaseLifecycleProvider: params.leaseLifecycleProvider,
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
+    platformResourceCleanup: params.platformResourceCleanup,
+  } satisfies SessionCloseCommandInput);
 
 const handleSessionStateCommandGroup: SessionCommandHandler = async ({
   req,
@@ -163,28 +177,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
   replay: handleReplayCommand,
   test: handleReplayTestCommand,
   batch: async ({ req, sessionName, invoke }) => await runBatchCommands(req, sessionName, invoke),
-  close: async ({
-    req,
-    sessionName,
-    logPath,
-    sessionStore,
-    leaseRegistry,
-    leaseLifecycleProvider,
-    inspectFacts,
-    bindDevice,
-    platformResourceCleanup,
-  }) =>
-    await handleCloseCommand({
-      req,
-      sessionName,
-      logPath,
-      sessionStore,
-      leaseRegistry,
-      leaseLifecycleProvider,
-      inspectFacts,
-      bindDevice,
-      platformResourceCleanup,
-    }),
+  close: handleSessionCloseCommandGroup,
 } satisfies Record<DescriptorSessionRouteCommandName, SessionCommandHandler>;
 
 export async function handleSessionCommands(

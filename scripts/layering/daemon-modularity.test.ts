@@ -189,7 +189,11 @@ test('daemon replay rejects handler, owner, session-store, and engine deep edges
       ],
       [
         'src/daemon/replay/internal/test-command.ts',
-        "import { handleCloseCommand } from '../../handlers/session-close.ts';",
+        "import { handleSessionCloseCommands } from '../../session-lifecycle/internal/session-close.ts';",
+      ],
+      [
+        'src/daemon/replay/internal/close-command.ts',
+        "import { handleSessionCloseCommands } from '../../session-lifecycle/index.ts';",
       ],
       [
         'src/daemon/replay/internal/command-types.ts',
@@ -200,7 +204,11 @@ test('daemon replay rejects handler, owner, session-store, and engine deep edges
         "import { runReplayCommand } from '../../../../src/daemon/replay/internal/native-command.ts';",
       ],
       ['src/daemon/replay/internal/native-command.ts', 'export function runReplayCommand() {}'],
-      ['src/daemon/handlers/session-close.ts', 'export function handleCloseCommand() {}'],
+      [
+        'src/daemon/session-lifecycle/internal/session-close.ts',
+        'export function handleSessionCloseCommands() {}',
+      ],
+      ['src/daemon/session-lifecycle/index.ts', 'export function handleSessionCloseCommands() {}'],
       ['src/daemon/session-store.ts', 'export class SessionStore {}'],
     ]),
   );
@@ -210,12 +218,40 @@ test('daemon replay rejects handler, owner, session-store, and engine deep edges
     baselineTypeCycleMembers(),
   );
   assert.deepEqual(
-    violations.map(({ message }) => message.replace(/;.*/, '')),
+    violations.map(({ file, line, message }) => ({
+      file,
+      line,
+      message: message.replace(/;.*/, ''),
+    })),
     [
-      "src/daemon/handlers/session.ts must not import daemon-replay's internal tree (src/daemon/replay/internal/native-command.ts)",
-      'daemon-replay must not import src/daemon/handlers/session-close.ts',
-      'daemon-replay must not import src/daemon/session-store.ts',
-      "packages/ad-replay/src/internal/step-loop.ts must not import daemon-replay's internal tree (src/daemon/replay/internal/native-command.ts)",
+      {
+        file: 'src/daemon/handlers/session.ts',
+        line: 1,
+        message:
+          "src/daemon/handlers/session.ts must not import daemon-replay's internal tree (src/daemon/replay/internal/native-command.ts)",
+      },
+      {
+        file: 'src/daemon/replay/internal/test-command.ts',
+        line: 1,
+        message:
+          "src/daemon/replay/internal/test-command.ts must not import daemon-session-lifecycle's internal tree (src/daemon/session-lifecycle/internal/session-close.ts)",
+      },
+      {
+        file: 'src/daemon/replay/internal/close-command.ts',
+        line: 1,
+        message: 'daemon-replay must not import src/daemon/session-lifecycle/index.ts',
+      },
+      {
+        file: 'src/daemon/replay/internal/command-types.ts',
+        line: 1,
+        message: 'daemon-replay must not import src/daemon/session-store.ts',
+      },
+      {
+        file: 'packages/ad-replay/src/internal/step-loop.ts',
+        line: 1,
+        message:
+          "packages/ad-replay/src/internal/step-loop.ts must not import daemon-replay's internal tree (src/daemon/replay/internal/native-command.ts)",
+      },
     ],
   );
 });
@@ -225,17 +261,20 @@ test('session lifecycle rejects handler deep imports in both directions', () => 
     new Map([
       [
         'src/daemon/handlers/session.ts',
-        "import { handleSessionInventoryCommands } from '../session-lifecycle/internal/inventory.ts';",
+        "import { handleSessionInventoryCommands } from '../session-lifecycle/internal/inventory.ts';\nexport function handleSessionCommands() {}",
       ],
       [
         'src/daemon/session-lifecycle/internal/inventory.ts',
-        "import { handleCloseCommand } from '../../handlers/session-close.ts';",
+        "import { handleSessionCommands } from '../../handlers/session.ts';\nexport function handleSessionInventoryCommands() {}",
+      ],
+      [
+        'src/daemon/session-lifecycle/internal/session-close.ts',
+        "import { handleSessionCommands } from '../../handlers/session.ts';",
       ],
       [
         'src/daemon/session-lifecycle/index.ts',
         'export function handleSessionInventoryCommands() {}',
       ],
-      ['src/daemon/handlers/session-close.ts', 'export function handleCloseCommand() {}'],
     ]),
   );
 
@@ -244,10 +283,28 @@ test('session lifecycle rejects handler deep imports in both directions', () => 
     baselineTypeCycleMembers(),
   );
   assert.deepEqual(
-    violations.map(({ message }) => message.replace(/;.*/, '')),
+    violations.map(({ file, line, message }) => ({
+      file,
+      line,
+      message: message.replace(/;.*/, ''),
+    })),
     [
-      "src/daemon/handlers/session.ts must not import daemon-session-lifecycle's internal tree (src/daemon/session-lifecycle/internal/inventory.ts)",
-      'daemon-session-lifecycle must not import src/daemon/handlers/session-close.ts',
+      {
+        file: 'src/daemon/handlers/session.ts',
+        line: 1,
+        message:
+          "src/daemon/handlers/session.ts must not import daemon-session-lifecycle's internal tree (src/daemon/session-lifecycle/internal/inventory.ts)",
+      },
+      {
+        file: 'src/daemon/session-lifecycle/internal/inventory.ts',
+        line: 1,
+        message: 'daemon-session-lifecycle must not import src/daemon/handlers/session.ts',
+      },
+      {
+        file: 'src/daemon/session-lifecycle/internal/session-close.ts',
+        line: 1,
+        message: 'daemon-session-lifecycle must not import src/daemon/handlers/session.ts',
+      },
     ],
   );
 });
@@ -257,6 +314,8 @@ test('session lifecycle rejects restored neutral helper paths', () => {
     'src/daemon/session-device-resolution.ts',
     'src/daemon/handlers/session-device-utils.ts',
     'src/daemon/handlers/session-runtime-admission.ts',
+    'src/daemon/handlers/session-close-script.ts',
+    'src/daemon/handlers/session-close.ts',
   ]);
 
   assert.deepEqual(
@@ -264,24 +323,42 @@ test('session lifecycle rejects restored neutral helper paths', () => {
     [
       'retired session lifecycle path was restored: src/daemon/handlers/session-device-utils.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
       'retired session lifecycle path was restored: src/daemon/handlers/session-runtime-admission.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      'retired session lifecycle path was restored: src/daemon/handlers/session-close-script.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      'retired session lifecycle path was restored: src/daemon/handlers/session-close.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
     ],
   );
 });
 
-test('session lifecycle rejects any restored open handler path', () => {
+test('session lifecycle rejects any restored open or close handler path', () => {
   const violations = checkRetiredSessionLifecyclePaths([
     'src/daemon/handlers/session-open-regressed.ts',
+    'src/daemon/handlers/session-close-regressed.ts',
   ]);
 
-  assert.deepEqual(violations, [
-    {
+  assert.deepEqual(
+    violations.map(({ file, message }) => ({
       rule: 'R10 daemon-modularity',
-      file: 'src/daemon/handlers/session-open-regressed.ts',
+      file,
       line: 1,
-      message:
-        'retired session lifecycle path was restored: src/daemon/handlers/session-open-regressed.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
-    },
-  ]);
+      message,
+    })),
+    [
+      {
+        rule: 'R10 daemon-modularity',
+        file: 'src/daemon/handlers/session-open-regressed.ts',
+        line: 1,
+        message:
+          'retired session lifecycle path was restored: src/daemon/handlers/session-open-regressed.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      },
+      {
+        rule: 'R10 daemon-modularity',
+        file: 'src/daemon/handlers/session-close-regressed.ts',
+        line: 1,
+        message:
+          'retired session lifecycle path was restored: src/daemon/handlers/session-close-regressed.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      },
+    ],
+  );
 });
 
 test('R9 records zone ceilings and keeps engine files outside the largest component', () => {

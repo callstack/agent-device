@@ -194,8 +194,8 @@ function preflightSaveScriptTarget(params: {
  * ADR 0012 decision 6 (Fix 3): the source plan's own terminal `close` is
  * lifecycle, not a script step to replay, while a repair is armed — the agent
  * finalizes the transaction with `close --save-script` instead
- * (`session-close.ts`). Replaying the recorded `close` here would dispatch it
- * as an ordinary step: it tears the session down (and, absent Fix 1/2, could
+ * (`session-lifecycle/internal/session-close.ts`). Replaying the recorded `close` here would
+ * dispatch it as an ordinary step: it tears the session down (and, absent Fix 1/2, could
  * even publish or diverge) before the agent gets that chance. The pure
  * decision (`resolveSuppressedTerminalCloseIndex`, unified with #1554's
  * `--keep-session` suppression) now lives in `@agent-device/ad-replay`'s step

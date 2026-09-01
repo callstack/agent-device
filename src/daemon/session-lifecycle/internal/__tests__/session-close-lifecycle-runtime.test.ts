@@ -1,16 +1,17 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
-import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { SessionStore } from '../../../session-store.ts';
+import type { DaemonRequest, DaemonResponse, SessionState } from '../../../types.ts';
+import { readSessionRuntimeRevision } from '../../../ref-frame.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const runtimeHintsModule = vi.hoisted(() => ({
   evaluated: false,
   clearRuntimeHintValues: vi.fn(async () => {}),
 }));
 
-vi.mock('../../../platform-runtime-runtime-hints.ts', () => {
+vi.mock('../../../../platform-runtime-runtime-hints.ts', () => {
   runtimeHintsModule.evaluated = true;
   return { clearRuntimeHintValues: runtimeHintsModule.clearRuntimeHintValues };
 });
@@ -19,9 +20,9 @@ import {
   handleSessionCommands,
   mockBindDeviceRuntime,
   mockInspectDeviceRuntimeFacts,
-} from './session-command-harness.ts';
-import { lifecycleRuntimeFacts } from '../../__tests__/application-lifecycle-runtime-harness.ts';
-import { dispatchApplicationLifecycleEffect } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
+} from '../../../handlers/__tests__/session-command-harness.ts';
+import { lifecycleRuntimeFacts } from '../../../__tests__/application-lifecycle-runtime-harness.ts';
+import { dispatchApplicationLifecycleEffect } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({ ok: true, data: {} });
@@ -68,6 +69,40 @@ async function close(params: {
 beforeEach(() => {
   vi.clearAllMocks();
   runtimeHintsModule.evaluated = false;
+});
+
+test('an app-only close without a target fails before admission or ref-frame expiry', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-app-only-close-without-target';
+  const device = {
+    platform: 'android' as const,
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator' as const,
+    target: 'mobile' as const,
+    booted: true,
+  };
+  const session = makeSession(sessionName, device);
+  session.refFrameState = 'active';
+  sessionStore.set(sessionName, session);
+  const revisionBeforeClose = readSessionRuntimeRevision(session);
+
+  const response = await close({
+    sessionName,
+    sessionStore,
+    internal: { closeAppOnly: true },
+  });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: { code: 'INVALID_ARGS', message: 'App-only close requires an app target' },
+  });
+  expect(mockInspectDeviceRuntimeFacts).not.toHaveBeenCalled();
+  expect(mockBindDeviceRuntime).not.toHaveBeenCalled();
+  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(readSessionRuntimeRevision(session)).toBe(revisionBeforeClose);
+  expect(session.refFrameState).toBe('active');
+  expect(sessionStore.get(sessionName)).toBe(session);
 });
 
 test('close rejects a false close-target fact before its one implementation bind', async () => {

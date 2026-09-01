@@ -1,8 +1,8 @@
 import type { CloseApplicationFinalizationResult } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
-import type { DaemonRequest, SessionState } from '../types.ts';
-import { SessionStore } from '../session-store.ts';
-import { cleanupRetainedMaterializedPathsForSession } from '../materialized-path-registry.ts';
+import type { DaemonRequest, SessionState } from '../../types.ts';
+import { SessionStore } from '../../session-store.ts';
+import { cleanupRetainedMaterializedPathsForSession } from '../../materialized-path-registry.ts';
 import {
   reportSessionCleanupFailures,
   finishSessionAudioProbe,
@@ -11,9 +11,9 @@ import {
   stopSessionAppLog,
   stopSessionPerfCapture,
   type SessionCleanupFailure,
-} from '../session-teardown.ts';
+} from '../../session-teardown.ts';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
-import { hasRuntimeTransportHints, runtimeHintValues } from '../session-runtime.ts';
+import { hasRuntimeTransportHints, runtimeHintValues } from '../../session-runtime.ts';
 import type {
   CloseRuntime,
   CloseRuntimeWithRuntimeHintClear,

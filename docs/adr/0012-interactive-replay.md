@@ -881,7 +881,7 @@ by construction. The healed `.ad` is written only when the repair ends (below) a
 `--save-script` vocabulary and the precedented close-time write:
 
 - `replay <file>.ad --save-script[=<out>]` arms the repair loop at invocation, before step 1: it sets
-  `session.recordSession = true` (mirroring `session-close.ts:122-124`'s existing `saveScript` handling)
+  `session.recordSession = true` (mirroring the existing `saveScript` handling in `session-lifecycle/internal/session-close.ts`)
   **and** records the repair-run boundary watermark `session.actions.length` (R6). Absent this flag,
   replay behaves exactly as today: no recording, no heal. The heal is opt-in, preserving decision 1's "no
   silent rewrite."

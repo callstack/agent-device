@@ -3,7 +3,7 @@ import {
   sessionCloseShutdownFixture,
   type SessionState,
 } from './session-close-shutdown.fixtures.ts';
-import { installFakeManagedAgentBrowser } from '../../../__tests__/test-utils/web-managed-agent-browser.ts';
+import { installFakeManagedAgentBrowser } from '../../../../__tests__/test-utils/web-managed-agent-browser.ts';
 
 const {
   AppError,
