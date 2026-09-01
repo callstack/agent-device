@@ -49,13 +49,17 @@ test('Appium iOS snapshots acquire facts and publish regular output through the 
 });
 
 test('Appium iOS options become an engine plan and engine-owned projection', () => {
-  const acquired = acquireWebDriverIosSnapshot(SOURCE, {
-    raw: true,
-    interactiveOnly: true,
-    depth: 1,
-    scope: 'Continue',
-    customActions: true,
-  });
+  const acquired = acquireWebDriverIosSnapshot(
+    SOURCE,
+    {
+      raw: true,
+      interactiveOnly: true,
+      depth: 1,
+      scope: 'Continue',
+      customActions: true,
+    },
+    'ios-2',
+  );
 
   assert.equal(acquired.input.stage, 'acquired');
   assert.deepEqual(acquired.plan.narrowing, {
@@ -71,7 +75,7 @@ test('Appium iOS options become an engine plan and engine-owned projection', () 
     customActions: true,
     acquisitionIntent: 'full',
   });
-  assert.deepEqual(acquired.input.acquisition.lineage, {});
+  assert.deepEqual(acquired.input.acquisition.lineage, { targetId: 'ios-2' });
   assert.deepEqual(acquired.input.acquisition.viewport, {
     kind: 'reported',
     rect: { x: 0, y: 0, width: 390, height: 844 },
@@ -82,7 +86,7 @@ test('Appium iOS options become an engine plan and engine-owned projection', () 
     published.result.nodes?.map((node) => [node.type, node.label, node.depth, node.parentIndex]),
     [['XCUIElementTypeButton', 'Continue', 0, undefined]],
   );
-  assert.deepEqual(published.publication.comparisonIdentity.lineage, {});
+  assert.deepEqual(published.publication.comparisonIdentity.lineage, { targetId: 'ios-2' });
 });
 
 test('Appium regular presentation omits unavailable hittability while raw preserves supplied facts', async () => {
@@ -93,8 +97,9 @@ test('Appium regular presentation omits unavailable hittability while raw preser
 
   const regular = await captureWebDriverIosSnapshot({ source: async () => source });
   const regularButton = regular.nodes?.find((node) => node.label === 'Continue');
+  assert.ok(regularButton);
   assert.equal(regularButton?.hittable, undefined);
-  assert.equal('hittable' in (regularButton ?? {}), false);
+  assert.equal('hittable' in regularButton, false);
 
   const raw = await captureWebDriverIosSnapshot({ source: async () => source }, { raw: true });
   assert.equal(raw.nodes?.find((node) => node.label === 'Continue')?.hittable, true);
