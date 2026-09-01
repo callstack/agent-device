@@ -237,7 +237,11 @@ function supportedAdapters(
   return adapters.filter((adapter) => {
     if (adapter.candidate === 'xctest-control') return true;
     const probe = probes.find((candidate) => candidate.candidate === adapter.candidate);
-    return probe?.failure?.kind !== 'unsupported-mechanism';
+    return ![
+      'private-tool-unavailable',
+      'host-accessibility-permission',
+      'candidate-not-supported',
+    ].includes(probe?.failure?.code ?? '');
   });
 }
 

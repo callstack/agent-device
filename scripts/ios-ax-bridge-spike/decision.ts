@@ -79,11 +79,17 @@ function probeReasons(
   probes: readonly { candidate: CandidateId; failure?: { kind: string; code?: string } }[],
 ): string[] {
   return probes.flatMap((probe) =>
-    probe.failure
+    probe.failure && !isReadinessProbeFailure(probe.failure.code)
       ? [
           `${probe.candidate} protocol probe returned ${probe.failure.kind}/${probe.failure.code ?? 'no-code'}.`,
         ]
       : [],
+  );
+}
+
+function isReadinessProbeFailure(code: string | undefined): boolean {
+  return ['target-application-unavailable', 'target-simulator-window-unavailable'].includes(
+    code ?? '',
   );
 }
 
