@@ -9,7 +9,7 @@ import { IosSnapshotEngineError } from './types.ts';
 export function presentIosRunnerSnapshot(
   input: Extract<IosSnapshotInput, { stage: 'presented' }>,
   request: IosSnapshotRequest,
-  foldPolicy: IosSnapshotFoldPolicy,
+  foldPolicy: IosSnapshotFoldPolicy = 'cursor-projected',
 ): IosSnapshotEnginePresentation {
   validateRunnerRequest(input, request);
   const projection = input.validation.presentationKey.projection;

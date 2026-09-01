@@ -1,5 +1,4 @@
 import type {
-  IosAcquisitionResidue,
   IosRunnerQualityPayloadFacts,
   IosSnapshotInput,
   IosViewportEvidence,
@@ -7,8 +6,8 @@ import type {
 import type { SnapshotOptions } from '@agent-device/contracts/interactor-types';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import {
-  publishIosSnapshot,
   IosSnapshotEngineError,
+  presentIosRunnerSnapshot,
 } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { readSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import {
@@ -82,12 +81,12 @@ export function presentAppleRunnerSnapshot(
       viewport,
       hittability: { kind: 'available' },
       lineage: { targetId: deviceId },
-      residue: runnerResidue(result),
+      residue: [],
     },
   };
 
   try {
-    return [...publishIosSnapshot(input, request).payload.nodes];
+    return presentIosRunnerSnapshot(input, request).nodes;
   } catch (error) {
     throwSnapshotEngineError(error);
   }
@@ -150,21 +149,6 @@ function compareRectArea(left: RawSnapshotNode, right: RawSnapshotNode): number 
 
 function rectArea(rect: RawSnapshotNode['rect']): number {
   return rect ? rect.width * rect.height : 0;
-}
-
-function runnerResidue(result: AppleRunnerSnapshotResult): IosAcquisitionResidue[] {
-  const residue: IosAcquisitionResidue[] = [];
-  if (result.truncated === true || result.qualityPayload?.truncated === true) {
-    residue.push({ kind: 'truncated', dimension: 'payload' });
-  }
-  if (result.quality?.effectiveDepth !== undefined) {
-    residue.push({
-      kind: 'truncated',
-      dimension: 'depth',
-      limit: result.quality.effectiveDepth,
-    });
-  }
-  return residue;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
