@@ -3,9 +3,10 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
 import { parseConfig } from './benchmark-config.ts';
+import { createBenchmarkStateRoot } from './state-ownership.ts';
 
 test('proxy measurements retain the warm sample minimum', async () => {
-  const stateDir = await mkdtempForTest('agent-device-ios-benchmark-config-');
+  const stateDir = createBenchmarkStateRoot();
   const args = [
     '--mode',
     'proxy',
@@ -21,7 +22,7 @@ test('proxy measurements retain the warm sample minimum', async () => {
 });
 
 test('unknown benchmark flags fail closed', async () => {
-  const stateDir = await mkdtempForTest('agent-device-ios-benchmark-config-');
+  const stateDir = createBenchmarkStateRoot();
   assert.throws(
     () => parseConfig(['--udid', 'simulator', '--state-dir', stateDir, '--unknown']),
     /Unknown option: --unknown/,
@@ -29,7 +30,7 @@ test('unknown benchmark flags fail closed', async () => {
 });
 
 test('derived data is confined to the owned benchmark state directory', async () => {
-  const stateDir = await mkdtempForTest('agent-device-ios-benchmark-config-');
+  const stateDir = createBenchmarkStateRoot();
   assert.doesNotThrow(() =>
     parseConfig([
       '--udid',
@@ -52,4 +53,14 @@ test('derived data is confined to the owned benchmark state directory', async ()
       ]),
     /descendant of the benchmark state directory/,
   );
+});
+
+test('caller-supplied state directories must already be benchmark-owned', async () => {
+  const unmarked = await mkdtempForTest('agent-device-ios-benchmark-unmarked-');
+  assert.throws(
+    () => parseConfig(['--udid', 'simulator', '--state-dir', unmarked]),
+    /not benchmark-owned/,
+  );
+  const stateDir = createBenchmarkStateRoot();
+  assert.equal(parseConfig(['--udid', 'simulator', '--state-dir', stateDir]).stateDir, stateDir);
 });

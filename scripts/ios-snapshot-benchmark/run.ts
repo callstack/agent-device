@@ -6,6 +6,7 @@ import {
   parseConfig,
   type BenchmarkConfig,
 } from './benchmark-config.ts';
+import { classifyFailure, formatCliFailure, openFixture, type CliContext } from './command.ts';
 import { BenchmarkControlError, runDeepButtonControls } from './deep-control.ts';
 import { CONTRACT, screenFixture } from './definitions.ts';
 import { deepButtonFixtureEvidence } from './deep-button.ts';
@@ -16,8 +17,9 @@ import {
   BenchmarkInfrastructureError,
   bootSimulator,
   shutdownSimulator,
+  stopDaemon,
 } from './lifecycle.ts';
-import { runLocalMeasurements } from './local-runner.ts';
+import { closeSession, runLocalMeasurements } from './local-runner.ts';
 import { measurePackageSize, notRunPackageSize } from './package-evidence.ts';
 import { runProxyMeasurements } from './proxy-runner.ts';
 import { renderBenchmarkMarkdown } from './report.ts';
@@ -83,6 +85,7 @@ async function executeBenchmark(
   };
   try {
     bootSimulator(config.udid);
+    primeDeepLink(config);
     evidence.deepButtonEvidence = runDeepButtonControls(config.repoRoot);
     if (!config.skipPackageSize) {
       evidence.packageSize = measurePackageSize(config.repoRoot, metadata.revision.commit);
@@ -95,6 +98,30 @@ async function executeBenchmark(
     return stoppedResult(config, metadata, evidence, error);
   } finally {
     shutdownAfterRun(config);
+  }
+}
+
+function primeDeepLink(config: BenchmarkConfig): void {
+  const fixture = config.screens.map(screenFixture).find((candidate) => candidate.launchUrl);
+  if (!fixture) return;
+  const context: CliContext = {
+    repoRoot: config.repoRoot,
+    stateDir: config.stateDir,
+    session: 'bench-deep-link-prime',
+    udid: config.udid,
+    derivedPath: path.join(config.derivedPath, 'deep-link-prime'),
+  };
+  try {
+    const opened = openFixture(context, fixture, { relaunch: true });
+    if (!opened.ok) {
+      throw new BenchmarkInfrastructureError(
+        formatCliFailure('deep-link priming', classifyFailure(opened.payload, opened), opened),
+        'agent-device open --launch-url',
+      );
+    }
+  } finally {
+    closeSession(context);
+    stopDaemon(config.repoRoot, config.stateDir);
   }
 }
 

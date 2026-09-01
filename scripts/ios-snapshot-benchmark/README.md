@@ -40,6 +40,8 @@ Every sample keeps daemon duration and fresh-process wall time separately, the f
 
 Each local cell is admitted only after the simulator state, verified daemon identity, app process generation, and exact fixture anchor are checked. A mismatch stops the run with a typed cell-state or fixture-anchor reason. Derived data is cleared only below the benchmark-owned state directory.
 
+When `--state-dir` is omitted, the harness allocates a fresh marker-owned root under the host temporary directory. A caller-supplied state directory must already be a real, marker-owned directory; the CLI never initializes ownership for an existing path. Any explicit `--derived-path` must remain below that root.
+
 ## Proxy matrix
 
 The proxy mode starts the repository proxy, then inserts a local deterministic conditioner in front of it. It runs both a persistent Node client and a fresh-process CLI at RTT 0, 20, and 80 ms. Request and response body bytes, failures, bandwidth, packet-loss rate, and seed are retained in the raw result.

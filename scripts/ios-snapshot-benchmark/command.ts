@@ -96,13 +96,22 @@ export function openFixture(
   fixture: ScreenFixture,
   options: { relaunch?: boolean } = {},
 ): CliResult {
-  return invokeCli(context, [
+  const opened = invokeCli(context, [
     'open',
     fixture.app,
     ...(options.relaunch ? ['--relaunch'] : []),
     ...(fixture.launchUrl ? ['--launch-url', fixture.launchUrl] : []),
     '--foreground',
   ]);
+  if (!fixture.launchUrl || !hasDeepLinkConfirmation(opened.payload)) return opened;
+  const accepted = pressFixtureTarget(context, 'label="Open"');
+  if (accepted.ok) return opened;
+  return {
+    ...opened,
+    ok: false,
+    stderr: [opened.stderr, accepted.stderr].filter(Boolean).join('\n'),
+    payload: accepted.payload,
+  };
 }
 
 export function snapshotFixture(context: CliContext): CliResult {
@@ -118,11 +127,25 @@ export function pressFixtureTarget(context: CliContext, selector: string): CliRe
 }
 
 export function snapshotHasAnchor(payload: unknown, anchorText: string): boolean {
+  return snapshotNodes(payload).some((record) => {
+    return record.label === anchorText || record.value === anchorText;
+  });
+}
+
+export function hasDeepLinkConfirmation(payload: unknown): boolean {
+  return snapshotNodes(payload).some((record) => {
+    const role = readString(record.role);
+    const label = readString(record.label);
+    return role === 'alert' && label?.startsWith('Open in ') === true;
+  });
+}
+
+function snapshotNodes(payload: unknown): Record<string, unknown>[] {
   const snapshot = readSnapshotRecord(payload);
-  if (!snapshot || !Array.isArray(snapshot.nodes)) return false;
-  return snapshot.nodes.some((node) => {
+  if (!snapshot || !Array.isArray(snapshot.nodes)) return [];
+  return snapshot.nodes.flatMap((node) => {
     const record = asRecord(node);
-    return record?.label === anchorText || record?.value === anchorText;
+    return record ? [record] : [];
   });
 }
 

@@ -3,9 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { BenchmarkStopReason } from './types.ts';
 
-const BENCHMARK_OWNER_MARKER = '.agent-device-ios-snapshot-benchmark-owner';
-const BENCHMARK_OWNER_MARKER_CONTENT = 'agent-device-ios-snapshot-benchmark.v1\n';
-
 export class BenchmarkInfrastructureError extends Error {
   readonly command?: string;
 
@@ -70,12 +67,21 @@ export function shutdownSimulator(udid: string): void {
       `xcrun simctl shutdown ${udid}`,
     );
   }
-  if (readSimulatorState(udid) !== 'Shutdown') {
+  if (!waitForSimulatorState(udid, 'Shutdown')) {
     throw new BenchmarkInfrastructureError(
       `Simulator ${udid} did not reach Shutdown after shutdown.`,
       `xcrun simctl shutdown ${udid}`,
     );
   }
+}
+
+function waitForSimulatorState(udid: string, expected: string): boolean {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (readSimulatorState(udid) === expected) return true;
+    spawnSync('sleep', ['0.25'], { stdio: 'ignore' });
+  }
+  return readSimulatorState(udid) === expected;
 }
 
 export function terminateApp(udid: string, appId: string): void {
@@ -127,59 +133,6 @@ export function stopDaemon(repoRoot: string, stateDir: string): void {
     throw new BenchmarkInfrastructureError(
       `Daemon metadata remained after stopping ${stateDir}.`,
       'agent-device daemon stop --clean',
-    );
-  }
-}
-
-export function clearDerivedData(derivedPath: string, ownerRoot: string): void {
-  assertOwnedDerivedPath(derivedPath, ownerRoot);
-  if (fs.existsSync(derivedPath)) fs.rmSync(derivedPath, { recursive: true, force: true });
-  fs.mkdirSync(path.dirname(derivedPath), { recursive: true });
-}
-
-export function ensureBenchmarkOwner(ownerRoot: string): void {
-  fs.mkdirSync(ownerRoot, { recursive: true });
-  const markerPath = path.join(ownerRoot, BENCHMARK_OWNER_MARKER);
-  if (!fs.existsSync(markerPath)) {
-    fs.writeFileSync(markerPath, BENCHMARK_OWNER_MARKER_CONTENT, { flag: 'wx' });
-    return;
-  }
-  if (fs.lstatSync(markerPath).isSymbolicLink()) {
-    throw new BenchmarkCellAdmissionError(
-      'derived-path',
-      `Benchmark owner marker must not be a symbolic link: ${markerPath}`,
-    );
-  }
-  if (fs.readFileSync(markerPath, 'utf8') !== BENCHMARK_OWNER_MARKER_CONTENT) {
-    throw new BenchmarkCellAdmissionError(
-      'derived-path',
-      `Benchmark owner marker is invalid: ${markerPath}`,
-    );
-  }
-}
-
-export function assertOwnedDerivedPath(derivedPath: string, ownerRoot: string): void {
-  ensureBenchmarkOwner(ownerRoot);
-  const resolvedOwnerRoot = path.resolve(ownerRoot);
-  const resolvedDerivedPath = path.resolve(derivedPath);
-  if (!isDescendant(resolvedDerivedPath, resolvedOwnerRoot)) {
-    throw new BenchmarkCellAdmissionError(
-      'derived-path',
-      `Derived-data path must be a descendant of the benchmark state directory.`,
-    );
-  }
-  if (fs.existsSync(resolvedDerivedPath) && fs.lstatSync(resolvedDerivedPath).isSymbolicLink()) {
-    throw new BenchmarkCellAdmissionError(
-      'derived-path',
-      `Derived-data path must not be a symbolic link: ${resolvedDerivedPath}`,
-    );
-  }
-  const realOwnerRoot = fs.realpathSync.native(resolvedOwnerRoot);
-  const realExistingParent = fs.realpathSync.native(findExistingPath(resolvedDerivedPath));
-  if (!isDescendantOrSame(realExistingParent, realOwnerRoot)) {
-    throw new BenchmarkCellAdmissionError(
-      'derived-path',
-      `Derived-data path resolves outside the benchmark state directory.`,
     );
   }
 }
@@ -264,33 +217,4 @@ function processOutput(stdout: string | Buffer | null): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isDescendant(candidate: string, root: string): boolean {
-  const relative = path.relative(root, candidate);
-  return (
-    relative !== '' &&
-    relative !== '..' &&
-    !relative.startsWith(`..${path.sep}`) &&
-    !path.isAbsolute(relative)
-  );
-}
-
-function isDescendantOrSame(candidate: string, root: string): boolean {
-  return candidate === root || isDescendant(candidate, root);
-}
-
-function findExistingPath(target: string): string {
-  let current = target;
-  while (!fs.existsSync(current)) {
-    const parent = path.dirname(current);
-    if (parent === current) {
-      throw new BenchmarkCellAdmissionError(
-        'derived-path',
-        `Could not resolve derived-data parent: ${target}`,
-      );
-    }
-    current = parent;
-  }
-  return current;
 }

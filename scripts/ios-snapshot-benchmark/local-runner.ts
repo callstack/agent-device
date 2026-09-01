@@ -90,7 +90,7 @@ function contextFor(options: CellAdmissionOptions): CliContext {
   };
 }
 
-function closeSession(context: CliContext): void {
+export function closeSession(context: CliContext): void {
   spawnSync(
     process.execPath,
     [

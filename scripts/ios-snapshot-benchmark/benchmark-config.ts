@@ -1,9 +1,11 @@
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { parseLocalStates, parseRtt, parseSampleCount, parseScreenIds } from './definitions.ts';
 import { resolveRepoRoot } from './host.ts';
-import { assertOwnedDerivedPath, ensureBenchmarkOwner } from './lifecycle.ts';
+import {
+  assertBenchmarkOwner,
+  assertOwnedDerivedPath,
+  createBenchmarkStateRoot,
+} from './state-ownership.ts';
 import type { LocalState, ScreenId } from './types.ts';
 
 export class BenchmarkConfigurationError extends Error {}
@@ -153,18 +155,16 @@ function sampleMinimumStates(states: LocalState[], mode: BenchmarkConfig['mode']
 function readPaths(
   values: Map<string, string>,
 ): Pick<BenchmarkConfig, 'stateDir' | 'outputPath' | 'derivedPath' | 'appPath'> {
-  const stateDir = resolvePath(
-    values.get('--state-dir'),
-    fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-ios-benchmark-')),
-  );
+  const stateDir = values.has('--state-dir')
+    ? resolvePath(values.get('--state-dir'), '')
+    : createBenchmarkStateRoot();
   const appPath = values.get('--app-path');
-  fs.mkdirSync(stateDir, { recursive: true });
   const derivedPath = resolvePath(
     values.get('--derived-path'),
     path.join(stateDir, 'derived-data'),
   );
   try {
-    ensureBenchmarkOwner(stateDir);
+    assertBenchmarkOwner(stateDir);
     assertOwnedDerivedPath(derivedPath, stateDir);
   } catch (error) {
     throw new BenchmarkConfigurationError(error instanceof Error ? error.message : String(error));
@@ -241,7 +241,7 @@ Options:
   --bandwidth-kbps <n|unlimited>
   --packet-loss <percent>      Deterministic loss rate for proxy requests.
   --seed <n>                   Deterministic proxy loss seed.
-  --state-dir <path>           Isolated daemon/client state directory.
+  --state-dir <path>           Existing pre-marked benchmark state directory; omit for a fresh root.
   --derived-path <path>        Isolated iOS XCTest derived-data path.
   --out <path>                 Raw JSON output path.
   --skip-package-size          Omit packed/clean-installed/bundled measurement.

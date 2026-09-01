@@ -16,13 +16,13 @@ import {
   BenchmarkCellAdmissionError,
   BenchmarkContentionError,
   bootSimulator,
-  clearDerivedData,
   readRunningAppPids,
   readSimulatorState,
   shutdownSimulator,
   stopDaemon,
   terminateApp,
 } from './lifecycle.ts';
+import { clearDerivedData } from './state-ownership.ts';
 import type { LocalState, ScreenFixture } from './types.ts';
 
 export type CellAdmissionOptions = {

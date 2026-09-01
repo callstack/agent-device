@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { classifyFailure, firstTreeStatus, snapshotHasAnchor } from './command.ts';
+import {
+  classifyFailure,
+  firstTreeStatus,
+  hasDeepLinkConfirmation,
+  snapshotHasAnchor,
+} from './command.ts';
 
 test('classifies typed reasons without using error message text', () => {
   assert.equal(
@@ -57,4 +62,29 @@ test('admits only an exact semantic anchor from snapshot node fields', () => {
   assert.equal(snapshotHasAnchor(payload, 'Automation lab'), true);
   assert.equal(snapshotHasAnchor(payload, 'secondary value'), true);
   assert.equal(snapshotHasAnchor(payload, 'Automation'), false);
+});
+
+test('recognizes the first-install deep-link confirmation as a setup prompt', () => {
+  assert.equal(
+    hasDeepLinkConfirmation({
+      data: {
+        results: [
+          {
+            data: {
+              snapshot: {
+                nodes: [{ role: 'alert', label: 'Open in “Agent Device Tester”?' }],
+              },
+            },
+          },
+        ],
+      },
+    }),
+    true,
+  );
+  assert.equal(
+    hasDeepLinkConfirmation({
+      data: { results: [{ data: { snapshot: { nodes: [{ role: 'application' }] } } }] },
+    }),
+    false,
+  );
 });
