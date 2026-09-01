@@ -2,27 +2,24 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import {
   openFixture,
-  pressFixtureTarget,
-  classifyFailure,
-  formatCliFailure,
   sampleFromCli,
   snapshotFixture,
   type CliContext,
   type CliResult,
 } from './command.ts';
 import {
-  BenchmarkContentionError,
-  clearDerivedData,
-  bootSimulator,
-  shutdownSimulator,
-  stopDaemon,
-  terminateApp,
-} from './lifecycle.ts';
+  admitReadyCell,
+  admitSuccessfulSample,
+  prepareCellState,
+  prepareSampleState,
+  type CellAdmissionOptions,
+} from './cell-admission.ts';
 import { sampleMinimumForState } from './definitions.ts';
+import { stopDaemon } from './lifecycle.ts';
 import { buildMeasurement } from './statistics.ts';
 import type { LocalState, Measurement, RawSample, ScreenFixture } from './types.ts';
 
-export async function runLocalMeasurements(options: {
+type LocalRunnerOptions = {
   repoRoot: string;
   stateDir: string;
   derivedPath: string;
@@ -30,7 +27,9 @@ export async function runLocalMeasurements(options: {
   fixtures: ScreenFixture[];
   states: LocalState[];
   samples: number;
-}): Promise<Measurement[]> {
+};
+
+export async function runLocalMeasurements(options: LocalRunnerOptions): Promise<Measurement[]> {
   const measurements: Measurement[] = [];
   for (const state of options.states) {
     for (const fixture of options.fixtures) {
@@ -40,20 +39,19 @@ export async function runLocalMeasurements(options: {
   return measurements;
 }
 
-async function runCell(options: {
-  repoRoot: string;
-  stateDir: string;
-  derivedPath: string;
-  udid: string;
-  samples: number;
-  state: LocalState;
-  fixture: ScreenFixture;
-}): Promise<Measurement> {
+async function runCell(options: CellAdmissionOptions): Promise<Measurement> {
   const context = contextFor(options);
-  prepareState(options);
+  let appPid: number | undefined;
   try {
-    prepareReadyCell(context, options);
-    const samples = collectCellSamples(context, options);
+    prepareCellState(options);
+    appPid = admitReadyCell(context, options);
+    const samples: RawSample[] = [];
+    for (let index = 0; index < options.samples; index += 1) {
+      if (index > 0) prepareSampleState(options);
+      const result = runMeasuredCommand(context, options);
+      if (result.ok) appPid = admitSuccessfulSample(context, options, result, appPid);
+      samples.push(sampleFromCli(result, measuredOperation(options.state), index));
+    }
     return buildMeasurement({
       transport: 'local',
       execution: 'fresh-process-cli',
@@ -69,119 +67,9 @@ async function runCell(options: {
   }
 }
 
-function prepareReadyCell(
-  context: CliContext,
-  options: { state: LocalState; fixture: ScreenFixture },
-): void {
-  if (options.state !== 'warm' && options.state !== 'relaunch') return;
-  const opened = openFixture(context, options.fixture, { relaunch: true });
-  requireSetupSuccess(opened, `warm ${options.fixture.id} setup`);
-  prepareScreen(context, options.fixture);
-}
-
-function collectCellSamples(
-  context: CliContext,
-  options: {
-    repoRoot: string;
-    stateDir: string;
-    derivedPath: string;
-    udid: string;
-    samples: number;
-    state: LocalState;
-    fixture: ScreenFixture;
-  },
-): RawSample[] {
-  const samples: RawSample[] = [];
-  for (let index = 0; index < options.samples; index += 1) {
-    prepareColdSampleForState(options);
-    const result = runMeasuredCommand(context, options);
-    samples.push(sampleFromCli(result, measuredOperation(options.state), index));
-    if (shouldPrepareScreen(result, options)) prepareScreen(context, options.fixture);
-  }
-  return samples;
-}
-
-function prepareColdSampleForState(options: {
-  repoRoot: string;
-  stateDir: string;
-  derivedPath: string;
-  udid: string;
-  state: LocalState;
-  fixture: ScreenFixture;
-}): void {
-  if (options.state === 'cold-cold') return prepareColdColdSample(options);
-  if (options.state === 'cold') prepareColdSample(options);
-}
-
-function shouldPrepareScreen(
-  result: CliResult,
-  options: { fixture: ScreenFixture; state: LocalState },
-): boolean {
-  return result.ok && options.fixture.setupAction !== undefined && options.state !== 'warm';
-}
-
-function prepareState(options: {
-  repoRoot: string;
-  stateDir: string;
-  derivedPath: string;
-  udid: string;
-  state: LocalState;
-}): void {
-  if (options.state === 'cold-cold') {
-    shutdownSimulator(options.udid);
-    stopDaemon(options.repoRoot, options.stateDir);
-    clearDerivedData(options.derivedPath);
-    bootSimulator(options.udid);
-    return;
-  }
-  bootSimulator(options.udid);
-  if (options.state === 'cold') stopDaemon(options.repoRoot, options.stateDir);
-}
-
-function prepareColdColdSample(options: {
-  repoRoot: string;
-  stateDir: string;
-  derivedPath: string;
-  udid: string;
-}): void {
-  shutdownSimulator(options.udid);
-  stopDaemon(options.repoRoot, options.stateDir);
-  clearDerivedData(options.derivedPath);
-  bootSimulator(options.udid);
-}
-
-function prepareColdSample(options: {
-  repoRoot: string;
-  stateDir: string;
-  udid: string;
-  fixture: ScreenFixture;
-}): void {
-  stopDaemon(options.repoRoot, options.stateDir);
-  terminateApp(options.udid, options.fixture.app);
-}
-
-function runMeasuredCommand(
-  context: CliContext,
-  options: { fixture: ScreenFixture; state: LocalState },
-) {
+function runMeasuredCommand(context: CliContext, options: CellAdmissionOptions): CliResult {
   if (options.state === 'warm') return snapshotFixture(context);
   return openFixture(context, options.fixture, { relaunch: true });
-}
-
-function prepareScreen(context: CliContext, fixture: ScreenFixture): void {
-  if (!fixture.setupAction) return;
-  const result = pressFixtureTarget(context, 'id="automation-open-alert"');
-  requireSetupSuccess(result, `${fixture.id} setup action`);
-  const observed = snapshotFixture(context);
-  requireSetupSuccess(observed, `${fixture.id} native surface observation`);
-}
-
-function requireSetupSuccess(result: CliResult, operation: string): void {
-  if (result.ok) return;
-  const failure = classifyFailure(result.payload, result);
-  const message = formatCliFailure(operation, failure, result);
-  if (failure.code === 'DEVICE_IN_USE') throw new BenchmarkContentionError(message, operation);
-  throw new Error(message);
 }
 
 function measuredOperation(
@@ -192,14 +80,7 @@ function measuredOperation(
   return 'open-foreground';
 }
 
-function contextFor(options: {
-  repoRoot: string;
-  stateDir: string;
-  derivedPath: string;
-  udid: string;
-  state: LocalState;
-  fixture: ScreenFixture;
-}): CliContext {
+function contextFor(options: CellAdmissionOptions): CliContext {
   return {
     repoRoot: options.repoRoot,
     stateDir: options.stateDir,

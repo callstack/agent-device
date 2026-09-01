@@ -123,6 +123,7 @@ export type PackageSize = {
 };
 
 export type DeepButtonObservation = {
+  depth: number;
   surfaceDigest: string;
   fullDigest: string;
   state: 'off' | 'on';
@@ -139,6 +140,8 @@ export type DeepButtonControl = {
 export type DeepButtonEvidence = {
   issue: typeof DEEP_BUTTON_ISSUE_ID;
   fixture: 'deep-button-v1';
+  artifact: 'deep-button-fixture.v1.json';
+  depth: number;
   changedDescendant: 'deep-button-state';
   invalidShallowRule: DeepButtonControl;
   safeFullRule: DeepButtonControl;
@@ -153,9 +156,12 @@ export type ProxyNetwork = {
   seed: number;
 };
 
+export type BenchmarkStopReason = 'cell-state' | 'fixture-anchor' | 'derived-path';
+
 export type BenchmarkStop = {
   category: 'infrastructure' | 'contention' | 'configuration';
   message: string;
+  reason?: BenchmarkStopReason;
   command?: string;
 };
 

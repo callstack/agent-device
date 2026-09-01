@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import { test } from 'vitest';
 import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
 import { parseConfig } from './benchmark-config.ts';
@@ -24,5 +25,31 @@ test('unknown benchmark flags fail closed', async () => {
   assert.throws(
     () => parseConfig(['--udid', 'simulator', '--state-dir', stateDir, '--unknown']),
     /Unknown option: --unknown/,
+  );
+});
+
+test('derived data is confined to the owned benchmark state directory', async () => {
+  const stateDir = await mkdtempForTest('agent-device-ios-benchmark-config-');
+  assert.doesNotThrow(() =>
+    parseConfig([
+      '--udid',
+      'simulator',
+      '--state-dir',
+      stateDir,
+      '--derived-path',
+      path.join(stateDir, 'derived-data', 'cell'),
+    ]),
+  );
+  assert.throws(
+    () =>
+      parseConfig([
+        '--udid',
+        'simulator',
+        '--state-dir',
+        stateDir,
+        '--derived-path',
+        path.join(stateDir, '..', 'unowned-derived-data'),
+      ]),
+    /descendant of the benchmark state directory/,
   );
 });

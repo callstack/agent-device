@@ -81,6 +81,10 @@ test('accepts a stopped run before the first measurement cell', () => {
   const value = result();
   value.status = 'stopped';
   value.measurements = [];
-  value.stop = { category: 'infrastructure', message: 'fixture build unavailable' };
+  value.stop = {
+    category: 'infrastructure',
+    reason: 'fixture-anchor',
+    message: 'fixture build unavailable',
+  };
   assert.doesNotThrow(() => assertValidRawResult(value));
 });

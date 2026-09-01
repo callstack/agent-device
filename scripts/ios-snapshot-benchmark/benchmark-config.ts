@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { parseLocalStates, parseRtt, parseSampleCount, parseScreenIds } from './definitions.ts';
 import { resolveRepoRoot } from './host.ts';
+import { assertOwnedDerivedPath, ensureBenchmarkOwner } from './lifecycle.ts';
 import type { LocalState, ScreenId } from './types.ts';
 
 export class BenchmarkConfigurationError extends Error {}
@@ -158,13 +159,23 @@ function readPaths(
   );
   const appPath = values.get('--app-path');
   fs.mkdirSync(stateDir, { recursive: true });
+  const derivedPath = resolvePath(
+    values.get('--derived-path'),
+    path.join(stateDir, 'derived-data'),
+  );
+  try {
+    ensureBenchmarkOwner(stateDir);
+    assertOwnedDerivedPath(derivedPath, stateDir);
+  } catch (error) {
+    throw new BenchmarkConfigurationError(error instanceof Error ? error.message : String(error));
+  }
   return {
     stateDir,
     outputPath: resolvePath(
       values.get('--out'),
       path.join(stateDir, 'ios-snapshot-convergence.v1.json'),
     ),
-    derivedPath: resolvePath(values.get('--derived-path'), path.join(stateDir, 'derived-data')),
+    derivedPath,
     ...optionalAppPath(appPath),
   };
 }

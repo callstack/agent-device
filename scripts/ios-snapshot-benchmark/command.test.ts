@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { classifyFailure, firstTreeStatus } from './command.ts';
+import { classifyFailure, firstTreeStatus, snapshotHasAnchor } from './command.ts';
 
 test('classifies typed reasons without using error message text', () => {
   assert.equal(
@@ -38,4 +38,23 @@ test('keeps empty, readable, unreadable, and unobserved first trees distinct', (
     firstTreeStatus({ error: { details: { reason: 'bridge_unavailable' } } }),
     'not-observed',
   );
+});
+
+test('admits only an exact semantic anchor from snapshot node fields', () => {
+  const payload = {
+    data: {
+      results: [
+        {
+          data: {
+            snapshot: {
+              nodes: [{ label: 'Automation lab' }, { value: 'secondary value' }],
+            },
+          },
+        },
+      ],
+    },
+  };
+  assert.equal(snapshotHasAnchor(payload, 'Automation lab'), true);
+  assert.equal(snapshotHasAnchor(payload, 'secondary value'), true);
+  assert.equal(snapshotHasAnchor(payload, 'Automation'), false);
 });

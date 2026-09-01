@@ -74,7 +74,7 @@ function invokeCli(context: CliContext, args: string[], timeoutMs = 300_000): Cl
   const stdout = typeof result.stdout === 'string' ? result.stdout : '';
   const stderr = typeof result.stderr === 'string' ? result.stderr : '';
   const exitCode = typeof result.status === 'number' ? result.status : -1;
-  const spawnErrorCode = readString(result.error?.code);
+  const spawnErrorCode = readString((result.error as NodeJS.ErrnoException | undefined)?.code);
   const spawnError = result.error ? `${result.error.name}: ${result.error.message}` : '';
   const payload = parseJson(stdout);
   const finishedAt = new Date().toISOString();
@@ -115,6 +115,15 @@ export function snapshotFixture(context: CliContext): CliResult {
 
 export function pressFixtureTarget(context: CliContext, selector: string): CliResult {
   return invokeCli(context, ['click', selector]);
+}
+
+export function snapshotHasAnchor(payload: unknown, anchorText: string): boolean {
+  const snapshot = readSnapshotRecord(payload);
+  if (!snapshot || !Array.isArray(snapshot.nodes)) return false;
+  return snapshot.nodes.some((node) => {
+    const record = asRecord(node);
+    return record?.label === anchorText || record?.value === anchorText;
+  });
 }
 
 export function sampleFromCli(

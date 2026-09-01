@@ -11,6 +11,7 @@ import { CONTRACT, screenFixture } from './definitions.ts';
 import { deepButtonFixtureEvidence } from './deep-button.ts';
 import { readGitRevision, readTarget, readToolchain } from './host.ts';
 import {
+  BenchmarkCellAdmissionError,
   BenchmarkContentionError,
   BenchmarkInfrastructureError,
   bootSimulator,
@@ -23,6 +24,7 @@ import { renderBenchmarkMarkdown } from './report.ts';
 import { assertValidRawResult } from './schema.ts';
 import {
   BENCHMARK_SCHEMA_VERSION,
+  type BenchmarkStop,
   type BenchmarkResult,
   type DeepButtonEvidence,
   type GitRevision,
@@ -165,8 +167,17 @@ function stoppedResult(
     stop: {
       category: stopCategory(error),
       message: message.slice(0, 2000),
-      ...(stopCommand(error) ? { command: stopCommand(error) } : {}),
+      ...stopDetails(error),
     },
+  };
+}
+
+function stopDetails(error: unknown): Pick<BenchmarkStop, 'reason' | 'command'> {
+  const reason = error instanceof BenchmarkCellAdmissionError ? error.reason : undefined;
+  const command = stopCommand(error);
+  return {
+    ...(reason ? { reason } : {}),
+    ...(command ? { command } : {}),
   };
 }
 

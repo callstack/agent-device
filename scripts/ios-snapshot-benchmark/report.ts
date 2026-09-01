@@ -19,6 +19,7 @@ export function renderBenchmarkMarkdown(result: BenchmarkResult): string {
     '',
     '## Deep-button control',
     '',
+    `- Fixture artifact: ${result.deepButtonEvidence.artifact} (depth ${result.deepButtonEvidence.depth})`,
     `- Red control: ${result.deepButtonEvidence.invalidShallowRule.command} (exit ${result.deepButtonEvidence.invalidShallowRule.exitCode})`,
     `  - ${result.deepButtonEvidence.invalidShallowRule.assertion}`,
     `- Safe control: ${result.deepButtonEvidence.safeFullRule.command} (exit ${result.deepButtonEvidence.safeFullRule.exitCode})`,
@@ -26,6 +27,7 @@ export function renderBenchmarkMarkdown(result: BenchmarkResult): string {
   ];
   if (result.stop) {
     lines.push('', '## Stop condition', '', `- ${result.stop.category}: ${result.stop.message}`);
+    if (result.stop.reason) lines.push(`- Reason: ${result.stop.reason}`);
     if (result.stop.command) lines.push(`- Command: ${result.stop.command}`);
   }
   return `${lines.join('\n')}\n`;

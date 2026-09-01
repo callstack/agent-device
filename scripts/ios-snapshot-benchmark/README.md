@@ -38,6 +38,8 @@ The cells mean:
 
 Every sample keeps daemon duration and fresh-process wall time separately, the first-tree status, response bytes, target generation, and typed failure details. The raw JSON is validated against `raw-result.schema.v1.json`; the adjacent Markdown is a human-readable summary.
 
+Each local cell is admitted only after the simulator state, verified daemon identity, app process generation, and exact fixture anchor are checked. A mismatch stops the run with a typed cell-state or fixture-anchor reason. Derived data is cleared only below the benchmark-owned state directory.
+
 ## Proxy matrix
 
 The proxy mode starts the repository proxy, then inserts a local deterministic conditioner in front of it. It runs both a persistent Node client and a fresh-process CLI at RTT 0, 20, and 80 ms. Request and response body bytes, failures, bandwidth, packet-loss rate, and seed are retained in the raw result.
@@ -62,7 +64,7 @@ The conditioner is semantics-preserving at zero packet loss. Non-zero loss is an
 
 ## Permanent deep-button control
 
-This is an implementation-independent control for [#1626](https://github.com/callstack/agent-device/issues/1626): the changed leaf is intentionally omitted by the shallow observation, so a no-effect assertion must fail. The full observation includes the leaf and passes.
+This is an implementation-independent control for [#1626](https://github.com/callstack/agent-device/issues/1626): the checked-in `deep-button-fixture.v1.json` artifact contains a 72-level ancestor chain and independently recorded shallow/full outputs. The changed leaf is intentionally omitted by the shallow observation, so a no-effect assertion must fail. The full observation includes the leaf and passes.
 
 ```sh
 pnpm bench:ios-snapshot:deep-button -- --rule invalid-shallow

@@ -158,6 +158,7 @@
       "properties": {
         "category": { "type": "string", "enum": ["infrastructure", "contention", "configuration"] },
         "message": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "enum": ["cell-state", "fixture-anchor", "derived-path"] },
         "command": { "type": "string", "minLength": 1 }
       }
     },
@@ -292,6 +293,8 @@
       "required": [
         "issue",
         "fixture",
+        "artifact",
+        "depth",
         "changedDescendant",
         "invalidShallowRule",
         "safeFullRule",
@@ -301,6 +304,8 @@
       "properties": {
         "issue": { "const": "#1626" },
         "fixture": { "const": "deep-button-v1" },
+        "artifact": { "const": "deep-button-fixture.v1.json" },
+        "depth": { "type": "integer", "minimum": 1 },
         "changedDescendant": { "const": "deep-button-state" },
         "invalidShallowRule": { "$ref": "#/$defs/control" },
         "safeFullRule": { "$ref": "#/$defs/control" },
@@ -321,8 +326,16 @@
     "observation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["surfaceDigest", "fullDigest", "state", "surfaceNodeIds", "fullNodeIds"],
+      "required": [
+        "depth",
+        "surfaceDigest",
+        "fullDigest",
+        "state",
+        "surfaceNodeIds",
+        "fullNodeIds"
+      ],
       "properties": {
+        "depth": { "type": "integer", "minimum": 1 },
         "surfaceDigest": { "type": "string", "minLength": 1 },
         "fullDigest": { "type": "string", "minLength": 1 },
         "state": { "type": "string", "enum": ["off", "on"] },

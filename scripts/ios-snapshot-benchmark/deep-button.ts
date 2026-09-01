@@ -1,5 +1,11 @@
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import {
+  ARTIFACT_FILENAME,
+  materializeNodes,
+  readDeepButtonFixtureArtifact,
+  type DeepButtonArtifact,
+} from './deep-button-artifact.ts';
 import type { DeepButtonEvidence, DeepButtonObservation } from './types.ts';
 
 const INVALID_SHALLOW_COMMAND = 'pnpm bench:ios-snapshot:deep-button -- --rule invalid-shallow';
@@ -7,43 +13,16 @@ const SAFE_FULL_COMMAND = 'pnpm bench:ios-snapshot:deep-button -- --rule safe-fu
 const INVALID_ASSERTION =
   'AssertionError: changed descendant was omitted by shallow observation; no-effect claim is invalid.';
 
-type FixtureNode = { id: string; depth: number; label: string; state?: 'off' | 'on' };
-
-const SURFACE_NODES: FixtureNode[] = [
-  { id: 'deep-button-root', depth: 0, label: 'Deep button fixture' },
-  { id: 'deep-button-container', depth: 1, label: 'Action container' },
-];
-
-function fullNodes(state: 'off' | 'on'): FixtureNode[] {
-  return [
-    ...SURFACE_NODES,
-    { id: 'deep-button-state', depth: 8, label: `Deep button ${state}`, state },
-  ];
-}
-
-function digest(nodes: FixtureNode[]): string {
-  return crypto.createHash('sha256').update(JSON.stringify(nodes)).digest('hex');
-}
-
-function observation(state: 'off' | 'on'): DeepButtonObservation {
-  const surfaceNodes = SURFACE_NODES;
-  const allNodes = fullNodes(state);
-  return {
-    surfaceDigest: digest(surfaceNodes),
-    fullDigest: digest(allNodes),
-    state,
-    surfaceNodeIds: surfaceNodes.map((node) => node.id),
-    fullNodeIds: allNodes.map((node) => node.id),
-  };
-}
+export { readDeepButtonFixtureArtifact } from './deep-button-artifact.ts';
 
 export function deepButtonFixtureEvidence(): DeepButtonEvidence {
-  const before = observation('off');
-  const after = observation('on');
+  const artifact = readDeepButtonFixtureArtifact();
   return {
     issue: '#1626',
     fixture: 'deep-button-v1',
-    changedDescendant: 'deep-button-state',
+    artifact: ARTIFACT_FILENAME,
+    depth: artifact.depth,
+    changedDescendant: artifact.changedDescendant,
     invalidShallowRule: {
       command: INVALID_SHALLOW_COMMAND,
       exitCode: 1,
@@ -54,19 +33,19 @@ export function deepButtonFixtureEvidence(): DeepButtonEvidence {
       exitCode: 0,
       assertion: 'full observation changed and includes the changed descendant.',
     },
-    before: {
-      ...before,
-    },
-    after: {
-      ...after,
-    },
+    before: observation(artifact, artifact.before),
+    after: observation(artifact, artifact.after),
   };
 }
 
 export function assertInvalidShallowRuleFails(): never {
-  const before = observation('off');
-  const after = observation('on');
-  if (before.surfaceDigest === after.surfaceDigest && before.fullDigest !== after.fullDigest) {
+  const evidence = deepButtonFixtureEvidence();
+  if (
+    evidence.before.surfaceDigest === evidence.after.surfaceDigest &&
+    evidence.before.fullDigest !== evidence.after.fullDigest &&
+    !evidence.after.surfaceNodeIds.includes(evidence.changedDescendant) &&
+    evidence.after.fullNodeIds.includes(evidence.changedDescendant)
+  ) {
     throw new Error(INVALID_ASSERTION);
   }
   throw new Error('AssertionError: fixture did not produce a changed omitted descendant.');
@@ -80,6 +59,26 @@ export function assertSafeFullRulePasses(): void {
   if (!evidence.after.fullNodeIds.includes(evidence.changedDescendant)) {
     throw new Error('AssertionError: full observation omitted the changed descendant.');
   }
+}
+
+function observation(
+  artifact: DeepButtonArtifact,
+  source: DeepButtonArtifact['before'],
+): DeepButtonObservation {
+  const surfaceNodes = materializeNodes(artifact.nodes, source.shallowNodeIds, source.changedNode);
+  const fullNodes = materializeNodes(artifact.nodes, source.fullNodeIds, source.changedNode);
+  return {
+    depth: artifact.depth,
+    surfaceDigest: digest(surfaceNodes),
+    fullDigest: digest(fullNodes),
+    state: source.state,
+    surfaceNodeIds: source.shallowNodeIds,
+    fullNodeIds: source.fullNodeIds,
+  };
+}
+
+function digest(nodes: DeepButtonArtifact['nodes']): string {
+  return crypto.createHash('sha256').update(JSON.stringify(nodes)).digest('hex');
 }
 
 function readRule(argv: string[]): 'invalid-shallow' | 'safe-full' {
