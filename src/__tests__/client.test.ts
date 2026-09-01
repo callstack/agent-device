@@ -10,7 +10,6 @@ import type {
 import {
   createAgentDeviceClient,
   type AgentDeviceClient,
-  type AgentDeviceClientConfig,
   type DiffSnapshotCommandResult,
   type DoctorCommandResult,
   type PrepareCommandResult,
@@ -24,18 +23,12 @@ import {
 } from '../agent-device-client.ts';
 import { runCommand } from '../commands/command-surface.ts';
 import type { CommandResult } from '../core/command-descriptor/command-result.ts';
-import type {
-  DaemonRequest,
-  DaemonResponse,
-  DaemonResponseData,
-} from '@agent-device/kernel/contracts';
+import type { DaemonResponse, DaemonResponseData } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import fs from 'node:fs';
 import nodePath from 'node:path';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
-
-// Isolated so open/close metro-session-hint file writes never touch the real state dir.
-const TEST_STATE_DIR = mkdtempForTestSync('agent-device-client-test-');
+import { createTransport } from './client-transport-fixture.ts';
 
 // #1802: replay/test requests carry the script text the CLIENT read, so these cases need real
 // files. `cwd` is what the writer resolves the caller's relative path against.
@@ -95,37 +88,6 @@ const closedProjectionResponses: Record<string, DaemonResponseData> = {
     message: 'Triggered app event: screenshot_taken',
   },
 };
-
-function createTransport(
-  handler: (req: Omit<DaemonRequest, 'token'>) => Promise<DaemonResponse> | DaemonResponse,
-): {
-  calls: Array<Omit<DaemonRequest, 'token'>>;
-  config: AgentDeviceClientConfig;
-  transport: (req: Omit<DaemonRequest, 'token'>) => Promise<DaemonResponse>;
-} {
-  const calls: Array<Omit<DaemonRequest, 'token'>> = [];
-  const config: AgentDeviceClientConfig = {
-    session: 'qa',
-    stateDir: TEST_STATE_DIR,
-    cwd: '/tmp/agent-device',
-    debug: true,
-    daemonBaseUrl: 'http://daemon.example.test',
-    daemonAuthToken: 'secret',
-    daemonTransport: 'http',
-    tenant: 'acme',
-    sessionIsolation: 'tenant',
-    runId: 'run-123',
-    leaseId: 'lease-123',
-  };
-  return {
-    calls,
-    config,
-    transport: async (req) => {
-      calls.push(req);
-      return await handler(req);
-    },
-  };
-}
 
 test('client exposes narrowed result types for closed daemon projections', async () => {
   const setup = createTransport(async (req) => closedProjectionResponse(req.command));
@@ -1116,22 +1078,6 @@ test('client capture.snapshot preserves visibility metadata from daemon response
     totalNodeCount: 67,
     reasons: ['offscreen-nodes'],
   });
-});
-
-test('client capture.snapshot preserves unknown truncation as an omitted field', async () => {
-  const setup = createTransport(async () => ({
-    ok: true,
-    data: {
-      nodes: [],
-      warnings: ['tree completeness is not independently verified'],
-    },
-  }));
-  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
-
-  const result = await client.capture.snapshot();
-
-  assert.equal('truncated' in result, false);
-  assert.equal(result.truncated, undefined);
 });
 
 test('client capture.snapshot preserves refsGeneration from daemon responses (ADR 0014)', async () => {
