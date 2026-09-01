@@ -142,6 +142,9 @@ describe('the real tree', () => {
   test('the package-source boundary rejects an unguarded runner unit test', () => {
     const root = mkdtempForTestSync('agent-device-runner-package-selection-');
     onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+    const packageManifestPath = path.join(root, 'apple/snapshot-presentation/Package.runner.swift');
+    fs.mkdirSync(path.dirname(packageManifestPath), { recursive: true });
+    fs.writeFileSync(packageManifestPath, '// fixture package manifest\n');
     const sourcePath = path.join(
       root,
       'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Fixture.swift',
