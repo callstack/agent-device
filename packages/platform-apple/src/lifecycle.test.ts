@@ -96,6 +96,39 @@ test('starts an unawaited physical iOS first-open runner without a redundant hea
   });
 });
 
+test('preserves the health check when physical iOS runner prewarm is awaited', async () => {
+  const signal = new AbortController().signal;
+  const events: string[] = [];
+  const interactor = {
+    open: vi.fn(async () => {
+      events.push('open');
+    }),
+  } as unknown as Interactor;
+  const baseHost = platformRuntimeHostFixture();
+  const prewarmRunnerSession = vi.fn(async () => {
+    events.push('prewarm');
+  });
+  const host = {
+    ...baseHost,
+    localInteractors: { resolve: async () => interactor },
+    appleApplications: {
+      ...baseHost.appleApplications,
+      prewarmRunnerSession,
+    },
+  } as unknown as PlatformRuntimeHost;
+  const lifecycle = bindAppleApplicationLifecycle({ host, device, signal });
+
+  await lifecycle.openApplication({
+    ...openInput(),
+    hasExistingSession: false,
+    relaunch: false,
+    prewarmRunnerBeforeOpen: true,
+  });
+
+  expect(events).toEqual(['prewarm', 'open']);
+  expect(prewarmRunnerSession).toHaveBeenCalledWith(device, {}, signal, true);
+});
+
 test.each(['ipados', 'tvos', 'visionos'] as const)(
   'preserves runner restart semantics for a physical %s target',
   async (appleOs) => {
