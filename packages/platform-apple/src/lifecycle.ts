@@ -1,5 +1,6 @@
 import {
   type ApplicationLifecycleRuntimeOperations,
+  type AppleRunnerSessionPrewarmOptions,
   type CloseApplicationFinalizationInput,
   type CloseApplicationInput,
   type OpenApplicationInput,
@@ -362,17 +363,31 @@ function createRunnerPrewarm(
 ): RunnerPrewarm {
   let pending: Promise<void> | undefined;
   let awaited = false;
+  const options: AppleRunnerSessionPrewarmOptions | undefined = isUnawaitedPhysicalIosOpen(
+    binding.device,
+    input,
+  )
+    ? { healthCheck: false }
+    : undefined;
   return {
     schedule: (propagateError = false) => {
       if (pending) return;
       timing.runnerPrewarmKind = 'session';
       timing.runnerPrewarmScheduled = true;
-      pending = host.appleApplications.prewarmRunnerSession(
-        binding.device,
-        input.execution,
-        binding.signal,
-        propagateError,
-      );
+      pending = options
+        ? host.appleApplications.prewarmRunnerSession(
+            binding.device,
+            input.execution,
+            binding.signal,
+            propagateError,
+            options,
+          )
+        : host.appleApplications.prewarmRunnerSession(
+            binding.device,
+            input.execution,
+            binding.signal,
+            propagateError,
+          );
     },
     wait: async () => {
       if (!pending || awaited) return;
@@ -388,6 +403,15 @@ function createRunnerPrewarm(
       if (pending && !awaited) timing.runnerPrewarmWaited = false;
     },
   };
+}
+
+function isUnawaitedPhysicalIosOpen(device: DeviceInfo, input: OpenApplicationInput): boolean {
+  return (
+    device.kind === 'device' &&
+    device.appleOs === 'ios' &&
+    !input.relaunch &&
+    !input.prewarmRunnerBeforeOpen
+  );
 }
 
 function openLaunchPlan(

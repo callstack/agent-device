@@ -1,8 +1,8 @@
 import { retryWithPolicy, emitDiagnostic } from './host.ts';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import {
+  ensureRunnerSession,
   stopIosRunnerSession,
-  type RunnerSessionOptions,
   validateRunnerDevice,
 } from './runner-session.ts';
 import {
@@ -16,6 +16,7 @@ import {
   createLocalAppleRunnerProvider,
   resolveAppleRunnerProvider,
   type AppleRunnerCommandOptions,
+  type AppleRunnerPrewarmOptions,
   type AppleRunnerProvider,
 } from './runner-provider.ts';
 import { ensureXctestrunArtifact } from './runner-xctestrun.ts';
@@ -72,7 +73,7 @@ export async function notifyIosRunnerAppRelaunched(
   }
 }
 
-type PrewarmIosRunnerOptions = RunnerSessionOptions & {
+type PrewarmIosRunnerOptions = AppleRunnerPrewarmOptions & {
   propagateError?: boolean;
 };
 
@@ -124,7 +125,7 @@ function runBestEffortIosRunnerPrewarm(params: {
   device: DeviceInfo;
   options: PrewarmIosRunnerOptions;
   failurePhase: 'ios_runner_cache_prewarm_failed' | 'ios_runner_session_prewarm_failed';
-  task: (options: RunnerSessionOptions) => Promise<void>;
+  task: (options: AppleRunnerPrewarmOptions) => Promise<void>;
 }): Promise<void> {
   const { device, options, failurePhase, task } = params;
   const { propagateError = false, ...runnerOptions } = options;
@@ -178,8 +179,13 @@ function resolveAppleRunnerRuntime(
 const LOCAL_APPLE_RUNNER_RUNTIME = createLocalAppleRunnerProvider(executeRunnerCommand, {
   prepare: prepareLocalIosRunner,
   prewarm: async (device, options) => {
+    const { healthCheck, ...runnerOptions } = options;
+    if (healthCheck === false) {
+      await ensureRunnerSession(device, runnerOptions);
+      return;
+    }
     await prepareLocalIosRunner(device, {
-      ...options,
+      ...runnerOptions,
       healthTimeoutMs: RUNNER_COMMAND_TIMEOUT_MS,
     });
   },

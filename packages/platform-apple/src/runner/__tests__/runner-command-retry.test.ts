@@ -232,6 +232,19 @@ test('prewarmIosRunnerSession proves cached runner health with uptime', async ()
   assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[0]?.[4], 45_000);
 });
 
+test('prewarmIosRunnerSession can start a session without a redundant health command', async () => {
+  const session = makeRunnerSession({ port: 8100 });
+  mockEnsureRunnerSession.mockResolvedValueOnce(session);
+
+  const prewarm = prewarmIosRunnerSession(IOS_SIMULATOR, { healthCheck: false });
+
+  await prewarm;
+
+  assert.equal(mockEnsureRunnerSession.mock.calls.length, 1);
+  assert.equal(mockEnsureRunnerSession.mock.calls[0]?.[1]?.healthCheck, undefined);
+  assert.equal(mockExecuteRunnerCommandWithSession.mock.calls.length, 0);
+});
+
 test('prewarmIosRunnerSession can propagate setup failures for blocking callers', async () => {
   const failure = new AppError('COMMAND_FAILED', 'Developer mode is disabled');
   mockEnsureRunnerSession.mockRejectedValueOnce(failure);

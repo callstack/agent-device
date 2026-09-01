@@ -57,9 +57,44 @@ test.each(['coredevice', 'xctest'] as const)(
 
     expect(events).toEqual(['close', 'open', 'prewarm', 'reset']);
     expect(stopRunnerSession).not.toHaveBeenCalled();
+    expect(prewarmRunnerSession).toHaveBeenCalledWith(selectedDevice, {}, signal, false);
     expect(notifyRunnerAppRelaunched).toHaveBeenCalledWith(selectedDevice, {}, signal);
   },
 );
+
+test('starts an unawaited physical iOS first-open runner without a redundant health check', async () => {
+  const signal = new AbortController().signal;
+  const events: string[] = [];
+  const interactor = {
+    open: vi.fn(async () => {
+      events.push('open');
+    }),
+  } as unknown as Interactor;
+  const baseHost = platformRuntimeHostFixture();
+  const prewarmRunnerSession = vi.fn(async () => {
+    events.push('prewarm');
+  });
+  const host = {
+    ...baseHost,
+    localInteractors: { resolve: async () => interactor },
+    appleApplications: {
+      ...baseHost.appleApplications,
+      prewarmRunnerSession,
+    },
+  } as unknown as PlatformRuntimeHost;
+  const lifecycle = bindAppleApplicationLifecycle({ host, device, signal });
+
+  await lifecycle.openApplication({
+    ...openInput(),
+    hasExistingSession: false,
+    relaunch: false,
+  });
+
+  expect(events).toEqual(['open', 'prewarm']);
+  expect(prewarmRunnerSession).toHaveBeenCalledWith(device, {}, signal, false, {
+    healthCheck: false,
+  });
+});
 
 test.each(['ipados', 'tvos', 'visionos'] as const)(
   'preserves runner restart semantics for a physical %s target',
@@ -100,6 +135,7 @@ test.each(['ipados', 'tvos', 'visionos'] as const)(
     await lifecycle.openApplication(openInput());
 
     expect(events).toEqual(['stop', 'close', 'open', 'prewarm']);
+    expect(prewarmRunnerSession).toHaveBeenCalledWith(selectedDevice, {}, signal, false);
     expect(notifyRunnerAppRelaunched).not.toHaveBeenCalled();
   },
 );

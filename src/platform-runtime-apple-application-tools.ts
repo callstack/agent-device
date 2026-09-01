@@ -1,5 +1,6 @@
 import type {
   AppleApplicationTools,
+  AppleRunnerSessionPrewarmOptions,
   CloseApplicationFinalizationInput,
   OpenTargetResolution,
   OpenTargetResolutionInput,
@@ -17,12 +18,19 @@ export function createAppleApplicationTools(): AppleApplicationTools {
         await import('@agent-device/platform-apple/runner/operations');
       await prewarmAppleRunnerCache(device, appleRunnerOptions(execution, signal));
     },
-    prewarmRunnerSession: async (device, execution, signal, propagateError) => {
+    prewarmRunnerSession: async (
+      device,
+      execution,
+      signal,
+      propagateError,
+      options?: AppleRunnerSessionPrewarmOptions,
+    ) => {
       const { prewarmIosRunnerSession } =
         await import('@agent-device/platform-apple/runner/operations');
       await prewarmIosRunnerSession(device, {
         ...appleRunnerOptions(execution, signal),
         propagateError,
+        ...options,
       });
     },
     notifyRunnerAppRelaunched: async (device, execution, signal) => {
