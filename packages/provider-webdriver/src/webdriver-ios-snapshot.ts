@@ -32,7 +32,7 @@ const RESIDUE_WARNINGS = {
 } satisfies Pick<Record<IosAcquisitionResidue['kind'], string>, 'missing-viewport'>;
 const UNAVAILABLE_FACT_WARNINGS: Partial<Record<IosSnapshotFact, string>> = {
   'acquisition-depth':
-    'Appium page source does not report hierarchy completeness; depth- or child-limited nodes may be absent.',
+    'Appium page source does not report hierarchy completeness; provider-side depth or child limits may omit nodes.',
   hittability:
     'Appium page source does not guarantee hittability evidence; regular presentation treats it as unavailable.',
 };
@@ -106,8 +106,7 @@ export function publishWebDriverIosSnapshot(
     backend: 'xctest',
     producer: 'appium-source',
     nodes: stripRefs(publication.payload.nodes),
-    truncated: publication.payload.truncated,
-    ...warningsForResidue(publication.residue),
+    ...warningsForResidue(publication.residue, acquisition.request),
   } satisfies SnapshotResult;
   return { acquisition, publication, result };
 }
@@ -123,17 +122,24 @@ function residueForSource(viewport: IosViewportEvidence): readonly IosAcquisitio
   return residue;
 }
 
-function warningsForResidue(residue: readonly IosAcquisitionResidue[]): { warnings?: string[] } {
+function warningsForResidue(
+  residue: readonly IosAcquisitionResidue[],
+  request: IosSnapshotRequest,
+): { warnings?: string[] } {
   const warnings = new Set<string>();
   for (const entry of residue) {
-    const warning = warningForResidue(entry);
+    const warning = warningForResidue(entry, request);
     if (warning) warnings.add(warning);
   }
   return warnings.size > 0 ? { warnings: [...warnings] } : {};
 }
 
-function warningForResidue(entry: IosAcquisitionResidue): string | undefined {
+function warningForResidue(
+  entry: IosAcquisitionResidue,
+  request: IosSnapshotRequest,
+): string | undefined {
   if (entry.kind === 'unavailable-fact') {
+    if (entry.fact === 'hittability' && request.projection === 'raw') return undefined;
     return UNAVAILABLE_FACT_WARNINGS[entry.fact];
   }
   if (entry.kind === 'missing-viewport') {
