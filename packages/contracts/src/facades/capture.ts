@@ -53,14 +53,17 @@ export type {
   ScreenshotResultData,
 } from '../snapshot-types.ts';
 export {
+  attachSnapshotPresentationEvidence,
   attachSnapshotClickabilityEvidence,
   attachSnapshotOcclusionContextEvidence,
   copySnapshotClickabilityEvidence,
   readSnapshotClickabilityEvidence,
   readSnapshotOcclusionContextEvidence,
+  readSnapshotPresentationEvidence,
 } from '../snapshot-private-evidence.ts';
 export type {
   AndroidSiblingOrderEvidence,
+  SnapshotPresentationEvidence,
   SnapshotClickabilityEvidence,
   SnapshotOcclusionContextEvidence,
 } from '../snapshot-private-evidence.ts';

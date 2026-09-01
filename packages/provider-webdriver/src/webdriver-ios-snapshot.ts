@@ -2,6 +2,7 @@ import {
   createIosSnapshotEngine,
   IosSnapshotEngineError,
 } from '@agent-device/capture-kit/ios-snapshot-engine';
+import { attachSnapshotPresentationEvidence } from '@agent-device/contracts/capture';
 import {
   createIosSnapshotRequest,
   IOS_SNAPSHOT_PRODUCER_CAPABILITIES,
@@ -101,13 +102,16 @@ export function publishWebDriverIosSnapshot(
   } catch (error) {
     throwWebDriverIosSnapshotError(error);
   }
-  const result: SnapshotResult = {
-    backend: 'xctest',
-    producer: 'appium-source',
-    nodes: stripRefs(publication.payload.nodes),
-    truncated: publication.payload.truncated,
-    ...warningsForResidue(publication.residue),
-  };
+  const result = attachSnapshotPresentationEvidence(
+    {
+      backend: 'xctest',
+      producer: 'appium-source',
+      nodes: stripRefs(publication.payload.nodes),
+      truncated: publication.payload.truncated,
+      ...warningsForResidue(publication.residue),
+    } satisfies SnapshotResult,
+    { owner: 'ios-snapshot-engine' },
+  );
   return { acquisition, publication, result };
 }
 
