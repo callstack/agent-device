@@ -148,6 +148,7 @@ export default defineConfig({
             // helper families are rebuilt through the shared release/size-report owner.
             'scripts/__tests__/prepare-publish-assets.test.ts',
             'scripts/ios-snapshot-benchmark/*.test.ts',
+            'scripts/ios-ax-bridge-spike/*.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
             'test/ci/upload-artifact-hidden-paths.test.ts',

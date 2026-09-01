@@ -95,6 +95,22 @@ export async function admitSuccessfulSample(
   return await admitNonWarmSample(context, options, previousAppPid);
 }
 
+export function admitStableWarmSample(
+  options: CellAdmissionOptions,
+  previousAppPid: number,
+): number {
+  assertReadyState(options);
+  const appPid = assertAppRunning(options.udid, options.fixture.app);
+  if (appPid !== previousAppPid) {
+    throw new BenchmarkCellAdmissionError(
+      'cell-state',
+      `Warm cell ${options.fixture.id} changed app PID from ${String(previousAppPid)} to ${String(appPid)}.`,
+      'agent-device batch --steps snapshot',
+    );
+  }
+  return appPid;
+}
+
 export function cleanupSuccessfulSample(context: CliContext, options: CellAdmissionOptions): void {
   if (options.state !== 'relaunch' || options.fixture.setupAction !== 'open-alert') return;
   const dismissed = pressFixtureTarget(context, 'label="Cancel"');
