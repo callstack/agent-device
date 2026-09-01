@@ -18,6 +18,14 @@ export type SnapshotCaptureBackend = 'tree' | 'queries' | 'private-ax' | 'androi
 /** Internal backends that evidence probes may select explicitly. */
 export type SnapshotPreferredBackend = 'tree' | 'private-ax';
 
+export const SNAPSHOT_ENGINE_PRESENTED: unique symbol = Symbol(
+  'agent-device.snapshot-engine-presented',
+);
+
+export type SnapshotEnginePresentedMarker = Readonly<{
+  [SNAPSHOT_ENGINE_PRESENTED]?: true;
+}>;
+
 export type SnapshotQualityTiming = {
   acquisitionMs: number;
   presentationMs: number;

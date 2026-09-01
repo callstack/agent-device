@@ -86,7 +86,7 @@ test('the independent iOS snapshot goldens match the TypeScript engine', () => {
       | {
           outcome: 'success';
           nodes: ReturnType<typeof normalizeGoldenNodes>;
-          truncated: boolean;
+          truncated?: boolean;
           residue: typeof acquisition.residue;
           qualityLabels?: readonly (string | null)[];
         }

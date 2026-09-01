@@ -14,7 +14,7 @@ import {
   presentIosSnapshot,
 } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { AppError } from '@agent-device/kernel/errors';
-import type { Rect } from '@agent-device/kernel/snapshot';
+import { SNAPSHOT_ENGINE_PRESENTED, type Rect } from '@agent-device/kernel/snapshot';
 import type { LimrunIosSession } from './ios.ts';
 import { flattenIosTree, type IosTreeNode } from './snapshot.ts';
 
@@ -45,7 +45,6 @@ export async function captureLimrunIosSnapshot(
     intent: 'full',
     hint,
     nodes,
-    truncated: false,
     viewport,
     lineage: { targetId: session.instanceId },
     residue,
@@ -56,9 +55,9 @@ export async function captureLimrunIosSnapshot(
     const warnings = limrunSnapshotWarnings(residue);
     return {
       nodes: presentation.nodes,
-      truncated: acquisition.truncated,
       backend: 'xctest',
       producer: 'limrun-ios-tree',
+      [SNAPSHOT_ENGINE_PRESENTED]: true,
       ...(warnings.length > 0 ? { warnings } : {}),
     };
   } catch (error) {
@@ -136,6 +135,7 @@ function limrunAcquisitionResidue(
   viewport: IosViewportEvidence,
 ): IosAcquisitionResidue[] {
   return [
+    { kind: 'unavailable-fact', fact: 'truncation' },
     ...(hittability === 'unavailable'
       ? [{ kind: 'unavailable-fact' as const, fact: 'hittability' as const }]
       : []),
@@ -147,6 +147,11 @@ function limrunAcquisitionResidue(
 
 function limrunSnapshotWarnings(residue: readonly IosAcquisitionResidue[]): string[] {
   const warnings: string[] = [];
+  if (residue.some((entry) => entry.kind === 'unavailable-fact' && entry.fact === 'truncation')) {
+    warnings.push(
+      'Limrun iOS tree responses do not expose truncation metadata; tree completeness is not independently verified.',
+    );
+  }
   if (residue.some((entry) => entry.kind === 'unavailable-fact' && entry.fact === 'hittability')) {
     warnings.push(
       'Limrun iOS snapshots do not provide hittability evidence; regular snapshots will not mark nodes actionable.',

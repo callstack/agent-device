@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import { SNAPSHOT_ENGINE_PRESENTED } from '@agent-device/kernel/snapshot';
 import {
   IOS_SNAPSHOT_PRODUCER_CAPABILITIES,
   createIosSnapshotRequest,
@@ -29,6 +30,10 @@ test('derives the current engine viewport from the tree before the cached device
     'Save',
   ]);
   expect(result.nodes?.find((node) => node.label === 'Save')?.hittable).toBe(false);
+  expect(result[SNAPSHOT_ENGINE_PRESENTED]).toBe(true);
+  expect(result.warnings).toContain(
+    'Limrun iOS tree responses do not expose truncation metadata; tree completeness is not independently verified.',
+  );
   expect(result.warnings).toContain(
     'Limrun iOS snapshots do not provide hittability evidence; regular snapshots will not mark nodes actionable.',
   );
@@ -47,14 +52,14 @@ test.each([
   const result = await captureLimrunIosSnapshot(createLimrunSnapshotSession(), options);
 
   expect(result.nodes?.map((node) => node.label)).toEqual(labels);
-  expect(result.truncated).toBe(false);
+  expect(result.truncated).toBeUndefined();
 });
 
-test('the Limrun capability plan narrows only the raw traversal tier and records unavailable facts', () => {
+test('the Limrun capability plan leaves unsupported acquisition tiers to the shared engine', () => {
   const request = createIosSnapshotRequest({ raw: true, interactiveOnly: true, depth: 2 });
   const plan = planIosSnapshot(request, IOS_SNAPSHOT_PRODUCER_CAPABILITIES['limrun-ios-tree']);
 
-  expect(plan.narrowing).toEqual({ depth: 2, scope: null, interactiveOnly: false });
+  expect(plan.narrowing).toEqual({ depth: null, scope: null, interactiveOnly: false });
   expect(plan.evidence).toEqual({
     scope: 'incomplete',
     interactiveQuery: 'incomplete',

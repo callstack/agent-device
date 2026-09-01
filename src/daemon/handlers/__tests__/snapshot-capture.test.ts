@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
-import { captureSnapshotData } from '../snapshot-capture.ts';
+import { captureSnapshot, captureSnapshotData } from '../snapshot-capture.ts';
 import { buildSnapshotVisibility } from '../../../snapshot/snapshot-visibility.ts';
+import { SNAPSHOT_ENGINE_PRESENTED } from '@agent-device/kernel/snapshot';
 import {
   ANDROID_EMULATOR,
   IOS_SIMULATOR,
@@ -8,7 +9,14 @@ import {
 } from '../../../__tests__/test-utils/device-fixtures.ts';
 
 const captureSnapshotWithInteractor = vi.hoisted(() => vi.fn());
+const iosPresentation = vi.hoisted(() => vi.fn());
 vi.mock('../snapshot-interactor-capture.ts', () => ({ captureSnapshotWithInteractor }));
+vi.mock('@agent-device/capture-kit/ios-snapshot-engine', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/capture-kit/ios-snapshot-engine')>();
+  iosPresentation.mockImplementation(actual.presentIosInteractiveSnapshot);
+  return { ...actual, presentIosInteractiveSnapshot: iosPresentation };
+});
 
 test('iOS interactive capture sends scope to runner presentation', async () => {
   captureSnapshotWithInteractor.mockClear();
@@ -28,6 +36,27 @@ test('iOS interactive capture sends scope to runner presentation', async () => {
       options: expect.objectContaining({ interactiveOnly: true, scope: 'action file' }),
     }),
   );
+});
+
+test('daemon does not re-present provider results already presented by the shared engine', async () => {
+  iosPresentation.mockClear();
+  const providerResult = {
+    nodes: [{ index: 0, depth: 0, type: 'Application' }],
+    backend: 'xctest' as const,
+    producer: 'limrun-ios-tree' as const,
+    [SNAPSHOT_ENGINE_PRESENTED]: true as const,
+  };
+
+  const result = await captureSnapshot({
+    device: IOS_SIMULATOR,
+    session: undefined,
+    flags: { snapshotInteractiveOnly: true },
+    logPath: '/tmp/snapshot-capture-test.log',
+    captureData: async () => providerResult,
+  });
+
+  expect(iosPresentation).not.toHaveBeenCalled();
+  expect(Object.getOwnPropertySymbols(result.snapshot)).not.toContain(SNAPSHOT_ENGINE_PRESENTED);
 });
 
 test('snapshot capture preserves scope for every other platform projection', async () => {

@@ -7,9 +7,11 @@ import { isAndroidInputMethodNode } from '@agent-device/contracts/android-input-
 import {
   attachRefs,
   buildSnapshotPresentationKey,
+  SNAPSHOT_ENGINE_PRESENTED,
   snapshotPresentationOptionsFromFlags,
   type RawSnapshotNode,
   type SnapshotBackend,
+  type SnapshotEnginePresentedMarker,
   type SnapshotStateProvenance,
   snapshotStateProvenance,
   type SnapshotState,
@@ -38,7 +40,8 @@ export function buildSnapshotState(
     nodes?: RawSnapshotNode[];
     truncated?: boolean;
     quality?: unknown;
-  } & SnapshotStateProvenance,
+  } & SnapshotStateProvenance &
+    SnapshotEnginePresentedMarker,
   flags:
     | (Pick<CommandFlags, 'snapshotDepth' | 'snapshotInteractiveOnly' | 'snapshotRaw'> &
         Partial<Pick<CommandFlags, 'snapshotScope'>>)
@@ -121,13 +124,14 @@ function backendScopesAfterWire(backend: SnapshotBackend | undefined): boolean {
 }
 
 function shouldPresentIosInteractiveSnapshot(
-  provenance: SnapshotStateProvenance,
+  provenance: SnapshotStateProvenance & SnapshotEnginePresentedMarker,
   flags:
     | (Pick<CommandFlags, 'snapshotDepth' | 'snapshotInteractiveOnly' | 'snapshotRaw'> &
         Partial<Pick<CommandFlags, 'snapshotScope'>>)
     | undefined,
 ): boolean {
   return (
+    provenance[SNAPSHOT_ENGINE_PRESENTED] !== true &&
     provenance.backend === 'xctest' &&
     iosSnapshotPresentationStage(provenance) === 'acquired' &&
     flags?.snapshotInteractiveOnly === true &&
