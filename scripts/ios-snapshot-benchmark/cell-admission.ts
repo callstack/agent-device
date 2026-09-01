@@ -129,7 +129,7 @@ function admitWarmSample(
   previousAppPid: number | undefined,
 ): number {
   assertReadyState(options);
-  requireAnchor(result, options.fixture);
+  requireAnchor(result, options.fixture.anchorText);
   const appPid = assertAppRunning(options.udid, options.fixture.app);
   if (previousAppPid !== undefined && appPid !== previousAppPid) {
     throw new BenchmarkCellAdmissionError(
@@ -151,7 +151,7 @@ function admitOpenedFixture(context: CliContext, options: CellAdmissionOptions):
     `${options.fixture.id} semantic anchor observation`,
     'fixture-anchor',
   );
-  requireAnchor(observed, options.fixture);
+  requireAnchor(observed, options.fixture.anchorText);
   if (options.fixture.setupAction === 'open-alert') {
     const scrolled = scrollFixtureSetup(context);
     requireCommandSuccess(scrolled, `${options.fixture.id} setup scroll`, 'cell-state');
@@ -163,7 +163,7 @@ function admitOpenedFixture(context: CliContext, options: CellAdmissionOptions):
       `${options.fixture.id} post-setup semantic anchor observation`,
       'fixture-anchor',
     );
-    requireAnchor(prepared, options.fixture);
+    requireAnchor(prepared, options.fixture.postSetupAnchorText ?? options.fixture.anchorText);
   }
   const appPid = assertAppRunning(options.udid, options.fixture.app);
   return appPid;
@@ -231,11 +231,11 @@ function assertAppRunning(udid: string, appId: string): number {
   return pids[0]!;
 }
 
-function requireAnchor(result: CliResult, fixture: ScreenFixture): void {
-  if (!snapshotHasAnchor(result.payload, fixture.anchorText)) {
+function requireAnchor(result: CliResult, anchorText: string): void {
+  if (!snapshotHasAnchor(result.payload, anchorText)) {
     throw new BenchmarkCellAdmissionError(
       'fixture-anchor',
-      `Fixture ${fixture.id} did not expose the exact anchor ${JSON.stringify(fixture.anchorText)}.`,
+      `Fixture did not expose the exact anchor ${JSON.stringify(anchorText)}.`,
       'agent-device snapshot',
     );
   }
