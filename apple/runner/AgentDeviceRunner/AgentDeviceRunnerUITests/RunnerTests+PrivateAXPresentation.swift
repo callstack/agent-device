@@ -144,7 +144,7 @@ extension RunnerTests {
       options: PresentationOptions(
         interactiveOnly: interactiveOnly, depth: nil, scope: nil, raw: false),
       policy: .cursorProjected
-    ).payload.nodes ?? []
+    ).nodes
   }
 
   func testPrivateAXRegularPresentationProjectsToViewportAndKeepsScrollHint() throws {

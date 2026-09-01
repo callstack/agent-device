@@ -8,6 +8,15 @@ const SOURCE_DIR = path.join('apple', 'runner');
 const OUTPUT_DIR = path.join('dist', 'apple', 'runner');
 const SNAPSHOT_PRESENTATION_SOURCE_DIR = path.join('apple', 'snapshot-presentation');
 const SNAPSHOT_PRESENTATION_OUTPUT_DIR = path.join('dist', 'apple', 'snapshot-presentation');
+const SNAPSHOT_PRESENTATION_RUNNER_MANIFEST = 'Package.runner.swift';
+const SNAPSHOT_PRESENTATION_DEVELOPMENT_DIR_NAMES = new Set([
+  'Tests',
+  'SnapshotPresentationConformance',
+  '.build',
+  '.swiftpm',
+  'UnitTests',
+  'xcuserdata',
+]);
 // Packaged-runner locations from before the apple-runner/ -> apple/runner/ move. `dist` ships
 // wholesale, so a stale tree left by an older build/checkout would double-ship into the npm
 // package (and inflate the bundle-size diff, which packages the base then the PR into one dist).
@@ -59,9 +68,19 @@ function packageSnapshotPresentationSource(root, options, summary) {
   if (!options.checkOnly) {
     fs.rmSync(outputRoot, { recursive: true, force: true });
   }
+  const manifestSource = path.join(sourceRoot, SNAPSHOT_PRESENTATION_RUNNER_MANIFEST);
+  if (!fs.existsSync(manifestSource)) {
+    throw new Error(`Apple snapshot presentation runner manifest not found at ${manifestSource}`);
+  }
   processDirectory(sourceRoot, options.checkOnly ? undefined : outputRoot, '', summary, {
     validateSwift: false,
+    skipDirectoryNames: SNAPSHOT_PRESENTATION_DEVELOPMENT_DIR_NAMES,
+    skipFilePaths: new Set(['Package.swift', SNAPSHOT_PRESENTATION_RUNNER_MANIFEST]),
   });
+  if (!options.checkOnly) {
+    fs.copyFileSync(manifestSource, path.join(outputRoot, 'Package.swift'));
+    summary.copiedFiles += 1;
+  }
 }
 
 function prepareOutput(root, outputRoot, checkOnly) {
@@ -214,15 +233,20 @@ function assertNoShippedTestMethods(strippedContents, relativePath) {
 }
 
 function shouldSkipEntry(entry, relativePath, options) {
-  return shouldSkipDirectory(entry, options) || shouldSkipFile(entry, relativePath);
+  return shouldSkipDirectory(entry, options) || shouldSkipFile(entry, relativePath, options);
 }
 
 function shouldSkipDirectory(entry, options) {
   return entry.isDirectory() && (options.skipDirectoryNames ?? SKIPPED_DIR_NAMES).has(entry.name);
 }
 
-function shouldSkipFile(entry, relativePath) {
-  return entry.isFile() && (isXcodeUserStateFile(entry) || isSkippedRootFile(entry, relativePath));
+function shouldSkipFile(entry, relativePath, options) {
+  return (
+    entry.isFile() &&
+    (isXcodeUserStateFile(entry) ||
+      isSkippedRootFile(entry, relativePath) ||
+      options.skipFilePaths?.has(relativePath) === true)
+  );
 }
 
 function isXcodeUserStateFile(entry) {

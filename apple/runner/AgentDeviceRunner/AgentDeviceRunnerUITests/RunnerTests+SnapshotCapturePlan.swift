@@ -65,6 +65,19 @@ struct SnapshotBackendCapture {
 }
 
 extension RunnerTests {
+  static func makeSnapshotBackendCapture(
+    from result: AgentDeviceSnapshotPresentation.SnapshotPresentationResult
+  ) -> SnapshotBackendCapture {
+    SnapshotBackendCapture(
+      payload: DataPayload(nodes: result.nodes, truncated: result.truncated),
+      effectiveDepth: result.effectiveDepth,
+      customActions: result.customActions,
+      qualityPayload: result.qualityNodes.map {
+        DataPayload(nodes: $0, truncated: result.truncated)
+      }
+    )
+  }
+
   static let sparseRecoveryTruncatedNodeThreshold = 8
   /// Umbrella wall-clock budget for one capture plan. Individual backends bound themselves,
   /// but chained recovery tiers must never stack past the 30s main-thread watchdog: when the
@@ -476,14 +489,14 @@ extension RunnerTests {
     let presented: SnapshotBackendCapture
     do {
       presented = try timer.measure(.presentation) {
-        guard let capture = try SnapshotPresentation.present(acquisition, options: options) else {
+        guard let result = try SnapshotPresentation.present(acquisition, options: options) else {
           throw Self.snapshotProjectionMismatchFailure(
             kind,
             requested: hint.projection,
             acquired: acquisition.hint.projection
           )
         }
-        return capture
+        return Self.makeSnapshotBackendCapture(from: result)
       }
     } catch let failure as SnapshotPresentationFailure {
       return SnapshotBackendAttempt(
@@ -871,7 +884,7 @@ extension RunnerTests {
       scope: nil,
       raw: true
     )
-    let capture = SnapshotPresentation.presentRaw(
+    let result = SnapshotPresentation.presentRaw(
       SnapshotAcquisition(
         hint: SnapshotPresentation.captureHint(for: options),
         nodes: [],
@@ -881,6 +894,7 @@ extension RunnerTests {
       ),
       options: options
     )
+    let capture = Self.makeSnapshotBackendCapture(from: result)
 
     let payload = stampedSnapshotPayload(
       capture,

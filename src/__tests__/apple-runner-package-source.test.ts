@@ -42,6 +42,10 @@ test('package apple runner source strips unit-test blocks without mutating check
     ),
   );
   assert.ok(fs.existsSync(path.join(root, 'dist/apple/snapshot-presentation/Package.swift')));
+  assert.equal(
+    fs.readFileSync(path.join(root, 'dist/apple/snapshot-presentation/Package.swift'), 'utf8'),
+    'runner package\n',
+  );
   assert.ok(
     fs.existsSync(
       path.join(
@@ -50,6 +54,13 @@ test('package apple runner source strips unit-test blocks without mutating check
       ),
     ),
   );
+  assert.equal(
+    fs.existsSync(
+      path.join(root, 'dist/apple/snapshot-presentation/Sources/SnapshotPresentationConformance'),
+    ),
+    false,
+  );
+  assert.equal(fs.existsSync(path.join(root, 'dist/apple/snapshot-presentation/Tests')), false);
   assert.equal(fs.existsSync(path.join(root, 'dist/apple/runner/README.md')), false);
   assert.equal(fs.existsSync(path.join(root, 'dist/apple/runner/.build/cache.txt')), false);
   assert.equal(
@@ -201,6 +212,32 @@ test('apple runner tree snapshot capture stays on the main queue', () => {
   assert.match(boundedCapture, /captureSnapshotRoot\(element\)/);
 });
 
+test('runner uses the shared presenter without a local facade or model aliases', () => {
+  const runnerRoot = path.join(repoRoot, 'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests');
+  assert.equal(
+    fs.existsSync(path.join(runnerRoot, 'RunnerTests+SnapshotPresentation.swift')),
+    false,
+    'the runner must not recreate a local SnapshotPresentation facade',
+  );
+  assert.equal(
+    fs.existsSync(path.join(runnerRoot, 'RunnerTests+SnapshotPresentationModels.swift')),
+    false,
+    'the runner must not recreate shared presenter type aliases',
+  );
+
+  const sourceFiles = fs
+    .readdirSync(runnerRoot)
+    .filter((entry) => entry.endsWith('.swift'))
+    .map((entry) => fs.readFileSync(path.join(runnerRoot, entry), 'utf8'))
+    .join('\n');
+  assert.doesNotMatch(sourceFiles, /enum SnapshotPresentation\s*\{/);
+  assert.doesNotMatch(
+    sourceFiles,
+    /typealias (?:RawAXNode|CaptureHint|SnapshotAcquisition|PresentedNode)\s*=/,
+  );
+  assert.match(sourceFiles, /import AgentDeviceSnapshotPresentation/);
+});
+
 function writeStripFixtureTree(root: string): void {
   writeFixtureFile(root, 'apple/runner/README.md', 'developer docs\n');
   writeFixtureFile(root, 'apple/runner/.build/cache.txt', 'cache\n');
@@ -215,10 +252,21 @@ function writeStripFixtureTree(root: string): void {
     'state\n',
   );
   writeFixtureFile(root, 'apple/snapshot-presentation/Package.swift', 'package\n');
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
   writeFixtureFile(
     root,
     'apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/Package.swift',
     'package source\n',
+  );
+  writeFixtureFile(
+    root,
+    'apple/snapshot-presentation/Sources/SnapshotPresentationConformance/main.swift',
+    'development harness\n',
+  );
+  writeFixtureFile(
+    root,
+    'apple/snapshot-presentation/Tests/AgentDeviceSnapshotPresentationTests/ConformanceTests.swift',
+    'development tests\n',
   );
   writeFixtureFile(
     root,

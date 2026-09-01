@@ -154,7 +154,7 @@ extension RunnerTests {
       interactiveOnly: false, depth: nil, scope: nil, raw: false)
     let capture = try SnapshotPresentation.presentRegular(
       acquisition, options: options, policy: .cursorProjected)
-    let nodes = try XCTUnwrap(capture.payload.nodes)
+    let nodes = capture.nodes
 
     XCTAssertEqual(nodes.compactMap(\.label), ["App", "Outer", "Inner", "Partially visible"])
     let clipped = try XCTUnwrap(nodes.first { $0.label == "Partially visible" })
@@ -211,7 +211,7 @@ extension RunnerTests {
     let nodes = try XCTUnwrap(
       try SnapshotPresentation.presentRegular(
         acquisition, options: options, policy: .cursorProjected
-      ).payload.nodes)
+      ).nodes)
 
     XCTAssertEqual(nodes.compactMap(\.label), [
       "App", "Geometryless semantics", "Child is not clipped", "Zero-area semantics",
@@ -257,7 +257,7 @@ extension RunnerTests {
           viewport: .infinite
         ),
         options: options
-      ).payload.nodes)
+      ).nodes)
 
     XCTAssertEqual(raw.map(\.label), ["App", "Offscreen", "Frameless"])
     XCTAssertEqual(raw[1].rect.x, 200)
@@ -307,7 +307,7 @@ extension RunnerTests {
     }
 
     XCTAssertThrowsError(
-      try SnapshotPresentation.validateRegularInvariantForTesting(
+      try SnapshotPresentationInvariant.validateRegularWithStats(
         folded,
         viewport: viewport,
         policy: .cursorProjected
@@ -336,7 +336,7 @@ extension RunnerTests {
       return SnapshotPresentationNode(raw: raw, effectiveRect: raw.rect)
     }
 
-    let stats = try SnapshotPresentation.validateRegularInvariantForTesting(
+    let stats = try SnapshotPresentationInvariant.validateRegularWithStats(
       nodes,
       viewport: viewport,
       policy: .cursorProjected
