@@ -49,7 +49,7 @@ test('daemon does not re-present provider results already presented by the share
     { owner: 'ios-snapshot-engine' },
   );
 
-  const result = await captureSnapshot({
+  await captureSnapshot({
     device: IOS_SIMULATOR,
     session: undefined,
     flags: { snapshotInteractiveOnly: true },
