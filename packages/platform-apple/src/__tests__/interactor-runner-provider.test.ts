@@ -284,6 +284,43 @@ test('snapshot reports typed runner presentation failures', async () => {
   );
 });
 
+test('sparse runner payloads with no viewport fail before publishing actionable nodes', async () => {
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    {},
+    {
+      runCommand: async () => ({
+        nodes: [
+          { index: 0, type: 'Application', label: 'App' },
+          {
+            index: 1,
+            parentIndex: 0,
+            type: 'Button',
+            label: 'Escaped action',
+            rect: { x: 10, y: 10, width: 80, height: 40 },
+            hittable: true,
+          },
+        ],
+        truncated: true,
+        snapshotQuality: {
+          state: 'sparse',
+          backend: 'tree',
+          reason: 'no usable snapshot backend',
+          reasonCode: 'sparse-tree',
+        },
+      }),
+    },
+  );
+
+  await assert.rejects(
+    interactor.snapshot(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'COMMAND_FAILED' &&
+      error.details?.reason === 'missing-viewport',
+  );
+});
+
 test('snapshot rejects a scoped quality payload at the runner boundary', async () => {
   const interactor = createAppleInteractor(
     IOS_SIMULATOR,

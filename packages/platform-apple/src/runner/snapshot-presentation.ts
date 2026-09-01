@@ -62,7 +62,6 @@ export function presentAppleRunnerSnapshot(
     customActions: options?.customActions,
   });
   const viewport = runnerViewportEvidence(nodes, result.qualityPayload?.nodes);
-  if (viewport.kind === 'missing' && result.quality?.state === 'sparse') return nodes;
 
   const input: IosSnapshotInput = {
     stage: 'presented',
