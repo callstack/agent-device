@@ -34,6 +34,7 @@ import {
   presentAppleRunnerSnapshot,
   readAppleSnapshotResult,
 } from './runner/snapshot-presentation.ts';
+import type { AppleRunnerSnapshotResult } from './runner/snapshot-presentation.ts';
 
 export function createAppleInteractor(
   device: DeviceInfo,
@@ -245,7 +246,7 @@ async function captureAppleRunnerSnapshot(
     throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.');
   }
   return {
-    nodes: isMacOs(device) ? nodes : presentAppleRunnerSnapshot(device.id, options, result),
+    nodes: presentRunnerSnapshotForDevice(device, options, result),
     truncated: result.truncated ?? false,
     backend: 'xctest' as const,
     producer: 'apple-runner' as const,
@@ -253,6 +254,15 @@ async function captureAppleRunnerSnapshot(
     // Legacy runners without a quality verdict still surface their message text.
     ...(!result.quality && result.message ? { warnings: [result.message] } : {}),
   };
+}
+
+function presentRunnerSnapshotForDevice(
+  device: DeviceInfo,
+  options: SnapshotOptions | undefined,
+  result: AppleRunnerSnapshotResult,
+) {
+  if (isMacOs(device)) return result.nodes ?? [];
+  return presentAppleRunnerSnapshot(device.id, options, result);
 }
 
 function acceptsEmptyScopedSnapshot(
