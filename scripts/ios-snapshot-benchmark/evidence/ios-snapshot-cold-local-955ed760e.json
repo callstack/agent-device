@@ -34,18 +34,8 @@
     "warmSampleMinimum": 20,
     "coldSampleMinimum": 10,
     "requestedSamples": 10,
-    "screens": [
-      "quiet",
-      "list",
-      "nested-scroll",
-      "alert",
-      "system-surface",
-      "xctest-stress"
-    ],
-    "states": [
-      "cold-cold",
-      "cold"
-    ]
+    "screens": ["quiet", "list", "nested-scroll", "alert", "system-surface", "xctest-stress"],
+    "states": ["cold-cold", "cold"]
   },
   "measurements": [
     {
@@ -2222,10 +2212,7 @@
       "surfaceDigest": "bd7118623fd764b18b99394d25021372840cea98e8b3b0c0196d3e791b199062",
       "fullDigest": "275f9d14720d5a02ed77b54a03a8f51830afcdc2b12577bd8014631bfbf2c81a",
       "state": "off",
-      "surfaceNodeIds": [
-        "deep-button-root",
-        "deep-button-level-01"
-      ],
+      "surfaceNodeIds": ["deep-button-root", "deep-button-level-01"],
       "fullNodeIds": [
         "deep-button-root",
         "deep-button-level-01",
@@ -2307,10 +2294,7 @@
       "surfaceDigest": "bd7118623fd764b18b99394d25021372840cea98e8b3b0c0196d3e791b199062",
       "fullDigest": "8542024b5b9719f6b2ba9692915bda9011e0e5d10c4e21463257763ee765719d",
       "state": "on",
-      "surfaceNodeIds": [
-        "deep-button-root",
-        "deep-button-level-01"
-      ],
+      "surfaceNodeIds": ["deep-button-root", "deep-button-level-01"],
       "fullNodeIds": [
         "deep-button-root",
         "deep-button-level-01",
