@@ -1,5 +1,8 @@
 import { performance } from 'node:perf_hooks';
-import { createIosSnapshotRequest, deriveIosCaptureHint } from '@agent-device/capture-kit';
+import {
+  createIosSnapshotRequest,
+  deriveIosCaptureHint,
+} from '@agent-device/capture-kit/ios-snapshot-planning';
 import type { IosSnapshotAcquisition } from '@agent-device/contracts/ios-snapshot';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { PresentationMeasurement, RawAcquisition } from './types.ts';
