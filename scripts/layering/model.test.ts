@@ -249,7 +249,7 @@ test('classifyZone separates the ranked spine from intentionally-unranked zones'
   assert.equal(classifyZone('(root)'), 'unranked');
   assert.equal(classifyZone('platform-runtime'), 'unranked');
   assert.equal(classifyZone('platforms'), 'unclassified');
-  assert.equal(classifyZone('utils'), 'ranked');
+  assert.equal(classifyZone('utils'), 'unclassified');
   // Every satellite zone joined the spine; only the composition root stays out, because R2
   // forbids daemon/ from importing commands/ so the files that wire them cannot be ranked.
   assert.equal(classifyZone('mcp'), 'ranked');
