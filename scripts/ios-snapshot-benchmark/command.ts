@@ -1,9 +1,7 @@
-import { spawnSync } from 'node:child_process';
-import { performance } from 'node:perf_hooks';
 import { asRecord, readString } from './result-values.ts';
+import { runCli, runCliAsync, type CliContext, type CliResult } from './cli-process.ts';
 import type { Failure, FirstTreeStatus, RawSample, ScreenFixture } from './types.ts';
 
-const MAX_BUFFER = 64 * 1024 * 1024;
 const APP_MOUNT_REASONS = new Set([
   'app_mount_race',
   'app_not_mounted',
@@ -39,64 +37,14 @@ const REASON_CATEGORIES: ReadonlyArray<[Set<string>, Failure['category']]> = [
 ];
 const TIMEOUT_CODES = new Set(['TIMEOUT', 'REQUEST_TIMEOUT', 'ETIMEDOUT']);
 
-export type CliResult = {
-  exitCode: number;
-  startedAt: string;
-  finishedAt: string;
-  wallClockMs: number;
-  stdout: string;
-  stderr: string;
-  payload: unknown;
-  ok: boolean;
-  spawnErrorCode?: string;
-};
-
-export type CliContext = {
-  repoRoot: string;
-  stateDir: string;
-  session: string;
-  udid: string;
-  derivedPath: string;
-  extraFlags?: string[];
-};
-
-function invokeCli(context: CliContext, args: string[], timeoutMs = 300_000): CliResult {
-  const argv = ['bin/agent-device.mjs', ...args, ...baseFlags(context), '--json'];
-  const startedAt = new Date().toISOString();
-  const started = performance.now();
-  const result = spawnSync(process.execPath, argv, {
-    cwd: context.repoRoot,
-    env: { ...process.env, AGENT_DEVICE_NO_UPDATE_NOTIFIER: '1' },
-    encoding: 'utf8',
-    maxBuffer: MAX_BUFFER,
-    timeout: timeoutMs,
-  });
-  const stdout = typeof result.stdout === 'string' ? result.stdout : '';
-  const stderr = typeof result.stderr === 'string' ? result.stderr : '';
-  const exitCode = typeof result.status === 'number' ? result.status : -1;
-  const spawnErrorCode = readString((result.error as NodeJS.ErrnoException | undefined)?.code);
-  const spawnError = result.error ? `${result.error.name}: ${result.error.message}` : '';
-  const payload = parseJson(stdout);
-  const finishedAt = new Date().toISOString();
-  return {
-    exitCode,
-    startedAt,
-    finishedAt,
-    wallClockMs: performance.now() - started,
-    stdout,
-    stderr: [stderr, spawnError].filter(Boolean).join('\n'),
-    payload,
-    ok: exitCode === 0 && !isExplicitFailure(payload) && !isBatchStepFailure(payload),
-    ...(spawnErrorCode ? { spawnErrorCode } : {}),
-  };
-}
+export type { CliContext, CliResult } from './cli-process.ts';
 
 export function openFixture(
   context: CliContext,
   fixture: ScreenFixture,
   options: { relaunch?: boolean } = {},
 ): CliResult {
-  const opened = invokeCli(context, [
+  const opened = runCli(context, [
     'open',
     fixture.app,
     ...(options.relaunch ? ['--relaunch'] : []),
@@ -114,8 +62,39 @@ export function openFixture(
   };
 }
 
+export async function openFixtureAsync(
+  context: CliContext,
+  fixture: ScreenFixture,
+  options: { relaunch?: boolean } = {},
+): Promise<CliResult> {
+  const opened = await runCliAsync(context, [
+    'open',
+    fixture.app,
+    ...(options.relaunch ? ['--relaunch'] : []),
+    ...(fixture.launchUrl ? ['--launch-url', fixture.launchUrl] : []),
+    '--foreground',
+  ]);
+  if (!fixture.launchUrl || !hasDeepLinkConfirmation(opened.payload)) return opened;
+  const accepted = await pressFixtureTargetAsync(context, 'label="Open"');
+  if (accepted.ok) return opened;
+  return {
+    ...opened,
+    ok: false,
+    stderr: [opened.stderr, accepted.stderr].filter(Boolean).join('\n'),
+    payload: accepted.payload,
+  };
+}
+
 export function snapshotFixture(context: CliContext): CliResult {
-  return invokeCli(context, [
+  return runCli(context, [
+    'batch',
+    '--steps',
+    JSON.stringify([{ command: 'snapshot', input: { interactiveOnly: true } }]),
+  ]);
+}
+
+export async function snapshotFixtureAsync(context: CliContext): Promise<CliResult> {
+  return await runCliAsync(context, [
     'batch',
     '--steps',
     JSON.stringify([{ command: 'snapshot', input: { interactiveOnly: true } }]),
@@ -123,7 +102,18 @@ export function snapshotFixture(context: CliContext): CliResult {
 }
 
 export function pressFixtureTarget(context: CliContext, selector: string): CliResult {
-  return invokeCli(context, ['click', selector]);
+  return runCli(context, ['click', selector]);
+}
+
+export async function pressFixtureTargetAsync(
+  context: CliContext,
+  selector: string,
+): Promise<CliResult> {
+  return await runCliAsync(context, ['click', selector]);
+}
+
+export async function closeSessionAsync(context: CliContext): Promise<void> {
+  await runCliAsync(context, ['close']);
 }
 
 export function snapshotHasAnchor(payload: unknown, anchorText: string): boolean {
@@ -237,22 +227,6 @@ function firstTreeStatusFromReason(reason: string | undefined): FirstTreeStatus 
   return APP_MOUNT_REASONS.has(reason ?? '') ? 'unreadable' : 'not-observed';
 }
 
-function baseFlags(context: CliContext): string[] {
-  return [
-    '--state-dir',
-    context.stateDir,
-    '--session',
-    context.session,
-    '--platform',
-    'ios',
-    '--udid',
-    context.udid,
-    '--ios-xctest-derived-data-path',
-    context.derivedPath,
-    ...(context.extraFlags ?? []),
-  ];
-}
-
 function readDaemonDuration(
   payload: unknown,
   operation: RawSample['operation'],
@@ -315,34 +289,6 @@ function readError(
     return { code: initial.code, message: readString(initial.message), details: initial.details };
   }
   return undefined;
-}
-
-function parseJson(value: string): unknown {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const start = trimmed.indexOf('{');
-    const end = trimmed.lastIndexOf('}');
-    if (start < 0 || end <= start) return undefined;
-    try {
-      return JSON.parse(trimmed.slice(start, end + 1));
-    } catch {
-      return undefined;
-    }
-  }
-}
-
-function isExplicitFailure(value: unknown): boolean {
-  const record = asRecord(value);
-  return record?.ok === false || Boolean(asRecord(record?.data)?.initialSnapshotError);
-}
-
-function isBatchStepFailure(value: unknown): boolean {
-  const results = asRecord(asRecord(value)?.data)?.results;
-  const first = Array.isArray(results) ? asRecord(results[0]) : undefined;
-  return first?.ok === false;
 }
 
 function readFiniteNumber(value: unknown): number | undefined {

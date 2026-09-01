@@ -1,5 +1,10 @@
 import path from 'node:path';
-import { openFixture, pressFixtureTarget, sampleFromCli, snapshotFixture } from './command.ts';
+import {
+  openFixtureAsync,
+  pressFixtureTargetAsync,
+  sampleFromCli,
+  snapshotFixtureAsync,
+} from './command.ts';
 import { buildMeasurement } from './statistics.ts';
 import {
   allocateLease,
@@ -78,7 +83,7 @@ async function measureFreshCli(
 ): Promise<Measurement> {
   const context = freshCliContext(options, lease, clientId, runId);
   try {
-    const samples = collectFreshCliSamples(context, options);
+    const samples = await collectFreshCliSamples(context, options);
     return buildMeasurement({
       transport: 'proxy',
       execution: 'fresh-process-cli',
@@ -90,7 +95,7 @@ async function measureFreshCli(
       network: options.network,
     });
   } finally {
-    closeCliSession(context);
+    await closeCliSession(context);
   }
 }
 
@@ -100,46 +105,47 @@ function freshCliContext(
   clientId: string,
   runId: string,
 ) {
+  const stateDir = path.join(
+    options.clientStateDir,
+    `cli-${options.fixture.id}-${options.network.rttMs}`,
+  );
   return {
     repoRoot: options.repoRoot,
-    stateDir: path.join(
-      options.clientStateDir,
-      `cli-${options.fixture.id}-${options.network.rttMs}`,
-    ),
+    stateDir,
     session: `bench-cli-${options.fixture.id}-${options.network.rttMs}`,
     udid: options.udid,
     derivedPath: options.derivedPath,
-    extraFlags: remoteFlags(options, lease, clientId, runId),
+    extraFlags: remoteFlags(options, lease, clientId, runId, stateDir),
   };
 }
 
-function collectFreshCliSamples(
+async function collectFreshCliSamples(
   context: ReturnType<typeof freshCliContext>,
   options: ProxyMeasurementOptions,
-): RawSample[] {
-  const opened = openFixture(context, options.fixture, { relaunch: true });
+): Promise<RawSample[]> {
+  const opened = await openFixtureAsync(context, options.fixture, { relaunch: true });
   if (!opened.ok) throw setupFailure('fresh CLI open', opened);
-  prepareFreshCliFixture(context, options.fixture);
+  await prepareFreshCliFixture(context, options.fixture);
   const samples: RawSample[] = [];
   for (let index = 0; index < options.samples; index += 1) {
     const mark = options.conditioner.mark();
-    const result = snapshotFixture(context);
+    const result = await snapshotFixtureAsync(context);
     samples.push(sampleFromProxyCli(result, options.conditioner, mark, index));
   }
   return samples;
 }
 
-function prepareFreshCliFixture(
+async function prepareFreshCliFixture(
   context: ReturnType<typeof freshCliContext>,
   fixture: ScreenFixture,
-): void {
+): Promise<void> {
   if (fixture.setupAction !== 'open-alert') return;
-  const pressed = pressFixtureTarget(context, 'id="automation-open-alert"');
+  const pressed = await pressFixtureTargetAsync(context, 'id="automation-open-alert"');
   if (!pressed.ok) throw setupFailure('fresh CLI alert setup', pressed);
 }
 
 function sampleFromProxyCli(
-  result: ReturnType<typeof snapshotFixture>,
+  result: Awaited<ReturnType<typeof snapshotFixtureAsync>>,
   conditioner: NetworkConditioner,
   mark: number,
   index: number,

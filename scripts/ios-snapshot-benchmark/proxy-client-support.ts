@@ -1,10 +1,16 @@
-import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { buildDaemonHttpBaseUrl } from '../../src/daemon/http-contract.ts';
 import { BenchmarkContentionError, BenchmarkInfrastructureError } from './lifecycle.ts';
-import { classifyFailure, formatCliFailure, type CliContext, type CliResult } from './command.ts';
+import {
+  classifyFailure,
+  closeSessionAsync,
+  formatCliFailure,
+  type CliContext,
+  type CliResult,
+} from './command.ts';
 import { type NetworkConditioner, type ProxyRpcRecord } from './proxy-conditioner.ts';
 import type { ProxyStartup } from './proxy-process.ts';
 import { asRecord } from './result-values.ts';
@@ -301,7 +307,32 @@ export function remoteFlags(
   lease: Record<string, unknown>,
   clientId: string,
   runId: string,
+  stateDir: string,
 ): string[] {
+  const remoteConfigPath = path.join(stateDir, 'proxy-connection.json');
+  fs.mkdirSync(stateDir, { recursive: true });
+  fs.writeFileSync(
+    remoteConfigPath,
+    `${JSON.stringify(
+      {
+        daemonBaseUrl: buildDaemonHttpBaseUrl(options.conditioner.baseUrl),
+        daemonTransport: 'http',
+        tenant: 'bench',
+        sessionIsolation: 'tenant',
+        runId,
+        leaseId: readRequiredString(lease, 'leaseId'),
+        leaseBackend: 'ios-simulator',
+        leaseProvider: 'proxy',
+        clientId,
+        deviceKey: readRequiredString(lease, 'deviceKey'),
+        platform: 'apple',
+        target: 'mobile',
+      },
+      null,
+      2,
+    )}\n`,
+    'utf8',
+  );
   return [
     '--daemon-base-url',
     buildDaemonHttpBaseUrl(options.conditioner.baseUrl),
@@ -309,42 +340,15 @@ export function remoteFlags(
     options.proxy.token,
     '--daemon-transport',
     'http',
-    '--tenant',
-    'bench',
-    '--run-id',
-    runId,
-    '--lease-id',
-    readRequiredString(lease, 'leaseId'),
-    '--lease-provider',
-    'proxy',
-    '--client-id',
-    clientId,
-    '--device-key',
-    readRequiredString(lease, 'deviceKey'),
-    '--lease-backend',
-    'ios-simulator',
+    '--platform',
+    'apple',
+    '--remote-config',
+    remoteConfigPath,
   ];
 }
 
-export function closeCliSession(context: CliContext): void {
-  spawnSync(
-    process.execPath,
-    [
-      'bin/agent-device.mjs',
-      'close',
-      '--state-dir',
-      context.stateDir,
-      '--session',
-      context.session,
-      '--platform',
-      'ios',
-      '--udid',
-      context.udid,
-      ...(context.extraFlags ?? []),
-      '--json',
-    ],
-    { cwd: context.repoRoot, stdio: 'ignore', timeout: 60_000 },
-  );
+export async function closeCliSession(context: CliContext): Promise<void> {
+  await closeSessionAsync(context);
 }
 
 export function setupFailure(operation: string, result: CliResult): BenchmarkInfrastructureError {
