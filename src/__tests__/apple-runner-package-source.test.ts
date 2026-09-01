@@ -245,7 +245,7 @@ test('snapshot presentation manifests keep their supported platform declarations
   );
 
   for (const declaration of ['.iOS(.v15)', '.macOS(.v13)', '.tvOS(.v15)', '.visionOS(.v1)']) {
-    const escaped = declaration.replace(/[.()]/g, '\\$&');
+    const escaped = declaration.replaceAll(/[.()]/g, String.raw`\$&`);
     assert.match(manifest, new RegExp(escaped));
     assert.match(runnerManifest, new RegExp(escaped));
   }
