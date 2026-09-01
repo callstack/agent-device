@@ -398,7 +398,8 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // module records for the same code, with no new subtree behind any of them.
   // #2148 moves output-only CLI dependencies behind call-time imports and reduces the entry
   // closure by two modules.
-  'src/cli.ts': 378,
+  // #2146 splits one eagerly reached URL utility into its client and Metro owners.
+  'src/cli.ts': 379,
   'src/platform-runtime.ts': 47,
   'src/core/command-descriptor/registry.ts': 71,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,
