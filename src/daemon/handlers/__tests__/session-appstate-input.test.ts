@@ -272,25 +272,3 @@ test('clipboard rejects unsupported iOS physical devices', async () => {
     expect(response.error.message).toMatch(/clipboard is not supported on this device/i);
   }
 });
-
-test('perf requires an active session', async () => {
-  const sessionStore = makeSessionStore();
-  const response = await handleSessionCommands({
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'perf',
-      positionals: [],
-      flags: {},
-    },
-    sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
-  });
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('SESSION_NOT_FOUND');
-  }
-});

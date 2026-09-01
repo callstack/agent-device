@@ -28,6 +28,11 @@ const DAEMON_SESSION_LIFECYCLE_FACADE = {
   ],
 } as const;
 
+const DAEMON_SESSION_OBSERVABILITY_FACADE = {
+  root: 'src/daemon/session-observability/index.ts',
+  exports: ['SessionObservabilityCommandInput', 'handleSessionObservabilityCommands'],
+} as const;
+
 export const SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS = [
   'src/daemon/handlers/session-device-utils.ts',
   'src/daemon/handlers/session-runtime-admission.ts',
@@ -59,6 +64,13 @@ const DAEMON_INTERACTION_FACADE = {
     'settleFlagGuardResponse',
   ],
 } as const;
+
+export const SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS = [
+  'src/daemon/handlers/session-observability.ts',
+  'src/daemon/handlers/session-perf-runtime.ts',
+  'src/daemon/handlers/session-network.ts',
+  'src/daemon/handlers/session-audio.ts',
+] as const;
 
 export const LOGICAL_MODULE_POLICIES = [
   {
@@ -105,6 +117,12 @@ export const LOGICAL_MODULE_POLICIES = [
     forbiddenTargetRoots: [],
     internalForbiddenTargetRoots: ['src/daemon/handlers/'],
     facade: DAEMON_INTERACTION_FACADE,
+  },
+  {
+    name: 'daemon-session-observability',
+    roots: ['src/daemon/session-observability/'],
+    forbiddenTargetRoots: ['src/daemon/handlers/'],
+    facade: DAEMON_SESSION_OBSERVABILITY_FACADE,
   },
 ] as const satisfies readonly LogicalModulePolicy[];
 

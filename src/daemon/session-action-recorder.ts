@@ -97,6 +97,31 @@ export function recordActionEntry(
   return action;
 }
 
+type SessionActionStore = { recordAction(session: SessionState, entry: RecordActionEntry): void };
+
+/**
+ * Record a session action if a session is active. No-op when session is undefined.
+ *
+ * By default the recorded positionals/flags mirror the request; pass `overrides` to
+ * record a different set (e.g. resolved positionals or stripped public flags).
+ */
+export function recordSessionAction(
+  sessionStore: SessionActionStore,
+  session: SessionState | undefined,
+  req: DaemonRequest,
+  command: string,
+  result: Record<string, unknown> | undefined,
+  overrides?: { positionals?: string[]; flags?: CommandFlags },
+): void {
+  if (!session) return;
+  sessionStore.recordAction(session, {
+    command,
+    positionals: overrides?.positionals ?? req.positionals ?? [],
+    flags: overrides?.flags ?? ((req.flags ?? {}) as CommandFlags),
+    result: result ?? {},
+  });
+}
+
 type FillLiteral = { literal: string; placeholder: string };
 
 /** The (literal, placeholder) pair a `fill --record-as` entry carries, or `undefined` for an ordinary fill/other command. */
@@ -269,7 +294,7 @@ function replaceFillText(positionals: string[], placeholder: string): string[] {
  * absent: it is flow timing/synchronisation, not observation, so it always
  * records. A mutating `find … click|fill|focus|type` never reaches a caller of
  * `isInteractiveObservation` (it records through `recordSessionAction`,
- * `handlers/handler-utils.ts`), so `find` here always means a read-only
+ * `session-action-recorder.ts`), so `find` here always means a read-only
  * sub-action; `diff` is likewise absent because only `snapshot` is classified
  * at the snapshot-runtime call site.
  */

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { handleSessionObservabilityCommands } from '../session-observability.ts';
+import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { handleSessionObservabilityCommands } from '../../index.ts';
 import { createNetworkRuntime, emptyAppLogResult } from './network-runtime-harness.ts';
 
 test('network dump validates include mode directly', async () => {

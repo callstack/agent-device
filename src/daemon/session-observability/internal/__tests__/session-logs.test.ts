@@ -8,25 +8,25 @@ import {
   narrowDeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../../__tests__/test-utils/runtime-operation-facts.ts';
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { createTestAppLogLiveHandle } from '../../../__tests__/test-utils/app-log-live-handle.ts';
+import { createTestAppLogLiveHandle } from '../../../../__tests__/test-utils/app-log-live-handle.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   createAppLogAdmissionLedger,
   type AppLogAdmissionLedger,
-} from '../../app-log-admission-ledger.ts';
-import { handleSessionCommands } from './session-command-harness.ts';
-import { appLogResourceStore } from '../../app-log-resource-store.ts';
-import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
-import type { SessionStore } from '../../session-store.ts';
+} from '../../../app-log-admission-ledger.ts';
+import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
+import { appLogResourceStore } from '../../../app-log-resource-store.ts';
+import type { BindDeviceRuntime } from '../../../request-runtime-binding.ts';
+import type { SessionStore } from '../../../session-store.ts';
 import {
   makeSession,
   makeSessionStore,
   makeTestAppLogResource,
   noopInvoke,
-} from './session-test-harness.ts';
+} from '../../../handlers/__tests__/session-test-harness.ts';
 
 const DEVICE: DeviceInfo = {
   platform: 'apple',

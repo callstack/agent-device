@@ -11,28 +11,32 @@ import {
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../app-log.ts';
-import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
-import type { AudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
-import type { PerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
-import { appLogResourceStore } from '../app-log-resource-store.ts';
+import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../../app-log.ts';
+import type { AppLogAdmissionLedger } from '../../app-log-admission-ledger.ts';
+import type { AudioProbeAdmissionLedger } from '../../audio-probe-admission-ledger.ts';
+import type { PerfCaptureAdmissionLedger } from '../../perf-capture-admission-ledger.ts';
+import { appLogResourceStore } from '../../app-log-resource-store.ts';
 import {
   adoptStartedSessionAppLog,
   clearSessionAppLogFailure,
   finishSessionAppLog,
   inspectSessionAppLog,
   recordSessionAppLogFailure,
-} from '../app-log-session-resource.ts';
-import { createNextAppLogFence } from '../app-log-start-preflight.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import type { SessionStore } from '../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { errorResponse, type DaemonFailureResponse } from '../response.ts';
+  type AppLogSessionSnapshot,
+} from '../../app-log-session-resource.ts';
+import { createNextAppLogFence } from '../../app-log-start-preflight.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../request-runtime-binding.ts';
+import type { SessionStore } from '../../session-store.ts';
+import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import { errorResponse, type DaemonFailureResponse } from '../../response.ts';
 import { handleAudioCommand } from './session-audio.ts';
 import { handlePerfRuntimeCommand } from './session-perf-runtime.ts';
 import { handleNetworkCommand } from './session-network.ts';
 
-type ObservabilityParams = {
+export type SessionObservabilityCommandInput = {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -43,7 +47,8 @@ type ObservabilityParams = {
   perfCaptureAdmissionLedger?: PerfCaptureAdmissionLedger;
   throwIfCanceled?: () => void;
 };
-type LogsHandlerParams = Omit<ObservabilityParams, 'bindDevice' | 'appLogAdmissionLedger'> & {
+type ObservabilityInput = SessionObservabilityCommandInput;
+type LogsHandlerParams = Omit<ObservabilityInput, 'bindDevice' | 'appLogAdmissionLedger'> & {
   session: SessionState;
   bindDevice: BindDeviceRuntime;
   appLogAdmissionLedger: AppLogAdmissionLedger;
@@ -51,16 +56,7 @@ type LogsHandlerParams = Omit<ObservabilityParams, 'bindDevice' | 'appLogAdmissi
 type ExecutableLogsRuntimePlan =
   | Extract<LogsRuntimePlan, { requiresAppSession: false }>
   | (Extract<LogsRuntimePlan, { requiresAppSession: true }> & { appBundleId: string });
-type SessionLogStatus = {
-  active: boolean;
-  state: 'active' | 'recovering' | 'ended' | 'failed' | 'inactive';
-  backend: LogBackend;
-  startedAt?: number;
-  failureCode?: string;
-  failureMessage?: string;
-  hint?: string;
-  notes?: string[];
-};
+type SessionLogStatus = AppLogSessionSnapshot & { backend: LogBackend; notes?: string[] };
 
 function resolveSessionLogStatus(
   session: SessionState,
@@ -80,19 +76,14 @@ function resolveSessionLogStatus(
 function buildAppLogFailureNote(failure: AppLogFailure): string {
   return failure.hint ? `${failure.message} ${failure.hint}` : failure.message;
 }
-
 function buildAppLogStateNotes(state: SessionLogStatus['state']): string[] | undefined {
-  if (state === 'failed') {
-    return [
-      'The app log stream process exited with an error. Run logs doctor for backend diagnostics.',
-    ];
-  }
-  if (state === 'ended') {
-    return [
-      'The app log stream process ended. Run logs clear --restart before the next capture window.',
-    ];
-  }
-  return undefined;
+  return state === 'failed'
+    ? ['The app log stream process exited with an error. Run logs doctor for backend diagnostics.']
+    : state === 'ended'
+      ? [
+          'The app log stream process ended. Run logs clear --restart before the next capture window.',
+        ]
+      : undefined;
 }
 
 function mergeLogDoctorNotes(
@@ -103,7 +94,7 @@ function mergeLogDoctorNotes(
 }
 
 export async function handleSessionObservabilityCommands(
-  params: ObservabilityParams,
+  params: SessionObservabilityCommandInput,
 ): Promise<DaemonResponse | null> {
   const { req } = params;
 
@@ -129,7 +120,7 @@ export async function handleSessionObservabilityCommands(
   return null;
 }
 
-async function handleEventsCommand(params: ObservabilityParams): Promise<DaemonResponse> {
+async function handleEventsCommand(params: ObservabilityInput): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
   try {
     await sessionStore.flushEvents(sessionName);
@@ -149,7 +140,7 @@ async function handleEventsCommand(params: ObservabilityParams): Promise<DaemonR
 // logs
 // ---------------------------------------------------------------------------
 
-async function handleLogsCommand(params: ObservabilityParams): Promise<DaemonResponse> {
+async function handleLogsCommand(params: ObservabilityInput): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
   const session = sessionStore.get(sessionName);
   if (!session) {
@@ -412,7 +403,7 @@ async function startSessionAppLog(
     return { ok: false, error: normalized };
   }
 }
-function requireAudioSeams(params: ObservabilityParams): Parameters<typeof handleAudioCommand>[0] {
+function requireAudioSeams(params: ObservabilityInput): Parameters<typeof handleAudioCommand>[0] {
   if (!params.bindDevice || !params.inspectFacts) {
     throw new AppError('COMMAND_FAILED', 'Device runtime gateway is not configured', {
       reason: 'runtime-gateway-missing',
@@ -435,7 +426,7 @@ function requireAudioSeams(params: ObservabilityParams): Parameters<typeof handl
 }
 
 function requireLogsHandlerParams(
-  params: ObservabilityParams & { session: SessionState },
+  params: ObservabilityInput & { session: SessionState },
 ): LogsHandlerParams {
   if (!params.bindDevice) {
     throw new AppError('COMMAND_FAILED', 'Device runtime gateway is not configured', {

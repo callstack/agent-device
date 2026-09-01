@@ -3,6 +3,7 @@ import {
   LOGICAL_MODULE_POLICIES,
   matchesDeclaredRoot,
   SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS,
+  SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS,
   type LogicalModulePolicy,
 } from './architecture-ownership.ts';
 import { targetDagZone, type LayeringViolation, type ResolvedImportEdge } from './model.ts';
@@ -57,19 +58,41 @@ export function checkDaemonModularityRatchets(
 export function checkRetiredSessionLifecyclePaths(
   sourceFiles: readonly string[],
 ): LayeringViolation[] {
-  const restoredPaths = sourceFiles.filter(
-    (file) =>
-      SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS.some((retiredPath) => retiredPath === file) ||
-      /^src\/daemon\/handlers\/session-(?:open|close)(?:-[^/]+)?\.ts$/.test(file),
+  return checkRetiredHandlerPaths(
+    sourceFiles,
+    SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS,
+    /^src\/daemon\/handlers\/session-(?:open|close)(?:-[^/]+)?\.ts$/,
+    'session lifecycle',
   );
-  return restoredPaths.map((file) => ({
-    rule: 'R10 daemon-modularity',
-    file,
-    line: 1,
-    message:
-      `retired session lifecycle path was restored: ${file}. ` +
-      'Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
-  }));
+}
+
+export function checkRetiredSessionObservabilityPaths(
+  sourceFiles: readonly string[],
+): LayeringViolation[] {
+  return checkRetiredHandlerPaths(
+    sourceFiles,
+    SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS,
+    /^src\/daemon\/handlers\/session-(?:observability|perf|logs|events|network|audio)(?:-[^/]+)?\.ts$/,
+    'session observability',
+  );
+}
+
+function checkRetiredHandlerPaths(
+  sourceFiles: readonly string[],
+  retiredPaths: readonly string[],
+  pattern: RegExp,
+  capability: string,
+): LayeringViolation[] {
+  return sourceFiles
+    .filter((file) => retiredPaths.includes(file) || pattern.test(file))
+    .map((file) => ({
+      rule: 'R10 daemon-modularity',
+      file,
+      line: 1,
+      message:
+        `retired ${capability} path was restored: ${file}. ` +
+        'Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+    }));
 }
 
 function checkSessionStateBaseline(): LayeringViolation[] {

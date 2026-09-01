@@ -18,7 +18,7 @@ import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { resolveInstallFromSourceResultTarget } from '../result-serialization.ts';
 import { withSuccessText } from '@agent-device/kernel/success-text';
-import { recordSessionAction } from './handler-utils.ts';
+import { recordSessionAction } from '../session-action-recorder.ts';
 import { resolveCommandDevice } from '../session-device-resolution.ts';
 import {
   requireRuntimeBinding,

@@ -18,24 +18,27 @@ import {
 } from '@agent-device/contracts/observability';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import type { PerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
+import type { PerfCaptureAdmissionLedger } from '../../perf-capture-admission-ledger.ts';
 import {
   adoptStartedPerfCapture,
   finishLivePerfCapture,
   perfCaptureDurableResource,
-} from '../perf-capture-session-resource.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import { SessionStore } from '../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { recordSessionAction } from './handler-utils.ts';
-import { errorResponse } from '../response.ts';
+} from '../../perf-capture-session-resource.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../request-runtime-binding.ts';
+import { SessionStore } from '../../session-store.ts';
+import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import { recordSessionAction } from '../../session-action-recorder.ts';
+import { errorResponse } from '../../response.ts';
 import {
   admitRuntimePlan,
   requireRuntimeBinding,
   unavailableRuntimeOperationResponse,
   unwrapAdmittedRuntimePlan,
   type AdmittedRuntimePlan,
-} from '../session-runtime-admission.ts';
+} from '../../session-runtime-admission.ts';
 
 export type PerfRuntimeHandlerParams = Readonly<{
   req: DaemonRequest;

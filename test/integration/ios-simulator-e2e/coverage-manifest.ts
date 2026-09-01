@@ -60,7 +60,7 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
     'daemon inventory exposes a typed non-empty artifact and its downloadable bytes',
   ),
   [C.audio]: contract(
-    'src/daemon/handlers/__tests__/session-audio.test.ts',
+    'src/daemon/session-observability/internal/__tests__/session-audio.test.ts',
     'audio probe starts host helper for iOS simulator audio',
     'host audio permission and probe lifecycle; ScreenCaptureKit is not available on hosted CI',
   ),

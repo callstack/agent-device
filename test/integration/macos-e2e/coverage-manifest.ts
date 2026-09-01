@@ -95,7 +95,7 @@ export const MACOS_PLATFORM_COVERAGE = {
     'macOS network capture parses HTTP traffic from the session app log',
   ),
   [C.audio]: contract(
-    'src/daemon/handlers/__tests__/session-audio.test.ts',
+    'src/daemon/session-observability/internal/__tests__/session-audio.test.ts',
     'audio probe start binds once, adopts the durable handle, and answers from it',
     'macOS audio probe starts the ScreenCaptureKit helper and reports its backend',
   ),

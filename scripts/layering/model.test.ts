@@ -313,7 +313,7 @@ test('session-state writes are found by field, and non-daemon or undeclared name
       // a runner session outside the daemon is a different type that happens to share a name
       ['src/platforms/apple/runner-session.ts', 'session.refFrameState = 1;'],
       // a local that is not a declared SessionState field
-      ['src/daemon/handlers/session-audio.ts', 'session.somethingElse = 1;'],
+      ['src/daemon/session-observability/internal/session-audio.ts', 'session.somethingElse = 1;'],
       // reads and comparisons are not writes
       ['src/daemon/handlers/find.ts', "if (session.refFrameState === 'active') return;"],
       // a write into a sub-object is not a write to the field itself

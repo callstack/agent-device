@@ -122,7 +122,7 @@ export const WEB_PLATFORM_COVERAGE = {
   ),
   [C.network]: live('network dump returns the fixture GET request and requested headers'),
   [C.audio]: contract(
-    'src/daemon/handlers/__tests__/session-audio.test.ts',
+    'src/daemon/session-observability/internal/__tests__/session-audio.test.ts',
     'audio probe forwards daemon millisecond timing to the web query operation',
     'web audio probe forwards typed duration and bucket values',
   ),

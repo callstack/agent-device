@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   checkDaemonModularityRatchets,
   checkRetiredSessionLifecyclePaths,
+  checkRetiredSessionObservabilityPaths,
   DAEMON_MODULARITY_BASELINE,
   TYPE_CYCLE_BASELINE,
 } from './daemon-modularity.ts';
@@ -370,6 +371,50 @@ test('interaction rejects handler crossings and deep imports around its facade',
   );
 });
 
+test('session observability rejects handler deep imports in both directions', () => {
+  const edges = resolveImportEdges(
+    new Map([
+      [
+        'src/daemon/handlers/session.ts',
+        "import { handleSessionObservabilityCommands } from '../session-observability/internal/session-observability.ts';\nexport function handleSessionCommands() {}",
+      ],
+      [
+        'src/daemon/session-observability/internal/session-observability.ts',
+        "import { handleSessionCommands } from '../../handlers/session.ts';\nexport function handleSessionObservabilityCommands() {}",
+      ],
+      [
+        'src/daemon/session-observability/index.ts',
+        'export function handleSessionObservabilityCommands() {}',
+      ],
+    ]),
+  );
+
+  const violations = checkDaemonModularityRatchets(
+    [...baselineEdges(), ...edges],
+    baselineTypeCycleMembers(),
+  );
+  assert.deepEqual(
+    violations.map(({ file, line, message }) => ({
+      file,
+      line,
+      message: message.replace(/;.*/, ''),
+    })),
+    [
+      {
+        file: 'src/daemon/handlers/session.ts',
+        line: 1,
+        message:
+          "src/daemon/handlers/session.ts must not import daemon-session-observability's internal tree (src/daemon/session-observability/internal/session-observability.ts)",
+      },
+      {
+        file: 'src/daemon/session-observability/internal/session-observability.ts',
+        line: 1,
+        message: 'daemon-session-observability must not import src/daemon/handlers/session.ts',
+      },
+    ],
+  );
+});
+
 test('session lifecycle rejects restored neutral helper paths', () => {
   const violations = checkRetiredSessionLifecyclePaths([
     'src/daemon/session-device-resolution.ts',
@@ -419,6 +464,30 @@ test('session lifecycle rejects any restored open or close handler path', () => 
           'retired session lifecycle path was restored: src/daemon/handlers/session-close-regressed.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
       },
     ],
+  );
+});
+
+test('session observability rejects restored handler paths', () => {
+  const restoredPaths = [
+    'src/daemon/handlers/session-observability.ts',
+    'src/daemon/handlers/session-perf-runtime.ts',
+    'src/daemon/handlers/session-network.ts',
+    'src/daemon/handlers/session-audio.ts',
+    'src/daemon/handlers/session-network-regressed.ts',
+    'src/daemon/handlers/session-perf.ts',
+    'src/daemon/handlers/session-logs.ts',
+    'src/daemon/handlers/session-events.ts',
+  ] as const;
+  const violations = checkRetiredSessionObservabilityPaths(restoredPaths);
+
+  assert.deepEqual(
+    violations.map(({ file, message }) => ({ file, message })),
+    restoredPaths.map((file) => ({
+      file,
+      message:
+        `retired session observability path was restored: ${file}. ` +
+        'Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+    })),
   );
 });
 

@@ -16,20 +16,41 @@ import {
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceIdentity } from '@agent-device/kernel/device';
-import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
-import { createPerfCaptureAdmissionLedger } from '../../perf-capture-admission-ledger.ts';
+import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../../__tests__/test-utils/runtime-operation-facts.ts';
+import { createPerfCaptureAdmissionLedger } from '../../../perf-capture-admission-ledger.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
-} from '../../request-runtime-binding.ts';
-import { handleSessionObservabilityCommands } from '../session-observability.ts';
+} from '../../../request-runtime-binding.ts';
+import { handleSessionObservabilityCommands } from '../../index.ts';
 
 const available = Object.freeze({ available: true as const });
 const unavailable = Object.freeze({
   available: false as const,
   reason: 'owner-capability-missing' as const,
+});
+
+test('perf requires an active session', async () => {
+  const sessionStore = makeSessionStore();
+  const response = await handleSessionObservabilityCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'perf',
+      positionals: [],
+      flags: {},
+    },
+    sessionName: 'default',
+    sessionStore,
+  });
+
+  assert.ok(response);
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'SESSION_NOT_FOUND');
+  }
 });
 
 test('perf frames admits and binds only the selected runtime operation', async () => {

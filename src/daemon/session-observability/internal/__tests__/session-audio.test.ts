@@ -13,24 +13,35 @@ import {
   encodeDurableDescriptor,
   hostAudioProbeDescriptorCodec,
 } from '@agent-device/capture-kit';
-import { IOS_DEVICE, WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
+import {
+  IOS_DEVICE,
+  WEB_DESKTOP_DEVICE,
+} from '../../../../__tests__/test-utils/device-fixtures.ts';
 import {
   makeAndroidSession,
   makeIosSession,
   makeMacOsSession,
   makeSession,
-} from '../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+} from '../../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import {
   unavailableApplicationLifecycleOperationFacts,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
-} from '../../../__tests__/test-utils/runtime-operation-facts.ts';
-import { createAudioProbeAdmissionLedger } from '../../audio-probe-admission-ledger.ts';
-import { audioProbeDurableResource } from '../../audio-probe-session-resource.ts';
-import type { SessionStore } from '../../session-store.ts';
-import type { DaemonResponse } from '../../types.ts';
-import { handleAudioCommand } from '../session-audio.ts';
-import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from './session-audio.coverage.ts';
+} from '../../../../__tests__/test-utils/runtime-operation-facts.ts';
+import { createAudioProbeAdmissionLedger } from '../../../audio-probe-admission-ledger.ts';
+import { audioProbeDurableResource } from '../../../audio-probe-session-resource.ts';
+import type { SessionStore } from '../../../session-store.ts';
+import type { DaemonResponse } from '../../../types.ts';
+import { handleSessionObservabilityCommands } from '../../index.ts';
+import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from '../../__tests__/session-audio.coverage.ts';
+
+async function runAudio(
+  params: Parameters<typeof handleSessionObservabilityCommands>[0],
+): Promise<DaemonResponse> {
+  const response = await handleSessionObservabilityCommands(params);
+  assert.ok(response);
+  return response;
+}
 
 function ownerFor(device: DeviceInfo) {
   return localRuntimeOwner(device.platform as Parameters<typeof localRuntimeOwner>[0]);
@@ -196,7 +207,7 @@ test('audio probe validates daemon duration bounds', async () => {
   });
 
   assertInvalidArgs(
-    await handleAudioCommand(params as never),
+    await runAudio(params as never),
     /duration must be an integer in range 100..120000/,
   );
   assert.equal(bindDevice.mock.calls.length, 0);
@@ -211,7 +222,7 @@ test('audio probe validates daemon bucket bounds', async () => {
   });
 
   assertInvalidArgs(
-    await handleAudioCommand(params as never),
+    await runAudio(params as never),
     /bucket must be an integer in range 100..10000/,
   );
   assert.equal(bindDevice.mock.calls.length, 0);
@@ -225,10 +236,7 @@ test('audio probe rejects timing positionals for status', async () => {
     cells: { capture: false, query: true },
   });
 
-  assertInvalidArgs(
-    await handleAudioCommand(params as never),
-    /only supported with audio probe start/,
-  );
+  assertInvalidArgs(await runAudio(params as never), /only supported with audio probe start/);
   assert.equal(bindDevice.mock.calls.length, 0);
 });
 
@@ -240,7 +248,7 @@ test('audio refuses with the owner-stated hint when no fact admits it', async ()
     cells: { capture: false, query: false },
   });
 
-  const response = await handleAudioCommand(params as never);
+  const response = await runAudio(params as never);
   assert.equal(response.ok, false);
   if (!response.ok) {
     assert.equal(response.error.code, 'UNSUPPORTED_OPERATION');
@@ -260,7 +268,7 @@ test('audio probe start binds once, adopts the durable handle, and answers from 
     operations: runtime.operations,
   });
 
-  const response = await handleAudioCommand(params as never);
+  const response = await runAudio(params as never);
 
   assert.ok(response.ok);
   assert.equal(bindDevice.mock.calls.length, 1);
@@ -289,7 +297,7 @@ test('audio probe starts host helper for iOS simulator audio', async () => {
     operations: runtime.operations,
   });
 
-  const response = await handleAudioCommand(params as never);
+  const response = await runAudio(params as never);
 
   assert.ok(response.ok);
   assert.equal(runtime.startCalls.length, 1);
@@ -307,7 +315,7 @@ test(ANDROID_AUDIO_CONTRACT_EVIDENCE.testName, async () => {
     operations: runtime.operations,
   });
 
-  const response = await handleAudioCommand(params as never);
+  const response = await runAudio(params as never);
 
   assert.ok(response.ok);
   assert.deepEqual(response.data?.peakDbfs, [-13]);
@@ -324,14 +332,14 @@ test('audio probe stop finishes the durable resource and clears the slot', async
     cells: { capture: true, query: false },
     operations: runtime.operations,
   });
-  assert.ok((await handleAudioCommand(start.params as never)).ok);
+  assert.ok((await runAudio(start.params as never)).ok);
 
   const stop = audioParams('macos', sessionStore, session.device, {
     positionals: ['probe', 'stop'],
     cells: { capture: true, query: false },
     operations: runtime.operations,
   });
-  const response = await handleAudioCommand(stop.params as never);
+  const response = await runAudio(stop.params as never);
 
   assert.ok(response.ok);
   assert.equal(response.data?.state, 'stopped');
@@ -353,7 +361,7 @@ test('audio probe status without an active probe reports not-started', async () 
     cells: { capture: true, query: false },
   });
 
-  const response = await handleAudioCommand(params as never);
+  const response = await runAudio(params as never);
 
   assert.ok(response.ok);
   assert.equal(response.data?.state, 'stopped');
@@ -373,7 +381,7 @@ test('audio probe forwards daemon millisecond timing to the web query operation'
     operations: { audioProbeQuery },
   });
 
-  const response = await handleAudioCommand(params as never);
+  const response = await runAudio(params as never);
 
   assert.ok(response.ok);
   assert.equal(bindDevice.mock.calls.length, 1);

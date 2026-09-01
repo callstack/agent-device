@@ -10,7 +10,7 @@ import {
   handleSessionOpenCommands,
 } from '../session-lifecycle/index.ts';
 import { handleSessionStateCommands } from './session-state.ts';
-import { handleSessionObservabilityCommands } from './session-observability.ts';
+import { handleSessionObservabilityCommands } from '../session-observability/index.ts';
 import { handleReplayCommand, handleReplayTestCommand } from './session-replay-command.ts';
 import { handleSessionScriptPublication } from './session-script-publication.ts';
 import { handleSessionClipboardCommand } from './session-clipboard.ts';
@@ -26,6 +26,7 @@ import type {
   SessionInventoryCommandInput,
   SessionOpenCommandInput,
 } from '../session-lifecycle/index.ts';
+import type { SessionObservabilityCommandInput } from '../session-observability/index.ts';
 import type { DescriptorSessionRouteCommandName } from '../../core/command-descriptor/registry.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 
@@ -93,7 +94,7 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
     audioProbeAdmissionLedger,
     perfCaptureAdmissionLedger,
     throwIfCanceled,
-  });
+  } satisfies SessionObservabilityCommandInput);
 
 /**
  * Descriptor-driven exhaustive dispatch table for the daemon's `session`

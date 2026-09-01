@@ -171,7 +171,7 @@
         "count": 1
       }
     },
-    "src/daemon/handlers/__tests__/session-appstate-input-perf.test.ts": {
+    "src/daemon/handlers/__tests__/session-appstate-input.test.ts": {
       "crap_high": {
         "count": 3
       },
@@ -189,7 +189,7 @@
         "count": 1
       }
     },
-    "src/daemon/handlers/__tests__/session-logs.test.ts": {
+    "src/daemon/session-observability/internal/__tests__/session-logs.test.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -230,7 +230,7 @@
         "count": 1
       }
     },
-    "src/daemon/handlers/session-observability.ts": {
+    "src/daemon/session-observability/internal/session-observability.ts": {
       "crap_moderate": {
         "count": 2
       }

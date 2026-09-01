@@ -1,14 +1,14 @@
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
-import { handleSessionCommands } from './session-command-harness.ts';
+import type { BindDeviceRuntime } from '../../../request-runtime-binding.ts';
+import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
 import {
   makeSession,
   makeSessionStore,
   makeTestAppLogResource,
   noopInvoke,
-} from './session-test-harness.ts';
+} from '../../../handlers/__tests__/session-test-harness.ts';
 import { NETWORK_RUNTIME_PROJECTION_PARITY } from './session-network-runtime-parity-fixtures.ts';
 import { createNetworkRuntime, emptyAppLogResult } from './network-runtime-harness.ts';
 
