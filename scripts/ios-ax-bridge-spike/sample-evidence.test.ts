@@ -51,5 +51,8 @@ test('keeps one raw acquisition exemplar while retaining every sample measuremen
   assert.ok(acquisitionSamples[0]?.acquisition);
   assert.equal(acquisitionSamples[1]?.acquisition, undefined);
   assert.equal(presentationSamples.length, 2);
-  assert.equal(presentationSamples.every((sample) => sample.acquisition === undefined), true);
+  assert.equal(
+    presentationSamples.every((sample) => sample.acquisition === undefined),
+    true,
+  );
 });

@@ -9,6 +9,7 @@
     "dist/**",
     "node_modules/**",
     "**/*.md",
+    "docs/evidence/ios-simulator-ax-bridge-2026-09-01.json",
     "scripts/maestro-conformance/corpus/**",
     "fallow-baselines/**"
   ]
