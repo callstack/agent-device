@@ -490,6 +490,11 @@ extension RunnerTests {
     do {
       presented = try timer.measure(.presentation) {
         guard let result = try SnapshotPresentation.present(acquisition, options: options) else {
+          NSLog(
+            "AGENT_DEVICE_RUNNER_SNAPSHOT_PROJECTION_MISMATCH requested=%@ acquired=%@",
+            hint.projection.rawValue,
+            acquisition.hint.projection.rawValue
+          )
           throw Self.snapshotProjectionMismatchFailure(
             kind,
             requested: hint.projection,

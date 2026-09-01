@@ -44,7 +44,7 @@ runs:
       id: source-hash
       run: |
         set -euo pipefail
-        echo "value=${{ hashFiles('apple/runner/**', 'scripts/build-xcuitest-apple.sh', 'scripts/patch-xcuitest-runner-icon.ts', 'scripts/write-xcuitest-cache-metadata.mjs', 'packages/platform-apple/src/runner/apple-runner-platform.ts', 'packages/platform-apple/src/runner/runner-cache-metadata.ts', 'packages/platform-apple/src/runner/runner-icon.ts', 'packages/platform-apple/src/runner/runner-xctestrun.ts', 'packages/platform-apple/src/runner/runner-xctestrun-products.ts', '.github/actions/setup-apple-runner-build/action.yml', 'package.json', 'pnpm-lock.yaml') }}" >> "$GITHUB_OUTPUT"
+        echo "value=${{ hashFiles('apple/runner/**', 'apple/snapshot-presentation/**', 'scripts/build-xcuitest-apple.sh', 'scripts/patch-xcuitest-runner-icon.ts', 'scripts/write-xcuitest-cache-metadata.mjs', 'packages/platform-apple/src/runner/apple-runner-platform.ts', 'packages/platform-apple/src/runner/runner-cache-metadata.ts', 'packages/platform-apple/src/runner/runner-icon.ts', 'packages/platform-apple/src/runner/runner-xctestrun.ts', 'packages/platform-apple/src/runner/runner-xctestrun-products.ts', '.github/actions/setup-apple-runner-build/action.yml', 'package.json', 'pnpm-lock.yaml') }}" >> "$GITHUB_OUTPUT"
       shell: bash
 
     - name: Resolve Apple runner build variant

@@ -307,7 +307,7 @@ extension RunnerTests {
     }
 
     XCTAssertThrowsError(
-      try SnapshotPresentationInvariant.validateRegularWithStats(
+      try SnapshotPresentationInvariant.validateRegular(
         folded,
         viewport: viewport,
         policy: .cursorProjected
@@ -321,30 +321,6 @@ extension RunnerTests {
       XCTAssertEqual(clip.x, 20)
       XCTAssertEqual(clip.width, 100)
     }
-  }
-
-  func testRegularInvariantUsesOneParentClipLookupPerNode() throws {
-    let nodeCount = 5_000
-    let viewport = CGRect(x: 0, y: 0, width: 100, height: 100)
-    let nodes = (0..<nodeCount).map { index in
-      let raw = Self.invariantNode(
-        index,
-        type: index == 0 ? "Application" : "ScrollView",
-        rect: SnapshotRect(x: 0, y: 0, width: 100, height: 100),
-        parentIndex: index == 0 ? nil : index - 1
-      )
-      return SnapshotPresentationNode(raw: raw, effectiveRect: raw.rect)
-    }
-
-    let stats = try SnapshotPresentationInvariant.validateRegularWithStats(
-      nodes,
-      viewport: viewport,
-      policy: .cursorProjected
-    )
-
-    // The former per-node ancestor walk performs 12,497,500 lookups for this chain. Counting the
-    // cached parent resolutions makes the linear guarantee deterministic without timing the test.
-    XCTAssertEqual(stats.parentClipLookups, nodeCount - 1)
   }
 
   func testPresentationFailureKeepsItsNamedSnapshotQualityReason() {

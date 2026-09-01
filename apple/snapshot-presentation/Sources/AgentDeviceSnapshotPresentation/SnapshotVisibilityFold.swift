@@ -169,9 +169,7 @@ public enum SnapshotVisibilityFold {
     var hints: [Int: (above: Bool, below: Bool)] = [:]
 
     for (offset, node) in nodes.enumerated() {
-      let parentState = node.parentIndex.flatMap { index in
-        index >= 0 && index < states.count ? states[index] : nil
-      }
+      let parentState = node.parentIndex.flatMap { states[$0] }
       let parentTraversal = parentState?.traversal ?? .root
       let parentAnchor = policy == .cursorProjected ? parentState?.anchor : nil
       let rect = node.rect.cgRect

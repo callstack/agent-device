@@ -18,6 +18,7 @@ test('classifies every shipped entry into one named component', () => {
       ['dist/src/index.js', 'js'],
       ['dist/src/index.d.ts', 'js'],
       ['dist/apple/runner/RunnerTests.swift', 'apple-runner'],
+      ['dist/apple/snapshot-presentation/Package.swift', 'apple-snapshot-presentation'],
       ['apple/macos-helper/Sources/main.swift', 'macos-helper'],
       ['android/snapshot-helper/dist/helper.apk', 'android-helpers'],
       ['package.json', 'other'],
@@ -45,13 +46,14 @@ test('component bytes sum exactly to npm pack unpackedSize', () => {
     {
       js: 503,
       'apple-runner': 503,
+      'apple-snapshot-presentation': 113,
       'macos-helper': 211,
       'android-helpers': 307,
       other: 177,
     },
   );
   assert.throws(
-    () => summarizeNpmPackComponents({ ...fixturePack, unpackedSize: 1700 }),
+    () => summarizeNpmPackComponents({ ...fixturePack, unpackedSize: 1800 }),
     /does not match npm pack unpackedSize/,
   );
 });
@@ -61,7 +63,7 @@ test('Markdown reports component diffs and changed packed files', () => {
     js: { rawBytes: 10, gzipBytes: 8 },
     npmPack: {
       tarballBytes: 100,
-      unpackedBytes: 1701,
+      unpackedBytes: 1814,
       components: summarizeNpmPackComponents(fixturePack),
       entries: fixturePack.files,
     },
@@ -74,10 +76,10 @@ test('Markdown reports component diffs and changed packed files', () => {
     js: { rawBytes: 10, gzipBytes: 8 },
     npmPack: {
       tarballBytes: 100,
-      unpackedBytes: 1600,
+      unpackedBytes: 1713,
       components: summarizeNpmPackComponents({
         ...fixturePack,
-        unpackedSize: 1600,
+        unpackedSize: 1713,
         files: baseEntries,
       }),
       entries: baseEntries,

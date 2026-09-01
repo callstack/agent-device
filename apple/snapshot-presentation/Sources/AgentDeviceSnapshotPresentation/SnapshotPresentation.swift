@@ -2,8 +2,6 @@ import Foundation
 import CoreGraphics
 
 public enum SnapshotPresentation {
-  public typealias PresentedNode = AgentDeviceSnapshotPresentation.PresentedNode
-
   public static func present(
     _ acquisition: SnapshotAcquisition,
     options: PresentationOptions

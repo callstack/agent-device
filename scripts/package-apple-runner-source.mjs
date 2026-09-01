@@ -62,10 +62,9 @@ function packageAppleRunnerSource(options = {}) {
 function packageSnapshotPresentationSource(root, options, summary) {
   const sourceRoot = path.join(root, SNAPSHOT_PRESENTATION_SOURCE_DIR);
   if (!fs.existsSync(sourceRoot)) {
-    return;
+    throw new Error(`Apple snapshot presentation source not found at ${sourceRoot}`);
   }
   const outputRoot = path.join(root, SNAPSHOT_PRESENTATION_OUTPUT_DIR);
-  prepareSnapshotPresentationOutput(outputRoot, options.checkOnly);
   const manifestSource = requireSnapshotPresentationManifest(sourceRoot);
   processDirectory(sourceRoot, options.checkOnly ? undefined : outputRoot, '', summary, {
     validateSwift: false,
@@ -73,11 +72,6 @@ function packageSnapshotPresentationSource(root, options, summary) {
     skipFilePaths: new Set(['Package.swift', SNAPSHOT_PRESENTATION_RUNNER_MANIFEST]),
   });
   copySnapshotPresentationManifest(manifestSource, outputRoot, summary, options.checkOnly);
-}
-
-function prepareSnapshotPresentationOutput(outputRoot, checkOnly) {
-  if (checkOnly) return;
-  fs.rmSync(outputRoot, { recursive: true, force: true });
 }
 
 function requireSnapshotPresentationManifest(sourceRoot) {

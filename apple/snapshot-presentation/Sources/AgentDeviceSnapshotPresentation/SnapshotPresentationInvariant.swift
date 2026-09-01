@@ -2,10 +2,10 @@ import Foundation
 import CoreGraphics
 
 public enum SnapshotPresentationInvariant {
-  public struct ValidationStats: Equatable {
-    public let parentClipLookups: Int
+  struct ValidationStats: Equatable {
+    let parentClipLookups: Int
 
-    public init(parentClipLookups: Int) {
+    init(parentClipLookups: Int) {
       self.parentClipLookups = parentClipLookups
     }
   }
@@ -18,7 +18,7 @@ public enum SnapshotPresentationInvariant {
     _ = try validateRegularWithStats(nodes, viewport: viewport, policy: policy)
   }
 
-  public static func validateRegularWithStats(
+  static func validateRegularWithStats(
     _ nodes: [SnapshotPresentationNode],
     viewport: CGRect,
     policy: SnapshotVisibilityFold.Policy

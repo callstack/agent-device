@@ -21,6 +21,7 @@ extension RunnerTests {
   func testSnapshotScopePolicyMatchesGoldenParityTable() throws {
     // Non-vacuity: label-only semantic values fail the identifier-only and value-only fixtures.
     let fixtureURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent() // UnitTests
       .deletingLastPathComponent() // AgentDeviceRunnerUITests
       .deletingLastPathComponent() // AgentDeviceRunner
       .deletingLastPathComponent() // runner

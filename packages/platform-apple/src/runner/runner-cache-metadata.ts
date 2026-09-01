@@ -17,7 +17,10 @@ import {
   resolveRunnerPlatformName,
   resolveRunnerSdkName,
 } from './apple-runner-platform.ts';
-import { resolveAppleRunnerSourceRoot } from './runner-source.ts';
+import {
+  resolveAppleRunnerSourceRoot,
+  resolveAppleSnapshotPresentationSourceRoot,
+} from './runner-source.ts';
 
 const DEFAULT_IOS_RUNNER_APP_BUNDLE_ID = 'com.callstack.agentdevice.runner';
 const RUNNER_DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'apple-runner');
@@ -243,33 +246,37 @@ type RunnerSourceFingerprintCacheEntry = {
 const runnerSourceFingerprintCache = new Map<string, RunnerSourceFingerprintCacheEntry>();
 
 function computeRunnerSourceFingerprint(projectRoot: string): string {
-  const runnerRoot = resolveAppleRunnerSourceRoot(projectRoot);
-  const files = collectRunnerSourceFiles(runnerRoot);
-  const fileStatsFingerprint = computeRunnerSourceFileStatsFingerprint(runnerRoot, files);
-  const cached = runnerSourceFingerprintCache.get(runnerRoot);
+  const sourceRoots = [
+    resolveAppleRunnerSourceRoot(projectRoot),
+    resolveAppleSnapshotPresentationSourceRoot(projectRoot),
+  ];
+  const files = collectRunnerSourceFiles(sourceRoots);
+  const fileStatsFingerprint = computeRunnerSourceFileStatsFingerprint(projectRoot, files);
+  const cacheKey = JSON.stringify(sourceRoots);
+  const cached = runnerSourceFingerprintCache.get(cacheKey);
   if (cached?.fileStatsFingerprint === fileStatsFingerprint) {
     return cached.sourceFingerprint;
   }
   const hash = crypto.createHash('sha256');
   for (const file of files) {
-    const relativePath = path.relative(runnerRoot, file);
+    const relativePath = path.relative(projectRoot, file);
     hash.update(relativePath);
     hash.update('\0');
     hash.update(fs.readFileSync(file));
     hash.update('\0');
   }
   const sourceFingerprint = hash.digest('hex');
-  runnerSourceFingerprintCache.set(runnerRoot, { fileStatsFingerprint, sourceFingerprint });
+  runnerSourceFingerprintCache.set(cacheKey, { fileStatsFingerprint, sourceFingerprint });
   return sourceFingerprint;
 }
 
 function computeRunnerSourceFileStatsFingerprint(
-  runnerRoot: string,
+  projectRoot: string,
   files: readonly string[],
 ): string {
   const hash = crypto.createHash('sha256');
   for (const file of files) {
-    const relativePath = path.relative(runnerRoot, file);
+    const relativePath = path.relative(projectRoot, file);
     const stat = fs.statSync(file);
     hash.update(relativePath);
     hash.update('\0');
@@ -281,27 +288,29 @@ function computeRunnerSourceFileStatsFingerprint(
   return hash.digest('hex');
 }
 
-function collectRunnerSourceFiles(root: string): string[] {
-  if (!fs.existsSync(root)) {
-    return [];
-  }
+function collectRunnerSourceFiles(roots: readonly string[]): string[] {
   const files: string[] = [];
-  const stack = [root];
-  while (stack.length > 0) {
-    const current = stack.pop() as string;
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const fullPath = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name === 'xcuserdata') continue;
-        stack.push(fullPath);
-        continue;
-      }
-      if (entry.isFile() && isRunnerSourceFile(entry.name, fullPath)) {
-        files.push(fullPath);
+  for (const root of roots) {
+    if (!fs.existsSync(root)) {
+      continue;
+    }
+    const stack = [root];
+    while (stack.length > 0) {
+      const current = stack.pop() as string;
+      for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+        const fullPath = path.join(current, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name === 'xcuserdata') continue;
+          stack.push(fullPath);
+          continue;
+        }
+        if (entry.isFile() && isRunnerSourceFile(entry.name, fullPath)) {
+          files.push(fullPath);
+        }
       }
     }
   }
-  return files.sort((a, b) => a.localeCompare(b));
+  return [...new Set(files)].sort((a, b) => a.localeCompare(b));
 }
 
 function isRunnerSourceFile(fileName: string, filePath: string): boolean {
