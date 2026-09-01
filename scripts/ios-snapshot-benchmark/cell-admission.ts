@@ -89,6 +89,12 @@ export function admitSuccessfulSample(
   return admitNonWarmSample(context, options, previousAppPid);
 }
 
+export function cleanupSuccessfulSample(context: CliContext, options: CellAdmissionOptions): void {
+  if (options.state !== 'relaunch' || options.fixture.setupAction !== 'open-alert') return;
+  const dismissed = pressFixtureTarget(context, 'label="Cancel"');
+  requireCommandSuccess(dismissed, `${options.fixture.id} sample cleanup`, 'cell-state');
+}
+
 function admitNonWarmSample(
   context: CliContext,
   options: CellAdmissionOptions,
