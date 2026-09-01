@@ -17,6 +17,7 @@ import {
   formatPackedFiles,
 } from './size-report-package.mjs';
 import { measureCleanInstalledPackage } from './size-report-install.mjs';
+import { preparePublishAssets } from './prepare-publish-assets.mjs';
 
 const COMMENT_MARKER = '<!-- agent-device-size-report -->';
 const GITHUB_REQUEST_ATTEMPTS = 4;
@@ -132,7 +133,7 @@ function collectReport(root, options) {
   if (jsFiles.length === 0) {
     throw new Error('No dist/src JavaScript files found. Run `pnpm build` before measuring size.');
   }
-  prepareGeneratedPackageAssets(root);
+  preparePublishAssets({ root });
 
   const chunks = jsFiles
     .map((file) => {
@@ -171,17 +172,6 @@ function collectReport(root, options) {
       : {}),
     chunks: chunks.slice(0, 20),
   };
-}
-
-function prepareGeneratedPackageAssets(root) {
-  const packageAppleRunnerScript = path.join(root, 'scripts', 'package-apple-runner-source.mjs');
-  if (!fs.existsSync(packageAppleRunnerScript)) {
-    return;
-  }
-  execFileSync(process.execPath, [packageAppleRunnerScript, '--quiet'], {
-    cwd: root,
-    stdio: ['ignore', 'ignore', 'inherit'],
-  });
 }
 
 function collectStartupBenchmarks(root, runs) {

@@ -1,5 +1,5 @@
 {
-  "unpackedSize": 1814,
+  "unpackedSize": 2319,
   "files": [
     { "path": "dist/src/index.js", "size": 401 },
     { "path": "dist/src/index.d.ts", "size": 102 },
@@ -7,6 +7,9 @@
     { "path": "dist/apple/snapshot-presentation/Package.swift", "size": 113 },
     { "path": "apple/macos-helper/Sources/main.swift", "size": 211 },
     { "path": "android/snapshot-helper/dist/helper.apk", "size": 307 },
+    { "path": "android/snapshot-helper/dist/helper.manifest.json", "size": 99 },
+    { "path": "android/ime-helper/dist/helper.apk", "size": 307 },
+    { "path": "android/ime-helper/dist/helper.manifest.json", "size": 99 },
     { "path": "package.json", "size": 99 },
     { "path": "vendor/unknown.bin", "size": 78 }
   ]

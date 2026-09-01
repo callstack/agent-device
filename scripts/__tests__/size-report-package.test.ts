@@ -3,7 +3,11 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'vitest';
 import { formatMarkdown } from '../size-report.mjs';
-import { classifyNpmPackEntry, summarizeNpmPackComponents } from '../size-report-package.mjs';
+import {
+  assertPublishPackageContents,
+  classifyNpmPackEntry,
+  summarizeNpmPackComponents,
+} from '../size-report-package.mjs';
 
 const fixturePack = JSON.parse(
   await readFile(join(import.meta.dirname, 'fixtures', 'size-report-npm-pack.json'), 'utf8'),
@@ -21,6 +25,9 @@ test('classifies every shipped entry into one named component', () => {
       ['dist/apple/snapshot-presentation/Package.swift', 'apple-snapshot-presentation'],
       ['apple/macos-helper/Sources/main.swift', 'macos-helper'],
       ['android/snapshot-helper/dist/helper.apk', 'android-helpers'],
+      ['android/snapshot-helper/dist/helper.manifest.json', 'android-helpers'],
+      ['android/ime-helper/dist/helper.apk', 'android-helpers'],
+      ['android/ime-helper/dist/helper.manifest.json', 'android-helpers'],
       ['package.json', 'other'],
       ['vendor/unknown.bin', 'other'],
     ],
@@ -31,6 +38,25 @@ test('unknown package paths fall into other', () => {
   assert.equal(
     classifyNpmPackEntry({ path: 'new/future-package-file', size: 13 }).component,
     'other',
+  );
+});
+
+test('publish package requires both Android helpers and excludes benchmark scripts', () => {
+  assert.doesNotThrow(() => assertPublishPackageContents(fixturePack.files));
+  assert.throws(
+    () =>
+      assertPublishPackageContents(
+        fixturePack.files.filter((entry) => !entry.path.startsWith('android/ime-helper/')),
+      ),
+    /android\/ime-helper/,
+  );
+  assert.throws(
+    () =>
+      assertPublishPackageContents([
+        ...fixturePack.files,
+        { path: 'scripts/ios-snapshot-benchmark/run.ts', size: 1 },
+      ]),
+    /benchmark or build scripts/,
   );
 });
 
@@ -48,12 +74,12 @@ test('component bytes sum exactly to npm pack unpackedSize', () => {
       'apple-runner': 503,
       'apple-snapshot-presentation': 113,
       'macos-helper': 211,
-      'android-helpers': 307,
+      'android-helpers': 812,
       other: 177,
     },
   );
   assert.throws(
-    () => summarizeNpmPackComponents({ ...fixturePack, unpackedSize: 1800 }),
+    () => summarizeNpmPackComponents({ ...fixturePack, unpackedSize: 2318 }),
     /does not match npm pack unpackedSize/,
   );
 });
@@ -63,7 +89,7 @@ test('Markdown reports component diffs and changed packed files', () => {
     js: { rawBytes: 10, gzipBytes: 8 },
     npmPack: {
       tarballBytes: 100,
-      unpackedBytes: 1814,
+      unpackedBytes: 2319,
       components: summarizeNpmPackComponents(fixturePack),
       entries: fixturePack.files,
     },
@@ -79,7 +105,7 @@ test('Markdown reports component diffs and changed packed files', () => {
       unpackedBytes: 1713,
       components: summarizeNpmPackComponents({
         ...fixturePack,
-        unpackedSize: 1713,
+        unpackedSize: 2218,
         files: baseEntries,
       }),
       entries: baseEntries,
