@@ -5,7 +5,7 @@ import { parseTvRemoteButton, type TvRemoteButton } from '@agent-device/contract
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
-import { requireIntInRange } from '../utils/validation.ts';
+import { requireIntInRange } from '../core/validation.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
 import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from './runtime-admission.ts';

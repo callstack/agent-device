@@ -34,7 +34,7 @@ import {
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
 import { resolveDaemonPaths } from './daemon/config.ts';
-import { applyDefaultPlatformBinding, resolveBindingSettings } from './utils/session-binding.ts';
+import { applyDefaultPlatformBinding, resolveBindingSettings } from './cli/session-binding.ts';
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';
 import { maybeRunUpgradeNotifier } from './cli/update-check.ts';
 import {

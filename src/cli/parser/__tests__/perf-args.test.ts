@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { parseArgs, usageForCommand } from '../../cli/parser/args.ts';
+import { parseArgs, usageForCommand } from '../args.ts';
 
 test('parseArgs accepts perf area subcommands', () => {
   const frames = parseArgs(['perf', 'frames'], { strictFlags: true });

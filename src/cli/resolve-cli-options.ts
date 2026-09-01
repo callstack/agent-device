@@ -1,5 +1,5 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import { mergeDefinedFlags } from '../utils/merge-flags.ts';
+import { mergeDefinedFlags } from '../cli-schema/merge-flags.ts';
 import { finalizeParsedArgs, parseRawArgs } from './parser/args.ts';
 import { resolveConfigBackedFlagDefaults } from '../cli-schema/cli-config.ts';
 import { resolveRemoteConfigDefaults } from './remote-config-flags.ts';

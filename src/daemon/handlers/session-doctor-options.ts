@@ -1,4 +1,4 @@
-import { detectProjectRuntimeKind } from '../../utils/project-runtime.ts';
+import { detectProjectRuntimeKind } from '../../core/project-runtime.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';

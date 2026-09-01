@@ -6,8 +6,8 @@ import type {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
-import { findMistargetedTypeRefToken } from '../utils/type-target-warning.ts';
-import { requireIntInRange } from '../utils/validation.ts';
+import { findMistargetedTypeRefToken } from './type-target-warning.ts';
+import { requireIntInRange } from '../core/validation.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { DaemonFailureResponse } from './response.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from './runtime-admission.ts';

@@ -1,6 +1,6 @@
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { mergeDefinedFlags } from '../../utils/merge-flags.ts';
+import { mergeDefinedFlags } from '../../cli-schema/merge-flags.ts';
 import {
   applyCommandDefaults,
   assertCommandPositionalArity,

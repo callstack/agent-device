@@ -3,7 +3,7 @@ import { focusRuntimeUse } from '@agent-device/contracts/platform-runtime-operat
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Point } from '@agent-device/kernel/snapshot';
 import { successText } from '@agent-device/kernel/success-text';
-import { readPointPositionals } from '../utils/validation.ts';
+import { readPointPositionals } from '../core/validation.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
 import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from './runtime-admission.ts';

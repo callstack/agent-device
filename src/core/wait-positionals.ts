@@ -1,4 +1,4 @@
-import { parseTimeout } from '../utils/parse-timeout.ts';
+import { parseTimeout } from './parse-timeout.ts';
 import {
   detectUnknownSelectorKeyToken,
   isRoleHintWord,

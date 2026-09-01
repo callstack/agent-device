@@ -7,7 +7,7 @@ import type { Interactor, RunnerContext } from '@agent-device/contracts/interact
 import { setActiveProviderDeviceRuntimes } from '../../provider-device-runtime.ts';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 
-import { getInteractor, getLocalInteractor } from '../../core/interactors.ts';
+import { getInteractor, getLocalInteractor } from '../interactors.ts';
 
 const iosSimulator: DeviceInfo = {
   platform: 'apple',

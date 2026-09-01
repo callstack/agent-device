@@ -11,8 +11,8 @@ import type { BackMode } from '@agent-device/contracts/back-mode';
 import { parseTvRemoteButton } from '@agent-device/contracts/tv-remote';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
-import { requireIntInRange } from '../../../utils/validation.ts';
-import { isKeyboardAction } from '../../../utils/keyboard-actions.ts';
+import { isKeyboardAction } from '../../../core/keyboard-actions.ts';
+import { requireIntInRange } from '../../../core/validation.ts';
 import {
   toBackendResult,
   type BackendResultEnvelope,

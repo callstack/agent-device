@@ -33,7 +33,7 @@ import {
   classifyOffscreenScrollDirection,
   type OffscreenScrollDirection,
 } from '@agent-device/capture-kit/mobile-snapshot-semantics';
-import { truncateUtf8 } from '../../../utils/truncate-utf8.ts';
+import { truncateUtf8 } from './truncate-utf8.ts';
 import type {
   InteractionTarget,
   PointTarget,

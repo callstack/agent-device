@@ -17,7 +17,7 @@ import type {
 } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { isKeyboardAction, type KeyboardAction } from '../utils/keyboard-actions.ts';
+import { isKeyboardAction, type KeyboardAction } from '../core/keyboard-actions.ts';
 import { successText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
 import {

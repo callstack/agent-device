@@ -15,7 +15,7 @@ import { contextFromFlags } from '../context.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { recordIfSession } from './snapshot-session.ts';
-import { parseTimeout } from '../../utils/parse-timeout.ts';
+import { parseTimeout } from '../../core/parse-timeout.ts';
 import { resolveRefFrameEffect } from '../daemon-command-registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import type { DaemonFailureResponse } from '../response.ts';

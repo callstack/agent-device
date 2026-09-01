@@ -21,7 +21,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { Point } from '@agent-device/kernel/snapshot';
 import { readFillBackendResult } from '../core/fill-backend-result.ts';
 import { successText } from '@agent-device/kernel/success-text';
-import { requireIntInRange } from '../utils/validation.ts';
+import { requireIntInRange } from '../core/validation.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { DirectIosSelectorTarget } from './direct-ios-selector.ts';
 import type { DaemonFailureResponse } from './response.ts';

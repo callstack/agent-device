@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { truncateUtf8 } from '../truncate-utf8.ts';
+import { truncateUtf8 } from './truncate-utf8.ts';
 
 test('truncateUtf8 leaves short strings untouched', () => {
   assert.equal(truncateUtf8('Save', 256), 'Save');

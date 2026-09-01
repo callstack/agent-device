@@ -4,7 +4,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import type { JsonSchema } from '../commands/command-contract.ts';
 import type { CommandName } from '../commands/command-metadata.ts';
 import { resolveConfigBackedFlagDefaults } from '../cli-schema/cli-config.ts';
-import { mergeDefinedFlags } from '../utils/merge-flags.ts';
+import { mergeDefinedFlags } from '../cli-schema/merge-flags.ts';
 
 export function resolveMcpConfigDefaults(
   name: CommandName,
