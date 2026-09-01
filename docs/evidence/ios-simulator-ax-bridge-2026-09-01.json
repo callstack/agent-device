@@ -1,0 +1,195 @@
+{
+  "schemaVersion": "ios-simulator-ax-bridge-spike.v1",
+  "issue": "#2192",
+  "parent": "#2188",
+  "prerequisites": ["#2189", "#2190"],
+  "generatedAt": "2026-09-01T07:40:59.071Z",
+  "revision": {
+    "commit": "a1c250b5cf63ee387935b17d3f81edc9f69abb97",
+    "branch": "codex/2192-ios-ax-bridge-spike",
+    "dirty": true
+  },
+  "toolchain": {
+    "node": "v26.7.0",
+    "pnpm": "11.19.0",
+    "xcode": "Xcode 27.0\nBuild version 27A5252f",
+    "simctl": "@(#)PROGRAM:simctl  PROJECT:CoreSimulator-1171.6",
+    "os": "darwin 27.0.0",
+    "arch": "arm64",
+    "swift": "Apple Swift version 6.4 (swiftlang-6.4.0.33.1 clang-2100.3.33.1)\nTarget: arm64-apple-macosx27.0.0"
+  },
+  "target": {
+    "udid": "793B72F6-02C9-4BCD-BEC9-1B3EB42A7ED4",
+    "name": "AgentDevice-2192-AX-20260901",
+    "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-27-0"
+  },
+  "limits": {
+    "maxRequestBytes": 65536,
+    "maxResponseBytes": 4194304,
+    "maxNodes": 1500,
+    "maxTraversalDepth": 12,
+    "maxCpuMs": 2000,
+    "maxMemoryBytes": 268435456,
+    "maxDurationMs": 5000
+  },
+  "candidates": ["public-macos-ax", "private-coresimulator-ax", "xctest-control"],
+  "config": {
+    "states": ["cold-cold", "cold", "warm", "relaunch"],
+    "screens": ["quiet", "list", "nested-scroll", "alert", "system-surface", "xctest-stress"],
+    "requestedSamples": 20
+  },
+  "protocolProbes": [
+    {
+      "version": 1,
+      "id": "protocol-probe:public-macos-ax",
+      "candidate": "public-macos-ax",
+      "ok": false,
+      "failure": {
+        "kind": "unsupported-mechanism",
+        "code": "host-accessibility-permission"
+      },
+      "metrics": {
+        "requestBytes": 395,
+        "responseBytes": 331,
+        "nodeCount": 0,
+        "maxTraversalDepth": 0,
+        "cpuMs": 3.015999999999999,
+        "memoryBytes": 9011200,
+        "durationMs": 37.457958
+      }
+    },
+    {
+      "version": 1,
+      "id": "protocol-probe:private-coresimulator-ax",
+      "candidate": "private-coresimulator-ax",
+      "ok": false,
+      "failure": {
+        "kind": "unsupported-mechanism",
+        "code": "private-tool-unavailable"
+      },
+      "metrics": {
+        "requestBytes": 413,
+        "responseBytes": 0,
+        "nodeCount": 0,
+        "maxTraversalDepth": 0,
+        "cpuMs": null,
+        "memoryBytes": null,
+        "durationMs": 0
+      }
+    }
+  ],
+  "protocolProbeLogs": [
+    {
+      "candidate": "public-macos-ax",
+      "id": "protocol-probe:public-macos-ax",
+      "stderr": "[ios-ax-spike] capture id=protocol-probe:public-macos-ax candidate=public-macos-ax screen=quiet\n"
+    },
+    {
+      "candidate": "private-coresimulator-ax",
+      "id": "protocol-probe:private-coresimulator-ax",
+      "stderr": ""
+    }
+  ],
+  "preferenceEvidence": {
+    "applied": true,
+    "restored": true,
+    "simulatorStateBefore": "Shutdown",
+    "diffs": [
+      {
+        "path": "/Users/michal/Library/Developer/CoreSimulator/Devices/793B72F6-02C9-4BCD-BEC9-1B3EB42A7ED4/data/Library/Preferences/com.apple.Accessibility.plist",
+        "existedBefore": true,
+        "beforeSha256": "fbc67ebbd3aa0079a4b4afff4181280731fbb8faaca2ffc623393a8d9c26a436",
+        "afterSha256": "725b6bb8efe60c8c6d5768aebcec0b9f6af5cee185f0430a7d1ab62953428147",
+        "changes": [
+          {
+            "key": "AccessibilityEnabled",
+            "after": true
+          },
+          {
+            "key": "ApplicationAccessibilityEnabled",
+            "after": true
+          },
+          {
+            "key": "AutomationEnabled",
+            "after": true
+          },
+          {
+            "key": "IgnoreAXServerEntitlements",
+            "after": true
+          }
+        ]
+      },
+      {
+        "path": "/Users/michal/Library/Developer/CoreSimulator/Devices/793B72F6-02C9-4BCD-BEC9-1B3EB42A7ED4/data/Library/Preferences/com.apple.UIAutomation.plist",
+        "existedBefore": true,
+        "beforeSha256": "db8995177327a963486dd0607260f0fad74ad10d9dec6c2f5abdbaf0dbd00b2c",
+        "afterSha256": "db8995177327a963486dd0607260f0fad74ad10d9dec6c2f5abdbaf0dbd00b2c",
+        "changes": []
+      }
+    ]
+  },
+  "lifecycle": {
+    "source": "framed-protocol-fixture",
+    "crash": {
+      "failure": "process-crash",
+      "recovered": true
+    },
+    "timeout": {
+      "failure": "timeout",
+      "recovered": true
+    },
+    "cancellation": {
+      "failure": "cancelled",
+      "recovered": true
+    },
+    "staleGeneration": {
+      "failure": "stale-generation",
+      "recovered": true
+    }
+  },
+  "positiveControl": {
+    "issue": "#1626",
+    "fixture": "deep-button-v1",
+    "changedDescendant": "deep-button-state",
+    "invalidShallowRule": {
+      "command": "pnpm bench:ios-snapshot:deep-button -- --rule invalid-shallow",
+      "exitCode": 1,
+      "assertion": "AssertionError: changed descendant was omitted by shallow observation; no-effect claim is invalid."
+    },
+    "safeFullRule": {
+      "command": "pnpm bench:ios-snapshot:deep-button -- --rule safe-full",
+      "exitCode": 0,
+      "assertion": "full observation changed and includes the changed descendant."
+    },
+    "before": {
+      "surfaceDigest": "cce3230d667fd7292340daaf491fac48b45ba80fba846038bee2f82bf2489a85",
+      "fullDigest": "993a4f50b3bdac7821f0964dcb589f31deb9a6f1c1ca72c5c0d718088fbdf89b",
+      "state": "off",
+      "surfaceNodeIds": ["deep-button-root", "deep-button-container"],
+      "fullNodeIds": ["deep-button-root", "deep-button-container", "deep-button-state"]
+    },
+    "after": {
+      "surfaceDigest": "cce3230d667fd7292340daaf491fac48b45ba80fba846038bee2f82bf2489a85",
+      "fullDigest": "4be81b73f2318615532a2b86dbba8a555f7c84995809d469a1c249d09cb7f55e",
+      "state": "on",
+      "surfaceNodeIds": ["deep-button-root", "deep-button-container"],
+      "fullNodeIds": ["deep-button-root", "deep-button-container", "deep-button-state"]
+    }
+  },
+  "status": "stopped",
+  "cells": [],
+  "decision": "NO-GO",
+  "decisionReasons": [
+    "The live run stopped before the full corpus completed.",
+    "public-macos-ax protocol probe returned unsupported-mechanism/host-accessibility-permission.",
+    "private-coresimulator-ax protocol probe returned unsupported-mechanism/private-tool-unavailable.",
+    "public-macos-ax produced no cells.",
+    "private-coresimulator-ax produced no cells."
+  ],
+  "nextInterface": "Keep any future bridge behind the #2190 acquisition adapter and preserve raw facts until a separate GO evidence run proves fidelity, lifecycle, and latency.",
+  "stop": {
+    "category": "infrastructure",
+    "message": "open quiet failed during fixture preparation (exit 1; code=COMMAND_FAILED; reason=none; diagnostic=Simulator device failed to open agent-device-test-app:///inert.)",
+    "command": "/opt/homebrew/Cellar/node/26.7.0/bin/node bin/agent-device.mjs open com.callstack.agentdevicelab --launch-url agent-device-test-app:///inert --foreground --state-dir /var/folders/pn/0s6xww5x5tj2brz0nrvlx96w0000gn/T/agent-device-ios-ax-spike-n3rBW5 --session ax-spike-public-macos-ax-cold-cold-quiet --platform ios --udid 793B72F6-02C9-4BCD-BEC9-1B3EB42A7ED4 --ios-xctest-derived-data-path /var/folders/pn/0s6xww5x5tj2brz0nrvlx96w0000gn/T/agent-device-ios-ax-spike-n3rBW5/derived-data/public-macos-ax/cold-cold/quiet --json"
+  }
+}
