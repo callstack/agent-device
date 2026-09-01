@@ -38,17 +38,19 @@ export type IosSnapshotProjectionResult = Readonly<{
 }>;
 
 export function projectIosSnapshot(input: ProjectionInput): IosSnapshotProjectionResult {
-  const scoped = scopeIosSnapshotNodes(input);
+  const depths = resolveRawDepths(input.nodes);
+  const scoped = scopeIosSnapshotNodes(input, depths);
   return input.projection === 'raw'
-    ? projectRawNodes(scoped, input.depth)
+    ? projectRawNodes(scoped, input.depth, depths)
     : projectRegularNodes(scoped, input.depth);
 }
 
 export function projectIosQualitySnapshot(
   input: Omit<ProjectionInput, 'scope'>,
 ): IosSnapshotProjectionResult {
+  const depths = resolveRawDepths(input.nodes);
   return input.projection === 'raw'
-    ? projectRawNodes(input.nodes, input.depth)
+    ? projectRawNodes(input.nodes, input.depth, depths)
     : projectRegularNodes(input.nodes, input.depth);
 }
 
@@ -57,14 +59,17 @@ function isEligibleForIosRegularPresentation(node: RawSnapshotNode): boolean {
   return REGULAR_ELIGIBLE_TYPES.has(normalizeType(node.type ?? '')) || hasSemanticContent(node);
 }
 
-function scopeIosSnapshotNodes(input: ProjectionInput): IosSnapshotPresentationNode[] {
+function scopeIosSnapshotNodes(
+  input: ProjectionInput,
+  depths: ReadonlyMap<number, number>,
+): IosSnapshotPresentationNode[] {
   const query = input.scope?.trim().toLowerCase();
   if (!query) return [...input.nodes];
 
   for (let start = 0; start < input.nodes.length; start += 1) {
     const candidate = input.nodes[start];
     if (!candidate || !matchesScope(candidate.raw, query)) continue;
-    const range = subtreeRange(input.nodes, start);
+    const range = subtreeRange(input.nodes, start, depths);
     const contributes =
       input.projection === 'raw' ||
       range.some((position) => isEligibleForIosRegularPresentation(input.nodes[position]!.raw));
@@ -73,9 +78,11 @@ function scopeIosSnapshotNodes(input: ProjectionInput): IosSnapshotPresentationN
     const scoped = range.map((position) => input.nodes[position]!);
     const limited =
       input.projection === 'raw' && input.depth !== null
-        ? scoped.filter((node) => rawDepth(node) - rawDepth(candidate) <= input.depth!)
+        ? scoped.filter(
+            (node) => rawDepth(node, depths) - rawDepth(candidate, depths) <= input.depth!,
+          )
         : scoped;
-    return reindexScopedNodes(limited, rawDepth(candidate));
+    return reindexScopedNodes(limited, rawDepth(candidate, depths), depths);
   }
   return [];
 }
@@ -83,12 +90,15 @@ function scopeIosSnapshotNodes(input: ProjectionInput): IosSnapshotPresentationN
 function projectRawNodes(
   nodes: readonly IosSnapshotPresentationNode[],
   maximumDepth: number | null,
+  depths: ReadonlyMap<number, number>,
 ): IosSnapshotProjectionResult {
   const selected =
-    maximumDepth === null ? [...nodes] : nodes.filter((node) => rawDepth(node) <= maximumDepth);
+    maximumDepth === null
+      ? [...nodes]
+      : nodes.filter((node) => rawDepth(node, depths) <= maximumDepth);
   return {
     nodes: selected.map((node) => ({ ...node.raw, rect: node.raw.rect })),
-    sourceIndexes: selected.map((node) => node.raw.index),
+    sourceIndexes: selected.map((node) => node.sourceIndex),
   };
 }
 
@@ -108,7 +118,7 @@ function projectRegularNodes(
       continue;
     }
     presented.push(projected);
-    sourceIndexes.push(node.raw.index);
+    sourceIndexes.push(node.sourceIndex);
     nearestPresented.set(node.raw.index, projected);
   }
   return { nodes: presented, sourceIndexes };
@@ -162,6 +172,7 @@ function rememberNearestPresented(
 function reindexScopedNodes(
   nodes: readonly IosSnapshotPresentationNode[],
   depthOffset: number,
+  depths: ReadonlyMap<number, number>,
 ): IosSnapshotPresentationNode[] {
   const indexMap = new Map(nodes.map((node, index) => [node.raw.index, index]));
   return nodes.map((node, index) => ({
@@ -169,7 +180,7 @@ function reindexScopedNodes(
     raw: {
       ...node.raw,
       index,
-      depth: Math.max(0, rawDepth(node) - depthOffset),
+      depth: Math.max(0, rawDepth(node, depths) - depthOffset),
       parentIndex:
         node.raw.parentIndex === undefined ? undefined : indexMap.get(node.raw.parentIndex),
     },
@@ -182,18 +193,41 @@ function matchesScope(node: RawSnapshotNode, query: string): boolean {
   );
 }
 
-function subtreeRange(nodes: readonly IosSnapshotPresentationNode[], start: number): number[] {
-  const rootDepth = rawDepth(nodes[start]!);
+function subtreeRange(
+  nodes: readonly IosSnapshotPresentationNode[],
+  start: number,
+  depths: ReadonlyMap<number, number>,
+): number[] {
+  const rootDepth = rawDepth(nodes[start]!, depths);
   const positions: number[] = [];
   for (let position = start; position < nodes.length; position += 1) {
-    if (position > start && rawDepth(nodes[position]!) <= rootDepth) break;
+    if (position > start && rawDepth(nodes[position]!, depths) <= rootDepth) break;
     positions.push(position);
   }
   return positions;
 }
 
-function rawDepth(node: IosSnapshotPresentationNode): number {
-  return Math.max(0, node.raw.depth ?? 0);
+function rawDepth(
+  node: IosSnapshotPresentationNode,
+  depths?: ReadonlyMap<number, number>,
+): number {
+  return Math.max(0, node.raw.depth ?? depths?.get(node.raw.index) ?? 0);
+}
+
+function resolveRawDepths(
+  nodes: readonly IosSnapshotPresentationNode[],
+): ReadonlyMap<number, number> {
+  const depths = new Map<number, number>();
+  for (const node of nodes) {
+    const parentDepth =
+      node.raw.parentIndex === undefined ? -1 : (depths.get(node.raw.parentIndex) ?? -1);
+    const structuralDepth = parentDepth + 1;
+    depths.set(
+      node.raw.index,
+      node.raw.depth === undefined ? structuralDepth : Math.max(0, node.raw.depth),
+    );
+  }
+  return depths;
 }
 
 function hasSemanticContent(node: RawSnapshotNode): boolean {

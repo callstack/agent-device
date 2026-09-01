@@ -119,6 +119,7 @@ function appendFoldedNode(
         node.hittable === true &&
         isGeometricallyActionable(node.enabled !== false, decision.effectiveRect, viewport),
     },
+    sourceIndex: node.index,
     ...(decision.effectiveRect ? { effectiveRect: decision.effectiveRect } : {}),
   });
   keptIndex = index;

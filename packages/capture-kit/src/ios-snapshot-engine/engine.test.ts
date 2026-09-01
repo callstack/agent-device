@@ -55,6 +55,55 @@ test('raw projection preserves reported geometry while regular projection clips 
   assert.equal(raw.payload.nodes.find((node) => node.label === 'Escaped child')?.hittable, true);
 });
 
+test('presentation mapping retains acquisition lineage through projection and scoped reindexing', () => {
+  const nodes: RawSnapshotNode[] = [
+    node(10, 'Application', 'App', viewport),
+    node(20, 'Other', undefined, viewport, 10, 1),
+    node(40, 'Button', 'Target', { x: 20, y: 20, width: 80, height: 40 }, 20, 2),
+  ];
+  const regularRequest = createIosSnapshotRequest();
+  const regular = presentIosSnapshot(acquiredInput(regularRequest, nodes), regularRequest);
+
+  assert.deepEqual([...regular.presentedIndexesBySourceIndex], [
+    [10, [0]],
+    [20, []],
+    [40, [1]],
+  ]);
+
+  const rawRequest = createIosSnapshotRequest({ raw: true, scope: 'Target' });
+  const rawNodes = [
+    node(10, 'Application', 'App', viewport),
+    node(20, 'Other', 'Target', viewport, 10, 1),
+    node(40, 'Button', 'Child', { x: 20, y: 20, width: 80, height: 40 }, 20, 2),
+  ];
+  const raw = presentIosSnapshot(acquiredInput(rawRequest, rawNodes), rawRequest);
+
+  assert.deepEqual([...raw.presentedIndexesBySourceIndex], [
+    [10, []],
+    [20, [0]],
+    [40, [1]],
+  ]);
+});
+
+test('raw scoped depth derives missing source depths from parent order', () => {
+  const request = createIosSnapshotRequest({ raw: true, scope: 'Target', depth: 1 });
+  const nodes: RawSnapshotNode[] = [
+    node(10, 'Application', 'App', viewport),
+    { ...node(20, 'Other', 'Target', viewport, 10), depth: undefined },
+    {
+      ...node(40, 'Button', 'Child', { x: 20, y: 20, width: 80, height: 40 }, 20),
+      depth: undefined,
+    },
+    {
+      ...node(50, 'Button', 'Grandchild', { x: 24, y: 24, width: 60, height: 32 }, 40),
+      depth: undefined,
+    },
+  ];
+  const result = presentIosSnapshot(acquiredInput(request, nodes), request);
+
+  assert.deepEqual(result.nodes.map((entry) => entry.label), ['Target', 'Child']);
+});
+
 test('cursor projection keeps geometryless nodes neutral while plain viewport keeps child visibility independent', () => {
   const request = createIosSnapshotRequest();
   const nodes = [
@@ -285,7 +334,7 @@ function scopedNodes(): RawSnapshotNode[] {
 function node(
   index: number,
   type: string,
-  label: string,
+  label: string | undefined,
   rect: Rect,
   parentIndex?: number,
   depth?: number,

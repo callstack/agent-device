@@ -12,6 +12,7 @@ export type IosSnapshotFoldOptions = Readonly<{
 
 export type IosSnapshotPresentationNode = Readonly<{
   raw: RawSnapshotNode;
+  sourceIndex: number;
   effectiveRect?: Rect;
 }>;
 

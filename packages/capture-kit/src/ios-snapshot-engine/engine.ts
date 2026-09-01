@@ -87,8 +87,9 @@ function presentAcquiredSnapshot(
 
   if (request.projection === 'raw') {
     validateIosSnapshotGraph(acquisition.nodes);
+    const sourceNodes = acquisition.nodes.map((raw) => ({ raw, sourceIndex: raw.index }));
     const projected = projectIosSnapshot({
-      nodes: acquisition.nodes.map((raw) => ({ raw })),
+      nodes: sourceNodes,
       projection: 'raw',
       scope: request.scope,
       depth: request.depth,
@@ -98,7 +99,7 @@ function presentAcquiredSnapshot(
       request.scope === null
         ? undefined
         : projectIosQualitySnapshot({
-            nodes: acquisition.nodes.map((raw) => ({ raw })),
+            nodes: sourceNodes,
             projection: 'raw',
             depth: null,
             foldPolicy,
@@ -106,7 +107,12 @@ function presentAcquiredSnapshot(
     return {
       nodes: projected.nodes,
       ...(qualityNodes ? { qualityNodes } : {}),
-      presentedIndexesBySourceIndex: identityMapping(projected.nodes),
+      presentedIndexesBySourceIndex: remapPresentedIndexes(
+        acquisition.nodes,
+        projected.nodes,
+        projected.sourceIndexes,
+        identityMapping(projected.nodes),
+      ),
       stats: {
         presentedNodeCount: projected.nodes.length,
         sourceNodeCount: acquisition.nodes.length,
@@ -134,8 +140,8 @@ function presentAcquiredSnapshot(
     ? buildIosInteractiveSnapshotPresentation(projected.nodes)
     : {
         nodes: projected.nodes,
-        presentedIndexesBySourceIndex: identityMapping(projected.nodes),
-      };
+      presentedIndexesBySourceIndex: identityMapping(projected.nodes),
+    };
   const validation = validateIosPayload(
     compacted.nodes,
     'regular',
@@ -155,7 +161,12 @@ function presentAcquiredSnapshot(
   return {
     nodes: compacted.nodes,
     ...(qualityNodes ? { qualityNodes } : {}),
-    presentedIndexesBySourceIndex: compacted.presentedIndexesBySourceIndex,
+    presentedIndexesBySourceIndex: remapPresentedIndexes(
+      acquisition.nodes,
+      projected.nodes,
+      projected.sourceIndexes,
+      compacted.presentedIndexesBySourceIndex,
+    ),
     stats: {
       presentedNodeCount: compacted.nodes.length,
       sourceNodeCount: acquisition.nodes.length,
@@ -193,4 +204,25 @@ function identityMapping(
   nodes: readonly RawSnapshotNode[],
 ): ReadonlyMap<number, readonly number[]> {
   return new Map(nodes.map((node) => [node.index, [node.index]]));
+}
+
+function remapPresentedIndexes(
+  sourceNodes: readonly RawSnapshotNode[],
+  projectedNodes: readonly RawSnapshotNode[],
+  sourceIndexes: readonly number[],
+  presentedIndexesByProjectedIndex: ReadonlyMap<number, readonly number[]>,
+): ReadonlyMap<number, readonly number[]> {
+  const sourceIndexByProjectedIndex = new Map(
+    projectedNodes.map((node, position) => [node.index, sourceIndexes[position]!]),
+  );
+  const remapped = new Map<number, readonly number[]>(
+    sourceNodes.map((node) => [node.index, []] as const),
+  );
+  for (const [projectedIndex, presentedIndexes] of presentedIndexesByProjectedIndex) {
+    const sourceIndex = sourceIndexByProjectedIndex.get(projectedIndex);
+    if (sourceIndex !== undefined) {
+      remapped.set(sourceIndex, presentedIndexes);
+    }
+  }
+  return remapped;
 }
