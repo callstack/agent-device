@@ -64,11 +64,14 @@ test('presentation mapping retains acquisition lineage through projection and sc
   const regularRequest = createIosSnapshotRequest();
   const regular = presentIosSnapshot(acquiredInput(regularRequest, nodes), regularRequest);
 
-  assert.deepEqual([...regular.presentedIndexesBySourceIndex], [
-    [10, [0]],
-    [20, []],
-    [40, [1]],
-  ]);
+  assert.deepEqual(
+    [...regular.presentedIndexesBySourceIndex],
+    [
+      [10, [0]],
+      [20, []],
+      [40, [1]],
+    ],
+  );
 
   const rawRequest = createIosSnapshotRequest({ raw: true, scope: 'Target' });
   const rawNodes = [
@@ -78,11 +81,14 @@ test('presentation mapping retains acquisition lineage through projection and sc
   ];
   const raw = presentIosSnapshot(acquiredInput(rawRequest, rawNodes), rawRequest);
 
-  assert.deepEqual([...raw.presentedIndexesBySourceIndex], [
-    [10, []],
-    [20, [0]],
-    [40, [1]],
-  ]);
+  assert.deepEqual(
+    [...raw.presentedIndexesBySourceIndex],
+    [
+      [10, []],
+      [20, [0]],
+      [40, [1]],
+    ],
+  );
 });
 
 test('raw scoped depth derives missing source depths from parent order', () => {
@@ -101,7 +107,10 @@ test('raw scoped depth derives missing source depths from parent order', () => {
   ];
   const result = presentIosSnapshot(acquiredInput(request, nodes), request);
 
-  assert.deepEqual(result.nodes.map((entry) => entry.label), ['Target', 'Child']);
+  assert.deepEqual(
+    result.nodes.map((entry) => entry.label),
+    ['Target', 'Child'],
+  );
 });
 
 test('cursor projection keeps geometryless nodes neutral while plain viewport keeps child visibility independent', () => {

@@ -207,10 +207,7 @@ function subtreeRange(
   return positions;
 }
 
-function rawDepth(
-  node: IosSnapshotPresentationNode,
-  depths?: ReadonlyMap<number, number>,
-): number {
+function rawDepth(node: IosSnapshotPresentationNode, depths?: ReadonlyMap<number, number>): number {
   return Math.max(0, node.raw.depth ?? depths?.get(node.raw.index) ?? 0);
 }
 

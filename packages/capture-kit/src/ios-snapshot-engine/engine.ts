@@ -140,8 +140,8 @@ function presentAcquiredSnapshot(
     ? buildIosInteractiveSnapshotPresentation(projected.nodes)
     : {
         nodes: projected.nodes,
-      presentedIndexesBySourceIndex: identityMapping(projected.nodes),
-    };
+        presentedIndexesBySourceIndex: identityMapping(projected.nodes),
+      };
   const validation = validateIosPayload(
     compacted.nodes,
     'regular',

@@ -47,12 +47,10 @@ test('package apple runner source strips unit-test blocks without mutating check
     'utf8',
   );
   const sharedPackageRelativePath =
-    packagedProject.match(/relativePath = ([^;]+);/)?.[1].trim() ?? '';
+    packagedProject.match(/relativePath = ([^;]+);/)?.[1]?.trim() ?? '';
   assert.equal(sharedPackageRelativePath, '../../snapshot-presentation');
   assert.ok(
-    fs.existsSync(
-      path.resolve(packagedRunnerRoot, sharedPackageRelativePath, 'Package.swift'),
-    ),
+    fs.existsSync(path.resolve(packagedRunnerRoot, sharedPackageRelativePath, 'Package.swift')),
   );
   assert.ok(fs.existsSync(path.join(root, 'dist/apple/snapshot-presentation/Package.swift')));
   assert.equal(
@@ -198,11 +196,7 @@ test('package apple runner source removes legacy dist/apple-runner output before
     'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.pbxproj',
     '',
   );
-  writeFixtureFile(
-    root,
-    'apple/snapshot-presentation/Package.runner.swift',
-    'runner package\n',
-  );
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
   // Stale packaged trees left by builds/checkouts predating the apple-runner -> apple/runner
   // move. `dist` ships wholesale, so these must not survive packaging or they double-ship.
   writeFixtureFile(
