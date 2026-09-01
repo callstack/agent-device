@@ -21,7 +21,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { flattenIosTree, toIosSelector, writeBase64File, type IosTreeNode } from './snapshot.ts';
+import { captureLimrunIosSnapshot } from './ios-snapshot-adapter.ts';
+import { toIosSelector, writeBase64File } from './snapshot.ts';
 import { normalizeOptionalString } from './strings.ts';
 import {
   awaitLimrunDeploymentOperation,
@@ -254,10 +255,8 @@ class LimrunIosInteractor implements Interactor {
     await writeBase64File(outPath, screenshot.base64);
   }
 
-  async snapshot(_options?: SnapshotOptions): Promise<SnapshotResult> {
-    const treeJson = await this.session.client.elementTree();
-    const parsed = JSON.parse(treeJson) as IosTreeNode | IosTreeNode[];
-    return { nodes: flattenIosTree(parsed), backend: 'xctest', producer: 'limrun-ios-tree' };
+  async snapshot(options?: SnapshotOptions): Promise<SnapshotResult> {
+    return await captureLimrunIosSnapshot(this.session, options);
   }
 
   async back(): Promise<void> {

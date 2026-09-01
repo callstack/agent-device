@@ -8,8 +8,10 @@ test('limrun iOS snapshot stamps the xctest channel with its own producer', asyn
       elementTree: async () =>
         JSON.stringify({
           elementType: 'Application',
+          frame: { x: 0, y: 0, width: 320, height: 240 },
           children: [{ elementType: 'Button', label: 'Continue', enabled: true }],
         }),
+      deviceInfo: { screenWidth: 320, screenHeight: 240 },
     },
   } as unknown as LimrunIosSession;
 
