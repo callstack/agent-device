@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { encodeFrame, DEFAULT_SPIKE_LIMITS } from './limits.ts';
-import { failureResponse, parseSpikeResponse } from './protocol.ts';
+import { failureResponse, parseSpikeResponse, readResponseId } from './protocol.ts';
 import type { ResourceLimits, SpikeFailureKind, SpikeRequest, SpikeResponse } from './types.ts';
 
 export type PersistentProcessSpec = Readonly<{
@@ -40,6 +40,7 @@ export class PersistentFramedProcess {
   private stdoutBuffer = Buffer.alloc(0);
   private stderr = '';
   private pending?: PendingBatch;
+  private terminateNextBatch = false;
   private serial: Promise<void> = Promise.resolve();
   private closed = false;
 
@@ -66,6 +67,10 @@ export class PersistentFramedProcess {
     await this.serial;
     terminate(this.child);
     this.child = undefined;
+  }
+
+  terminateReaderOnNextBatchForEvidence(): void {
+    this.terminateNextBatch = true;
   }
 
   private async execute(
@@ -151,6 +156,10 @@ export class PersistentFramedProcess {
         abortCleanup: () => signal?.removeEventListener('abort', onAbort),
       };
       for (const { line } of encoded) this.child?.stdin.write(line);
+      if (this.terminateNextBatch) {
+        this.terminateNextBatch = false;
+        terminate(this.child);
+      }
     });
   }
 
@@ -182,7 +191,7 @@ export class PersistentFramedProcess {
       return;
     }
     const pending = this.pending;
-    const request = pending?.requests.find((item) => item.id === readId(value));
+    const request = pending?.requests.find((item) => item.id === readResponseId(value));
     if (!pending || !request || pending.responses.has(request.id)) {
       this.finishPending('malformed-tree', 'response-id-invalid', true);
       return;
@@ -251,14 +260,6 @@ function errorCode(error: unknown, fallback: string): string {
     if (typeof code === 'string') return code;
   }
   return fallback;
-}
-
-function readId(value: unknown): string | undefined {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const id = (value as Record<string, unknown>).id;
-    return typeof id === 'string' ? id : undefined;
-  }
-  return undefined;
 }
 
 function terminate(child: ChildProcessWithoutNullStreams | undefined): void {

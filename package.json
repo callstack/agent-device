@@ -125,6 +125,7 @@
     "bench:ios-snapshot:deep-button": "node --experimental-strip-types scripts/ios-snapshot-benchmark/deep-button.ts",
     "bench:ios-snapshot:evidence": "node --experimental-strip-types scripts/ios-snapshot-benchmark/evidence.ts",
     "bench:ios-ax-bridge": "node --experimental-strip-types scripts/ios-ax-bridge-spike/run.ts",
+    "bench:ios-ax-bridge:targeted": "node --experimental-strip-types scripts/ios-ax-bridge-spike/targeted-run.ts",
     "mutation:run": "node --experimental-strip-types scripts/mutation/run.ts",
     "mutation:check": "node --experimental-strip-types scripts/mutation/run.ts --no-run",
     "mutation:affected": "node --experimental-strip-types scripts/mutation/run.ts --affected",

@@ -91,6 +91,14 @@ export function firstTreeStatus(response: SpikeResponse): FirstTreeStatus {
   return 'not-observed';
 }
 
+export function readResponseId(value: unknown): string | undefined {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const id = (value as Record<string, unknown>).id;
+    return typeof id === 'string' ? id : undefined;
+  }
+  return undefined;
+}
+
 function malformedResponse(
   request: SpikeRequest,
   code: string,

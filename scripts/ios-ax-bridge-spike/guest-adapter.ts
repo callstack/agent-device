@@ -53,6 +53,9 @@ export function createGuestSimulatorFrameworkBridgeAdapter(
     candidate: CANDIDATE,
     acquireBatch: (requests, acquireOptions) => session.acquireBatch(requests, acquireOptions),
     close: () => session.close(),
+    evidence: {
+      terminateReaderOnNextBatch: () => session.terminateReaderOnNextBatchForEvidence(),
+    },
   };
 }
 
@@ -124,9 +127,13 @@ class GuestSession {
   async close(): Promise<void> {
     this.closed = true;
     await this.reader.close();
-    terminate(this.companion);
+    await terminateAndWait(this.companion);
     this.companion = undefined;
     fs.rmSync(this.tempDir, { recursive: true, force: true });
+  }
+
+  terminateReaderOnNextBatchForEvidence(): void {
+    this.reader.terminateReaderOnNextBatchForEvidence();
   }
 
   private async ensureCompanion(udid: string, limits: ResourceLimits): Promise<void> {
@@ -240,4 +247,11 @@ async function waitForCompanion(
 
 function terminate(child: ChildProcessWithoutNullStreams | undefined): void {
   if (child && !child.killed) child.kill('SIGTERM');
+}
+
+async function terminateAndWait(child: ChildProcessWithoutNullStreams | undefined): Promise<void> {
+  if (!child || child.exitCode !== null) return;
+  const exited = new Promise<void>((resolve) => child.once('close', () => resolve()));
+  terminate(child);
+  await exited;
 }

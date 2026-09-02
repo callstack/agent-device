@@ -219,26 +219,33 @@ function withoutStderr(sample: SpikeSample): SpikeSample {
 }
 
 function fidelityLines(report: SpikeReport): string[] {
-  const lines = ['Raw exemplar fidelity (candidate vs XCTest control):'];
-  const candidates = ['guest-simulator-framework-bridge'] as const;
-  for (const candidate of candidates) {
-    let compared = false;
-    for (const screen of report.config.screens) {
-      const candidateSample = exemplarSample(report, candidate, screen);
-      const controlSample = exemplarSample(report, 'xctest-control', screen);
-      if (!candidateSample || !controlSample) continue;
-      compared = true;
-      const candidateNodes = candidateSample.acquisition!.nodes;
-      const controlNodes = controlSample.acquisition!.nodes;
-      lines.push(
-        `- ${candidate} ${screen}: nodes ${candidateNodes.length}/${controlNodes.length}; depth ${candidateSample.metrics?.maxTraversalDepth ?? '–'}/${controlSample.metrics?.maxTraversalDepth ?? '–'}; identifiers ${candidateNodes.filter((node) => node.identifier).length}/${controlNodes.filter((node) => node.identifier).length}.`,
-      );
-    }
-    if (!compared && report.candidates.includes(candidate)) {
-      lines.push(`- ${candidate}: no comparable raw exemplar was produced.`);
-    }
+  const candidate = 'guest-simulator-framework-bridge';
+  const comparisons = report.config.screens.flatMap((screen) =>
+    fidelityComparison(report, candidate, screen),
+  );
+  if (comparisons.length > 0) {
+    return ['Raw exemplar fidelity (candidate vs XCTest control):', ...comparisons];
   }
-  return lines.length === 1 ? ['Raw exemplar fidelity comparison was not available.'] : lines;
+  return report.candidates.includes(candidate)
+    ? [`- ${candidate}: no comparable raw exemplar was produced.`]
+    : ['Raw exemplar fidelity comparison was not available.'];
+}
+
+function fidelityComparison(
+  report: SpikeReport,
+  candidate: SpikeCell['candidate'],
+  screen: SpikeCell['screen'],
+): readonly string[] {
+  const candidateSample = exemplarSample(report, candidate, screen);
+  const controlSample = exemplarSample(report, 'xctest-control', screen);
+  if (!candidateSample?.acquisition || !controlSample?.acquisition) return [];
+  const candidateNodes = candidateSample.acquisition.nodes;
+  const controlNodes = controlSample.acquisition.nodes;
+  const candidateIdentifiers = candidateNodes.filter((node) => node.identifier).length;
+  const controlIdentifiers = controlNodes.filter((node) => node.identifier).length;
+  return [
+    `- ${candidate} ${screen}: nodes ${candidateNodes.length}/${controlNodes.length}; depth ${candidateSample.metrics?.maxTraversalDepth ?? '–'}/${controlSample.metrics?.maxTraversalDepth ?? '–'}; identifiers ${candidateIdentifiers}/${controlIdentifiers}.`,
+  ];
 }
 
 function exemplarSample(
@@ -264,7 +271,7 @@ function median(values: readonly number[]): number {
   return percentile(values, 50);
 }
 
-function percentile(values: readonly number[], percentage: number): number {
+export function percentile(values: readonly number[], percentage: number): number {
   if (values.length === 0) return Number.NaN;
   const sorted = [...values].sort((left, right) => left - right);
   const rank = Math.ceil((percentage / 100) * sorted.length);

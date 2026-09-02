@@ -22,6 +22,7 @@ export type AcquisitionAdapter = Readonly<{
     options?: Readonly<{ signal?: AbortSignal }>,
   ): Promise<AcquisitionBatchResult>;
   close?: () => Promise<void>;
+  evidence?: Readonly<{ terminateReaderOnNextBatch?: () => void }>;
 }>;
 
 export type AcquisitionBatchResult = Readonly<{

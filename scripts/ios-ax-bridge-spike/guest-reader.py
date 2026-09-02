@@ -193,10 +193,10 @@ def build_response(
                 "durationMs": duration_ms,
             },
         }
-    generation = expected
-    if generation is None and len(pids) == 1:
-        generation = f"pid:{next(iter(pids))}"
-    residue: list[dict[str, Any]] = []
+    generation = f"pid:{next(iter(pids))}" if len(pids) == 1 else None
+    residue: list[dict[str, Any]] = [
+        {"kind": "provider-pruned", "fields": ["depth"]},
+    ]
     if viewport is None:
         residue.append({"kind": "missing-viewport", "reason": "not-provided"})
     if generation is None:

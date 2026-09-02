@@ -1,0 +1,104 @@
+import type { CorrectedReport, GateResult, LatencySummary } from './corrected-types.ts';
+
+export function renderCorrectedMarkdown(report: CorrectedReport): string {
+  const lines = [
+    '# iOS Simulator AX bridge corrected evidence',
+    '',
+    `- Decision: **${report.decision}**`,
+    '- Interpretation: **maintainer-corrected**',
+    `- Revision: ${report.revision.commit} (${report.revision.branch})`,
+    `- Target: ${report.target.name} (${report.target.udid}, ${report.target.runtime})`,
+    `- Generated: ${report.generatedAt}`,
+    `- Immutable broad raw artifact: \`${report.sourceArtifact.path}\` (original ${report.sourceArtifact.originalDecision}; interpretation superseded to stretch-only)`,
+    `- Narrow targeted raw artifact: \`${report.targetedArtifact.path}\``,
+    '',
+    'The broad run is preserved unchanged. Its old NO-GO was caused by readiness-inclusive first-look and stretch thresholds; this report evaluates the corrected hard contract.',
+    '',
+    '## Hard gates',
+    '',
+    '| Gate | Status | Target | Evidence |',
+    '|---|---|---|---|',
+    ...Object.entries(report.hardGates).map(([name, gate]) => gateLine(name, gate)),
+    '',
+    '## Readiness boundary and candidate-owned latency',
+    '',
+    'Warm and relaunch timing starts at the bridge acquisition after fixture/app readiness admission. Relaunch readiness is recorded separately; the old first-look value includes Simulator, app, daemon, and runner costs.',
+    '',
+    '| State | Screen | Samples | Readable | Ready generation | Candidate p50/p95 ms | Readiness p95 ms | Old first-look p95 ms | Generations |',
+    '|---|---|---:|---:|---:|---:|---:|---:|---:|',
+    ...report.readiness.map(readinessLine),
+    '',
+    '## Cold diagnostics',
+    '',
+    'Cold and cold-cold first-look measurements remain visible for diagnosis, but are excluded from the candidate-owned hard verdict because they combine environment and readiness boundaries with bridge work.',
+    '',
+    '| State | Screen | Preparation p95 ms | First-look p95 ms | Interpretation |',
+    '|---|---|---:|---:|---|',
+    ...report.coldDiagnostics.map(coldDiagnosticLine),
+    '',
+    '## Nonresident bootstrap',
+    '',
+    `- ${report.hardGates.nonresidentBootstrap.evidence}.`,
+    '- The timed boundary begins with a nonresident adapter and ends at the first usable guest tree; Simulator/app readiness was established before the timer.',
+    '',
+    '| Sample | Duration ms | Usable tree | Failure | Nodes | Generation |',
+    '|---:|---:|---|---|---:|---|',
+    ...report.bootstrap.map(bootstrapLine),
+    '',
+    '## Live candidate recovery',
+    '',
+    `- ${report.hardGates.liveRecovery.evidence}.`,
+    '',
+    '| Operation | Observed failure | Recovery response | Recovered tree |',
+    '|---|---|---|---|',
+    ...report.liveRecovery.map(recoveryLine),
+    '',
+    '## Hierarchy residue',
+    '',
+    `- ${report.hardGates.hierarchyResidue.evidence}.`,
+    `- Observed traversal depth: ${report.hierarchy.observedTraversalDepth}; depth complete: **${report.hierarchy.depthComplete}**. The guest response is flat and carries typed \`${report.hierarchy.residue.kind}/${report.hierarchy.residue.fields.join(',')}\` residue.`,
+    '',
+    '## Stretch findings',
+    '',
+    ...report.stretchFindings.map((finding) => `- ${finding}`),
+    '',
+    '## Production boundary',
+    '',
+    '- No production backend selection, fallback, runner-demand, open/relaunch, proxy, XCTest interaction, or public CLI changes were made.',
+    '- The corrected result is evidence for the #2192 decision boundary only; it does not start production routing.',
+  ];
+  return `${lines.join('\n')}\n`;
+}
+
+function gateLine(name: string, gate: GateResult): string {
+  return `| ${name} | **${gate.status}** | ${gate.target} | ${gate.evidence} |`;
+}
+
+function readinessLine(summary: LatencySummary): string {
+  return `| ${summary.state} | ${summary.screen} | ${summary.samples} | ${summary.readableSamples} | ${summary.readinessObservedSamples} | ${formatMs(summary.candidateP50Ms)}/${formatMs(summary.candidateP95Ms)} | ${formatMs(summary.preparationP95Ms)} | ${formatMs(summary.firstLookP95Ms)} | ${summary.generationCount} |`;
+}
+
+function coldDiagnosticLine(diagnostic: CorrectedReport['coldDiagnostics'][number]): string {
+  return `| ${diagnostic.state} | ${diagnostic.screen} | ${formatMs(diagnostic.preparationP95Ms)} | ${formatMs(diagnostic.firstLookP95Ms)} | excluded runner/app readiness costs |`;
+}
+
+function bootstrapLine(sample: CorrectedReport['bootstrap'][number]): string {
+  const response = sample.response;
+  return `| ${sample.index} | ${sample.durationMs.toFixed(1)} | ${sample.usableTree} | ${failureText(response.failure)} | ${response.metrics.nodeCount} | ${response.acquisition?.targetGeneration ?? '–'} |`;
+}
+
+function recoveryLine(probe: CorrectedReport['liveRecovery'][number]): string {
+  const recovery = probe.recoveredResponse;
+  const status = recovery.ok ? 'ok' : 'failed';
+  const nodes = recovery.acquisition?.nodes.length ?? 0;
+  return `| ${probe.operation} | ${failureText(probe.response.failure)} | ${status} | ${nodes} nodes |`;
+}
+
+function failureText(failure: CorrectedReport['bootstrap'][number]['response']['failure']): string {
+  if (!failure) return 'none/none';
+  return `${failure.kind}/${failure.code ?? 'none'}`;
+}
+
+function formatMs(value: number | null): string {
+  return value === null ? '–' : value.toFixed(1);
+}
