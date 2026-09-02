@@ -65,8 +65,7 @@ pnpm depgraph
 # Zone pairs that invert the ranked spine. Read `typeInversions` rather than deriving it from
 # `zoneEdges`: those counts come from the COLLAPSED edge list, where one edge per file pair
 # survives and `dynamic` outranks `type`, so a module imported both lazily and for its types
-# would drop out. `typeInversions` is counted by the gate's own rule and is what CI compares
-# against TYPE_INVERSION_BASELINE.
+# would drop out. `typeInversions` is counted by the gate's own rule.
 node -e "const j=require('./.tmp/depgraph/graph.json');
   Object.entries(j.typeInversions)
     .sort((a, b) => b[1] - a[1])
@@ -80,20 +79,15 @@ it returns an empty list, which is the gate passing, not a broken query.
 
 ## What is authoritative
 
-`pnpm check:layering` is. The viewer reads the same model, so the numbers should agree — and that
-agreement is now enforced rather than hoped for: the **Layering Guard job runs
-`scripts/depgraph/model.test.ts`**, whose last test asserts this report's inversion count reproduces
-`TYPE_INVERSION_BASELINE`. If the tree changes and only one side is updated, CI fails and names the
-difference. The two cannot be green independently.
+`pnpm check:layering` is. The report reads the same model (`scripts/layering/model.ts`) and applies
+the gate's own counting rule — `typeInversionsByPair` counts once per file pair over the raw edges,
+exactly as `checkTypeInversions` in `scripts/layering/check.ts` does — so `typeInversions` reproduces
+`TYPE_INVERSION_BASELINE` by construction, not by a second measurement. CI used to assert that
+equality; it was a duplicate detector of the same code path and was removed. In particular the count
+does NOT come from the collapsed edge list, where `dynamic` outranks `type` and a module imported
+both lazily and for its types would drop out.
 
-What that check proves precisely: the report's graph build, over the real tree, agrees with the
-gate's baseline. It is a cross-check of the extraction and the baseline against reality, not two
-independent algorithms — `typeInversionsByPair` deliberately applies the gate's counting rule (once
-per file pair, over raw edges) so the numbers cannot diverge for a reason unrelated to layering. In
-particular it does NOT count from the collapsed edge list, where `dynamic` outranks `type` and a
-module imported both lazily and for its types would drop out.
-
-If they ever disagree, the gate is right and the baseline or the tree is wrong.
+If the report ever disagrees with the gate, the gate is right.
 
 ## Why it reuses the layering gate
 

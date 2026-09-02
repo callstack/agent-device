@@ -4,7 +4,6 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { listSourceFiles, TYPE_INVERSION_BASELINE } from '../layering/check.ts';
 import { ARCHITECTURE_OWNERSHIP } from '../layering/architecture-ownership.ts';
 import { resolveImportEdges } from '../layering/model.ts';
 import {
@@ -320,31 +319,28 @@ test('buildGraph reports zone membership, degrees, and cross-zone edge counts', 
   );
 });
 
-// Two-sources-of-truth check, run by the Layering Guard job.
-//
-// The report and the gate read the same model, so their inversion counts must agree. This locks
-// that: if the tree changes and only one side is updated, or if the report's extraction diverges
-// from what the gate sees, this fails and names the difference.
-//
-// What it proves precisely: the report's own graph build, over the real tree, reproduces
-// TYPE_INVERSION_BASELINE. It is a cross-check of the extraction and the baseline against reality,
-// not two independent algorithms — `typeInversionsByPair` deliberately applies the gate's counting
-// rule so the numbers cannot differ for a reason unrelated to layering. The gate stays the
-// authority; if these disagree, the baseline or the tree is wrong, never this test.
-test("the report's inversion count reproduces the gate's TYPE_INVERSION_BASELINE", () => {
-  const files = listSourceFiles();
-  const sources = new Map(files.map((file) => [file, readFileSync(file, 'utf8')]));
-  const actual = typeInversionsByPair(resolveImportEdges(sources));
+// `typeInversions` is the report's view of R6 over the RAW edges: a module imported both lazily
+// and for its types keeps its type-only edge, where `collapseEdges` ranks `dynamic` above `type`
+// and would lose it.
+test('typeInversionsByPair counts raw type-only edges once per file pair', () => {
+  const files = sources({
+    'src/commands/tap.ts': 'export type TapOptions = { retries: number };\n',
+    'src/core/interactors/tap.ts': [
+      "import type { TapOptions } from '../../commands/tap.ts';",
+      "import type { TapOptions as Again } from '../../commands/tap.ts';",
+      'export type Both = TapOptions | Again;',
+    ].join('\n'),
+    'src/core/interactors/lazy.ts': [
+      "import type { TapOptions } from '../../commands/tap.ts';",
+      "export const load = (): Promise<unknown> => import('../../commands/tap.ts');",
+      'export type Options = TapOptions;',
+    ].join('\n'),
+    'src/core/interactors/value.ts': "import '../../commands/tap.ts';\n",
+  });
+  const edges = resolveImportEdges(files);
 
-  assert.deepEqual(
-    actual,
-    // Object key order differs between the two literals; compare as sorted entries.
-    Object.fromEntries(
-      Object.entries(TYPE_INVERSION_BASELINE).sort(([left], [right]) => left.localeCompare(right)),
-    ),
-    'depgraph and scripts/layering/check.ts disagree about type-only spine inversions. ' +
-      'Regenerate with `pnpm depgraph` and update TYPE_INVERSION_BASELINE, or fix the edge.',
-  );
+  assert.deepEqual(typeInversionsByPair(edges), { 'core -> commands': 2 });
+  assert.deepEqual(buildGraph(files, edges).typeInversions, { 'core -> commands': 2 });
 });
 
 // A raw NUL byte in a source file makes Git classify it as binary, which hides the whole diff
