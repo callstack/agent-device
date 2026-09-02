@@ -13,23 +13,35 @@ import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtim
 import type { DaemonResponse, SessionState } from '../../types.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
-import { buildSnapshotSignatures } from '../../../snapshot/snapshot-freshness/index.ts';
 import { buildInteractionSurfaceSignature } from '../../interaction-outcome-policy.ts';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { snapshotCliOutput } from '../../../commands/capture/output.ts';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
+import { buildNodes } from '../../../__tests__/test-utils/snapshot-builders.ts';
 import {
   fixtureScreenshotCaptures,
   fixtureSettingsMutations,
   resetSnapshotRuntimeFixture,
   snapshotRuntimeFixture,
 } from '../../__tests__/snapshot-runtime-fixture.ts';
-import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
 import {
+  androidCapture,
+  androidDevice,
+  androidTextRows,
+  batteryCapture,
+  countingSnapshotRuntime,
+  inboxBaselineNodes,
+  inboxRow,
+  iosSimulatorDevice,
+  locationRequiredCapture,
+  macOsDevice,
+  makeAndroidFreshnessSession,
   makeProviderRuntimeOwning,
   makeSession,
   makeSessionStore,
-} from './snapshot-handler-fixture.ts';
+  providerIosDevice,
+  snapshotRequest,
+} from './snapshot-handler.fixtures.ts';
 
 vi.mock('../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../__tests__/legacy-snapshot-capture-fixture.ts');
@@ -80,42 +92,6 @@ function handleSnapshotCommands(
 // without one the plan asks for the without-active-app row local Apple refuses.
 const appAttach = (d: SessionState['device']): Partial<SessionState> =>
   d.platform === 'apple' ? { appBundleId: 'com.example.app' } : {};
-
-const iosSimulatorDevice: SessionState['device'] = {
-  platform: 'apple',
-  id: 'sim-1',
-  name: 'My iPhone Simulator',
-  kind: 'simulator',
-  booted: true,
-};
-
-const macOsDevice: SessionState['device'] = {
-  platform: 'apple',
-  appleOs: 'macos',
-  id: 'host-macos-local',
-  name: 'Host Mac',
-  kind: 'device',
-  target: 'desktop',
-  booted: true,
-};
-
-const androidDevice: SessionState['device'] = {
-  platform: 'android',
-  id: 'emulator-5554',
-  name: 'Pixel 9 Pro XL',
-  kind: 'emulator',
-  target: 'mobile',
-  booted: true,
-};
-
-const providerIosDevice: SessionState['device'] = {
-  platform: 'apple',
-  id: 'browserstack:ios:lease-a',
-  name: 'iPhone 16',
-  kind: 'device',
-  target: 'mobile',
-  booted: true,
-};
 
 afterEach(() => {
   setActiveProviderDeviceRuntimes([]);
@@ -204,13 +180,7 @@ async function runWaitCommand(
   const sessionStore = makeSessionStore();
   sessionStore.set(sessionName, makeSession(sessionName, device, appAttach(device)));
   return await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'wait',
-      positionals,
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'wait', { positionals }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -251,23 +221,6 @@ const locationPermissionNodes = [
     label: 'Continue',
     rect: { x: 180, y: 320, width: 160, height: 48 },
     hittable: true,
-  },
-];
-
-const locationRequiredNodes = [
-  {
-    index: 0,
-    depth: 0,
-    type: 'android.widget.TextView',
-    label: 'Location required',
-    rect: { x: 24, y: 180, width: 342, height: 40 },
-  },
-  {
-    index: 1,
-    depth: 0,
-    type: 'android.widget.Button',
-    label: 'Dismiss',
-    rect: { x: 24, y: 260, width: 342, height: 48 },
   },
 ];
 
@@ -331,13 +284,7 @@ test('snapshot rejects @ref scope without existing session snapshot', async () =
   );
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: { snapshotScope: '@e1' },
-    },
+    req: snapshotRequest(sessionName, 'snapshot', { flags: { snapshotScope: '@e1' } }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -355,26 +302,15 @@ test('snapshot on iOS rejects sessions without a tracked app', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-no-app';
   sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
-  const runtime = snapshotRuntimeFixture();
-  let bindCount = 0;
-  const bindDevice: BindDeviceRuntime = async (device, use) => {
-    bindCount += 1;
-    return await runtime.bindDevice(device, use);
-  };
+  const runtime = countingSnapshotRuntime();
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
     inspectFacts: runtime.inspectFacts,
-    bindDevice,
+    bindDevice: runtime.bindDevice,
   });
 
   expect(response?.ok).toBe(false);
@@ -385,7 +321,7 @@ test('snapshot on iOS rejects sessions without a tracked app', async () => {
     expect(response.error.details?.hint).toBeUndefined();
   }
   expect(legacyDispatchCapture).not.toHaveBeenCalled();
-  expect(bindCount).toBe(0);
+  expect(runtime.bindCount()).toBe(0);
 });
 
 test('snapshot on iOS without a tracked app carries the detected open command as its hint', async () => {
@@ -398,13 +334,7 @@ test('snapshot on iOS without a tracked app carries the detected open command as
   sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -435,26 +365,15 @@ test('snapshot on provider-backed iOS runs without a tracked app', async () => {
     truncated: false,
     backend: 'xctest',
   });
-  const runtime = snapshotRuntimeFixture();
-  let bindCount = 0;
-  const bindDevice: BindDeviceRuntime = async (device, use) => {
-    bindCount += 1;
-    return await runtime.bindDevice(device, use);
-  };
+  const runtime = countingSnapshotRuntime();
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
     inspectFacts: runtime.inspectFacts,
-    bindDevice,
+    bindDevice: runtime.bindDevice,
   });
 
   expect(response?.ok).toBe(true);
@@ -463,7 +382,7 @@ test('snapshot on provider-backed iOS runs without a tracked app', async () => {
   // simctl and can only ever see local simulators — for a hosted device it is a
   // guaranteed-useless spawn on what is now a success path.
   expect(mockBuildIosOpenCommandHint).not.toHaveBeenCalled();
-  expect(bindCount).toBe(1);
+  expect(runtime.bindCount()).toBe(1);
 });
 
 test('diff on local iOS still requires a tracked app', async () => {
@@ -472,13 +391,7 @@ test('diff on local iOS still requires a tracked app', async () => {
   sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'diff',
-      positionals: ['snapshot'],
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'diff', { positionals: ['snapshot'] }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -506,13 +419,7 @@ test('snapshot on iOS runs when the session tracks an app', async () => {
   });
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -547,7 +454,7 @@ test('snapshot re-activates a complete frame; diff preserves it (ADR 0014)', asy
   });
 
   const snapshotResponse = await handleSnapshotCommands({
-    req: { token: 't', session: sessionName, command: 'snapshot', positionals: [], flags: {} },
+    req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -559,13 +466,7 @@ test('snapshot re-activates a complete frame; diff preserves it (ADR 0014)', asy
   expect(sessionStore.get(sessionName)?.refFrameState).toBe('active');
 
   const diffResponse = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'diff',
-      positionals: ['snapshot'],
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'diff', { positionals: ['snapshot'] }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -584,13 +485,9 @@ async function runVersionedRefsCommand(params: {
   command: 'snapshot' | 'diff';
 }): Promise<Record<string, unknown> | undefined> {
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: params.sessionName,
-      command: params.command,
+    req: snapshotRequest(params.sessionName, params.command, {
       positionals: params.command === 'diff' ? ['snapshot'] : [],
-      flags: {},
-    },
+    }),
     sessionName: params.sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore: params.sessionStore,
@@ -673,14 +570,7 @@ test('daemon-private snapshot observation advances capture state without publish
   });
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: {},
-      internal: { observationOnly: true },
-    },
+    req: snapshotRequest(sessionName, 'snapshot', { internal: { observationOnly: true } }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -699,21 +589,12 @@ test('snapshot surfaces filtered-to-zero Android guidance for interactive snapsh
   const sessionName = 'android-empty-interactive';
   sessionStore.set(sessionName, makeSession(sessionName, androidDevice));
 
-  legacyDispatchCapture.mockResolvedValue({
-    nodes: [],
-    truncated: false,
-    backend: 'android',
-    analysis: { rawNodeCount: 42, maxDepth: 8 },
-  });
+  legacyDispatchCapture.mockResolvedValue(androidCapture([], { rawNodeCount: 42, maxDepth: 8 }));
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
+    req: snapshotRequest(sessionName, 'snapshot', {
       flags: { snapshotInteractiveOnly: true, snapshotDepth: 3 },
-    },
+    }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -774,13 +655,7 @@ test('snapshot annotations survive pending interaction capture into CLI JSON', a
   });
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -810,13 +685,7 @@ test('snapshot timeout captures Android screenshot evidence with overlay refs', 
   const sessionStore = makeAndroidTimeoutEvidenceSession(sessionName);
   mockAndroidTimeoutEvidenceDispatch();
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -831,38 +700,21 @@ test('snapshot warns when recent snapshot node count collapses sharply', async (
   const sessionName = 'android-stale-collapse';
   const session = makeSession(sessionName, androidDevice);
   session.snapshot = {
-    nodes: Array.from({ length: 50 }, (_, index) => ({
-      ref: `e${index + 1}`,
-      index,
-      depth: 0,
-      type: 'android.widget.TextView',
-      label: `Row ${index + 1}`,
-    })),
+    nodes: buildNodes(androidTextRows(50, (row) => `Row ${row}`)),
     createdAt: Date.now(),
     backend: 'android',
   };
   sessionStore.set(sessionName, session);
 
-  legacyDispatchCapture.mockResolvedValue({
-    nodes: Array.from({ length: 8 }, (_, index) => ({
-      index,
-      depth: 0,
-      type: 'android.widget.TextView',
-      label: `Next ${index + 1}`,
-    })),
-    truncated: false,
-    backend: 'android',
-    analysis: { rawNodeCount: 8, maxDepth: 1 },
-  });
+  legacyDispatchCapture.mockResolvedValue(
+    androidCapture(
+      androidTextRows(8, (row) => `Next ${row}`),
+      { rawNodeCount: 8, maxDepth: 1 },
+    ),
+  );
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -908,13 +760,7 @@ test('snapshot does not warn on expected node drop across presentation modes', a
   });
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: { snapshotInteractiveOnly: true },
-    },
+    req: snapshotRequest(sessionName, 'snapshot', { flags: { snapshotInteractiveOnly: true } }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -933,59 +779,25 @@ test('snapshot does not warn on expected node drop across presentation modes', a
 test('snapshot automatically retries stale Android trees after recent navigation', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-stale-retries-to-fresh';
-  const session = makeSession(sessionName, androidDevice);
-  const baselineNodes = Array.from({ length: 24 }, (_, index) => ({
-    ref: `e${index + 1}`,
-    index,
-    depth: 0,
-    type: 'android.widget.TextView',
-    label: `Inbox row ${index + 1}`,
-  }));
-  session.snapshot = {
-    nodes: baselineNodes,
-    createdAt: Date.now(),
-    backend: 'android',
-    comparisonSafe: true,
-  };
-  session.androidSnapshotFreshness = {
-    action: 'press',
-    markedAt: Date.now(),
-    baselineCount: baselineNodes.length,
-    baselineSignatures: buildSnapshotSignatures(baselineNodes),
-    routeComparable: true,
-  };
+  const session = makeAndroidFreshnessSession(sessionName, 'press', inboxBaselineNodes(24));
   sessionStore.set(sessionName, session);
 
   legacyDispatchCapture
-    .mockResolvedValueOnce({
-      nodes: Array.from({ length: 24 }, (_, index) => ({
-        index,
-        depth: 0,
-        type: 'android.widget.TextView',
-        label: `Inbox row ${index + 1}`,
-      })),
-      truncated: false,
-      backend: 'android',
-      analysis: { rawNodeCount: 24, maxDepth: 2 },
-    })
-    .mockResolvedValueOnce({
-      nodes: [
-        { index: 0, depth: 0, type: 'android.widget.TextView', label: 'Create document' },
-        { index: 1, depth: 0, type: 'android.widget.Button', label: 'Submit', hittable: true },
-      ],
-      truncated: false,
-      backend: 'android',
-      analysis: { rawNodeCount: 2, maxDepth: 1 },
-    });
+    .mockResolvedValueOnce(
+      androidCapture(androidTextRows(24, inboxRow), { rawNodeCount: 24, maxDepth: 2 }),
+    )
+    .mockResolvedValueOnce(
+      androidCapture(
+        [
+          { index: 0, depth: 0, type: 'android.widget.TextView', label: 'Create document' },
+          { index: 1, depth: 0, type: 'android.widget.Button', label: 'Submit', hittable: true },
+        ],
+        { rawNodeCount: 2, maxDepth: 1 },
+      ),
+    );
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: { snapshotInteractiveOnly: true },
-    },
+    req: snapshotRequest(sessionName, 'snapshot', { flags: { snapshotInteractiveOnly: true } }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -1005,49 +817,15 @@ test('snapshot automatically retries stale Android trees after recent navigation
 test('snapshot warns when Android freshness retries still return the previous route', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-stale-after-press';
-  const session = makeSession(sessionName, androidDevice);
-  const baselineNodes = Array.from({ length: 24 }, (_, index) => ({
-    ref: `e${index + 1}`,
-    index,
-    depth: 0,
-    type: 'android.widget.TextView',
-    label: `Inbox row ${index + 1}`,
-  }));
-  session.snapshot = {
-    nodes: baselineNodes,
-    createdAt: Date.now(),
-    backend: 'android',
-    comparisonSafe: true,
-  };
-  session.androidSnapshotFreshness = {
-    action: 'press',
-    markedAt: Date.now(),
-    baselineCount: baselineNodes.length,
-    baselineSignatures: buildSnapshotSignatures(baselineNodes),
-    routeComparable: true,
-  };
+  const session = makeAndroidFreshnessSession(sessionName, 'press', inboxBaselineNodes(24));
   sessionStore.set(sessionName, session);
 
-  legacyDispatchCapture.mockResolvedValue({
-    nodes: Array.from({ length: 24 }, (_, index) => ({
-      index,
-      depth: 0,
-      type: 'android.widget.TextView',
-      label: `Inbox row ${index + 1}`,
-    })),
-    truncated: false,
-    backend: 'android',
-    analysis: { rawNodeCount: 24, maxDepth: 2 },
-  });
+  legacyDispatchCapture.mockResolvedValue(
+    androidCapture(androidTextRows(24, inboxRow), { rawNodeCount: 24, maxDepth: 2 }),
+  );
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: { snapshotInteractiveOnly: true },
-    },
+    req: snapshotRequest(sessionName, 'snapshot', { flags: { snapshotInteractiveOnly: true } }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -1095,13 +873,7 @@ test('snapshot response includes normalized visibility metadata', async () => {
   });
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: { snapshotInteractiveOnly: true },
-    },
+    req: snapshotRequest(sessionName, 'snapshot', { flags: { snapshotInteractiveOnly: true } }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -1121,49 +893,18 @@ test('snapshot response includes normalized visibility metadata', async () => {
 test('diff snapshot carries stale-tree warnings for recent Android presses', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-diff-stale-after-press';
-  const session = makeSession(sessionName, androidDevice);
-  const baselineNodes = Array.from({ length: 24 }, (_, index) => ({
-    ref: `e${index + 1}`,
-    index,
-    depth: 0,
-    type: 'android.widget.TextView',
-    label: `Inbox row ${index + 1}`,
-  }));
-  session.snapshot = {
-    nodes: baselineNodes,
-    createdAt: Date.now(),
-    backend: 'android',
-    comparisonSafe: true,
-  };
-  session.androidSnapshotFreshness = {
-    action: 'press',
-    markedAt: Date.now(),
-    baselineCount: baselineNodes.length,
-    baselineSignatures: buildSnapshotSignatures(baselineNodes),
-    routeComparable: true,
-  };
+  const session = makeAndroidFreshnessSession(sessionName, 'press', inboxBaselineNodes(24));
   sessionStore.set(sessionName, session);
 
-  legacyDispatchCapture.mockResolvedValue({
-    nodes: Array.from({ length: 24 }, (_, index) => ({
-      index,
-      depth: 0,
-      type: 'android.widget.TextView',
-      label: `Inbox row ${index + 1}`,
-    })),
-    truncated: false,
-    backend: 'android',
-    analysis: { rawNodeCount: 24, maxDepth: 2 },
-  });
+  legacyDispatchCapture.mockResolvedValue(
+    androidCapture(androidTextRows(24, inboxRow), { rawNodeCount: 24, maxDepth: 2 }),
+  );
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'diff',
+    req: snapshotRequest(sessionName, 'diff', {
       positionals: ['snapshot'],
       flags: { snapshotInteractiveOnly: true },
-    },
+    }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -1183,39 +924,23 @@ test('diff snapshot carries stale-tree warnings for recent Android presses', asy
 test('Android ref refresh mode does not retry narrow snapshots as sharp drops', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-ref-refresh-no-sharp-drop';
-  const session = makeSession(sessionName, androidDevice);
-  const baselineNodes = Array.from({ length: 50 }, (_, index) => ({
-    ref: `e${index + 1}`,
-    index,
-    depth: 0,
-    type: 'android.widget.TextView',
-    label: `Previous row ${index + 1}`,
-  }));
-  session.snapshot = {
-    nodes: baselineNodes,
-    createdAt: Date.now(),
-    backend: 'android',
-    comparisonSafe: true,
-  };
-  session.androidSnapshotFreshness = {
-    action: 'press',
-    markedAt: Date.now(),
-    baselineCount: baselineNodes.length,
-    baselineSignatures: buildSnapshotSignatures(baselineNodes),
-    routeComparable: true,
-  };
+  const session = makeAndroidFreshnessSession(
+    sessionName,
+    'press',
+    buildNodes(androidTextRows(50, (row) => `Previous row ${row}`)),
+  );
   sessionStore.set(sessionName, session);
 
-  legacyDispatchCapture.mockResolvedValue({
-    nodes: Array.from({ length: 8 }, (_, index) => ({
-      index,
-      depth: 0,
-      type: 'android.widget.TextView',
-    })),
-    truncated: false,
-    backend: 'android',
-    analysis: { rawNodeCount: 8, maxDepth: 1 },
-  });
+  legacyDispatchCapture.mockResolvedValue(
+    androidCapture(
+      Array.from({ length: 8 }, (_, index) => ({
+        index,
+        depth: 0,
+        type: 'android.widget.TextView',
+      })),
+      { rawNodeCount: 8, maxDepth: 1 },
+    ),
+  );
 
   const result = await captureSnapshot({
     device: androidDevice,
@@ -1459,34 +1184,11 @@ test('captureSnapshot retries pending tap outcome before post-gesture stabilizat
 
 test('captureSnapshot composes post-gesture stabilization with Android freshness capture', async () => {
   const sessionName = 'android-post-gesture-freshness';
-  const session = makeSession(sessionName, androidDevice);
-  const baselineNodes = Array.from({ length: 18 }, (_, index) => ({
-    ref: `e${index + 1}`,
-    index,
-    depth: 0,
-    type: 'android.widget.TextView',
-    label: `Inbox row ${index + 1}`,
-  }));
-  const changedNodes = Array.from({ length: 18 }, (_, index) => ({
-    ref: `e${index + 1}`,
-    index,
-    depth: 0,
-    type: 'android.widget.TextView',
-    label: index === 0 ? 'album-0' : `Album row ${index + 1}`,
-  }));
-  session.snapshot = {
-    nodes: baselineNodes,
-    createdAt: Date.now(),
-    backend: 'android',
-    comparisonSafe: true,
-  };
-  session.androidSnapshotFreshness = {
-    action: 'click',
-    markedAt: Date.now(),
-    baselineCount: baselineNodes.length,
-    baselineSignatures: buildSnapshotSignatures(baselineNodes),
-    routeComparable: true,
-  };
+  const baselineNodes = inboxBaselineNodes(18);
+  const changedNodes = buildNodes(
+    androidTextRows(18, (row) => (row === 1 ? 'album-0' : `Album row ${row}`)),
+  );
+  const session = makeAndroidFreshnessSession(sessionName, 'click', baselineNodes);
   session.postGestureStabilization = {
     action: 'click',
     positionals: [],
@@ -1494,24 +1196,9 @@ test('captureSnapshot composes post-gesture stabilization with Android freshness
   };
 
   legacyDispatchCapture
-    .mockResolvedValueOnce({
-      nodes: baselineNodes,
-      truncated: false,
-      backend: 'android',
-      analysis: { rawNodeCount: 18, maxDepth: 1 },
-    })
-    .mockResolvedValueOnce({
-      nodes: changedNodes,
-      truncated: false,
-      backend: 'android',
-      analysis: { rawNodeCount: 18, maxDepth: 1 },
-    })
-    .mockResolvedValueOnce({
-      nodes: changedNodes,
-      truncated: false,
-      backend: 'android',
-      analysis: { rawNodeCount: 18, maxDepth: 1 },
-    });
+    .mockResolvedValueOnce(androidCapture(baselineNodes, { rawNodeCount: 18, maxDepth: 1 }))
+    .mockResolvedValueOnce(androidCapture(changedNodes, { rawNodeCount: 18, maxDepth: 1 }))
+    .mockResolvedValueOnce(androidCapture(changedNodes, { rawNodeCount: 18, maxDepth: 1 }));
 
   const result = await captureSnapshot({
     device: androidDevice,
@@ -1534,27 +1221,8 @@ test('captureSnapshot composes post-gesture stabilization with Android freshness
 
 test('captureSnapshot composes pending outcome retry with Android freshness capture', async () => {
   const sessionName = 'android-lazy-outcome-freshness';
-  const session = makeSession(sessionName, androidDevice);
-  const baselineNodes = Array.from({ length: 18 }, (_, index) => ({
-    ref: `e${index + 1}`,
-    index,
-    depth: 0,
-    type: 'android.widget.TextView',
-    label: `Inbox row ${index + 1}`,
-  }));
-  session.snapshot = {
-    nodes: baselineNodes,
-    createdAt: Date.now(),
-    backend: 'android',
-    comparisonSafe: true,
-  };
-  session.androidSnapshotFreshness = {
-    action: 'click',
-    markedAt: Date.now(),
-    baselineCount: baselineNodes.length,
-    baselineSignatures: buildSnapshotSignatures(baselineNodes),
-    routeComparable: true,
-  };
+  const baselineNodes = inboxBaselineNodes(18);
+  const session = makeAndroidFreshnessSession(sessionName, 'click', baselineNodes);
   session.pendingInteractionOutcome = {
     action: 'click',
     command: 'press',
@@ -1566,26 +1234,21 @@ test('captureSnapshot composes pending outcome retry with Android freshness capt
   };
 
   legacyDispatchCapture
-    .mockResolvedValueOnce({
-      nodes: [],
-      truncated: false,
-      backend: 'android',
-      analysis: { rawNodeCount: 18, maxDepth: 1 },
-    })
-    .mockResolvedValueOnce({
-      nodes: [
-        {
-          index: 0,
-          depth: 0,
-          type: 'android.widget.Button',
-          label: 'Create document',
-          hittable: true,
-        },
-      ],
-      truncated: false,
-      backend: 'android',
-      analysis: { rawNodeCount: 1, maxDepth: 0 },
-    });
+    .mockResolvedValueOnce(androidCapture([], { rawNodeCount: 18, maxDepth: 1 }))
+    .mockResolvedValueOnce(
+      androidCapture(
+        [
+          {
+            index: 0,
+            depth: 0,
+            type: 'android.widget.Button',
+            label: 'Create document',
+            hittable: true,
+          },
+        ],
+        { rawNodeCount: 1, maxDepth: 0 },
+      ),
+    );
 
   const result = await captureSnapshot({
     device: androidDevice,
@@ -1611,60 +1274,26 @@ test('captureSnapshot composes pending outcome retry with Android freshness capt
 test('wait text on Android uses freshness-aware capture instead of one-shot snapshot polling', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-wait-freshness';
-  const session = makeSession(sessionName, androidDevice);
-  const baselineNodes = Array.from({ length: 18 }, (_, index) => ({
-    ref: `e${index + 1}`,
-    index,
-    depth: 0,
-    type: 'android.widget.TextView',
-    label: `Inbox row ${index + 1}`,
-  }));
-  session.snapshot = {
-    nodes: baselineNodes,
-    createdAt: Date.now(),
-    backend: 'android',
-    comparisonSafe: true,
-  };
-  session.androidSnapshotFreshness = {
-    action: 'press',
-    markedAt: Date.now(),
-    baselineCount: baselineNodes.length,
-    baselineSignatures: buildSnapshotSignatures(baselineNodes),
-    routeComparable: true,
-  };
+  const session = makeAndroidFreshnessSession(sessionName, 'press', inboxBaselineNodes(18));
   sessionStore.set(sessionName, session);
 
   legacyDispatchCapture
-    .mockResolvedValueOnce({
-      nodes: Array.from({ length: 18 }, (_, index) => ({
-        index,
-        depth: 0,
-        type: 'android.widget.TextView',
-        label: `Inbox row ${index + 1}`,
-      })),
-      truncated: false,
-      backend: 'android',
-      analysis: { rawNodeCount: 18, maxDepth: 1 },
-    })
-    .mockResolvedValueOnce({
-      nodes: [
-        { index: 0, depth: 0, type: 'android.widget.TextView', label: 'Create document' },
-        { index: 1, depth: 0, type: 'android.widget.TextView', label: 'Done' },
-      ],
-      truncated: false,
-      backend: 'android',
-      analysis: { rawNodeCount: 2, maxDepth: 1 },
-    });
+    .mockResolvedValueOnce(
+      androidCapture(androidTextRows(18, inboxRow), { rawNodeCount: 18, maxDepth: 1 }),
+    )
+    .mockResolvedValueOnce(
+      androidCapture(
+        [
+          { index: 0, depth: 0, type: 'android.widget.TextView', label: 'Create document' },
+          { index: 1, depth: 0, type: 'android.widget.TextView', label: 'Done' },
+        ],
+        { rawNodeCount: 2, maxDepth: 1 },
+      ),
+    );
 
+  // The wait budget includes Android's 250 ms freshness retry delay.
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'wait',
-      // The wait budget includes Android's 250 ms freshness retry delay.
-      positionals: ['Create document', '500'],
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'wait', { positionals: ['Create document', '500'] }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -1706,12 +1335,7 @@ test('wait text timeout includes compact current-surface labels and buttons', as
 
 test('wait selector timeout includes compact current-surface details', async () => {
   const sessionName = 'android-wait-selector-timeout-surface';
-  legacyDispatchCapture.mockResolvedValue({
-    nodes: locationRequiredNodes,
-    truncated: false,
-    backend: 'android',
-    analysis: { rawNodeCount: 2, maxDepth: 0 },
-  });
+  legacyDispatchCapture.mockResolvedValue(locationRequiredCapture());
 
   const response = await runWaitCommand(sessionName, androidDevice, ['id=receipt-uploaded', '50']);
 
@@ -1732,27 +1356,9 @@ test('wait selector polling skips hidden-content hint derivation on every poll (
   // consumes scroll hints, so every per-poll snapshot capture must disable hint derivation —
   // otherwise a pathological `dumpsys activity top` call is charged against the wait budget.
   const sessionName = 'android-wait-selector-skips-hints';
-  const withoutBattery = {
-    nodes: locationRequiredNodes,
-    truncated: false,
-    backend: 'android',
-    analysis: { rawNodeCount: 2, maxDepth: 0 },
-  };
-  const withBattery = {
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'android.widget.TextView',
-        label: 'Battery',
-        rect: { x: 252, y: 780, width: 153, height: 65 },
-      },
-    ],
-    truncated: false,
-    backend: 'android',
-    analysis: { rawNodeCount: 1, maxDepth: 0 },
-  };
-  legacyDispatchCapture.mockResolvedValueOnce(withoutBattery).mockResolvedValueOnce(withBattery);
+  legacyDispatchCapture
+    .mockResolvedValueOnce(locationRequiredCapture())
+    .mockResolvedValueOnce(batteryCapture());
 
   const response = await runWaitCommand(sessionName, androidDevice, ['label="Battery"', '8000']);
 
@@ -1769,27 +1375,9 @@ test('wait selector polling skips hidden-content hint derivation on every poll (
 
 test('wait text polling skips hidden-content hint derivation on every poll (#1270)', async () => {
   const sessionName = 'android-wait-text-skips-hints';
-  const withoutBattery = {
-    nodes: locationRequiredNodes,
-    truncated: false,
-    backend: 'android',
-    analysis: { rawNodeCount: 2, maxDepth: 0 },
-  };
-  const withBattery = {
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'android.widget.TextView',
-        label: 'Battery',
-        rect: { x: 252, y: 780, width: 153, height: 65 },
-      },
-    ],
-    truncated: false,
-    backend: 'android',
-    analysis: { rawNodeCount: 1, maxDepth: 0 },
-  };
-  legacyDispatchCapture.mockResolvedValueOnce(withoutBattery).mockResolvedValueOnce(withBattery);
+  legacyDispatchCapture
+    .mockResolvedValueOnce(locationRequiredCapture())
+    .mockResolvedValueOnce(batteryCapture());
 
   const response = await runWaitCommand(sessionName, androidDevice, ['Battery', '8000']);
 
@@ -1868,13 +1456,7 @@ test('settings rejects unsupported iOS physical devices', async () => {
   );
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'settings',
-      positionals: ['wifi', 'on'],
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'settings', { positionals: ['wifi', 'on'] }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -1894,13 +1476,9 @@ test('settings clear-app-state dispatches explicit app id without an active app 
   sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'settings',
+    req: snapshotRequest(sessionName, 'settings', {
       positionals: ['clear-app-state', 'org.reactnavigation.playground'],
-      flags: {},
-    },
+    }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -1920,13 +1498,7 @@ test('settings clear-app-state rejects missing app id when no app session is bou
   sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'settings',
-      positionals: ['clear-app-state'],
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'settings', { positionals: ['clear-app-state'] }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -1943,13 +1515,7 @@ test('settings clear-app-state rejects missing app id when no app session is bou
 test('settings usage hint documents canonical faceid states', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'settings',
-      positionals: [],
-      flags: {},
-    },
+    req: snapshotRequest('default', 'settings'),
     sessionName: 'default',
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -1972,13 +1538,7 @@ test('settings on macOS rejects wifi before dispatch with explicit subset guidan
   sessionStore.set(sessionName, makeSession(sessionName, macOsDevice));
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'settings',
-      positionals: ['wifi', 'on'],
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'settings', { positionals: ['wifi', 'on'] }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -2003,13 +1563,7 @@ test('settings on macOS rejects wifi before dispatch with explicit subset guidan
 test('diff rejects unsupported kind', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'diff',
-      positionals: ['unknown'],
-      flags: {},
-    },
+    req: snapshotRequest('default', 'diff', { positionals: ['unknown'] }),
     sessionName: 'default',
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -2026,13 +1580,7 @@ test('diff rejects unsupported kind', async () => {
 test('diff screenshot is not handled daemon-side (client-backed command)', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'diff',
-      positionals: ['screenshot'],
-      flags: {},
-    },
+    req: snapshotRequest('default', 'diff', { positionals: ['screenshot'] }),
     sessionName: 'default',
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -2074,13 +1622,7 @@ test('wait selector bypasses a fresh matching session snapshot', async () => {
   });
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'wait',
-      positionals: ['label="Ready"', '5000'],
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'wait', { positionals: ['label="Ready"', '5000'] }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
@@ -2103,13 +1645,7 @@ test('wait sleep bypasses sessionless runner cleanup wrapper', async () => {
   sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'wait',
-      positionals: ['0'],
-      flags: {},
-    },
+    req: snapshotRequest(sessionName, 'wait', { positionals: ['0'] }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
