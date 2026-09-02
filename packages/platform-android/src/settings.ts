@@ -9,6 +9,7 @@ import {
   type CommandAttemptFailure,
 } from './settings-parsing.ts';
 import { runAndroidAdb } from './adb.ts';
+import { setAndroidAirplaneMode } from './settings-airplane.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-deployment-resolution.ts';
 import { setAndroidPermission } from './settings-permission.ts';
@@ -35,21 +36,7 @@ export async function setAndroidSetting(
       return;
     }
     case 'airplane': {
-      const enabled = parseSettingState(state);
-      const flag = enabled ? '1' : '0';
-      const bool = enabled ? 'true' : 'false';
-      await runAndroidAdb(device, ['shell', 'settings', 'put', 'global', 'airplane_mode_on', flag]);
-      await runAndroidAdb(device, [
-        'shell',
-        'am',
-        'broadcast',
-        '-a',
-        'android.intent.action.AIRPLANE_MODE',
-        '--ez',
-        'state',
-        bool,
-      ]);
-      return;
+      return await setAndroidAirplaneMode(device, parseSettingState(state));
     }
     case 'location': {
       if (state.toLowerCase() === 'set') {
