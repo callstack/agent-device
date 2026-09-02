@@ -95,7 +95,7 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('affected-selector', 'Affected-check selector model', 'check:affected:test'),
   gate('gate-manifest', 'Gate manifest — every gate owned and wired', 'check:gate-manifest'),
   gate('gate-manifest-model', 'Gate manifest model', 'check:gate-manifest:test'),
-  gate('depgraph', 'Dependency graph report agrees with the gate', 'depgraph:test'),
+  gate('depgraph', 'Dependency graph report model', 'depgraph:test'),
   gate('tmpdir-leaks', 'Leaked test tmpdir detector', 'check:tmpdir-leaks'),
   gate('tmpdir-leaks-model', 'TMPDIR redirection model', 'check:tmpdir-leaks:test'),
   gate('coverage-model', 'Changed-line coverage model', 'check:coverage-changed:test'),

@@ -115,15 +115,14 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: layering }
 
-      - name: Check the depgraph report agrees with the gate
-        # scripts/depgraph reads the same model as the gate, so its inversion count must
-        # reproduce TYPE_INVERSION_BASELINE. Free two-sources check: if the tree changes
-        # and only one side is updated, this fails and names the difference. Runs beside
-        # the layering gate so the two can never be green independently.
+      # Model tests for the dependency-graph report and its blast-radius query. The report
+      # reads the gate's model (scripts/layering/model.ts) and applies the gate's own R6
+      # counting rule, so it is not a second measurement of TYPE_INVERSION_BASELINE.
+      - name: Check the depgraph report model
         uses: ./.github/actions/run-gate
         with: { gate: depgraph }
 
-      # Tests for the TMPDIR redirection itself, hidden the same way as the check above.
+      # Tests for the TMPDIR redirection itself.
       #
       # Deliberately NOT in Coverage next to `check:tmpdir-leaks`, where the subject matter
       # would put it: vitest-tmpdir-global-setup.test.ts proves the lifecycle by spawning a
