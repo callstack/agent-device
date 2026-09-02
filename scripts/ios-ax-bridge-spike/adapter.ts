@@ -5,7 +5,7 @@ import {
   type CliContext,
   type CliResult,
 } from '../ios-snapshot-benchmark/command.ts';
-import { DEFAULT_SPIKE_LIMITS, validateRawAcquisition } from './limits.ts';
+import { validateRawAcquisition } from './limits.ts';
 import { failureResponse } from './protocol.ts';
 import type {
   CandidateId,
