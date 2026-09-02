@@ -414,8 +414,8 @@ function aggregateZones(nodes: ReadonlyMap<string, GraphNode>): GraphData['zones
  * Deliberately not derived from the collapsed edge list. `collapseEdges` keeps one edge per file
  * pair, strongest kind wins, and `dynamic` outranks `type` — so a module imported both lazily and
  * for its types would collapse to `dynamic` and drop out of the count. No such pair exists today,
- * but the count feeding a CI equality check must not be able to drift for a reason unrelated to
- * layering.
+ * but the report's inversion count must not drift for a reason unrelated to layering. This is
+ * report data only; the layering gate owns and enforces the inversion ratchet.
  */
 export function typeInversionsByPair(edges: readonly ResolvedImportEdge[]): Record<string, number> {
   const seen = new Set<string>();

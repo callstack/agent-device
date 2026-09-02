@@ -233,8 +233,8 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation
 // See docs/dependency-graph-findings.md §0 for the long form. The counts may only go DOWN. Fixing edges without lowering the number fails too, so the baseline
 // cannot quietly stop describing the tree.
 //
-// Exported so scripts/depgraph can assert its own graph build reproduces it — see the
-// baseline-parity test there. The gate remains the authority; the report follows.
+// This gate is the sole owner of the ratchet. The depgraph report reuses the shared inversion
+// classifier for observability, but does not compare its report output with this baseline.
 export const TYPE_INVERSION_BASELINE: Readonly<Record<string, number>> = {
   'commands -> client': 3,
   'commands -> daemon-server': 1,
