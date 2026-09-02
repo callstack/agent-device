@@ -5,9 +5,14 @@ import path from 'node:path';
 import {
   connectionWorkspace,
   createTestClient,
+  forceConnectFlags,
   metroPrepareResult,
+  recordedLeaseAllocate,
+  recordedLeaseRelease,
   seedConnectionState,
+  seedPreviousConnection,
   unexpectedCommandCall,
+  writeReplacedProfiles,
 } from './remote-connection.fixtures.ts';
 
 vi.mock('../metro/client-metro-companion.ts', () => ({
@@ -591,7 +596,7 @@ test('proxy open resolves device key before allocating lease', async () => {
       clientId: 'client-1',
     },
   });
-  let allocateRequest: Parameters<AgentDeviceClient['leases']['allocate']>[0] | undefined;
+  const allocate = recordedLeaseAllocate({ leaseId: 'abc123abc123abc1', backend: 'ios-instance' });
 
   const materialized = await materializeRemoteConnectionForCommand({
     command: 'open',
@@ -620,26 +625,15 @@ test('proxy open resolves device key before allocating lease', async () => {
           ios: { udid: 'SIM-001' },
         },
       ],
-      allocate: async (request) => {
-        allocateRequest = request;
-        return {
-          leaseId: 'abc123abc123abc1',
-          tenantId: request.tenant,
-          runId: request.runId,
-          backend: request.leaseBackend ?? 'ios-instance',
-          leaseProvider: request.leaseProvider,
-          clientId: request.clientId,
-          deviceKey: request.deviceKey,
-        };
-      },
+      allocate: allocate.stub,
     }),
   });
 
-  assert.equal(allocateRequest?.leaseProvider, 'proxy');
-  assert.equal(allocateRequest?.clientId, 'client-1');
-  assert.equal(allocateRequest?.deviceKey, 'ios:mobile:SIM-001');
-  assert.equal(allocateRequest?.ttlMs, PROXY_REMOTE_LEASE_TTL_MS);
-  assert.equal(allocateRequest?.leaseBackend, 'ios-instance');
+  assert.equal(allocate.request?.leaseProvider, 'proxy');
+  assert.equal(allocate.request?.clientId, 'client-1');
+  assert.equal(allocate.request?.deviceKey, 'ios:mobile:SIM-001');
+  assert.equal(allocate.request?.ttlMs, PROXY_REMOTE_LEASE_TTL_MS);
+  assert.equal(allocate.request?.leaseBackend, 'ios-instance');
   assert.equal(materialized.flags.leaseId, 'abc123abc123abc1');
   assert.equal(materialized.flags.udid, 'SIM-001');
   assert.equal(materialized.connection?.deviceKey, 'ios:mobile:SIM-001');
@@ -667,7 +661,10 @@ test('proxy install allocates a device lease before dispatch', async () => {
       clientId: 'client-1',
     },
   });
-  let allocateRequest: Parameters<AgentDeviceClient['leases']['allocate']>[0] | undefined;
+  const allocate = recordedLeaseAllocate({
+    leaseId: 'android-lease-1',
+    backend: 'android-instance',
+  });
 
   const materialized = await materializeRemoteConnectionForCommand({
     command: 'install',
@@ -683,27 +680,14 @@ test('proxy install allocates a device lease before dispatch', async () => {
       session: 'adc-proxy',
       platform: 'android',
     },
-    client: createTestClient({
-      allocate: async (request) => {
-        allocateRequest = request;
-        return {
-          leaseId: 'android-lease-1',
-          tenantId: request.tenant,
-          runId: request.runId,
-          backend: request.leaseBackend ?? 'android-instance',
-          leaseProvider: request.leaseProvider,
-          clientId: request.clientId,
-          deviceKey: request.deviceKey,
-        };
-      },
-    }),
+    client: createTestClient({ allocate: allocate.stub }),
   });
 
-  assert.equal(allocateRequest?.leaseProvider, 'proxy');
-  assert.equal(allocateRequest?.clientId, 'client-1');
-  assert.equal(allocateRequest?.deviceKey, 'android:mobile:emulator-5554');
-  assert.equal(allocateRequest?.ttlMs, PROXY_REMOTE_LEASE_TTL_MS);
-  assert.equal(allocateRequest?.leaseBackend, 'android-instance');
+  assert.equal(allocate.request?.leaseProvider, 'proxy');
+  assert.equal(allocate.request?.clientId, 'client-1');
+  assert.equal(allocate.request?.deviceKey, 'android:mobile:emulator-5554');
+  assert.equal(allocate.request?.ttlMs, PROXY_REMOTE_LEASE_TTL_MS);
+  assert.equal(allocate.request?.leaseBackend, 'android-instance');
   assert.equal(materialized.flags.leaseId, 'android-lease-1');
   assert.equal(materialized.flags.serial, 'emulator-5554');
   const state = readRemoteConnectionState({ stateDir, session: 'adc-proxy' });
@@ -1373,7 +1357,10 @@ test('deferred provider materialization forwards provider profile fields to leas
       platform: 'android',
     },
   });
-  let allocateRequest: Parameters<AgentDeviceClient['leases']['allocate']>[0] | undefined;
+  const allocate = recordedLeaseAllocate({
+    leaseId: 'lease-browserstack',
+    backend: 'android-instance',
+  });
 
   const materialized = await materializeRemoteConnectionForCommand({
     command: 'open',
@@ -1394,29 +1381,16 @@ test('deferred provider materialization forwards provider profile fields to leas
       providerProject: 'agent-device',
       providerBuild: 'live-smoke',
     },
-    client: createTestClient({
-      allocate: async (request) => {
-        allocateRequest = request;
-        return {
-          leaseId: 'lease-browserstack',
-          tenantId: request.tenant,
-          runId: request.runId,
-          backend: request.leaseBackend ?? 'android-instance',
-          leaseProvider: request.leaseProvider,
-          clientId: request.clientId,
-          deviceKey: request.deviceKey,
-        };
-      },
-    }),
+    client: createTestClient({ allocate: allocate.stub }),
   });
 
   assert.equal(materialized.flags.leaseId, 'lease-browserstack');
-  assert.equal(allocateRequest?.platform, 'android');
-  assert.equal(allocateRequest?.device, 'Google Pixel 8');
-  assert.equal(allocateRequest?.providerApp, '/tmp/WikipediaSample.apk');
-  assert.equal(allocateRequest?.providerOsVersion, '14.0');
-  assert.equal(allocateRequest?.providerProject, 'agent-device');
-  assert.equal(allocateRequest?.providerBuild, 'live-smoke');
+  assert.equal(allocate.request?.platform, 'android');
+  assert.equal(allocate.request?.device, 'Google Pixel 8');
+  assert.equal(allocate.request?.providerApp, '/tmp/WikipediaSample.apk');
+  assert.equal(allocate.request?.providerOsVersion, '14.0');
+  assert.equal(allocate.request?.providerProject, 'agent-device');
+  assert.equal(allocate.request?.providerBuild, 'live-smoke');
 
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
@@ -1575,7 +1549,7 @@ test('deferred materialization stops the new Metro companion if state persistenc
     'agent-device-connect-write-fail-',
   );
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
-  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+  const release = recordedLeaseRelease();
   seedConnectionState({
     stateDir,
     state: {
@@ -1620,12 +1594,7 @@ test('deferred materialization stops the new Metro companion if state persistenc
           metroPublicBaseUrl: 'https://sandbox.example.test',
           metroProxyBaseUrl: 'https://proxy.example.test',
         },
-        client: createTestClient({
-          release: async (request) => {
-            releaseRequest = request;
-            return { released: true };
-          },
-        }),
+        client: createTestClient({ release: release.stub }),
       }),
     writeFailure,
   );
@@ -1636,10 +1605,10 @@ test('deferred materialization stops the new Metro companion if state persistenc
     profileKey: remoteConfigPath,
     consumerKey: 'adc-android',
   });
-  assert.equal(releaseRequest?.leaseId, 'lease-1');
-  assert.equal(releaseRequest?.tenant, 'acme');
-  assert.equal(releaseRequest?.runId, 'run-123');
-  assert.equal(releaseRequest?.leaseBackend, 'android-instance');
+  assert.equal(release.request?.leaseId, 'lease-1');
+  assert.equal(release.request?.tenant, 'acme');
+  assert.equal(release.request?.runId, 'run-123');
+  assert.equal(release.request?.leaseBackend, 'android-instance');
 
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
@@ -1730,28 +1699,16 @@ test('connect requires force when the daemon endpoint changes', async () => {
 
 test('connect --force stops replaced Metro companion after state is updated', async () => {
   const { tempRoot, stateDir } = connectionWorkspace('agent-device-connect-force-');
-  const oldRemoteConfigPath = path.join(tempRoot, 'old-remote.json');
-  const newRemoteConfigPath = path.join(tempRoot, 'new-remote.json');
-  fs.writeFileSync(
-    oldRemoteConfigPath,
-    JSON.stringify({
-      daemonBaseUrl: 'https://old.example',
-      // Recoverable from the previous connection's own profile (plan 007
-      // rule 1) so the forced release authenticates against old.example with
-      // its own credential, not the new connection's.
-      daemonAuthToken: 'test-old-not-a-real-token',
-    }),
-  );
-  fs.writeFileSync(newRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://new.example' }));
-  seedConnectionState({
+  // Recoverable from the previous connection's own profile (plan 007
+  // rule 1) so the forced release authenticates against old.example with
+  // its own credential, not the new connection's.
+  const { oldRemoteConfigPath, newRemoteConfigPath } = writeReplacedProfiles(tempRoot, {
+    previousToken: 'test-old-not-a-real-token',
+  });
+  seedPreviousConnection({
     stateDir,
-    state: {
-      session: 'adc-android',
-      remoteConfigPath: oldRemoteConfigPath,
-      tenant: 'acme',
-      runId: 'run-old',
-      leaseId: 'lease-old',
-      leaseBackend: 'android-instance',
+    remoteConfigPath: oldRemoteConfigPath,
+    overrides: {
       daemon: {
         baseUrl: 'https://old.example',
         transport: 'http',
@@ -1763,31 +1720,17 @@ test('connect --force stops replaced Metro companion after state is updated', as
       },
     },
   });
-  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+  const release = recordedLeaseRelease();
 
   await captureStdout(async () => {
     await connectCommand({
       positionals: [],
-      flags: {
-        json: true,
-        help: false,
-        version: false,
-        force: true,
+      flags: forceConnectFlags({
         stateDir,
         remoteConfig: newRemoteConfigPath,
-        daemonBaseUrl: 'https://new.example',
         daemonAuthToken: 'test-new-not-a-real-token',
-        tenant: 'acme',
-        runId: 'run-new',
-        session: 'adc-android',
-        platform: 'android',
-      },
-      client: createTestClient({
-        release: async (request) => {
-          releaseRequest = request;
-          return { released: true };
-        },
       }),
+      client: createTestClient({ release: release.stub }),
     });
   });
 
@@ -1796,35 +1739,24 @@ test('connect --force stops replaced Metro companion after state is updated', as
     profileKey: oldRemoteConfigPath,
     consumerKey: 'adc-android',
   });
-  assert.equal(releaseRequest?.leaseId, 'lease-old');
-  assert.equal(releaseRequest?.daemonBaseUrl, 'https://old.example');
-  assert.equal(releaseRequest?.daemonTransport, 'http');
-  assert.equal(releaseRequest?.daemonAuthToken, 'test-old-not-a-real-token');
+  assert.equal(release.request?.leaseId, 'lease-old');
+  assert.equal(release.request?.daemonBaseUrl, 'https://old.example');
+  assert.equal(release.request?.daemonTransport, 'http');
+  assert.equal(release.request?.daemonAuthToken, 'test-old-not-a-real-token');
   assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-android' })?.runId, 'run-new');
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
 test('connect --force without a session does not replace the active generated connection', async () => {
   const { tempRoot, stateDir } = connectionWorkspace('agent-device-connect-force-active-');
-  const oldRemoteConfigPath = path.join(tempRoot, 'old-remote.json');
-  const newRemoteConfigPath = path.join(tempRoot, 'new-remote.json');
-  fs.writeFileSync(
-    oldRemoteConfigPath,
-    JSON.stringify({
-      daemonBaseUrl: 'https://old.example',
-      daemonAuthToken: 'test-old-not-a-real-token',
-    }),
-  );
-  fs.writeFileSync(newRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://new.example' }));
-  seedConnectionState({
+  const { oldRemoteConfigPath, newRemoteConfigPath } = writeReplacedProfiles(tempRoot, {
+    previousToken: 'test-old-not-a-real-token',
+  });
+  seedPreviousConnection({
     stateDir,
-    state: {
+    remoteConfigPath: oldRemoteConfigPath,
+    overrides: {
       session: 'adc-7f3a2c',
-      remoteConfigPath: oldRemoteConfigPath,
-      tenant: 'acme',
-      runId: 'run-old',
-      leaseId: 'lease-old',
-      leaseBackend: 'android-instance',
       daemon: {
         baseUrl: 'https://old.example',
         transport: 'http',
@@ -1836,30 +1768,18 @@ test('connect --force without a session does not replace the active generated co
       },
     },
   });
-  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+  const release = recordedLeaseRelease();
 
   await captureStdout(async () => {
     await connectCommand({
       positionals: [],
-      flags: {
-        json: true,
-        help: false,
-        version: false,
-        force: true,
+      flags: forceConnectFlags({
         stateDir,
         remoteConfig: newRemoteConfigPath,
-        daemonBaseUrl: 'https://new.example',
         daemonAuthToken: 'test-new-not-a-real-token',
-        tenant: 'acme',
-        runId: 'run-new',
-        platform: 'android',
-      },
-      client: createTestClient({
-        release: async (request) => {
-          releaseRequest = request;
-          return { released: true };
-        },
+        session: undefined,
       }),
+      client: createTestClient({ release: release.stub }),
     });
   });
 
@@ -1871,7 +1791,7 @@ test('connect --force without a session does not replace the active generated co
   assert.notEqual(activeState?.session, 'adc-7f3a2c');
   assert.equal(activeState?.runId, 'run-new');
   assert.equal(activeState?.remoteConfigPath, newRemoteConfigPath);
-  assert.equal(releaseRequest, undefined);
+  assert.equal(release.request, undefined);
   assert.equal(vi.mocked(stopMetroCompanion).mock.calls.length, 0);
   assert.equal(storedSessions.length, 2);
   assert.equal(
@@ -1884,114 +1804,55 @@ test('connect --force without a session does not replace the active generated co
 
 test("connect --force releases the previous lease with the previous connection's own token, not the new one", async () => {
   const { tempRoot, stateDir } = connectionWorkspace('agent-device-connect-force-prev-token-');
-  const oldRemoteConfigPath = path.join(tempRoot, 'old-remote.json');
-  const newRemoteConfigPath = path.join(tempRoot, 'new-remote.json');
-  fs.writeFileSync(
-    oldRemoteConfigPath,
-    JSON.stringify({
-      daemonBaseUrl: 'https://old.example',
-      // Token A: belongs to the previous (old) connection's own profile.
-      daemonAuthToken: 'test-old-not-a-real-token',
-    }),
-  );
-  fs.writeFileSync(newRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://new.example' }));
-  seedConnectionState({
-    stateDir,
-    state: {
-      session: 'adc-android',
-      remoteConfigPath: oldRemoteConfigPath,
-      tenant: 'acme',
-      runId: 'run-old',
-      leaseId: 'lease-old',
-      leaseBackend: 'android-instance',
-      daemon: { baseUrl: 'https://old.example' },
-    },
+  // Token A: belongs to the previous (old) connection's own profile.
+  const { oldRemoteConfigPath, newRemoteConfigPath } = writeReplacedProfiles(tempRoot, {
+    previousToken: 'test-old-not-a-real-token',
   });
-  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+  seedPreviousConnection({ stateDir, remoteConfigPath: oldRemoteConfigPath });
+  const release = recordedLeaseRelease();
 
   await captureStdout(async () => {
     await connectCommand({
       positionals: [],
-      flags: {
-        json: true,
-        help: false,
-        version: false,
-        force: true,
+      flags: forceConnectFlags({
         stateDir,
         remoteConfig: newRemoteConfigPath,
-        daemonBaseUrl: 'https://new.example',
         // Token B: the new connection's credential; must never reach old.example.
         daemonAuthToken: 'test-new-not-a-real-token',
-        tenant: 'acme',
-        runId: 'run-new',
-        session: 'adc-android',
-        platform: 'android',
-      },
-      client: createTestClient({
-        release: async (request) => {
-          releaseRequest = request;
-          return { released: true };
-        },
       }),
+      client: createTestClient({ release: release.stub }),
     });
   });
 
-  assert.equal(releaseRequest?.leaseId, 'lease-old');
-  assert.equal(releaseRequest?.daemonBaseUrl, 'https://old.example');
-  assert.equal(releaseRequest?.daemonAuthToken, 'test-old-not-a-real-token');
-  assert.notEqual(releaseRequest?.daemonAuthToken, 'test-new-not-a-real-token');
+  assert.equal(release.request?.leaseId, 'lease-old');
+  assert.equal(release.request?.daemonBaseUrl, 'https://old.example');
+  assert.equal(release.request?.daemonAuthToken, 'test-old-not-a-real-token');
+  assert.notEqual(release.request?.daemonAuthToken, 'test-new-not-a-real-token');
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
 test('connect --force skips releasing the previous lease when its token cannot be recovered and the endpoint differs', async () => {
   const { tempRoot, stateDir } = connectionWorkspace('agent-device-connect-force-unreleasable-');
-  const oldRemoteConfigPath = path.join(tempRoot, 'old-remote.json');
-  const newRemoteConfigPath = path.join(tempRoot, 'new-remote.json');
   // No daemonAuthToken in the previous connection's own profile: its
   // credential cannot be recovered, and the new endpoint differs.
-  fs.writeFileSync(oldRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://old.example' }));
-  fs.writeFileSync(newRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://new.example' }));
-  seedConnectionState({
-    stateDir,
-    state: {
-      session: 'adc-android',
-      remoteConfigPath: oldRemoteConfigPath,
-      tenant: 'acme',
-      runId: 'run-old',
-      leaseId: 'lease-old',
-      leaseBackend: 'android-instance',
-      daemon: { baseUrl: 'https://old.example' },
-    },
-  });
-  let releaseCalled = false;
+  const { oldRemoteConfigPath, newRemoteConfigPath } = writeReplacedProfiles(tempRoot);
+  seedPreviousConnection({ stateDir, remoteConfigPath: oldRemoteConfigPath });
+  const release = recordedLeaseRelease();
 
   const stdout = await captureStdout(async () => {
     await connectCommand({
       positionals: [],
-      flags: {
+      flags: forceConnectFlags({
         json: false,
-        help: false,
-        version: false,
-        force: true,
         stateDir,
         remoteConfig: newRemoteConfigPath,
-        daemonBaseUrl: 'https://new.example',
         daemonAuthToken: 'test-new-not-a-real-token',
-        tenant: 'acme',
-        runId: 'run-new',
-        session: 'adc-android',
-        platform: 'android',
-      },
-      client: createTestClient({
-        release: async () => {
-          releaseCalled = true;
-          return { released: true };
-        },
       }),
+      client: createTestClient({ release: release.stub }),
     });
   });
 
-  assert.equal(releaseCalled, false);
+  assert.equal(release.request, undefined);
   assert.match(stdout, /Could not release the previous lease lease-old/);
   assert.match(stdout, /tenant acme, run run-old/);
   assert.match(stdout, /old\.example/);
@@ -2002,58 +1863,27 @@ test('connect --force skips releasing the previous lease when its token cannot b
 
 test('connect --force does not misclassify an env-sourced new token as the previous connection’s own credential', async () => {
   const { tempRoot, stateDir } = connectionWorkspace('agent-device-connect-force-env-token-');
-  const oldRemoteConfigPath = path.join(tempRoot, 'old-remote.json');
-  const newRemoteConfigPath = path.join(tempRoot, 'new-remote.json');
   // Neither config file declares daemonAuthToken; the only source of a token
   // anywhere is the environment, which is global and belongs to the *new*
   // connection, not provably to old.example.
-  fs.writeFileSync(oldRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://old.example' }));
-  fs.writeFileSync(newRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://new.example' }));
+  const { oldRemoteConfigPath, newRemoteConfigPath } = writeReplacedProfiles(tempRoot);
   // Token B, supplied through the environment — not via --daemon-auth-token —
   // which is precisely the gap a merged-profile read would miss.
   vi.stubEnv('AGENT_DEVICE_DAEMON_AUTH_TOKEN', 'test-env-not-a-real-token');
-  seedConnectionState({
-    stateDir,
-    state: {
-      session: 'adc-android',
-      remoteConfigPath: oldRemoteConfigPath,
-      tenant: 'acme',
-      runId: 'run-old',
-      leaseId: 'lease-old',
-      leaseBackend: 'android-instance',
-      daemon: { baseUrl: 'https://old.example' },
-    },
-  });
-  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+  seedPreviousConnection({ stateDir, remoteConfigPath: oldRemoteConfigPath });
+  const release = recordedLeaseRelease();
 
   const stdout = await captureStdout(async () => {
     await connectCommand({
       positionals: [],
-      flags: {
-        json: false,
-        help: false,
-        version: false,
-        force: true,
-        stateDir,
-        remoteConfig: newRemoteConfigPath,
-        daemonBaseUrl: 'https://new.example',
-        // No daemonAuthToken flag: the ambient token below flows in purely
-        // through the environment, matching production's resolution chain.
-        tenant: 'acme',
-        runId: 'run-new',
-        session: 'adc-android',
-        platform: 'android',
-      },
-      client: createTestClient({
-        release: async (request) => {
-          releaseRequest = request;
-          return { released: true };
-        },
-      }),
+      // No daemonAuthToken flag: the ambient token above flows in purely
+      // through the environment, matching production's resolution chain.
+      flags: forceConnectFlags({ json: false, stateDir, remoteConfig: newRemoteConfigPath }),
+      client: createTestClient({ release: release.stub }),
     });
   });
 
-  assert.equal(releaseRequest, undefined);
+  assert.equal(release.request, undefined);
   assert.match(stdout, /Could not release the previous lease lease-old/);
   assert.match(stdout, /tenant acme, run run-old/);
   assert.match(stdout, /old\.example/);
@@ -2079,18 +1909,7 @@ test('connect --force does not treat a re-pointed config path’s token as the p
   );
   // Recorded while the file still described old.example — the fact that
   // makes the later edit detectable.
-  seedConnectionState({
-    stateDir,
-    state: {
-      session: 'adc-android',
-      remoteConfigPath,
-      tenant: 'acme',
-      runId: 'run-old',
-      leaseId: 'lease-old',
-      leaseBackend: 'android-instance',
-      daemon: { baseUrl: 'https://old.example' },
-    },
-  });
+  seedPreviousConnection({ stateDir, remoteConfigPath });
   // The edit: same path, now endpoint B with token B.
   fs.writeFileSync(
     remoteConfigPath,
@@ -2099,35 +1918,18 @@ test('connect --force does not treat a re-pointed config path’s token as the p
       daemonAuthToken: 'test-new-not-a-real-token',
     }),
   );
-  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+  const release = recordedLeaseRelease();
 
   const stdout = await captureStdout(async () => {
     await connectCommand({
       positionals: [],
-      flags: {
-        json: false,
-        help: false,
-        version: false,
-        force: true,
-        stateDir,
-        remoteConfig: remoteConfigPath,
-        daemonBaseUrl: 'https://new.example',
-        tenant: 'acme',
-        runId: 'run-new',
-        session: 'adc-android',
-        platform: 'android',
-      },
-      client: createTestClient({
-        release: async (request) => {
-          releaseRequest = request;
-          return { released: true };
-        },
-      }),
+      flags: forceConnectFlags({ json: false, stateDir, remoteConfig: remoteConfigPath }),
+      client: createTestClient({ release: release.stub }),
     });
   });
 
   // No request at all — not merely a request carrying a different token.
-  assert.equal(releaseRequest, undefined);
+  assert.equal(release.request, undefined);
   assert.match(stdout, /Could not release the previous lease lease-old/);
   assert.match(stdout, /old\.example/);
   assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-android' })?.runId, 'run-new');
@@ -2148,49 +1950,25 @@ test('connect --force does not trust an unchanged profile token for a CLI-overri
       daemonAuthToken: 'test-new-not-a-real-token',
     }),
   );
-  seedConnectionState({
-    stateDir,
-    state: {
-      session: 'adc-android',
-      remoteConfigPath,
-      tenant: 'acme',
-      runId: 'run-old',
-      leaseId: 'lease-old',
-      leaseBackend: 'android-instance',
-      // Effective previous endpoint A came from --daemon-base-url, overriding
-      // the profile's endpoint B when this state was recorded.
-      daemon: { baseUrl: 'https://old.example' },
-    },
-  });
-  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+  // Effective previous endpoint A came from --daemon-base-url, overriding
+  // the profile's endpoint B when this state was recorded.
+  seedPreviousConnection({ stateDir, remoteConfigPath });
+  const release = recordedLeaseRelease();
 
   const stdout = await captureStdout(async () => {
     await connectCommand({
       positionals: [],
-      flags: {
+      flags: forceConnectFlags({
         json: false,
-        help: false,
-        version: false,
-        force: true,
         stateDir,
         remoteConfig: remoteConfigPath,
-        daemonBaseUrl: 'https://new.example',
         daemonAuthToken: 'test-new-not-a-real-token',
-        tenant: 'acme',
-        runId: 'run-new',
-        session: 'adc-android',
-        platform: 'android',
-      },
-      client: createTestClient({
-        release: async (request) => {
-          releaseRequest = request;
-          return { released: true };
-        },
       }),
+      client: createTestClient({ release: release.stub }),
     });
   });
 
-  assert.equal(releaseRequest, undefined);
+  assert.equal(release.request, undefined);
   assert.match(stdout, /Could not release the previous lease lease-old/);
   assert.match(stdout, /old\.example/);
   assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-android' })?.runId, 'run-new');
@@ -2198,71 +1976,35 @@ test('connect --force does not trust an unchanged profile token for a CLI-overri
 });
 
 test('connect --force still releases with a rotated credential when the config keeps the same endpoint', async () => {
-  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
-    'agent-device-connect-force-rotated-token-',
-  );
-  const newRemoteConfigPath = path.join(tempRoot, 'new-remote.json');
-  fs.writeFileSync(
-    remoteConfigPath,
-    JSON.stringify({
-      daemonBaseUrl: 'https://old.example',
-      daemonAuthToken: 'test-old-not-a-real-token',
-    }),
-  );
-  fs.writeFileSync(newRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://new.example' }));
-  seedConnectionState({
-    stateDir,
-    state: {
-      session: 'adc-android',
-      remoteConfigPath,
-      tenant: 'acme',
-      runId: 'run-old',
-      leaseId: 'lease-old',
-      leaseBackend: 'android-instance',
-      daemon: { baseUrl: 'https://old.example' },
-    },
+  const { tempRoot, stateDir } = connectionWorkspace('agent-device-connect-force-rotated-token-');
+  const { oldRemoteConfigPath, newRemoteConfigPath } = writeReplacedProfiles(tempRoot, {
+    previousToken: 'test-old-not-a-real-token',
   });
+  seedPreviousConnection({ stateDir, remoteConfigPath: oldRemoteConfigPath });
   // The file changed — so the hash no longer matches — but it still describes
   // old.example, so the rotated token is still that endpoint's own credential
   // and must still release its lease. This is the case an edit-detecting rule
   // must not break: refusing here would orphan leases on every key rotation.
   fs.writeFileSync(
-    remoteConfigPath,
+    oldRemoteConfigPath,
     JSON.stringify({
       daemonBaseUrl: 'https://old.example',
       daemonAuthToken: 'test-rotated-not-a-real-token',
     }),
   );
-  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+  const release = recordedLeaseRelease();
 
   await captureStdout(async () => {
     await connectCommand({
       positionals: [],
-      flags: {
-        json: true,
-        help: false,
-        version: false,
-        force: true,
-        stateDir,
-        remoteConfig: newRemoteConfigPath,
-        daemonBaseUrl: 'https://new.example',
-        tenant: 'acme',
-        runId: 'run-new',
-        session: 'adc-android',
-        platform: 'android',
-      },
-      client: createTestClient({
-        release: async (request) => {
-          releaseRequest = request;
-          return { released: true };
-        },
-      }),
+      flags: forceConnectFlags({ stateDir, remoteConfig: newRemoteConfigPath }),
+      client: createTestClient({ release: release.stub }),
     });
   });
 
-  assert.equal(releaseRequest?.leaseId, 'lease-old');
-  assert.equal(releaseRequest?.daemonBaseUrl, 'https://old.example');
-  assert.equal(releaseRequest?.daemonAuthToken, 'test-rotated-not-a-real-token');
+  assert.equal(release.request?.leaseId, 'lease-old');
+  assert.equal(release.request?.daemonBaseUrl, 'https://old.example');
+  assert.equal(release.request?.daemonAuthToken, 'test-rotated-not-a-real-token');
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
@@ -2273,49 +2015,29 @@ test('connect --force reuses the ambient token to release the previous lease whe
   // No daemonAuthToken on the profile itself: the ambient flag is the only
   // source, matching an ordinary same-profile --force reconnect.
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
-  seedConnectionState({
+  seedPreviousConnection({
     stateDir,
-    state: {
-      session: 'adc-android',
-      remoteConfigPath,
-      tenant: 'acme',
-      runId: 'run-old',
-      leaseId: 'lease-old',
-      leaseBackend: 'android-instance',
-      daemon: { baseUrl: 'https://daemon.example' },
-    },
+    remoteConfigPath,
+    overrides: { daemon: { baseUrl: 'https://daemon.example' } },
   });
-  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+  const release = recordedLeaseRelease();
 
   await captureStdout(async () => {
     await connectCommand({
       positionals: [],
-      flags: {
-        json: true,
-        help: false,
-        version: false,
-        force: true,
+      flags: forceConnectFlags({
         stateDir,
         remoteConfig: remoteConfigPath,
         daemonBaseUrl: 'https://daemon.example',
         daemonAuthToken: 'test-ambient-not-a-real-token',
-        tenant: 'acme',
-        runId: 'run-new',
-        session: 'adc-android',
-        platform: 'android',
-      },
-      client: createTestClient({
-        release: async (request) => {
-          releaseRequest = request;
-          return { released: true };
-        },
       }),
+      client: createTestClient({ release: release.stub }),
     });
   });
 
-  assert.equal(releaseRequest?.leaseId, 'lease-old');
-  assert.equal(releaseRequest?.daemonBaseUrl, 'https://daemon.example');
-  assert.equal(releaseRequest?.daemonAuthToken, 'test-ambient-not-a-real-token');
+  assert.equal(release.request?.leaseId, 'lease-old');
+  assert.equal(release.request?.daemonBaseUrl, 'https://daemon.example');
+  assert.equal(release.request?.daemonAuthToken, 'test-ambient-not-a-real-token');
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
@@ -2555,7 +2277,7 @@ test('disconnect releases proxy lease with provider client and device metadata',
       deviceKey: 'ios:mobile:SIM-001',
     },
   });
-  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
+  const release = recordedLeaseRelease();
 
   await captureStdout(async () => {
     await disconnectCommand({
@@ -2571,22 +2293,17 @@ test('disconnect releases proxy lease with provider client and device metadata',
         // dispatcher resolves it before invoking this handler.
         daemonAuthToken: 'test-not-a-real-token',
       },
-      client: createTestClient({
-        release: async (request) => {
-          releaseRequest = request;
-          return { released: true };
-        },
-      }),
+      client: createTestClient({ release: release.stub }),
     });
   });
 
-  assert.equal(releaseRequest?.leaseProvider, 'proxy');
-  assert.equal(releaseRequest?.clientId, 'client-1');
-  assert.equal(releaseRequest?.deviceKey, 'ios:mobile:SIM-001');
-  assert.equal(releaseRequest?.leaseId, 'abc123abc123abc1');
-  assert.equal(releaseRequest?.leaseBackend, 'ios-instance');
-  assert.equal(releaseRequest?.daemonBaseUrl, 'http://proxy.example.test/agent-device');
-  assert.equal(releaseRequest?.daemonAuthToken, 'test-not-a-real-token');
+  assert.equal(release.request?.leaseProvider, 'proxy');
+  assert.equal(release.request?.clientId, 'client-1');
+  assert.equal(release.request?.deviceKey, 'ios:mobile:SIM-001');
+  assert.equal(release.request?.leaseId, 'abc123abc123abc1');
+  assert.equal(release.request?.leaseBackend, 'ios-instance');
+  assert.equal(release.request?.daemonBaseUrl, 'http://proxy.example.test/agent-device');
+  assert.equal(release.request?.daemonAuthToken, 'test-not-a-real-token');
   assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' }), null);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });

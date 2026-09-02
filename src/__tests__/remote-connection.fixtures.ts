@@ -1,4 +1,6 @@
+import fs from 'node:fs';
 import path from 'node:path';
+import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
 import {
   hashRemoteConfigFile,
@@ -157,4 +159,124 @@ export function seedConnectionState(options: {
   };
   writeRemoteConnectionState({ stateDir: options.stateDir, state });
   return state;
+}
+
+export type LeaseAllocateRequest = Parameters<AgentDeviceClient['leases']['allocate']>[0];
+export type LeaseReleaseRequest = Parameters<AgentDeviceClient['leases']['release']>[0];
+
+/** A `leases.release` stub that reports success and keeps the last request it received. */
+export function recordedLeaseRelease(): {
+  stub: AgentDeviceClient['leases']['release'];
+  readonly request: LeaseReleaseRequest | undefined;
+} {
+  let request: LeaseReleaseRequest | undefined;
+  return {
+    stub: async (incoming) => {
+      request = incoming;
+      return { released: true };
+    },
+    get request() {
+      return request;
+    },
+  };
+}
+
+/**
+ * A `leases.allocate` stub that grants `leaseId` under the request's own scope and provider
+ * fields, and keeps the last request it received.
+ */
+export function recordedLeaseAllocate(options: {
+  leaseId: string;
+  backend: NonNullable<LeaseAllocateRequest['leaseBackend']>;
+}): {
+  stub: AgentDeviceClient['leases']['allocate'];
+  readonly request: LeaseAllocateRequest | undefined;
+} {
+  let request: LeaseAllocateRequest | undefined;
+  return {
+    stub: async (incoming) => {
+      request = incoming;
+      return {
+        leaseId: options.leaseId,
+        tenantId: incoming.tenant,
+        runId: incoming.runId,
+        backend: incoming.leaseBackend ?? options.backend,
+        leaseProvider: incoming.leaseProvider,
+        clientId: incoming.clientId,
+        deviceKey: incoming.deviceKey,
+      };
+    },
+    get request() {
+      return request;
+    },
+  };
+}
+
+export type ReplacedProfiles = {
+  oldRemoteConfigPath: string;
+  newRemoteConfigPath: string;
+};
+
+/**
+ * Two profile files in one workspace: the previous connection's, describing https://old.example
+ * with `previousToken` when given, and the one `connect --force` moves to, describing
+ * https://new.example.
+ */
+export function writeReplacedProfiles(
+  tempRoot: string,
+  options: { previousToken?: string } = {},
+): ReplacedProfiles {
+  const oldRemoteConfigPath = path.join(tempRoot, 'old-remote.json');
+  const newRemoteConfigPath = path.join(tempRoot, 'new-remote.json');
+  fs.writeFileSync(
+    oldRemoteConfigPath,
+    JSON.stringify({
+      daemonBaseUrl: 'https://old.example',
+      ...(options.previousToken ? { daemonAuthToken: options.previousToken } : {}),
+    }),
+  );
+  fs.writeFileSync(newRemoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://new.example' }));
+  return { oldRemoteConfigPath, newRemoteConfigPath };
+}
+
+/**
+ * Persists the connection a `connect --force` replaces: session `adc-android` holding lease
+ * `lease-old` under run `run-old` against https://old.example.
+ */
+export function seedPreviousConnection(options: {
+  stateDir: string;
+  remoteConfigPath: string;
+  overrides?: Partial<StoredConnectionSeed>;
+}): RemoteConnectionState {
+  return seedConnectionState({
+    stateDir: options.stateDir,
+    state: {
+      session: 'adc-android',
+      remoteConfigPath: options.remoteConfigPath,
+      tenant: 'acme',
+      runId: 'run-old',
+      leaseId: 'lease-old',
+      leaseBackend: 'android-instance',
+      daemon: { baseUrl: 'https://old.example' },
+      ...options.overrides,
+    },
+  });
+}
+
+/** `connect --force` flags that move session `adc-android` to run `run-new` at https://new.example. */
+export function forceConnectFlags(
+  options: { stateDir: string; remoteConfig: string } & Partial<CliFlags>,
+): CliFlags {
+  return {
+    json: true,
+    help: false,
+    version: false,
+    force: true,
+    daemonBaseUrl: 'https://new.example',
+    tenant: 'acme',
+    runId: 'run-new',
+    session: 'adc-android',
+    platform: 'android',
+    ...options,
+  };
 }
