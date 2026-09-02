@@ -37,9 +37,8 @@ export type EagerClosureBudget = {
    * A `<=` ceiling looks stricter than it is: the moment an entry legitimately shrinks, the
    * unchanged row silently becomes headroom, and the next regression up to the old number passes
    * unnoticed. Equality is what "only ever ratchets down" actually requires -- the same shape
-   * `test-file-size-ratchet.test.ts` uses for file length and R9/R10 use for cycle size and
-   * writer counts: growing fails, and shrinking ALSO fails until the row is lowered in the same
-   * PR, so the gain is kept rather than banked as slack.
+   * R9/R10 use for cycle size and writer counts: growing fails, and shrinking ALSO fails until
+   * the row is lowered in the same PR, so the gain is kept rather than banked as slack.
    *
    * Seeded from measurement, never rounded up. The regression this catches is a single static
    * import dragging a subtree in, measured by #1969 at 5-12% of the whole suite's import work

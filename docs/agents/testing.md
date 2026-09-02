@@ -178,8 +178,9 @@ or remove flakes.
   along source topology is a performance win, not just a readability win.
 - The slow-test reporter enforces unit and integration budgets. Existing pins only shrink; a new
   pin needs measured justification.
-- Test files over 1,000 lines are pinned to their merge-base size and may only shrink. Split the
-  family before adding tests; never raise the pin.
+- Test files over 1,000 lines may be no longer than at the merge-base with `origin/main`, and no
+  new test file may cross that line. Split the family before adding tests; shrinking needs no
+  gate edit.
 - Keep isolation enabled and the pool on forks — both alternatives were measured and did not help.
   The useful optimization is importing the module under test, not a platform barrel.
 - Local Vitest runs use a four-worker cap. Override it when a run needs a different host share:
