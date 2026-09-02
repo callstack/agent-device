@@ -22,12 +22,7 @@ const preferences: PreferenceEvidence = {
 };
 
 test('fails closed when a bridge has no readable corpus cells', () => {
-  const result = decideSpike([], lifecycle, preferences, DEFAULT_SPIKE_LIMITS, 'completed', [
-    {
-      candidate: 'public-macos-ax',
-      failure: { kind: 'unsupported-mechanism', code: 'permission' },
-    },
-  ]);
+  const result = decideSpike([], lifecycle, preferences, DEFAULT_SPIKE_LIMITS);
   assert.equal(result.decision, 'NO-GO');
   assert.ok(result.reasons.some((reason) => reason.includes('No guest SimulatorFrameworkBridge')));
 });
@@ -75,7 +70,7 @@ test('reports a decisive partial corpus failure instead of replacing it with com
   );
 });
 
-test('selects one complete viable guest bridge without requiring public AX to pass', () => {
+test('selects one complete viable guest bridge without requiring the control to pass', () => {
   const states: LocalState[] = ['cold-cold', 'cold', 'warm', 'relaunch'];
   const screens: ScreenId[] = [
     'quiet',
@@ -89,7 +84,7 @@ test('selects one complete viable guest bridge without requiring public AX to pa
     screens.map((screen) => readableCell('guest-simulator-framework-bridge', state, screen)),
   );
   const result = decideSpike(cells, lifecycle, preferences, DEFAULT_SPIKE_LIMITS, 'completed', [
-    { candidate: 'public-macos-ax' },
+    { candidate: 'guest-simulator-framework-bridge' },
     {
       candidate: 'guest-simulator-framework-bridge',
       failure: { kind: 'timeout', code: 'batch-duration-limit' },

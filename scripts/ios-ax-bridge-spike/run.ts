@@ -1,7 +1,6 @@
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { createPublicMacOsAxAdapter, createXCTestControlAdapter } from './adapter.ts';
+import { createXCTestControlAdapter } from './adapter.ts';
 import {
   createGuestSimulatorFrameworkBridgeAdapter,
   GUEST_MECHANISM_EVIDENCE,
@@ -44,9 +43,8 @@ function reportFailure(error: unknown): void {
 async function main(argv: readonly string[]): Promise<void> {
   const config = parseConfig(argv);
   const metadata = readMetadata(config);
-  const runConfig = { ...config, targetWindowName: metadata.target.name };
   const lifecycle = await runLifecycleProbes();
-  const evidence = await executeSpikeRun(runConfig);
+  const evidence = await collectSpikeEvidence(config);
   const decision = decideSpike(
     evidence.cells,
     lifecycle,
@@ -55,7 +53,7 @@ async function main(argv: readonly string[]): Promise<void> {
     evidence.status,
     evidence.protocolProbes,
   );
-  const report = createReport(runConfig, metadata, lifecycle, evidence, decision);
+  const report = createReport(config, metadata, lifecycle, evidence, decision);
   writeSpikeReport(config.outputPath, report);
   process.stdout.write(
     `Decision: ${report.decision}\nRaw: ${config.outputPath}\nMarkdown: ${markdownPath(config.outputPath)}\n`,
@@ -73,13 +71,7 @@ type SpikeRunEvidence = Readonly<{
   positiveControl: SpikeReport['positiveControl'];
 }>;
 
-async function executeSpikeRun(config: SpikeConfig): Promise<SpikeRunEvidence> {
-  return collectSpikeEvidence(config);
-}
-
-type CollectedSpikeEvidence = SpikeRunEvidence;
-
-async function collectSpikeEvidence(config: SpikeConfig): Promise<CollectedSpikeEvidence> {
+async function collectSpikeEvidence(config: SpikeConfig): Promise<SpikeRunEvidence> {
   let preferenceEvidence = initialPreferenceEvidence(config.udid);
   let cells: Awaited<ReturnType<typeof runSpikeCells>> = [];
   let protocolProbes: SpikeResponse[] = [];
@@ -134,7 +126,7 @@ function collectedEvidence(
   protocolProbeLogs: SpikeReport['protocolProbeLogs'],
   preferenceEvidence: PreferenceEvidence,
   positiveControl: SpikeReport['positiveControl'],
-): CollectedSpikeEvidence {
+): SpikeRunEvidence {
   return {
     status,
     cells,
@@ -210,21 +202,18 @@ function createReport(
 
 function createAdapters(config: SpikeConfig) {
   const options = createAdapterOptions(config);
-  const adapters = config.candidates.flatMap((candidate) => {
-    if (candidate === 'public-macos-ax') return [createPublicMacOsAxAdapter(options)];
-    if (candidate === 'guest-simulator-framework-bridge')
-      return [createGuestSimulatorFrameworkBridgeAdapter(options)];
-    return [
-      createXCTestControlAdapter((request) => ({
-        repoRoot: config.repoRoot,
-        stateDir: config.stateDir,
-        session: `ax-spike-xctest-control-${request.state ?? 'state'}-${request.screen}`,
-        udid: request.simulatorUdid,
-        derivedPath: path.join(config.derivedPath, 'xctest-control', request.screen),
-      })),
-    ];
+  return config.candidates.map((candidate) => {
+    if (candidate === 'guest-simulator-framework-bridge') {
+      return createGuestSimulatorFrameworkBridgeAdapter(options);
+    }
+    return createXCTestControlAdapter((request) => ({
+      repoRoot: config.repoRoot,
+      stateDir: config.stateDir,
+      session: `ax-spike-xctest-control-${request.state}-${request.screen}`,
+      udid: request.simulatorUdid,
+      derivedPath: path.join(config.derivedPath, 'xctest-control', request.screen),
+    }));
   });
-  return adapters;
 }
 
 async function runProtocolProbes(
@@ -233,35 +222,28 @@ async function runProtocolProbes(
 ): Promise<{ responses: SpikeResponse[]; logs: SpikeReport['protocolProbeLogs'] }> {
   const responses: SpikeResponse[] = [];
   const logs: ProtocolProbeLog[] = [];
-  for (const adapter of adapters.filter(isBridgeAdapter)) {
-    const request = protocolProbeRequest(config, adapter.candidate);
+  for (const adapter of adapters) {
+    if (adapter.candidate !== 'guest-simulator-framework-bridge') continue;
+    const request = protocolProbeRequest(config);
     const result = await adapter.acquireBatch([request]);
     responses.push(...result.responses.slice(0, 1));
-    logs.push({ candidate: adapter.candidate, id: request.id, stderr: result.stderr });
+    logs.push({
+      candidate: 'guest-simulator-framework-bridge',
+      id: request.id,
+      stderr: result.stderr,
+    });
   }
   return { responses, logs };
 }
 
-function isBridgeAdapter(adapter: AcquisitionAdapter): adapter is AcquisitionAdapter & {
-  candidate: Exclude<SpikeRequest['candidate'], 'xctest-control'>;
-} {
-  return adapter.candidate !== 'xctest-control';
-}
-
-function protocolProbeRequest(
-  config: SpikeConfig,
-  candidate: Exclude<SpikeRequest['candidate'], 'xctest-control'>,
-): SpikeRequest {
+function protocolProbeRequest(config: SpikeConfig): SpikeRequest {
   return {
     version: 1,
-    id: `protocol-probe:${candidate}`,
-    candidate,
+    id: 'protocol-probe:guest-simulator-framework-bridge',
+    candidate: 'guest-simulator-framework-bridge',
     simulatorUdid: config.udid,
     state: 'warm',
     screen: 'unprepared-surface',
-    appBundleId: config.appBundleId,
-    ...(config.targetWindowName === undefined ? {} : { targetWindowName: config.targetWindowName }),
-    ...(config.targetProcessId === undefined ? {} : { targetProcessId: config.targetProcessId }),
     limits: config.limits,
   };
 }
@@ -271,10 +253,9 @@ function readMetadata(config: SpikeConfig): {
   toolchain: Toolchain;
 } {
   const target = readTarget(config.udid, 'com.callstack.agentdevicelab');
-  const base = readToolchain();
   return {
     target: { udid: target.udid, name: target.name, runtime: target.runtime },
-    toolchain: { ...base, swift: commandText('swift', ['--version']) },
+    toolchain: readToolchain(),
   };
 }
 
@@ -294,18 +275,6 @@ function supportedAdapters(
       'candidate-not-supported',
     ].includes(probe?.failure?.code ?? '');
   });
-}
-
-function commandText(command: string, args: readonly string[]): string {
-  try {
-    return execFileSync(command, [...args], {
-      encoding: 'utf8',
-      timeout: 30_000,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  } catch {
-    return 'unavailable';
-  }
 }
 
 function isConfigurationError(error: unknown): boolean {

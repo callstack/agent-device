@@ -40,7 +40,6 @@ export async function runSpikeCells(
 export function createAdapterOptions(config: SpikeConfig): AdapterOptions {
   return {
     repoRoot: config.repoRoot,
-    ...(config.helperPath ? { helperPath: config.helperPath } : {}),
     ...(config.guestCompanion ? { guestCompanion: config.guestCompanion } : {}),
     ...(config.guestPython ? { guestPython: config.guestPython } : {}),
     ...(config.guestSitePackages ? { guestSitePackages: config.guestSitePackages } : {}),

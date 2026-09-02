@@ -77,9 +77,6 @@ export function makeRequest(
     simulatorUdid: config.udid,
     state,
     screen,
-    appBundleId: config.appBundleId,
-    ...(config.targetWindowName === undefined ? {} : { targetWindowName: config.targetWindowName }),
-    ...(config.targetProcessId === undefined ? {} : { targetProcessId: config.targetProcessId }),
     ...(candidate === 'guest-simulator-framework-bridge' && appPid !== undefined
       ? { expectedTargetGeneration: `pid:${appPid}` }
       : {}),

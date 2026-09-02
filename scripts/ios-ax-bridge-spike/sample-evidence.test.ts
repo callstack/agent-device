@@ -13,7 +13,7 @@ test('keeps one raw acquisition exemplar while retaining every sample measuremen
     response: {
       version: 1,
       id: 'sample',
-      candidate: 'public-macos-ax',
+      candidate: 'guest-simulator-framework-bridge',
       ok: true,
       acquisition: {
         targetId: 'simulator:test',
@@ -36,7 +36,7 @@ test('keeps one raw acquisition exemplar while retaining every sample measuremen
 
   for (const index of [0, 1]) {
     appendSamples(
-      'public-macos-ax',
+      'guest-simulator-framework-bridge',
       'warm',
       'quiet',
       index,
@@ -67,7 +67,7 @@ test('rejects a non-empty acquisition that is not bound to the prepared fixture'
     response: {
       version: 1,
       id: 'wrong-tree',
-      candidate: 'public-macos-ax',
+      candidate: 'guest-simulator-framework-bridge',
       ok: true,
       acquisition: {
         targetId: 'simulator:test',
@@ -89,7 +89,7 @@ test('rejects a non-empty acquisition that is not bound to the prepared fixture'
     },
   };
   appendSamples(
-    'public-macos-ax',
+    'guest-simulator-framework-bridge',
     'warm',
     'quiet',
     0,

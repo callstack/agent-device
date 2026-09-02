@@ -42,7 +42,6 @@ function renderSpikeMarkdown(report: SpikeReport): string {
     '',
     '| Candidate | Mechanism | App surface | System surface | Lifecycle | Main limitation |',
     '|---|---|---|---|---|---|',
-    `| public-macos-ax | public macOS ApplicationServices AX | ${surfaceStatus(report, 'public-macos-ax', 'app')} | ${surfaceStatus(report, 'public-macos-ax', 'system')} | framed protocol | ${publicAxLimitation(report)} |`,
     `| guest-simulator-framework-bridge | idb SimulatorFrameworkBridge guest via axbridge-persistent | ${surfaceStatus(report, 'guest-simulator-framework-bridge', 'app')} | ${surfaceStatus(report, 'guest-simulator-framework-bridge', 'system')} | persistent companion + typed reader | provider exposes a flat raw element response |`,
     `| xctest-control | #2189 XCTest runner control | ${surfaceStatus(report, 'xctest-control', 'app')} | ${surfaceStatus(report, 'xctest-control', 'system')} | existing runner lifecycle | control, not a host-side AX bridge |`,
     '',
@@ -108,7 +107,6 @@ function environmentLines(report: SpikeReport): string[] {
     `- pnpm: ${report.toolchain.pnpm}`,
     `- Xcode: ${report.toolchain.xcode.replaceAll('\n', '; ')}`,
     `- simctl: ${report.toolchain.simctl}`,
-    `- Swift: ${report.toolchain.swift}`,
     `- OS: ${report.toolchain.os}; arch=${report.toolchain.arch}`,
     `- Bounds: request=${report.limits.maxRequestBytes} B, response=${report.limits.maxResponseBytes} B, nodes=${report.limits.maxNodes}, traversal=${report.limits.maxTraversalDepth}, CPU=${report.limits.maxCpuMs} ms, memory=${report.limits.maxMemoryBytes} B, duration=${report.limits.maxDurationMs} ms`,
   ];
@@ -202,20 +200,6 @@ function preferenceExperimentLine(report: SpikeReport): string {
       : '- No private/preboot preference keys were applied in this run.';
 }
 
-function publicAxLimitation(report: SpikeReport): string {
-  const publicList = exemplarSample(report, 'public-macos-ax', 'list');
-  const controlList = exemplarSample(report, 'xctest-control', 'list');
-  if (!publicList || !controlList) return 'fidelity and latency remain unproven';
-  const publicDepth = publicList.metrics?.maxTraversalDepth ?? 0;
-  const controlDepth = controlList.metrics?.maxTraversalDepth ?? 0;
-  const publicIdentifiers = publicList.acquisition!.nodes.filter((node) => node.identifier).length;
-  const controlIdentifiers = controlList.acquisition!.nodes.filter(
-    (node) => node.identifier,
-  ).length;
-  const shape = publicDepth < controlDepth ? 'flatter' : 'structurally different';
-  return `list evidence is ${shape} and has different identifier coverage (depth ${publicDepth} vs ${controlDepth}; identifiers ${publicIdentifiers} vs ${controlIdentifiers})`;
-}
-
 function compactReportEvidence(report: SpikeReport): SpikeReport {
   return {
     ...report,
@@ -236,7 +220,7 @@ function withoutStderr(sample: SpikeSample): SpikeSample {
 
 function fidelityLines(report: SpikeReport): string[] {
   const lines = ['Raw exemplar fidelity (candidate vs XCTest control):'];
-  const candidates = ['guest-simulator-framework-bridge', 'public-macos-ax'] as const;
+  const candidates = ['guest-simulator-framework-bridge'] as const;
   for (const candidate of candidates) {
     let compared = false;
     for (const screen of report.config.screens) {

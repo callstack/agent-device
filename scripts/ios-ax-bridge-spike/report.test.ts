@@ -17,7 +17,7 @@ test('does not call an unproduced requested corpus full', () => {
       ['cold-cold', 'cold', 'warm', 'relaunch'],
       ['quiet', 'list', 'nested-scroll', 'alert', 'system-surface', 'xctest-stress'],
       [],
-      ['public-macos-ax'],
+      ['guest-simulator-framework-bridge'],
     ),
     'decisive-early-stop',
   );

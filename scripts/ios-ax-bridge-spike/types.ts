@@ -9,7 +9,7 @@ export const SPIKE_ISSUE = '#2192' as const;
 export const SPIKE_PARENT = '#2188' as const;
 export const SPIKE_PREREQUISITES = ['#2189', '#2190'] as const;
 
-export type CandidateId = 'public-macos-ax' | 'guest-simulator-framework-bridge' | 'xctest-control';
+export type CandidateId = 'guest-simulator-framework-bridge' | 'xctest-control';
 
 export type SpikeFailureKind =
   | 'unsupported-mechanism'
@@ -85,9 +85,6 @@ export type SpikeRequest = Readonly<{
   simulatorUdid: string;
   state: LocalState;
   screen: ScreenId | 'unprepared-surface';
-  appBundleId: string;
-  targetWindowName?: string;
-  targetProcessId?: number;
   expectedTargetGeneration?: string;
   limits: ResourceLimits;
 }>;
@@ -153,7 +150,6 @@ export type Toolchain = Readonly<{
   simctl: string;
   os: string;
   arch: string;
-  swift: string;
 }>;
 
 export type GuestMechanismEvidence = Readonly<{

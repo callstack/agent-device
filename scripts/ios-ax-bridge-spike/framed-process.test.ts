@@ -8,11 +8,10 @@ function request(id: string): SpikeRequest {
   return {
     version: 1,
     id,
-    candidate: 'public-macos-ax',
+    candidate: 'guest-simulator-framework-bridge',
     simulatorUdid: '00000000-0000-0000-0000-000000000000',
     state: 'warm',
     screen: 'quiet',
-    appBundleId: 'com.apple.dt.Devices',
     limits: DEFAULT_SPIKE_LIMITS,
   };
 }

@@ -124,7 +124,6 @@
     "bench:ios-snapshot": "node --experimental-strip-types scripts/ios-snapshot-benchmark/run.ts",
     "bench:ios-snapshot:deep-button": "node --experimental-strip-types scripts/ios-snapshot-benchmark/deep-button.ts",
     "bench:ios-snapshot:evidence": "node --experimental-strip-types scripts/ios-snapshot-benchmark/evidence.ts",
-    "build:ios-ax-bridge-spike": "node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts swift build -c release --package-path scripts/ios-ax-bridge-spike/swift --product agent-device-ios-ax-bridge-spike",
     "bench:ios-ax-bridge": "node --experimental-strip-types scripts/ios-ax-bridge-spike/run.ts",
     "mutation:run": "node --experimental-strip-types scripts/mutation/run.ts",
     "mutation:check": "node --experimental-strip-types scripts/mutation/run.ts --no-run",

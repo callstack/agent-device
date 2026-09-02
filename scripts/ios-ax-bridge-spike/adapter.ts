@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import {
   classifyFailure,
@@ -7,7 +5,6 @@ import {
   type CliContext,
   type CliResult,
 } from '../ios-snapshot-benchmark/command.ts';
-import { runFramedBatch, type FramedProcessSpec } from './framed-process.ts';
 import { DEFAULT_SPIKE_LIMITS, validateRawAcquisition } from './limits.ts';
 import { failureResponse } from './protocol.ts';
 import type {
@@ -34,31 +31,11 @@ export type AcquisitionBatchResult = Readonly<{
 
 export type AdapterOptions = Readonly<{
   repoRoot: string;
-  helperPath?: string;
   limits?: ResourceLimits;
-  stateDir?: string;
   guestCompanion?: string;
   guestPython?: string;
   guestSitePackages?: string;
 }>;
-
-export function createPublicMacOsAxAdapter(options: AdapterOptions): AcquisitionAdapter {
-  const limits = options.limits ?? DEFAULT_SPIKE_LIMITS;
-  const helperPath = options.helperPath ?? defaultPublicMacOsAxHelperPath(options.repoRoot);
-  return framedAdapter('public-macos-ax', helperPath, limits);
-}
-
-export function defaultPublicMacOsAxHelperPath(repoRoot: string): string {
-  return path.join(
-    repoRoot,
-    'scripts',
-    'ios-ax-bridge-spike',
-    'swift',
-    '.build',
-    'release',
-    'agent-device-ios-ax-bridge-spike',
-  );
-}
 
 export function createXCTestControlAdapter(
   contextFor: (request: SpikeRequest) => CliContext,
@@ -77,32 +54,6 @@ export function createXCTestControlAdapter(
         }),
         stderr: '',
       };
-    },
-  };
-}
-
-function framedAdapter(
-  candidate: Exclude<CandidateId, 'xctest-control'>,
-  file: string,
-  limits: ResourceLimits,
-): AcquisitionAdapter {
-  const spec: FramedProcessSpec = { file };
-  return {
-    candidate,
-    async acquireBatch(requests, options = {}) {
-      if (!fs.existsSync(file)) {
-        return {
-          responses: requests.map((request) =>
-            failureResponse(request, {
-              kind: 'unsupported-mechanism',
-              code: 'adapter-binary-unavailable',
-            }),
-          ),
-          stderr: '',
-        };
-      }
-      const result = await runFramedBatch(spec, requests, { ...options, limits });
-      return result;
     },
   };
 }

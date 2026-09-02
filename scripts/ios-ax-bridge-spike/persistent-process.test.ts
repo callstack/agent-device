@@ -12,7 +12,6 @@ function request(id: string): SpikeRequest {
     simulatorUdid: 'simulator',
     state: 'warm',
     screen: 'quiet',
-    appBundleId: 'com.callstack.agentdevicelab',
     limits: DEFAULT_SPIKE_LIMITS,
   };
 }
