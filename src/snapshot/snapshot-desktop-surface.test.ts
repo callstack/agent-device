@@ -1,6 +1,8 @@
+import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { eagerClosureOf } from '../__tests__/eager-import-closure.fixtures.ts';
 
 const { captureLinuxSurfaceSnapshot, captureMacOsSurfaceSnapshot } = vi.hoisted(() => ({
   captureLinuxSurfaceSnapshot: vi.fn(),
@@ -37,6 +39,11 @@ function createHost() {
     macos: captureMacOsSurfaceSnapshot,
   });
 }
+
+test('desktop snapshot host keeps iOS presentation outside its eager import closure', () => {
+  const closure = eagerClosureOf(path.join(import.meta.dirname, 'snapshot-desktop-surface.ts'));
+  expect(closure).not.toContain(path.join(import.meta.dirname, 'ios-snapshot-runtime.ts'));
+});
 
 test('Apple snapshot host preserves non-app macOS surface capture and menubar identity', async () => {
   captureMacOsSurfaceSnapshot.mockResolvedValue({

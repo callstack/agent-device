@@ -309,11 +309,11 @@ class WebDriverInteractor implements Interactor {
       const { captureWebDriverIosSnapshot } = await import('./webdriver-ios-snapshot.ts');
       return await captureWebDriverIosSnapshot(this.client, this.targetId);
     }
-    const { parseAndroidWebDriverSource } = await import('./webdriver-android-source.ts');
+    const { parseWebDriverSourceFacts } = await import('./webdriver-source.ts');
     return {
       backend: 'android' as const,
       producer: 'appium-source' as const,
-      nodes: parseAndroidWebDriverSource(await this.client.source()),
+      nodes: parseWebDriverSourceFacts(await this.client.source(), 'android').nodes,
     };
   }
 

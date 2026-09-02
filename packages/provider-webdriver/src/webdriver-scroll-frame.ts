@@ -5,8 +5,7 @@ import { parseWebDriverSourceFacts } from './webdriver-source.ts';
 export async function scrollFrameFromAndroidWebDriverSource(
   source: string,
 ): Promise<WebDriverWindowRect | undefined> {
-  const { parseAndroidWebDriverSource } = await import('./webdriver-android-source.ts');
-  return scrollFrameFromNodes(parseAndroidWebDriverSource(source));
+  return scrollFrameFromNodes(parseWebDriverSourceFacts(source, 'android').nodes);
 }
 
 export function scrollFrameFromIosWebDriverSource(source: string): WebDriverWindowRect | undefined {

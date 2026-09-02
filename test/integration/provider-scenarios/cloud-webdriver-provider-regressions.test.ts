@@ -1,14 +1,24 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import {
   CLOUD_WEBDRIVER_PROVIDERS,
   createProviderWebDriver,
   type RunHostCommand,
 } from '@agent-device/provider-webdriver';
+import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
+import type { DeviceLease } from '@agent-device/contracts/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import { withProviderScenarioResource, withProviderScenarioTempDir } from './harness.ts';
+import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
+import type { DaemonRequest } from '../../../src/daemon/types.ts';
+import * as iosSnapshotRuntime from '../../../src/snapshot/ios-snapshot-runtime.ts';
+import {
+  createProviderScenarioHarness,
+  withProviderScenarioResource,
+  withProviderScenarioTempDir,
+} from './harness.ts';
+import { assertRpcOk } from './assertions.ts';
 import {
   AwsRemoteAccessHost,
   PROVIDER_REGRESSION_CLIENT_VERSION,
@@ -216,6 +226,116 @@ test('AWS Device Farm sends the requested platform in WebDriver capabilities', a
   });
 });
 
+test('BrowserStack iOS snapshot reaches one shared presenter and public daemon output', async () => {
+  await withProviderScenarioResource(
+    () => ProviderRegressionServer.start('ios'),
+    async (server) => {
+      const runtimes = createProviderWebDriver({
+        clientVersion: PROVIDER_REGRESSION_CLIENT_VERSION,
+        runHostCommand: unexpectedHostCommand,
+      }).createDefaultRuntimes({
+        BROWSERSTACK_USERNAME: 'user',
+        BROWSERSTACK_ACCESS_KEY: 'key',
+        BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+      });
+      const providers = createProviderDeviceRuntimeRequestProviders(runtimes);
+      const daemon = await createProviderScenarioHarness({
+        ...providers,
+        deviceInventorySource: providers.deviceInventorySource!,
+        platformRuntime: {
+          providerRuntimes: runtimes,
+          providerModules: runtimes.map((runtime) =>
+            Object.freeze({ runtime, module: runtime.platformRuntimeModule }),
+          ),
+        },
+      });
+      const present = vi.spyOn(iosSnapshotRuntime, 'presentIosSnapshotAcquisition');
+      let lease: DeviceLease | undefined;
+      try {
+        const allocation = assertRpcOk<{ lease: DeviceLease }>(
+          await daemon.callCommand('lease_allocate', [], browserStackIosFlags(), {
+            meta: browserStackIosMeta(),
+          }),
+        );
+        lease = allocation.lease;
+        assertRpcOk(
+          await daemon.callCommand(
+            'open',
+            ['com.example.demo'],
+            browserStackIosFlags(lease.leaseId),
+            {
+              meta: browserStackIosMeta(lease.leaseId),
+            },
+          ),
+        );
+        const result = assertRpcOk<CaptureSnapshotResult>(
+          await daemon.callCommand('snapshot', [], browserStackIosFlags(lease.leaseId), {
+            meta: browserStackIosMeta(lease.leaseId),
+          }),
+        );
+
+        assert.equal(present.mock.calls.length, 1);
+        assert.equal(present.mock.calls[0]?.[0].acquisition.producer, 'appium-source');
+        assert.equal(server.calls.filter((call) => call.path.endsWith('/source')).length, 1);
+        assert.deepEqual(
+          result.nodes?.map((node) => [node.type, node.label]),
+          [
+            ['XCUIElementTypeApplication', 'Demo'],
+            ['XCUIElementTypeButton', 'Continue'],
+          ],
+        );
+        assert.equal(
+          result.nodes?.every((node) => typeof node.ref === 'string'),
+          true,
+        );
+        assert.equal(result.truncated, undefined);
+        assert.deepEqual(result.warnings, [
+          'iOS snapshot acquisition does not provide hittability evidence; regular snapshots omit unverified hittability while raw snapshots preserve supplied facts.',
+          'iOS snapshot acquisition does not report hierarchy completeness; provider-side depth or child limits may omit nodes.',
+          'iOS snapshot acquisition does not expose truncation metadata; tree completeness is not independently verified.',
+        ]);
+      } finally {
+        present.mockRestore();
+        if (lease) {
+          await daemon.callCommand('lease_release', [], browserStackIosFlags(lease.leaseId), {
+            meta: browserStackIosMeta(lease.leaseId),
+          });
+        }
+        await daemon.close();
+        await Promise.allSettled(runtimes.map(async (runtime) => await runtime.shutdown()));
+      }
+    },
+  );
+});
+
 const unexpectedHostCommand: RunHostCommand = async () => {
   throw new Error('unexpected host command');
 };
+
+function browserStackIosFlags(leaseId?: string): DaemonRequest['flags'] {
+  return {
+    platform: 'ios',
+    tenant: 'team-a',
+    runId: 'run-a',
+    leaseId,
+    leaseProvider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+    device: 'iPhone 15',
+    providerApp: 'bs://preuploaded',
+    providerOsVersion: '17.0',
+    providerProject: 'agent-device',
+    providerBuild: 'run-a',
+    providerSessionName: leaseId,
+  };
+}
+
+function browserStackIosMeta(leaseId?: string): DaemonRequest['meta'] {
+  return {
+    tenantId: 'team-a',
+    runId: 'run-a',
+    leaseId,
+    leaseBackend: 'ios-instance',
+    leaseProvider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+    deviceKey: 'webdriver-ios-a',
+    clientId: 'client-a',
+  };
+}

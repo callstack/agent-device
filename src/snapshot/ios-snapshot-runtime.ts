@@ -84,36 +84,32 @@ function iosSnapshotInput(
 }
 
 function snapshotWarnings(residue: readonly IosAcquisitionResidue[]): { warnings?: string[] } {
-  const warnings = new Set<string>();
-  for (const entry of residue) {
-    const warning = warningForResidue(entry);
-    if (warning) warnings.add(warning);
-  }
+  const warnings = new Set(
+    residue.flatMap((entry) => {
+      if (entry.kind === 'missing-viewport') {
+        return [
+          `iOS snapshot acquisition did not provide a valid viewport (${entry.reason}); retry with --raw to inspect the acquired tree, while regular presentation requires viewport evidence.`,
+        ];
+      }
+      if (entry.kind !== 'unavailable-fact') return [];
+      const warning = IOS_SNAPSHOT_FACT_WARNINGS[entry.fact];
+      return warning ? [warning] : [];
+    }),
+  );
   return warnings.size === 0 ? {} : { warnings: [...warnings] };
-}
-
-function warningForResidue(entry: IosAcquisitionResidue): string | undefined {
-  if (entry.kind === 'missing-viewport') {
-    return `iOS snapshot acquisition did not provide a valid viewport (${entry.reason}); retry with --raw to inspect the acquired tree, while regular presentation requires viewport evidence.`;
-  }
-  if (entry.kind !== 'unavailable-fact') return undefined;
-  return IOS_SNAPSHOT_FACT_WARNINGS[entry.fact];
 }
 
 function throwIosSnapshotPresentationError(error: unknown): never {
   if (!(error instanceof IosSnapshotEngineError)) throw error;
   const details = toIosSnapshotEngineErrorDetails(error);
-  const hint = viewportError(error.reason)
-    ? 'Use snapshot --raw to inspect the acquired iOS tree; regular presentation requires valid viewport evidence.'
-    : undefined;
+  const hint =
+    error.reason === 'missing-viewport' || error.reason === 'invalid-viewport'
+      ? 'Use snapshot --raw to inspect the acquired iOS tree; regular presentation requires valid viewport evidence.'
+      : undefined;
   throw new AppError(
     'COMMAND_FAILED',
     error.message,
     { ...details, ...(hint ? { hint } : {}) },
     error,
   );
-}
-
-function viewportError(reason: string): boolean {
-  return reason === 'missing-viewport' || reason === 'invalid-viewport';
 }

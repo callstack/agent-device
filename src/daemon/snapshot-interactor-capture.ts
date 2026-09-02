@@ -4,7 +4,6 @@ import type {
   SnapshotResult,
 } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { presentIosSnapshotAcquisition } from '../../snapshot/ios-snapshot-runtime.ts';
 
 /**
  * Legacy snapshot consumers that have not moved to a device-runtime operation
@@ -23,5 +22,7 @@ export async function captureSnapshotWithInteractor(params: {
   const { getInteractor } = await import('../core/interactors.ts');
   const interactor = await getInteractor(params.device, params.runnerContext);
   const result = await interactor.snapshot(params.options);
-  return 'stage' in result ? presentIosSnapshotAcquisition(result, params.options) : result;
+  if (!('stage' in result)) return result;
+  const { presentIosSnapshotAcquisition } = await import('../snapshot/ios-snapshot-runtime.ts');
+  return await presentIosSnapshotAcquisition(result, params.options);
 }

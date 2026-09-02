@@ -47,3 +47,47 @@ test('the structural gate rejects a planted provider presentation path', () => {
     JSON.stringify(violations),
   );
 });
+
+test('the structural gate rejects a planted provider residue discard', () => {
+  const sources = currentSources();
+  const adapter = sources.get(WEBDRIVER_IOS_SNAPSHOT_ADAPTER);
+  assert.ok(adapter);
+  const planted = adapter.replace(
+    /residue:\s*deriveIosSnapshotAcquisitionResidue\([^)]*\)/,
+    'residue: []',
+  );
+  assert.notEqual(planted, adapter);
+  sources.set(WEBDRIVER_IOS_SNAPSHOT_ADAPTER, planted);
+
+  const violations = providerSnapshotPresentationViolations(sources);
+  assert.ok(
+    violations.some(
+      (entry) =>
+        entry.rule === PROVIDER_SNAPSHOT_PRESENTATION_RULE &&
+        entry.file === WEBDRIVER_IOS_SNAPSHOT_ADAPTER &&
+        entry.message.includes('residue'),
+    ),
+    JSON.stringify(violations),
+  );
+});
+
+test('the structural gate rejects a planted provider residue rewrite', () => {
+  const sources = currentSources();
+  const adapter = sources.get(WEBDRIVER_IOS_SNAPSHOT_ADAPTER);
+  assert.ok(adapter);
+  sources.set(
+    WEBDRIVER_IOS_SNAPSHOT_ADAPTER,
+    `${adapter}\nfunction rewriteCarrier(carrier) { carrier.acquisition.residue = []; }\n`,
+  );
+
+  const violations = providerSnapshotPresentationViolations(sources);
+  assert.ok(
+    violations.some(
+      (entry) =>
+        entry.rule === PROVIDER_SNAPSHOT_PRESENTATION_RULE &&
+        entry.file === WEBDRIVER_IOS_SNAPSHOT_ADAPTER &&
+        entry.message.includes('rewrite acquired carrier residue'),
+    ),
+    JSON.stringify(violations),
+  );
+});

@@ -17,9 +17,17 @@ export const PROVIDER_REGRESSION_CLIENT_VERSION = '0.20.3-regression-test';
 
 export class ProviderRegressionServer extends CloudWebDriverTestServer {
   sessionFailuresRemaining = 0;
+  private readonly platform: 'android' | 'ios';
 
-  static async start(): Promise<StartedCloudWebDriverTestServer<ProviderRegressionServer>> {
-    return await startCloudWebDriverTestServer(new ProviderRegressionServer());
+  constructor(platform: 'android' | 'ios' = 'android') {
+    super();
+    this.platform = platform;
+  }
+
+  static async start(
+    platform: 'android' | 'ios' = 'android',
+  ): Promise<StartedCloudWebDriverTestServer<ProviderRegressionServer>> {
+    return await startCloudWebDriverTestServer(new ProviderRegressionServer(platform));
   }
 
   protected respond(call: CloudWebDriverHttpCall) {
@@ -29,8 +37,14 @@ export class ProviderRegressionServer extends CloudWebDriverTestServer {
         return cloudWebDriverTestJson({ value: { message: 'transient provider failure' } }, 503);
       }
       return cloudWebDriverTestJson({
-        value: { sessionId: 'wd-regression', capabilities: { platformName: 'Android' } },
+        value: {
+          sessionId: 'wd-regression',
+          capabilities: { platformName: this.platform === 'ios' ? 'iOS' : 'Android' },
+        },
       });
+    }
+    if (call.method === 'GET' && call.path === '/wd/hub/session/wd-regression/source') {
+      return cloudWebDriverTestJson({ value: providerRegressionSource(this.platform) });
     }
     return cloudWebDriverTestJson({ value: null });
   }
@@ -99,14 +113,17 @@ export function providerRuntimeFor(
   return runtime;
 }
 
-export function providerRegressionLease(provider: string): DeviceLease {
+export function providerRegressionLease(
+  provider: string,
+  platform: 'android' | 'ios' = 'android',
+): DeviceLease {
   return {
     leaseId: 'regression-lease',
     tenantId: 'team-a',
     runId: 'run-a',
     clientId: 'client-a',
     leaseProvider: provider,
-    backend: 'android-instance',
+    backend: platform === 'ios' ? 'ios-instance' : 'android-instance',
     deviceKey: 'provider-device-regression',
     createdAt: 1,
     expiresAt: 2,
@@ -114,13 +131,15 @@ export function providerRegressionLease(provider: string): DeviceLease {
   };
 }
 
-export function browserStackRegressionContext(): LeaseLifecycleContext {
+export function browserStackRegressionContext(
+  platform: 'android' | 'ios' = 'android',
+): LeaseLifecycleContext {
   return {
     flags: {
-      platform: 'android',
-      device: 'Google Pixel 8',
+      platform,
+      device: platform === 'ios' ? 'iPhone 15' : 'Google Pixel 8',
       providerApp: 'bs://preuploaded',
-      providerOsVersion: '14.0',
+      providerOsVersion: platform === 'ios' ? '17.0' : '14.0',
     },
   };
 }
@@ -135,4 +154,13 @@ export function awsRegressionContext(
       awsDeviceArn: 'arn:aws:devicefarm:us-west-2::device/device-id',
     },
   };
+}
+
+function providerRegressionSource(platform: 'android' | 'ios'): string {
+  if (platform === 'android') return '';
+  return (
+    '<AppiumAUT><XCUIElementTypeApplication name="Demo" x="0" y="0" width="390" height="844">' +
+    '<XCUIElementTypeButton name="Continue" label="Continue" x="24" y="96" width="160" height="48" enabled="true" visible="true" />' +
+    '</XCUIElementTypeApplication></AppiumAUT>'
+  );
 }
