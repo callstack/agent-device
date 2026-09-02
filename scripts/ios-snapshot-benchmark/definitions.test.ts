@@ -6,6 +6,7 @@ import {
   parseSampleCount,
   parseScreenIds,
   sampleMinimumForState,
+  screenFixture,
 } from './definitions.ts';
 
 test('parses the versioned state and screen cells', () => {
@@ -14,6 +15,7 @@ test('parses the versioned state and screen cells', () => {
   assert.deepEqual(parseRtt('80,0,20,0'), [80, 0, 20]);
   assert.equal(sampleMinimumForState('cold-cold'), 10);
   assert.equal(sampleMinimumForState('relaunch'), 20);
+  assert.equal(screenFixture('alert').cleanupAnchorIdentifier, 'automation-open-alert');
 });
 
 test('enforces the warm and cold sample minima', () => {

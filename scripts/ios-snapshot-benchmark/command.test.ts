@@ -5,6 +5,7 @@ import {
   firstTreeStatus,
   hasDeepLinkConfirmation,
   snapshotHasAnchor,
+  snapshotHasIdentifier,
 } from './command.ts';
 
 test('classifies typed reasons without using error message text', () => {
@@ -69,6 +70,24 @@ test('admits only an exact semantic anchor from snapshot node fields', () => {
     ),
     true,
   );
+});
+
+test('admits only an exact snapshot identifier', () => {
+  const payload = {
+    data: {
+      results: [
+        {
+          data: {
+            snapshot: {
+              nodes: [{ identifier: 'automation-open-alert' }, { identifier: 'other-control' }],
+            },
+          },
+        },
+      ],
+    },
+  };
+  assert.equal(snapshotHasIdentifier(payload, 'automation-open-alert'), true);
+  assert.equal(snapshotHasIdentifier(payload, 'automation-open'), false);
 });
 
 test('recognizes the first-install deep-link confirmation as a setup prompt', () => {

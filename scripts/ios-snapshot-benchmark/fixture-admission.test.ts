@@ -15,6 +15,7 @@ const alertFixture: ScreenFixture = {
   app: 'com.callstack.agentdevicelab',
   anchorText: 'Automation lab',
   postSetupAnchorText: 'Automation confirmation',
+  cleanupAnchorIdentifier: 'automation-open-alert',
   setupAction: 'open-alert',
 };
 
