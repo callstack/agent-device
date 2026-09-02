@@ -7,7 +7,6 @@
  * for the actual action dispatch).
  */
 import { test, expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../../core/dispatch-resolve.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../core/dispatch-resolve.ts')>();
@@ -28,21 +27,23 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => {
   return { ...actual, sleep: vi.fn(async () => {}) };
 });
 
-import path from 'node:path';
-import type { DaemonRequest } from '../../../types.ts';
-import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
-import { SessionStore } from '../../../session-store.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import {
-  baseReplayRequest as baseReq,
-  writeReplayFile,
-} from '../../__tests__/session-replay-runtime.fixtures.ts';
 import {
   legacyDispatchCapture,
   resetLegacySnapshotCapture,
 } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
+import {
+  DRAG_ANNOTATION,
+  DRAG_NODES,
+  SAVE_ANNOTATION,
+  UNVERIFIABLE_ANNOTATION,
+  WAIT_ANNOTATION,
+  WAIT_UNVERIFIABLE_ANNOTATION,
+  emptyCapture,
+  replayScriptScene,
+  saveButtonCapture,
+} from './session-replay-scenario.fixtures.ts';
 
 const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
@@ -51,153 +52,54 @@ beforeEach(() => {
   resetLegacySnapshotCapture(mockCaptureSnapshotWithInteractor);
 });
 
-const SAVE_ANNOTATION =
-  '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
-
-const UNVERIFIABLE_ANNOTATION =
-  '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"unverifiable"}';
-
-const DRAG_ANNOTATION = `# agent-device:targets-v1 ${JSON.stringify({
-  source: {
-    id: 'source',
-    role: 'view',
-    label: 'Source',
-    ancestry: [],
-    sibling: 0,
-    viewportOrder: 0,
-    verification: 'verified',
-  },
-  destination: {
-    id: 'destination',
-    role: 'view',
-    label: 'Drop',
-    ancestry: [],
-    sibling: 1,
-    viewportOrder: 0,
-    verification: 'verified',
-  },
-})}`;
-
-const DRAG_NODES = [
-  {
-    index: 0,
-    depth: 0,
-    type: 'View',
-    identifier: 'source',
-    label: 'Source',
-    rect: { x: 10, y: 10, width: 40, height: 20 },
-  },
-  {
-    index: 1,
-    depth: 0,
-    type: 'View',
-    identifier: 'destination',
-    label: 'Drop',
-    rect: { x: 100, y: 100, width: 40, height: 20 },
-  },
-];
-
-function setupSession(root: string): { sessionStore: SessionStore; sessionName: string } {
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-  return { sessionStore, sessionName };
-}
-
 test('an unannotated action executes unchanged (old-script pass-through)', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-target-verify-passthrough-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, ['click id="save"']);
+  const scene = replayScriptScene('agent-device-replay-target-verify-passthrough-', [
+    'click id="save"',
+  ]);
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
   expect(response.ok).toBe(true);
-  expect(invoked.map((req) => req.command)).toEqual(['click']);
+  expect(scene.invoked.map((req) => req.command)).toEqual(['click']);
   // The pre-action snapshot-capture path (captureDivergenceObservation) is
   // never reached for an unannotated action.
   expect(mockDispatchCommand).not.toHaveBeenCalled();
 });
 
 test('a verified target proceeds to dispatch the action', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-target-verify-verified-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+  const scene = replayScriptScene('agent-device-replay-target-verify-verified-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
 
-  mockDispatchCommand.mockResolvedValue({
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'Button',
-        identifier: 'save',
-        label: 'Save',
-        rect: { x: 10, y: 10, width: 40, height: 20 },
-      },
-    ],
-    truncated: false,
-    backend: 'xctest',
-  });
+  mockDispatchCommand.mockResolvedValue(saveButtonCapture());
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
   expect(response.ok).toBe(true);
-  expect(invoked.map((req) => req.command)).toEqual(['click']);
-  expect(invoked[0]?.positionals).toEqual(['id="save"']);
+  expect(scene.invoked.map((req) => req.command)).toEqual(['click']);
+  expect(scene.invoked[0]?.positionals).toEqual(['id="save"']);
 });
 
 test('a verified drag guards both source and destination before dispatch', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-drag-guards-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [
+  const scene = replayScriptScene('agent-device-replay-drag-guards-', [
     DRAG_ANNOTATION,
     'gesture drag id="source" id="destination" 800 500 0',
   ]);
   mockDispatchCommand.mockResolvedValue({ nodes: DRAG_NODES, backend: 'xctest' });
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
   expect(response.ok).toBe(true);
-  expect(invoked).toHaveLength(1);
-  expect(invoked[0]?.internal?.replayTargetGuards).toMatchObject({
+  expect(scene.invoked).toHaveLength(1);
+  expect(scene.invoked[0]?.internal?.replayTargetGuards).toMatchObject({
     source: { identity: { id: 'source', label: 'Source' } },
     destination: { identity: { id: 'destination', label: 'Drop' } },
   });
 });
 
 test('a shifted drag destination diverges before pointer-down even when the source still matches', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-drag-destination-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [
+  const scene = replayScriptScene('agent-device-replay-drag-destination-', [
     DRAG_ANNOTATION,
     'gesture drag id="source" label="Drop" 800 500 0',
   ]);
@@ -206,19 +108,9 @@ test('a shifted drag destination diverges before pointer-down even when the sour
     backend: 'xctest',
   });
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
-  expect(invoked).toHaveLength(0);
+  expect(scene.invoked).toHaveLength(0);
   expect(response.ok).toBe(false);
   if (response.ok) return;
   const divergence = response.error.details?.divergence as Record<string, unknown>;
@@ -230,19 +122,13 @@ test('a shifted drag destination diverges before pointer-down even when the sour
 });
 
 test('a destination guard refusal reports destination evidence after both preflight checks pass', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-drag-guard-refusal-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [
+  const scene = replayScriptScene('agent-device-replay-drag-guard-refusal-', [
     DRAG_ANNOTATION,
     'gesture drag id="source" id="destination" 800 500 0',
   ]);
   mockDispatchCommand.mockResolvedValue({ nodes: DRAG_NODES, backend: 'xctest' });
 
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
+  const response = await scene.replay({
     invoke: async () => ({
       ok: false,
       error: {
@@ -268,27 +154,18 @@ test('a destination guard refusal reports destination evidence after both prefli
 });
 
 test('a selector-miss divergence blocks dispatch and never sends the action', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-target-verify-miss-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+  const scene = replayScriptScene('agent-device-replay-target-verify-miss-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
 
   // The pre-action capture finds an entirely empty tree: the recorded
   // selector no longer matches anything.
-  mockDispatchCommand.mockResolvedValue({ nodes: [], truncated: false, backend: 'xctest' });
+  mockDispatchCommand.mockResolvedValue(emptyCapture());
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
-  expect(invoked.length).toBe(0); // the click action was never dispatched
+  expect(scene.invoked.length).toBe(0); // the click action was never dispatched
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.code).toBe('REPLAY_DIVERGENCE');
@@ -302,39 +179,18 @@ test('a selector-miss divergence blocks dispatch and never sends the action', as
 });
 
 test('an identity-mismatch divergence reports matchCount and an observed identity', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-target-verify-mismatch-');
-  const { sessionStore, sessionName } = setupSession(root);
   // A label-based selector so it can match a node whose id changed.
-  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click label="Save"']);
+  const scene = replayScriptScene('agent-device-replay-target-verify-mismatch-', [
+    SAVE_ANNOTATION,
+    'click label="Save"',
+  ]);
 
-  mockDispatchCommand.mockResolvedValue({
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'Button',
-        identifier: 'save-v2', // renamed id: no longer matches the recorded 'save'
-        label: 'Save',
-        rect: { x: 10, y: 10, width: 40, height: 20 },
-      },
-    ],
-    truncated: false,
-    backend: 'xctest',
-  });
+  // renamed id: no longer matches the recorded 'save'
+  mockDispatchCommand.mockResolvedValue(saveButtonCapture('save-v2'));
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
-  expect(invoked.length).toBe(0);
+  expect(scene.invoked.length).toBe(0);
   expect(response.ok).toBe(false);
   if (response.ok) return;
   const divergence = response.error.details?.divergence as Record<string, unknown>;
@@ -355,38 +211,16 @@ test('an identity-mismatch divergence reports matchCount and an observed identit
 });
 
 test('a recorded-unverifiable annotation is an identity-unverifiable divergence with matchCount omitted', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-target-verify-unverifiable-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [UNVERIFIABLE_ANNOTATION, 'click id="save"']);
+  const scene = replayScriptScene('agent-device-replay-target-verify-unverifiable-', [
+    UNVERIFIABLE_ANNOTATION,
+    'click id="save"',
+  ]);
 
-  mockDispatchCommand.mockResolvedValue({
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'Button',
-        identifier: 'save',
-        label: 'Save',
-        rect: { x: 10, y: 10, width: 40, height: 20 },
-      },
-    ],
-    truncated: false,
-    backend: 'xctest',
-  });
+  mockDispatchCommand.mockResolvedValue(saveButtonCapture());
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
-  expect(invoked.length).toBe(0);
+  expect(scene.invoked.length).toBe(0);
   expect(response.ok).toBe(false);
   if (response.ok) return;
   const divergence = response.error.details?.divergence as Record<string, unknown>;
@@ -397,115 +231,61 @@ test('a recorded-unverifiable annotation is an identity-unverifiable divergence 
 });
 
 test('a verified annotated action carries the post-resolution guard on its dispatch request', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-target-guard-thread-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+  const scene = replayScriptScene('agent-device-replay-target-guard-thread-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
 
-  mockDispatchCommand.mockResolvedValue({
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'Button',
-        identifier: 'save',
-        label: 'Save',
-        rect: { x: 10, y: 10, width: 40, height: 20 },
-      },
-    ],
-    truncated: false,
-    backend: 'xctest',
-  });
+  mockDispatchCommand.mockResolvedValue(saveButtonCapture());
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
   expect(response.ok).toBe(true);
   // The verified member's normalized identity AND structural denotation ride
   // the request so dispatch's own resolution can cross-check its winner
   // pre-action — the structural part distinguishes a same-identity duplicate.
-  expect(invoked[0]?.internal?.replayTargetGuard).toEqual({
+  expect(scene.invoked[0]?.internal?.replayTargetGuard).toEqual({
     identity: { id: 'save', role: 'button', label: 'Save' },
     structural: { documentOrder: 0, sibling: 0 },
   });
 });
 
 test('an unannotated action never carries a post-resolution guard', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-target-guard-none-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, ['click id="save"']);
+  const scene = replayScriptScene('agent-device-replay-target-guard-none-', ['click id="save"']);
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
   expect(response.ok).toBe(true);
-  expect(invoked[0]?.internal?.replayTargetGuard).toBeUndefined();
+  expect(scene.invoked[0]?.internal?.replayTargetGuard).toBeUndefined();
 });
 
 test('a dispatch-time guard mismatch converts to an identity-mismatch target-binding divergence', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-target-guard-mismatch-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+  const scene = replayScriptScene('agent-device-replay-target-guard-mismatch-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
 
   // Pre-action verification passes against this tree (guard minted)...
-  mockDispatchCommand.mockResolvedValue({
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'Button',
-        identifier: 'save',
-        label: 'Save',
-        rect: { x: 10, y: 10, width: 40, height: 20 },
-      },
-    ],
-    truncated: false,
-    backend: 'xctest',
-  });
+  mockDispatchCommand.mockResolvedValue(saveButtonCapture());
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      // ...but dispatch's own resolution (occlusion/visibility guards) landed
-      // on a different element and refused pre-action with the guard marker.
-      return {
-        ok: false,
-        error: {
-          code: 'COMMAND_FAILED',
-          message: 'click resolved to a different element than replay verification isolated',
-          details: {
-            reason: 'replay_target_guard_mismatch',
-            observed: { id: 'save-decoy', role: 'button', label: 'Save' },
-            expected: { id: 'save', role: 'button', label: 'Save' },
-          },
+  const response = await scene.replay({
+    // ...but dispatch's own resolution (occlusion/visibility guards) landed
+    // on a different element and refused pre-action with the guard marker.
+    invoke: async () => ({
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'click resolved to a different element than replay verification isolated',
+        details: {
+          reason: 'replay_target_guard_mismatch',
+          observed: { id: 'save-decoy', role: 'button', label: 'Save' },
+          expected: { id: 'save', role: 'button', label: 'Save' },
         },
-      };
-    },
+      },
+    }),
   });
 
-  expect(invoked.length).toBe(1); // dispatched once; the refusal was pre-action inside dispatch
+  expect(scene.invoked.length).toBe(1); // dispatched once; the refusal was pre-action inside dispatch
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.code).toBe('REPLAY_DIVERGENCE');
@@ -531,30 +311,14 @@ test('a dispatch-time guard mismatch converts to an identity-mismatch target-bin
 });
 
 test('a same-identity guard mismatch surfaces the structural position difference in the divergence', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-target-guard-struct-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+  const scene = replayScriptScene('agent-device-replay-target-guard-struct-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
 
-  mockDispatchCommand.mockResolvedValue({
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'Button',
-        identifier: 'save',
-        label: 'Save',
-        rect: { x: 10, y: 10, width: 40, height: 20 },
-      },
-    ],
-    truncated: false,
-    backend: 'xctest',
-  });
+  mockDispatchCommand.mockResolvedValue(saveButtonCapture());
 
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
+  const response = await scene.replay({
     // Dispatch refused a DIFFERENT DUPLICATE with IDENTICAL local identity —
     // the refusal is driven purely by the structural denotation.
     invoke: async () => ({
@@ -592,26 +356,18 @@ test('a same-identity guard mismatch surfaces the structural position difference
 // never heals/retries a step; there is no healed action to re-verify.
 
 test('a target-binding divergence carries a real computed resume (step 5 wiring, not the retired stub)', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-target-resume-');
-  const { sessionStore, sessionName } = setupSession(root);
   // Two leading plain actions then the annotated (verified→miss) action at
   // step 3: a pre-action divergence resumes AT the failed step, and step 3 is
   // reachable because steps 1-2 produce no outputEnv and cross no control flow.
-  const filePath = writeReplayFile(root, [
+  const scene = replayScriptScene('agent-device-replay-target-resume-', [
     'wait 10',
     'wait 10',
     SAVE_ANNOTATION,
     'click id="save"',
   ]);
-  mockDispatchCommand.mockResolvedValue({ nodes: [], truncated: false, backend: 'xctest' });
+  mockDispatchCommand.mockResolvedValue(emptyCapture());
 
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async () => ({ ok: true, data: {} }),
-  });
+  const response = await scene.replay();
 
   expect(response.ok).toBe(false);
   if (response.ok) return;
@@ -673,9 +429,10 @@ function throwAdbMechanismFailureMarkedRetriable(): never {
 }
 
 test('a transient content-quality capture failure right after launch recovers within the bounded retry, and the action still dispatches', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-target-verify-launch-race-recover-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+  const scene = replayScriptScene('agent-device-replay-target-verify-launch-race-recover-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
 
   // First two captures fail closed with a content-quality verdict (mirrors a
   // mid-launch/mid-mount capture); the third lands after the app settles and
@@ -683,58 +440,26 @@ test('a transient content-quality capture failure right after launch recovers wi
   mockDispatchCommand
     .mockImplementationOnce(async () => throwContentQualityCaptureFailure())
     .mockImplementationOnce(async () => throwContentQualityCaptureFailure())
-    .mockResolvedValue({
-      nodes: [
-        {
-          index: 0,
-          depth: 0,
-          type: 'Button',
-          identifier: 'save',
-          label: 'Save',
-          rect: { x: 10, y: 10, width: 40, height: 20 },
-        },
-      ],
-      truncated: false,
-      backend: 'xctest',
-    });
+    .mockResolvedValue(saveButtonCapture());
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
   expect(response.ok).toBe(true);
-  expect(invoked.map((req) => req.command)).toEqual(['click']);
+  expect(scene.invoked.map((req) => req.command)).toEqual(['click']);
   expect(mockDispatchCommand).toHaveBeenCalledTimes(3);
 });
 
 test('a content-quality capture failure that never recovers still fails closed as identity-unverifiable once the bounded retry is exhausted', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-target-verify-launch-race-exhausted-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+  const scene = replayScriptScene('agent-device-replay-target-verify-launch-race-exhausted-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
 
   mockDispatchCommand.mockImplementation(async () => throwContentQualityCaptureFailure());
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
-  expect(invoked.length).toBe(0);
+  expect(scene.invoked.length).toBe(0);
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.code).toBe('REPLAY_DIVERGENCE');
@@ -768,9 +493,10 @@ function iosSparseCapture(): {
 }
 
 test('an iOS sparse-snapshot verdict right after launch recovers within the bounded retry, and the action still dispatches', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-target-verify-launch-race-sparse-recover-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+  const scene = replayScriptScene('agent-device-replay-target-verify-launch-race-sparse-recover-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
 
   // First two captures return a structurally-valid but sparse-flagged tree
   // (mirrors the private-AX fallback engaging mid-launch); the third lands
@@ -778,60 +504,26 @@ test('an iOS sparse-snapshot verdict right after launch recovers within the boun
   mockDispatchCommand
     .mockImplementationOnce(async () => iosSparseCapture())
     .mockImplementationOnce(async () => iosSparseCapture())
-    .mockResolvedValue({
-      nodes: [
-        {
-          index: 0,
-          depth: 0,
-          type: 'Button',
-          identifier: 'save',
-          label: 'Save',
-          rect: { x: 10, y: 10, width: 40, height: 20 },
-        },
-      ],
-      truncated: false,
-      backend: 'xctest',
-    });
+    .mockResolvedValue(saveButtonCapture());
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
   expect(response.ok).toBe(true);
-  expect(invoked.map((req) => req.command)).toEqual(['click']);
+  expect(scene.invoked.map((req) => req.command)).toEqual(['click']);
   expect(mockDispatchCommand).toHaveBeenCalledTimes(3);
 });
 
 test('an iOS sparse-snapshot verdict that never recovers still fails closed as identity-unverifiable once the bounded retry is exhausted', async () => {
-  const root = mkdtempForTestSync(
+  const scene = replayScriptScene(
     'agent-device-replay-target-verify-launch-race-sparse-exhausted-',
+    [SAVE_ANNOTATION, 'click id="save"'],
   );
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
 
   mockDispatchCommand.mockImplementation(async () => iosSparseCapture());
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
-  expect(invoked.length).toBe(0);
+  expect(scene.invoked.length).toBe(0);
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.code).toBe('REPLAY_DIVERGENCE');
@@ -845,9 +537,10 @@ test('an iOS sparse-snapshot verdict that never recovers still fails closed as i
 });
 
 test('a permanent (non-content-quality) capture failure fails fast without retrying', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-target-verify-launch-race-permanent-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+  const scene = replayScriptScene('agent-device-replay-target-verify-launch-race-permanent-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
 
   // A missing helper artifact is not something a launch-race retry can fix —
   // it never carries `androidSnapshotHelperFailureReason` at all, so the
@@ -855,19 +548,9 @@ test('a permanent (non-content-quality) capture failure fails fast without retry
   // foregone conclusion.
   mockDispatchCommand.mockImplementation(async () => throwPermanentCaptureFailure());
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
-  expect(invoked.length).toBe(0);
+  expect(scene.invoked.length).toBe(0);
   expect(response.ok).toBe(false);
   if (response.ok) return;
   const divergence = response.error.details?.divergence as Record<string, unknown>;
@@ -876,9 +559,10 @@ test('a permanent (non-content-quality) capture failure fails fast without retry
 });
 
 test('an adb mechanism failure marked retriable at the transport level still fails fast (retriable is not a content-quality signal)', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-target-verify-launch-race-adb-mechanism-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+  const scene = replayScriptScene('agent-device-replay-target-verify-launch-race-adb-mechanism-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
 
   // A dropped adb connection carries `retriable: true` (retrying the SAME adb
   // command can succeed) but no `androidSnapshotHelperFailureReason` content
@@ -886,19 +570,9 @@ test('an adb mechanism failure marked retriable at the transport level still fai
   // as proof this is a "the app is still mounting" content-quality failure.
   mockDispatchCommand.mockImplementation(async () => throwAdbMechanismFailureMarkedRetriable());
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
-  expect(invoked.length).toBe(0);
+  expect(scene.invoked.length).toBe(0);
   expect(response.ok).toBe(false);
   if (response.ok) return;
   const divergence = response.error.details?.divergence as Record<string, unknown>;
@@ -915,32 +589,19 @@ test('an adb mechanism failure marked retriable at the transport level still fai
 
 import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
 
-const WAIT_ANNOTATION =
-  '# agent-device:target-v1 {"role":"statictext","label":"Screen X","ancestry":[{"role":"other","label":"Detail Screen"}],"sibling":0,"viewportOrder":0,"verification":"verified"}';
-
-const WAIT_UNVERIFIABLE_ANNOTATION =
-  '# agent-device:target-v1 {"role":"statictext","label":"Screen X","ancestry":[{"role":"other","label":"Detail Screen"}],"sibling":0,"viewportOrder":0,"verification":"unverifiable"}';
-
 test('an annotated selector wait dispatches with the landmark guard and no eager pre-action refusal', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-wait-landmark-thread-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [WAIT_ANNOTATION, 'wait "label=\\"Screen X\\"" 2000']);
+  const scene = replayScriptScene('agent-device-replay-wait-landmark-thread-', [
+    WAIT_ANNOTATION,
+    'wait "label=\\"Screen X\\"" 2000',
+  ]);
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: { waitedMs: 300, selector: 'label="Screen X"' } };
-    },
+  const response = await scene.replay({
+    invoke: async () => ({ ok: true, data: { waitedMs: 300, selector: 'label="Screen X"' } }),
   });
 
   expect(response.ok).toBe(true);
-  expect(invoked.map((req) => req.command)).toEqual(['wait']);
-  expect(invoked[0]?.internal?.replayLandmarkGuard).toEqual({
+  expect(scene.invoked.map((req) => req.command)).toEqual(['wait']);
+  expect(scene.invoked[0]?.internal?.replayLandmarkGuard).toEqual({
     role: 'statictext',
     label: 'Screen X',
     ancestry: [{ role: 'other', label: 'Detail Screen' }],
@@ -948,35 +609,23 @@ test('an annotated selector wait dispatches with the landmark guard and no eager
     viewportOrder: 0,
     verification: 'verified',
   });
-  expect(invoked[0]?.internal?.replayTargetGuard).toBeUndefined();
+  expect(scene.invoked[0]?.internal?.replayTargetGuard).toBeUndefined();
   // The landmark may legitimately be absent when the step starts: no
   // pre-action capture, no eager refusal.
   expect(mockDispatchCommand).not.toHaveBeenCalled();
 });
 
 test('a recorded-unverifiable wait annotation refuses before polling with matchCount omitted', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-wait-landmark-unverifiable-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [
+  const scene = replayScriptScene('agent-device-replay-wait-landmark-unverifiable-', [
     WAIT_UNVERIFIABLE_ANNOTATION,
     'wait "label=\\"Screen X\\"" 2000',
   ]);
 
-  mockDispatchCommand.mockResolvedValue({ nodes: [], truncated: false, backend: 'xctest' });
+  mockDispatchCommand.mockResolvedValue(emptyCapture());
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
-  expect(invoked.length).toBe(0);
+  expect(scene.invoked.length).toBe(0);
   expect(response.ok).toBe(false);
   if (response.ok) return;
   const divergence = response.error.details?.divergence as Record<string, unknown>;
@@ -986,9 +635,10 @@ test('a recorded-unverifiable wait annotation refuses before polling with matchC
 });
 
 test("the wait loop's landmark refusal converts into an identity-mismatch divergence", async () => {
-  const root = mkdtempForTestSync('agent-device-replay-wait-landmark-miss-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [WAIT_ANNOTATION, 'wait "label=\\"Screen X\\"" 2000']);
+  const scene = replayScriptScene('agent-device-replay-wait-landmark-miss-', [
+    WAIT_ANNOTATION,
+    'wait "label=\\"Screen X\\"" 2000',
+  ]);
 
   // The divergence screen capture after the refusal.
   mockDispatchCommand.mockResolvedValue({
@@ -1005,32 +655,24 @@ test("the wait loop's landmark refusal converts into an identity-mismatch diverg
     backend: 'xctest',
   });
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return {
-        ok: false,
-        error: {
-          code: 'COMMAND_FAILED',
-          message:
-            'wait matched selector label="Screen X" but no candidate carried the recorded landmark identity',
-          details: {
-            reason: WAIT_LANDMARK_MISMATCH_REASON,
-            matchCount: 2,
-            observed: { role: 'statictext', label: 'Screen X' },
-            observedAncestry: [{ role: 'other', label: 'List Screen' }],
-          },
+  const response = await scene.replay({
+    invoke: async () => ({
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message:
+          'wait matched selector label="Screen X" but no candidate carried the recorded landmark identity',
+        details: {
+          reason: WAIT_LANDMARK_MISMATCH_REASON,
+          matchCount: 2,
+          observed: { role: 'statictext', label: 'Screen X' },
+          observedAncestry: [{ role: 'other', label: 'List Screen' }],
         },
-      };
-    },
+      },
+    }),
   });
 
-  expect(invoked.map((req) => req.command)).toEqual(['wait']);
+  expect(scene.invoked.map((req) => req.command)).toEqual(['wait']);
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.code).toBe('REPLAY_DIVERGENCE');
@@ -1047,17 +689,14 @@ test("the wait loop's landmark refusal converts into an identity-mismatch diverg
 });
 
 test('a plain wait timeout on an annotated wait stays an action-failure divergence', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-wait-plain-timeout-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [WAIT_ANNOTATION, 'wait "label=\\"Screen X\\"" 2000']);
+  const scene = replayScriptScene('agent-device-replay-wait-plain-timeout-', [
+    WAIT_ANNOTATION,
+    'wait "label=\\"Screen X\\"" 2000',
+  ]);
 
-  mockDispatchCommand.mockResolvedValue({ nodes: [], truncated: false, backend: 'xctest' });
+  mockDispatchCommand.mockResolvedValue(emptyCapture());
 
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
+  const response = await scene.replay({
     invoke: async () => ({
       ok: false,
       error: {
@@ -1074,25 +713,18 @@ test('a plain wait timeout on an annotated wait stays an action-failure divergen
 });
 
 test('an annotation on a duration wait is inert (no guard, no refusal)', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-wait-duration-inert-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [WAIT_UNVERIFIABLE_ANNOTATION, 'wait 500']);
+  const scene = replayScriptScene('agent-device-replay-wait-duration-inert-', [
+    WAIT_UNVERIFIABLE_ANNOTATION,
+    'wait 500',
+  ]);
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: { waitedMs: 500 } };
-    },
+  const response = await scene.replay({
+    invoke: async () => ({ ok: true, data: { waitedMs: 500 } }),
   });
 
   expect(response.ok).toBe(true);
-  expect(invoked.map((req) => req.command)).toEqual(['wait']);
-  expect(invoked[0]?.internal?.replayLandmarkGuard).toBeUndefined();
+  expect(scene.invoked.map((req) => req.command)).toEqual(['wait']);
+  expect(scene.invoked[0]?.internal?.replayLandmarkGuard).toBeUndefined();
   expect(mockDispatchCommand).not.toHaveBeenCalled();
 });
 
@@ -1104,77 +736,35 @@ const IS_ANNOTATION =
   '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
 
 test('an annotated is step verifies pre-dispatch and threads the post-resolution guard', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-is-verified-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [IS_ANNOTATION, 'is visible id="save"']);
+  const scene = replayScriptScene('agent-device-replay-is-verified-', [
+    IS_ANNOTATION,
+    'is visible id="save"',
+  ]);
 
-  mockDispatchCommand.mockResolvedValue({
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'Button',
-        identifier: 'save',
-        label: 'Save',
-        rect: { x: 10, y: 10, width: 40, height: 20 },
-      },
-    ],
-    truncated: false,
-    backend: 'xctest',
-  });
+  mockDispatchCommand.mockResolvedValue(saveButtonCapture());
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: { predicate: 'visible', pass: true } };
-    },
+  const response = await scene.replay({
+    invoke: async () => ({ ok: true, data: { predicate: 'visible', pass: true } }),
   });
 
   expect(response.ok).toBe(true);
-  expect(invoked.map((req) => req.command)).toEqual(['is']);
-  expect(invoked[0]?.internal?.replayTargetGuard).toMatchObject({
+  expect(scene.invoked.map((req) => req.command)).toEqual(['is']);
+  expect(scene.invoked[0]?.internal?.replayTargetGuard).toMatchObject({
     identity: { id: 'save', role: 'button', label: 'Save' },
   });
 });
 
 test('an annotated is step whose recorded identity vanished diverges before dispatch', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-is-mismatch-');
-  const { sessionStore, sessionName } = setupSession(root);
-  const filePath = writeReplayFile(root, [IS_ANNOTATION, 'is visible label="Save"']);
+  const scene = replayScriptScene('agent-device-replay-is-mismatch-', [
+    IS_ANNOTATION,
+    'is visible label="Save"',
+  ]);
 
-  mockDispatchCommand.mockResolvedValue({
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'Button',
-        identifier: 'save-v2',
-        label: 'Save',
-        rect: { x: 10, y: 10, width: 40, height: 20 },
-      },
-    ],
-    truncated: false,
-    backend: 'xctest',
-  });
+  mockDispatchCommand.mockResolvedValue(saveButtonCapture('save-v2'));
 
-  const invoked: DaemonRequest[] = [];
-  const response = await runReplayForTest({
-    req: baseReq({ positionals: [filePath] }),
-    sessionName,
-    logPath: path.join(root, 'daemon.log'),
-    sessionStore,
-    invoke: async (req) => {
-      invoked.push(req);
-      return { ok: true, data: {} };
-    },
-  });
+  const response = await scene.replay();
 
-  expect(invoked.length).toBe(0);
+  expect(scene.invoked.length).toBe(0);
   expect(response.ok).toBe(false);
   if (response.ok) return;
   const divergence = response.error.details?.divergence as Record<string, unknown>;
