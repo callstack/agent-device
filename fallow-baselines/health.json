@@ -268,11 +268,6 @@
         "count": 1
       }
     },
-    "src/daemon/handlers/snapshot-capture.ts": {
-      "crap_moderate": {
-        "count": 3
-      }
-    },
     "src/daemon/handlers/snapshot-settings.ts": {
       "complexity_moderate": {
         "count": 1
