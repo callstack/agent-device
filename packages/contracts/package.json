@@ -239,6 +239,10 @@
       "types": "./src/interaction-error.ts",
       "default": "./src/interaction-error.ts"
     },
+    "./is-predicate": {
+      "types": "./src/is-predicate.ts",
+      "default": "./src/is-predicate.ts"
+    },
     "./interaction-guarantees": {
       "types": "./src/interaction-guarantees.ts",
       "default": "./src/interaction-guarantees.ts"

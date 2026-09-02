@@ -44,6 +44,7 @@ import {
 } from './internal/replay.ts';
 
 export type { FindAction, FindLocator } from './internal/find.ts';
+export { IS_PREDICATES } from '@agent-device/contracts/is-predicate';
 export type { IsPredicate } from './internal/predicates.ts';
 export type {
   PolicyResolutionOutcome,

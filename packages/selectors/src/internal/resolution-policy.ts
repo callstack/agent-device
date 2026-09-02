@@ -61,12 +61,12 @@ export const SELECTOR_RESOLUTION_POLICIES = {
     ambiguity: 'disambiguate',
     requireRect: false,
   },
-  /** `is` non-exists predicates and `get attrs` — ties reject, never guess. */
+  /** `is` predicates other than `exists`/`absent`, and `get attrs` — ties reject, never guess. */
   readUnique: {
     ambiguity: 'fail-closed',
     requireRect: false,
   },
-  /** `exists` and find's read-only actions — presence is the question. */
+  /** `exists`/`absent` and find's read-only actions — presence is the question. */
   readAny: {
     ambiguity: 'first-match',
     requireRect: false,

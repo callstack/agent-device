@@ -1,5 +1,4 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { normalizeType } from '@agent-device/contracts/snapshot';
 import type { BackendSnapshotResult } from '../backend.ts';
 import {
   buildSnapshotPresentationKey,
@@ -15,6 +14,7 @@ import { getActiveAndroidSnapshotFreshness } from './session-snapshot-freshness.
 import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
 import type { BoundSelectorCapture } from './selector-capture-binding.ts';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
+import { isLegacySparseIosInteractiveSnapshot } from '../core/absence-observation.ts';
 
 const SELECTOR_CAPTURE_CACHE_TTL_MS = 750;
 
@@ -314,10 +314,4 @@ function updateSessionSnapshot(params: {
   if (!session || isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)) return;
   setSessionSnapshot(session, snapshot);
   sessionStore.set(sessionName, session);
-}
-
-function isLegacySparseIosInteractiveSnapshot(snapshot: SnapshotState): boolean {
-  if (snapshot.snapshotQuality) return false;
-  if (snapshot.backend !== 'xctest' || snapshot.nodes.length !== 1) return false;
-  return normalizeType(snapshot.nodes[0]?.type ?? '') === 'application';
 }

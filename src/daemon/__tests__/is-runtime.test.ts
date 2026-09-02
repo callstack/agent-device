@@ -26,7 +26,7 @@ beforeEach(() => {
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
 
-// `is` answers every one of its seven predicates from the resolved capture — `isCommand` never
+// `is` answers every one of its eight predicates from the resolved capture — `isCommand` never
 // reaches `backend.readText`. So its whole platform execution is the request-bound capture, and
 // these cases bind at `inspectFacts` / `bindDevice`, never at `core/dispatch-resolve.ts`.
 
@@ -54,8 +54,12 @@ function buttonSnapshot(): SnapshotResult {
   };
 }
 
-function isRequest(session: string, positionals: readonly string[]): DaemonRequest {
-  return { token: 't', session, command: 'is', positionals: [...positionals], flags: {} };
+function isRequest(
+  session: string,
+  positionals: readonly string[],
+  flags: DaemonRequest['flags'] = {},
+): DaemonRequest {
+  return { token: 't', session, command: 'is', positionals: [...positionals], flags };
 }
 
 test('an admitted is inspects once, binds once, and answers through the bound capture', async () => {
@@ -75,6 +79,103 @@ test('an admitted is inspects once, binds once, and answers through the bound ca
   expect(fixture.inspections).toEqual([ANDROID_EMULATOR]);
   expect(fixture.binds).toEqual([ANDROID_EMULATOR]);
   expect(fixture.captures.length).toBeGreaterThan(0);
+});
+
+test('is absent uses the bound readAny capture for selector-first input without rects', async () => {
+  const fixture = selectorCaptureFixture({
+    snapshot: () => ({ nodes: [], backend: 'xctest', producer: 'apple-runner' }),
+  });
+  const sessionStore = makeSessionStore();
+  sessionStore.set('is-absent', makeIosAppSession('is-absent'));
+
+  const response = await dispatchIsViaRuntime({
+    req: isRequest('is-absent', ['label="Removed row"', 'absent']),
+    sessionName: 'is-absent',
+    sessionStore,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data).toMatchObject({
+      predicate: 'absent',
+      pass: true,
+      matches: 0,
+    });
+  }
+  expect(fixture.captures).toHaveLength(1);
+  expect(fixture.captures[0]?.options?.includeRects).toBe(false);
+});
+
+test('is absent fails closed for a quality-less legacy iOS root-only capture', async () => {
+  const fixture = selectorCaptureFixture({
+    snapshot: () => ({
+      nodes: [{ index: 0, type: 'XCUIElementTypeApplication' }],
+      backend: 'xctest',
+      producer: 'apple-runner',
+    }),
+  });
+  const sessionStore = makeSessionStore();
+  sessionStore.set('is-legacy-sparse', makeIosAppSession('is-legacy-sparse'));
+
+  const response = await dispatchIsViaRuntime({
+    req: isRequest('is-legacy-sparse', ['absent', 'label="Removed row"']),
+    sessionName: 'is-legacy-sparse',
+    sessionStore,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  expect(response?.ok).toBe(false);
+  if (response?.ok === false) {
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(response.error.details).toMatchObject({
+      command: 'is',
+      reason: 'predicate_failed',
+      predicate: 'absent',
+      observation: 'sparse',
+      matches: 0,
+      snapshotQuality: {
+        state: 'sparse',
+        backend: 'tree',
+        reasonCode: 'sparse-tree',
+      },
+    });
+  }
+  expect(fixture.captures).toHaveLength(1);
+});
+
+test('is absent rejects depth and scope before binding with typed invalid arguments', async () => {
+  const fixture = selectorCaptureFixture();
+  const sessionStore = makeSessionStore();
+  sessionStore.set('is-absent-flags', makeIosAppSession('is-absent-flags'));
+
+  for (const [flag, value] of [
+    ['snapshotScope', 'Login'],
+    ['snapshotDepth', 2],
+  ] as const) {
+    const response = await dispatchIsViaRuntime({
+      req: isRequest('is-absent-flags', ['absent', 'label="Gone"'], { [flag]: value }),
+      sessionName: 'is-absent-flags',
+      sessionStore,
+      inspectFacts: fixture.inspectFacts,
+      bindDevice: fixture.bindDevice,
+    });
+
+    expect(response?.ok).toBe(false);
+    if (response?.ok === false) {
+      expect(response.error.code).toBe('INVALID_ARGS');
+      expect(response.error.details).toMatchObject({
+        command: 'is',
+        predicate: 'absent',
+        rejectedOption: flag === 'snapshotScope' ? 'scope' : 'depth',
+      });
+    }
+  }
+  expect(fixture.inspections).toEqual([]);
+  expect(fixture.binds).toEqual([]);
+  expect(fixture.captures).toEqual([]);
 });
 
 test('an unavailable capture fact refuses before any bind', async () => {

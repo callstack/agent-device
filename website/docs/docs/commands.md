@@ -174,7 +174,7 @@ agent-device close --platform web
 - `web doctor` verifies the managed backend after setup.
 - The managed install respects `--state-dir` and `AGENT_DEVICE_STATE_DIR`.
 - Web automation requires Node 24+.
-- Supported through `agent-device`: URL open, snapshot refs, `get text/attrs`, `is visible/exists/text`, `find text/selector`, click/press, hover, fill/type, wait, `network dump`, `audio probe`, screenshot, close, and replay scripts composed from those commands.
+- Supported through `agent-device`: URL open, snapshot refs, `get text/attrs`, `is visible/hidden/exists/absent/focused/text`, `find text/selector`, click/press, hover, fill/type, wait, `network dump`, `audio probe`, screenshot, close, and replay scripts composed from those commands.
 - `hover <@ref|selector|x y>` moves the pointer without pressing so hover-gated UI (row toolbars, menus) appears. Add `--settle` to read what it revealed instead of taking another snapshot. `hover @ref` hovers the browser's own element handle; like `click @ref --settle`, the `--settle` diff needs a selector or coordinate target on web because web refs carry no geometry.
 - `audio probe start [durationSeconds] [bucketMs]` samples HTML media elements into compact RMS/peak dBFS buckets while the page keeps running. The first timing positional is seconds; the second is milliseconds.
 - URL-backed web media may be routed through the probe `AudioContext` while observed. Use `audio probe status` to poll partial buckets and `audio probe stop` to end the probe early.
@@ -514,6 +514,7 @@ Actions: `click` (default; `press`/`tap` are aliases), `list`, `focus`, `fill`, 
 ```bash
 agent-device is visible 'role="button" label="Continue"'
 agent-device is exists 'id="primary-cta"'
+agent-device is absent 'label="Loading..."'
 agent-device is hidden 'text="Loading..."'
 agent-device is editable 'id="email"'
 agent-device is selected 'label="Wi-Fi"'
@@ -521,13 +522,14 @@ agent-device is text 'id="greeting"' "Welcome back"
 ```
 
 - `is` evaluates UI predicates against a selector expression and exits non-zero on failure.
-- Supported predicates are `visible`, `hidden`, `exists`, `editable`, `selected`, and `text`.
+- Supported predicates are `visible`, `hidden`, `exists`, `absent`, `editable`, `selected`, `focused`, and `text`.
 - `is visible` checks whether the resolved element is present in the current visible snapshot viewport. A node without its own rect still passes when a visible ancestor within the viewport provides the on-screen geometry.
 - `is exists` only checks whether the selector matches in the current snapshot.
+- `is absent` passes only when the selector has zero matches in one readable, complete, unscoped, full-depth accessibility capture. It does not mean hidden; `--scope` and `--depth` are rejected, and sparse, unreadable, or truncated captures fail closed.
 - `wait text` is a text-presence wait, not a hittability assertion.
 - `is text <selector> <value>` compares the resolved element text against the expected value.
 - `is` does not accept snapshot refs like `@e3`; use a selector expression instead.
-- `is` accepts the same selector-oriented snapshot flags as `click`, `fill`, `get`, and `wait`.
+- `is` accepts the same selector-oriented snapshot flags as `click`, `fill`, `get`, and `wait`; `is absent` rejects `--scope` and `--depth` because its proof must cover the complete unscoped tree.
 
 ## Replay
 

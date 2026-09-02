@@ -108,6 +108,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/interactor-operation-catalog',
   '@agent-device/contracts/interactor-types',
   '@agent-device/contracts/ios-snapshot',
+  '@agent-device/contracts/is-predicate',
   '@agent-device/contracts/keyboard',
   '@agent-device/contracts/keyboard-runtime',
   '@agent-device/contracts/local-interactor-operation-set',

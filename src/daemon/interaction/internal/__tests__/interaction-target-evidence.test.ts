@@ -413,6 +413,37 @@ test('is exists while recording stays intentionally unannotated (deferred covera
   expect(recordedAction?.targetEvidence).toBeUndefined();
 });
 
+test('is absent while recording stays an ordinary unannotated observation', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'recording-is-absent';
+  sessionStore.set(sessionName, makeSessionWithSnapshot(sessionName, { recording: true }));
+  mockSnapshotWithSaveButton();
+
+  const response = await runCommand(sessionStore, sessionName, 'is', [
+    'absent',
+    'label="Removed row"',
+  ]);
+
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data).toEqual({
+      predicate: 'absent',
+      pass: true,
+      selector: 'label="Removed row"',
+      matches: 0,
+    });
+  }
+  const recordedAction = sessionStore.get(sessionName)?.actions[0];
+  expect(recordedAction?.command).toBe('is');
+  expect(recordedAction?.targetEvidence).toBeUndefined();
+  expect(recordedAction?.result).toEqual({
+    predicate: 'absent',
+    pass: true,
+    selector: 'label="Removed row"',
+    matches: 0,
+  });
+});
+
 test('is visible without recording never computes target-v1 evidence', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'non-recording-is';

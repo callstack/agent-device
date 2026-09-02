@@ -1,5 +1,6 @@
 import { refuse, type SelectorArgumentRefusal } from './argument-refusal.ts';
 
+import { IS_PREDICATES, type IsPredicate } from '@agent-device/contracts/is-predicate';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
@@ -12,23 +13,15 @@ import {
 import { isNodeEditable, isNodeVisible } from './node.ts';
 import { tryParseSelectorChain } from './parse.ts';
 
-export type IsPredicate =
-  | 'visible'
-  | 'hidden'
-  | 'exists'
-  | 'editable'
-  | 'selected'
-  | 'focused'
-  | 'text';
+export type { IsPredicate } from '@agent-device/contracts/is-predicate';
 
 // Module-private since `checkIsPredicate` became the admission API: a caller that tests the
 // vocabulary without going through admission is how the case-normalization drift started.
 function isSupportedPredicate(input: string): input is IsPredicate {
-  return ['visible', 'hidden', 'exists', 'editable', 'selected', 'focused', 'text'].includes(input);
+  return (IS_PREDICATES as readonly string[]).includes(input);
 }
 
-export const IS_PREDICATE_REQUIRED_MESSAGE =
-  'is requires predicate: visible|hidden|exists|editable|selected|focused|text';
+export const IS_PREDICATE_REQUIRED_MESSAGE = `is requires predicate: ${IS_PREDICATES.join('|')}`;
 
 /**
  * The one `is` predicate admission check. Three call sites used to state this rule
@@ -67,7 +60,7 @@ export function normalizeIsPositionals(positionals: string[]): string[] {
 }
 
 export function evaluateIsPredicate(params: {
-  predicate: Exclude<IsPredicate, 'exists'>;
+  predicate: Exclude<IsPredicate, 'exists' | 'absent'>;
   node: SnapshotState['nodes'][number];
   nodes: SnapshotState['nodes'];
   expectedText?: string;
@@ -102,6 +95,8 @@ export function evaluateIsPredicate(params: {
     case 'text':
       pass = actualText === (expectedText ?? '');
       break;
+    default:
+      return assertNever(predicate);
   }
   const details =
     predicate === 'text'
@@ -113,6 +108,10 @@ export function evaluateIsPredicate(params: {
           focused,
         })}`;
   return { pass, actualText, details };
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled is predicate: ${String(value)}`);
 }
 
 function isAssertionVisible(

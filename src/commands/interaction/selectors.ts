@@ -8,6 +8,8 @@ import {
   normalizeIsPositionals,
   UNSUPPORTED_FIND_ACTION_HINT,
 } from '@agent-device/selectors';
+import { absenceCaptureOptionRefusal } from '../../core/absence-observation.ts';
+import { absenceCaptureOptionError } from '../../core/absence-observation-errors.ts';
 import {
   direct,
   optionalCliNumber,
@@ -139,6 +141,12 @@ function readIsOptionsFromPositionals(positionals: string[], flags: CliFlags): I
   // check this replaced compared the raw token, so the CLI used to be stricter than the
   // executor it hands the command to.
   const predicate = admitted.predicate;
+  if (predicate === 'absent') {
+    const refusedOption = absenceCaptureOptionRefusal(base);
+    if (refusedOption) {
+      throw absenceCaptureOptionError(refusedOption);
+    }
+  }
   const split = splitRequiredSelector(normalized.slice(1), {
     preferTrailingValue: predicate === 'text',
   });

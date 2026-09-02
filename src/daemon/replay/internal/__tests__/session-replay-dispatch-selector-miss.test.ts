@@ -34,6 +34,7 @@ import path from 'node:path';
 import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
 import { SessionStore } from '../../../session-store.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import type { DaemonRequest } from '../../../types.ts';
 import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import {
@@ -188,6 +189,54 @@ test('(b) an UNANNOTATED press whose dispatch throws a selector-miss yields REPL
   expect(divergence.kind).toBe('action-failure');
   const cause = divergence.cause as { code: string; message: string };
   expect(cause.code).toBe('COMMAND_FAILED');
+});
+
+test('an authored is absent predicate failure remains an action-failure, never an identity mismatch', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-is-absent-failure-');
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, ['is absent label="Gone"']);
+
+  mockDispatchCommand.mockResolvedValue({
+    nodes: bottomTabsRealCaptureFixture(),
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const invoked: DaemonRequest[] = [];
+  const response = await runReplayForTest({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return {
+        ok: false,
+        error: {
+          code: 'COMMAND_FAILED',
+          message: 'is absent failed for selector label="Gone": 1 match found',
+          details: {
+            command: 'is',
+            reason: 'predicate_failed',
+            predicate: 'absent',
+            selector: 'label="Gone"',
+            matches: 1,
+            observation: 'present',
+          },
+        },
+      };
+    },
+  });
+
+  expect(invoked).toHaveLength(1);
+  expect(invoked[0]?.command).toBe('is');
+  expect(invoked[0]?.positionals).toEqual(['absent', 'label="Gone"']);
+  const { divergence, targetBinding } = assertDivergenceShape(response);
+  expect(divergence.kind).toBe('action-failure');
+  expect(targetBinding).toBeUndefined();
+  const cause = divergence.cause as { code: string; message: string };
+  expect(cause.code).toBe('COMMAND_FAILED');
+  expect(cause.message).toContain('is absent failed');
 });
 
 test('(c) a fill selector-miss thrown at dispatch yields REPLAY_DIVERGENCE, not COMMAND_FAILED', async () => {

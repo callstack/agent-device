@@ -145,7 +145,7 @@ export const SELECTOR_PIPELINE_POLICIES = {
     promotion: 'none',
     poll: 'none',
   },
-  /** `is` non-exists predicates and `get attrs`. */
+  /** `is` predicates other than `exists`/`absent`, and `get attrs`. */
   readUnique: {
     resolution: SELECTOR_RESOLUTION_POLICIES.readUnique,
     occlusion: 'ignore',
@@ -153,7 +153,7 @@ export const SELECTOR_PIPELINE_POLICIES = {
     promotion: 'none',
     poll: 'none',
   },
-  /** `is exists` and find's read-only actions. */
+  /** `is exists`/`absent` and find's read-only actions. */
   readAny: {
     resolution: SELECTOR_RESOLUTION_POLICIES.readAny,
     occlusion: 'ignore',

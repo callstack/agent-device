@@ -46,6 +46,8 @@ import {
   type BoundSelectorOperations,
 } from './selector-capture-binding.ts';
 import { dispatchConditionalWaitSelector } from './wait-conditional-selector.ts';
+import { absenceCaptureOptionRefusal } from '../core/absence-observation.ts';
+import { absenceCaptureOptionError } from '../core/absence-observation-errors.ts';
 
 export async function dispatchFindReadOnlyViaRuntime(
   params: SelectorRuntimeParams,
@@ -205,6 +207,16 @@ export async function dispatchIsViaRuntime(
     );
   }
   const { predicate, selectorExpression, expectedText } = checked;
+  if (predicate === 'absent') {
+    const refusedOption = absenceCaptureOptionRefusal({
+      depth: req.flags?.snapshotDepth,
+      scope: req.flags?.snapshotScope,
+    });
+    if (refusedOption) {
+      const error = absenceCaptureOptionError(refusedOption);
+      return errorResponse(error.code, error.message, error.details);
+    }
+  }
   // ADR 0012 decision 3 / #1349: a guarded replay dispatch resolves through the snapshot path so
   // the post-resolution identity guard runs against the resolution tree.
   const replayTargetGuard = req.internal?.replayTargetGuard;

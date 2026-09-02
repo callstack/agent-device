@@ -279,14 +279,16 @@ A recorded `id` never matches a node without that id.
 >   verify against the live tree's real value at replay time, so the evidence is dropped rather than
 >   published unverified. See ADR 0017's session-scoped echo protection amendment for the mechanism.
 > - **`get` — unchanged**; already covered by the pre-dispatch path and the post-resolution guard.
-> - **`is` (all predicates except `exists`) — covered, `pre-dispatch`, the `get` pattern end-to-end.**
+> - **`is` (all predicates except `exists` and `absent`) — covered, `pre-dispatch`, the `get` pattern end-to-end.**
 >   `is` resolves a unique node immediately, so pre-action verification is semantically valid; the
 >   resolved node/tree feed record-time evidence, and dispatch threads `replayTargetGuard` into
 >   `assertExpectedResolvedTarget` exactly like `get`. The direct-iOS `is`/`wait` fast paths are gated
 >   off during recording and guarded replays, mirroring `get`'s existing recording gate.
 > - **Intentionally deferred, with tests proving no annotation is recorded and no identity check runs:**
 >   `is exists` (existence assertion with no unique winner; wait-like semantics without the
->   guard-critical role), every read-only `find` variant (fuzzy-locator resolution has no
+>   guard-critical role), `is absent` (a strict one-capture absence observation has no resolved
+>   winner; it records as an ordinary observation and its `predicate_failed` failure is always an
+>   action-failure, never an identity mismatch), every read-only `find` variant (fuzzy-locator resolution has no
 >   selector-chain identity token for the classifier, and publication already refuses mutating `find`
 >   as non-verifiable), and `wait text`/`wait stable`/duration waits/`wait @ref` (no element target, or
 >   a session-local ref that ADR 0016 already refuses to publish; `wait @ref` is rejected rather than

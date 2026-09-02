@@ -39,7 +39,7 @@ These are the main case families this app can support without adding more screen
 - `fill` on single-line and multiline fields
 - `type` after focus for append flows
 - `get text` on headings, badges, summaries, and accordion content
-- `is visible` and `is exists` assertions
+- `is visible`, `is exists`, and `is absent` assertions
 - `wait` for async loading and success states
 - `diff snapshot` after dismissals and submits
 - long-list scrolling and `scrollintoview`

@@ -11,6 +11,7 @@ import {
   readGesturePayload,
 } from '@agent-device/contracts/gesture-input';
 import { SCROLL_DURATION_MAX_MS } from '@agent-device/contracts/scroll-command';
+import { IS_PREDICATES } from '@agent-device/contracts/is-predicate';
 import {
   SCROLL_DIRECTIONS,
   SWIPE_PATTERNS,
@@ -69,7 +70,7 @@ const interactionCommandDescriptions = {
   scroll:
     'Scroll in a direction, or toward the top/bottom edge of scrollable content. The optional amount is the finger-path fraction of the viewport axis; app scroll physics determine the final content offset.',
   get: 'Read text or accessibility attributes from a snapshot ref or selector without changing the app. Use format text for visible content or attrs for the element attribute map.',
-  is: 'Check whether a selector satisfies a UI predicate such as visible, hidden, editable, selected, focused, or text. Use wait when the condition may appear asynchronously.',
+  is: 'Check whether a selector satisfies a UI predicate such as visible, hidden, exists, absent, editable, selected, focused, or text. `absent` passes only when one readable, complete, unscoped, full-depth accessibility capture has zero matches. Use wait when the condition may appear asynchronously.',
   find: 'Find by text/label/value/role/id and run action',
   gesture:
     'Perform a structured pan, fling, swipe, pinch, rotate, transform, or drag gesture. Select the gesture kind, then provide only the inputs that apply to that kind.',
@@ -171,9 +172,7 @@ const getFields = {
 };
 
 const isFields = {
-  predicate: requiredField(
-    enumField(['visible', 'hidden', 'exists', 'editable', 'selected', 'focused', 'text'] as const),
-  ),
+  predicate: requiredField(enumField(IS_PREDICATES)),
   selector: requiredField(stringField()),
   value: stringField(),
   ...selectorSnapshotFields(),

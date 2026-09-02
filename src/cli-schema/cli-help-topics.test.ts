@@ -373,7 +373,7 @@ test('usageForCommand resolves web help topic', async () => {
   assert.match(help, /agent-device screenshot \.\/artifacts\/web-home\.png --platform web/);
   assert.match(help, /agent-device close --platform web/);
   assert.match(help, /open <url>, snapshot -i, get text\/attrs/);
-  assert.match(help, /is visible\/exists\/text, find text\/selector/);
+  assert.match(help, /is visible\/hidden\/exists\/absent\/focused\/text, find text\/selector/);
   assert.match(help, /click\/press @ref or selector/);
   assert.match(help, /network dump/);
   assert.match(help, /audio probe/);

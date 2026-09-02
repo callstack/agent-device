@@ -3,6 +3,7 @@ import type {
   CommandContext,
   CommandSessionRecord,
 } from '../../../runtime-contract.ts';
+import type { BackendSnapshotResult } from '../../../backend.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
   SnapshotNode,
@@ -80,15 +81,7 @@ export async function captureSelectorSnapshot(
       ? { includeHiddenContentHints: captureOptions.includeHiddenContentHints }
       : {}),
   });
-  const snapshot =
-    result.snapshot ??
-    ({
-      nodes: result.nodes ?? [],
-      truncated: result.truncated,
-      backend: result.backend as SnapshotState['backend'],
-      ...(result.quality ? { snapshotQuality: result.quality } : {}),
-      createdAt: now(runtime),
-    } satisfies SnapshotState);
+  const snapshot = snapshotStateFromResult(result, runtime);
   (options.signal ?? runtime.signal)?.throwIfAborted();
   if (
     captureOptions.updateSession &&
@@ -98,6 +91,33 @@ export async function captureSelectorSnapshot(
     await runtime.sessions.set({ ...session, snapshot });
   }
   return { sessionName, session, snapshot };
+}
+
+function snapshotStateFromResult(
+  result: BackendSnapshotResult,
+  runtime: AgentDeviceRuntime,
+): SnapshotState {
+  if (result.snapshot) return mergeSnapshotAnnotations(result.snapshot, result);
+  return {
+    nodes: result.nodes ?? [],
+    truncated: result.truncated,
+    backend: result.backend as SnapshotState['backend'],
+    ...(result.quality ? { snapshotQuality: result.quality } : {}),
+    createdAt: now(runtime),
+  } satisfies SnapshotState;
+}
+
+function mergeSnapshotAnnotations(
+  snapshot: SnapshotState,
+  result: BackendSnapshotResult,
+): SnapshotState {
+  const merged = { ...snapshot };
+  if (result.truncated === true || merged.truncated === true) merged.truncated = true;
+  else if (result.truncated !== undefined) merged.truncated = result.truncated;
+  if (result.quality && merged.snapshotQuality === undefined) {
+    merged.snapshotQuality = result.quality;
+  }
+  return merged;
 }
 
 export async function readText(
