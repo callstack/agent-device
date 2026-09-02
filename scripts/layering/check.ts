@@ -112,11 +112,10 @@ import {
 import { runtimeExecutionIntegrityViolations } from './runtime-execution-policy.ts';
 import { sourceExecutionCompatibilityViolations } from './source-execution-policy.ts';
 import { sessionResourceOwnershipViolations } from './session-resource-ownership.ts';
-import { replayOwnershipViolations } from './replay-ownership.ts';
 import { applicationLifecycleOwnershipViolations } from './application-lifecycle-policy.ts';
 import { iosSnapshotEngineOwnershipViolations } from './ios-snapshot-engine-policy.ts';
 import { providerSnapshotPresentationViolations } from './provider-snapshot-presentation-policy.ts';
-import { SRC_UTILS_RETIREMENT_RULE, srcUtilsRetirementViolations } from './src-utils-retirement.ts';
+import { RETIRED_PATH_RULES, retiredPathRuleViolations } from './retired-paths-policy.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -488,7 +487,7 @@ function report(
       `Layering guard: OK — ${files.length} source files satisfy R2 and contain no ` +
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
         `back-edges; the ranked spine's type-only inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
-        `${SRC_UTILS_RETIREMENT_RULE} permits no tracked paths under retired src/utils; ` +
+        `${RETIRED_PATH_RULES.R14.rule} permits no tracked paths under retired src/utils; ` +
         `all ${sessionStateFieldCount()} SessionState fields are classified and every write is ` +
         `inside its declared owner (R7); the largest type-level cycle is ${typeCycle} files ` +
         `(R9); ${daemonModularitySummary()}; ` +
@@ -611,8 +610,9 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
       { untrackedProductionFiles: listUntrackedProductionTypeScriptFiles(repoRoot) },
     ),
   'retired-platforms-zone': () => checkRetiredPlatformsZone(listTrackedPlatformZoneFiles(repoRoot)),
-  'src-utils-retirement': (context) => srcUtilsRetirementViolations(context.trackedSrcUtilsFiles),
-  'replay-ownership': (context) => replayOwnershipViolations(context.sourceFiles),
+  'src-utils-retirement': (context) =>
+    retiredPathRuleViolations('R14', context.trackedSrcUtilsFiles),
+  'replay-ownership': (context) => retiredPathRuleViolations('R71', context.sourceFiles),
   'ios-snapshot-engine-ownership': (context) =>
     iosSnapshotEngineOwnershipViolations(
       [...context.sources].map(([path, source]) => ({ path, source })),
