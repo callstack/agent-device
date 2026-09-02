@@ -106,7 +106,7 @@ export function discoverFacadeEntryFiles(repoRoot: string): string[] {
  */
 export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // --- @agent-device/ad-replay ---
-  'packages/ad-replay/src/index.ts': 61,
+  'packages/ad-replay/src/index.ts': 62,
 
   // --- @agent-device/ad-script ---
   'packages/ad-script/src/index.ts': 41,
@@ -233,6 +233,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/contracts/src/interactor-types.ts': 1,
   // #2190's iOS snapshot vocabulary has type-only imports and remains a one-module entry.
   'packages/contracts/src/ios-snapshot.ts': 1,
+  'packages/contracts/src/is-predicate.ts': 1,
   'packages/contracts/src/keyboard.ts': 1,
   'packages/contracts/src/logs-runtime-plan.ts': 5,
   'packages/contracts/src/managed-web-backend.ts': 1,
@@ -300,7 +301,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/kernel/src/snapshot.ts': 1,
 
   // --- @agent-device/maestro ---
-  'packages/maestro/src/index.ts': 110,
+  'packages/maestro/src/index.ts': 111,
 
   // --- @agent-device/platform-*: ADR-0019's metadata-eager/implementation-lazy façades. Each
   // evaluates only itself; every implementation sits behind a function-scoped `await import`.
@@ -351,7 +352,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // --- @agent-device/selectors ---
   'packages/selectors/src/ast.ts': 16,
   'packages/selectors/src/engine.ts': 19,
-  'packages/selectors/src/index.ts': 54,
+  'packages/selectors/src/index.ts': 55,
 
   // --- @agent-device/xml ---
   'packages/xml/src/index.ts': 3,
@@ -410,9 +411,9 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // #2148 moves output-only CLI dependencies behind call-time imports and reduces the entry
   // closure by two modules.
   // #2146 splits one eagerly reached URL utility into its client and Metro owners.
-  'src/cli.ts': 379,
+  'src/cli.ts': 380,
   'src/platform-runtime.ts': 47,
-  'src/core/command-descriptor/registry.ts': 71,
+  'src/core/command-descriptor/registry.ts': 72,
   'src/core/command-descriptor/platform-execution-entry.ts': 3,
   'src/core/interactors/register-builtins.ts': 6,
   // R64 removes the perf plugin facet and keeps collector binding behind the selected runtime

@@ -8,8 +8,6 @@ import {
   normalizeIsPositionals,
   UNSUPPORTED_FIND_ACTION_HINT,
 } from '@agent-device/selectors';
-import { absenceCaptureOptionRefusal } from '../../core/absence-observation.ts';
-import { absenceCaptureOptionError } from '../../core/absence-observation-errors.ts';
 import {
   direct,
   optionalCliNumber,
@@ -154,6 +152,29 @@ function readIsOptionsFromPositionals(positionals: string[], flags: CliFlags): I
     return { ...base, predicate, selector: split.selectorExpression, value: split.rest.join(' ') };
   }
   return { ...base, predicate, selector: split.selectorExpression };
+}
+
+type AbsenceCaptureOption = 'depth' | 'scope';
+
+function absenceCaptureOptionRefusal(options: {
+  depth?: number;
+  scope?: string;
+}): AbsenceCaptureOption | undefined {
+  if (options.scope !== undefined) return 'scope';
+  if (options.depth !== undefined) return 'depth';
+  return undefined;
+}
+
+function absenceCaptureOptionError(option: AbsenceCaptureOption): AppError {
+  const message =
+    option === 'scope'
+      ? 'is absent does not support --scope; it requires an unscoped capture'
+      : 'is absent does not support --depth; it requires a full-depth capture';
+  return new AppError('INVALID_ARGS', message, {
+    command: 'is',
+    predicate: 'absent',
+    rejectedOption: option,
+  });
 }
 
 function readFindLocator(value: string | undefined): FindOptions['locator'] | undefined {

@@ -114,7 +114,10 @@ export const ANDROID_EMULATOR_E2E_COVERAGE = {
     ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE,
     'Android install-source resolves an installable artifact with typed identity',
   ),
-  [C.is]: live('smoke:automation-system', 'visible predicate passes for Android fixture node'),
+  [C.is]: live(
+    'smoke:automation-system',
+    'visible predicate passes and absent observes the unmounted Android modal control',
+  ),
   [C.keyboard]: live('smoke:keyboard-ime', 'safe dismissal hides keyboard without navigating Back'),
   [C.logs]: live(
     'full:observability-artifacts',

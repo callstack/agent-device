@@ -104,6 +104,13 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
   await assertWaitText(context, 'Automation sheet');
   await runStep(context, 'close Android fixture modal', ['click', 'id="automation-close-sheet"']);
   await assertWaitText(context, 'Automation lab');
+  const absentModal = await runStep(context, 'assert closed Android modal is absent', [
+    'is',
+    'absent',
+    'id="automation-close-sheet"',
+  ]);
+  assert.equal(absentModal.json?.data?.pass, true, JSON.stringify(absentModal.json));
+  verifyCommand(context, C.is, 'strict absence observes the unmounted Android modal control');
   verifyCommand(context, C.click, 'resource-id selectors open and close fixture modal');
 
   await assertOrientationFixtureState(context, 'landscape-left', 'landscape');

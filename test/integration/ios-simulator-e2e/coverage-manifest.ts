@@ -102,7 +102,10 @@ export const IOS_SIMULATOR_E2E_COVERAGE = {
     'exposes only fact-admitted Apple deployment operations',
     'fact-admitted local .app materialization, simulator install dispatch, and typed identity',
   ),
-  [C.is]: live('smoke:automation-input', 'visible/editable predicates pass on fixture nodes'),
+  [C.is]: live(
+    'smoke:automation-input',
+    'visible/editable predicates pass and absent observes the unmounted sheet control',
+  ),
   [C.keyboard]: live(
     'smoke:form-input',
     'real keyboard dismissal reports dismissed=true and visible=false',

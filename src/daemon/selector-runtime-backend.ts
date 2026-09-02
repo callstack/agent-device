@@ -28,6 +28,7 @@ import type { AndroidObservationAdapter } from '@agent-device/contracts/android-
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { snapshotOptionsToFlags } from '../backend-snapshot-options.ts';
+import { checkIsArgs } from '@agent-device/selectors';
 
 export type SelectorRuntimeParams = {
   req: DaemonRequest;
@@ -184,6 +185,7 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
         const needsFreshSnapshot =
           req.command === 'wait' ||
           req.command === 'find' ||
+          isAbsentPredicateRequest(req) ||
           (includeRects && device.platform === 'web');
         return await captureRuntime.capture({
           flags,
@@ -227,4 +229,10 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
         }
       : {}),
   };
+}
+
+function isAbsentPredicateRequest(req: DaemonRequest): boolean {
+  if (req.command !== 'is') return false;
+  const checked = checkIsArgs(req.positionals ?? []);
+  return checked.ok && checked.predicate === 'absent';
 }

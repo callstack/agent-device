@@ -21,6 +21,7 @@ export {
 export {
   parseTargetAnnotationV1Payload,
   serializeTargetAnnotationV1,
+  truncateToUtf8Bytes,
   utf8ByteLength,
   TARGET_ANNOTATION_MAX_ANCESTRY,
   TARGET_ANNOTATION_MAX_FIELD_BYTES,

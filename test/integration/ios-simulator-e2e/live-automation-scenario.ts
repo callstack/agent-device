@@ -107,6 +107,13 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   await assertWaitText(context, 'Automation sheet');
   await runStep(context, 'close fixture sheet', ['click', 'id="automation-close-sheet"']);
   await assertWaitText(context, 'Automation lab');
+  const absentSheet = await runStep(context, 'assert closed fixture sheet is absent', [
+    'is',
+    'absent',
+    'id="automation-close-sheet"',
+  ]);
+  assert.equal(absentSheet.json?.data?.pass, true, JSON.stringify(absentSheet.json));
+  verifyCommand(context, C.is, 'strict absence observes the unmounted fixture sheet control');
   await runStep(context, 'restore automation route top after sheet', ['scroll', 'top']);
   verifyBehavior(
     context,

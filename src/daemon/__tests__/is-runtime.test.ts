@@ -1,5 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { SnapshotResult } from '@agent-device/contracts/snapshot-runtime';
+import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import {
   makeAndroidSession,
@@ -8,6 +9,7 @@ import {
 } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { withTestDeviceInventory } from '../../__tests__/test-utils/device-inventory-gateways.ts';
+import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
 import type { DaemonRequest } from '../types.ts';
 import { selectorCaptureFixture } from './selector-capture-fixture.ts';
 
@@ -106,6 +108,48 @@ test('is absent uses the bound readAny capture for selector-first input without 
   }
   expect(fixture.captures).toHaveLength(1);
   expect(fixture.captures[0]?.options?.includeRects).toBe(false);
+});
+
+test('is absent bypasses a cached no-match snapshot before evaluating the bound capture', async () => {
+  const cachedAbsent = {
+    ...makeSnapshotState([{ index: 0, type: 'StaticText', label: 'Current screen' }], {
+      backend: 'xctest',
+      producer: 'apple-runner',
+    }),
+    presentationKey: buildSnapshotPresentationKey({}),
+  } satisfies NonNullable<ReturnType<typeof makeIosAppSession>['snapshot']>;
+  const fixture = selectorCaptureFixture({
+    snapshot: () => ({
+      nodes: [{ index: 0, type: 'Button', label: 'Removed row' }],
+      backend: 'xctest',
+      producer: 'apple-runner',
+    }),
+  });
+  const sessionStore = makeSessionStore();
+  sessionStore.set(
+    'is-absent-fresh',
+    makeIosAppSession('is-absent-fresh', { snapshot: cachedAbsent }),
+  );
+
+  const response = await dispatchIsViaRuntime({
+    req: isRequest('is-absent-fresh', ['absent', 'label="Removed row"']),
+    sessionName: 'is-absent-fresh',
+    sessionStore,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  expect(response?.ok).toBe(false);
+  if (response?.ok === false) {
+    expect(response.error.details).toMatchObject({
+      command: 'is',
+      reason: 'predicate_failed',
+      predicate: 'absent',
+      matches: 1,
+      observation: 'present',
+    });
+  }
+  expect(fixture.captures).toHaveLength(1);
 });
 
 test('is absent fails closed for a quality-less legacy iOS root-only capture', async () => {

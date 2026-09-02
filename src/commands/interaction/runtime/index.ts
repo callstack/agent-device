@@ -28,9 +28,6 @@ import {
   getAttrsCommand,
   getCommand,
   getTextCommand,
-  isCommand,
-  isHiddenCommand,
-  isVisibleCommand,
   waitCommand,
   waitForTextCommand,
   type ElementTarget,
@@ -40,21 +37,25 @@ import {
   type GetCommandOptions,
   type GetCommandResult,
   type GetTextCommandOptions,
-  type IsCommandOptions,
-  type IsCommandResult,
-  type IsSelectorCommandOptions,
-  type SelectorTarget,
   type WaitCommandOptions,
   type WaitCommandResult,
   type WaitForTextCommandOptions,
 } from './selector-read.ts';
+import {
+  isCommand,
+  isHiddenCommand,
+  isVisibleCommand,
+  type IsCommandOptions,
+  type IsCommandResult,
+  type IsSelectorCommandOptions,
+} from './selector-is.ts';
 import {
   gestureCommand,
   type GestureCommandOptions,
   type GestureCommandResult,
 } from './gesture-command.ts';
 import { settleObservationCommand, type SettleObservationCommandOptions } from './settle.ts';
-import type { SettleObservation } from '@agent-device/contracts/interaction';
+import type { SelectorTarget, SettleObservation } from '@agent-device/contracts/interaction';
 
 export type SelectorCommands = {
   find: RuntimeCommand<FindReadCommandOptions, FindReadCommandResult>;

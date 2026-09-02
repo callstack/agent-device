@@ -18,7 +18,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 // Three surfaces validate the same rule: the daemon handler (via `checkIsArgs`), the CLI
 // grammar (`readInputFromCli`), and the runtime command that receives already-parsed
 // options (`isCommand`, covered on its own production route in
-// commands/interaction/runtime/selector-read.test.ts). They used to state the rule three
+// commands/interaction/runtime/selector-is.test.ts). They used to state the rule three
 // times, and all three had drifted: one inlined its own predicate list, one compared the raw
 // token so it rejected input the daemon accepts, and one dropped the usage hint.
 //

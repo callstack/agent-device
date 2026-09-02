@@ -33,10 +33,24 @@ test('classifies matches as present and exposes only stable first-match fields',
   assert.deepEqual(observation, {
     kind: 'present',
     matches: 2,
-    firstMatch: { id: 'save', role: 'button', label: 'Save', text: 'Save' },
+    firstMatch: { id: 'save', role: 'button', label: 'Save' },
   });
   assert.equal('rect' in observation.firstMatch, false);
   assert.equal('visibleToUser' in observation.firstMatch, false);
+});
+
+test('bounds optional first-match text by UTF-8 bytes', () => {
+  const snapshot = makeSnapshotState([
+    { index: 0, type: 'Button', value: '\u{1F642}'.repeat(100) },
+  ]);
+
+  const observation = classifyAbsenceObservation(snapshot, [snapshot.nodes[0]!]);
+
+  assert.equal(observation.kind, 'present');
+  if (observation.kind === 'present') {
+    assert.equal(Buffer.byteLength(observation.firstMatch.text ?? '', 'utf8') <= 256, true);
+    assert.equal(observation.firstMatch.text, '\u{1F642}'.repeat(64));
+  }
 });
 
 test('classifies sparse and truncated captures before evaluating zero matches', () => {

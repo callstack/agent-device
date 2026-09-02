@@ -1,5 +1,9 @@
 import { extractNodeText, normalizeType } from '@agent-device/contracts/snapshot';
-import { readNodeLocalIdentity } from '@agent-device/ad-script';
+import {
+  readNodeLocalIdentity,
+  TARGET_ANNOTATION_MAX_FIELD_BYTES,
+  truncateToUtf8Bytes,
+} from '@agent-device/ad-script';
 import type {
   SnapshotNode,
   SnapshotQualityVerdict,
@@ -103,9 +107,9 @@ export function isLegacySparseIosInteractiveSnapshot(
 
 function stableFirstMatch(node: SnapshotNode): AbsenceFirstMatch {
   const identity = readNodeLocalIdentity(node);
-  const text = extractNodeText(node);
+  const text = truncateToUtf8Bytes(extractNodeText(node), TARGET_ANNOTATION_MAX_FIELD_BYTES);
   return {
     ...identity,
-    ...(text ? { text } : {}),
+    ...(text && text !== identity.label ? { text } : {}),
   };
 }
