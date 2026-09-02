@@ -1,3 +1,15 @@
+// Catches: a substrate package (capture-kit and peers) dispatching through request-scoped
+//   async_hooks, or a retired src/contracts/ production file reappearing — either one re-mixes
+//   request-bound state into durable capture code, which type-checks fine because async_hooks
+//   and the retired path are both ordinary, legal imports from where the violation happens.
+// Evidence: e832325e87 (#2088) split host mechanics into the host-kit capability ports this
+//   rule keeps request-scoped dispatch out of.
+// Cost: 170 LOC (110 rule + 60 test).
+// Kill criterion: none enforced today; retire only by maintainer decision that capture-kit staying
+//   free of request-scoped dispatch, and src/contracts/ staying retired, no longer matter.
+//   package.json cannot replace it: node:async_hooks is a built-in, not a dependency, and no
+//   manifest governs a tracked path under src/contracts/.
+
 import { parseSync } from 'oxc-parser';
 import type { LayeringViolation } from './model.ts';
 

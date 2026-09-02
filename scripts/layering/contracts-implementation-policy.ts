@@ -1,3 +1,17 @@
+// Catches: packages/contracts production source calling host, process, or timer mechanics
+//   directly — contracts owns vocabulary only, and a mechanic call there means an adapter's
+//   concern leaked into the shared-vocabulary package every zone imports, invisible to
+//   consumers because the call itself is fully typed and legal Node code.
+// Evidence: 8f98d23f14 (#1750) gave R18 its own number after an id collision; 057ab1c82d (#1746)
+//   fixed double-reporting in this same authority check.
+// Cost: 337 LOC (206 rule + 131 test).
+// Kill criterion: none enforced today; retire only by maintainer decision that contracts owning
+//   vocabulary only no longer matters. package.json cannot replace it: node: built-ins are not
+//   dependencies and timer globals need no import. The A4 spike found `types: []` would break
+//   contracts' AbortSignal/URL/Buffer/process uses while every lib that supplies them also
+//   supplies setTimeout, and the file-level bans (interaction-outcome, snapshot-quality-warnings,
+//   network-traffic and ios-snapshot type-only statements, kernel-only imports) have no tsc form.
+
 import { parseSync } from 'oxc-parser';
 import type { LayeringViolation } from './model.ts';
 

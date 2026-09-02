@@ -156,6 +156,20 @@ function checkLayeringRules(edges: readonly ResolvedImportEdge[]): LayeringViola
   return violations;
 }
 
+/**
+ * Catches: a production import cycle — A imports B imports A at the value level — that a
+ *   file-by-file review cannot see because each edge looks locally fine; only walking the
+ *   whole graph exposes the loop. No other gate looks at cycles at all.
+ * Evidence: 3d70943550 (#984) introduced the import-direction DAG gate this cycle check
+ *   anchors; f19864e486 (#1410) added the dependency-graph report built on the same model.
+ * Cost: not attributed (folded into check.ts's whole-graph pass; no standalone module or
+ *   test file to size separately).
+ * Kill criterion: none enforced today; retire only by maintainer decision that an acyclic
+ *   value-import graph no longer matters. tsc rejects a cyclic `references` edge between
+ *   projects, but no tsconfig declares references today and the A4 spike found they are a
+ *   build-cache mechanism, not a boundary: value imports inside one project are never
+ *   cycle-checked, and a cross-package edge resolves through root node_modules with no error.
+ */
 function checkCycles(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
   return findValueImportCycles(edges).map((cycle) => ({
     rule: 'R4 value-import-cycle',
@@ -190,6 +204,19 @@ function checkRecordRuntimeOwnership(sources: ReadonlyMap<string, string>): Laye
   });
 }
 
+/**
+ * Catches: a value import that runs against the ranked target spine's declared order (a lower
+ *   zone importing a higher one) — the runtime-consequential half of what R6 also checks for
+ *   type-only edges; neither zone-policy.ts's table nor the cycle check names direction.
+ * Evidence: 3d70943550 (#984) introduced the ranked spine and its back-edge check; docs/
+ *   dependency-graph-findings.md tracks the count this rule ratchets.
+ * Cost: not attributed (folded into check.ts's whole-graph pass; no standalone module or
+ *   test file to size separately).
+ * Kill criterion: none enforced today; retire only by maintainer decision that the ranked spine's
+ *   import direction no longer matters. Splitting zones into packages would not replace it: the
+ *   A4 spike found an undeclared workspace package still resolves through root node_modules and
+ *   a relative tunnel into another package's src still compiles.
+ */
 function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
   const seen = new Set<string>();
   return edges.flatMap((edge) => {
@@ -208,6 +235,18 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation
   });
 }
 
+// Catches: a type-only import against the ranked spine's declared order — a design-level
+//   dependency (zone A is stated in terms of zone B) that R5 is blind to because it costs
+//   nothing at runtime, so nothing else flags "the type shape leaks the wrong direction."
+// Evidence: the R5-adjacent commits in check.ts's history introduced this ratchet; the 61-to-5
+//   reduction and the two remaining deliberate inversions are recorded below and in
+//   docs/dependency-graph-findings.md.
+// Cost: not attributed (folded into check.ts's whole-graph pass; no standalone module or test
+//   file to size separately).
+// Kill criterion: none enforced today; retire only by maintainer decision that type-only spine
+//   inversions no longer matter. Reaching zero remaining inversions does not retire it: at zero
+//   the ratchet is what keeps the count from regrowing, and tsc never rejects a type-only edge.
+//
 // R6 ratchet: type-only spine inversions, per zone pair. R5 cannot see these (a type-only import
 // is free at runtime), but "zone A is declared in terms of zone B" is still a boundary claim, and
 // ranking type edges surfaced 61 of them. Down to 5, and every one of the 5 is now a deliberate

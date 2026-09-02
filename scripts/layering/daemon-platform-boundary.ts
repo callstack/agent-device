@@ -4,6 +4,20 @@ import { isProductionSourceFile } from './tracked-sources.ts';
 import type { LayeringViolation } from './model.ts';
 
 /**
+ * Catches: src/daemon importing a concrete platform package or the retired src/platforms path,
+ *   in any form — static, dynamic, or type-only — the terminal boundary the R11/R13 package
+ *   split exists to make possible; a daemon module that reaches around a platform's package
+ *   facade defeats the composition-root discipline R13 enforces on the other side.
+ * Evidence: c794c11d7e (#2072) closed the daemon platform boundary this rule pins; 1522126f1f
+ *   (#2212) kept close lifecycle behind the session facade rather than reopening the boundary.
+ * Cost: 694 LOC (402 rule + 292 test).
+ * Kill criterion: none enforced today; retire only by maintainer decision that src/daemon staying
+ *   free of concrete-platform imports no longer matters. A package boundary would not replace
+ *   it: @agent-device/platform-* resolves from src/daemon through root node_modules whether
+ *   declared or not (A4 spike), and the retired src/platforms path is a plain relative import.
+ */
+
+/**
  * R65 rejects every concrete-platform dependency from tracked production daemon sources.
  *
  * The module record supplies static imports and re-exports; the AST supplies dynamic imports and

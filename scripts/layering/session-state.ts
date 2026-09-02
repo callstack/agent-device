@@ -1,3 +1,17 @@
+// Catches: a daemon module writing a SessionState field it does not own — aliasing through
+//   SessionStore.get()/set() lets any module mutate store-owned state, and only a full-graph
+//   AST walk over every assignment site (not a review of one module) can tell whose write
+//   it was.
+// Evidence: PR #1392 (e8b779cb32) fixed a close-time script-save failure leaking the session/
+//   device claim — a symptom of unowned SessionState writes; the field-owner table this file
+//   enforces is the durable fix.
+// Cost: 262 LOC (no dedicated test file; exercised through daemon-modularity.test.ts and
+//   model.test.ts).
+// Kill criterion: none enforced today; retire only by maintainer decision that per-field
+//   SessionState write ownership no longer matters. SessionStore hands out the live record
+//   through get()/set(), so a `session.<field> =` from any module type-checks; no owner exists
+//   at the type level.
+//
 // R7 session-state ownership.
 //
 // `SessionStore.get()` hands back the live `SessionState` out of a private Map, and `set()`

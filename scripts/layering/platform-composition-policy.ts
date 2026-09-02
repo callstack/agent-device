@@ -1,3 +1,17 @@
+// Catches: src/platform-runtime.ts, the one canonical composition root, wiring a platform
+//   package's implementation eagerly instead of through the lazy provider-composition seam —
+//   a startup-cost regression (every platform's code loading on every process start) that only
+//   shows up as a perf number, not a type error.
+// Evidence: 03f0f408c2 (#2070) moved platform provider composition out of the daemon into this
+//   root; c7f42ccedc (#2117) moved the Android family behind package exports the composition
+//   file now targets.
+// Cost: 103 LOC (no dedicated test file; exercised through platform-package-policy.test.ts);
+//   shares rule id R13 with platform-package-policy.ts (1030 LOC) and
+//   platform-package-source-policy.ts (230 LOC).
+// Kill criterion: none enforced today; retire only by maintainer decision that lazy platform
+//   composition in src/platform-runtime.ts no longer matters. The build cannot tell an eager
+//   import from the lazy seam; both resolve and type-check identically.
+
 import { parseSync } from 'oxc-parser';
 import { parseImports, type LayeringViolation } from './model.ts';
 

@@ -1,3 +1,14 @@
+// Catches: a session resource field (appLog, appLogFailure, audioProbe, perfCapture) written
+//   from outside its declared owner module — R7's session-state-ownership shape applied to the
+//   narrower set of per-resource fields these session-scoped runtimes carry, where the same
+//   aliasing hazard (get()/set() hand back and re-put the live reference) applies.
+// Evidence: 7b48531d3b (#2081) retired ADR-0019 cutover scaffolding this policy protected during
+//   the runtime-command migration; 4454aef139 (#2092) removed what it retired.
+// Cost: 115 LOC (57 rule + 58 test).
+// Kill criterion: none enforced today; retire only by maintainer decision that per-owner write
+//   authority over appLog/appLogFailure/audioProbe/perfCapture no longer matters. The fields
+//   are plain mutable properties on the shared session record, so an outside write type-checks.
+
 import { parseSync } from 'oxc-parser';
 import { propertyName, visitAst } from './layering-ast.ts';
 import type { LayeringViolation } from './model.ts';

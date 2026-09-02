@@ -15,6 +15,19 @@ import path from 'node:path';
  * naming registry, not a behavioural claim.
  */
 
+// Catches: two rule modules declaring the same numeric id — #1656 and #1750 both reached for
+//   R17 independently, and because the files differ, git sees no conflict; every review
+//   comment, CI annotation, and code reference to that number then addresses two different
+//   rules with no way to tell which one is meant. (This module has no single rule id of its
+//   own; R98/R99 in its test file are placeholder ids the collision-detection tests exercise,
+//   not declared production rules.)
+// Evidence: 8f98d23f14 (#1750) gave the colliding rule its own number after the collision this
+//   module now prevents from recurring.
+// Cost: 191 LOC (106 rule + 85 test); not attributed for wall-time share.
+// Kill criterion: none enforced today; retire only by maintainer decision that unique rule ids no
+//   longer matter — moot only if ids stop being chosen by hand, and no generated id sequence
+//   exists today.
+
 export type RuleDeclaration = {
   id: string;
   name: string;

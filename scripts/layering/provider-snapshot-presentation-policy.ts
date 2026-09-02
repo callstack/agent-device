@@ -1,3 +1,16 @@
+// Catches: a provider-* package acquiring an iOS snapshot outside the capture-kit acquisition
+//   entrypoint, or presenting it outside src/snapshot/ios-snapshot-runtime.ts — the exact split
+//   R72's engine convergence closed for the runner layer, mirrored here one layer up for the
+//   provider packages that call into it.
+// Evidence: 7ee1a5ded7 (#2233) carried provider acquisitions through this one presentation
+//   owner, the change this policy was written to hold in place.
+// Cost: 195 LOC (111 rule + 84 test).
+// Kill criterion: none enforced today; retire only by maintainer decision that provider-* packages
+//   reaching presentation only through @agent-device/capture-kit/ios-snapshot-acquisition, and
+//   never constructing, discarding, or reassigning acquisition residue, no longer matter. An
+//   exports map cannot replace it: it restricts external specifiers, not the transitive walk
+//   into src/snapshot/ or a provider-local `residue` property or assignment.
+
 import { parseSync } from 'oxc-parser';
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
 import { memberPath, propertyName, visitAst } from './layering-ast.ts';

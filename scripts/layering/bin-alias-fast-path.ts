@@ -1,3 +1,16 @@
+// Catches: bin.ts's --help fast path re-declaring its own alias table instead of calling the
+//   real registry — the exact silent-drift bug #1618-adjacent produced, where tap/launch/
+//   relaunch fell out of a hand-written table and paid a full CLI bootstrap for static help
+//   text. bin.ts runs unconditionally on import, so no unit test can import and exercise it
+//   directly; only reading its source text structurally can catch a regression.
+// Evidence: d85072d935 (#1641) routed command aliases through the help fast path; 74a70f1764
+//   (#2046) removed next-major compatibility surfaces bin.ts once carried alongside it.
+// Cost: 650 LOC (339 rule + 311 test).
+// Kill criterion: none enforced today; retire only by maintainer decision that bin.ts's --help
+//   fast path no longer needs to delegate to the real alias registry — moot once the fast path
+//   is deleted or its resolution is inlined into commands/cli-command-aliases.ts, leaving no
+//   second call site.
+//
 // R12 bin-alias-fast-path.
 //
 // `bin.ts`'s `--help` fast path resolves a command alias (`tap`, `launch`, …) to its canonical

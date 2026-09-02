@@ -1,3 +1,16 @@
+// Catches: the daemon record owner reaching past its declared coordinators to spawn or poll a
+//   native process/timer directly — the same "delegate to your single owner" shape as R7 and
+//   R12, applied to record's runtime mechanics; a type check cannot see this because runCmd and
+//   setInterval are both fully typed, legal calls from anywhere.
+// Evidence: 1b2e786128 (#1724) moved screen recording onto the platform runtime, the migration
+//   this ownership boundary protects against regressing.
+// Cost: 165 LOC (112 rule + 53 test); shares rule id R16 with record-runtime-registry-policy.ts
+//   (137 LOC).
+// Kill criterion: none enforced today; retire only by maintainer decision that the daemon record
+//   owner staying free of native mechanics (runCmd*/spawn*/timer calls, child kill, platform
+//   comparisons and switches) no longer matters. A typed capture-kit port would not replace it:
+//   setTimeout is a global and spawn stays importable from the owner whatever port it holds.
+
 import { parseSync } from 'oxc-parser';
 import { memberName, type ProductionSource, visitAst } from './layering-ast.ts';
 

@@ -1,3 +1,19 @@
+// Catches: a platform package's private implementation loaded before the one canonical
+//   composition root assembles it, or a cross-boundary edge into another platform family's
+//   private surface — the six platform packages moved behind package facades (#2116-#2125)
+//   specifically to make eager loading and cross-family reach-ins visible, and only a source
+//   walk over every package's imports can confirm the boundary actually held.
+// Evidence: 838ed223b5 (#2116) moved the six W6 platform families behind package facades;
+//   ed26b31c94 (#2125) contracted the Apple platform surface to match.
+// Cost: 1030 LOC (377 rule + 653 test); shared with platform-composition-policy.ts (103 LOC)
+//   and platform-package-source-policy.ts (230 LOC), which this module orchestrates.
+// Kill criterion: none enforced today; retire only by maintainer decision that platform-family
+//   isolation (private manifests with exact exports, static imports only from the composition
+//   root, no sibling-family reach-ins, no top-level loadInventory/loadRuntime) no longer
+//   matters. Publishing the families separately would not replace it: the A4 spike found an
+//   undeclared workspace package still resolves through root node_modules and a relative tunnel
+//   into a sibling's src still compiles; project references are a build cache, not a boundary.
+
 import path from 'node:path';
 import { PLATFORMS } from '@agent-device/kernel/device';
 import { parseImports, type LayeringViolation } from './model.ts';

@@ -1,3 +1,15 @@
+// Catches: daemon code constructing or narrowing an AdmittedRuntimePlan/BoundDeviceRuntime
+//   outside runtime-admission.ts — manufacturing a runtime proof instead of receiving one from
+//   the single admission authority, which "Guarantees erode at path boundaries" (AGENTS.md)
+//   names directly; a type check alone cannot see this because the forged value still type-
+//   checks as the real proof type.
+// Evidence: 7b48531d3b (#2081) retired ADR-0019 cutover scaffolding this policy outlived;
+//   4454aef139 (#2092) removed the retired migration scaffolding alongside it.
+// Cost: 362 LOC (216 rule + 146 test).
+// Kill criterion: none enforced today; retire only by maintainer decision that runtime-admission.ts
+//   being the sole producer of AdmittedRuntimePlan/BoundDeviceRuntime no longer matters. The
+//   token is a type, so an `as` cast or narrowing to it type-checks from any module.
+
 import { parseSync } from 'oxc-parser';
 import { memberName, propertyName, visitAst } from './layering-ast.ts';
 import type { LayeringViolation } from './model.ts';

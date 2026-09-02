@@ -45,6 +45,20 @@ const ENGINE_FILE_PREFIXES = [
   'packages/replay-test/src/',
 ] as const;
 
+/**
+ * Catches: the daemon modularity migration regressing quietly — a SessionState field losing
+ *   its owner, a logical module gaining a forbidden or internal import, or an external
+ *   daemon/types.ts importer count creeping up — any of which erodes the wave-by-wave
+ *   extraction #1478/#1478-P5 already paid for, and nothing enforces the wave order itself.
+ * Evidence: 2316fd32c5 (#1487) pinned the migration contracts this ratchet grew from;
+ *   6984a1e095 (#1852) fixed the R10 zone-listing message when the type-cycle ceiling trips.
+ * Cost: 937 LOC total for the file (323 rule + 614 test; shared with R9's checkTypeCycleBaseline
+ *   below, not attributed separately).
+ * Kill criterion: none enforced today; retire only by maintainer decision that the daemon
+ *   modularity baselines (SessionState field-owner counts, logical-module import policies and
+ *   facades, the external daemon/types.ts importer list, per-zone cycle ceilings) no longer
+ *   matter. Every one is a count or an import edge the compiler accepts either way.
+ */
 export function checkDaemonModularityRatchets(
   edges: readonly ResolvedImportEdge[],
   largestTypeCycleMembers: readonly string[],
@@ -143,6 +157,20 @@ function checkSessionStateBaseline(): LayeringViolation[] {
   return violations;
 }
 
+/**
+ * Catches: the largest type-only import cycle growing past its pinned size, or the baseline
+ *   shrinking without the ceiling being lowered to match — R4 keeps the value graph acyclic, so
+ *   these cycles cost nothing at runtime, but an ungoverned type cycle can grow without bound
+ *   while every individual edge still looks locally reasonable.
+ * Evidence: 6984a1e095 (#1852) fixed R10's zone listing when this ceiling trips, evidence the
+ *   check fires in practice; ef6ec2995b (#1825, #1781 A6) made the R9 shrink direction
+ *   mandatory rather than advisory.
+ * Cost: 937 LOC total for the file (323 rule + 614 test; shared with R10's ratchets above, not
+ *   attributed separately).
+ * Kill criterion: none enforced today; retire only by maintainer decision that a bounded
+ *   type-only cycle size no longer matters. tsc never rejects a type-only cycle, and emptying
+ *   LARGEST_TYPE_CYCLE_ZONE_CEILINGS pins the size at zero rather than retiring the check.
+ */
 function checkTypeCycleBaseline(members: readonly string[]): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
   const baseline = DAEMON_MODULARITY_BASELINE.largestTypeCycle;

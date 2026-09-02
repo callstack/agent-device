@@ -1,3 +1,17 @@
+// Catches: a package reaching back into root src/, a root file tunnelling into packages/*/src
+//   with a relative path, an undeclared workspace import, or a subpath the exports map does not
+//   name — bypasses Node's own resolution error cannot see, because a relative route resolves
+//   fine even though it duplicates the module under its specifier form.
+// Evidence: 76453add71 (#1494, #1490 W0) established the workspace split this rule protects;
+//   83322a3f2f (#1574) pinned exact facade symbols for every workspace package.
+// Cost: 1239 LOC (363 rule + 876 test).
+// Kill criterion: none enforced today; retire only by maintainer decision that the workspace
+//   boundary no longer matters. `pnpm typecheck` already covers two branches for src/ and
+//   packages/ importers (NodeNext rejects a non-exported subpath with TS2307; composite rootDir
+//   rejects a package→root relative escape with TS6059), but the A4 spike found no compiler
+//   mechanism for an undeclared workspace:* dependency, a root→packages/*/src relative tunnel,
+//   or any scripts/ import: project references are a build-cache mechanism, not a boundary.
+//
 // R11 package-boundaries: the workspace rules of #1490, as data the gate walks.
 //
 // Package resolution already makes a deep `@agent-device/*` specifier a runtime

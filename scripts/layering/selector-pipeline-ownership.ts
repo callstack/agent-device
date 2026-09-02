@@ -1,6 +1,20 @@
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
 
 /**
+ * Catches: a route to the matching engine that bypasses selector-pipeline-policy.ts's declared
+ *   structural stages (occlusion, off-screen, hittable-ancestor promotion, poll budget) — the
+ *   route still gets an ambiguity contract, so it looks correct in review while silently
+ *   skipping every stage the declared owner exists to guarantee.
+ * Evidence: 74eab2a554 (#1744) routed selector-resolution structural stages into this typed
+ *   policy, the migration this ownership check protects against regressing.
+ * Cost: 154 LOC (66 rule + 88 test).
+ * Kill criterion: none enforced today; retire only by maintainer decision that a single admitted
+ *   importer of @agent-device/selectors/engine no longer matters. The exports map makes the
+ *   engine resolvable, not private: any module can import the subpath, so only this edge scan
+ *   sees a second importer.
+ */
+
+/**
  * R19 selector-pipeline-ownership (#1656).
  *
  * The structural stages of selector resolution — occlusion, off-screen,

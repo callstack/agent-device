@@ -1,3 +1,14 @@
+// Catches: application-lifecycle state (the platform-runtime-gateway/application-resources/
+//   IME-activation trio) mutated from outside its declared owner file — an app-boot or IME
+//   readiness race that only shows up as an intermittent device-facing flake, because the type
+//   system sees a legal write to a legal field regardless of which module made it.
+// Evidence: d8a7d03faf (#1759) routed application lifecycle through runtime facts, the migration
+//   this ownership check protects; 7b48531d3b (#2081) retired the cutover scaffolding around it.
+// Cost: 201 LOC (119 rule + 82 test).
+// Kill criterion: none enforced today; retire only by maintainer decision that the
+//   gateway/application-resources/IME-activation trio having one writer no longer matters.
+//   The trio are plain mutable fields, so an outside write type-checks.
+
 import { parseSync } from 'oxc-parser';
 import { memberName, visitAst } from './layering-ast.ts';
 import type { LayeringViolation } from './model.ts';

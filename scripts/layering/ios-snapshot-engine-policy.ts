@@ -1,3 +1,16 @@
+// Catches: an iOS snapshot caller reaching the XCTest/Limrun/Appium runners directly instead of
+//   through the one converged engine.ts — the fragmentation #2222's "converge Limrun snapshots
+//   through engine" and #758's "bulk-snapshot DEPTH limit" both trace back to, where each
+//   backend's snapshot path could silently diverge from the others' presentation contract.
+// Evidence: a8ee397168 (#2213) added the snapshot engine conformance gates this policy
+//   enforces; 6c8c0508d9 (#2222) converged Limrun snapshots through the engine it protects.
+// Cost: 267 LOC (229 rule + 38 test).
+// Kill criterion: none enforced today; retire only by maintainer decision that the engine.ts →
+//   runner-presentation.ts call topology (presentIosSnapshot and publishIosSnapshot each make
+//   their one delegating call; the runner file never folds, validates, or builds the
+//   presentation itself) no longer matters. An exports map cannot replace it: both files sit
+//   in one package and call each other by relative import, which no manifest restricts.
+
 import { parseSync } from 'oxc-parser';
 import type { LayeringViolation } from './model.ts';
 import { memberPath, visitAst } from './layering-ast.ts';

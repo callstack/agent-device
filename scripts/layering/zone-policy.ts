@@ -1,6 +1,18 @@
 import type { ImportEdge } from './model.ts';
 
 /**
+ * Catches: a core or daemon module reaching up into commands/ — the one direction the ranked
+ *   spine (R5/R6) cannot see on its own, because "commands is above core" is a zone-table fact,
+ *   not a rank the cycle/back-edge checkers infer.
+ * Evidence: ba1a5efbc6 (#1449) introduced the policy table after R1-R3 lived as hand-written
+ *   predicates; 2e0879a260 (#987) records the SDK-barrel exemption R3 needed before retirement.
+ * Cost: 152 LOC (72 rule + 80 test).
+ * Kill criterion: none enforced today; retire only by maintainer decision that "core and daemon
+ *   never import commands/" no longer matters — moot only if commands/ absorbs core and daemon
+ *   as internal implementation detail and the zone table collapses to one row or fewer.
+ */
+
+/**
  * R2 as data: which zone may import which.
  *
  * The original folder policies were hand-written predicate functions. Stating the remaining rule
