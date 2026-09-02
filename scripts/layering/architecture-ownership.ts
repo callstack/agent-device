@@ -96,6 +96,12 @@ export const SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS = [
   'src/daemon/handlers/session-audio.ts',
 ] as const;
 
+export const SNAPSHOT_EXECUTION_RETIRED_HANDLER_PATHS = [
+  'src/daemon/handlers/snapshot-capture.ts',
+  'src/daemon/handlers/snapshot-interactor-capture.ts',
+  'src/daemon/handlers/snapshot-session.ts',
+] as const;
+
 export const LOGICAL_MODULE_POLICIES = [
   {
     name: 'ad-replay',

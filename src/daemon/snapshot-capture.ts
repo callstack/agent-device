@@ -13,17 +13,17 @@ import {
   type SnapshotStateProvenance,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { resolveRefLabel } from '../../core/snapshot-node-lookup.ts';
+import { resolveRefLabel } from '../core/snapshot-node-lookup.ts';
 import { captureSnapshotWithInteractor } from './snapshot-interactor-capture.ts';
-import { buildSnapshotState } from '../../core/snapshot-state.ts';
-import { clearAndroidSnapshotFreshness } from '../session-snapshot-freshness.ts';
-import type { SnapshotFreshnessMode } from '../../snapshot/snapshot-freshness/index.ts';
-import { contextFromFlags } from '../context.ts';
-import { resolveDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
-import { createInteractionRetryTap } from '../interaction-retry-tap.ts';
-import type { SessionState } from '../types.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import { errorResponse, type DaemonFailureResponse } from '../response.ts';
+import { buildSnapshotState } from '../core/snapshot-state.ts';
+import { clearAndroidSnapshotFreshness } from './session-snapshot-freshness.ts';
+import type { SnapshotFreshnessMode } from '../snapshot/snapshot-freshness/index.ts';
+import { contextFromFlags } from './context.ts';
+import { resolveDeferredInteractionOutcome } from './deferred-interaction-outcome.ts';
+import { createInteractionRetryTap } from './interaction-retry-tap.ts';
+import type { SessionState } from './types.ts';
+import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
+import { errorResponse, type DaemonFailureResponse } from './response.ts';
 
 type CaptureSnapshotParams = {
   device: SessionState['device'];

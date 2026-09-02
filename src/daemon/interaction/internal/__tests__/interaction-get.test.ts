@@ -26,7 +26,7 @@ const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
 
-vi.mock('../../../handlers/snapshot-interactor-capture.ts', async () => {
+vi.mock('../../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../../__tests__/legacy-snapshot-capture-fixture.ts');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });

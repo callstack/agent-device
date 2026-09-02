@@ -7,7 +7,7 @@ import {
 } from '../../__tests__/interaction-get-runtime-fixture.ts';
 import fs from 'node:fs';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../snapshot.ts';
-import { captureSnapshot } from '../snapshot-capture.ts';
+import { captureSnapshot } from '../../snapshot-capture.ts';
 import { SessionStore } from '../../session-store.ts';
 import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtime.ts';
 import type { DaemonResponse, SessionState } from '../../types.ts';
@@ -31,7 +31,7 @@ import {
   makeSessionStore,
 } from './snapshot-handler-fixture.ts';
 
-vi.mock('../snapshot-interactor-capture.ts', async () => {
+vi.mock('../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../__tests__/legacy-snapshot-capture-fixture.ts');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });

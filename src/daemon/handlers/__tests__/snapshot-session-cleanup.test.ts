@@ -9,7 +9,7 @@ vi.mock('@agent-device/platform-apple/app-lifecycle', async (importOriginal) => 
   closeIosApp: vi.fn(async () => {}),
 }));
 
-import { withSessionlessRunnerCleanup } from '../snapshot-session.ts';
+import { withSessionlessRunnerCleanup } from '../../snapshot-session.ts';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { closeIosApp } from '@agent-device/platform-apple/app-lifecycle';
 import { stopIosRunnerSession } from '@agent-device/platform-apple/runner/operations';

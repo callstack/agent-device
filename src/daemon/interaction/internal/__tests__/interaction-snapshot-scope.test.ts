@@ -15,7 +15,7 @@ import { captureSnapshotForSession } from '../../index.ts';
 
 const captured = vi.hoisted(() => ({ options: [] as SnapshotOptions[] }));
 
-vi.mock('../../../handlers/snapshot-interactor-capture.ts', () => ({
+vi.mock('../../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(async ({ options }: { options: SnapshotOptions }) => {
     captured.options.push(options);
     const nodes = [

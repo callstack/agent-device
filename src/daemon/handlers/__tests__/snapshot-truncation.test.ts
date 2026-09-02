@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
+import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../snapshot.ts';
 import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtime.ts';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';

@@ -12,8 +12,8 @@ import { type CommandSessionRecord, createAgentDevice } from '../runtime.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { RuntimeAdmissionBindings } from './request-runtime-binding.ts';
 import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
-import { captureSnapshot } from './handlers/snapshot-capture.ts';
-import { buildSnapshotSession, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
+import { captureSnapshot } from './snapshot-capture.ts';
+import { buildSnapshotSession, withSessionlessRunnerCleanup } from './snapshot-session.ts';
 import { resolveSessionScope } from './session-routing.ts';
 import { activateCompleteRefFrame } from './ref-frame.ts';
 import {

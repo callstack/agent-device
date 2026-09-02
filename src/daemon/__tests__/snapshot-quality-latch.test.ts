@@ -18,7 +18,7 @@ import type { SessionState } from '../types.ts';
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 
-vi.mock('../handlers/snapshot-interactor-capture.ts', async () => {
+vi.mock('../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('./legacy-snapshot-capture-fixture.ts');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });

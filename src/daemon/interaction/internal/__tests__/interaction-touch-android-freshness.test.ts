@@ -27,7 +27,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../handlers/snapshot-interactor-capture.ts', () => ({
+vi.mock('../../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
@@ -42,7 +42,7 @@ import {
   getAndroidBlockingDialogObservation,
   getAndroidScreenSize,
 } from '@agent-device/platform-android/mechanics';
-import { captureSnapshotWithInteractor } from '../../../handlers/snapshot-interactor-capture.ts';
+import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);

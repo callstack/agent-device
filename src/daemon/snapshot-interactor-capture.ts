@@ -19,7 +19,7 @@ export async function captureSnapshotWithInteractor(params: {
   runnerContext: RunnerContext;
   options: SnapshotOptions;
 }): Promise<SnapshotResult> {
-  const { getInteractor } = await import('../../core/interactors.ts');
+  const { getInteractor } = await import('../core/interactors.ts');
   const interactor = await getInteractor(params.device, params.runnerContext);
   return await interactor.snapshot(params.options);
 }

@@ -1,8 +1,8 @@
-import { resolveTargetDevice } from '../../core/dispatch-resolve.ts';
+import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
-import type { DaemonRequest, SessionScope, SessionState } from '../types.ts';
-import { ensureDeviceReady } from '../device-ready.ts';
-import { SessionStore } from '../session-store.ts';
+import type { DaemonRequest, SessionScope, SessionState } from './types.ts';
+import { ensureDeviceReady } from './device-ready.ts';
+import { SessionStore } from './session-store.ts';
 
 export async function resolveSessionDevice(
   sessionStore: SessionStore,

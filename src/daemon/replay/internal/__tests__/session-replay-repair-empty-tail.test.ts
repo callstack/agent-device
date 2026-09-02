@@ -29,7 +29,7 @@ vi.mock('../../../../core/dispatch-resolve.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../core/dispatch-resolve.ts')>();
   return { ...actual, resolveTargetDevice: vi.fn() };
 });
-vi.mock('../../../handlers/snapshot-interactor-capture.ts', () => ({
+vi.mock('../../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
@@ -37,7 +37,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
 import { SessionStore } from '../../../session-store.ts';
-import { captureSnapshotWithInteractor } from '../../../handlers/snapshot-interactor-capture.ts';
+import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,

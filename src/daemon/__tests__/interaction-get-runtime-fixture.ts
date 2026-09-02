@@ -27,7 +27,7 @@ import {
 } from '@agent-device/contracts/touch-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import { captureSnapshotWithInteractor } from '../handlers/snapshot-interactor-capture.ts';
+import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 import { androidObservationFixture } from './android-observation-fixture.ts';
 import { createUnavailableRuntimeFactsForTest } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 

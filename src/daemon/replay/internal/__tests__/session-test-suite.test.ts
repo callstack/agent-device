@@ -8,7 +8,7 @@ import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts'
 // device runner, so without a mock those calls fall through to the real
 // (slow/hanging) runner dispatch path. Reject fast so failure-path tests keep
 // exercising `divergence.screen: unavailable` deterministically.
-vi.mock('../../../handlers/snapshot-interactor-capture.ts', () => ({
+vi.mock('../../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(async () => {
     throw new Error('no device runner available in this test');
   }),

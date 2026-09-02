@@ -43,7 +43,7 @@ vi.mock('../../../../core/dispatch-resolve.ts', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../handlers/snapshot-interactor-capture.ts', () => ({
+vi.mock('../../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
@@ -62,7 +62,7 @@ import {
 } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { captureSnapshotThroughLegacyDispatchFixture } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
-import { captureSnapshotWithInteractor } from '../../../handlers/snapshot-interactor-capture.ts';
+import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 import { seedReplayFixtureSession } from '../../__tests__/session-replay-runtime.fixtures.ts';
 
 vi.mocked(captureSnapshotWithInteractor).mockImplementation(

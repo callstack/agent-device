@@ -23,8 +23,8 @@ import {
   type AdmittedRuntimePlan,
 } from './session-runtime-admission.ts';
 import { errorResponse } from './response.ts';
-import { resolveSnapshotScope } from './handlers/snapshot-capture.ts';
-import { resolveSessionDevice } from './handlers/snapshot-session.ts';
+import { resolveSnapshotScope } from './snapshot-capture.ts';
+import { resolveSessionDevice } from './snapshot-session.ts';
 import {
   selectElementTextOperation,
   selectFindMutatingOperations,

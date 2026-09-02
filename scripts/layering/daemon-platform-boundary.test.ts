@@ -246,7 +246,7 @@ test('R65 rejects platform selection inside cleanup orchestrators', () => {
 
   const predicate = violations(
     'export const cleanup = (device: any) => isIosFamily(device);',
-    'src/daemon/handlers/snapshot-session.ts',
+    'src/daemon/snapshot-session.ts',
   );
   assert.match(predicate[0]?.message ?? '', /typed root-composed cleanup capability/);
 
@@ -259,7 +259,7 @@ test('R65 rejects platform selection inside cleanup orchestrators', () => {
   assert.deepEqual(
     violations(
       'export const cleanup = (owner: any, device: any) => owner.cleanupSessionlessExecutionHost(device);',
-      'src/daemon/handlers/snapshot-session.ts',
+      'src/daemon/snapshot-session.ts',
     ),
     [],
   );

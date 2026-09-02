@@ -79,6 +79,7 @@ import {
   checkRetiredInteractionPaths,
   checkRetiredSessionLifecyclePaths,
   checkRetiredSessionObservabilityPaths,
+  checkRetiredSnapshotExecutionPaths,
   daemonModularitySummary,
 } from './daemon-modularity.ts';
 import {
@@ -594,6 +595,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     ...checkDaemonModularityRatchets(context.edges, context.typeCycleMembers),
     ...checkRetiredSessionLifecyclePaths(context.sourceFiles),
     ...checkRetiredSessionObservabilityPaths(context.sourceFiles),
+    ...checkRetiredSnapshotExecutionPaths(context.sourceFiles),
     ...checkRetiredInteractionPaths(context.sourceFiles),
   ],
   'daemon-platform-boundary': (context) =>

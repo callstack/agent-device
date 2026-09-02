@@ -6,7 +6,7 @@ vi.mock('../../../../core/dispatch-resolve.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../core/dispatch-resolve.ts')>();
   return { ...actual, resolveTargetDevice: vi.fn() };
 });
-vi.mock('../../../handlers/snapshot-interactor-capture.ts', () => ({
+vi.mock('../../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 import fs from 'node:fs';
@@ -25,7 +25,7 @@ import {
 } from '../session-replay-maestro-failure.ts';
 import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
 import { SessionStore } from '../../../session-store.ts';
-import { captureSnapshotWithInteractor } from '../../../handlers/snapshot-interactor-capture.ts';
+import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { baseReplayRequest as baseReq } from '../../__tests__/session-replay-runtime.fixtures.ts';
 import { replaySessionForTest } from './replay-session-fixture.ts';

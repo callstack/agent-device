@@ -9,7 +9,7 @@ import {
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { DaemonRequest, SessionState } from './types.ts';
 import { SessionStore } from './session-store.ts';
-import { captureSnapshot } from './handlers/snapshot-capture.ts';
+import { captureSnapshot } from './snapshot-capture.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import { getActiveAndroidSnapshotFreshness } from './session-snapshot-freshness.ts';
 import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';

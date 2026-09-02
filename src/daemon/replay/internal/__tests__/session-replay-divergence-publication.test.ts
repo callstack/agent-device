@@ -3,11 +3,11 @@ import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../../../handlers/snapshot-interactor-capture.ts', () => ({
+vi.mock('../../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
-import { captureSnapshotWithInteractor } from '../../../handlers/snapshot-interactor-capture.ts';
+import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { ReplayDivergence } from '@agent-device/contracts/divergence';

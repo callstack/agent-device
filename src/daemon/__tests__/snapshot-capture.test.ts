@@ -1,11 +1,11 @@
 import { expect, test, vi } from 'vitest';
 import { captureSnapshotData } from '../snapshot-capture.ts';
-import { buildSnapshotVisibility } from '../../../snapshot/snapshot-visibility.ts';
+import { buildSnapshotVisibility } from '../../snapshot/snapshot-visibility.ts';
 import {
   ANDROID_EMULATOR,
   IOS_SIMULATOR,
   MACOS_DEVICE,
-} from '../../../__tests__/test-utils/device-fixtures.ts';
+} from '../../__tests__/test-utils/device-fixtures.ts';
 
 const captureSnapshotWithInteractor = vi.hoisted(() => vi.fn());
 vi.mock('../snapshot-interactor-capture.ts', () => ({ captureSnapshotWithInteractor }));

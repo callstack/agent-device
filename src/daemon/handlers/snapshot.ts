@@ -6,7 +6,7 @@ import { handleSettingsCommand, parseSettingsArgs } from './snapshot-settings.ts
 import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';
 import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import { dispatchWaitViaRuntime } from '../selector-runtime.ts';
-import { resolveSessionDevice, withSessionlessRunnerCleanup } from './snapshot-session.ts';
+import { resolveSessionDevice, withSessionlessRunnerCleanup } from '../snapshot-session.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 

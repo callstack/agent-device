@@ -11,7 +11,7 @@ import {
 import { invokeFindHandler } from './find-handler-fixture.ts';
 import { legacyDispatchCapture } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
 
-vi.mock('../../../handlers/snapshot-interactor-capture.ts', async () => {
+vi.mock('../../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../../__tests__/legacy-snapshot-capture-fixture.ts');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });

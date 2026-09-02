@@ -1,7 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
 import { handleReactNativeCommands } from '../react-native.ts';
-import { captureSnapshot } from '../snapshot-capture.ts';
+import { captureSnapshot } from '../../snapshot-capture.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
@@ -11,7 +11,7 @@ import {
   resetGetRuntimeFixture,
 } from '../../__tests__/interaction-get-runtime-fixture.ts';
 
-vi.mock('../snapshot-capture.ts', () => ({
+vi.mock('../../snapshot-capture.ts', () => ({
   captureSnapshot: vi.fn(),
 }));
 

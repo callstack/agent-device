@@ -13,7 +13,7 @@
 import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../../../daemon/handlers/snapshot-interactor-capture.ts', () => ({
+vi.mock('../../../daemon/snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(async () => {
     throw new Error('no device runner available in this test');
   }),

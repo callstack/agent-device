@@ -5,6 +5,7 @@ import {
   matchesDeclaredRoot,
   SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS,
   SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS,
+  SNAPSHOT_EXECUTION_RETIRED_HANDLER_PATHS,
   type LogicalModulePolicy,
 } from './architecture-ownership.ts';
 import { targetDagZone, type LayeringViolation, type ResolvedImportEdge } from './model.ts';
@@ -75,6 +76,18 @@ export function checkRetiredSessionObservabilityPaths(
     SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS,
     /^src\/daemon\/handlers\/session-(?:observability|perf|logs|events|network|audio)(?:-[^/]+)?\.ts$/,
     'session observability',
+  );
+}
+
+export function checkRetiredSnapshotExecutionPaths(
+  sourceFiles: readonly string[],
+): LayeringViolation[] {
+  return checkRetiredHandlerPaths(
+    sourceFiles,
+    SNAPSHOT_EXECUTION_RETIRED_HANDLER_PATHS,
+    /$^/,
+    'snapshot execution handler',
+    'Reuse the daemon-owned snapshot execution module instead of restoring shared mechanics beneath a route adapter.',
   );
 }
 

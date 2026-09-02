@@ -1,7 +1,7 @@
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { buildRuntimeCaptureInput } from '../snapshot-runtime-capture-input.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
-import { captureSnapshot as captureSnapshotThroughHandler } from '../handlers/snapshot-capture.ts';
+import { captureSnapshot } from '../snapshot-capture.ts';
 import { captureInteractionSnapshot } from './internal/interaction-snapshot.ts';
 import { createInteractionRuntimeForRoute } from './internal/interaction-runtime.ts';
 import { readSettleRequest, settleFlagGuardResponse } from './internal/interaction-flags.ts';
@@ -31,7 +31,7 @@ export const captureSnapshotForSession: CaptureSnapshotForSession = async (
     contextFromFlags,
     options,
     capture: async ({ flags: effectiveFlags, options: captureOptions, context }) => {
-      const { snapshot } = await captureSnapshotThroughHandler({
+      const { snapshot } = await captureSnapshot({
         device: session.device,
         session,
         flags: effectiveFlags,

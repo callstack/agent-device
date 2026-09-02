@@ -6,7 +6,7 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { errorResponse } from './response.ts';
 import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from './session-snapshot.ts';
-import { resolveSessionDevice, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
+import { resolveSessionDevice, withSessionlessRunnerCleanup } from './snapshot-session.ts';
 import {
   checkElementTargetArgs,
   checkGetFormat,

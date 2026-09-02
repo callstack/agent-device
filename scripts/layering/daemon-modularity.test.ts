@@ -5,6 +5,7 @@ import {
   checkRetiredInteractionPaths,
   checkRetiredSessionLifecyclePaths,
   checkRetiredSessionObservabilityPaths,
+  checkRetiredSnapshotExecutionPaths,
   DAEMON_MODULARITY_BASELINE,
   TYPE_CYCLE_BASELINE,
 } from './daemon-modularity.ts';
@@ -414,6 +415,25 @@ test('session observability rejects handler deep imports in both directions', ()
       },
     ],
   );
+});
+
+test('snapshot execution cannot return to handler-owned support paths', () => {
+  const restored = [
+    'src/daemon/handlers/snapshot-capture.ts',
+    'src/daemon/handlers/snapshot-interactor-capture.ts',
+    'src/daemon/handlers/snapshot-session.ts',
+  ];
+
+  assert.deepEqual(
+    checkRetiredSnapshotExecutionPaths(restored).map(({ file, message }) => ({ file, message })),
+    restored.map((file) => ({
+      file,
+      message:
+        `retired snapshot execution handler path was restored: ${file}. ` +
+        'Reuse the daemon-owned snapshot execution module instead of restoring shared mechanics beneath a route adapter.',
+    })),
+  );
+  assert.deepEqual(checkRetiredSnapshotExecutionPaths(['src/daemon/handlers/snapshot.ts']), []);
 });
 
 test('session lifecycle rejects restored neutral helper paths', () => {
