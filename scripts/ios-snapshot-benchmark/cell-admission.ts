@@ -6,6 +6,7 @@ import {
   openFixture,
   pressFixtureTarget,
   scrollFixtureSetup,
+  snapshotHasAnchor,
   snapshotFixture,
   type CliContext,
   type CliResult,
@@ -113,12 +114,29 @@ export function admitStableWarmSample(
 
 export function cleanupSuccessfulSample(context: CliContext, options: CellAdmissionOptions): void {
   if (options.state !== 'relaunch' || options.fixture.setupAction !== 'open-alert') return;
-  const dismissed = pressFixtureTarget(context, 'label="Cancel"');
+  const dismissed = pressFixtureTarget(context, 'role="button" label="Cancel"');
   requireFixtureOperationSuccess(
-    fixtureOperationFromCli(dismissed, 'agent-device click label="Cancel"'),
+    fixtureOperationFromCli(dismissed, 'agent-device click role="button" label="Cancel"'),
     `${options.fixture.id} sample cleanup`,
     'cell-state',
   );
+  const observed = snapshotFixture(context);
+  requireFixtureOperationSuccess(
+    fixtureOperationFromCli(observed, 'agent-device batch --steps snapshot'),
+    `${options.fixture.id} sample cleanup verification`,
+    'cell-state',
+  );
+  if (
+    !snapshotHasAnchor(observed.payload, options.fixture.anchorText) ||
+    (options.fixture.postSetupAnchorText !== undefined &&
+      snapshotHasAnchor(observed.payload, options.fixture.postSetupAnchorText))
+  ) {
+    throw new BenchmarkCellAdmissionError(
+      'cell-state',
+      `Fixture ${options.fixture.id} cleanup did not restore its base surface.`,
+      'agent-device batch --steps snapshot',
+    );
+  }
 }
 
 async function admitNonWarmSample(
