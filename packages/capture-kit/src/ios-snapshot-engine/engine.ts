@@ -4,7 +4,6 @@ import {
   deriveIosCaptureHint,
   planIosSnapshot,
 } from '../ios-snapshot-planning.ts';
-import { IOS_SNAPSHOT_PRODUCER_CAPABILITIES } from '../ios-snapshot-acquisition.ts';
 import type {
   IosSnapshotAcquisition,
   IosSnapshotEngine,
@@ -121,9 +120,7 @@ function presentAcquiredSnapshot(
   }
 
   const viewport = resolveIosViewport(acquisition);
-  const hittabilityAvailable =
-    IOS_SNAPSHOT_PRODUCER_CAPABILITIES[acquisition.producer].hittabilityEvidence === 'available' &&
-    !hasUnavailableHittability(acquisition.residue);
+  const hittabilityAvailable = !hasUnavailableHittability(acquisition.residue);
   const folded = foldIosSnapshot(acquisition.nodes, viewport, request.interactiveOnly, foldPolicy, {
     hittabilityAvailable,
   });
