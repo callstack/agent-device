@@ -3,9 +3,7 @@ export {
   createIosSnapshotEngine,
   presentIosSnapshot,
   publishIosSnapshot,
-  resolveIosViewportEvidenceFromRoots,
 } from './engine.ts';
-export type { IosSnapshotViewportRoot } from './engine.ts';
 export { presentIosRunnerSnapshot } from './runner-presentation.ts';
 export {
   buildIosInteractiveSnapshotPresentation,

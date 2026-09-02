@@ -18,8 +18,8 @@ import {
   IosSnapshotEngineError,
   presentIosSnapshot,
   publishIosSnapshot,
-  resolveIosViewportEvidenceFromRoots,
 } from './index.ts';
+import { resolveIosViewportEvidenceFromRoots } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type { Rect, RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
 const viewport: Rect = { x: 0, y: 0, width: 320, height: 240 };

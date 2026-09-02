@@ -1,33 +1,22 @@
 import {
+  createIosSnapshotAcquisition,
   resolveIosViewportEvidenceFromRoots,
-  type IosSnapshotViewportRoot,
-} from '@agent-device/capture-kit/ios-snapshot-engine';
-import {
-  deriveIosSnapshotAcquisitionResidue,
-  IOS_SNAPSHOT_PRODUCER_CAPABILITIES,
-} from '@agent-device/capture-kit/ios-snapshot-planning';
+} from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
 import type { LimrunIosSession } from './ios.ts';
 import { flattenIosTree, type IosTreeNode } from './snapshot.ts';
-
-const LIMRUN_IOS_PRODUCER = IOS_SNAPSHOT_PRODUCER_CAPABILITIES['limrun-ios-tree'];
 
 export async function captureLimrunIosSnapshot(
   session: Pick<LimrunIosSession, 'client' | 'instanceId'>,
 ): Promise<SnapshotRuntimeAcquiredResult> {
   const tree = JSON.parse(await session.client.elementTree()) as IosTreeNode | IosTreeNode[];
   const viewport = readLimrunViewport(tree, session.client.deviceInfo);
-  return {
-    stage: 'acquired',
-    acquisition: {
-      producer: 'limrun-ios-tree',
-      intent: 'full',
-      nodes: flattenIosTree(tree),
-      viewport,
-      lineage: { targetId: session.instanceId },
-      residue: deriveIosSnapshotAcquisitionResidue(LIMRUN_IOS_PRODUCER, viewport),
-    },
-  };
+  return createIosSnapshotAcquisition({
+    producer: 'limrun-ios-tree',
+    nodes: flattenIosTree(tree),
+    viewport,
+    lineage: { targetId: session.instanceId },
+  });
 }
 
 function readLimrunViewport(
@@ -43,24 +32,24 @@ function readLimrunViewport(
   return readLimrunDeviceInfoViewport(deviceInfo);
 }
 
-function limrunViewportRoot(node: IosTreeNode): IosSnapshotViewportRoot {
+function limrunViewportRoot(node: IosTreeNode) {
   const rawRect = node.rect ?? node.frame;
   const rect = completeRect(rawRect);
   return {
     type: node.elementType ?? node.type ?? node.role,
     ...(rect ? { rect } : {}),
-    rectStatus: rectStatus(rawRect, rect),
+    rectStatus: viewportStatus(rawRect, rect),
   };
 }
 
-function completeRect(rect: IosTreeNode['rect']): IosSnapshotViewportRoot['rect'] | undefined {
+function completeRect(rect: IosTreeNode['rect']) {
   if (!isCompleteRect(rect)) return undefined;
   return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
 }
 
 function isCompleteRect(
   rect: IosTreeNode['rect'],
-): rect is NonNullable<IosSnapshotViewportRoot['rect']> {
+): rect is { x: number; y: number; width: number; height: number } {
   return [rect?.x, rect?.y, rect?.width, rect?.height].every(isFiniteNumber);
 }
 
@@ -68,19 +57,11 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function rectStatus(
+const viewportStatus = (
   rawRect: IosTreeNode['rect'],
-  rect: IosSnapshotViewportRoot['rect'] | undefined,
-): NonNullable<IosSnapshotViewportRoot['rectStatus']> {
-  if (!rawRect) return 'not-provided';
-  const complete =
-    rawRect.x !== undefined &&
-    rawRect.y !== undefined &&
-    rawRect.width !== undefined &&
-    rawRect.height !== undefined;
-  if (!complete) return 'not-provided';
-  return rect && rect.width > 0 && rect.height > 0 ? 'reported' : 'invalid';
-}
+  rect: ReturnType<typeof completeRect>,
+): 'reported' | 'invalid' | 'not-provided' =>
+  !rawRect || !rect ? 'not-provided' : rect.width > 0 && rect.height > 0 ? 'reported' : 'invalid';
 
 function readLimrunDeviceInfoViewport(
   deviceInfo: { screenWidth?: number; screenHeight?: number } | undefined,

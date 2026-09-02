@@ -26,7 +26,7 @@ import { buildSnapshotVisibility } from '../../../snapshot/snapshot-visibility.t
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../../core/android-system-surface-disclosure.ts';
 import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';
 import { now } from '../../runtime-common.ts';
-import { IOS_SNAPSHOT_PRODUCER_CAPABILITIES } from '@agent-device/capture-kit/ios-snapshot-planning';
+import { IOS_SNAPSHOT_PRODUCER_CAPABILITIES } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type {
   DiffSnapshotCommandOptions,
   RuntimeCommand,

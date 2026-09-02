@@ -1,13 +1,12 @@
-import { resolveIosViewportEvidenceFromRoots } from '@agent-device/capture-kit/ios-snapshot-engine';
 import {
-  deriveIosSnapshotAcquisitionResidue,
-  IOS_SNAPSHOT_PRODUCER_CAPABILITIES,
-} from '@agent-device/capture-kit/ios-snapshot-planning';
+  createIosSnapshotAcquisition,
+  resolveIosViewportEvidenceFromRoots,
+} from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
 import type { WebDriverClient } from './webdriver-client.ts';
 import { parseWebDriverSourceFacts } from './webdriver-source.ts';
 
-const APPIUM_PRODUCER = IOS_SNAPSHOT_PRODUCER_CAPABILITIES['appium-source'];
+const APPIUM_PRODUCER = 'appium-source' as const;
 
 export async function captureWebDriverIosSnapshot(
   client: Pick<WebDriverClient, 'source'>,
@@ -24,15 +23,10 @@ export function acquireWebDriverIosSnapshot(
   const viewport =
     resolveIosViewportEvidenceFromRoots(sourceFacts.roots) ??
     ({ kind: 'missing', reason: 'not-provided' } as const);
-  return {
-    stage: 'acquired',
-    acquisition: {
-      producer: 'appium-source',
-      intent: 'full',
-      nodes: sourceFacts.nodes,
-      viewport,
-      lineage: targetId ? { targetId } : {},
-      residue: deriveIosSnapshotAcquisitionResidue(APPIUM_PRODUCER, viewport),
-    },
-  };
+  return createIosSnapshotAcquisition({
+    producer: APPIUM_PRODUCER,
+    nodes: sourceFacts.nodes,
+    viewport,
+    lineage: targetId ? { targetId } : {},
+  });
 }

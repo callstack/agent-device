@@ -618,7 +618,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
       [...context.sources].map(([path, source]) => ({ path, source })),
     ),
   'provider-snapshot-presentation-ownership': (context) =>
-    providerSnapshotPresentationViolations(context.sources),
+    providerSnapshotPresentationViolations(context.sources, context.edges),
 };
 
 export function main(): number {

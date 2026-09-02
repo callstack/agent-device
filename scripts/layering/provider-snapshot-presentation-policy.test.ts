@@ -4,90 +4,81 @@ import path from 'node:path';
 import { test } from 'node:test';
 import {
   IOS_SNAPSHOT_PRESENTATION_OWNER,
-  LIMRUN_IOS_SNAPSHOT_ADAPTER,
   PROVIDER_SNAPSHOT_PRESENTATION_RULE,
-  SNAPSHOT_RUNTIME_HOST,
-  WEBDRIVER_IOS_SNAPSHOT_ADAPTER,
   providerSnapshotPresentationViolations,
 } from './provider-snapshot-presentation-policy.ts';
+import { resolveImportEdges } from './model.ts';
+import { workspaceSpecifierTargets } from './package-boundaries.ts';
+import { listTrackedProductionSources } from './tracked-sources.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
+const providerHelper = 'packages/provider-webdriver/src/provider-snapshot-helper.ts';
 
-function currentSources(): Map<string, string> {
-  return new Map(
-    [
-      WEBDRIVER_IOS_SNAPSHOT_ADAPTER,
-      LIMRUN_IOS_SNAPSHOT_ADAPTER,
-      IOS_SNAPSHOT_PRESENTATION_OWNER,
-      SNAPSHOT_RUNTIME_HOST,
-      'packages/provider-webdriver/src/platform-runtime.ts',
-      'packages/provider-limrun/src/app-log-runtime.ts',
-    ].map((file) => [file, fs.readFileSync(path.join(repoRoot, file), 'utf8')]),
+function currentSources(overrides: ReadonlyMap<string, string> = new Map()): Map<string, string> {
+  const sources = new Map(
+    listTrackedProductionSources(repoRoot).map((file) => [
+      file,
+      fs.readFileSync(path.join(repoRoot, file), 'utf8'),
+    ]),
+  );
+  for (const [file, source] of overrides) sources.set(file, source);
+  return sources;
+}
+
+function violations(overrides: ReadonlyMap<string, string> = new Map()) {
+  const sources = currentSources(overrides);
+  return providerSnapshotPresentationViolations(
+    sources,
+    resolveImportEdges(sources, workspaceSpecifierTargets(repoRoot)),
   );
 }
 
-test('provider adapters carry facts while one host module owns presentation', () => {
-  assert.deepEqual(providerSnapshotPresentationViolations(currentSources()), []);
+test('provider packages use the acquisition entrypoint and cannot reach presentation', () => {
+  assert.deepEqual(violations(), []);
 });
 
-test('the structural gate rejects a planted provider presentation path', () => {
-  const sources = currentSources();
-  sources.set(
-    WEBDRIVER_IOS_SNAPSHOT_ADAPTER,
-    `${sources.get(WEBDRIVER_IOS_SNAPSHOT_ADAPTER)}\nconst duplicatePresentation = presentIosSnapshot;\n`,
+test('R73 rejects an out-of-adapter provider presentation import', () => {
+  const result = violations(
+    new Map([
+      [
+        providerHelper,
+        `import { presentIosSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';\nvoid presentIosSnapshot;\n`,
+      ],
+    ]),
   );
-
-  const violations = providerSnapshotPresentationViolations(sources);
   assert.ok(
-    violations.some(
+    result.some(
       (entry) =>
         entry.rule === PROVIDER_SNAPSHOT_PRESENTATION_RULE &&
-        entry.message.includes('presentIosSnapshot'),
+        entry.file === providerHelper &&
+        entry.message.includes(IOS_SNAPSHOT_PRESENTATION_OWNER),
     ),
-    JSON.stringify(violations),
+    JSON.stringify(result),
   );
 });
 
-test('the structural gate rejects a planted provider residue discard', () => {
-  const sources = currentSources();
-  const adapter = sources.get(WEBDRIVER_IOS_SNAPSHOT_ADAPTER);
-  assert.ok(adapter);
-  const planted = adapter.replace(
-    /residue:\s*deriveIosSnapshotAcquisitionResidue\([^)]*\)/,
-    'residue: []',
-  );
-  assert.notEqual(planted, adapter);
-  sources.set(WEBDRIVER_IOS_SNAPSHOT_ADAPTER, planted);
-
-  const violations = providerSnapshotPresentationViolations(sources);
-  assert.ok(
-    violations.some(
-      (entry) =>
-        entry.rule === PROVIDER_SNAPSHOT_PRESENTATION_RULE &&
-        entry.file === WEBDRIVER_IOS_SNAPSHOT_ADAPTER &&
-        entry.message.includes('residue'),
-    ),
-    JSON.stringify(violations),
-  );
-});
-
-test('the structural gate rejects a planted provider residue rewrite', () => {
-  const sources = currentSources();
-  const adapter = sources.get(WEBDRIVER_IOS_SNAPSHOT_ADAPTER);
-  assert.ok(adapter);
-  sources.set(
-    WEBDRIVER_IOS_SNAPSHOT_ADAPTER,
-    `${adapter}\nfunction rewriteCarrier(carrier) { carrier.acquisition.residue = []; }\n`,
-  );
-
-  const violations = providerSnapshotPresentationViolations(sources);
-  assert.ok(
-    violations.some(
-      (entry) =>
-        entry.rule === PROVIDER_SNAPSHOT_PRESENTATION_RULE &&
-        entry.file === WEBDRIVER_IOS_SNAPSHOT_ADAPTER &&
-        entry.message.includes('rewrite acquired carrier residue'),
-    ),
-    JSON.stringify(violations),
-  );
-});
+for (const planted of [
+  {
+    name: 'a planted provider residue discard',
+    source: 'export const discarded = { residue: [] };\n',
+    message: 'construct or discard acquisition residue',
+  },
+  {
+    name: 'a planted provider residue rewrite',
+    source: 'export function rewrite(carrier) { carrier.acquisition.residue = []; }\n',
+    message: 'rewrite acquisition residue',
+  },
+]) {
+  test(`R73 rejects ${planted.name}`, () => {
+    const result = violations(new Map([[providerHelper, planted.source]]));
+    assert.ok(
+      result.some(
+        (entry) =>
+          entry.rule === PROVIDER_SNAPSHOT_PRESENTATION_RULE &&
+          entry.file === providerHelper &&
+          entry.message.includes(planted.message),
+      ),
+      JSON.stringify(result),
+    );
+  });
+}

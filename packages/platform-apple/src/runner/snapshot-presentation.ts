@@ -7,9 +7,9 @@ import type { SnapshotOptions } from '@agent-device/contracts/interactor-types';
 import {
   IosSnapshotEngineError,
   presentIosRunnerSnapshot,
-  resolveIosViewportEvidenceFromRoots,
   toIosSnapshotEngineErrorDetails,
 } from '@agent-device/capture-kit/ios-snapshot-engine';
+import { resolveIosViewportEvidenceFromRoots } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import { readSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import {
   createIosSnapshotRequest,

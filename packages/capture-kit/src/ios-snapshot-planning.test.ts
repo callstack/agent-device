@@ -10,15 +10,17 @@ import type {
   IosSnapshotRequestInput,
 } from '@agent-device/contracts/ios-snapshot';
 import {
-  IOS_SNAPSHOT_PRODUCER_CAPABILITIES,
   areIosSnapshotComparisonIdentitiesEqual,
   buildIosSnapshotComparisonIdentity,
   buildIosSnapshotPresentationKey,
   createIosSnapshotRequest,
   deriveIosCaptureHint,
-  deriveIosSnapshotCapabilityResidue,
   planIosSnapshot,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
+import {
+  createIosSnapshotAcquisition,
+  IOS_SNAPSHOT_PRODUCER_CAPABILITIES,
+} from '@agent-device/capture-kit/ios-snapshot-acquisition';
 
 type CaptureHintFixture = Readonly<{
   name: string;
@@ -157,29 +159,20 @@ test('Appium source plan carries its viewport evidence capability', () => {
   assert.equal(plan.evidence.viewport, 'available');
 });
 
-test('capability residue derives unavailable Appium facts from the registry', () => {
+test('acquisition derives unavailable Appium facts from the registry', () => {
   assert.deepEqual(
-    deriveIosSnapshotCapabilityResidue(IOS_SNAPSHOT_PRODUCER_CAPABILITIES['appium-source']),
+    createIosSnapshotAcquisition({
+      producer: 'appium-source',
+      nodes: [],
+      viewport: { kind: 'reported', rect: { x: 0, y: 0, width: 1, height: 1 } },
+      lineage: {},
+    }).acquisition.residue,
     [
       { kind: 'unavailable-fact', fact: 'hittability' },
       { kind: 'unavailable-fact', fact: 'acquisition-depth' },
       { kind: 'unavailable-fact', fact: 'truncation' },
     ],
   );
-});
-
-test('capability residue reports truncation independently from acquisition depth', () => {
-  const producer = acquiredProducer({
-    acquisitionDepth: {
-      rawTraversal: { kind: 'complete' },
-      regularPresented: { kind: 'complete' },
-    },
-    truncationEvidence: 'unavailable',
-  });
-
-  assert.deepEqual(deriveIosSnapshotCapabilityResidue(producer), [
-    { kind: 'unavailable-fact', fact: 'truncation' },
-  ]);
 });
 
 test('comparison identity rejects every identity axis and residue mismatch', () => {

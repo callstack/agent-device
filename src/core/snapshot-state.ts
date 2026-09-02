@@ -22,7 +22,7 @@ import { coveredAndroidReplacementNodeIndexes } from '../snapshot/android-replac
 import { scopeSnapshotNodes } from '@agent-device/capture-kit/snapshot-desktop-projection';
 import { normalizeSnapshotTree, pruneGroupNodes } from '../core/snapshot-tree-ingestion.ts';
 import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
-import { IOS_SNAPSHOT_PRODUCER_CAPABILITIES } from '@agent-device/capture-kit/ios-snapshot-planning';
+import { IOS_SNAPSHOT_PRODUCER_CAPABILITIES } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 
 /**
  * The ONE daemon assembly of a captured tree (ADR 0004 / #1797): normalize, group prune,

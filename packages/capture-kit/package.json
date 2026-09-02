@@ -14,6 +14,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./ios-snapshot-acquisition": {
+      "types": "./src/ios-snapshot-acquisition.ts",
+      "default": "./src/ios-snapshot-acquisition.ts"
+    },
     "./ios-snapshot-planning": {
       "types": "./src/ios-snapshot-planning.ts",
       "default": "./src/ios-snapshot-planning.ts"
