@@ -5,7 +5,10 @@ import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtim
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import { snapshotCliOutput } from '../../../commands/capture/output.ts';
-import { createLimrunIosInteractor } from '../../../../packages/provider-limrun/src/ios.ts';
+import {
+  createLimrunIosInteractor,
+  type LimrunIosSession,
+} from '../../../../packages/provider-limrun/src/ios.ts';
 import {
   createLimrunSnapshotSession,
   limrunSnapshotTree,
@@ -52,7 +55,7 @@ test('Limrun unknown truncation stays omitted through daemon and public output',
   } as const;
   const limrunSession = createLimrunSnapshotSession(limrunSnapshotTree());
   const elementTree = vi.spyOn(limrunSession.client, 'elementTree');
-  const limrunInteractor = createLimrunIosInteractor(limrunSession);
+  const limrunInteractor = createLimrunIosInteractor(limrunSession as LimrunIosSession);
   let providerNodes: Array<[string | undefined, string | undefined]> | undefined;
   sessionStore.set(sessionName, makeSession(sessionName, limrunDevice));
   setActiveProviderDeviceRuntimes([
@@ -95,6 +98,7 @@ test('Limrun unknown truncation stays omitted through daemon and public output',
 
   expect(response?.ok).toBe(true);
   if (!response?.ok) return;
+  const responseData = response.data as unknown as CaptureSnapshotResult;
   expect(elementTree).toHaveBeenCalledOnce();
   expect(providerNodes).toEqual([
     ['Application', 'App'],
@@ -103,11 +107,11 @@ test('Limrun unknown truncation stays omitted through daemon and public output',
     ['Button', 'Save'],
     ['StaticText', 'Save'],
   ]);
-  expect(response.data.nodes?.map((node) => [node.type, node.label])).toEqual(providerNodes);
-  expect(response.data).not.toHaveProperty('truncated');
+  expect(responseData.nodes?.map((node) => [node.type, node.label])).toEqual(providerNodes);
+  expect(responseData).not.toHaveProperty('truncated');
 
   const cliOutput = await snapshotCliOutput({
-    result: response.data as unknown as CaptureSnapshotResult,
+    result: responseData,
   });
   expect(cliOutput.jsonData).not.toHaveProperty('truncated');
 });
