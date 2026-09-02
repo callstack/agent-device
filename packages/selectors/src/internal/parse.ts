@@ -58,9 +58,8 @@ export const SELECTOR_KEY_NAMES: readonly SelectorKey[] = [...ALL_KEYS];
 // `button` in `button="Push Article"`). Superset of the ROLE_LABELS vocabulary in
 // src/snapshot/snapshot-lines.ts (plus a few common role words like list/tab/alert/dialog/header,
 // minus valid selector keys such as `text`, which ALL_KEYS short-circuits before this set is
-// consulted), kept as a local copy to avoid a utils/ -> snapshot/ layering dependency
-// (scripts/layering/check.ts). Drifts silently if ROLE_LABELS grows; that's fine here since this
-// is only used to sharpen a hint, not to validate anything.
+// consulted), kept locally to avoid a selectors -> snapshot layering dependency. Drifts silently
+// if ROLE_LABELS grows; that's fine here since this only sharpens a hint, not validates anything.
 const ROLE_HINT_WORDS = new Set([
   'button',
   'imagebutton',

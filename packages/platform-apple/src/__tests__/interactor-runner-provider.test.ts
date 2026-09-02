@@ -275,13 +275,12 @@ test('snapshot reports typed runner presentation failures', async () => {
     { runCommand: async () => ({ nodes: [{ index: 0, type: 'Application' }] }) },
   );
 
-  await assert.rejects(
-    interactor.snapshot(),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'COMMAND_FAILED' &&
-      error.details?.reason === 'missing-viewport',
-  );
+  await assert.rejects(interactor.snapshot(), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.deepEqual(error.details, { reason: 'missing-viewport', field: 'viewport' });
+    return true;
+  });
 });
 
 test('sparse runner payloads with no viewport fail before publishing actionable nodes', async () => {

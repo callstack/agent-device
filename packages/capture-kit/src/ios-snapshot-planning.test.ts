@@ -16,6 +16,7 @@ import {
   buildIosSnapshotPresentationKey,
   createIosSnapshotRequest,
   deriveIosCaptureHint,
+  deriveIosSnapshotCapabilityResidue,
   planIosSnapshot,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 
@@ -147,6 +148,24 @@ test('presented producers cannot claim acquisition narrowing', () => {
   });
 });
 
+test('Appium source plan carries its viewport evidence capability', () => {
+  const plan = planIosSnapshot(
+    createIosSnapshotRequest(),
+    IOS_SNAPSHOT_PRODUCER_CAPABILITIES['appium-source'],
+  );
+  assert.equal(plan.evidence.viewport, 'available');
+});
+
+test('capability residue derives unavailable Appium facts from the registry', () => {
+  assert.deepEqual(
+    deriveIosSnapshotCapabilityResidue(IOS_SNAPSHOT_PRODUCER_CAPABILITIES['appium-source']),
+    [
+      { kind: 'unavailable-fact', fact: 'hittability' },
+      { kind: 'unavailable-fact', fact: 'acquisition-depth' },
+    ],
+  );
+});
+
 test('comparison identity rejects every identity axis and residue mismatch', () => {
   const base = comparisonIdentity();
   const mismatches: IosSnapshotComparisonIdentity[] = [
@@ -223,6 +242,7 @@ function acquiredProducer(
     interactiveQueryCompleteness: 'incomplete',
     viewportEvidence: 'available',
     hittabilityEvidence: 'available',
+    presentationOwner: 'snapshot-state',
     ...overrides,
   };
 }

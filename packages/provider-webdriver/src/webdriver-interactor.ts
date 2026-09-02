@@ -99,25 +99,34 @@ export type WebDriverInteractorOptions = {
   client: WebDriverClient;
   backend: Extract<SnapshotResult['backend'], 'android' | 'xctest'>;
   capabilities: CloudWebDriverProviderCapabilities;
+  targetId?: string;
 };
 
 export function createWebDriverInteractor(options: WebDriverInteractorOptions): Interactor {
-  return new WebDriverInteractor(options.client, options.backend, options.capabilities);
+  return new WebDriverInteractor(
+    options.client,
+    options.backend,
+    options.capabilities,
+    options.targetId,
+  );
 }
 
 class WebDriverInteractor implements Interactor {
   private readonly client: WebDriverClient;
   private readonly backend: Extract<SnapshotResult['backend'], 'android' | 'xctest'>;
   private readonly capabilities: CloudWebDriverProviderCapabilities;
+  private readonly targetId: string | undefined;
 
   constructor(
     client: WebDriverClient,
     backend: Extract<SnapshotResult['backend'], 'android' | 'xctest'>,
     capabilities: CloudWebDriverProviderCapabilities,
+    targetId?: string,
   ) {
     this.client = client;
     this.backend = backend;
     this.capabilities = capabilities;
+    this.targetId = targetId;
   }
 
   async open(
@@ -292,14 +301,16 @@ class WebDriverInteractor implements Interactor {
     await this.client.screenshot(outPath);
   }
 
-  async snapshot(_options?: SnapshotOptions): Promise<SnapshotResult> {
+  async snapshot(options?: SnapshotOptions): Promise<SnapshotResult> {
     this.requireSupport('snapshot');
-    // Spelled as a correlated pair per channel so the SnapshotProvenance union accepts it.
+    if (this.backend === 'xctest') {
+      const { captureWebDriverIosSnapshot } = await import('./webdriver-ios-snapshot.ts');
+      return await captureWebDriverIosSnapshot(this.client, options, this.targetId);
+    }
     return {
-      ...(this.backend === 'xctest'
-        ? { backend: 'xctest' as const, producer: 'appium-source' as const }
-        : { backend: 'android' as const, producer: 'appium-source' as const }),
-      nodes: parseWebDriverSource(await this.client.source()),
+      backend: 'android' as const,
+      producer: 'appium-source' as const,
+      nodes: parseWebDriverSource(await this.client.source(), { mode: 'legacy-derived' }),
     };
   }
 
@@ -496,9 +507,10 @@ class WebDriverInteractor implements Interactor {
   }
 
   private async scrollGestureFrame(): Promise<WebDriverWindowRect> {
+    const sourceMode = this.backend === 'xctest' ? 'facts' : 'legacy-derived';
     const sourceFrame = await this.client
       .source()
-      .then((source) => scrollFrameFromWebDriverSource(source))
+      .then((source) => scrollFrameFromWebDriverSource(source, { mode: sourceMode }))
       .catch(() => undefined);
     if (sourceFrame) return sourceFrame;
     return await this.client.windowRect();

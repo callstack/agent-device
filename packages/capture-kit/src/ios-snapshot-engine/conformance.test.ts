@@ -7,7 +7,7 @@ import {
   createIosSnapshotRequest,
   deriveIosCaptureHint,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
-import { IosSnapshotEngineError, presentIosSnapshot } from './index.ts';
+import { IosSnapshotEngineError, presentIosSnapshot, publishIosSnapshot } from './index.ts';
 import { runTypeScriptCase, writeDifferentialFailureArtifact } from './conformance-harness.ts';
 import {
   acquisitionForGoldenCase,
@@ -97,16 +97,21 @@ test('the independent iOS snapshot goldens match the TypeScript engine', () => {
         };
 
     try {
-      const result = presentIosSnapshot({ stage: 'acquired', acquisition }, request, {
+      const presentation = presentIosSnapshot({ stage: 'acquired', acquisition }, request, {
+        foldPolicy: testCase.foldPolicy,
+      });
+      const publication = publishIosSnapshot({ stage: 'acquired', acquisition }, request, {
         foldPolicy: testCase.foldPolicy,
       });
       actual = {
         outcome: 'success',
-        nodes: normalizeGoldenNodes(result.nodes),
-        truncated: acquisition.truncated,
-        residue: acquisition.residue,
+        nodes: normalizeGoldenNodes(publication.payload.nodes),
+        ...(publication.payload.truncated === undefined
+          ? {}
+          : { truncated: publication.payload.truncated }),
+        residue: publication.residue,
         ...(testCase.qualityLabels
-          ? { qualityLabels: result.qualityNodes?.map((node) => node.label ?? null) }
+          ? { qualityLabels: presentation.qualityNodes?.map((node) => node.label ?? null) }
           : {}),
       };
     } catch (error) {
@@ -123,6 +128,21 @@ test('the independent iOS snapshot goldens match the TypeScript engine', () => {
       testCase.name,
     );
   }
+});
+
+test('published payload omits unknown truncation instead of defaulting it', () => {
+  const fixture = readIosSnapshotEngineFixture();
+  const testCase = fixture.cases[0]!;
+  const request = requestForGoldenCase(testCase);
+  const acquisition = {
+    ...acquisitionForGoldenCase(fixture, testCase),
+    truncated: undefined,
+  };
+
+  const publication = publishIosSnapshot({ stage: 'acquired', acquisition }, request);
+
+  assert.equal(publication.payload.truncated, undefined);
+  assert.equal('truncated' in publication.payload, false);
 });
 
 test('the differential TypeScript runner preserves typed failures', () => {

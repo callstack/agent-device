@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Breaking (0.21): iOS Appium/WebDriver snapshots now expose engine-owned acquisition facts and
+  typed fidelity warnings. The SDK snapshot `truncated` field is optional when Appium cannot report
+  hierarchy completeness; regular snapshots fail closed without valid viewport evidence, while
+  `snapshot --raw` remains available for diagnostics (#2195).
 - Security (daemon, remote/proxy HTTP only): when `AGENT_DEVICE_HTTP_AUTH_HOOK` is configured and a
   request's hook result does not attest a `tenantId`, the request is now refused (401) outright — the
   daemon no longer runs it as whichever tenant the client declared (RPC body `meta.tenantId` or

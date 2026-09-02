@@ -80,7 +80,7 @@ describe('explainCommand', () => {
     if (!result.found) return;
     expect(result.explanation.cli?.commandFlags.map((flag) => flag.key)).toContain('settle');
     expect(result.explanation.files).toContain('src/commands/interaction/index.ts');
-    expect(result.explanation.files).toContain('src/daemon/handlers/interaction.ts');
+    expect(result.explanation.files).toContain('src/daemon/interaction/index.ts');
     expect(result.explanation.files.every(fileExists)).toBe(true);
   });
 
@@ -146,7 +146,7 @@ describe('explainCommand table-driven coverage', () => {
   });
 
   test.each([
-    ['press', ['src/commands/interaction/index.ts', 'src/daemon/handlers/interaction.ts']],
+    ['press', ['src/commands/interaction/index.ts', 'src/daemon/interaction/index.ts']],
     ['apps', ['src/commands/management/app.ts']],
     // R39: screenshot has no dispatch projection left, so its platform work is named directly.
     ['screenshot', ['src/commands/capture/screenshot.ts', 'src/daemon/screenshot-runtime.ts']],

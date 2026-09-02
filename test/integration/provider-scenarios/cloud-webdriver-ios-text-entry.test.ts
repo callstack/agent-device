@@ -62,6 +62,71 @@ test('cloud iOS snapshot captures through the provider session after open', asyn
   });
 }, 15_000);
 
+test('cloud iOS engine-presented snapshot survives daemon publication', async () => {
+  await withProviderScenarioResource(createCloudIosWorld, async ({ daemon, server }) => {
+    const lease = await openCloudIosSession(daemon);
+    server.sourceOverride =
+      '<XCUIElementTypeApplication name="Demo" x="0" y="0" width="390" height="844">' +
+      '<XCUIElementTypeNavigationBar name="Team Standup" x="0" y="56" width="390" height="44">' +
+      '<XCUIElementTypeStaticText label="Team Standup" x="219" y="58" width="85" height="40" />' +
+      '<XCUIElementTypeButton label="Video Call" x="300" y="56" width="46" height="44" />' +
+      '<XCUIElementTypeTextField label="Team Standup" value="Team Standup" name="DisplayNameTextField" enabled="false" x="100" y="67" width="113" height="22" />' +
+      '<XCUIElementTypeImage name="RoomDetailsIconImageView" x="81" y="80" width="14" height="14" />' +
+      '</XCUIElementTypeNavigationBar>' +
+      '<XCUIElementTypeTable label="Team Standup" x="0" y="100" width="390" height="600">' +
+      '<XCUIElementTypeCell label="Team Standup" x="0" y="100" width="390" height="297">' +
+      '<XCUIElementTypeButton label="Team Standup" x="20" y="200" width="362" height="27" />' +
+      '</XCUIElementTypeCell>' +
+      '</XCUIElementTypeTable>' +
+      '</XCUIElementTypeApplication>';
+
+    const response = await daemon.callCommand(
+      'snapshot',
+      [],
+      { ...leaseFlags(lease.leaseId), snapshotInteractiveOnly: true },
+      { meta: leaseMeta(lease.leaseId) },
+    );
+
+    const data = assertRpcOk<{
+      nodes?: Array<{
+        type?: string;
+        label?: string;
+        identifier?: string;
+        enabled?: boolean;
+        hittable?: boolean;
+      }>;
+      truncated?: boolean;
+      warnings?: string[];
+    }>(response);
+    assert.equal(
+      data.nodes?.some(
+        (node) =>
+          node.type === 'Button' &&
+          node.label === 'Team Standup' &&
+          node.identifier === 'DisplayNameTextField' &&
+          node.enabled === true,
+      ),
+      true,
+    );
+    assert.equal(
+      data.nodes?.find((node) => node.identifier === 'DisplayNameTextField')?.hittable,
+      undefined,
+    );
+    assert.ok(data.warnings?.some((warning) => warning.includes('hittability evidence')));
+    assert.equal(data.truncated, undefined);
+    assert.equal(
+      data.nodes?.some(
+        (node) => node.type === 'XCUIElementTypeStaticText' && node.label === 'Team Standup',
+      ),
+      false,
+    );
+    assert.equal(
+      data.nodes?.some((node) => node.identifier === 'RoomDetailsIconImageView'),
+      false,
+    );
+  });
+}, 15_000);
+
 /**
  * #1658: `fill` tapped and sent its keys back-to-back. A WebView input takes
  * first responder asynchronously, so the keys arrived with nothing focused and
@@ -254,6 +319,7 @@ class FakeIosWebDriverServer extends CloudWebDriverTestServer {
   pollsUntilFocus = 1;
   fieldValues: Record<FieldName, string> = { email: '', password: '' };
   focused: FieldName | undefined;
+  sourceOverride: string | undefined;
 
   private pollsRemaining = Number.POSITIVE_INFINITY;
   private pendingFocus: FieldName | undefined;
@@ -373,6 +439,7 @@ class FakeIosWebDriverServer extends CloudWebDriverTestServer {
   }
 
   private source(): string {
+    if (this.sourceOverride !== undefined) return this.sourceOverride;
     const field = (name: FieldName, label: string) =>
       `<XCUIElementTypeTextField name="${name}" label="${label}" value="${this.fieldValues[name]}" ` +
       `x="${FIELDS[name].x}" y="${FIELDS[name].y}" width="${FIELDS[name].width}" ` +

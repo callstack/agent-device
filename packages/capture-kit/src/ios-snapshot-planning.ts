@@ -24,6 +24,7 @@ const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
     interactiveQueryCompleteness: 'complete',
     viewportEvidence: 'available',
     hittabilityEvidence: 'available',
+    presentationOwner: 'ios-snapshot-engine',
   },
   'simulator-ax-bridge': {
     producer: 'simulator-ax-bridge',
@@ -36,6 +37,7 @@ const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
     interactiveQueryCompleteness: 'incomplete',
     viewportEvidence: 'available',
     hittabilityEvidence: 'available',
+    presentationOwner: 'snapshot-state',
   },
   'appium-source': {
     producer: 'appium-source',
@@ -46,8 +48,9 @@ const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
     },
     scopeCompleteness: 'incomplete',
     interactiveQueryCompleteness: 'incomplete',
-    viewportEvidence: 'unavailable',
+    viewportEvidence: 'available',
     hittabilityEvidence: 'unavailable',
+    presentationOwner: 'ios-snapshot-engine',
   },
   'limrun-ios-tree': {
     producer: 'limrun-ios-tree',
@@ -60,12 +63,30 @@ const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
     interactiveQueryCompleteness: 'incomplete',
     viewportEvidence: 'available',
     hittabilityEvidence: 'unavailable',
+    presentationOwner: 'ios-snapshot-engine',
   },
 } as const satisfies Record<IosSnapshotProducer, IosSnapshotProducerCapabilities>;
 
 export const IOS_SNAPSHOT_PRODUCER_CAPABILITIES: Readonly<
   Record<IosSnapshotProducer, IosSnapshotProducerCapabilities>
 > = Object.freeze(IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES);
+
+export function deriveIosSnapshotCapabilityResidue(
+  producer: IosSnapshotProducerCapabilities,
+): readonly IosAcquisitionResidue[] {
+  const residue: IosAcquisitionResidue[] = [];
+  if (producer.hittabilityEvidence === 'unavailable') {
+    residue.push({ kind: 'unavailable-fact', fact: 'hittability' });
+  }
+  if (
+    producer.stage === 'acquired' &&
+    (producer.acquisitionDepth.rawTraversal.kind === 'incomplete' ||
+      producer.acquisitionDepth.regularPresented.kind === 'incomplete')
+  ) {
+    residue.push({ kind: 'unavailable-fact', fact: 'acquisition-depth' });
+  }
+  return Object.freeze(residue);
+}
 
 export function createIosSnapshotRequest(input: IosSnapshotRequestInput = {}): IosSnapshotRequest {
   return Object.freeze({

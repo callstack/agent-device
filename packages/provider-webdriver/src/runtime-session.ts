@@ -113,6 +113,7 @@ export class WebDriverSessionManager {
           client,
           backend: snapshotBackendForPlatform(prepared.platform),
           capabilities,
+          targetId: device.id,
         }),
       }),
     );

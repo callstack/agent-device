@@ -13,7 +13,7 @@ productive artifact is the JSON, queried directly.
 ## Blast radius of one file
 
 ```sh
-pnpm depgraph affected src/utils/exec.ts        # bounded text
+pnpm depgraph affected packages/host-kit/src/command.ts # bounded text
 pnpm depgraph affected src/daemon/ref-frame.ts --json --limit 25
 ```
 

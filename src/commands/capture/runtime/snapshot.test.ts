@@ -36,10 +36,42 @@ test('runtime snapshot captures nodes and updates the session baseline', async (
   const result = await device.capture.snapshot({ session: 'default' });
 
   assert.equal(result.nodes[0]?.label, 'Home');
-  assert.equal(result.truncated, undefined);
+  assert.equal(result.truncated, false);
   assert.equal(result.appName, 'Demo');
   assert.equal(result.appBundleId, 'com.example.demo');
   assert.equal(stored?.snapshot?.nodes[0]?.label, 'Home');
+});
+
+test('runtime snapshot preserves unknown hierarchy completeness for engine-owned iOS acquisition', async () => {
+  const device = createSnapshotOnlyDevice({
+    snapshot: {
+      nodes: [],
+      backend: 'xctest',
+      producer: 'appium-source',
+      createdAt: 1,
+    },
+  });
+
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.equal(result.truncated, undefined);
+});
+
+test('runtime snapshot uses the Appium sparse-tree disclosure for Appium acquisition', async () => {
+  const device = createSnapshotOnlyDevice({
+    snapshot: {
+      nodes: [{ ref: 'e1', index: 0, type: 'XCUIElementTypeApplication', depth: 0 }],
+      backend: 'xctest',
+      producer: 'appium-source',
+      createdAt: 1,
+    },
+  });
+
+  const result = await device.capture.snapshot({ session: 'default', interactiveOnly: true });
+
+  assert.equal(result.warnings?.length, 1);
+  assert.match(result.warnings?.[0] ?? '', /^Appium page source exposed only/);
+  assert.doesNotMatch(result.warnings?.[0] ?? '', /XCTest|simulator/);
 });
 
 test('runtime snapshot forwards interactive capture options', async () => {

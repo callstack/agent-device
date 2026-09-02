@@ -142,17 +142,19 @@ function createRegularProjectedNode(
   if (!isEligibleForIosRegularPresentation(node.raw)) return undefined;
   const depth = parent ? (parent.depth ?? 0) + 1 : 0;
   if (maximumDepth !== null && depth > maximumDepth) return undefined;
+  const hittable = isProjectedNodeHittable(node);
   return {
     ...node.raw,
     index,
     depth,
     parentIndex: parent?.index,
     ...(node.effectiveRect ? { rect: node.effectiveRect } : { rect: undefined }),
-    hittable: isProjectedNodeHittable(node),
+    ...(hittable === undefined ? {} : { hittable }),
   };
 }
 
-function isProjectedNodeHittable(node: IosSnapshotPresentationNode): boolean {
+function isProjectedNodeHittable(node: IosSnapshotPresentationNode): RawSnapshotNode['hittable'] {
+  if (node.raw.hittable === undefined) return undefined;
   return Boolean(
     node.raw.hittable === true &&
     node.effectiveRect &&

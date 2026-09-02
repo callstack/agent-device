@@ -8,6 +8,7 @@ import {
   type SnapshotDiagnosticsSummary,
 } from '@agent-device/contracts/capture';
 import { AppError } from '@agent-device/kernel/errors';
+import { normalizeType } from '@agent-device/contracts/snapshot';
 import type {
   SnapshotNode,
   SnapshotState,
@@ -25,6 +26,7 @@ import { buildSnapshotVisibility } from '../../../snapshot/snapshot-visibility.t
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../../core/android-system-surface-disclosure.ts';
 import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';
 import { now } from '../../runtime-common.ts';
+import { IOS_SNAPSHOT_PRODUCER_CAPABILITIES } from '@agent-device/capture-kit/ios-snapshot-planning';
 import type {
   DiffSnapshotCommandOptions,
   RuntimeCommand,
@@ -68,9 +70,10 @@ export const snapshotCommand: RuntimeCommand<
     },
   });
   await runtime.sessions.set(nextSnapshotSession(options.session, capture));
+  const truncated = snapshotTruncationForResult(capture.snapshot);
   return copySnapshotClickabilityEvidence(capture.snapshot, {
     nodes: capture.snapshot.nodes,
-    ...(capture.snapshot.truncated !== undefined ? { truncated: capture.snapshot.truncated } : {}),
+    ...(truncated === undefined ? {} : { truncated }),
     visibility: buildSnapshotVisibility({
       nodes: capture.snapshot.nodes,
       backend: capture.snapshot.backend,
@@ -218,6 +221,19 @@ function snapshotAppFields(capture: SnapshotCapture): {
   };
 }
 
+function snapshotTruncationForResult(snapshot: SnapshotState): boolean | undefined {
+  if (snapshot.truncated !== undefined) return snapshot.truncated;
+  if (snapshot.backend !== 'xctest' || snapshot.producer === undefined) return false;
+  const capability = IOS_SNAPSHOT_PRODUCER_CAPABILITIES[snapshot.producer];
+  if (!capability) return false;
+  const acquisitionDepthUnknown =
+    capability.stage === 'acquired' &&
+    capability.presentationOwner === 'ios-snapshot-engine' &&
+    (capability.acquisitionDepth.rawTraversal.kind === 'incomplete' ||
+      capability.acquisitionDepth.regularPresented.kind === 'incomplete');
+  return acquisitionDepthUnknown ? undefined : false;
+}
+
 function buildSnapshotWarnings(params: {
   result: BackendSnapshotResult;
   annotations: SnapshotCaptureAnnotations;
@@ -273,11 +289,25 @@ function buildSparseIosInteractiveWarnings(params: {
   }
 
   const root = params.snapshot.nodes[0];
-  if (root?.type !== 'Application') return [];
+  if (!isApplicationRoot(root)) return [];
+
+  if (params.snapshot.producer === 'appium-source') {
+    return [
+      'Appium page source exposed only the application root. Descendants may be absent from the acquired hierarchy; use snapshot --raw to inspect the source and verify the app accessibility tree.',
+    ];
+  }
+  if (params.snapshot.producer !== undefined && params.snapshot.producer !== 'apple-runner') {
+    return [];
+  }
 
   return [
     'iOS interactive snapshot exposed only the application root. XCTest accessibility queries can fail to enumerate some simulator UI trees even when screenshots and direct gestures still work. Use screenshot as visual truth, try a scoped/full snapshot for diagnostics, and prefer direct selectors when known.',
   ];
+}
+
+function isApplicationRoot(node: SnapshotNode | undefined): boolean {
+  if (!node) return false;
+  return normalizeType(node.type ?? '') === 'application';
 }
 
 const MERGED_LEAF_MIN_SEGMENTS = 10;

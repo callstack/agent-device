@@ -249,6 +249,46 @@ test('fill refuses empty text as an unsupported clear rather than a vacuous succ
   assert.deepEqual(world.transcript, []);
 });
 
+test('iOS WebDriver interactor routes snapshots through the acquisition adapter', async () => {
+  const source = vi.fn(
+    async () =>
+      '<AppiumAUT><XCUIElementTypeApplication x="0" y="0" width="390" height="844" /></AppiumAUT>',
+  );
+  const interactor = createWebDriverInteractor({
+    client: { source } as unknown as WebDriverClient,
+    backend: 'xctest',
+    capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'ios' }),
+    targetId: 'ios-1',
+  });
+
+  const result = await interactor.snapshot({ raw: true, depth: 1 });
+
+  assert.equal(result.backend, 'xctest');
+  assert.equal(result.producer, 'appium-source');
+  assert.equal(source.mock.calls.length, 1);
+  assert.equal(result.nodes?.[0]?.type, 'XCUIElementTypeApplication');
+});
+
+test('Android WebDriver interactor keeps legacy-derived source facts at its call site', async () => {
+  const source = vi.fn(
+    async () =>
+      '<hierarchy rotation="0"><android.widget.Button bounds="[0,0][100,40]" displayed="true" enabled="true" /></hierarchy>',
+  );
+  const interactor = createWebDriverInteractor({
+    client: { source } as unknown as WebDriverClient,
+    backend: 'android',
+    capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
+  });
+
+  const result = await interactor.snapshot();
+
+  assert.equal(result.backend, 'android');
+  assert.equal(result.nodes?.[0]?.type, 'hierarchy');
+  assert.equal(result.nodes?.[1]?.type, 'android.widget.Button');
+  assert.equal(result.nodes?.[1]?.hittable, true);
+  assert.equal(source.mock.calls.length, 1);
+});
+
 async function runFill(world: ReturnType<typeof createTextEntryWorld>) {
   vi.useFakeTimers();
   try {

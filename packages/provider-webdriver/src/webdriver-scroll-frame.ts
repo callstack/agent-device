@@ -1,9 +1,12 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { WebDriverWindowRect } from './webdriver-client.ts';
-import { parseWebDriverSource } from './webdriver-source.ts';
+import { parseWebDriverSource, type WebDriverSourceParseMode } from './webdriver-source.ts';
 
-export function scrollFrameFromWebDriverSource(source: string): WebDriverWindowRect | undefined {
-  const rect = parseWebDriverSource(source)
+export function scrollFrameFromWebDriverSource(
+  source: string,
+  options: Readonly<{ mode: WebDriverSourceParseMode }>,
+): WebDriverWindowRect | undefined {
+  const rect = parseWebDriverSource(source, options)
     .flatMap((node) =>
       isScrollableSourceNode(node) && isUsableScrollRect(node.rect) ? [node.rect] : [],
     )

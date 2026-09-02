@@ -8,14 +8,13 @@ import {
 } from '../../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { handleInteractionCommands } from '../../../handlers/interaction.ts';
-import { finalizeTouchInteraction } from '../../index.ts';
+import { finalizeTouchInteraction, handleInteractionCommands } from '../../index.ts';
 import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
 import {
   getRuntimeBindings,
   mockFillPoint,
   resetGetRuntimeFixture,
-} from '../../../handlers/__tests__/interaction-get-runtime-fixture.ts';
+} from '../../../__tests__/interaction-get-runtime-fixture.ts';
 
 const contextFromFlags = (_flags: CommandFlags | undefined) => ({});
 

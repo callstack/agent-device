@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   checkDaemonModularityRatchets,
+  checkRetiredInteractionPaths,
   checkRetiredSessionLifecyclePaths,
   checkRetiredSessionObservabilityPaths,
   DAEMON_MODULARITY_BASELINE,
@@ -314,12 +315,12 @@ test('interaction rejects handler crossings and deep imports around its facade',
   const edges = resolveImportEdges(
     new Map([
       [
-        'src/daemon/handlers/interaction.ts',
-        "import { refSnapshotFlagGuardResponse } from '../interaction/internal/interaction-flags.ts';\nexport function handleInteractionCommands() {}",
+        'src/daemon/handlers/react-native.ts',
+        "import { refSnapshotFlagGuardResponse } from '../interaction/internal/interaction-flags.ts';\nexport function handleReactNativeCommands() {}",
       ],
       [
         'src/daemon/interaction/internal/interaction-runtime.ts',
-        "import { handleInteractionCommands } from '../../handlers/interaction.ts';\nexport function createInteractionRuntime() {}",
+        "import { handleReactNativeCommands } from '../../handlers/react-native.ts';\nexport function createInteractionRuntime() {}",
       ],
       [
         'src/daemon/generic-settle.ts',
@@ -331,14 +332,14 @@ test('interaction rejects handler crossings and deep imports around its facade',
       ],
       [
         'src/daemon/selector-runtime-backend.ts',
-        "import { readTextForNode } from './interaction/internal/interaction-read.ts';",
+        "import { readTextForNode } from './interaction/internal/interaction-ref-policy.ts';",
       ],
       [
         'src/daemon/interaction/internal/interaction-flags.ts',
         'export function refSnapshotFlagGuardResponse() {}',
       ],
       [
-        'src/daemon/interaction/internal/interaction-read.ts',
+        'src/daemon/interaction/internal/interaction-ref-policy.ts',
         'export function readTextForNode() {}',
       ],
     ]),
@@ -352,14 +353,14 @@ test('interaction rejects handler crossings and deep imports around its facade',
   assert.ok(
     violations.some(({ message }) =>
       message.includes(
-        "src/daemon/handlers/interaction.ts must not import daemon-interaction's internal tree",
+        "src/daemon/handlers/react-native.ts must not import daemon-interaction's internal tree",
       ),
     ),
   );
   assert.ok(
     violations.some(({ message }) =>
       message.includes(
-        "src/daemon/interaction/internal/interaction-runtime.ts must not import src/daemon/handlers/interaction.ts from daemon-interaction's internal tree",
+        "src/daemon/interaction/internal/interaction-runtime.ts must not import src/daemon/handlers/react-native.ts from daemon-interaction's internal tree",
       ),
     ),
   );
@@ -431,6 +432,46 @@ test('session lifecycle rejects restored neutral helper paths', () => {
       'retired session lifecycle path was restored: src/daemon/handlers/session-runtime-admission.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
       'retired session lifecycle path was restored: src/daemon/handlers/session-close-script.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
       'retired session lifecycle path was restored: src/daemon/handlers/session-close.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+    ],
+  );
+});
+
+test('interaction rejects restored handler implementation paths', () => {
+  const violations = checkRetiredInteractionPaths([
+    'src/daemon/interaction/internal/interaction.ts',
+    'src/daemon/handlers/interaction-touch.ts',
+  ]);
+
+  assert.deepEqual(violations, [
+    {
+      rule: 'R10 daemon-modularity',
+      file: 'src/daemon/handlers/interaction-touch.ts',
+      line: 1,
+      message:
+        'retired interaction handler path was restored: src/daemon/handlers/interaction-touch.ts. Keep route implementations behind src/daemon/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
+    },
+  ]);
+});
+
+test('interaction rejects renamed handler implementation paths', () => {
+  const violations = checkRetiredInteractionPaths([
+    'src/daemon/handlers/interaction-touch-v2.ts',
+    'src/daemon/handlers/find-next.ts',
+  ]);
+
+  assert.deepEqual(
+    violations.map(({ file, message }) => ({ file, message })),
+    [
+      {
+        file: 'src/daemon/handlers/interaction-touch-v2.ts',
+        message:
+          'retired interaction handler path was restored: src/daemon/handlers/interaction-touch-v2.ts. Keep route implementations behind src/daemon/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
+      },
+      {
+        file: 'src/daemon/handlers/find-next.ts',
+        message:
+          'retired interaction handler path was restored: src/daemon/handlers/find-next.ts. Keep route implementations behind src/daemon/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
+      },
     ],
   );
 });

@@ -4,7 +4,6 @@ import type {
   IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
 import type { SnapshotOptions, SnapshotResult } from '@agent-device/contracts/interactor-types';
-import { attachSnapshotPresentationEvidence } from '@agent-device/contracts/capture';
 import {
   IOS_SNAPSHOT_PRODUCER_CAPABILITIES,
   createIosSnapshotRequest,
@@ -54,15 +53,12 @@ export async function captureLimrunIosSnapshot(
   try {
     const presentation = presentIosSnapshot({ stage: 'acquired', acquisition }, request);
     const warnings = limrunSnapshotWarnings(residue);
-    return attachSnapshotPresentationEvidence(
-      {
-        nodes: presentation.nodes,
-        backend: 'xctest',
-        producer: 'limrun-ios-tree',
-        ...(warnings.length > 0 ? { warnings } : {}),
-      },
-      { owner: 'ios-snapshot-engine' },
-    );
+    return {
+      nodes: presentation.nodes,
+      backend: 'xctest',
+      producer: 'limrun-ios-tree',
+      ...(warnings.length > 0 ? { warnings } : {}),
+    };
   } catch (error) {
     throwLimrunSnapshotError(error, residue);
   }

@@ -3,6 +3,7 @@ import { PLATFORMS } from '@agent-device/kernel/device';
 import { parseImports, type LayeringViolation } from './model.ts';
 import { checkPlatformComposition } from './platform-composition-policy.ts';
 import { checkPlatformPackageSourcePolicy } from './platform-package-source-policy.ts';
+import { retiredPathViolations } from './retired-zone-policy.ts';
 
 export const CANONICAL_PLATFORM_FAMILIES = PLATFORMS;
 type PlatformFamily = (typeof CANONICAL_PLATFORM_FAMILIES)[number];
@@ -43,15 +44,12 @@ const PLATFORM_RUNTIME_HOST_FILES = new Set([
 export const APPLE_RUNNER_SUBTREE = 'packages/platform-apple/src/runner/';
 
 export function checkRetiredPlatformsZone(files: readonly string[]): LayeringViolation[] {
-  return files
-    .filter((file) => file.startsWith('src/platforms/'))
-    .map((file) => ({
-      rule: 'retired-platforms-zone',
-      file,
-      line: 1,
-      message:
-        'src/platforms is retired; family code belongs in its platform package, shared mechanics in an owning substrate package, and cross-family tests in their root or package test owner',
-    }));
+  return retiredPathViolations(
+    files,
+    'src/platforms',
+    'retired-platforms-zone',
+    'src/platforms is retired; family code belongs in its platform package, shared mechanics in an owning substrate package, and cross-family tests in their root or package test owner',
+  );
 }
 const APPLE_RUNNER_FACADE = '@agent-device/platform-apple/runner';
 const APPLE_RUNNER_TEST_HOST = '@agent-device/platform-apple/runner/test-host';

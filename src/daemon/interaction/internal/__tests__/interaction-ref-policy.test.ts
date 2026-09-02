@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { activatePartialRefFrame, readRefMutationFrame } from '../../../ref-frame.ts';
 import { refMutationAdmissionResponse } from '../interaction-ref-policy.ts';
-import { makeStaleRefSession } from '../../../handlers/__tests__/interaction-touch-fixtures.ts';
+import { makeStaleRefSession } from './interaction-touch-fixtures.ts';
 
 test('a plain ref emitted by the current partial frame suggests its exact pinned form', () => {
   const session = makeStaleRefSession('partial-frame-suggestion');

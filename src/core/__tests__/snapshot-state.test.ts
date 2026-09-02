@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { buildSnapshotState } from '../snapshot-state.ts';
+import { resolveActionableTouchResolution } from '../interaction-targeting.ts';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { attachSnapshotOcclusionContextEvidence } from '@agent-device/contracts/capture';
 import {
@@ -114,28 +115,6 @@ test('buildSnapshotState marks comparisonSafe false for filtered Android snapsho
   expect(unfiltered.comparisonSafe).toBe(true);
 });
 
-test('buildSnapshotState applies iOS interactive presentation for xctest snapshots', () => {
-  const rowRect = { x: 16, y: 293, width: 370, height: 52 };
-  const state = buildSnapshotState(
-    {
-      nodes: [
-        { index: 0, depth: 0, type: 'Application', label: 'Settings' },
-        { index: 1, depth: 1, parentIndex: 0, type: 'CollectionView' },
-        { index: 2, depth: 2, parentIndex: 1, type: 'Cell', label: 'General', rect: rowRect },
-        { index: 3, depth: 3, parentIndex: 2, type: 'Button', label: 'General', rect: rowRect },
-      ],
-      backend: 'xctest',
-    },
-    { snapshotInteractiveOnly: true },
-  );
-
-  expect(state.nodes.map((node) => [node.type, node.label, node.parentIndex])).toEqual([
-    ['Application', 'Settings', undefined],
-    ['CollectionView', undefined, 0],
-    ['Cell', 'General', 1],
-  ]);
-});
-
 test('buildSnapshotState leaves Apple runner presentation to the engine', () => {
   const nodes = [
     { index: 0, depth: 0, type: 'Application', label: 'Settings' },
@@ -150,6 +129,49 @@ test('buildSnapshotState leaves Apple runner presentation to the engine', () => 
   );
 
   expect(state.nodes.map((node) => node.type)).toEqual(['Application', 'Table', 'Cell', 'Button']);
+});
+
+test('Appium presentation does not infer hittability from an enabled ancestor rectangle', () => {
+  const state = buildSnapshotState(
+    {
+      nodes: [
+        {
+          index: 0,
+          depth: 0,
+          type: 'Application',
+          rect: { x: 0, y: 0, width: 390, height: 844 },
+        },
+        {
+          index: 1,
+          depth: 1,
+          parentIndex: 0,
+          type: 'Cell',
+          rect: { x: 16, y: 293, width: 370, height: 52 },
+          enabled: true,
+        },
+        {
+          index: 2,
+          depth: 2,
+          parentIndex: 1,
+          type: 'StaticText',
+          label: 'General',
+          rect: { x: 24, y: 309, width: 100, height: 20 },
+          enabled: true,
+        },
+      ],
+      backend: 'xctest',
+      producer: 'appium-source',
+    },
+    { snapshotInteractiveOnly: true },
+  );
+  const target = state.nodes.find((node) => node.label === 'General');
+
+  expect(target).toBeDefined();
+  expect(target?.hittable).toBeUndefined();
+  expect(resolveActionableTouchResolution(state.nodes, target!)).toMatchObject({
+    node: target,
+    reason: 'original',
+  });
 });
 
 test('buildSnapshotState marks content covered by floating overlays as visible but blocked', () => {

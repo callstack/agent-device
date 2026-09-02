@@ -3,7 +3,7 @@ import { legacyDispatchCapture } from '../../../__tests__/legacy-snapshot-captur
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { handleInteractionCommands } from '../../../handlers/interaction.ts';
+import { handleInteractionCommands } from '../../index.ts';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import {
@@ -43,7 +43,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
 import {
   getRuntimeBindings,
   resetGetRuntimeFixture,
-} from '../../../handlers/__tests__/interaction-get-runtime-fixture.ts';
+} from '../../../__tests__/interaction-get-runtime-fixture.ts';
 const contextFromFlags = (_flags: CommandFlags | undefined) => ({});
 
 beforeEach(() => {

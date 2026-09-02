@@ -2,7 +2,7 @@ import {
   type GestureReferenceFrame,
   inferGestureReferenceFrame,
 } from '@agent-device/contracts/scroll-gesture';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 
 export type TouchReferenceFrame = GestureReferenceFrame;
 
@@ -19,6 +19,12 @@ export function getSnapshotReferenceFrame(
   if (!inferred) return undefined;
   snapshotReferenceFrameCache.set(snapshot, inferred);
   return inferred;
+}
+
+export function readSnapshotNodesReferenceFrame(
+  nodes: SnapshotNode[],
+): TouchReferenceFrame | undefined {
+  return getSnapshotReferenceFrame({ nodes, createdAt: 0 });
 }
 
 const inferTouchReferenceFrame = inferGestureReferenceFrame;

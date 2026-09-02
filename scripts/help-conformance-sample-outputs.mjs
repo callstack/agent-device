@@ -110,7 +110,7 @@ export const STALE_REF_SAMPLE = {
 Hint: Ref @e12 was minted from snapshot s5 but the session's ref frame is now s7 — re-run snapshot -i.`,
 };
 
-// AMBIGUOUS_MATCH from buildAmbiguousMatchError (src/daemon/handlers/find.ts)
+// AMBIGUOUS_MATCH from buildAmbiguousMatchError (src/daemon/selector-match-errors.ts)
 // — the parity test drives that exact producer. The by-design rejection
 // instead of silent disambiguation: #1597 made the candidate refs (ref, role,
 // label/identifier — the same compact rendering as snapshot -i) print

@@ -1,5 +1,4 @@
 import { expect, test, vi } from 'vitest';
-import { readSnapshotPresentationEvidence } from '@agent-device/contracts/capture';
 import {
   IOS_SNAPSHOT_PRODUCER_CAPABILITIES,
   createIosSnapshotRequest,
@@ -29,8 +28,7 @@ test('derives the current engine viewport from the tree before the cached device
     'Save',
     'Save',
   ]);
-  expect(result.nodes?.find((node) => node.label === 'Save')?.hittable).toBe(false);
-  expect(readSnapshotPresentationEvidence(result)).toEqual({ owner: 'ios-snapshot-engine' });
+  expect(result.nodes?.find((node) => node.label === 'Save')).not.toHaveProperty('hittable');
   expect(result.warnings).toContain(
     'Limrun iOS tree responses do not expose truncation metadata; tree completeness is not independently verified.',
   );
@@ -82,7 +80,7 @@ test('regular Limrun presentation never infers hittability from an enabled recta
   const target = result.nodes?.find((node) => node.label === 'Enabled but unverified');
 
   expect(target).toMatchObject({ enabled: true, rect: { x: 120, y: 120, width: 80, height: 40 } });
-  expect(target?.hittable).toBe(false);
+  expect(target).not.toHaveProperty('hittable');
 });
 
 test('regular presentation fails with a typed viewport error while raw output discloses the missing evidence', async () => {

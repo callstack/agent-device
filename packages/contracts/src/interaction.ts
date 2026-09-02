@@ -96,7 +96,7 @@ export type RecordingTargetOverride = {
  * captured itself, handed to the interaction leaf so the leaf does not resolve
  * the same `@ref` a second time.
  *
- * The sole producer is a mutating `find` (`src/daemon/handlers/find.ts`): it
+ * The sole producer is a mutating `find` (`src/daemon/interaction/internal/find.ts`): it
  * captures, matches by locator, promotes to a hittable ancestor, and mints
  * `@eN` off the node it chose — then re-enters the interaction leaf. Without
  * this channel the leaf repeated an in-memory `@eN` lookup after find had

@@ -315,7 +315,10 @@ test('session-state writes are found by field, and non-daemon or undeclared name
       // a local that is not a declared SessionState field
       ['src/daemon/session-observability/internal/session-audio.ts', 'session.somethingElse = 1;'],
       // reads and comparisons are not writes
-      ['src/daemon/handlers/find.ts', "if (session.refFrameState === 'active') return;"],
+      [
+        'src/daemon/interaction/internal/find.ts',
+        "if (session.refFrameState === 'active') return;",
+      ],
       // a write into a sub-object is not a write to the field itself
       ['src/daemon/handlers/session-probe.ts', 'session.refFrameState.inner = 1;'],
       // a different binding that happens to have a matching property

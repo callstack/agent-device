@@ -13,8 +13,8 @@
 //     rejection of all production static value-import cycles (R4). R1 kernel-sink
 //     retired with the kernel's move to packages/kernel (#1490 W0); R8
 //     zero-dep-job-closure retired with the last `install-deps: false` job
-//     (#1781 A6) — its invariant has no subjects, and both numbers are spent, so
-//     a new rule takes the next free id rather than reusing them.
+//     (#1781 A6) — its invariant has no subjects. R14 is reserved for the terminal
+//     src/utils retirement rule (#2149); other new rules take the next free id.
 //   - Over the RANKED SPINE only: rejection of every spine back-edge (R5), i.e.
 //     an import whose source zone outranks its target zone, plus a ratchet on the
 //     same inversion measured over TYPE-ONLY edges (R6).
@@ -40,9 +40,9 @@
 //     code cannot manufacture or repair a narrowed runtime proof (R66).
 //   - Over CONTRACTS PRODUCTION SOURCE: contracts owns vocabulary only — host, process, and timer
 //     mechanics belong in capture-kit or an adapter (R18).
-// Only `(root)` is unranked among src/ zones (see `UNRANKED_ZONES` in model.ts):
-// it holds entrypoints and composition roots. Extracted workspace package zones
-// are classified separately and held behind R11 instead of the src folder spine.
+// `(root)` holds entrypoints and composition roots. The retired `src/utils` zone is deliberately
+// outside the spine and is rejected separately by R14; extracted workspace package zones are
+// classified separately and held behind R11 instead of the src folder spine.
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -76,6 +76,7 @@ import {
 } from './model.ts';
 import {
   checkDaemonModularityRatchets,
+  checkRetiredInteractionPaths,
   checkRetiredSessionLifecyclePaths,
   checkRetiredSessionObservabilityPaths,
   daemonModularitySummary,
@@ -104,6 +105,7 @@ import { checkDaemonPlatformBoundary } from './daemon-platform-boundary.ts';
 import {
   listTrackedPlatformZoneFiles,
   listTrackedProductionSources,
+  listTrackedSrcUtilsFiles,
   listTrackedTypeScriptFiles,
 } from './tracked-sources.ts';
 import { runtimeExecutionIntegrityViolations } from './runtime-execution-policy.ts';
@@ -112,6 +114,7 @@ import { sessionResourceOwnershipViolations } from './session-resource-ownership
 import { replayOwnershipViolations } from './replay-ownership.ts';
 import { applicationLifecycleOwnershipViolations } from './application-lifecycle-policy.ts';
 import { iosSnapshotEngineOwnershipViolations } from './ios-snapshot-engine-policy.ts';
+import { SRC_UTILS_RETIREMENT_RULE, srcUtilsRetirementViolations } from './src-utils-retirement.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -482,8 +485,8 @@ function report(
     process.stdout.write(
       `Layering guard: OK — ${files.length} source files satisfy R2 and contain no ` +
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
-        `back-edges (only the composition root is unranked among src zones), and its type-only ` +
-        `inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
+        `back-edges; the ranked spine's type-only inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
+        `${SRC_UTILS_RETIREMENT_RULE} permits no tracked paths under retired src/utils; ` +
         `all ${sessionStateFieldCount()} SessionState fields are classified and every write is ` +
         `inside its declared owner (R7); the largest type-level cycle is ${typeCycle} files ` +
         `(R9); ${daemonModularitySummary()}; ` +
@@ -524,6 +527,7 @@ export type LayeringContext = Readonly<{
   sourceFiles: readonly string[];
   sources: ReadonlyMap<string, string>;
   allTypeScriptSources: ReadonlyMap<string, string>;
+  trackedSrcUtilsFiles: readonly string[];
   edges: readonly ResolvedImportEdge[];
   typeCycleMembers: readonly string[];
 }>;
@@ -558,6 +562,7 @@ export const LAYERING_RULE_IDS = [
   'package-boundaries',
   'platform-package-policy',
   'retired-platforms-zone',
+  'src-utils-retirement',
   'replay-ownership',
   'ios-snapshot-engine-ownership',
 ] as const;
@@ -589,6 +594,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     ...checkDaemonModularityRatchets(context.edges, context.typeCycleMembers),
     ...checkRetiredSessionLifecyclePaths(context.sourceFiles),
     ...checkRetiredSessionObservabilityPaths(context.sourceFiles),
+    ...checkRetiredInteractionPaths(context.sourceFiles),
   ],
   'daemon-platform-boundary': (context) =>
     checkDaemonPlatformBoundary([...context.sources].map(([path, source]) => ({ path, source }))),
@@ -601,6 +607,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
       { untrackedProductionFiles: listUntrackedProductionTypeScriptFiles(repoRoot) },
     ),
   'retired-platforms-zone': () => checkRetiredPlatformsZone(listTrackedPlatformZoneFiles(repoRoot)),
+  'src-utils-retirement': (context) => srcUtilsRetirementViolations(context.trackedSrcUtilsFiles),
   'replay-ownership': (context) => replayOwnershipViolations(context.sourceFiles),
   'ios-snapshot-engine-ownership': (context) =>
     iosSnapshotEngineOwnershipViolations(
@@ -612,6 +619,7 @@ export function main(): number {
   const sourceFiles = listSourceFiles();
   const sources = readSources(sourceFiles);
   const allTypeScriptSources = readSources(listTypeScriptFiles());
+  const trackedSrcUtilsFiles = listTrackedSrcUtilsFiles(repoRoot);
   const edges = resolveImportEdges(sources, workspaceSpecifierTargets(repoRoot));
   // Computed once and threaded: the rule and the success line must report the same number.
   const typeCycleMembers = largestTypeCycleMembers(edges);
@@ -620,6 +628,7 @@ export function main(): number {
     sourceFiles,
     sources,
     allTypeScriptSources,
+    trackedSrcUtilsFiles,
     edges,
     typeCycleMembers,
   };

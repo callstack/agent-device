@@ -107,23 +107,46 @@ function appendFoldedNode(
 
   const index = kept.length;
   keptDepth += 1;
+  const { hittable: sourceHittable, ...sourceNode } = node;
   kept.push({
     raw: {
-      ...node,
+      ...sourceNode,
       index,
       depth: keptDepth,
       parentIndex: keptIndex,
-      hittable:
-        node.parentIndex !== undefined &&
-        options.hittabilityAvailable !== false &&
-        node.hittable === true &&
-        isGeometricallyActionable(node.enabled !== false, decision.effectiveRect, viewport),
+      ...foldedHittability(
+        sourceHittable,
+        node.parentIndex !== undefined,
+        decision.effectiveRect,
+        node.enabled !== false,
+        viewport,
+        options,
+      ),
     },
     sourceIndex: node.index,
     ...(decision.effectiveRect ? { effectiveRect: decision.effectiveRect } : {}),
   });
   keptIndex = index;
   return { keptIndex, keptDepth };
+}
+
+function foldedHittability(
+  sourceHittable: RawSnapshotNode['hittable'],
+  hasParent: boolean,
+  effectiveRect: Rect | undefined,
+  enabled: boolean,
+  viewport: Rect,
+  options: IosSnapshotFoldOptions,
+): Partial<Pick<RawSnapshotNode, 'hittable'>> {
+  if (options.hittabilityAvailable === false) {
+    return sourceHittable === false ? { hittable: false } : {};
+  }
+  return {
+    hittable:
+      hasParent &&
+      sourceHittable === true &&
+      isGeometricallyActionable(enabled, effectiveRect, viewport),
+  };
 }
 
 function nextScrollAnchor(

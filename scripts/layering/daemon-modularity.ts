@@ -1,5 +1,6 @@
 import path from 'node:path';
 import {
+  INTERACTION_RETIRED_HANDLER_PATHS,
   LOGICAL_MODULE_POLICIES,
   matchesDeclaredRoot,
   SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS,
@@ -82,6 +83,7 @@ function checkRetiredHandlerPaths(
   retiredPaths: readonly string[],
   pattern: RegExp,
   capability: string,
+  guidance = 'Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
 ): LayeringViolation[] {
   return sourceFiles
     .filter((file) => retiredPaths.includes(file) || pattern.test(file))
@@ -89,10 +91,18 @@ function checkRetiredHandlerPaths(
       rule: 'R10 daemon-modularity',
       file,
       line: 1,
-      message:
-        `retired ${capability} path was restored: ${file}. ` +
-        'Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      message: `retired ${capability} path was restored: ${file}. ` + guidance,
     }));
+}
+
+export function checkRetiredInteractionPaths(sourceFiles: readonly string[]): LayeringViolation[] {
+  return checkRetiredHandlerPaths(
+    sourceFiles,
+    INTERACTION_RETIRED_HANDLER_PATHS,
+    /^src\/daemon\/handlers\/(?:find|interaction)(?:-[^/]+)?\.ts$/,
+    'interaction handler',
+    'Keep route implementations behind src/daemon/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
+  );
 }
 
 function checkSessionStateBaseline(): LayeringViolation[] {
