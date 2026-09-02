@@ -1,11 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { runAndroidAdb } from './adb.ts';
-import {
-  androidAdbResultError,
-  classifyAdbFailure,
-  type AndroidAdbExecutorResult,
-} from './adb-executor.ts';
+import { isAndroidShellCommandUnsupported, runAndroidAdb } from './adb.ts';
+import { androidAdbResultError, type AndroidAdbExecutorResult } from './adb-executor.ts';
 
 export type AndroidAirplaneMode = 'enabled' | 'disabled';
 
@@ -42,22 +38,22 @@ export async function setAndroidAirplaneMode(
 async function requireAndroidAirplaneModeSupport(device: DeviceInfo): Promise<void> {
   const { state, result } = await probeAndroidAirplaneMode(device);
   if (state) return;
-  if (result.exitCode !== 0 && classifyAdbFailure(result.stderr, result.stdout)) {
-    throw androidAdbResultError('Failed to read Android airplane mode', result, {
-      deviceId: device.id,
-    });
+  if (result.exitCode !== 0 && isAndroidShellCommandUnsupported(result.stdout, result.stderr)) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'The connectivity service on this Android build has no airplane-mode command, so nothing was changed.',
+      {
+        deviceId: device.id,
+        hint: 'settings airplane needs cmd connectivity airplane-mode, which requires Android 11 (API 30) or newer. Use a newer device or emulator image.',
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+      },
+    );
   }
-  throw new AppError(
-    'UNSUPPORTED_OPERATION',
-    'This Android build does not report airplane mode through the connectivity service, so nothing was changed.',
-    {
-      deviceId: device.id,
-      hint: 'settings airplane needs cmd connectivity airplane-mode, which requires Android 11 (API 30) or newer. Use a newer device or emulator image.',
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-    },
-  );
+  throw androidAdbResultError('Failed to read Android airplane mode', result, {
+    deviceId: device.id,
+  });
 }
 
 async function readAndroidAirplaneMode(device: DeviceInfo): Promise<AndroidAirplaneMode> {

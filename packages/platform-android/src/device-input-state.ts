@@ -3,7 +3,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 
-import { isClipboardShellUnsupported, sleep } from './adb.ts';
+import { isAndroidShellCommandUnsupported, sleep } from './adb.ts';
 import {
   androidAdbResultError,
   resolveAndroidAdbExecutor,
@@ -325,7 +325,7 @@ async function runAndroidClipboardShellCommand(
   // the clipboard's contents, and a user who has copied one of the missing-shell phrases must not
   // have their own text mistaken for adb refusing the command.
   if (result.exitCode === 0) return result.stdout;
-  if (isClipboardShellUnsupported(result.stdout, result.stderr)) {
+  if (isAndroidShellCommandUnsupported(result.stdout, result.stderr)) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       `Android shell clipboard ${operation} is not supported on this device.`,

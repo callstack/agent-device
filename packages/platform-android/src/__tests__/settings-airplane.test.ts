@@ -72,7 +72,7 @@ test('setAndroidSetting airplane refuses builds without the connectivity command
     async ({ calls, device }) => {
       await assertRejectsAppError(() => setAndroidSetting(device, 'airplane', 'on'), {
         code: 'UNSUPPORTED_OPERATION',
-        message: /does not report airplane mode through the connectivity service/,
+        message: /no airplane-mode command/,
         hint: /Android 11 \(API 30\)/,
       });
       assert.deepEqual(
@@ -88,8 +88,28 @@ test('setAndroidSetting airplane refuses unreadable state before writing', async
     () => 'Airplane mode: who knows',
     async ({ calls, device }) => {
       await assertRejectsAppError(() => setAndroidSetting(device, 'airplane', 'off'), {
-        code: 'UNSUPPORTED_OPERATION',
-        message: /does not report airplane mode through the connectivity service/,
+        code: 'COMMAND_FAILED',
+        message: /Failed to read Android airplane mode/,
+      });
+      assert.deepEqual(
+        calls.map((args) => args.join(' ')),
+        [READ],
+      );
+    },
+  );
+});
+
+test('setAndroidSetting airplane keeps a refused read a command failure, not an unsupported build', async () => {
+  await withFakeAdb(
+    () => ({
+      stdout: '',
+      stderr: 'java.lang.SecurityException: Permission Denial: not allowed to change airplane mode',
+      exitCode: 255,
+    }),
+    async ({ calls, device }) => {
+      await assertRejectsAppError(() => setAndroidSetting(device, 'airplane', 'on'), {
+        code: 'COMMAND_FAILED',
+        message: /Failed to read Android airplane mode/,
       });
       assert.deepEqual(
         calls.map((args) => args.join(' ')),

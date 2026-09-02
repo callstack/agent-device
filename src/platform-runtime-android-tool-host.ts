@@ -18,13 +18,13 @@ export function createAndroidToolHost(): AndroidToolHost {
      */
     probeClipboardShellSupport: async (device, signal) => {
       try {
-        const { runAndroidAdb, isClipboardShellUnsupported } = await loadAndroidMechanics();
+        const { runAndroidAdb, isAndroidShellCommandUnsupported } = await loadAndroidMechanics();
         const result = await runAndroidAdb(device, ['shell', 'cmd', 'clipboard', 'get', 'text'], {
           allowFailure: true,
           signal,
         });
         if (result.exitCode === 0) return 'supported';
-        return isClipboardShellUnsupported(result.stdout, result.stderr)
+        return isAndroidShellCommandUnsupported(result.stdout, result.stderr)
           ? 'unsupported'
           : 'probe-failed';
       } catch {
