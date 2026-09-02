@@ -457,6 +457,18 @@ function host(run: PlatformRuntimeHost['commands']['run']): PlatformRuntimeHost 
       }),
       readProcessMarker: async () => ({ status: 'missing' }),
     },
+    snapshot: {
+      captureSurface: async () => ({
+        backend: 'xctest' as const,
+        producer: 'appium-source' as const,
+        nodes: [],
+      }),
+      presentIosAcquisition: async () => ({
+        backend: 'xctest' as const,
+        producer: 'appium-source' as const,
+        nodes: [],
+      }),
+    },
     networkTransports: { resolve: async () => ({ mode: 'local' }) },
     appInventory: {
       apple: { listApps: async () => [] },

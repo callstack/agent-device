@@ -4,6 +4,7 @@ import type {
   SnapshotRuntimeHost,
 } from '@agent-device/contracts/snapshot-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { presentIosSnapshotAcquisition } from './ios-snapshot-runtime.ts';
 
 export type SnapshotSurfaceLoader = (
   options: CaptureSnapshotInput['options'],
@@ -21,7 +22,9 @@ export function createSnapshotRuntimeHost(loaders: SnapshotSurfaceLoaders): Snap
     requireMacOsSurfaceDevice(device);
     return await loaders.macos(options, signal);
   };
-  return Object.freeze({ captureSurface });
+  const presentIosAcquisition: SnapshotRuntimeHost['presentIosAcquisition'] = (input, options) =>
+    presentIosSnapshotAcquisition(input, options);
+  return Object.freeze({ captureSurface, presentIosAcquisition });
 }
 
 function requireMacOsSurfaceDevice(device: DeviceInfo): void {

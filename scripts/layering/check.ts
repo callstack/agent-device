@@ -115,6 +115,7 @@ import { sessionResourceOwnershipViolations } from './session-resource-ownership
 import { replayOwnershipViolations } from './replay-ownership.ts';
 import { applicationLifecycleOwnershipViolations } from './application-lifecycle-policy.ts';
 import { iosSnapshotEngineOwnershipViolations } from './ios-snapshot-engine-policy.ts';
+import { providerSnapshotPresentationViolations } from './provider-snapshot-presentation-policy.ts';
 import { SRC_UTILS_RETIREMENT_RULE, srcUtilsRetirementViolations } from './src-utils-retirement.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
@@ -566,6 +567,7 @@ export const LAYERING_RULE_IDS = [
   'src-utils-retirement',
   'replay-ownership',
   'ios-snapshot-engine-ownership',
+  'provider-snapshot-presentation-ownership',
 ] as const;
 
 export type LayeringRuleId = (typeof LAYERING_RULE_IDS)[number];
@@ -615,6 +617,8 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     iosSnapshotEngineOwnershipViolations(
       [...context.sources].map(([path, source]) => ({ path, source })),
     ),
+  'provider-snapshot-presentation-ownership': (context) =>
+    providerSnapshotPresentationViolations(context.sources),
 };
 
 export function main(): number {

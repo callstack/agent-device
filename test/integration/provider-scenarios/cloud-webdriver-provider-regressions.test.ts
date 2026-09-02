@@ -138,7 +138,20 @@ test('an active AWS Device Farm owner binds no install-family deployment operati
           platform: 'android',
         })) ?? [];
       assert.ok(device, 'Expected active AWS Device Farm device');
-      const owner = await runtime.platformRuntimeModule.loadRuntime({} as PlatformRuntimeHost);
+      const owner = await runtime.platformRuntimeModule.loadRuntime({
+        snapshot: {
+          captureSurface: async () => ({
+            backend: 'xctest' as const,
+            producer: 'appium-source' as const,
+            nodes: [],
+          }),
+          presentIosAcquisition: async () => ({
+            backend: 'xctest' as const,
+            producer: 'appium-source' as const,
+            nodes: [],
+          }),
+        },
+      } as unknown as PlatformRuntimeHost);
       const binding = await owner.bind({
         device,
         intent: { kind: 'ordinary' },

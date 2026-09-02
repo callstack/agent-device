@@ -1,12 +1,20 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { WebDriverWindowRect } from './webdriver-client.ts';
-import { parseWebDriverSource, type WebDriverSourceParseMode } from './webdriver-source.ts';
+import { parseWebDriverSourceFacts } from './webdriver-source.ts';
 
-export function scrollFrameFromWebDriverSource(
+export async function scrollFrameFromAndroidWebDriverSource(
   source: string,
-  options: Readonly<{ mode: WebDriverSourceParseMode }>,
-): WebDriverWindowRect | undefined {
-  const rect = parseWebDriverSource(source, options)
+): Promise<WebDriverWindowRect | undefined> {
+  const { parseAndroidWebDriverSource } = await import('./webdriver-android-source.ts');
+  return scrollFrameFromNodes(parseAndroidWebDriverSource(source));
+}
+
+export function scrollFrameFromIosWebDriverSource(source: string): WebDriverWindowRect | undefined {
+  return scrollFrameFromNodes(parseWebDriverSourceFacts(source).nodes);
+}
+
+function scrollFrameFromNodes(nodes: RawSnapshotNode[]): WebDriverWindowRect | undefined {
+  const rect = nodes
     .flatMap((node) =>
       isScrollableSourceNode(node) && isUsableScrollRect(node.rect) ? [node.rect] : [],
     )

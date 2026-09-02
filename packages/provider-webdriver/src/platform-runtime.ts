@@ -378,6 +378,7 @@ function webDriverInteractionOperations(
     device,
     signal,
     resolveInteractor: (runner: RunnerContext) => options.getInteractor?.(device, runner),
+    presentIosAcquisition: options.host.snapshot.presentIosAcquisition,
   };
   return {
     ...(facts.operations.captureSnapshot.available ? bindProviderSnapshotInteractor(resolver) : {}),

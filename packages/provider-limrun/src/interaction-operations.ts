@@ -25,7 +25,10 @@ import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboar
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { bindProviderScreenshotInteractor } from '@agent-device/contracts/screenshot-runtime';
-import { bindProviderSnapshotInteractor } from '@agent-device/contracts/snapshot-runtime';
+import {
+  bindProviderSnapshotInteractor,
+  type SnapshotRuntimePresenter,
+} from '@agent-device/contracts/snapshot-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import {
   bindProviderTypeTextInteractor,
@@ -189,12 +192,18 @@ export function bindLimrunInteractionOperations(
     device: DeviceInfo;
     signal: AbortSignal;
     getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
+    presentIosAcquisition: SnapshotRuntimePresenter;
   }>,
 ) {
   const { device, signal } = params;
   const resolveInteractor = (runner: RunnerContext) => params.getInteractor(device, runner);
   return Object.freeze({
-    ...bindProviderSnapshotInteractor({ device, signal, resolveInteractor }),
+    ...bindProviderSnapshotInteractor({
+      device,
+      signal,
+      resolveInteractor,
+      presentIosAcquisition: params.presentIosAcquisition,
+    }),
     ...bindProviderFocusInteractor({ device, signal, resolveInteractor }),
     ...bindProviderTypeTextInteractor({ device, signal, resolveInteractor }),
     ...bindProviderTouchInteractor({

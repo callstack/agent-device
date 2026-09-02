@@ -9,6 +9,10 @@ import type { SessionSurface } from './session-surface.ts';
 import type { BackendSnapshotResult } from './snapshot-types.ts';
 import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
 import type {
+  IosProviderAcquisitionProducer,
+  IosSnapshotAcquisitionFacts,
+} from './ios-snapshot.ts';
+import type {
   RawSnapshotNode,
   Point,
   Rect,
@@ -249,6 +253,13 @@ export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & 
   nodes?: RawSnapshotNode[];
 } & SnapshotProvenance;
 
+export type SnapshotRuntimeAcquiredResult = Readonly<{
+  stage: 'acquired';
+  acquisition: IosSnapshotAcquisitionFacts & Readonly<{ producer: IosProviderAcquisitionProducer }>;
+}>;
+
+export type SnapshotRuntimeResult = SnapshotResult | SnapshotRuntimeAcquiredResult;
+
 export type Interactor = {
   open(
     app: string,
@@ -305,7 +316,7 @@ export type Interactor = {
   ): Promise<Record<string, unknown> | void>;
   screenshot(outPath: string, options?: ScreenshotOptions): Promise<void>;
   setViewport?(width: number, height: number): Promise<Record<string, unknown> | void>;
-  snapshot(options?: SnapshotOptions): Promise<SnapshotResult>;
+  snapshot(options?: SnapshotOptions): Promise<SnapshotRuntimeResult>;
   /**
    * Native reading of the live text at a point, when the backend has one. Answers the text the
    * owner can see right now, which can exceed what an already-captured node carries (an editable

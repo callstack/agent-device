@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { Interactor, RunnerContext } from './interactor-types.ts';
+import type {
+  Interactor,
+  RunnerContext,
+  SnapshotRuntimeAcquiredResult,
+  SnapshotResult,
+} from './interactor-types.ts';
 import {
   bindLocalSnapshotInteractor,
   bindProviderSnapshotInteractor,
@@ -69,6 +74,39 @@ test('provider snapshot binding fails closed when its selected owner loses the i
       error instanceof Error &&
       error.message === 'Provider-owned snapshot operation has no bound provider interactor.',
   );
+});
+
+test('provider snapshot binding presents acquired facts through the supplied host owner', async () => {
+  const acquired: SnapshotRuntimeAcquiredResult = {
+    stage: 'acquired',
+    acquisition: {
+      producer: 'appium-source',
+      intent: 'full',
+      nodes: [],
+      viewport: { kind: 'reported', rect: { x: 0, y: 0, width: 390, height: 844 } },
+      lineage: { targetId: 'ios-1' },
+      residue: [{ kind: 'unavailable-fact', fact: 'truncation' }],
+    },
+  };
+  const presented: SnapshotResult = {
+    backend: 'xctest',
+    producer: 'appium-source',
+    nodes: [],
+  };
+  let presentedInput: SnapshotRuntimeAcquiredResult | undefined;
+  const operations = bindProviderSnapshotInteractor({
+    device,
+    signal: new AbortController().signal,
+    resolveInteractor: () => ({ snapshot: async () => acquired }) as unknown as Interactor,
+    presentIosAcquisition: async (input) => {
+      presentedInput = input;
+      return presented;
+    },
+  });
+
+  const result = await operations.captureSnapshot({ options: { raw: true } });
+  assert.equal(result, presented);
+  assert.equal(presentedInput, acquired);
 });
 
 // ---------------------------------------------------------------------------

@@ -43,6 +43,7 @@ const device: DeviceInfo = {
 test('harmonyos snapshot stamps its channel and producer', async () => {
   const result = await createHarmonyInteractor(device).snapshot();
 
+  if ('stage' in result) throw new Error('HarmonyOS snapshot must be presented');
   expect(result.backend).toBe('harmonyos-arkui');
   expect(result.producer).toBe('harmonyos-uitest');
   expect(result.nodes).toEqual([{ index: 0, type: 'Button', label: 'Continue' }]);

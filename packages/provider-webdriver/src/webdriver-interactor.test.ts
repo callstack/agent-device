@@ -263,10 +263,11 @@ test('iOS WebDriver interactor routes snapshots through the acquisition adapter'
 
   const result = await interactor.snapshot({ raw: true, depth: 1 });
 
-  assert.equal(result.backend, 'xctest');
-  assert.equal(result.producer, 'appium-source');
+  if (!('stage' in result)) throw new Error('iOS snapshot must carry acquired facts');
+  assert.equal(result.stage, 'acquired');
+  assert.equal(result.acquisition.producer, 'appium-source');
   assert.equal(source.mock.calls.length, 1);
-  assert.equal(result.nodes?.[0]?.type, 'XCUIElementTypeApplication');
+  assert.equal(result.acquisition.nodes[0]?.type, 'XCUIElementTypeApplication');
 });
 
 test('Android WebDriver interactor keeps legacy-derived source facts at its call site', async () => {
@@ -282,6 +283,7 @@ test('Android WebDriver interactor keeps legacy-derived source facts at its call
 
   const result = await interactor.snapshot();
 
+  if ('stage' in result) throw new Error('Android snapshot must be presented by the interactor');
   assert.equal(result.backend, 'android');
   assert.equal(result.nodes?.[0]?.type, 'hierarchy');
   assert.equal(result.nodes?.[1]?.type, 'android.widget.Button');

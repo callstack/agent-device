@@ -7,6 +7,10 @@ export type IosSnapshotProducer =
   | 'limrun-ios-tree';
 
 export type IosAcquisitionProducer = Exclude<IosSnapshotProducer, 'apple-runner'>;
+export type IosProviderAcquisitionProducer = Extract<
+  IosAcquisitionProducer,
+  'appium-source' | 'limrun-ios-tree'
+>;
 export type IosAcquisitionIntent = 'full' | 'surface-observation';
 export type IosSnapshotProjection = 'regular' | 'raw';
 export type IosSnapshotCompleteness = 'complete' | 'incomplete';
@@ -81,6 +85,7 @@ type IosSnapshotProducerCapabilityFacts = Readonly<{
   interactiveQueryCompleteness: IosSnapshotCompleteness;
   viewportEvidence: IosSnapshotEvidenceAvailability;
   hittabilityEvidence: IosSnapshotEvidenceAvailability;
+  truncationEvidence: IosSnapshotEvidenceAvailability;
   presentationOwner: IosSnapshotPresentationOwner;
 }>;
 
@@ -161,6 +166,8 @@ export type IosSnapshotAcquisition =
   | IosSnapshotAcquisitionForIntent<'full'>
   | IosSnapshotAcquisitionForIntent<'surface-observation'>;
 
+export type IosSnapshotAcquisitionFacts = Omit<IosSnapshotAcquisition, 'hint'>;
+
 export type IosRunnerPayloadFacts = Readonly<{
   nodes: readonly RawSnapshotNode[];
   truncated: boolean;
@@ -214,6 +221,7 @@ export type IosSnapshotPlan = Readonly<{
     interactiveQuery: IosSnapshotCompleteness;
     viewport: IosSnapshotEvidenceAvailability;
     hittability: IosSnapshotEvidenceAvailability;
+    truncation: IosSnapshotEvidenceAvailability;
   }>;
 }>;
 

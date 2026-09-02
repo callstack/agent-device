@@ -73,6 +73,7 @@ test('web interactor delegates first-slice operations to the scoped provider', a
     'viewport:1280:900',
     'snapshot:main',
   ]);
+  if ('stage' in snapshot) throw new Error('Web snapshot must be presented');
   assert.equal(snapshot.backend, 'web');
   assert.equal(snapshot.truncated, true);
   assert.deepEqual(snapshot.nodes, [{ index: 0, role: 'button', label: 'Submit' }]);

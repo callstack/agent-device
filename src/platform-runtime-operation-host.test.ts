@@ -29,6 +29,11 @@ const snapshot = {
     nodes: [],
     truncated: false,
   }),
+  presentIosAcquisition: async () => ({
+    backend: 'xctest' as const,
+    producer: 'appium-source' as const,
+    nodes: [],
+  }),
 };
 
 const shutdownLoaders = {

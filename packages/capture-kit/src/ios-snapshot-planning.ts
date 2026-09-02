@@ -10,6 +10,7 @@ import type {
   IosSnapshotProducerCapabilities,
   IosSnapshotRequest,
   IosSnapshotRequestInput,
+  IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
 
 const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
@@ -24,6 +25,7 @@ const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
     interactiveQueryCompleteness: 'complete',
     viewportEvidence: 'available',
     hittabilityEvidence: 'available',
+    truncationEvidence: 'available',
     presentationOwner: 'ios-snapshot-engine',
   },
   'simulator-ax-bridge': {
@@ -37,6 +39,7 @@ const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
     interactiveQueryCompleteness: 'incomplete',
     viewportEvidence: 'available',
     hittabilityEvidence: 'available',
+    truncationEvidence: 'available',
     presentationOwner: 'snapshot-state',
   },
   'appium-source': {
@@ -50,6 +53,7 @@ const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
     interactiveQueryCompleteness: 'incomplete',
     viewportEvidence: 'available',
     hittabilityEvidence: 'unavailable',
+    truncationEvidence: 'unavailable',
     presentationOwner: 'ios-snapshot-engine',
   },
   'limrun-ios-tree': {
@@ -63,6 +67,7 @@ const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
     interactiveQueryCompleteness: 'incomplete',
     viewportEvidence: 'available',
     hittabilityEvidence: 'unavailable',
+    truncationEvidence: 'unavailable',
     presentationOwner: 'ios-snapshot-engine',
   },
 } as const satisfies Record<IosSnapshotProducer, IosSnapshotProducerCapabilities>;
@@ -85,7 +90,22 @@ export function deriveIosSnapshotCapabilityResidue(
   ) {
     residue.push({ kind: 'unavailable-fact', fact: 'acquisition-depth' });
   }
+  if (producer.truncationEvidence === 'unavailable') {
+    residue.push({ kind: 'unavailable-fact', fact: 'truncation' });
+  }
   return Object.freeze(residue);
+}
+
+export function deriveIosSnapshotAcquisitionResidue(
+  producer: IosSnapshotProducerCapabilities,
+  viewport: IosViewportEvidence,
+): readonly IosAcquisitionResidue[] {
+  return Object.freeze([
+    ...deriveIosSnapshotCapabilityResidue(producer),
+    ...(viewport.kind === 'missing'
+      ? [{ kind: 'missing-viewport' as const, reason: viewport.reason }]
+      : []),
+  ]);
 }
 
 export function createIosSnapshotRequest(input: IosSnapshotRequestInput = {}): IosSnapshotRequest {
@@ -149,6 +169,7 @@ export function planIosSnapshot(
       interactiveQuery: producer.interactiveQueryCompleteness,
       viewport: producer.viewportEvidence,
       hittability: producer.hittabilityEvidence,
+      truncation: producer.truncationEvidence,
     }),
   });
 }

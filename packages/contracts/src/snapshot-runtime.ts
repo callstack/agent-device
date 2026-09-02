@@ -4,11 +4,13 @@ import type {
   Interactor,
   RunnerContext,
   SnapshotOptions,
+  SnapshotRuntimeAcquiredResult,
+  SnapshotRuntimeResult,
   SnapshotResult,
 } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 
-export type { SnapshotResult } from './interactor-types.ts';
+export type { SnapshotRuntimeAcquiredResult, SnapshotResult } from './interactor-types.ts';
 
 /** Runner metadata needed by the selected snapshot implementation, without request-owned state. */
 export type SnapshotRuntimeExecution = Readonly<Omit<RunnerContext, 'appBundleId' | 'signal'>>;
@@ -75,7 +77,16 @@ export type SnapshotRuntimeHost = Readonly<{
     options: CaptureSnapshotInput['options'],
     signal: AbortSignal,
   ): Promise<SnapshotResult>;
+  presentIosAcquisition(
+    input: SnapshotRuntimeAcquiredResult,
+    options: CaptureSnapshotInput['options'],
+  ): SnapshotResult | Promise<SnapshotResult>;
 }>;
+
+export type SnapshotRuntimePresenter = (
+  input: SnapshotRuntimeAcquiredResult,
+  options: CaptureSnapshotInput['options'],
+) => SnapshotResult | Promise<SnapshotResult>;
 
 export type LocalSnapshotInteractorResolver = (
   device: DeviceInfo,
@@ -90,12 +101,14 @@ type SnapshotInteractorBindingParams =
       signal: AbortSignal;
       ownership: 'local';
       resolveInteractor: LocalSnapshotInteractorResolver;
+      presentIosAcquisition?: never;
     }>
   | Readonly<{
       device: DeviceInfo;
       signal: AbortSignal;
       ownership: 'provider';
       resolveInteractor: ProviderSnapshotInteractorResolver;
+      presentIosAcquisition?: SnapshotRuntimePresenter;
     }>;
 
 /** Captures one selected owner's interactor authority for the lifetime of a request binding. */
@@ -120,7 +133,16 @@ function bindSnapshotInteractor(
         { reason: 'provider-runtime-interactor-missing', deviceId: params.device.id },
       );
     }
-    return await interactor.snapshot({ ...input.options, signal });
+    const result: SnapshotRuntimeResult = await interactor.snapshot({ ...input.options, signal });
+    if (!isSnapshotRuntimeAcquiredResult(result)) return result;
+    if (!params.presentIosAcquisition) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Acquired iOS snapshot has no host presentation owner.',
+        { reason: 'ios-snapshot-presenter-missing', deviceId: params.device.id },
+      );
+    }
+    return await params.presentIosAcquisition(result, input.options);
   };
   return Object.freeze({
     captureSnapshot,
@@ -145,7 +167,14 @@ export function bindProviderSnapshotInteractor(
     device: DeviceInfo;
     signal: AbortSignal;
     resolveInteractor: ProviderSnapshotInteractorResolver;
+    presentIosAcquisition?: SnapshotRuntimePresenter;
   }>,
 ): SnapshotRuntimeOperations {
   return bindSnapshotInteractor({ ...params, ownership: 'provider' });
+}
+
+function isSnapshotRuntimeAcquiredResult(
+  result: SnapshotRuntimeResult,
+): result is SnapshotRuntimeAcquiredResult {
+  return 'stage' in result && result.stage === 'acquired';
 }

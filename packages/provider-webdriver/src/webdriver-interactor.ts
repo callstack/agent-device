@@ -23,8 +23,10 @@ import {
 } from './capabilities.ts';
 import type { W3CPointerAction, WebDriverClient, WebDriverWindowRect } from './webdriver-client.ts';
 import { touchPointer } from './webdriver-gestures.ts';
-import { scrollFrameFromWebDriverSource } from './webdriver-scroll-frame.ts';
-import { parseWebDriverSource } from './webdriver-source.ts';
+import {
+  scrollFrameFromAndroidWebDriverSource,
+  scrollFrameFromIosWebDriverSource,
+} from './webdriver-scroll-frame.ts';
 import { setWebDriverOrientation } from './webdriver-orientation.ts';
 
 /**
@@ -301,16 +303,17 @@ class WebDriverInteractor implements Interactor {
     await this.client.screenshot(outPath);
   }
 
-  async snapshot(options?: SnapshotOptions): Promise<SnapshotResult> {
+  async snapshot(_options?: SnapshotOptions) {
     this.requireSupport('snapshot');
     if (this.backend === 'xctest') {
       const { captureWebDriverIosSnapshot } = await import('./webdriver-ios-snapshot.ts');
-      return await captureWebDriverIosSnapshot(this.client, options, this.targetId);
+      return await captureWebDriverIosSnapshot(this.client, this.targetId);
     }
+    const { parseAndroidWebDriverSource } = await import('./webdriver-android-source.ts');
     return {
       backend: 'android' as const,
       producer: 'appium-source' as const,
-      nodes: parseWebDriverSource(await this.client.source(), { mode: 'legacy-derived' }),
+      nodes: parseAndroidWebDriverSource(await this.client.source()),
     };
   }
 
@@ -507,10 +510,13 @@ class WebDriverInteractor implements Interactor {
   }
 
   private async scrollGestureFrame(): Promise<WebDriverWindowRect> {
-    const sourceMode = this.backend === 'xctest' ? 'facts' : 'legacy-derived';
     const sourceFrame = await this.client
       .source()
-      .then((source) => scrollFrameFromWebDriverSource(source, { mode: sourceMode }))
+      .then((source) =>
+        this.backend === 'xctest'
+          ? scrollFrameFromIosWebDriverSource(source)
+          : scrollFrameFromAndroidWebDriverSource(source),
+      )
       .catch(() => undefined);
     if (sourceFrame) return sourceFrame;
     return await this.client.windowRect();

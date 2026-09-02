@@ -23,7 +23,20 @@ export async function bindLimrunDeployment(platform: 'android' | 'ios', signal: 
     includePlatformModule: true,
   });
   const device = await allocatedDevice(registration.runtime, lease(platform));
-  const owner = await registration.platformModule.loadRuntime({} as PlatformRuntimeHost);
+  const owner = await registration.platformModule.loadRuntime({
+    snapshot: {
+      captureSurface: async () => ({
+        backend: 'xctest' as const,
+        producer: 'appium-source' as const,
+        nodes: [],
+      }),
+      presentIosAcquisition: async () => ({
+        backend: 'xctest' as const,
+        producer: 'appium-source' as const,
+        nodes: [],
+      }),
+    },
+  } as unknown as PlatformRuntimeHost);
   const binding = await owner.bind({
     device,
     intent: { kind: 'ordinary' },

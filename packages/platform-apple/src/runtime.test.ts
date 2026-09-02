@@ -6,6 +6,12 @@ import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
 import { createApplePlatformRuntime } from './runtime.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 
+const presentIosAcquisition: SnapshotRuntimeHost['presentIosAcquisition'] = async () => ({
+  backend: 'xctest',
+  producer: 'appium-source',
+  nodes: [],
+});
+
 function appleDevice(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
   return {
     platform: 'apple',
@@ -294,7 +300,7 @@ test.each(['frontmost-app', 'desktop', 'menubar'] as const)(
     const binding = await createApplePlatformRuntime({
       ...host,
       localInteractors: { resolve },
-      snapshot: { captureSurface },
+      snapshot: { captureSurface, presentIosAcquisition },
     }).bind({
       device: leaves.macos,
       intent: { kind: 'ordinary' },
@@ -596,7 +602,7 @@ test('the macOS surface branch composes the per-capture signal with the binding 
   const binding = await createApplePlatformRuntime({
     ...host,
     localInteractors: { resolve: vi.fn(async () => ({}) as never) },
-    snapshot: { captureSurface },
+    snapshot: { captureSurface, presentIosAcquisition },
   }).bind({
     device: leaves.macos,
     intent: { kind: 'ordinary' },

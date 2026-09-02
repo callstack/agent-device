@@ -59,16 +59,7 @@ export function resetSnapshotRuntimeFixture(): void {
 }
 
 /** Request-scoped snapshot seam for handler tests that mock the legacy leaf dispatch. */
-export function snapshotRuntimeFixture(
-  requestId?: string,
-  fixtureOptions: Readonly<{
-    captureSnapshot?: (
-      device: DeviceInfo,
-      input: CaptureSnapshotInput,
-      signal: AbortSignal,
-    ) => Promise<SnapshotResult>;
-  }> = {},
-): Readonly<{
+export function snapshotRuntimeFixture(requestId?: string): Readonly<{
   inspectFacts: InspectDeviceRuntimeFacts;
   bindDevice: BindDeviceRuntime;
 }> {
@@ -79,9 +70,7 @@ export function snapshotRuntimeFixture(
     const facts = await snapshotFacts(device);
     const providerOwned = facts.device.providerMode === 'provider-runtime';
     const captureSnapshot = async (input: CaptureSnapshotInput) =>
-      await (fixtureOptions.captureSnapshot
-        ? fixtureOptions.captureSnapshot(device, input, requestSignal)
-        : dispatchFixtureSnapshot(device, input, requestSignal));
+      await dispatchFixtureSnapshot(device, input, requestSignal);
     const captureScreenshot = async (input: CaptureScreenshotInput) => {
       fixtureScreenshotCaptures.push(input);
       writeSolidPng(input.outPath);

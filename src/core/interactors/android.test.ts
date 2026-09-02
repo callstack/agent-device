@@ -57,6 +57,7 @@ test('preserves Android clickability evidence through the interactor snapshot ad
 
   const result = await createAndroidInteractor(device).snapshot({});
 
+  if ('stage' in result) throw new Error('Android snapshot must be presented');
   expect(readSnapshotClickabilityEvidence(result)).toEqual(evidence);
   expect(readSnapshotOcclusionContextEvidence(result)).toEqual(occlusionContext);
   expect(result.quality).toEqual({ state: 'healthy', backend: 'android-helper' });

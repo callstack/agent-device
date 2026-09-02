@@ -64,5 +64,17 @@ export function unusedLimrunHost(): PlatformRuntimeHost {
       }),
       readProcessMarker: async () => ({ status: 'missing' }),
     },
+    snapshot: {
+      captureSurface: async () => ({
+        backend: 'xctest' as const,
+        producer: 'appium-source' as const,
+        nodes: [],
+      }),
+      presentIosAcquisition: async () => ({
+        backend: 'xctest' as const,
+        producer: 'appium-source' as const,
+        nodes: [],
+      }),
+    },
   } as unknown as PlatformRuntimeHost;
 }

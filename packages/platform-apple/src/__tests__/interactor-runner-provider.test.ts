@@ -1,5 +1,10 @@
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
-import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
+import type {
+  Interactor,
+  RunnerContext,
+  SnapshotResult,
+  SnapshotRuntimeResult,
+} from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
@@ -12,6 +17,11 @@ import type {
 import { createAppleInteractor } from '../interactor.ts';
 
 type RecordedRunnerCall = { command: RunnerCommand; options: AppleRunnerCommandOptions };
+
+function presentedSnapshot(result: SnapshotRuntimeResult): SnapshotResult {
+  if ('stage' in result) throw new Error('Apple runner snapshot must be presented');
+  return result;
+}
 
 // Every Interactor method must either ride the injected runner transport or
 // fail fast as a local-tooling method the provider composes itself. The two
@@ -175,7 +185,7 @@ test('snapshot merges its per-call cancellation signal with the interaction cont
 
 test('snapshot over the injected transport keeps the shared xctest result shape', async () => {
   const interactor = createAppleInteractor(IOS_SIMULATOR, {}, recordingRunnerProvider([]));
-  const result = await interactor.snapshot();
+  const result = presentedSnapshot(await interactor.snapshot());
   assert.equal(result.backend, 'xctest');
   assert.equal(result.nodes?.length, 2);
 });
@@ -246,7 +256,7 @@ test('snapshot publishes runner presentation through the engine and drops its qu
     },
   );
 
-  const result = await interactor.snapshot({ interactiveOnly: true });
+  const result = presentedSnapshot(await interactor.snapshot({ interactiveOnly: true }));
 
   assert.deepEqual(
     result.nodes?.map((node) => node.type),
@@ -263,7 +273,7 @@ test('macOS app snapshots preserve runner nodes outside the iOS presentation eng
     { runCommand: async () => ({ nodes }) },
   );
 
-  const result = await interactor.snapshot({ interactiveOnly: true });
+  const result = presentedSnapshot(await interactor.snapshot({ interactiveOnly: true }));
 
   assert.deepEqual(result.nodes, nodes);
 });
@@ -350,7 +360,7 @@ test('snapshot accepts only structured healthy empty scope results', async () =>
   };
   const interactor = createAppleInteractor(IOS_SIMULATOR, {}, healthyEmptyProvider);
 
-  const scoped = await interactor.snapshot({ scope: 'missing' });
+  const scoped = presentedSnapshot(await interactor.snapshot({ scope: 'missing' }));
   assert.deepEqual(scoped.nodes, []);
   assert.equal(scoped.backend, 'xctest');
   assert.equal(scoped.quality?.state, 'healthy');

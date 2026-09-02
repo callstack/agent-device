@@ -286,7 +286,12 @@ function bindLimrunAppLogs(
       }),
       runtimeFacts.operations,
     ),
-    ...bindLimrunInteractionOperations({ device, signal, getInteractor: options.getInteractor }),
+    ...bindLimrunInteractionOperations({
+      device,
+      signal,
+      getInteractor: options.getInteractor,
+      presentIosAcquisition: options.host.snapshot.presentIosAcquisition,
+    }),
     ...bindAdmittedProviderInteractorOperations({
       device,
       signal,

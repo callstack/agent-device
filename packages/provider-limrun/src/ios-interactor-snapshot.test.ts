@@ -17,7 +17,8 @@ test('limrun iOS snapshot stamps the xctest channel with its own producer', asyn
 
   const result = await createLimrunIosInteractor(session).snapshot();
 
-  expect(result.backend).toBe('xctest');
-  expect(result.producer).toBe('limrun-ios-tree');
-  expect(result.nodes?.map((node) => node.label)).toEqual([undefined, 'Continue']);
+  if (!('stage' in result)) throw new Error('Limrun iOS snapshot must carry acquired facts');
+  expect(result.stage).toBe('acquired');
+  expect(result.acquisition.producer).toBe('limrun-ios-tree');
+  expect(result.acquisition.nodes.map((node) => node.label)).toEqual([undefined, 'Continue']);
 });

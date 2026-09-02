@@ -5,11 +5,7 @@ import type {
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
 } from '@agent-device/contracts/device';
-import type {
-  Interactor,
-  SnapshotOptions,
-  SnapshotResult,
-} from '@agent-device/contracts/interactor-types';
+import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type Limrun from '@limrun/api';
@@ -254,9 +250,9 @@ class LimrunIosInteractor implements Interactor {
     await writeBase64File(outPath, screenshot.base64);
   }
 
-  async snapshot(options?: SnapshotOptions): Promise<SnapshotResult> {
+  async snapshot() {
     const { captureLimrunIosSnapshot } = await import('./ios-snapshot-adapter.ts');
-    return await captureLimrunIosSnapshot(this.session, options);
+    return await captureLimrunIosSnapshot(this.session);
   }
 
   async back(): Promise<void> {

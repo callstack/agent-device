@@ -145,6 +145,7 @@ test('presented producers cannot claim acquisition narrowing', () => {
     interactiveQuery: 'complete',
     viewport: 'available',
     hittability: 'available',
+    truncation: 'available',
   });
 });
 
@@ -162,8 +163,23 @@ test('capability residue derives unavailable Appium facts from the registry', ()
     [
       { kind: 'unavailable-fact', fact: 'hittability' },
       { kind: 'unavailable-fact', fact: 'acquisition-depth' },
+      { kind: 'unavailable-fact', fact: 'truncation' },
     ],
   );
+});
+
+test('capability residue reports truncation independently from acquisition depth', () => {
+  const producer = acquiredProducer({
+    acquisitionDepth: {
+      rawTraversal: { kind: 'complete' },
+      regularPresented: { kind: 'complete' },
+    },
+    truncationEvidence: 'unavailable',
+  });
+
+  assert.deepEqual(deriveIosSnapshotCapabilityResidue(producer), [
+    { kind: 'unavailable-fact', fact: 'truncation' },
+  ]);
 });
 
 test('comparison identity rejects every identity axis and residue mismatch', () => {
@@ -242,6 +258,7 @@ function acquiredProducer(
     interactiveQueryCompleteness: 'incomplete',
     viewportEvidence: 'available',
     hittabilityEvidence: 'available',
+    truncationEvidence: 'available',
     presentationOwner: 'snapshot-state',
     ...overrides,
   };
