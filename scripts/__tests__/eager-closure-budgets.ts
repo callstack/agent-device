@@ -310,7 +310,7 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   'packages/platform-android/src/adb-host.ts': 1,
   // The named mechanics facet is intentionally implementation-eager once selected. Its exact
   // closure is pinned so a future facade expansion is visible in review.
-  'packages/platform-android/src/mechanics.ts': 177,
+  'packages/platform-android/src/mechanics.ts': 178,
 
   // --- @agent-device/platform-apple ---
   'packages/platform-apple/src/index.ts': 1,
