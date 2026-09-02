@@ -131,6 +131,29 @@ test('buildSnapshotState leaves Apple runner presentation to the engine', () => 
   expect(state.nodes.map((node) => node.type)).toEqual(['Application', 'Table', 'Cell', 'Button']);
 });
 
+test('buildSnapshotState uses the registered presentation owner for Appium results', () => {
+  const rowRect = { x: 16, y: 293, width: 370, height: 52 };
+  const data = {
+    nodes: [
+      { index: 0, depth: 0, type: 'Application', label: 'Settings' },
+      { index: 1, depth: 1, parentIndex: 0, type: 'CollectionView' },
+      { index: 2, depth: 2, parentIndex: 1, type: 'Cell', label: 'General', rect: rowRect },
+      { index: 3, depth: 3, parentIndex: 2, type: 'Button', label: 'General', rect: rowRect },
+    ],
+    backend: 'xctest' as const,
+    producer: 'appium-source' as const,
+  };
+
+  const state = buildSnapshotState(data, { snapshotInteractiveOnly: true });
+
+  expect(state.nodes.map((node) => [node.type, node.label])).toEqual([
+    ['Application', 'Settings'],
+    ['CollectionView', undefined],
+    ['Cell', 'General'],
+    ['Button', 'General'],
+  ]);
+});
+
 test('Appium presentation does not infer hittability from an enabled ancestor rectangle', () => {
   const state = buildSnapshotState(
     {
