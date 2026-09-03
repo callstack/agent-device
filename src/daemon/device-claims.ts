@@ -375,6 +375,8 @@ function staleReleaseRefusalReason(classification: DeviceClaimClassification): s
       return 'owner-liveness-unknown';
     case 'inconsistent':
       return 'claim-record-inconsistent';
+    case 'allocator-inconsistent':
+      return 'allocator-claim-record-inconsistent';
     case 'allocator-held':
       return 'allocator-held-owner';
     case 'owner-process-dead':

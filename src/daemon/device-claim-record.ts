@@ -93,6 +93,16 @@ export function decodeStoredDeviceClaim(value: unknown): StoredDeviceClaim | nul
   return null;
 }
 
+/**
+ * Whether raw claim-file contents declare the allocator-held schema version, independent of
+ * whether the rest of the record decodes. A record that answers true here but that
+ * {@link decodeStoredDeviceClaim} still rejects is not provably a non-allocator record, so a
+ * reader that must fail closed on an allocator-held claim cannot treat it as absent.
+ */
+export function looksLikeAllocatorHeldClaim(value: unknown): boolean {
+  return isClaimObject(value) && value.schemaVersion === ALLOCATOR_HELD_CLAIM_SCHEMA_VERSION;
+}
+
 /** Fields that would make an allocator-held record answer a process principal. */
 const PROCESS_PRINCIPAL_FIELDS = [
   'ownerPid',

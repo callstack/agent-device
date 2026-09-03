@@ -275,6 +275,7 @@ function conflictReason(
     case 'owner-state-dir-gone':
     case 'unknown':
     case 'inconsistent':
+    case 'allocator-inconsistent':
       return 'DEVICE_CLAIM_OWNER_UNCERTAIN';
   }
 }

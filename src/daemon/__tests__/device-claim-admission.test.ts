@@ -18,6 +18,7 @@ import { createDeviceClaimAdmission } from '../device-claim-admission.ts';
 import { acquireAllocatorHeldDeviceClaim } from '../device-claim-allocator.ts';
 import { abandonDeviceClaim, acquireDeviceClaim } from '../device-claims.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
+import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from '../device-claim-paths.ts';
 import { createRequestExecutionScope } from '../request-execution-scope.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { SessionStore } from '../session-store.ts';
@@ -320,6 +321,48 @@ test.for(POLICY_CLAIMS.map(([policy]) => policy).filter((policy) => policy !== '
     expect(fs.readdirSync(claimsDir)).toEqual(before);
   },
 );
+
+// A claim file corrupted into declaring both the allocator schema version and a process
+// principal does not decode to either claim kind, but it is not provably a non-allocator
+// record either: it must refuse ordinary admission, not fall through as if the device were free.
+test('an ordinary owner is refused for a corrupted allocator-looking claim record, not waved through', async () => {
+  const { stateDir, claimsDir } = setup();
+  fs.mkdirSync(claimsDir, { recursive: true });
+  const deviceKey = canonicalLocalDeviceKey(ANDROID_EMULATOR);
+  fs.writeFileSync(
+    resolveDeviceClaimPath(deviceKey),
+    JSON.stringify({
+      schemaVersion: 3,
+      kind: 'allocator',
+      deviceKey,
+      device: {
+        family: 'android',
+        id: ANDROID_EMULATOR.id,
+        name: ANDROID_EMULATOR.name,
+        kind: ANDROID_EMULATOR.kind,
+      },
+      stateDir: '/state/host',
+      allocator: { instanceId: 'sim-a', identityIncarnationId: 'inc-1' },
+      // A process principal on an allocator record is exactly the corruption that must not
+      // decode: decodeAllocatorHeldClaim refuses it, and this is the record that refusal leaves.
+      ownerPid: 4242,
+      createdAtMs: 1,
+      updatedAtMs: 2,
+    }),
+  );
+  const admission = makeAdmission('observe', stateDir);
+
+  const error = asAppError(
+    await admission
+      .admit(ANDROID_EMULATOR, localAndroid, ORDINARY)
+      .catch((error: unknown) => error),
+  );
+
+  expect(error.code).toBe('DEVICE_IN_USE');
+  expect(error.details?.reason).toBe('DEVICE_CLAIM_OWNER_UNCERTAIN');
+  expect(error.details?.classification).toBe('allocator-inconsistent');
+  await admission[Symbol.asyncDispose]();
+});
 
 test('the none policy still reaches no device state at all', async () => {
   const { stateDir, claimsDir } = setup();

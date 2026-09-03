@@ -12,6 +12,7 @@ import { resolveDeviceClaimRoot } from './device-claim-paths.ts';
 import {
   decodeStoredDeviceClaim,
   isAllocatorHeldDeviceClaim,
+  looksLikeAllocatorHeldClaim,
   type AllocatorHeldDeviceClaim,
   type DeviceClaim,
   type StoredDeviceClaim,
@@ -20,10 +21,13 @@ import {
 /**
  * `allocator-held` is a statement about the principal, not about liveness: the claim belongs to an
  * installation and an allocator identity incarnation, so there is no process to classify.
+ * `allocator-inconsistent` is the same statement made unreliable: the raw record declares the
+ * allocator schema version but does not decode, so it is not provably a non-allocator record.
  */
 export type DeviceClaimClassification =
   | OwnerLiveness
   | 'inconsistent'
+  | 'allocator-inconsistent'
   | 'owner-daemon-superseded'
   | 'allocator-held';
 
@@ -133,14 +137,18 @@ export function inspectDeviceClaimFile(filePath: string): InspectedDeviceClaim |
 }
 
 /**
- * The allocator-held claim recorded at this path, or null for every other record. This kind
- * carries its classification in the record itself, so — unlike {@link inspectDeviceClaimFile} —
- * nothing here probes host process identity. The ordinary claim gate asks this on every device
+ * The allocator-held claim recorded at this path, or null for every record provably not one. This
+ * kind carries its classification in the record itself, so — unlike {@link inspectDeviceClaimFile}
+ * — nothing here probes host process identity. The ordinary claim gate asks this on every device
  * binding, and a claim whose owner is an installation has no process to probe.
+ *
+ * A record that declares the allocator schema version but fails to decode (for example, one
+ * corrupted into also carrying a process principal) is not provably absent, so it is returned
+ * too: the caller must refuse rather than treat the device as free for ordinary use.
  */
 export function readAllocatorHeldClaimFile(filePath: string): InspectedDeviceClaim | null {
   const entry = readDeviceClaimFile(filePath);
-  return entry?.allocatorClaim ? entry : null;
+  return entry?.allocatorClaim || entry?.classification === 'allocator-inconsistent' ? entry : null;
 }
 
 function readDeviceClaimFile(filePath: string): InspectedDeviceClaim | null {
@@ -160,8 +168,16 @@ function readDeviceClaimFile(filePath: string): InspectedDeviceClaim | null {
 
 function inspectClaimContents(fileName: string, contents: string): InspectedDeviceClaim {
   try {
-    const record = decodeStoredDeviceClaim(JSON.parse(contents) as unknown);
-    if (!record) return { fileName, classification: 'inconsistent' };
+    const parsed = JSON.parse(contents) as unknown;
+    const record = decodeStoredDeviceClaim(parsed);
+    if (!record) {
+      return {
+        fileName,
+        classification: looksLikeAllocatorHeldClaim(parsed)
+          ? 'allocator-inconsistent'
+          : 'inconsistent',
+      };
+    }
     if (isAllocatorHeldDeviceClaim(record)) {
       return {
         fileName,
@@ -215,6 +231,9 @@ export function deviceClaimRequiresStaleInspection(
     case 'unknown':
     case 'inconsistent':
       return false;
+    // Corrupted, not leftover: `--stale` release proofs a dead process, which this has none of.
+    case 'allocator-inconsistent':
+      return false;
     // An allocator-held claim is the normal state of a managed identity, not a leftover.
     case 'allocator-held':
       return false;
@@ -239,6 +258,9 @@ export function deviceClaimOwnerCannotRelease(classification: DeviceClaimClassif
     case 'owner-state-dir-gone':
     case 'unknown':
     case 'inconsistent':
+      return false;
+    // No process proof applies to a record that never decoded far enough to name one.
+    case 'allocator-inconsistent':
       return false;
     // Its owner is an installation, not a process, so no process proof can settle it: only the
     // allocator's removal proof clears it, through `releaseAllocatorHeldClaim`.
