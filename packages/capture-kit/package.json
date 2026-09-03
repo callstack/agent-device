@@ -34,6 +34,10 @@
       "types": "./src/png.ts",
       "default": "./src/png.ts"
     },
+    "./png-crop": {
+      "types": "./src/png-crop.ts",
+      "default": "./src/png-crop.ts"
+    },
     "./png-resize": {
       "types": "./src/png-resize.ts",
       "default": "./src/png-resize.ts"
@@ -73,6 +77,10 @@
     "./snapshot-quality-verdict": {
       "types": "./src/snapshot-quality-verdict.ts",
       "default": "./src/snapshot-quality-verdict.ts"
+    },
+    "./snapshot-rect-projection": {
+      "types": "./src/snapshot-rect-projection.ts",
+      "default": "./src/snapshot-rect-projection.ts"
     }
   },
   "devDependencies": {

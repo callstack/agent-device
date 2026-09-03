@@ -25,6 +25,7 @@ const NODE_STAGE_ROWS = [
   'findWait',
   'wait',
   'findAct',
+  'cropTarget',
 ] as const;
 
 /**
@@ -149,7 +150,14 @@ test('the occlusion stage decides candidacy: acting rows drop covered nodes, the
     );
     assert.equal(listed.list?.matchedNodes.length, 1, row);
   }
-  for (const row of ['readText', 'readUnique', 'readAny', 'wait', 'findWait'] as const) {
+  for (const row of [
+    'readText',
+    'readUnique',
+    'readAny',
+    'wait',
+    'findWait',
+    'cropTarget',
+  ] as const) {
     const outcome = await resolveSelectorPipeline(
       SELECTOR_PIPELINE_POLICIES[row],
       nodes,
@@ -168,7 +176,14 @@ test('the occlusion stage decides refusal: every row that refuses a covered targ
   }
   // `readList` is absent by construction: a listing row declares no node
   // stages, so it has no occlusion verdict to make on a target.
-  for (const row of ['readText', 'readUnique', 'readAny', 'wait', 'findWait'] as const) {
+  for (const row of [
+    'readText',
+    'readUnique',
+    'readAny',
+    'wait',
+    'findWait',
+    'cropTarget',
+  ] as const) {
     const target = await stagedIndex(row, COVERED_TREE, 1);
     assert.equal(target.kind, 'target', row);
     assert.equal(target.node.index, 1, row);
@@ -179,7 +194,14 @@ test('the promotion stage retargets only for the rows that declare it', async ()
   // Same tree, same node: the row is the whole difference.
   assert.equal((await stagedIndex('promotedTarget', PROMOTABLE_TREE, 1)).node.index, 0);
   assert.equal((await stagedIndex('findAct', PROMOTABLE_TREE, 1)).node.index, 0);
-  for (const row of ['resolvedTarget', 'readText', 'readUnique', 'readAny', 'wait'] as const) {
+  for (const row of [
+    'resolvedTarget',
+    'readText',
+    'readUnique',
+    'readAny',
+    'wait',
+    'cropTarget',
+  ] as const) {
     assert.equal((await stagedIndex(row, PROMOTABLE_TREE, 1)).node.index, 1, row);
   }
 });
@@ -305,6 +327,7 @@ test('the documented per-caller pipelines are the ones declared', () => {
       findWait: ['ignore', 'ignore', 'none', 'poll'],
       wait: ['ignore', 'ignore', 'none', 'poll'],
       findAct: ['refuse', 'ignore', 'hittable-ancestor-below-root', 'no-poll'],
+      cropTarget: ['ignore', 'ignore', 'none', 'no-poll'],
     },
   );
 });

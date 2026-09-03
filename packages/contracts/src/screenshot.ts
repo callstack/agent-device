@@ -44,6 +44,29 @@ export function validateNoRetiredScreenshotMaxSize(
   }
 }
 
+/**
+ * Machine-readable `screenshot --crop-on` outcome taxonomy. Failures carry these
+ * values in `error.details.reason`; `partialIntersection` doubles as the
+ * success-path warning token. Callers branch on the values, never on message
+ * text. `pendingPixelIdentityEvidence` is the acceptance-matrix rejection
+ * reason, not a runtime failure.
+ */
+export const SCREENSHOT_CROP_REASONS = {
+  selectorInvalid: 'CROP_SELECTOR_INVALID',
+  targetNotFound: 'CROP_TARGET_NOT_FOUND',
+  targetAmbiguous: 'CROP_TARGET_AMBIGUOUS',
+  captureUnreadable: 'CROP_CAPTURE_UNREADABLE',
+  captureIncomplete: 'CROP_CAPTURE_INCOMPLETE',
+  emptyIntersection: 'CROP_EMPTY_INTERSECTION',
+  partialIntersection: 'CROP_PARTIAL_INTERSECTION',
+  targetNotAccepted: 'CROP_TARGET_NOT_ACCEPTED',
+  frameMismatch: 'CROP_FRAME_MISMATCH',
+  pendingPixelIdentityEvidence: 'PENDING_PIXEL_IDENTITY_EVIDENCE',
+} as const;
+
+export type ScreenshotCropReason =
+  (typeof SCREENSHOT_CROP_REASONS)[keyof typeof SCREENSHOT_CROP_REASONS];
+
 export const SCREENSHOT_COMMAND_FLAG_KEYS = [
   'out',
   'overlayRefs',

@@ -128,9 +128,11 @@ test('disambiguation declines when candidates are genuinely indistinguishable', 
 });
 
 test('fail-closed rows refuse an ambiguous tree instead of guessing', () => {
-  const outcome = outcomeFor('readUnique', AMBIGUOUS_TREE);
-  assert.equal(outcome.kind, 'ambiguous');
-  if (outcome.kind === 'ambiguous') assert.equal(outcome.matchedNodes.length, 2);
+  for (const name of ['readUnique', 'cropTarget'] as const) {
+    const outcome = outcomeFor(name, AMBIGUOUS_TREE);
+    assert.equal(outcome.kind, 'ambiguous', name);
+    if (outcome.kind === 'ambiguous') assert.equal(outcome.matchedNodes.length, 2, name);
+  }
 });
 
 test('first-match rows take the head of an ambiguous tree', () => {
@@ -155,7 +157,7 @@ test('reject-candidates surfaces every candidate for the caller to narrow or ref
 });
 
 test('rect-requiring rows skip rectless nodes; read and wait rows accept them', () => {
-  for (const name of ['act', 'findAct', 'actCoveredDiagnosis'] as const) {
+  for (const name of ['act', 'findAct', 'actCoveredDiagnosis', 'cropTarget'] as const) {
     assert.equal(outcomeFor(name, RECTLESS_TREE).kind, 'none', name);
   }
   for (const name of ['readUnique', 'readAny', 'readText', 'wait'] as const) {
@@ -189,4 +191,5 @@ test('the documented per-caller contracts are the ones declared', () => {
   assert.equal(SELECTOR_RESOLUTION_POLICIES.readAny.ambiguity, 'first-match');
   assert.equal(SELECTOR_RESOLUTION_POLICIES.wait.ambiguity, 'first-match');
   assert.equal(SELECTOR_RESOLUTION_POLICIES.findAct.ambiguity, 'reject-candidates');
+  assert.equal(SELECTOR_RESOLUTION_POLICIES.cropTarget.ambiguity, 'fail-closed');
 });

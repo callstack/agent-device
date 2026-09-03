@@ -190,6 +190,14 @@ export const SELECTOR_PIPELINE_POLICIES = {
     promotion: 'hittable-ancestor-below-root',
     poll: 'none',
   },
+  /** `screenshot --crop-on`: crops the capture to the resolved node's frame. */
+  cropTarget: {
+    resolution: SELECTOR_RESOLUTION_POLICIES.cropTarget,
+    occlusion: 'ignore',
+    offscreen: 'ignore',
+    promotion: 'none',
+    poll: 'none',
+  },
 } as const satisfies Record<string, SelectorPipelinePolicy | SelectorListPolicy>;
 
 export type SelectorPipelinePolicyName = keyof typeof SELECTOR_PIPELINE_POLICIES;

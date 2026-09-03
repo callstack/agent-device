@@ -7,6 +7,10 @@ import {
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { decodePngAsync, encodePngAsync } from '@agent-device/capture-kit/png-worker-client';
+import {
+  projectSnapshotRectToScreenshot,
+  resolveSnapshotBounds,
+} from '@agent-device/capture-kit/snapshot-rect-projection';
 import { analyzeReactNativeOverlay } from '../core/react-native-overlay.ts';
 import {
   findNearestAncestor,
@@ -259,67 +263,12 @@ function projectRectToScreenshot(
   screenshotWidth: number,
   screenshotHeight: number,
 ): Rect {
-  if (snapshot.backend === 'android') {
-    return clampRect(roundRect(rect), screenshotWidth, screenshotHeight);
-  }
-  if (!bounds) {
-    return clampRect(roundRect(rect), screenshotWidth, screenshotHeight);
-  }
-  const scaleX = screenshotWidth / bounds.width;
-  const scaleY = screenshotHeight / bounds.height;
+  const space = snapshot.backend === 'android' ? 'device-pixels' : 'viewport-points';
   return clampRect(
-    {
-      x: Math.round((rect.x - bounds.x) * scaleX),
-      y: Math.round((rect.y - bounds.y) * scaleY),
-      width: Math.max(1, Math.round(rect.width * scaleX)),
-      height: Math.max(1, Math.round(rect.height * scaleY)),
-    },
+    projectSnapshotRectToScreenshot(space, bounds, rect, screenshotWidth, screenshotHeight),
     screenshotWidth,
     screenshotHeight,
   );
-}
-
-function resolveSnapshotBounds(nodes: SnapshotState['nodes']): Rect | null {
-  let viewport: Rect | null = null;
-  for (const node of nodes) {
-    if (!isViewportRootNode(node) || !hasPositiveRect(node.rect)) continue;
-    if (!viewport || rectArea(node.rect) > rectArea(viewport)) {
-      viewport = node.rect;
-    }
-  }
-  if (viewport) return viewport;
-
-  return measureSnapshotBounds(
-    nodes.filter((node) => hasPositiveRect(node.rect) && !isSnapshotBoundsOutlier(node)),
-  );
-}
-
-function measureSnapshotBounds(nodes: Array<Pick<SnapshotNode, 'rect'>>): Rect | null {
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxRight = Number.NEGATIVE_INFINITY;
-  let maxBottom = Number.NEGATIVE_INFINITY;
-  for (const node of nodes) {
-    if (!node.rect || !hasPositiveRect(node.rect)) continue;
-    minX = Math.min(minX, node.rect.x);
-    minY = Math.min(minY, node.rect.y);
-    maxRight = Math.max(maxRight, node.rect.x + node.rect.width);
-    maxBottom = Math.max(maxBottom, node.rect.y + node.rect.height);
-  }
-  if (!Number.isFinite(minX) || !Number.isFinite(minY) || maxRight <= minX || maxBottom <= minY) {
-    return null;
-  }
-  return {
-    x: minX,
-    y: minY,
-    width: maxRight - minX,
-    height: maxBottom - minY,
-  };
-}
-
-function isSnapshotBoundsOutlier(node: SnapshotNode): boolean {
-  const normalizedType = normalizeType(node.type ?? '');
-  return normalizedType === 'image' && !isMeaningfulSignal(node.label);
 }
 
 function hasActionableRole(node: SnapshotNode): boolean {
@@ -431,15 +380,6 @@ function compareNumericRefs(left: string, right: string): number {
   const leftValue = Number.parseInt(left.replace(/^\D+/, ''), 10);
   const rightValue = Number.parseInt(right.replace(/^\D+/, ''), 10);
   return leftValue - rightValue;
-}
-
-function roundRect(rect: Rect): Rect {
-  return {
-    x: Math.round(rect.x),
-    y: Math.round(rect.y),
-    width: Math.round(rect.width),
-    height: Math.round(rect.height),
-  };
 }
 
 function clampRect(rect: Rect, width: number, height: number): Rect {

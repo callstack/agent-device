@@ -1,0 +1,92 @@
+[
+  {
+    "name": "iOS simulator 1x capture: viewport-space rect projects 1:1 against a zero-origin bounds",
+    "space": "viewport-points",
+    "bounds": { "x": 0, "y": 0, "width": 402, "height": 874 },
+    "rect": { "x": 16, "y": 293.33, "width": 370, "height": 52 },
+    "image": { "width": 402, "height": 874 },
+    "expectedProjection": { "x": 16, "y": 293, "width": 370, "height": 52 },
+    "expectedIntersection": { "x": 16, "y": 293, "width": 370, "height": 52 }
+  },
+  {
+    "name": "iOS simulator 3x capture: the same points rect scales by imgW/bounds.width and rounds",
+    "space": "viewport-points",
+    "bounds": { "x": 0, "y": 0, "width": 402, "height": 874 },
+    "rect": { "x": 16, "y": 293.33, "width": 370, "height": 52 },
+    "image": { "width": 1206, "height": 2622 },
+    "expectedProjection": { "x": 48, "y": 880, "width": 1110, "height": 156 },
+    "expectedIntersection": { "x": 48, "y": 880, "width": 1110, "height": 156 }
+  },
+  {
+    "name": "Android: device-pixel rects project 1:1 with no bounds lookup",
+    "space": "device-pixels",
+    "bounds": null,
+    "rect": { "x": 210, "y": 678, "width": 436, "height": 71 },
+    "image": { "width": 1080, "height": 2400 },
+    "expectedProjection": { "x": 210, "y": 678, "width": 436, "height": 71 },
+    "expectedIntersection": { "x": 210, "y": 678, "width": 436, "height": 71 }
+  },
+  {
+    "name": "macOS app window: non-zero-origin bounds shift the rect before the 2x scale",
+    "space": "viewport-points",
+    "bounds": { "x": 898, "y": 74, "width": 586, "height": 488 },
+    "rect": { "x": 906, "y": 114, "width": 20, "height": 20 },
+    "image": { "width": 1172, "height": 976 },
+    "expectedProjection": { "x": 16, "y": 80, "width": 40, "height": 40 },
+    "expectedIntersection": { "x": 16, "y": 80, "width": 40, "height": 40 }
+  },
+  {
+    "name": "viewport-points without bounds degrades to a rounded 1:1 rect instead of dividing by zero",
+    "space": "viewport-points",
+    "bounds": null,
+    "rect": { "x": 16.6, "y": 293.33, "width": 370, "height": 52 },
+    "image": { "width": 402, "height": 874 },
+    "expectedProjection": { "x": 17, "y": 293, "width": 370, "height": 52 },
+    "expectedIntersection": { "x": 17, "y": 293, "width": 370, "height": 52 }
+  },
+  {
+    "name": "scrolled-out row above the image floor intersects nothing",
+    "space": "viewport-points",
+    "bounds": { "x": 0, "y": 0, "width": 402, "height": 874 },
+    "rect": { "x": 16, "y": 900, "width": 370, "height": 52 },
+    "image": { "width": 402, "height": 874 },
+    "expectedProjection": { "x": 16, "y": 900, "width": 370, "height": 52 },
+    "expectedIntersection": null
+  },
+  {
+    "name": "row grazing the bottom edge clips to the image and stays partial",
+    "space": "device-pixels",
+    "bounds": null,
+    "rect": { "x": 210, "y": 2360, "width": 436, "height": 111 },
+    "image": { "width": 1080, "height": 2400 },
+    "expectedProjection": { "x": 210, "y": 2360, "width": 436, "height": 111 },
+    "expectedIntersection": { "x": 210, "y": 2360, "width": 436, "height": 40 }
+  },
+  {
+    "name": "rect left of the image edge clips to x=0",
+    "space": "device-pixels",
+    "bounds": null,
+    "rect": { "x": -40, "y": 100, "width": 200, "height": 50 },
+    "image": { "width": 1080, "height": 2400 },
+    "expectedProjection": { "x": -40, "y": 100, "width": 200, "height": 50 },
+    "expectedIntersection": { "x": 0, "y": 100, "width": 160, "height": 50 }
+  },
+  {
+    "name": "rect fully past the right edge intersects nothing",
+    "space": "device-pixels",
+    "bounds": null,
+    "rect": { "x": 1080, "y": 100, "width": 100, "height": 50 },
+    "image": { "width": 1080, "height": 2400 },
+    "expectedProjection": { "x": 1080, "y": 100, "width": 100, "height": 50 },
+    "expectedIntersection": null
+  },
+  {
+    "name": "zero-area intersection (edge touch only) is empty, not a 1px sliver",
+    "space": "device-pixels",
+    "bounds": null,
+    "rect": { "x": 1079, "y": 2400, "width": 10, "height": 10 },
+    "image": { "width": 1080, "height": 2400 },
+    "expectedProjection": { "x": 1079, "y": 2400, "width": 10, "height": 10 },
+    "expectedIntersection": null
+  }
+]

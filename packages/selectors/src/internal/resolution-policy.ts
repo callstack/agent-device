@@ -89,6 +89,11 @@ export const SELECTOR_RESOLUTION_POLICIES = {
     ambiguity: 'reject-candidates',
     requireRect: false,
   },
+  /** `screenshot --crop-on` — crops the capture to the resolved node's frame. */
+  cropTarget: {
+    ambiguity: 'fail-closed',
+    requireRect: true,
+  },
 } as const satisfies Record<string, SelectorResolutionPolicy>;
 
 /**
