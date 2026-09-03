@@ -64,6 +64,75 @@ test('producer, consumers, upload, and concurrency use the canonical platform-sc
   );
 });
 
+test('resolve-artifact-name.sh fingerprints examples/test-app, not the workspace root', (t) => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-fingerprint-cwd-'));
+  t.after(() => fs.rmSync(tempRoot, { force: true, recursive: true }));
+
+  // A repo-root native helper dir that must be excluded once the fingerprint
+  // is scoped correctly, and the fixture app's own native module that must be
+  // included.
+  fs.mkdirSync(path.join(tempRoot, 'android'), { recursive: true });
+  fs.mkdirSync(path.join(tempRoot, 'examples/test-app/modules/push-broadcast-lab/android'), {
+    recursive: true,
+  });
+  const fingerprintBinDir = path.join(tempRoot, 'examples/test-app/node_modules/.bin');
+  fs.mkdirSync(fingerprintBinDir, { recursive: true });
+  const sourcesLog = path.join(tempRoot, 'fingerprint-sources.json');
+
+  // Stand-in for @expo/fingerprint: reports every `android` directory
+  // reachable under its own process.cwd(), the same cwd-scoped native-dir
+  // discovery the real tool performs.
+  fs.writeFileSync(
+    path.join(fingerprintBinDir, 'fingerprint'),
+    [
+      '#!/usr/bin/env node',
+      "const fs = require('node:fs');",
+      "const path = require('node:path');",
+      'function findAndroidDirs(dir, found) {',
+      '  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {',
+      "    if (!entry.isDirectory() || entry.name === 'node_modules' || entry.name === '.git') continue;",
+      '    const full = path.join(dir, entry.name);',
+      "    if (entry.name === 'android') found.push(full);",
+      '    findAndroidDirs(full, found);',
+      '  }',
+      '  return found;',
+      '}',
+      'const cwd = process.cwd();',
+      'const dirs = findAndroidDirs(cwd, []).map((p) => path.relative(cwd, p));',
+      "const report = { hash: 'stub-' + dirs.length, sources: dirs.map((filePath) => ({ type: 'dir', filePath })) };",
+      'if (process.env.TEST_FINGERPRINT_SOURCES_LOG) {',
+      '  fs.writeFileSync(process.env.TEST_FINGERPRINT_SOURCES_LOG, JSON.stringify(report));',
+      '}',
+      'process.stdout.write(JSON.stringify(report));',
+      '',
+    ].join('\n'),
+  );
+  fs.chmodSync(path.join(fingerprintBinDir, 'fingerprint'), 0o755);
+
+  const scriptDir = path.join(tempRoot, '.github/actions/setup-fixture-app');
+  fs.mkdirSync(scriptDir, { recursive: true });
+  fs.copyFileSync(
+    '.github/actions/setup-fixture-app/resolve-artifact-name.sh',
+    path.join(scriptDir, 'resolve-artifact-name.sh'),
+  );
+
+  const result = spawnSync('sh', [path.join(scriptDir, 'resolve-artifact-name.sh'), 'android'], {
+    cwd: tempRoot,
+    encoding: 'utf8',
+    env: { ...process.env, TEST_FINGERPRINT_SOURCES_LOG: sourcesLog },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout.trim(), /^fingerprint\.stub-1\.android$/);
+
+  const sources = JSON.parse(fs.readFileSync(sourcesLog, 'utf8')).sources;
+  const sourcePaths = sources.map((source) => source.filePath);
+  assert.deepEqual(sourcePaths, ['modules/push-broadcast-lab/android']);
+  assert.ok(
+    !sourcePaths.includes('android'),
+    `expected the workspace-root android/ helpers to be excluded, got ${JSON.stringify(sourcePaths)}`,
+  );
+});
+
 test('Android smoke consumes the restored APK through catalog fixture E2E', (t) => {
   const workflow = parse(fs.readFileSync('.github/workflows/android.yml', 'utf8'));
   const replayEvidence = JSON.parse(

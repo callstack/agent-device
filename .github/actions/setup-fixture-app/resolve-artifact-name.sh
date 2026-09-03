@@ -21,7 +21,9 @@ if [ ! -x "$FINGERPRINT_BIN" ]; then
   exit 1
 fi
 
-FINGERPRINT_JSON="$("$FINGERPRINT_BIN" fingerprint:generate --platform "$PLATFORM")"
+# @expo/fingerprint treats process.cwd() as the project root.
+FINGERPRINT_ABS="$(cd "$(dirname "$FINGERPRINT_BIN")" && pwd)/$(basename "$FINGERPRINT_BIN")"
+FINGERPRINT_JSON="$(cd examples/test-app && "$FINGERPRINT_ABS" fingerprint:generate --platform "$PLATFORM")"
 if ! HASH="$(
   printf '%s\n' "$FINGERPRINT_JSON" |
     jq -ser '
