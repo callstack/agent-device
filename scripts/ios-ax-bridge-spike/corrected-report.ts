@@ -49,11 +49,11 @@ export function buildCorrectedReport(options: {
     ),
     nonresidentBootstrap: bootstrapGate(options.targeted),
     liveRecovery: recoveryGate(options.targeted),
-    hierarchyResidue: hierarchy.gate,
+    hierarchy: hierarchy.gate,
   } as const;
   const failedGates = Object.entries(hardGates).filter(([, gate]) => gate.status === 'FAIL');
   return {
-    schemaVersion: 'ios-simulator-ax-bridge-corrected.v1',
+    schemaVersion: 'ios-simulator-ax-bridge-corrected.v2',
     interpretation: 'maintainer-corrected',
     generatedAt: new Date().toISOString(),
     revision: options.targeted.revision,
@@ -62,10 +62,20 @@ export function buildCorrectedReport(options: {
       revision: options.source.revision,
       originalDecision: 'NO-GO',
       interpretation: 'superseded-stretch-only',
+      hostClient: options.targeted.sourceArtifact.hostClient,
     },
-    targetedArtifact: { path: options.targetedPath, revision: options.targeted.revision },
+    ...(options.targeted.supersededTargetedArtifact
+      ? {
+          supersededTargetedArtifact: options.targeted.supersededTargetedArtifact,
+        }
+      : {}),
+    targetedArtifact: {
+      path: options.targetedPath,
+      revision: options.targeted.revision,
+    },
     target: options.targeted.target,
     toolchain: options.targeted.toolchain,
+    host: options.targeted.host,
     guestMechanism: options.targeted.guestMechanism,
     readiness,
     hardGates,
@@ -74,6 +84,7 @@ export function buildCorrectedReport(options: {
       ...options.source.decisionReasons.map((reason) => `Original broad-run finding: ${reason}`),
       'Cold and cold-cold first-look measurements include Simulator, app, daemon, and runner readiness costs; they are diagnostics, not candidate-owned hard gates.',
       'The former warm 75/150 ms and relaunch 250 ms thresholds are stretch findings under the corrected contract.',
+      `Nonresident bootstrap samples were taken on a host with 1-minute load average ${options.targeted.host.loadAverage1m} on ${options.targeted.host.cpuCores} cores; per-sample load is recorded with each sample.`,
     ],
     decision: failedGates.length === 0 ? 'GO' : 'NO-GO',
     decisionReasons: failedGates.map(
@@ -177,7 +188,12 @@ function bootstrapGate(targeted: TargetedRawArtifact): GateResult {
   return {
     status: passed ? 'PASS' : 'FAIL',
     target: 'nonresident companion + reader bootstrap and first usable tree p95 <2,000 ms',
-    evidence: `${usable.length}/${targeted.bootstrap.length} usable trees; p95=${formatMs(p95)}; timer covered adapter acquireBatch only after app readiness, with no xcodebuild, XCTest, or agent-device runner in the timed path`,
+    evidence: `${usable.length}/${targeted.bootstrap.length} usable trees; p95=${formatMs(p95)}; the timer covered guest spawn, socket connect, and the first tree after a throwaway probe observed the relaunched app's readiness (readiness p95=${formatMs(
+      optionalPercentile(
+        targeted.bootstrap.map((sample) => sample.readinessMs),
+        95,
+      ),
+    )}), with no resident bridge, xcodebuild, XCTest, or agent-device runner in the timed path`,
   };
 }
 
@@ -222,32 +238,52 @@ function isUnavailableGeneration(
   return residue.kind === 'unavailable-fact' && residue.fact === 'generation';
 }
 
+/**
+ * Hierarchy is a hard fact, not a presentation: the guest must either return structural depth with
+ * an honest truncation flag, or type its absence as provider-pruned residue. A flat tree claiming
+ * completeness fails.
+ */
 function hierarchyEvidence(targeted: TargetedRawArtifact): {
   gate: GateResult;
   value: CorrectedReport['hierarchy'];
 } {
-  const residues = targeted.bootstrap.flatMap(
-    (sample) => sample.response.acquisition?.residue ?? [],
+  const usable = targeted.bootstrap.filter((sample) => sample.usableTree);
+  const depth = Math.max(0, ...usable.map((sample) => sample.response.metrics.maxTraversalDepth));
+  const truncated = usable.some((sample) => sample.response.acquisition?.truncated === true);
+  const typedFlat = usable.some((sample) =>
+    (sample.response.acquisition?.residue ?? []).some(
+      (residue) => residue.kind === 'provider-pruned' && residue.fields.includes('depth'),
+    ),
   );
-  const typed = residues.some(
-    (residue) => residue.kind === 'provider-pruned' && residue.fields.includes('depth'),
-  );
-  const depth = targeted.bootstrap.at(0)?.response.metrics.maxTraversalDepth;
-  const value = {
-    residue: { kind: 'provider-pruned', fields: ['depth'] as const },
-    observedTraversalDepth: typeof depth === 'number' ? depth : 0,
-    depthComplete: false as const,
-    interpretation: 'flat-provider-response' as const,
-  };
+  if (usable.length > 0 && depth > 0) {
+    return {
+      gate: {
+        status: 'PASS',
+        target:
+          'structural hierarchy acquired with typed truncation, or its absence typed as residue',
+        evidence: `nested tree with traversal depth ${depth} in ${usable.length}/${targeted.bootstrap.length} samples; truncated=${truncated}`,
+      },
+      value: {
+        observedTraversalDepth: depth,
+        depthComplete: !truncated,
+        interpretation: 'nested-tree',
+      },
+    };
+  }
   return {
     gate: {
-      status: typed ? 'PASS' : 'FAIL',
-      target: 'missing hierarchy represented as typed provider-pruned depth residue',
-      evidence: typed
-        ? 'provider-pruned/depth observed; traversal depth is not treated as complete'
-        : 'no typed provider-pruned/depth residue observed',
+      status: typedFlat ? 'PASS' : 'FAIL',
+      target:
+        'structural hierarchy acquired with typed truncation, or its absence typed as residue',
+      evidence: typedFlat
+        ? 'flat response with typed provider-pruned/depth residue; depth is not treated as complete'
+        : 'no hierarchy and no typed residue observed',
     },
-    value,
+    value: {
+      observedTraversalDepth: 0,
+      depthComplete: false,
+      interpretation: usable.length === 0 ? 'not-observed' : 'flat-provider-response',
+    },
   };
 }
 

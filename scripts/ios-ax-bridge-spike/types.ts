@@ -157,11 +157,11 @@ export type GuestMechanismEvidence = Readonly<{
   release: 'v1.5.2';
   companionArchive: 'idb-companion.macos-arm64.tar.gz';
   companionSha256: string;
-  cliArchive: 'idb-cli-1.5.2.arm64_tahoe.bottle.tar.gz';
-  cliSha256: string;
-  backend: 'axbridge-persistent';
-  outputFormat: 'default';
-  client: 'persistent-in-repository-reader';
+  guestBinary: 'Resources/SimulatorFrameworkBridge';
+  guestBinarySha256: string;
+  transport: string;
+  traversal: string;
+  client: 'node-direct-socket';
 }>;
 
 export type Target = Readonly<{
@@ -227,6 +227,7 @@ export type SpikeReport = Readonly<{
   cells: readonly SpikeCell[];
   decision: 'GO' | 'NO-GO';
   decisionReasons: readonly string[];
+  stretchFindings: readonly string[];
   nextInterface: string;
   stop?: Readonly<{
     category: 'infrastructure' | 'configuration';

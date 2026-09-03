@@ -33,9 +33,8 @@ export type AcquisitionBatchResult = Readonly<{
 export type AdapterOptions = Readonly<{
   repoRoot: string;
   limits?: ResourceLimits;
-  guestCompanion?: string;
-  guestPython?: string;
-  guestSitePackages?: string;
+  /** Path to the in-Simulator `SimulatorFrameworkBridge` guest executable (idb v1.5.2 Resources). */
+  guestBridge?: string;
 }>;
 
 export function createXCTestControlAdapter(

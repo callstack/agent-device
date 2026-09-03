@@ -23,9 +23,7 @@ class SpikeConfigurationError extends Error {
 export type SpikeConfig = Readonly<{
   repoRoot: string;
   udid: string;
-  guestCompanion?: string;
-  guestPython?: string;
-  guestSitePackages?: string;
+  guestBridge?: string;
   stateDir: string;
   derivedPath: string;
   outputPath: string;
@@ -42,9 +40,7 @@ const CANDIDATES: readonly CandidateId[] = ['guest-simulator-framework-bridge', 
 const BOOLEAN_FLAGS = new Set(['--apply-preferences', '--keep-device']);
 const VALUE_FLAGS = new Set([
   '--udid',
-  '--guest-companion',
-  '--guest-python',
-  '--guest-site-packages',
+  '--guest-bridge',
   '--state-dir',
   '--derived-path',
   '--out',
@@ -64,9 +60,7 @@ export function parseConfig(argv: readonly string[]): SpikeConfig {
   return {
     repoRoot: resolveRepoRoot(),
     udid: required(parsed.values, '--udid'),
-    ...optionalPath(parsed.values.get('--guest-companion'), 'guestCompanion'),
-    ...optionalCommand(parsed.values.get('--guest-python'), 'guestPython'),
-    ...optionalPath(parsed.values.get('--guest-site-packages'), 'guestSitePackages'),
+    ...optionalPath(parsed.values.get('--guest-bridge'), 'guestBridge'),
     stateDir,
     derivedPath,
     outputPath: resolvePath(
@@ -200,20 +194,9 @@ function required(values: Map<string, string>, flag: string): string {
 
 function optionalPath(
   value: string | undefined,
-  key: 'guestCompanion' | 'guestSitePackages',
-): { guestCompanion: string } | { guestSitePackages: string } | Record<string, never> {
-  return value === undefined
-    ? {}
-    : ({ [key]: path.resolve(value) } as
-        | { guestCompanion: string }
-        | { guestSitePackages: string });
-}
-
-function optionalCommand(
-  value: string | undefined,
-  key: 'guestPython',
-): { guestPython: string } | Record<string, never> {
-  return value === undefined ? {} : ({ [key]: value } as { guestPython: string });
+  key: 'guestBridge',
+): { guestBridge: string } | Record<string, never> {
+  return value === undefined ? {} : { [key]: path.resolve(value) };
 }
 
 function resolvePath(value: string | undefined, fallback: string): string {
@@ -222,6 +205,6 @@ function resolvePath(value: string | undefined, fallback: string): string {
 
 function printHelp(): void {
   process.stdout.write(
-    `Usage: pnpm bench:ios-ax-bridge -- [options]\n\nRequired:\n  --udid <simulator-udid>\n\nOptions:\n  --candidate <list>             guest-simulator-framework-bridge, xctest-control\n  --state <list>                 #2189 state names\n  --screen <list>                #2189 fixture names\n  --samples <n>                  #2189 minimums: cold 10, warm/relaunch 20\n  --apply-preferences            apply task-owned preboot AX preference experiment\n  --guest-companion <path>       official idb_companion binary with SimulatorFrameworkBridge\n  --guest-python <command>       Python interpreter used for the persistent idb client\n  --guest-site-packages <path>   official idb 1.5.2 site-packages directory\n  --out <path>                   raw JSON report path\n  --keep-device                  leave the dedicated Simulator shutdown/boot state unchanged\n`,
+    `Usage: pnpm bench:ios-ax-bridge -- [options]\n\nRequired:\n  --udid <simulator-udid>\n\nOptions:\n  --candidate <list>             guest-simulator-framework-bridge, xctest-control\n  --state <list>                 #2189 state names\n  --screen <list>                #2189 fixture names\n  --samples <n>                  #2189 minimums: cold 10, warm/relaunch 20\n  --apply-preferences            apply task-owned preboot AX preference experiment\n  --guest-bridge <path>          official idb 1.5.2 Resources/SimulatorFrameworkBridge guest executable\n  --out <path>                   raw JSON report path\n  --keep-device                  leave the dedicated Simulator shutdown/boot state unchanged\n`,
   );
 }

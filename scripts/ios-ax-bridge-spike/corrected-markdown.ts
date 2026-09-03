@@ -9,10 +9,22 @@ export function renderCorrectedMarkdown(report: CorrectedReport): string {
     `- Revision: ${report.revision.commit} (${report.revision.branch})`,
     `- Target: ${report.target.name} (${report.target.udid}, ${report.target.runtime})`,
     `- Generated: ${report.generatedAt}`,
-    `- Immutable broad raw artifact: \`${report.sourceArtifact.path}\` (original ${report.sourceArtifact.originalDecision}; interpretation superseded to stretch-only)`,
-    `- Narrow targeted raw artifact: \`${report.targetedArtifact.path}\``,
+    `- Immutable broad raw artifact: \`${report.sourceArtifact.path}\` (original ${report.sourceArtifact.originalDecision}; interpretation superseded to stretch-only; host client ${report.sourceArtifact.hostClient})`,
+    ...(report.supersededTargetedArtifact
+      ? [
+          `- Superseded targeted raw artifact: \`${report.supersededTargetedArtifact.path}\` (${report.supersededTargetedArtifact.hostClient}; its bootstrap and recovery samples raced app readiness and shared one wedged companion, so they measured the prototype packaging, not the mechanism)`,
+        ]
+      : []),
+    `- Narrow targeted raw artifact: \`${report.targetedArtifact.path}\` (host client ${report.guestMechanism.client})`,
+    `- Host at generation: load average ${report.host.loadAverage1m} on ${report.host.cpuCores} cores`,
     '',
-    'The broad run is preserved unchanged. Its old NO-GO was caused by readiness-inclusive first-look and stretch thresholds; this report evaluates the corrected hard contract.',
+    'The broad run is preserved unchanged. Its old NO-GO was caused by readiness-inclusive first-look and stretch thresholds; this report evaluates the corrected hard contract. Warm and relaunch cells come from the broad run, whose host client was the idb companion plus a Python reader; the in-Simulator reader and the read it performs are the same mechanism the Node-direct targeted evidence uses, and the host client only adds latency, so those cells bound the mechanism from above.',
+    '',
+    '## Evaluated guest mechanism',
+    '',
+    `- Guest reader: ${report.guestMechanism.implementation} ${report.guestMechanism.release} \`${report.guestMechanism.guestBinary}\` (SHA-256 \`${report.guestMechanism.guestBinarySha256}\`) from \`${report.guestMechanism.companionArchive}\` (SHA-256 \`${report.guestMechanism.companionSha256}\`).`,
+    `- Transport: ${report.guestMechanism.transport}.`,
+    `- Traversal: ${report.guestMechanism.traversal}.`,
     '',
     '## Hard gates',
     '',
@@ -39,10 +51,10 @@ export function renderCorrectedMarkdown(report: CorrectedReport): string {
     '## Nonresident bootstrap',
     '',
     `- ${report.hardGates.nonresidentBootstrap.evidence}.`,
-    '- The timed boundary begins with a nonresident adapter and ends at the first usable guest tree; Simulator/app readiness was established before the timer.',
+    '- The timed boundary begins with no resident bridge and ends at the first usable guest tree. Before each timer the fixture app was relaunched and a throwaway probe bridge polled until the new generation answered with a tree (readiness), then exited.',
     '',
-    '| Sample | Duration ms | Usable tree | Failure | Nodes | Generation |',
-    '|---:|---:|---|---|---:|---|',
+    '| Sample | Duration ms | Usable tree | Failure | Nodes | Depth | Generation | Readiness ms | Readiness attempts | Host load |',
+    '|---:|---:|---|---|---:|---:|---|---:|---:|---:|',
     ...report.bootstrap.map(bootstrapLine),
     '',
     '## Live candidate recovery',
@@ -53,10 +65,10 @@ export function renderCorrectedMarkdown(report: CorrectedReport): string {
     '|---|---|---|---|',
     ...report.liveRecovery.map(recoveryLine),
     '',
-    '## Hierarchy residue',
+    '## Hierarchy',
     '',
-    `- ${report.hardGates.hierarchyResidue.evidence}.`,
-    `- Observed traversal depth: ${report.hierarchy.observedTraversalDepth}; depth complete: **${report.hierarchy.depthComplete}**. The guest response is flat and carries typed \`${report.hierarchy.residue.kind}/${report.hierarchy.residue.fields.join(',')}\` residue.`,
+    `- ${report.hardGates.hierarchy.evidence}.`,
+    `- Observed traversal depth: ${report.hierarchy.observedTraversalDepth}; depth complete: **${report.hierarchy.depthComplete}**; interpretation: ${report.hierarchy.interpretation}.`,
     '',
     '## Stretch findings',
     '',
@@ -84,7 +96,7 @@ function coldDiagnosticLine(diagnostic: CorrectedReport['coldDiagnostics'][numbe
 
 function bootstrapLine(sample: CorrectedReport['bootstrap'][number]): string {
   const response = sample.response;
-  return `| ${sample.index} | ${sample.durationMs.toFixed(1)} | ${sample.usableTree} | ${failureText(response.failure)} | ${response.metrics.nodeCount} | ${response.acquisition?.targetGeneration ?? '–'} |`;
+  return `| ${sample.index} | ${sample.durationMs.toFixed(1)} | ${sample.usableTree} | ${failureText(response.failure)} | ${response.metrics.nodeCount} | ${response.metrics.maxTraversalDepth} | ${response.acquisition?.targetGeneration ?? '–'} | ${sample.readinessMs.toFixed(0)} | ${sample.readinessAttempts} | ${sample.host.loadAverage1m} |`;
 }
 
 function recoveryLine(probe: CorrectedReport['liveRecovery'][number]): string {

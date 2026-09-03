@@ -160,7 +160,7 @@ function createReport(
   metadata: { target: SpikeReport['target']; toolchain: Toolchain },
   lifecycle: SpikeReport['lifecycle'],
   evidence: SpikeRunEvidence,
-  decision: { decision: SpikeReport['decision']; reasons: string[] },
+  decision: { decision: SpikeReport['decision']; reasons: string[]; stretchFindings: string[] },
 ): SpikeReport {
   return {
     schemaVersion: SPIKE_SCHEMA_VERSION,
@@ -194,6 +194,7 @@ function createReport(
     cells: evidence.cells,
     decision: decision.decision,
     decisionReasons: decision.reasons,
+    stretchFindings: decision.stretchFindings,
     nextInterface:
       'Keep any future bridge behind the #2190 acquisition adapter and preserve raw facts until a separate GO evidence run proves fidelity, lifecycle, and latency.',
     ...(evidence.stop ? { stop: evidence.stop } : {}),

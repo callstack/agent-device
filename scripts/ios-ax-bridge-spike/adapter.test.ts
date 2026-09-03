@@ -28,7 +28,7 @@ test('control mapping preserves the producer raw node type', () => {
   assert.equal(result?.nodes[0]?.role, 'AXButton');
 });
 
-test('guest adapter fails closed when the official companion is not configured', async () => {
+test('guest adapter fails closed when the guest bridge executable is not configured', async () => {
   const adapter = createGuestSimulatorFrameworkBridgeAdapter({ repoRoot: '/repo' });
   const result = await adapter.acquireBatch([
     {

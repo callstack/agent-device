@@ -56,6 +56,7 @@ test('reports a decisive partial corpus failure instead of replacing it with com
     ...cell,
     acquisitionSamples: cell.acquisitionSamples.map((sample) => ({
       ...sample,
+      wallClockMs: 1_000,
       metrics: { ...sample.metrics!, durationMs: 1_000 },
     })),
   };
@@ -90,7 +91,7 @@ test('selects one complete viable guest bridge without requiring the control to 
       failure: { kind: 'timeout', code: 'batch-duration-limit' },
     },
   ]);
-  assert.deepEqual(result, { decision: 'GO', reasons: [] });
+  assert.deepEqual(result, { decision: 'GO', reasons: [], stretchFindings: [] });
 });
 
 function readableCell(candidate: CandidateId, state: LocalState, screen: ScreenId): SpikeCell {

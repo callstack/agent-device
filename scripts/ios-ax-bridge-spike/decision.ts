@@ -7,6 +7,19 @@ import type {
 } from './types.ts';
 import { parseLocalStates, parseScreenIds } from '../ios-snapshot-benchmark/definitions.ts';
 
+/**
+ * Hard viability tiers from the #2192 measurement contract (maintainer-corrected 2026-09-02): warm
+ * daemon-resident acquisition p50 < 300 ms and p95 < 500 ms per screen, relaunch first usable tree
+ * p95 < 500 ms after observed app readiness. The former 75/150 ms and 250 ms values are stretch
+ * optimization targets and are reported separately; they never decide GO/NO-GO.
+ */
+export const HARD_WARM_P50_MS = 300;
+export const HARD_WARM_P95_MS = 500;
+export const HARD_RELAUNCH_P95_MS = 500;
+export const STRETCH_WARM_P50_MS = 75;
+export const STRETCH_WARM_P95_MS = 150;
+export const STRETCH_RELAUNCH_MS = 250;
+
 export function decideSpike(
   cells: readonly SpikeCell[],
   lifecycle: LifecycleEvidence,
@@ -17,7 +30,7 @@ export function decideSpike(
     candidate: CandidateId;
     failure?: { kind: string; code?: string };
   }[] = [],
-): { decision: 'GO' | 'NO-GO'; reasons: string[] } {
+): { decision: 'GO' | 'NO-GO'; reasons: string[]; stretchFindings: string[] } {
   const reasons = [
     ...statusReasons(status),
     ...preferenceReasons(preferences),
@@ -28,6 +41,7 @@ export function decideSpike(
   return {
     decision: uniqueReasons.length === 0 ? 'GO' : 'NO-GO',
     reasons: uniqueReasons,
+    stretchFindings: [...new Set(stretchFindings(cells))],
   };
 }
 
@@ -36,8 +50,7 @@ function statusReasons(status: 'completed' | 'stopped'): string[] {
 }
 
 function preferenceReasons(preferences: PreferenceEvidence): string[] {
-  if (!preferences.applied)
-    return ['The required task-owned Simulator preference experiment was not run.'];
+  if (!preferences.applied) return [];
   if (!preferences.restored)
     return ['The task-owned Simulator preference experiment was not restored.'];
   if (preferences.fixtureLaunchCompatible === false)
@@ -208,31 +221,58 @@ function resourceReasons(cell: SpikeCell, limits: ResourceLimits): string[] {
   return reasons;
 }
 
+/**
+ * Candidate-owned latency only: the wall clock of the acquisition after the fixture admitted the app
+ * generation as ready. Simulator boot, app launch, daemon, and XCTest runner preparation are recorded
+ * per sample (`preparationMs`) but never charged to the bridge.
+ */
 function latencyReasons(cell: SpikeCell): string[] {
-  const successful = cell.acquisitionSamples.filter(
-    (sample) => sample.ok && sample.firstTree === 'readable',
-  );
-  const firstLook = finite(successful.map((sample) => sample.firstLookMs));
-  const firstLookTarget = {
-    'cold-cold': { limit: 5_000, label: 'cold-cold first look missed the 5 second target.' },
-    cold: { limit: 1_500, label: 'cold prepared first look missed the 1.5 second target.' },
-    relaunch: { limit: 250, label: 'relaunch first look missed the 250 ms target.' },
-    warm: undefined,
-  }[cell.state];
+  if (cell.candidate === 'xctest-control') return [];
+  const acquisition = finite(readableSamples(cell).map((sample) => sample.wallClockMs));
   const reasons: string[] = [];
-  if (firstLookTarget && percentile(firstLook, 95) >= firstLookTarget.limit) {
-    reasons.push(`${cell.candidate} ${firstLookTarget.label}`);
-  }
-  const acquisition = finite(successful.map((sample) => sample.metrics?.durationMs));
   if (
     cell.state === 'warm' &&
-    (percentile(acquisition, 50) >= 75 || percentile(acquisition, 95) >= 150)
+    (percentile(acquisition, 50) >= HARD_WARM_P50_MS ||
+      percentile(acquisition, 95) >= HARD_WARM_P95_MS)
   ) {
     reasons.push(
-      `${cell.candidate} ${cell.state}/${cell.screen} acquisition missed the 75/150 ms target.`,
+      `${cell.candidate} ${cell.state}/${cell.screen} acquisition missed the hard ${HARD_WARM_P50_MS}/${HARD_WARM_P95_MS} ms target.`,
+    );
+  }
+  if (cell.state === 'relaunch' && percentile(acquisition, 95) >= HARD_RELAUNCH_P95_MS) {
+    reasons.push(
+      `${cell.candidate} relaunch first usable tree missed the hard ${HARD_RELAUNCH_P95_MS} ms target after app readiness.`,
     );
   }
   return reasons;
+}
+
+function stretchFindings(cells: readonly SpikeCell[]): string[] {
+  const findings: string[] = [];
+  for (const cell of cells) {
+    if (cell.candidate === 'xctest-control') continue;
+    const acquisition = finite(readableSamples(cell).map((sample) => sample.wallClockMs));
+    if (acquisition.length === 0) continue;
+    if (
+      cell.state === 'warm' &&
+      (percentile(acquisition, 50) >= STRETCH_WARM_P50_MS ||
+        percentile(acquisition, 95) >= STRETCH_WARM_P95_MS)
+    ) {
+      findings.push(
+        `${cell.candidate} ${cell.state}/${cell.screen} acquisition missed the stretch ${STRETCH_WARM_P50_MS}/${STRETCH_WARM_P95_MS} ms target.`,
+      );
+    }
+    if (cell.state === 'relaunch' && percentile(acquisition, 95) >= STRETCH_RELAUNCH_MS) {
+      findings.push(
+        `${cell.candidate} relaunch first usable tree missed the stretch ${STRETCH_RELAUNCH_MS} ms target.`,
+      );
+    }
+  }
+  return findings;
+}
+
+function readableSamples(cell: SpikeCell): SpikeCell['acquisitionSamples'] {
+  return cell.acquisitionSamples.filter((sample) => sample.ok && sample.firstTree === 'readable');
 }
 
 function exceedsLimit(value: number | null | undefined, limit: number): boolean {

@@ -9,11 +9,14 @@ import {
   readTargetedArtifact,
   writeCorrectedReport,
 } from './corrected-report.ts';
+import { GUEST_MECHANISM_EVIDENCE } from './guest-adapter.ts';
 import { runTargetedEvidence } from './targeted-evidence.ts';
 import { TARGETED_SCHEMA_VERSION, type TargetedRawArtifact } from './corrected-types.ts';
 import { readGitRevision, readTarget, readToolchain } from '../ios-snapshot-benchmark/host.ts';
 
 const SOURCE = 'docs/evidence/ios-simulator-ax-bridge-2026-09-01-final.json.gz';
+const SUPERSEDED_TARGETED =
+  'docs/evidence/ios-simulator-ax-bridge-2026-09-02-targeted-python-prototype.json.gz';
 const TARGETED = 'docs/evidence/ios-simulator-ax-bridge-2026-09-02-targeted.json.gz';
 const CORRECTED = 'docs/evidence/ios-simulator-ax-bridge-2026-09-02-corrected.json.gz';
 
@@ -23,6 +26,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 
 async function main(argv: readonly string[]): Promise<void> {
   const config = parseConfig(argv);
+  const source = readSpikeReport(SOURCE);
   const evidence = await runTargetedEvidence(config);
   const target = readTarget(config.udid, 'com.callstack.agentdevicelab');
   const artifact: TargetedRawArtifact = {
@@ -30,11 +34,24 @@ async function main(argv: readonly string[]): Promise<void> {
     generatedAt: new Date().toISOString(),
     revision: readGitRevision(config.repoRoot),
     command:
-      'pnpm bench:ios-ax-bridge:targeted -- --udid <UDID> --guest-companion <PATH> --guest-python python3 --guest-site-packages <PATH> --apply-preferences',
-    sourceArtifact: { path: SOURCE, revision: readSpikeReport(SOURCE).revision },
+      'pnpm bench:ios-ax-bridge:targeted -- --udid <UDID> --guest-bridge <PATH>/Resources/SimulatorFrameworkBridge',
+    sourceArtifact: {
+      path: SOURCE,
+      revision: source.revision,
+      hostClient: String((source.guestMechanism as { client?: unknown }).client ?? 'unknown'),
+    },
+    ...(fs.existsSync(SUPERSEDED_TARGETED)
+      ? {
+          supersededTargetedArtifact: {
+            path: SUPERSEDED_TARGETED,
+            hostClient: 'persistent-in-repository-reader (idb_companion + Python idb client)',
+          },
+        }
+      : {}),
     target: { udid: target.udid, name: target.name, runtime: target.runtime },
     toolchain: readToolchain(),
-    guestMechanism: readSpikeReport(SOURCE).guestMechanism,
+    host: evidence.host,
+    guestMechanism: GUEST_MECHANISM_EVIDENCE,
     preferenceEvidence: evidence.preferenceEvidence,
     config: {
       states: ['warm', 'relaunch'],
@@ -51,7 +68,7 @@ async function main(argv: readonly string[]): Promise<void> {
     CORRECTED,
     buildCorrectedReport({
       sourcePath: SOURCE,
-      source: readSpikeReport(SOURCE),
+      source,
       targetedPath: TARGETED,
       targeted: readTargetedArtifact(TARGETED),
     }),

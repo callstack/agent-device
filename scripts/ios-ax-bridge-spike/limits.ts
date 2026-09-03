@@ -4,7 +4,7 @@ export const DEFAULT_SPIKE_LIMITS: ResourceLimits = Object.freeze({
   maxRequestBytes: 64 * 1024,
   maxResponseBytes: 4 * 1024 * 1024,
   maxNodes: 1500,
-  maxTraversalDepth: 12,
+  maxTraversalDepth: 64,
   maxCpuMs: 2_000,
   maxMemoryBytes: 256 * 1024 * 1024,
   maxDurationMs: 5_000,

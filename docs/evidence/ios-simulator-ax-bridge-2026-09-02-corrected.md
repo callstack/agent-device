@@ -1,14 +1,22 @@
 # iOS Simulator AX bridge corrected evidence
 
-- Decision: **NO-GO**
+- Decision: **GO**
 - Interpretation: **maintainer-corrected**
-- Revision: eac2c7f409f4148bbeb1af87a55ad74eef54e8fc (codex/2192-guest-bridge-evidence)
-- Target: bench-golden-v2 (7E76ECA9-D40C-4833-A711-F870F8CE9363, com.apple.CoreSimulator.SimRuntime.iOS-27-0)
-- Generated: 2026-09-02T15:37:43.300Z
-- Immutable broad raw artifact: `docs/evidence/ios-simulator-ax-bridge-2026-09-01-final.json.gz` (original NO-GO; interpretation superseded to stretch-only)
-- Narrow targeted raw artifact: `docs/evidence/ios-simulator-ax-bridge-2026-09-02-targeted.json.gz`
+- Revision: 999920fa55098f11eb5ba1f9d39f9cb3cec208e3 (review-2237)
+- Target: ad-2237-axbridge (8CDB4DF1-3A3E-4FB1-AF89-B3D3A17647D5, com.apple.CoreSimulator.SimRuntime.iOS-26-2)
+- Generated: 2026-09-03T06:04:19.830Z
+- Immutable broad raw artifact: `docs/evidence/ios-simulator-ax-bridge-2026-09-01-final.json.gz` (original NO-GO; interpretation superseded to stretch-only; host client persistent-in-repository-reader)
+- Superseded targeted raw artifact: `docs/evidence/ios-simulator-ax-bridge-2026-09-02-targeted-python-prototype.json.gz` (persistent-in-repository-reader (idb_companion + Python idb client); its bootstrap and recovery samples raced app readiness and shared one wedged companion, so they measured the prototype packaging, not the mechanism)
+- Narrow targeted raw artifact: `docs/evidence/ios-simulator-ax-bridge-2026-09-02-targeted.json.gz` (host client node-direct-socket)
+- Host at generation: load average 13.75 on 12 cores
 
-The broad run is preserved unchanged. Its old NO-GO was caused by readiness-inclusive first-look and stretch thresholds; this report evaluates the corrected hard contract.
+The broad run is preserved unchanged. Its old NO-GO was caused by readiness-inclusive first-look and stretch thresholds; this report evaluates the corrected hard contract. Warm and relaunch cells come from the broad run, whose host client was the idb companion plus a Python reader; the in-Simulator reader and the read it performs are the same mechanism the Node-direct targeted evidence uses, and the host client only adds latency, so those cells bound the mechanism from above.
+
+## Evaluated guest mechanism
+
+- Guest reader: idb v1.5.2 `Resources/SimulatorFrameworkBridge` (SHA-256 `3545621d2dc98de32879ebac55e8b0c33dc8eb7cc2bfbc2d0d2d21a002c8de58`) from `idb-companion.macos-arm64.tar.gz` (SHA-256 `f17b718a513931705542a7fbfa9cfc11895ee191562c9ffd2343cf7f8254bc08`).
+- Transport: xcrun simctl spawn <udid> SimulatorFrameworkBridge accessibility serve <socket> --idle-timeout 300 --exit-on-disconnect true; UNIX socket frames are a 4-byte big-endian length + JSON.
+- Traversal: describe with snapshotTree=true (one XCTest snapshot fetch per read) and automationMode=true asserted per request; no idb_companion, gRPC, or Python client.
 
 ## Hard gates
 
@@ -16,9 +24,9 @@ The broad run is preserved unchanged. Its old NO-GO was caused by readiness-incl
 |---|---|---|---|
 | warm | **PASS** | p50 <300 ms and p95 <500 ms per screen | 6/6 warm screen cells passed; quiet p50/p95=8.6 ms/9.3 ms ready=20/20; list p50/p95=118.2 ms/120.9 ms ready=20/20; nested-scroll p50/p95=15.1 ms/15.8 ms ready=20/20; alert p50/p95=41.6 ms/43.3 ms ready=20/20; system-surface p50/p95=37.2 ms/39.6 ms ready=20/20; xctest-stress p50/p95=39.6 ms/41.1 ms ready=20/20 |
 | relaunch | **PASS** | p95 <500 ms per screen after observed new-generation app readiness | 6/6 relaunch screen cells passed; quiet p50/p95=8.9 ms/9.6 ms ready=20/20; list p50/p95=119.2 ms/121.1 ms ready=20/20; nested-scroll p50/p95=15.4 ms/16.5 ms ready=20/20; alert p50/p95=41.1 ms/42.7 ms ready=20/20; system-surface p50/p95=37.3 ms/39.5 ms ready=20/20; xctest-stress p50/p95=40.4 ms/42.6 ms ready=20/20 |
-| nonresidentBootstrap | **FAIL** | nonresident companion + reader bootstrap and first usable tree p95 <2,000 ms | 1/5 usable trees; p95=5768.8 ms; timer covered adapter acquireBatch only after app readiness, with no xcodebuild, XCTest, or agent-device runner in the timed path |
-| liveRecovery | **FAIL** | live crash, timeout, cancellation, and honest target-generation handling | 0/4 probes returned a typed failure or typed unavailable-generation residue and a usable recovered response |
-| hierarchyResidue | **PASS** | missing hierarchy represented as typed provider-pruned depth residue | provider-pruned/depth observed; traversal depth is not treated as complete |
+| nonresidentBootstrap | **PASS** | nonresident companion + reader bootstrap and first usable tree p95 <2,000 ms | 5/5 usable trees; p95=1136.2 ms; the timer covered guest spawn, socket connect, and the first tree after a throwaway probe observed the relaunched app's readiness (readiness p95=1333.2 ms), with no resident bridge, xcodebuild, XCTest, or agent-device runner in the timed path |
+| liveRecovery | **PASS** | live crash, timeout, cancellation, and honest target-generation handling | 4/4 probes returned a typed failure or typed unavailable-generation residue and a usable recovered response |
+| hierarchy | **PASS** | structural hierarchy acquired with typed truncation, or its absence typed as residue | nested tree with traversal depth 29 in 5/5 samples; truncated=false |
 
 ## Readiness boundary and candidate-owned latency
 
@@ -60,32 +68,32 @@ Cold and cold-cold first-look measurements remain visible for diagnosis, but are
 
 ## Nonresident bootstrap
 
-- 1/5 usable trees; p95=5768.8 ms; timer covered adapter acquireBatch only after app readiness, with no xcodebuild, XCTest, or agent-device runner in the timed path.
-- The timed boundary begins with a nonresident adapter and ends at the first usable guest tree; Simulator/app readiness was established before the timer.
+- 5/5 usable trees; p95=1136.2 ms; the timer covered guest spawn, socket connect, and the first tree after a throwaway probe observed the relaunched app's readiness (readiness p95=1333.2 ms), with no resident bridge, xcodebuild, XCTest, or agent-device runner in the timed path.
+- The timed boundary begins with no resident bridge and ends at the first usable guest tree. Before each timer the fixture app was relaunched and a throwaway probe bridge polled until the new generation answered with a tree (readiness), then exited.
 
-| Sample | Duration ms | Usable tree | Failure | Nodes | Generation |
-|---:|---:|---|---|---:|---|
-| 1 | 1990.6 | true | none/none | 159 | – |
-| 2 | 5718.8 | false | timeout/batch-duration-limit | 0 | – |
-| 3 | 5702.4 | false | timeout/batch-duration-limit | 0 | – |
-| 4 | 5740.5 | false | timeout/batch-duration-limit | 0 | – |
-| 5 | 5768.8 | false | timeout/batch-duration-limit | 0 | – |
+| Sample | Duration ms | Usable tree | Failure | Nodes | Depth | Generation | Readiness ms | Readiness attempts | Host load |
+|---:|---:|---|---|---:|---:|---|---:|---:|---:|
+| 1 | 1080.8 | true | none/none | 155 | 29 | pid:68714 | 1333 | 1 | 11.66 |
+| 2 | 1136.2 | true | none/none | 155 | 29 | pid:69066 | 1172 | 1 | 13.4 |
+| 3 | 1055.3 | true | none/none | 155 | 29 | pid:69393 | 1162 | 1 | 13.34 |
+| 4 | 1049.9 | true | none/none | 155 | 29 | pid:69892 | 1169 | 1 | 13.21 |
+| 5 | 1043.5 | true | none/none | 155 | 29 | pid:70202 | 1101 | 1 | 13.35 |
 
 ## Live candidate recovery
 
-- 0/4 probes returned a typed failure or typed unavailable-generation residue and a usable recovered response.
+- 4/4 probes returned a typed failure or typed unavailable-generation residue and a usable recovered response.
 
 | Operation | Observed failure | Recovery response | Recovered tree |
 |---|---|---|---|
-| process-crash | process-crash/persistent-process-exited | failed | 0 nodes |
-| timeout | timeout/guest-read-timeout | failed | 0 nodes |
-| cancelled | cancelled/abort-signal | failed | 0 nodes |
-| stale-generation | timeout/batch-duration-limit | failed | 0 nodes |
+| process-crash | process-crash/guest-exited | ok | 155 nodes |
+| timeout | timeout/batch-duration-limit | ok | 155 nodes |
+| cancelled | cancelled/abort-signal | ok | 155 nodes |
+| stale-generation | stale-generation/target-generation-mismatch | ok | 155 nodes |
 
-## Hierarchy residue
+## Hierarchy
 
-- provider-pruned/depth observed; traversal depth is not treated as complete.
-- Observed traversal depth: 0; depth complete: **false**. The guest response is flat and carries typed `provider-pruned/depth` residue.
+- nested tree with traversal depth 29 in 5/5 samples; truncated=false.
+- Observed traversal depth: 29; depth complete: **true**; interpretation: nested-tree.
 
 ## Stretch findings
 
@@ -95,6 +103,7 @@ Cold and cold-cold first-look measurements remain visible for diagnosis, but are
 - Original broad-run finding: guest-simulator-framework-bridge relaunch first look missed the 250 ms target.
 - Cold and cold-cold first-look measurements include Simulator, app, daemon, and runner readiness costs; they are diagnostics, not candidate-owned hard gates.
 - The former warm 75/150 ms and relaunch 250 ms thresholds are stretch findings under the corrected contract.
+- Nonresident bootstrap samples were taken on a host with 1-minute load average 13.75 on 12 cores; per-sample load is recorded with each sample.
 
 ## Production boundary
 

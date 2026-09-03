@@ -1,16 +1,24 @@
 import type { SpikeCell, SpikeReport, SpikeRequest, SpikeResponse } from './types.ts';
 
-const CORRECTED_SCHEMA_VERSION = 'ios-simulator-ax-bridge-corrected.v1' as const;
-export const TARGETED_SCHEMA_VERSION = 'ios-simulator-ax-bridge-targeted.v1' as const;
+const CORRECTED_SCHEMA_VERSION = 'ios-simulator-ax-bridge-corrected.v2' as const;
+export const TARGETED_SCHEMA_VERSION = 'ios-simulator-ax-bridge-targeted.v2' as const;
 
 export type TargetedRevision = SpikeReport['revision'];
 
+export type HostLoad = Readonly<{ loadAverage1m: number; cpuCores: number }>;
+
 export type TargetedBootstrapSample = Readonly<{
   index: number;
+  /** Candidate-owned: fresh guest spawn + connect + first usable tree, after readiness. */
   durationMs: number;
   usableTree: boolean;
   response: SpikeResponse;
   stderr: string;
+  /** Fixture-owned: app relaunch until a throwaway probe first read a tree; not charged. */
+  appPid: number;
+  readinessMs: number;
+  readinessAttempts: number;
+  host: HostLoad;
 }>;
 
 export type TargetedRecoveryProbe = Readonly<{
@@ -25,9 +33,15 @@ export type TargetedRawArtifact = Readonly<{
   generatedAt: string;
   revision: TargetedRevision;
   command: string;
-  sourceArtifact: Readonly<{ path: string; revision: TargetedRevision }>;
+  sourceArtifact: Readonly<{
+    path: string;
+    revision: TargetedRevision;
+    hostClient: string;
+  }>;
+  supersededTargetedArtifact?: Readonly<{ path: string; hostClient: string }>;
   target: SpikeReport['target'];
   toolchain: SpikeReport['toolchain'];
+  host: HostLoad;
   guestMechanism: SpikeReport['guestMechanism'];
   preferenceEvidence: SpikeReport['preferenceEvidence'];
   config: Readonly<{
@@ -38,7 +52,12 @@ export type TargetedRawArtifact = Readonly<{
   }>;
   bootstrap: readonly TargetedBootstrapSample[];
   recovery: readonly TargetedRecoveryProbe[];
-  simulator: Readonly<{ finalState: string; accessibilityPlistSha256: string }>;
+  simulator: Readonly<{
+    finalState: string;
+    accessibilityPlistSha256: string | null;
+    automationEnabledBefore: unknown;
+    automationEnabledAfter: unknown;
+  }>;
 }>;
 
 export type LatencySummary = Readonly<{
@@ -70,10 +89,13 @@ export type CorrectedReport = Readonly<{
     revision: TargetedRevision;
     originalDecision: 'NO-GO';
     interpretation: 'superseded-stretch-only';
+    hostClient: string;
   }>;
+  supersededTargetedArtifact?: Readonly<{ path: string; hostClient: string }>;
   targetedArtifact: Readonly<{ path: string; revision: TargetedRevision }>;
   target: SpikeReport['target'];
   toolchain: SpikeReport['toolchain'];
+  host: HostLoad;
   guestMechanism: SpikeReport['guestMechanism'];
   readiness: readonly LatencySummary[];
   hardGates: Readonly<{
@@ -81,7 +103,7 @@ export type CorrectedReport = Readonly<{
     relaunch: GateResult;
     nonresidentBootstrap: GateResult;
     liveRecovery: GateResult;
-    hierarchyResidue: GateResult;
+    hierarchy: GateResult;
   }>;
   coldDiagnostics: readonly Readonly<{
     state: 'cold-cold' | 'cold';
@@ -96,10 +118,9 @@ export type CorrectedReport = Readonly<{
   liveRecovery: readonly TargetedRecoveryProbe[];
   bootstrap: readonly TargetedBootstrapSample[];
   hierarchy: Readonly<{
-    residue: Readonly<{ kind: 'provider-pruned'; fields: readonly ['depth'] }>;
     observedTraversalDepth: number;
-    depthComplete: false;
-    interpretation: 'flat-provider-response';
+    depthComplete: boolean;
+    interpretation: 'nested-tree' | 'flat-provider-response' | 'not-observed';
   }>;
   productionBoundary: 'no-production-routing-changes';
 }>;

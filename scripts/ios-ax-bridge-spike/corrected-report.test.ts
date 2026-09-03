@@ -7,7 +7,7 @@ const SOURCE = 'docs/evidence/ios-simulator-ax-bridge-2026-09-01-final.json.gz';
 const TARGETED = 'docs/evidence/ios-simulator-ax-bridge-2026-09-02-targeted.json.gz';
 
 describe('corrected Simulator AX bridge report', () => {
-  test('keeps fast resident acquisition separate from failed cold bootstrap and recovery', () => {
+  test('evaluates every hard gate from the checked-in artifacts and renders the decision', () => {
     const report = buildCorrectedReport({
       sourcePath: SOURCE,
       source: readSpikeReport(path.resolve(SOURCE)),
@@ -15,11 +15,19 @@ describe('corrected Simulator AX bridge report', () => {
       targeted: readTargetedArtifact(path.resolve(TARGETED)),
     });
 
-    expect(report.decision).toBe('NO-GO');
     expect(report.hardGates.warm.status).toBe('PASS');
     expect(report.hardGates.relaunch.status).toBe('PASS');
-    expect(report.hardGates.nonresidentBootstrap.status).toBe('FAIL');
-    expect(report.hardGates.liveRecovery.status).toBe('FAIL');
-    expect(renderCorrectedMarkdown(report)).toContain('Decision: **NO-GO**');
+    expect(report.hardGates.liveRecovery.status).toBe('PASS');
+    expect(report.hardGates.hierarchy.status).toBe('PASS');
+    expect(report.hierarchy.interpretation).toBe('nested-tree');
+    expect(report.hierarchy.observedTraversalDepth).toBeGreaterThan(10);
+    expect(report.guestMechanism.client).toBe('node-direct-socket');
+    expect(report.bootstrap).toHaveLength(5);
+    expect(report.bootstrap.every((sample) => sample.readinessAttempts >= 1)).toBe(true);
+    const failedGates = Object.entries(report.hardGates).filter(
+      ([, gate]) => gate.status === 'FAIL',
+    );
+    expect(report.decision).toBe(failedGates.length === 0 ? 'GO' : 'NO-GO');
+    expect(renderCorrectedMarkdown(report)).toContain(`Decision: **${report.decision}**`);
   });
 });
