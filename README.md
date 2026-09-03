@@ -40,6 +40,18 @@ binary was verified against its pinned SHA-256 before capture.
 | `ios-simulator-ax-bridge-targeted-636b1deac.json.gz` | `092d3deab3753c1b7a0d230d9e54f703e5fedb87ffc0974f082541ba9b4e687d` |
 | `ios-simulator-ax-bridge-corrected-636b1deac.json.gz` | `a20039b38d4da65fed65518a3214153afa0174faaf6fb38c3950a3bd1362870d` |
 
+### Post-rebase final corpus
+
+The final artifacts were recaptured at repository commit
+`44995806ea3be09f3c48ceac50ac3cab18462c35` after rebasing the pull request onto
+`941ca0e7e08f50960dc90d3fdafa572355b030a0`. They repeat the same bounded corpus
+and supersede the preceding targeted artifacts for the pull-request decision.
+
+| File | sha256 |
+| --- | --- |
+| `ios-simulator-ax-bridge-targeted-44995806ea.json.gz` | `3440d066cb7eea33c4715fece838b5185c5d209694b097e54f5536d48d4984ad` |
+| `ios-simulator-ax-bridge-corrected-44995806ea.json.gz` | `0a34a84402e85154e177adef5122101b26bfd04d74714a0a9b6f0795270edc41` |
+
 ## Fetch into a checkout
 
 ```sh
