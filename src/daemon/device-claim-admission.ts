@@ -6,7 +6,7 @@ import type {
 import type { DeviceClaimPolicy } from '../core/command-descriptor/types.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { requireAllocatorHeldDeviceClaim } from './device-claim-allocator.ts';
-import { allocatorHeldAdmissionError, deviceClaimConflictError } from './device-claim-conflict.ts';
+import { decideAllocatorHeldAdmission, deviceClaimConflictError } from './device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from './device-claim-rule.ts';
 import {
   acquireTransientDeviceClaim,
@@ -54,12 +54,12 @@ export function createDeviceClaimAdmission(params: {
         case 'none':
           return;
         case 'allocator-held': {
-          const error = allocatorHeldAdmissionError(
+          const decision = decideAllocatorHeldAdmission(
             device,
             owner,
             requireAllocatorHeldDeviceClaim({ device, owner, intent }),
           );
-          if (error) throw error;
+          if (!decision.admitted) throw decision.error;
           return;
         }
         case 'ordinary': {
