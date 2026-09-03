@@ -22,7 +22,7 @@ const model = loadModel(repoRoot, tracked);
 
 const scriptModel = (scripts: Record<string, string>) => ({
   scripts,
-  vitestProjects: ['unit-core', 'extra-project'],
+  vitestProjects: ['unit-core', 'fuzz-worker'],
   opaque: {},
 });
 
@@ -61,13 +61,13 @@ test('a filtered Vitest run does not credit the whole project', () => {
 test('a bare Vitest run spans every configured project', () => {
   assert.deepEqual(scriptUnits('all', scriptModel({ all: 'vitest run --coverage' })), [
     'vitest:unit-core',
-    'vitest:extra-project',
+    'vitest:fuzz-worker',
   ]);
 });
 
 test('a negated --project subtracts from the configured set, so the skipped one is not credited', () => {
   assert.deepEqual(
-    scriptUnits('cov', scriptModel({ cov: 'vitest run --coverage --project=!extra-project' })),
+    scriptUnits('cov', scriptModel({ cov: 'vitest run --coverage --project=!fuzz-worker' })),
     ['vitest:unit-core'],
   );
 });
@@ -79,12 +79,11 @@ test('split coverage commands together still own every project', () => {
     scriptUnits(
       'test:coverage:ci',
       scriptModel({
-        'test:coverage:ci':
-          'vitest run --coverage --project=!extra-project && pnpm test:extra-project',
-        'test:extra-project': 'vitest run --project extra-project',
+        'test:coverage:ci': 'vitest run --coverage --project=!fuzz-worker && pnpm test:fuzz-worker',
+        'test:fuzz-worker': 'vitest run --project fuzz-worker',
       }),
     ),
-    ['vitest:unit-core', 'vitest:extra-project'],
+    ['vitest:unit-core', 'vitest:fuzz-worker'],
   );
 });
 
