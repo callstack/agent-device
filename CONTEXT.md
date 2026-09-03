@@ -31,7 +31,7 @@ behavior for an ownership-qualified device.
 
 **Managed local owner**:
 The exact-only runtime owner for an allocator-managed local device; it delegates automation
-mechanics to the device's platform module while device lifecycle stays with the allocator.
+to the device's platform module while lifecycle stays with the allocator.
 _Avoid_: Managed provider, provider runtime
 
 **Request binding**:
@@ -95,13 +95,13 @@ The ownership fence of one managed binding: requester and identity incarnation a
 request generation as its generation.
 
 **Request generation**:
-The per-requester monotonic number of one allocation attempt on an allocation lane; never shared
-across requesters.
+The per-requester monotonic number of one allocation attempt on a lane; never shared across
+requesters.
 
 **Identity incarnation**:
-The allocator-issued id of one creation of a managed identity, stable for that identity's pool
-lifetime and preserved across Android clean-baseline reuse; a fresh iOS identity is a new device
-with a new incarnation, and a different incarnation on a claimed device is a conflict.
+The allocator-issued id of one creation of a managed identity, stable for its pool lifetime
+and preserved across Android clean-baseline reuse; a fresh iOS identity is a new device with a
+new incarnation, and a different incarnation on a claimed device is a conflict.
 _Avoid_: Request generation
 
 **Human-control hold**:
@@ -308,8 +308,8 @@ Compatibility-engine evidence since the most recent mutation; mutation invalidat
 An external adapter that owns a device runtime or contributes transport to a platform module.
 
 **Managed device allocator port**:
-The daemon-owned interface to a managed-device allocator, covering everything the daemon needs to
-obtain, hold, and give back a managed device.
+The daemon-owned interface to a managed-device allocator: obtain, hold, and give back a managed
+device.
 _Avoid_: Simlock client, lease provider
 
 **Cloud WebDriver runtime**:
