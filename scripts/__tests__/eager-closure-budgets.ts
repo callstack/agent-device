@@ -1,60 +1,54 @@
 // Per-entry eager-closure budgets -- the ADR-0019 loading-shape probe (#1739, #1960).
 //
 // ADR-0019's "Implementation-laziness" section requires platform-package façades to stay
-// implementation-lazy and is explicit that a startup-time threshold alone is not a substitute for
-// preserving the loading shape (`docs/adr/0019-request-bound-platform-runtime.md`): "the tracking
-// issue owns the exact probe and planted-red procedure." #1950 built the AST-level walker
-// (`src/__tests__/eager-import-closure.fixtures.ts`); #1959/#1969 fixed two more instances of the
-// regression
-// class by hand. This table generalizes the proof: every package entry surface gets an exact pin
-// on how many repo modules importing it evaluates, plus a standing assertion that the closure
-// never reaches a concrete platform implementation before discovery/binding selects one.
+// implementation-lazy and says a startup-time threshold alone does not preserve the loading
+// shape (`docs/adr/0019-request-bound-platform-runtime.md`). The AST walker in
+// `src/__tests__/eager-import-closure.fixtures.ts` counts the repo modules that importing an
+// entry evaluates; this module says what count each entry may have. R13 governs import
+// DIRECTION (may this file reach that one at all), never evaluation WEIGHT.
 //
-// The six `packages/platform-*/src/index.ts` façades are the reason this gate exists. Each one
-// evaluates exactly ONE module today -- itself -- because its metadata is inline, its contract
-// imports are `import type` (erased), and every implementation loads through a function-scoped
-// `await import`. That is precisely ADR-0019's "metadata-eager and implementation-lazy" property,
-// and a single static value import would silently destroy it while every other gate stayed green:
-// R13 governs import DIRECTION (may this file reach that one at all), never evaluation WEIGHT.
+// Entries are every package entry surface `facadeEntryFiles` discovers plus the hand-listed hubs
+// below. Each falls under one rule, chosen by its category, which is derived from its path:
 //
-// Entry files are repo-root-relative, and are the KEYS of the two records below. Keying by path
-// is what makes a duplicate row unwritable rather than merely discouraged: a repeated key in an
-// object literal is a TypeScript error (ts1117), so the "exactly one row per entry" claim is
-// enforced by the compiler instead of by a runtime check that a `Set` conversion would hide.
+// - `platform-facade` (`packages/platform-<family>/src/index.ts`): EXACT. It evaluates one
+//   module, itself -- metadata inline, contract imports type-only, every implementation behind a
+//   function-scoped `await import`. A single static value import destroys the property.
+// - Every other entry that exists at the merge-base with origin/main: NO GROWTH. Its closure may
+//   not be larger than the closure of the same file (renames followed) in the committed
+//   merge-base tree, read through `committed-source-tree.ts`. Shrinking needs no edit: there is
+//   no number to keep in step, and the next merge-base keeps the gain.
+// - An entry absent at the merge-base: a per-category CEILING (`NEW_ENTRY_CEILINGS`). At or
+//   under it, nothing to write. Over it, one `APPROVED_OVER_CEILING` row naming the issue, the
+//   reason, and an owner; the row records no number, and the merge-base carries the entry from
+//   the next PR on. A row for an entry at or under its ceiling, or one that no longer exists,
+//   is stale and fails.
+//
+// Independent of size, a façade entry's closure must never reach a concrete platform
+// implementation (`PLATFORM_IMPLEMENTATION_PATTERNS`) before discovery or binding selects an
+// owner -- the ADR-0019 property itself, and the reason the exceptions below are named.
 
 import path from 'node:path';
 import { facadeEntryFiles } from '../layering/package-boundaries.ts';
 
-export type EagerClosureBudget = {
+export type EntryCategory =
+  | 'platform-facade'
+  | 'vocabulary-facade'
+  | 'domain-facade'
+  | 'mechanics-surface';
+
+export type EagerClosureEntry = {
   /** Stable label for test names and failure messages -- the entry's repo-relative path. */
   id: string;
   /** Repo-root-relative path to the module a consumer imports. */
   entryFile: string;
   /**
-   * The EXACT number of repo modules `eagerClosureOf(entryFile)` evaluates, asserted with
-   * equality rather than `<=`.
-   *
-   * A `<=` ceiling looks stricter than it is: the moment an entry legitimately shrinks, the
-   * unchanged row silently becomes headroom, and the next regression up to the old number passes
-   * unnoticed. Equality is what "only ever ratchets down" actually requires -- the same shape
-   * R9/R10 use for cycle size and writer counts: growing fails, and shrinking ALSO fails until
-   * the row is lowered in the same PR, so the gain is kept rather than banked as slack.
-   *
-   * Seeded from measurement, never rounded up. The regression this catches is a single static
-   * import dragging a subtree in, measured by #1969 at 5-12% of the whole suite's import work
-   * each; a row carrying "a few files" of spare room silently absorbs the small end of exactly
-   * that.
-   */
-  budget: number;
-  /**
-   * 'facade' rows are the package entry surfaces discovered by `facadeEntryFiles`, and the
-   * exhaustiveness test requires every discovered file to have exactly one row. 'hub' rows are
-   * hand-designated, high-fan-in modules that value-import an entry surface for only a slice of
-   * it (ADR-0019's other named case, and the shape #1969 fixed at five sites). There is no
-   * mechanical way to enumerate "every hub" the way a manifest enumerates every entry surface, so
-   * hub membership is a reviewed judgment call.
+   * 'facade' entries are the package entry surfaces `facadeEntryFiles` discovers. 'hub' entries
+   * are hand-designated, high-fan-in modules that value-import an entry surface for only a slice
+   * of it (ADR-0019's other named case, the shape #1969 fixed at five sites). Nothing enumerates
+   * "every hub" the way a manifest enumerates every entry surface, so membership is reviewed.
    */
   kind: 'facade' | 'hub';
+  category: EntryCategory;
   /**
    * When true, the closure must not evaluate any concrete platform implementation
    * (`PLATFORM_IMPLEMENTATION_PATTERNS`) OTHER than the entry file itself -- ADR-0019's rule that
@@ -100,336 +94,55 @@ export function discoverFacadeEntryFiles(repoRoot: string): string[] {
 }
 
 /**
- * Measured 2026-08-22 on `04e4c23b9` (post-#1969, which granularized the contracts entry surface
- * from 15 subpaths to 70 and moved the hubs off the wide façades). Exact pins; see the `budget`
- * field doc for why there is no headroom.
+ * Designated hubs: entry points whose closure the whole suite or every CLI run pays for.
+ * `src/platform-runtime.ts` is the ADR-0019 composition root, the one production module allowed
+ * to value-import a concrete platform package; its no-growth rule is also the assertion that
+ * composing the registry stays metadata-eager.
  */
-export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
-  // --- @agent-device/ad-replay ---
-  'packages/ad-replay/src/index.ts': 62,
+export const HUB_ENTRY_FILES: readonly string[] = [
+  'src/cli.ts',
+  'src/platform-runtime.ts',
+  'src/core/command-descriptor/registry.ts',
+  'src/core/command-descriptor/platform-execution-entry.ts',
+  'src/core/interactors/register-builtins.ts',
+  'src/daemon/session-teardown.ts',
+];
 
-  // --- @agent-device/ad-script ---
-  'packages/ad-script/src/index.ts': 41,
+/** A platform façade evaluates exactly this many modules: itself. */
+export const PLATFORM_FACADE_CLOSURE = 1;
 
-  // --- @agent-device/platform-apple/runner ---
-  // #2040 extraction: the façade stays types/pure-helpers/bundle-ids; the whole
-  // client implementation is package-internal and loads only behind consumers' dynamic imports.
-  'packages/platform-apple/src/runner/index.ts': 13,
-  'packages/platform-apple/src/runner/test-host.ts': 2,
-
-  // --- @agent-device/capture-kit ---
-  // R60 review: audio-probe split into descriptor/status/recovery/live-process modules (+3 files).
-  'packages/capture-kit/src/index.ts': 32,
-  'packages/capture-kit/src/ios-snapshot-acquisition.ts': 9,
-  // #2190 keeps iOS snapshot planning behind its dedicated subpath instead of the broad root.
-  'packages/capture-kit/src/ios-snapshot-planning.ts': 1,
-  // #2191 keeps the iOS snapshot engine behind its dedicated subpath instead of the broad root.
-  'packages/capture-kit/src/ios-snapshot-engine/index.ts': 36,
-  'packages/capture-kit/src/png-resize.ts': 18,
-  'packages/capture-kit/src/png-rgb-difference.ts': 1,
-  'packages/capture-kit/src/png-size.ts': 3,
-  'packages/capture-kit/src/png-worker-client.ts': 10,
-  'packages/capture-kit/src/png.ts': 3,
-  'packages/capture-kit/src/screenshot-density.ts': 6,
-  'packages/capture-kit/src/screenshot-diff-pixels.ts': 1,
-  'packages/capture-kit/src/mobile-snapshot-semantics.ts': 10,
-  'packages/capture-kit/src/snapshot-desktop-projection.ts': 2,
-  'packages/capture-kit/src/snapshot-occlusion.ts': 10,
-  'packages/capture-kit/src/snapshot-quality-backend-capabilities.ts': 1,
-  'packages/capture-kit/src/snapshot-quality-verdict.ts': 2,
-
-  // --- @agent-device/host-kit ---
-  'packages/host-kit/src/archive.ts': 9,
-  'packages/host-kit/src/command.ts': 7,
-  'packages/host-kit/src/diagnostics.ts': 3,
-  // #2136 adds one intentionally eager synchronous module: file.ts must value-re-export the
-  // moved verified-file operations from the existing capability surface. The same module is
-  // already on these static closure paths, so each exact ratchet moves by one: host-kit/file,
-  // provision-kit/install-source, platform-android/mechanics, the Apple app-lifecycle, doctor,
-  // install-artifact, and runner-operations facades, and src/cli. This records deliberate
-  // ownership growth, not budget headroom.
-  'packages/host-kit/src/file.ts': 13,
-  'packages/host-kit/src/host-file.ts': 2,
-  'packages/host-kit/src/process.ts': 12,
-  'packages/host-kit/src/request.ts': 5,
-  'packages/host-kit/src/retry.ts': 6,
-  // #2139 keeps framing, lazy HTTP/body mechanics, and secret comparison behind one
-  // transport port without growing the CLI's eager closure.
-  'packages/host-kit/src/transport.ts': 4,
-  'packages/host-kit/src/version.ts': 4,
-
-  // --- @agent-device/provision-kit ---
-  'packages/provision-kit/src/app-resolution-cache.ts': 1,
-  'packages/provision-kit/src/boot-diagnostics.ts': 3,
-  'packages/provision-kit/src/install-artifact-archive-context.ts': 10,
-  'packages/provision-kit/src/install-source.ts': 26,
-  'packages/provision-kit/src/install-source-config.ts': 3,
-  'packages/provision-kit/src/install-source-network.ts': 3,
-  'packages/provision-kit/src/install-source-network-transport.ts': 1,
-  'packages/provision-kit/src/toolchain-probe.ts': 8,
-
-  // --- @agent-device/contracts ---
-  'packages/contracts/src/alert-contract.ts': 1,
-  'packages/contracts/src/android-clipboard-support.ts': 1,
-  // Added by #2041 (adb/IME cluster extraction): shared helper-artifact and touch-plan
-  // vocabulary moved into the Android platform package.
-  'packages/contracts/src/android-helper-artifacts.ts': 3,
-  'packages/contracts/src/android-touch-plan.ts': 13,
-  'packages/contracts/src/android-input-ownership.ts': 1,
-  'packages/contracts/src/android-observation.ts': 1,
-  'packages/contracts/src/android-snapshot-quality.ts': 1,
-  'packages/contracts/src/android-system-chrome.ts': 1,
-  'packages/contracts/src/app-deployment-runtime-plan.ts': 3,
-  'packages/contracts/src/app-deployment-runtime.ts': 1,
-  'packages/contracts/src/app-inventory-runtime.ts': 1,
-  'packages/contracts/src/app-log-runtime.ts': 1,
-  'packages/contracts/src/app-state-runtime.ts': 1,
-  'packages/contracts/src/apple-runner-request.ts': 1,
-  'packages/contracts/src/apple-multitouch-support.ts': 6,
-  'packages/contracts/src/application-lifecycle-interaction.ts': 7,
-  'packages/contracts/src/application-lifecycle-runtime-plan.ts': 3,
-  'packages/contracts/src/application-lifecycle-runtime.ts': 1,
-  'packages/contracts/src/async-lifecycle.ts': 1,
-  'packages/contracts/src/audio-probe-result.ts': 1,
-  'packages/contracts/src/audio-probe-runtime.ts': 1,
-  'packages/contracts/src/audio-probe-runtime-host.ts': 1,
-  'packages/contracts/src/audio-probe-support.ts': 5,
-  'packages/contracts/src/audio-runtime-plan.ts': 5,
-  'packages/contracts/src/back-mode.ts': 1,
-  'packages/contracts/src/backend-diagnostics.ts': 1,
-  'packages/contracts/src/boot-failure.ts': 1,
-  'packages/contracts/src/click-button.ts': 3,
-  'packages/contracts/src/clipboard.ts': 1,
-  'packages/contracts/src/command-platform-execution.ts': 2,
-  'packages/contracts/src/daemon-owner-cleanup.ts': 1,
-  'packages/contracts/src/device-readiness-runtime.ts': 1,
-  'packages/contracts/src/device-shutdown-runtime.ts': 1,
-  'packages/contracts/src/durable-resource-envelope.ts': 1,
-  'packages/contracts/src/durable-resource.ts': 1,
-  'packages/contracts/src/element-text-runtime.ts': 4,
-  'packages/contracts/src/facades/capture.ts': 9,
-  'packages/contracts/src/facades/client.ts': 2,
-  'packages/contracts/src/facades/command.ts': 9,
-  'packages/contracts/src/facades/device.ts': 8,
-  'packages/contracts/src/facades/divergence.ts': 3,
-  'packages/contracts/src/facades/observability.ts': 7,
-  'packages/contracts/src/facades/progress.ts': 1,
-  'packages/contracts/src/facades/recording.ts': 3,
-  'packages/contracts/src/facades/remote.ts': 2,
-  'packages/contracts/src/facades/replay.ts': 3,
-  'packages/contracts/src/facades/session.ts': 5,
-  'packages/contracts/src/facades/snapshot.ts': 8,
-  'packages/contracts/src/focus-runtime.ts': 4,
-  'packages/contracts/src/gesture-input.ts': 13,
-  'packages/contracts/src/gesture-normalization.ts': 14,
-  'packages/contracts/src/gesture-plan-types.ts': 1,
-  'packages/contracts/src/gesture-admission.ts': 6,
-  'packages/contracts/src/gesture-runtime.ts': 5,
-  'packages/contracts/src/gesture-plan.ts': 12,
-  'packages/contracts/src/host-diagnostics.ts': 1,
-  'packages/contracts/src/interaction.ts': 1,
-  'packages/contracts/src/interaction-error.ts': 1,
-  'packages/contracts/src/interaction-guarantees.ts': 1,
-  'packages/contracts/src/interactor-types.ts': 1,
-  // #2190's iOS snapshot vocabulary has type-only imports and remains a one-module entry.
-  'packages/contracts/src/ios-snapshot.ts': 1,
-  'packages/contracts/src/is-predicate.ts': 1,
-  'packages/contracts/src/keyboard.ts': 1,
-  'packages/contracts/src/logs-runtime-plan.ts': 5,
-  'packages/contracts/src/managed-web-backend.ts': 1,
-  'packages/contracts/src/navigation.ts': 1,
-  'packages/contracts/src/network-runtime-plan.ts': 5,
-  'packages/contracts/src/network-runtime.ts': 1,
-  'packages/contracts/src/network-traffic.ts': 1,
-  'packages/contracts/src/platform-module.ts': 5,
-  'packages/contracts/src/platform-plugin.ts': 1,
-  'packages/contracts/src/platform-providers.ts': 1,
-  'packages/contracts/src/platform-resource-cleanup.ts': 1,
-  'packages/contracts/src/platform-runtime-host.ts': 1,
-  'packages/contracts/src/platform-runtime-operations.ts': 2,
-  'packages/contracts/src/platform-runtime-unavailable.ts': 30,
-  'packages/contracts/src/platform-runtime.ts': 6,
-  'packages/contracts/src/perf-runtime-host.ts': 1,
-  'packages/contracts/src/perf-runtime-operation-builder.ts': 3,
-  'packages/contracts/src/perf-runtime-plan.ts': 7,
-  'packages/contracts/src/perf-runtime.ts': 1,
-  'packages/contracts/src/record-runtime-execution.ts': 7,
-  'packages/contracts/src/react-native-overlay.ts': 1,
-  'packages/contracts/src/runner-lease-context.ts': 1,
-  'packages/contracts/src/screen-recording-runtime-plan.ts': 5,
-  'packages/contracts/src/screen-recording-runtime.ts': 1,
-  'packages/contracts/src/screen-recording-runtime-host.ts': 1,
-  'packages/contracts/src/screenshot-runtime.ts': 4,
-  'packages/contracts/src/scroll-command.ts': 3,
-  'packages/contracts/src/scroll-gesture.ts': 10,
-  'packages/contracts/src/scroll-runtime.ts': 4,
-  'packages/contracts/src/selector-observation-runtime.ts': 1,
-  'packages/contracts/src/settings.ts': 3,
-  'packages/contracts/src/snapshot-presentation.ts': 2,
-  'packages/contracts/src/snapshot-runtime.ts': 3,
-  'packages/contracts/src/snapshot-scope.ts': 1,
-  'packages/contracts/src/snapshot-timeout-evidence.ts': 1,
-  'packages/contracts/src/startup-recovery-fence.ts': 1,
-  'packages/contracts/src/tv-remote.ts': 3,
-  'packages/contracts/src/type-text-runtime.ts': 4,
-  'packages/contracts/src/touch-runtime.ts': 4,
-  'packages/contracts/src/viewport-runtime.ts': 1,
-  'packages/contracts/src/wait-runtime-plan.ts': 1,
-  'packages/contracts/src/wait.ts': 1,
-
-  // --- @agent-device/kernel ---
-  'packages/kernel/src/bounds.ts': 1,
-  'packages/kernel/src/collections.ts': 1,
-  'packages/kernel/src/contracts.ts': 4,
-  'packages/kernel/src/device.ts': 4,
-  'packages/kernel/src/errors.ts': 2,
-  // Added by #2041: keyed async lock moved from src/utils for the extracted IME lifecycle.
-  'packages/kernel/src/keyed-lock.ts': 1,
-  'packages/kernel/src/numeric.ts': 1,
-  'packages/kernel/src/rect-center.ts': 2,
-  'packages/kernel/src/rect.ts': 1,
-  'packages/kernel/src/device-isolation.ts': 1,
-  'packages/kernel/src/location-coordinates.ts': 3,
-  'packages/kernel/src/record.ts': 3,
-  'packages/kernel/src/scoped-provider.ts': 1,
-  'packages/kernel/src/screenshot-geometry.ts': 1,
-  'packages/kernel/src/source-value.ts': 3,
-  'packages/kernel/src/success-text.ts': 1,
-  'packages/kernel/src/ttl-memo.ts': 1,
-  'packages/kernel/src/redaction.ts': 1,
-  'packages/kernel/src/scroll-indicator.ts': 1,
-  'packages/kernel/src/snapshot.ts': 1,
-
-  // --- @agent-device/maestro ---
-  'packages/maestro/src/index.ts': 111,
-
-  // --- @agent-device/platform-*: ADR-0019's metadata-eager/implementation-lazy façades. Each
-  // evaluates only itself; every implementation sits behind a function-scoped `await import`.
-  // A pin of 1 is the tightest statement of that property the walker can make.
-  'packages/platform-android/src/index.ts': 1,
-  'packages/platform-android/src/adb-host.ts': 1,
-  // The named mechanics facet is intentionally implementation-eager once selected. Its exact
-  // closure is pinned so a future facade expansion is visible in review.
-  'packages/platform-android/src/mechanics.ts': 178,
-
-  // --- @agent-device/platform-apple ---
-  'packages/platform-apple/src/index.ts': 1,
-  'packages/platform-apple/src/app-lifecycle-facade.ts': 120,
-  'packages/platform-apple/src/app-resolution-facade.ts': 61,
-  'packages/platform-apple/src/debug-symbols-facade.ts': 24,
-  'packages/platform-apple/src/doctor-facade.ts': 101,
-  'packages/platform-apple/src/install-artifact-facade.ts': 42,
-  'packages/platform-apple/src/macos-facade.ts': 25,
-  'packages/platform-apple/src/perf-facade.ts': 60,
-  'packages/platform-apple/src/physical-device-facade.ts': 47,
-  'packages/platform-apple/src/runner-operations-facade.ts': 100,
-  'packages/platform-apple/src/runner-owner-facade.ts': 2,
-  'packages/platform-apple/src/simctl-facade.ts': 18,
-  'packages/platform-apple/src/simulator-facade.ts': 25,
-  'packages/platform-apple/src/tool-provider-facade.ts': 14,
-
-  // --- @agent-device/platform-harmonyos ---
-  'packages/platform-harmonyos/src/index.ts': 1,
-
-  // --- @agent-device/platform-linux ---
-  'packages/platform-linux/src/index.ts': 1,
-
-  // --- @agent-device/platform-vega ---
-  'packages/platform-vega/src/index.ts': 1,
-
-  // --- @agent-device/platform-web ---
-  'packages/platform-web/src/index.ts': 1,
-
-  // --- @agent-device/provider-limrun ---
-  'packages/provider-limrun/src/index.ts': 29,
-
-  // --- @agent-device/provider-webdriver ---
-  'packages/provider-webdriver/src/index.ts': 49,
-
-  // --- @agent-device/replay-test ---
-  'packages/replay-test/src/index.ts': 20,
-
-  // --- @agent-device/selectors ---
-  'packages/selectors/src/ast.ts': 16,
-  'packages/selectors/src/engine.ts': 19,
-  'packages/selectors/src/index.ts': 55,
-
-  // --- @agent-device/xml ---
-  'packages/xml/src/index.ts': 3,
-
-  // Added by #1993 (device-inventory context moved out of core).
-  'packages/contracts/src/back-runtime.ts': 1,
-  // Added by Wave 6 R55/R56/R57/R58/R59: the clipboard, app-switcher, app-event, settings and
-  // alert facets,
-  // plus the local interaction set Android and Linux used to hold a byte-identical copy of each.
-  // The set is its own module rather than part of the interactor catalog so the catalog's closure
-  // stays leaf-thin -- every module the set pulls in is one its two consumers already evaluate.
-  'packages/contracts/src/alert-runtime.ts': 1,
-  'packages/contracts/src/app-event-runtime.ts': 1,
-  'packages/contracts/src/app-switcher-runtime.ts': 1,
-  'packages/contracts/src/clipboard-runtime.ts': 1,
-  'packages/contracts/src/settings-runtime.ts': 1,
-  'packages/contracts/src/local-interactor-operation-set.ts': 26,
-  'packages/contracts/src/home-runtime.ts': 1,
-  'packages/contracts/src/interactor-operation-catalog.ts': 14,
-  'packages/contracts/src/keyboard-runtime.ts': 3,
-  'packages/contracts/src/orientation-runtime.ts': 1,
-  'packages/contracts/src/tv-remote-runtime.ts': 1,
+/**
+ * Ceilings for entries that do not exist at the merge-base, per category.
+ * Provisional: per-category p75 at e624ef9d3f (2026-09-02); Day-0 maintainer decision pending.
+ */
+export const NEW_ENTRY_CEILINGS: Readonly<Record<EntryCategory, number>> = Object.freeze({
+  'platform-facade': 1,
+  'vocabulary-facade': 4,
+  'domain-facade': 20,
+  'mechanics-surface': 71,
 });
 
 /**
- * Designated hub modules: high-fan-in entry points whose closure the whole suite (or every CLI
- * run) pays for.
- *
- * `cli.ts` and `session-teardown.ts` already carry ad hoc pins naming individual expensive
- * modules (`cli-startup-import-closure.test.ts`, `session-teardown-import-closure.test.ts`); the
- * five after them are the hubs #1969 moved off the wide contracts façades, pinned there by name
- * (`contracts-entry-closure.test.ts`). Those tests state a STRONGER property for the one module
- * each names; these pins add the general layer -- any unexpected growth, not only the shape
- * someone already thought to forbid.
- *
- * `src/platform-runtime.ts` is the ADR-0019 composition root, the one production module allowed
- * to value-import a concrete platform package. It evaluates all six family façades (metadata
- * only), so its pin is also the assertion that composing the registry stays metadata-eager.
+ * First-introduced entries allowed over their category ceiling, keyed by repo-relative entry
+ * path. No measured value: the merge-base carries the entry from the next PR on.
  */
-export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
-  // 363 -> 365 in #2004, which cuts per-invocation work and pays two modules for it:
-  // `@agent-device/kernel/ttl-memo` (version.ts now resolves the package version and the project root
-  // once per process instead of re-reading package.json several times an invocation) and
-  // `src/daemon/client/daemon-launch-spec.ts` (the launch-entry probe, split out of the 726-line
-  // daemon-client-lifecycle.ts). Both run on the path every local command already takes, so
-  // neither has a lazy seam to hide behind -- unlike `src/daemon/code-signature-cache.ts`, which
-  // the same PR added and only a source checkout reaches, and which therefore loads on demand
-  // (`resolveLocalDaemonCodeSignature`) rather than appearing here.
-  // #2054 splits daemon cleanup and managed web backend into separate neutral contract entries;
-  // the CLI already loads both command modules, so the second one-module contract is deliberate.
-  // #2027 splits the 705-line `commands/command-input.ts` into the three leaf modules the
-  // common-field table needs to exist without an import cycle: `input-readers.ts` (record
-  // readers), `input-audience.ts` (who may write a key), and `common-input-fields.ts` (the table
-  // itself). Every command schema already evaluated all three concerns; the growth is three more
-  // module records for the same code, with no new subtree behind any of them.
-  // #2148 moves output-only CLI dependencies behind call-time imports and reduces the entry
-  // closure by two modules.
-  // #2146 splits one eagerly reached URL utility into its client and Metro owners.
-  // #2236 adds the typed pre-admission --scope/--depth refusal for `wait absent` to the existing
-  // wait command reader. That deliberately keeps the shared absence option contract and error
-  // modules on the CLI path; the measured two-module growth is the contract being loaded, not
-  // implementation or platform machinery being pulled in eagerly.
-  'src/cli.ts': 382,
-  'src/platform-runtime.ts': 47,
-  'src/core/command-descriptor/registry.ts': 72,
-  'src/core/command-descriptor/platform-execution-entry.ts': 3,
-  'src/core/interactors/register-builtins.ts': 6,
-  // R64 removes the perf plugin facet and keeps collector binding behind the selected runtime
-  // operation. Teardown now owns only neutral durable-resource cleanup; platform collectors load
-  // through the perf host when an admitted operation actually runs.
-  'src/daemon/session-teardown.ts': 68,
-});
+export const APPROVED_OVER_CEILING: Readonly<
+  Record<string, { issue: string; reason: string; owner: string }>
+> = Object.freeze({});
+
+/** The category is a function of the path, never a hand-written column. */
+export function entryCategoryOf(entryFile: string): EntryCategory {
+  if (/^packages\/platform-[^/]+\/src\/index\.ts$/.test(entryFile)) return 'platform-facade';
+  if (entryFile.startsWith('packages/contracts/')) return 'vocabulary-facade';
+  if (/^packages\/[^/]+\/src\//.test(entryFile)) return 'domain-facade';
+  if (entryFile.startsWith('src/')) return 'mechanics-surface';
+  throw new Error(`${entryFile} is neither a package entry surface nor a src/ hub`);
+}
 
 /**
  * Mechanics facets inside platform packages. Their entry surfaces ARE platform implementation,
  * so the deny-platform assertion is meaningless for them: the whole closure is the mechanics
- * being exported. Their weight stays pinned by the exact budgets.
+ * being exported. Their weight stays under the no-growth rule.
  */
 const PLATFORM_MECHANICS_ENTRY_PREFIXES = [
   'packages/platform-apple/src/runner/',
@@ -452,55 +165,52 @@ const APPLE_DOMAIN_MECHANICS_ENTRY_FILES: ReadonlySet<string> = new Set([
   'packages/platform-apple/src/tool-provider-facade.ts',
 ]);
 
-function toRows(
-  budgets: Readonly<Record<string, number>>,
-  kind: 'facade' | 'hub',
-): EagerClosureBudget[] {
-  return Object.entries(budgets).map(([entryFile, budget]) => ({
+function toEntry(entryFile: string, kind: 'facade' | 'hub'): EagerClosureEntry {
+  return {
     id: entryFile,
     entryFile,
-    budget,
     kind,
+    category: entryCategoryOf(entryFile),
     denyPlatformImplementations:
       kind === 'facade' &&
       !PLATFORM_MECHANICS_ENTRY_PREFIXES.some((prefix) =>
         prefix.endsWith('/') ? entryFile.startsWith(prefix) : entryFile === prefix,
       ) &&
       !APPLE_DOMAIN_MECHANICS_ENTRY_FILES.has(entryFile),
-  }));
+  };
 }
 
-/**
- * The two records as one list. Uniqueness WITHIN each record is a compile error; the only
- * duplicate still expressible is the same path appearing in both, which
- * `eager-closure-budgets.test.ts` asserts against on this array, before any `Set` conversion
- * could absorb it.
- */
-export const EAGER_CLOSURE_BUDGETS: EagerClosureBudget[] = [
-  ...toRows(FACADE_BUDGETS, 'facade'),
-  ...toRows(HUB_BUDGETS, 'hub'),
-];
+/** Every entry the gate measures: the discovered façades, then the hubs. */
+export function eagerClosureEntries(repoRoot: string): EagerClosureEntry[] {
+  return [
+    ...discoverFacadeEntryFiles(repoRoot).map((file) => toEntry(file, 'facade')),
+    ...HUB_ENTRY_FILES.map((file) => toEntry(file, 'hub')),
+  ];
+}
 
-/**
- * The ratchet verdict for one row: `null` when the pin is exact, otherwise the finding to report.
- *
- * Pure and separately tested, so both directions have a test that fails when the rule is wrong --
- * an `<=` comparison passes every under-budget case, and no assertion over the real tree can
- * distinguish that from a correct rule while the tree happens to match its pins.
- */
-export function classifyBudget(id: string, actual: number, budget: number): string | null {
-  if (actual === budget) return null;
-  if (actual > budget) {
-    return (
-      `${id} evaluates ${actual} modules on import, pinned at ${budget}. Either something that ` +
-      'used to load on demand now loads eagerly (fix the import), or the growth is deliberate ' +
-      'and this row moves to the new number in the same PR.'
-    );
-  }
+/** The no-growth verdict: `null` unless the head closure is larger than the merge-base one. */
+export function classifyGrowth(id: string, base: number, head: number): string | null {
+  if (head <= base) return null;
   return (
-    `${id} evaluates ${actual} modules on import, pinned at ${budget}. It shrank -- lower its ` +
-    `pin to ${actual} in this PR so the ratchet keeps the gain instead of leaving headroom a ` +
-    'later regression could grow back into.'
+    `${id} evaluates ${head} modules on import; the merge-base evaluated ${base}. Something ` +
+    'that used to load on demand now loads eagerly, or a new static edge was added: move it ' +
+    'behind a function-scoped `await import`.'
+  );
+}
+
+/** The ceiling verdict for a first-introduced entry: `null` when it fits or is approved. */
+export function classifyNewEntry(
+  id: string,
+  category: EntryCategory,
+  head: number,
+  approved: boolean,
+): string | null {
+  const ceiling = NEW_ENTRY_CEILINGS[category];
+  if (head <= ceiling || approved) return null;
+  return (
+    `${id} is a new ${category} entry evaluating ${head} modules on import, over the ` +
+    `${category} ceiling of ${ceiling}. Make its heavy edges lazy, or add an ` +
+    'APPROVED_OVER_CEILING row naming the issue, the reason, and an owner.'
   );
 }
 
@@ -605,13 +315,8 @@ function renderOwningEdges(
  * common case, that edge is new and everything under it is attributed to it, so it sorts to the
  * top and the offending route is the first thing printed.
  *
- * What it does NOT show: a diff against a recorded baseline. This gate persists each entry's
- * module COUNT, not its module identity, so it cannot say "these three modules are new" -- only
- * "these edges account for the weight". A regression added deep inside an already-large subtree
- * is therefore attributed to the top-level edge containing it, not to the exact file that changed.
- * Naming the true delta would mean checking in ~1,500 module paths and rewriting them on every
- * contracts refactor; the count plus this attribution was judged the better trade. Reconstruct an
- * exact delta when you need one by running the walker on the merge base.
+ * This is the diagnostic for an entry with no merge-base closure to diff against;
+ * `describeClosureGrowth` names the exact delta for one that has it.
  */
 export function describeClosurePressure(
   graph: ReadonlyMap<string, string | null>,
@@ -626,6 +331,24 @@ export function describeClosurePressure(
     groupByOwningEdge(graph, entryPath, evaluated),
     'module(s)',
   );
+}
+
+/**
+ * Where an existing entry grew: the shortest import route to the first module the merge-base did
+ * not evaluate, plus how many more there are. The walk is breadth-first, so the first one in
+ * closure order is the shallowest, which is where the new edge almost always is.
+ */
+export function describeClosureGrowth(
+  graph: ReadonlyMap<string, string | null>,
+  baseClosure: ReadonlySet<string>,
+  entryPath: string,
+  repoRoot: string,
+): string {
+  const added = [...graph.keys()].filter((file) => file !== entryPath && !baseClosure.has(file));
+  const first = added[0];
+  if (first === undefined) return '  (no module is new against the merge-base)';
+  const more = added.length > 1 ? `\n  (+${added.length - 1} more newly evaluated module(s))` : '';
+  return `  ${formatImportChain(graph, first, repoRoot)}${more}`;
 }
 
 /**

@@ -5,15 +5,24 @@ import os from 'node:os';
 import path from 'node:path';
 import { eagerClosureGraphOf } from '../../src/__tests__/eager-import-closure.fixtures.ts';
 import {
-  classifyBudget,
+  createCommittedSourceTree,
+  mergeBaseWithMain,
+  renamedSince,
+} from './committed-source-tree.ts';
+import {
+  APPROVED_OVER_CEILING,
+  classifyGrowth,
+  classifyNewEntry,
+  describeClosureGrowth,
   describeClosurePressure,
   describePlatformOffenders,
   discoverFacadeEntryFiles,
-  EAGER_CLOSURE_BUDGETS,
-  FACADE_BUDGETS,
-  HUB_BUDGETS,
+  eagerClosureEntries,
+  entryCategoryOf,
+  HUB_ENTRY_FILES,
+  NEW_ENTRY_CEILINGS,
+  PLATFORM_FACADE_CLOSURE,
   PLATFORM_IMPLEMENTATION_PATTERNS,
-  type EagerClosureBudget,
 } from './eager-closure-budgets.ts';
 
 /**
@@ -25,41 +34,55 @@ import {
  * (`src/__tests__/eager-import-closure.fixtures.ts`, AST-level: static value edges plus top-level
  * dynamic
  * imports, type-only erased) and proved the planted-red procedure on one file. This is that
- * probe, generalized to every workspace-package entry surface plus designated hub modules.
+ * probe, generalized to every workspace-package entry surface plus designated hub modules, and
+ * ratcheted against the committed merge-base rather than against a table of numbers.
  *
  * - Catches: an entry surface or vocabulary module silently going eager -- the regression class
  *   #1950 fixed once and #1959/#1969 fixed at five more sites. Nothing else prevents the next
  *   instance: layering R13 governs import DIRECTION (may this file reach that one at all),
  *   never evaluation WEIGHT (how much of the repo an importer drags along).
  * - Evidence: planted red re-verified against this gate itself, not merely cited from #1950 --
- *   see the PR description. Every rule the real-tree assertions rest on (the equality ratchet,
- *   the bounded attribution, recursive discovery, row uniqueness) additionally has its own
- *   failing-direction test below, because a real tree that happens to satisfy its pins cannot
- *   distinguish a correct rule from a vacuous one.
- * - Cost: one unit-lane test file plus one data module; no subprocess, no device. The walker
- *   memoizes per-file edges, so the ~100 entries parse each reachable file once in total.
- * - Kill criterion: if two consecutive quarters show no pin ever tightening or firing, or
+ *   see the PR description. Every rule the real-tree assertions rest on (no growth, the
+ *   ceilings, the committed-tree reader, rename following, the bounded attribution, recursive
+ *   discovery) additionally has its own failing-direction test below, because a real tree that
+ *   happens to satisfy its rules cannot distinguish a correct rule from a vacuous one.
+ * - Cost: one unit-lane test file plus two data/reader modules; four git processes for the
+ *   merge-base side (merge-base, ls-tree, one cat-file batch, one rename diff), no device. The
+ *   walker memoizes per-file edges per tree and parses each file once per distinct content, so
+ *   the base tree pays only for the files the branch changed.
+ * - Kill criterion: if two consecutive quarters show no rule ever firing, or
  *   ADR-0019 composition lands a stronger structural proof of the loading shape, delete this gate
  *   in favor of that proof.
  */
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
+const absolute = (file: string) => path.resolve(repoRoot, file);
 
 // --- the rules, tested in their failing direction -------------------------------------------
 // Each of these covers a hole that the real-tree assertions below cannot see: while the tree
-// matches its pins, an `<=` comparison, a one-level discovery scan, and a duplicate-swallowing
-// `Set` all look exactly like correct implementations.
+// satisfies its rules, a wrong comparison, an unfollowed rename, a reader that quietly falls
+// back to the working directory, and a one-level discovery scan all look like correct rules.
 
-test('the ratchet fails an entry that SHRANK, not only one that grew', () => {
-  // The hole: `actual <= budget` passes every shrink, silently converting the gain into headroom
-  // that a later regression grows back into unnoticed.
-  expect(classifyBudget('x.ts', 42, 42)).toBeNull();
-  expect(classifyBudget('x.ts', 43, 42)).toMatch(/evaluates 43 .*pinned at 42/);
-  const shrank = classifyBudget('x.ts', 40, 42);
-  expect(shrank).toMatch(/shrank/);
-  expect(shrank, 'a shrink finding must tell the author the new number to pin').toMatch(
-    /lower its pin to 40/,
+test('no-growth fails growth with both counts and passes an equal or smaller closure', () => {
+  expect(classifyGrowth('x.ts', 42, 42)).toBeNull();
+  expect(classifyGrowth('x.ts', 42, 40)).toBeNull();
+  expect(classifyGrowth('x.ts', 42, 43)).toMatch(/evaluates 43 modules.*merge-base evaluated 42/);
+});
+
+test('a first-introduced entry fits its category ceiling or carries an approval', () => {
+  expect(classifyNewEntry('x.ts', 'vocabulary-facade', 4, false)).toBeNull();
+  expect(classifyNewEntry('x.ts', 'vocabulary-facade', 5, false)).toMatch(
+    /new vocabulary-facade entry evaluating 5 modules.*ceiling of 4/,
   );
+  expect(classifyNewEntry('x.ts', 'vocabulary-facade', 5, true)).toBeNull();
+});
+
+test('the category is derived from the path, never hand-listed', () => {
+  expect(entryCategoryOf('packages/platform-vega/src/index.ts')).toBe('platform-facade');
+  expect(entryCategoryOf('packages/contracts/src/facades/device.ts')).toBe('vocabulary-facade');
+  expect(entryCategoryOf('packages/kernel/src/rect.ts')).toBe('domain-facade');
+  expect(entryCategoryOf('src/cli.ts')).toBe('mechanics-surface');
+  expect(() => entryCategoryOf('scripts/gate/check.ts')).toThrow(/neither/);
 });
 
 test('closure pressure is attributed to the heaviest direct edges and is bounded', () => {
@@ -142,7 +165,10 @@ function mkGitFixtureRepo(prefix: string): string {
   fs.mkdirSync(path.join(pkgDir, 'src/facades/nested'), { recursive: true });
   fs.writeFileSync(
     path.join(pkgDir, 'package.json'),
-    JSON.stringify({ name: '@agent-device/demo', exports: { '.': './src/entry.ts' } }),
+    JSON.stringify({
+      name: '@agent-device/demo',
+      exports: { '.': './src/entry.ts' },
+    }),
   );
   fs.writeFileSync(path.join(pkgDir, 'src/entry.ts'), 'export const a = 1;\n');
   fs.writeFileSync(path.join(pkgDir, 'src/facades/top.ts'), 'export const b = 2;\n');
@@ -157,6 +183,32 @@ function mkGitFixtureRepo(prefix: string): string {
   );
   return repo;
 }
+
+test('the committed-tree reader walks what was committed, not the working directory', () => {
+  // The hole: a reader that falls back to `fs` for anything it cannot answer from git turns the
+  // merge-base side into a second copy of the head side, and no-growth passes every growth.
+  const repo = mkGitFixtureRepo('eager-closure-committed-tree-');
+  const entry = path.join(repo, 'packages/demo/src/entry.ts');
+  fs.writeFileSync(entry, "export * from './facades/top.ts';\n");
+  fs.writeFileSync(path.join(repo, 'packages/demo/src/scratch.ts'), 'export const s = 1;\n');
+
+  const committed = createCommittedSourceTree(repo, 'HEAD');
+  expect(committed.isFile(path.join(repo, 'packages/demo/src/scratch.ts'))).toBe(false);
+  expect(committed.readdir(path.join(repo, 'packages'))).toEqual(['demo']);
+  expect(committed.readFile(entry)).toBe('export const a = 1;\n');
+  expect(eagerClosureGraphOf(entry, committed).size, 'committed: no edges').toBe(1);
+  expect(eagerClosureGraphOf(entry).size, 'working tree: one edge').toBe(2);
+});
+
+test('a renamed entry is followed to its path at the base, not treated as first-introduced', () => {
+  const repo = mkGitFixtureRepo('eager-closure-renamed-entry-');
+  execFileSync('git', ['mv', 'packages/demo/src/entry.ts', 'packages/demo/src/moved.ts'], {
+    cwd: repo,
+  });
+  expect(renamedSince(repo, 'HEAD').get('packages/demo/src/moved.ts')).toBe(
+    'packages/demo/src/entry.ts',
+  );
+});
 
 test('discovery is recursive and reads TRACKED files only', () => {
   // Two holes in one fixture, because both are about discovery seeing the wrong set of files.
@@ -209,7 +261,10 @@ test('an untracked PACKAGE contributes no entry surface, however its manifest re
   fs.mkdirSync(path.join(scratchPkg, 'src/facades'), { recursive: true });
   fs.writeFileSync(
     path.join(scratchPkg, 'package.json'),
-    JSON.stringify({ name: '@agent-device/scratch', exports: { '.': './src/index.ts' } }),
+    JSON.stringify({
+      name: '@agent-device/scratch',
+      exports: { '.': './src/index.ts' },
+    }),
   );
   fs.writeFileSync(path.join(scratchPkg, 'src/index.ts'), 'export const z = 0;\n');
   fs.writeFileSync(path.join(scratchPkg, 'src/facades/thing.ts'), 'export const y = 0;\n');
@@ -254,47 +309,43 @@ test('a dirty manifest naming an UNTRACKED target contributes no entry surface',
   ).not.toContain('packages/demo/src/draft.ts');
 });
 
-test('no entry path is budgeted twice, checked before any Set could absorb it', () => {
-  // Uniqueness within each record is a TypeScript error (ts1117, duplicate object literal key),
-  // so the only duplicate still expressible is one path appearing in both records. Asserted on
-  // the ARRAY: converting to a Set first is what made the original "exactly one row" claim
-  // unfalsifiable.
-  const ids = EAGER_CLOSURE_BUDGETS.map((entry) => entry.entryFile);
-  const seen = new Set<string>();
-  const duplicated: string[] = [];
-  for (const id of ids) {
-    if (seen.has(id)) duplicated.push(id);
-    seen.add(id);
-  }
-  expect(
-    duplicated,
-    'These paths are budgeted twice (a path in both FACADE_BUDGETS and HUB_BUDGETS). One row per ' +
-      'entry: pick the record that describes it.',
-  ).toEqual([]);
-  expect(ids.length).toBe(Object.keys(FACADE_BUDGETS).length + Object.keys(HUB_BUDGETS).length);
-});
-
 // --- the real tree --------------------------------------------------------------------------
 
-test('every discovered entry surface has exactly one row, and none is stale', () => {
-  // Bidirectional, mirroring the repo's other exhaustiveness gates (R7/R10 field checklists, the
-  // R11 exhaustive re-export check): an entry surface with no row lets this whole mechanism go
-  // silently vacuous for it -- which is exactly how the first version of this gate missed all six
-  // platform-package façades -- and a row naming a file that is no longer an entry surface lets
-  // the table drift from what it claims to police.
-  const discovered = new Set(discoverFacadeEntryFiles(repoRoot));
-  const budgeted = new Set(Object.keys(FACADE_BUDGETS));
+const mergeBase = mergeBaseWithMain(repoRoot);
+const baseTree = createCommittedSourceTree(repoRoot, mergeBase);
+const renamedFrom = renamedSince(repoRoot, mergeBase);
+const entries = eagerClosureEntries(repoRoot);
 
+/** The entry's path in the merge-base tree (renames followed), or null when it was not there. */
+function basePathOf(entryFile: string): string | null {
+  const file = renamedFrom.get(entryFile) ?? entryFile;
+  return baseTree.isFile(absolute(file)) ? file : null;
+}
+
+const baseClosures = new Map<string, ReadonlySet<string>>();
+function baseClosureOf(baseFile: string): ReadonlySet<string> {
+  let closure = baseClosures.get(baseFile);
+  if (!closure) {
+    closure = new Set(eagerClosureGraphOf(absolute(baseFile), baseTree).keys());
+    baseClosures.set(baseFile, closure);
+  }
+  return closure;
+}
+
+const platformFacades = entries.filter((entry) => entry.category === 'platform-facade');
+const others = entries.filter((entry) => entry.category !== 'platform-facade');
+const carried = others.flatMap((entry) => {
+  const baseFile = basePathOf(entry.entryFile);
+  return baseFile === null ? [] : [{ ...entry, baseFile }];
+});
+const introduced = others.filter((entry) => basePathOf(entry.entryFile) === null);
+
+test('every hub exists and is not also a discovered façade', () => {
+  const discovered = new Set(discoverFacadeEntryFiles(repoRoot));
+  expect(HUB_ENTRY_FILES.filter((file) => !fs.existsSync(absolute(file)))).toEqual([]);
   expect(
-    [...discovered].filter((file) => !budgeted.has(file)).sort(),
-    'These package entry surfaces (a package.json `exports` target, or a production file under a ' +
-      '`src/facades/` directory) have no row in eager-closure-budgets.ts. Measure the current ' +
-      'closure size and add one, or the loading-shape probe does not actually cover them.',
-  ).toEqual([]);
-  expect(
-    [...budgeted].filter((file) => !discovered.has(file)).sort(),
-    'These FACADE_BUDGETS rows are no longer a package entry surface. Remove the stale row or ' +
-      'fix its path.',
+    HUB_ENTRY_FILES.filter((file) => discovered.has(file)),
+    'one entry, one rule: a façade is measured as a façade',
   ).toEqual([]);
 });
 
@@ -313,33 +364,62 @@ test('discovery reaches manifest-only façades with no facades/ directory', () =
   }
 });
 
-test('every budgeted entry file exists on disk', () => {
-  const missing = EAGER_CLOSURE_BUDGETS.filter(
-    (entry) => !fs.existsSync(path.resolve(repoRoot, entry.entryFile)),
-  ).map((entry) => entry.entryFile);
-  expect(missing, 'These eager-closure-budgets.ts rows name a file that does not exist.').toEqual(
-    [],
-  );
+test.for(platformFacades)('$id evaluates exactly one module: itself', (entry) => {
+  const entryPath = absolute(entry.entryFile);
+  const graph = eagerClosureGraphOf(entryPath);
+  expect(
+    graph.size,
+    `${entry.id} evaluates ${graph.size} modules on import; a platform façade is metadata-eager ` +
+      `and implementation-lazy (ADR-0019).\n${describeClosurePressure(graph, entryPath, repoRoot)}`,
+  ).toBe(PLATFORM_FACADE_CLOSURE);
 });
 
-test.for(EAGER_CLOSURE_BUDGETS)('$id evaluates exactly $budget modules', (entry) => {
-  const entryPath = path.resolve(repoRoot, entry.entryFile);
+test.for(carried)('$id evaluates no more modules than at the merge-base', (entry) => {
+  const entryPath = absolute(entry.entryFile);
   const graph = eagerClosureGraphOf(entryPath);
-  const finding = classifyBudget(entry.id, graph.size, entry.budget);
+  const base = baseClosureOf(entry.baseFile);
+  const finding = classifyGrowth(entry.id, base.size, graph.size);
   expect(
     finding,
     finding === null
       ? ''
-      : `${finding}\n\nWhere the weight comes from (heaviest direct edges, capped -- this ` +
-          'attributes by shortest import route, it does not diff against a recorded baseline):\n' +
-          describeClosurePressure(graph, entryPath, repoRoot),
+      : `${finding}\n\nFirst newly evaluated module, by shortest import route:\n` +
+          describeClosureGrowth(graph, base, entryPath, repoRoot),
   ).toBeNull();
 });
 
-test.for(EAGER_CLOSURE_BUDGETS.filter((entry) => entry.denyPlatformImplementations))(
+test.for(introduced)(
+  '$id is first-introduced and fits the $category ceiling or carries an approval',
+  (entry) => {
+    const entryPath = absolute(entry.entryFile);
+    const graph = eagerClosureGraphOf(entryPath);
+    const approved = Object.hasOwn(APPROVED_OVER_CEILING, entry.entryFile);
+    const finding = classifyNewEntry(entry.id, entry.category, graph.size, approved);
+    expect(
+      finding,
+      finding === null
+        ? ''
+        : `${finding}\n\nWhere the weight comes from (heaviest direct edges, capped):\n` +
+            describeClosurePressure(graph, entryPath, repoRoot),
+    ).toBeNull();
+  },
+);
+
+test('no APPROVED_OVER_CEILING row is stale', () => {
+  const stale = Object.keys(APPROVED_OVER_CEILING).filter((id) => {
+    const entry = entries.find((candidate) => candidate.entryFile === id);
+    return !entry || eagerClosureGraphOf(absolute(id)).size <= NEW_ENTRY_CEILINGS[entry.category];
+  });
+  expect(
+    stale,
+    'These approvals name an entry that no longer exists or now fits its ceiling: remove the rows.',
+  ).toEqual([]);
+});
+
+test.for(entries.filter((entry) => entry.denyPlatformImplementations))(
   '$id never evaluates a concrete platform implementation',
-  (entry: EagerClosureBudget) => {
-    const entryPath = path.resolve(repoRoot, entry.entryFile);
+  (entry) => {
+    const entryPath = absolute(entry.entryFile);
     const graph = eagerClosureGraphOf(entryPath);
     // The entry itself is excluded: a platform package's own façade necessarily matches the
     // pattern, and the property worth asserting there is that it evaluates none of its OWN
