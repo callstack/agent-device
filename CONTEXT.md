@@ -119,7 +119,8 @@ selected device.
 The daemon-side source of truth for route ownership and request-policy traits.
 
 **Runner command traits**:
-Per-command classifications controlling Apple runner lifecycle and recovery behavior.
+Per-command classifications controlling Apple runner lifecycle and recovery behavior
+independently of the public command surface.
 
 **Daemon RPC protocol version**:
 The integer used to detect breaking compatibility across the remote daemon boundary.
@@ -153,8 +154,8 @@ One dispatch-path-by-guarantee classification: enforced, delegated, inapplicable
 A guarantee gap with a tracking issue and explicit owner.
 
 **Delegation-on-error**:
-A fast path that returns semantic failures to the shared path; it settles failure-side handling,
-not success-path parity.
+A fast path that returns semantic failures to the shared path; it establishes failure-side
+handling, not success-path parity.
 
 **Parity table**:
 A golden cross-language rule table consumed by both TypeScript and native tests.
@@ -217,12 +218,13 @@ The policy input controlling how one snapshot acquisition becomes a public proje
 
 **Snapshot policy facet**:
 The host-side owner of neutral snapshot policy (presentation, freshness, timeout, overlay);
-platform acquisition supplies raw facts and a fold policy.
+platform acquisition supplies raw facts and a fold policy, and runner-side Swift presentation stays
+separate across the process boundary.
 
 **Capture hint**:
 The acquisition-facing view of a snapshot request: the projection a backend must serve, raw
-traversal depth kept apart from presented depth, and narrowing only where the backend can prove it
-complete.
+traversal depth kept apart from regular presented depth, and narrowing only where the backend can
+prove it complete.
 
 **Regular presented-depth frontier**:
 The acquisition boundary for an unscoped regular snapshot, measured against regular presented
@@ -232,8 +234,9 @@ depth after structural wrappers collapse.
 Membership in a presented snapshot projection, independent of whether a node is currently hittable.
 
 **Clip fold**:
-The regular projection's single visibility interpreter (viewport and scroll-container clipping,
-ancestor projection, scroll hints, collapsed depth); platform differences enter as a fold policy.
+The regular projection's single visibility interpreter, run inside presentation for every
+backend: viewport and scroll-container clipping, ancestor projection, scroll hints, collapsed
+depth. Platform differences enter as a fold policy, never as a backend exception.
 
 **Presented node**:
 A wire-facing snapshot value produced at the presentation boundary.
