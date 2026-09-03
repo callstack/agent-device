@@ -185,6 +185,10 @@ test('usageForCommand resolves workflow help topic', async () => {
   );
   assert.match(help, /open -> snapshot -i -> settle -> verify -> close loop/);
   assert.match(help, /type never takes --settle/);
+  assert.match(help, /snapshot\/get\/is\/find answer read-only questions/);
+  assert.match(help, /--settle confirms local UI quieted/);
+  assert.match(help, /wait text "Expected result" or wait <selector> instead of polling/);
+  assert.match(help, /strict disappearance uses wait absent <selector>/);
   assert.match(
     help,
     /Chain confident consecutive steps with &&: press 'label="Search"' --settle && fill 'label="Search"' "query" --settle/,
@@ -235,6 +239,10 @@ test('usageForCommand resolves workflow help topic', async () => {
   assert.match(help, /Wait failure contract:/);
   assert.match(help, /wait_target_absent: a readable capture ran and found no match/);
   assert.match(help, /wait_target_present: wait absent timed out with matches/);
+  assert.match(
+    help,
+    /predicate_failed: wait absent had no valid capture; final observation\/diagnostic is preserved/,
+  );
   assert.match(help, /wait_capture_stalled: no readable capture finished before the deadline/);
   assert.match(help, /wait_deadline_exceeded: a later capture used the remaining budget/);
   assert.match(help, /wait_landmark_identity_mismatch: a replay destination guard/);

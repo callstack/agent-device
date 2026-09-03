@@ -351,8 +351,8 @@ test('runtime selector convenience methods use explicit target helpers', async (
 // mid-transition Android helper content verdicts) instead of aborting the
 // wait — the live-validated destination-guard gap from #1349's PR review.
 // (#1349's own in-loop landmark identity verification tests — the
-// `target.recordedLandmark` cases — moved to `selector-wait.test.ts`, the
-// 1:1 topology location for `selector-wait.ts`; #1478 P5 step 2 cell 7.)
+// `target.recordedLandmark` cases — moved to `wait-selector.test.ts`, the
+// 1:1 topology location for `wait-selector.ts`; #1478 P5 step 2 cell 7.)
 // ---------------------------------------------------------------------------
 
 function landmarkScreen(parentLabel: string) {

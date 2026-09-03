@@ -87,6 +87,16 @@ export async function waitForAbsent<Runtime extends SelectorWaitRuntime>(
     await polling.sleepUntilNextPoll();
   }
 
+  // A runner restart is the authoritative deadline cause even when an earlier
+  // readable poll saw the target. Returning stale target-present evidence would
+  // hide the retriable restart and make callers stop retrying the wrong reason.
+  if (deadline === 'runner-restart-exhausted') {
+    throw waitTimeoutError(
+      `wait absent timed out for selector: ${selectorExpression}`,
+      polling,
+      deadline,
+    );
+  }
   if (present) throw waitTargetPresentError(selectorExpression, present, polling.failureEvidence());
   throw waitTimeoutError(
     `wait absent timed out for selector: ${selectorExpression}`,

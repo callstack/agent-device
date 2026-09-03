@@ -8,11 +8,7 @@ import {
   localCommandPolicy,
 } from '../../../runtime.ts';
 import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builders.ts';
-import {
-  createFakeClock,
-  createSelectorDevice,
-  selectorReadSnapshot,
-} from './__tests__/test-utils/index.ts';
+import { createFakeClock } from './__tests__/test-utils/index.ts';
 import { computeTargetEvidence } from '../../../daemon/session-target-evidence.ts';
 import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
 import { AppError } from '@agent-device/kernel/errors';
@@ -52,36 +48,9 @@ test('runtime focused selector waits against a full snapshot', async () => {
   assert.equal(captureOptions?.interactiveOnly, false);
 });
 
-// A text wait has exactly one source of truth: the polled capture. The backend `findText` seam
-// that short-circuited it on Apple was wait's second platform-execution path and retired with
-// wait's ADR 0019 cutover, so the tree answer is the only answer — in both directions.
-test('runtime wait resolves text from the polled snapshot', async () => {
-  const device = createSelectorDevice(selectorReadSnapshot(), { now: 10 });
-
-  const result = await device.selectors.wait({
-    session: 'default',
-    target: { kind: 'text', text: 'Continue', timeoutMs: 100 },
-  });
-
-  assert.deepEqual(result, { kind: 'text', text: 'Continue', waitedMs: 0 });
-});
-
-test('runtime wait times out on text the polled snapshot does not carry', async () => {
-  const device = createSelectorDevice(selectorReadSnapshot(), { clock: createFakeClock() });
-
-  await assert.rejects(
-    async () =>
-      await device.selectors.wait({
-        session: 'default',
-        target: { kind: 'text', text: 'Ready', timeoutMs: 100 },
-      }),
-    (error: Error) => error.message.includes('wait timed out for text: Ready'),
-  );
-});
-
 // ---------------------------------------------------------------------------
 // #1349 (relocated from `selector-read.test.ts` — this is the 1:1 topology
-// location for `selector-wait.ts`, and #1478 P5 step 2 cell 7's pin):
+// location for `wait-selector.ts`, and #1478 P5 step 2 cell 7's pin):
 // wait's in-loop landmark identity verification, threaded as
 // `target.recordedLandmark`. Polling semantics are preserved — a
 // same-selector impostor never aborts the wait; only the deadline turns

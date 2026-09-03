@@ -184,6 +184,13 @@ describe('command reference doc coverage', () => {
     );
   });
 
+  test('commands.md publishes the wait absence unreadable-observation reason', () => {
+    assert.match(
+      markdown,
+      /`?predicate_failed`? means strict `wait absent` could not prove absence because no valid capture arrived/,
+    );
+  });
+
   test('no stale waivers', () => {
     assert.deepEqual(
       findStaleUndocumentedWaivers(
