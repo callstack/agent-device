@@ -9,7 +9,7 @@
 // own static module graph.
 //
 // Two files are removed from whatever Vitest returns:
-//   - the real-subprocess-spawn tests (SUBPROCESS_STUB_TESTS in vitest.config.ts —
+//   - the real-subprocess-spawn tests (MUTATION_EXCLUDED_TESTS in vitest.config.ts —
 //     spawns stubbed binaries and waits real subprocess/retry/poll time, out of scope
 //     by the issue's constraint, and thousands of mutant runs would turn it into
 //     timeout noise regardless of whether Vitest itself still serializes it, #1823);
