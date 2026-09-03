@@ -12,8 +12,8 @@ An internal ownership group for related automation platforms: Apple, Android, Ha
 Linux, or web.
 
 **Platform leaf**:
-A concrete OS and device shape within a platform family whose support is classified independently,
-such as iOS simulator, physical iOS, tvOS, or macOS.
+A concrete OS and device shape within a platform family, classified independently: iOS simulator,
+physical iOS, tvOS, or macOS.
 
 **Platform module**:
 A private package that owns one platform family's device mechanics and exposes its metadata and
@@ -84,11 +84,10 @@ A device-scoped pause on agent mutations during human operation.
 
 **Command surface**:
 The catalog of public command identity, interface exposure, adapter policy, and shared metadata
-across CLI, Node.js, MCP, and batch entrypoints.
+across entrypoints.
 
 **Runtime use**:
-A command's platform-neutral declaration of operations required for admission and preferred fast
-paths whose absence does not reject the command.
+A command's platform-neutral declaration of required operations and optional preferred fast paths.
 
 **Inventory use**:
 An inventory command's platform-neutral declaration for composing device sources without binding a
@@ -98,8 +97,7 @@ selected device.
 The daemon-side source of truth for route ownership and request-policy traits.
 
 **Runner command traits**:
-Per-command classifications that control Apple runner lifecycle and recovery behavior independently
-of the public command surface.
+Per-command classifications controlling Apple runner lifecycle and recovery behavior.
 
 **Daemon RPC protocol version**:
 The integer used to detect breaking compatibility across the remote daemon boundary.
@@ -111,30 +109,29 @@ separately versioned helpers, persisted artifacts, and released API consumers.
 ### Interactions, selectors, and refs
 
 **Interactor**:
-The legacy monolithic interface between dispatch and platform behavior, retained only for commands
-not yet migrated to request-bound runtimes.
+The legacy monolithic interface between dispatch and platform behavior, kept only for unmigrated
+commands.
 _Avoid_: New or migrated command behavior
 
 **Interaction dispatch path**:
 One concrete route an interaction command takes from a resolved target to device execution.
 
 **Coordinate-first resolved element activation**:
-An Apple interaction that resolves a semantic element and then activates its resolved center point,
-avoiding a second element lookup after navigation.
+An Apple interaction that resolves a semantic element and activates its resolved center point
+without a second lookup.
 
 **Parent-owned touch point**:
-A point that preserves the selected parent's identity while avoiding independently interactive
+A point that keeps the selected parent's identity while avoiding independently interactive
 descendants at its center.
 
 **Guarantee cell**:
-One dispatch-path-by-guarantee classification stating where an interaction guarantee is enforced,
-delegated, inapplicable, or waived.
+One dispatch-path-by-guarantee classification: enforced, delegated, inapplicable, or waived.
 
 **Owned waiver**:
 A guarantee gap with a tracking issue and explicit owner.
 
 **Delegation-on-error**:
-A fast path returning semantic failures to the shared path. It establishes failure-side handling,
+A fast path that returns semantic failures to the shared path; it settles failure-side handling,
 not success-path parity.
 
 **Parity table**:
@@ -144,8 +141,8 @@ A golden cross-language rule table consumed by both TypeScript and native tests.
 A contract test's declaration of the guarantee cells it proves.
 
 **Ref frame**:
-The session's authorization namespace for mutating `@ref` targets, containing a frozen observation
-epoch and issuance scope separate from the latest operational snapshot.
+The session's authorization namespace for mutating `@ref` targets: a frozen observation epoch and
+issuance scope.
 
 **Frame expiry seam**:
 The point immediately before a mutating device operation where the active ref frame becomes invalid.
@@ -190,35 +187,31 @@ A backend-owned accessibility value before snapshot presentation.
 One backend attempt's raw accessibility nodes and attempt-level capture facts.
 
 **Snapshot producer**:
-The acquisition component that produced a snapshot's raw tree — the third identity axis beside
-the platform channel and the in-plan capture strategy. Producers on one channel carry different
-guarantees, so presentation, scope, and geometry logic keys on the producer, never the channel
-alone.
+The acquisition component that produced a snapshot's raw tree; presentation, scope, and geometry
+key on the producer, never on the platform channel alone.
 
 **Presentation options**:
 The policy input controlling how one snapshot acquisition becomes a public projection.
 
 **Snapshot policy facet**:
-The host-side owner of neutral snapshot policy: presentation, freshness, timeout and overlay.
-Platform acquisition supplies raw facts and a fold policy; runner-side Swift presentation remains
-separate across the process boundary.
+The host-side owner of neutral snapshot policy (presentation, freshness, timeout, overlay);
+platform acquisition supplies raw facts and a fold policy.
 
 **Capture hint**:
-The acquisition-facing view of a snapshot request, derived once from presentation options. It names
-the projection a backend must serve, keeps raw traversal depth separate from regular presented depth,
-and may narrow acquisition only where that backend can prove the narrowing complete.
+The acquisition-facing view of a snapshot request: the projection a backend must serve, raw
+traversal depth kept apart from presented depth, and narrowing only where the backend can prove it
+complete.
 
 **Regular presented-depth frontier**:
-The acquisition boundary for an unscoped regular snapshot, measured against regular presented depth
-after structural wrappers collapse. It is distinct from raw traversal depth.
+The acquisition boundary for an unscoped regular snapshot, measured against regular presented
+depth after structural wrappers collapse.
 
 **Snapshot eligibility**:
 Membership in a presented snapshot projection, independent of whether a node is currently hittable.
 
 **Clip fold**:
-The regular projection's single visibility interpreter, run inside presentation for every backend:
-viewport and scroll-container clipping, ancestor projection, scroll hints, and collapsed depth.
-Platform differences enter as a fold policy, never as a backend exception.
+The regular projection's single visibility interpreter (viewport and scroll-container clipping,
+ancestor projection, scroll hints, collapsed depth); platform differences enter as a fold policy.
 
 **Presented node**:
 A wire-facing snapshot value produced at the presentation boundary.
@@ -238,7 +231,7 @@ A fidelity limit in acquired evidence that presentation cannot repair and must d
 
 **AX-unavailable target invalidation**:
 The Apple behavior that discards a suspect cached application target after a root accessibility
-failure so the next command reacquires it.
+failure.
 
 ### Recording and replay
 
@@ -277,21 +270,15 @@ completed result, missing state, or typed refusal.
 ### Maestro compatibility
 
 **Maestro program**:
-A source-preserving typed representation of the Maestro Flow syntax and behavior supported by
-agent-device, interpreted through the compatibility runtime.
+A source-preserving typed representation of the supported Maestro Flow syntax and behavior.
 
 **Maestro observation generation**:
-Compatibility-engine evidence captured since the most recent mutation; mutation invalidates it
-before dispatch.
+Compatibility-engine evidence captured since the most recent mutation; mutation invalidates it.
 
 ### Providers and tests
 
 **Provider**:
 An external adapter that owns a device runtime or contributes transport to a platform module.
-
-**Provider-backed integration scenario**:
-A device-free test through the real daemon request path that replaces only external device or host
-tool execution.
 
 **Cloud WebDriver runtime**:
 A provider runtime that maps a cloud-owned Appium or WebDriver session into agent-device inventory,
@@ -302,15 +289,3 @@ Provider-hosted session output such as video, automation logs, device logs, or d
 
 **Daemon artifact type**:
 An optional semantic category supplied by the owner of a daemon-managed downloadable artifact.
-
-**Provider transcript**:
-An exact record of external provider calls used to verify command translation.
-
-**Scenario transcript**:
-A command-level integration flow describing user-visible behavior through daemon commands.
-
-**In-process provider scenario harness**:
-An integration runner that invokes the daemon request handler without opening an HTTP listener.
-
-**HTTP contract test**:
-A narrow test of JSON-RPC transport, authentication, and response finalization.
