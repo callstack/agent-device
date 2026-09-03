@@ -184,6 +184,21 @@ test('test app source selects root lint and format plus its isolated typecheck',
   ]);
 });
 
+test('the image-size parser mitigation is selected when its defining files change', () => {
+  for (const file of [
+    'examples/test-app/patches/image-size@1.2.1.patch',
+    'examples/test-app/security/image-size-security.test.mjs',
+    'examples/test-app/pnpm-workspace.yaml',
+  ]) {
+    const result = plan([file]);
+    assert.equal(result.failOpen, false, `${file} must not fail open`);
+    assert.ok(
+      result.checks.includes('test-app-security'),
+      `expected test-app-security for ${file}`,
+    );
+  }
+});
+
 test('unknown path fails open to the full check set', () => {
   const result = plan(['fixtures/unknown.data']);
   assert.equal(result.failOpen, true);

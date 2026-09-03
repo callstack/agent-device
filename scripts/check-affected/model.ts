@@ -33,6 +33,7 @@ export type CheckId =
   | 'lint'
   | 'typecheck'
   | 'test-app-typecheck'
+  | 'test-app-security'
   | 'layering'
   | 'di-seams'
   | 'fallow'
@@ -96,6 +97,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'lint',
   'typecheck',
   'test-app-typecheck',
+  'test-app-security',
   'layering',
   'di-seams',
   'fallow',
@@ -495,6 +497,17 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     rule: 'own:mcp',
     detail: 'MCP registry metadata must stay in sync',
     owns: (file) => file === 'server.json' || file === 'smithery.yaml',
+  },
+  // image-size ships no fixed version for its parser DoS advisories; the in-tree
+  // pnpm patch is the mitigation, and only its defining files own the proof.
+  {
+    check: 'test-app-security',
+    rule: 'own:test-app-security',
+    detail: 'the image-size parser mitigation is proven by the test-app security suite',
+    owns: (file) =>
+      file.startsWith('examples/test-app/patches/') ||
+      file.startsWith('examples/test-app/security/') ||
+      file === 'examples/test-app/pnpm-workspace.yaml',
   },
   // TS/Swift golden tables (`contracts/fixtures/*.json`): the vitest parity test and the
   // runner XCTest twin both read them, so a table edit owns the unit lane and both runner

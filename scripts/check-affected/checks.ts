@@ -38,6 +38,12 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   // The test app intentionally owns a separate Expo dependency graph. Do not
   // make every root-checkout validation install it implicitly.
   gate('test-app-typecheck', 'Expo test app typecheck', 'test-app:typecheck', false),
+  gate(
+    'test-app-security',
+    'Expo test app image-size parser security test',
+    'test-app:security',
+    false,
+  ),
   gate('layering', 'Import-direction layering guard', 'check:layering'),
   gate('di-seams', 'Test-only DI seam guard', 'check:di-seams'),
   gate('fallow', 'Fallow code-quality audit', 'check:fallow'),

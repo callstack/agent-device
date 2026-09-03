@@ -5,14 +5,13 @@ import path from 'node:path';
 import test from 'node:test';
 
 const packageStore = path.join(process.cwd(), 'node_modules', '.pnpm');
+const patchHash = /^ {2}image-size@1\.2\.1: ([0-9a-f]{64})$/m.exec(
+  fs.readFileSync(path.join(process.cwd(), 'pnpm-lock.yaml'), 'utf8'),
+)?.[1];
+assert.ok(patchHash, 'the lockfile must record the image-size patch hash');
 const imageSizePath =
   process.env.IMAGE_SIZE_PACKAGE_DIR ??
-  path.join(
-    packageStore,
-    fs.readdirSync(packageStore).find((entry) => entry.startsWith('image-size@1.2.1_patch_hash=')),
-    'node_modules',
-    'image-size',
-  );
+  path.join(packageStore, `image-size@1.2.1_patch_hash=${patchHash}`, 'node_modules', 'image-size');
 assert.ok(fs.existsSync(imageSizePath), 'the image-size package must be installed');
 
 test('zero-length image records and boxes return within the parser budget', () => {
@@ -35,6 +34,17 @@ test('zero-length image records and boxes return within the parser budget', () =
         Buffer.from('jxl '),
         Buffer.alloc(4),
         zeroBox('junk'),
+      ]),
+      'No codestream found in JXL container',
+    ],
+    [
+      'JXL zero-size jxlp box',
+      Buffer.concat([
+        box(8, 'JXL '),
+        box(16, 'ftyp'),
+        Buffer.from('jxl '),
+        Buffer.alloc(4),
+        zeroBox('jxlp'),
       ]),
       'No codestream found in JXL container',
     ],

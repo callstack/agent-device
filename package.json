@@ -172,6 +172,7 @@
     "test-app:ios": "pnpm --dir examples/test-app ios",
     "test-app:android": "pnpm --dir examples/test-app android",
     "test-app:typecheck": "pnpm --dir examples/test-app typecheck",
+    "test-app:security": "pnpm --dir examples/test-app security:test",
     "test-app:replay:ios": "pnpm ad test examples/test-app/replays --platform ios --artifacts-dir .tmp/test-app-replay/ios",
     "test-app:replay:android": "pnpm ad test examples/test-app/replays --platform android --artifacts-dir .tmp/test-app-replay/android",
     "test-app:maestro": "node scripts/run-test-app-maestro-suite.mjs",
