@@ -15,6 +15,7 @@ export type ScreenshotResultData = {
   logicalHeight?: number;
   pixelDensity?: number;
   overlayRefs?: ScreenshotOverlayRef[];
+  warnings?: string[];
 };
 export type BackendSnapshotResult = {
   nodes?: SnapshotNode[];

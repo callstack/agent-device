@@ -135,6 +135,34 @@ test('screenshot replay script round-trips screenshot flags', () => {
   assert.equal(parsed[0]?.flags.screenshotNoStabilize, true);
 });
 
+test('screenshot replay script round-trips a quoted --crop-on selector', () => {
+  const actions: SessionAction[] = [
+    {
+      ts: Date.now(),
+      command: 'screenshot',
+      positionals: ['./page.png'],
+      flags: {
+        screenshotCropOn: 'role=cell label=General || role=button label=General',
+        screenshotScale: 0.3,
+      },
+    },
+  ];
+
+  const script = formatReplayScriptForTest(actions);
+  assert.match(
+    script,
+    /screenshot "\.\/page\.png" --crop-on "role=cell label=General \|\| role=button label=General" --scale 0\.3/,
+  );
+
+  const parsed = parseReplayScriptDetailed(script).actions;
+  assert.deepEqual(parsed[0]?.positionals, ['./page.png']);
+  assert.equal(
+    parsed[0]?.flags.screenshotCropOn,
+    'role=cell label=General || role=button label=General',
+  );
+  assert.equal(parsed[0]?.flags.screenshotScale, 0.3);
+});
+
 test('snapshot replay script parses full refresh flags', () => {
   const ignoredLegacyFlag = '-' + 'c';
   const parsed = parseReplayScriptDetailed(

@@ -227,6 +227,10 @@ export function appendScreenshotActionScriptArgs(parts: string[], action: Sessio
   for (const positional of action.positionals ?? []) {
     parts.push(formatScriptArg(positional));
   }
+  const cropOn = action.flags?.screenshotCropOn;
+  if (typeof cropOn === 'string' && cropOn.length > 0) {
+    parts.push('--crop-on', formatScriptArgQuoteIfNeeded(cropOn));
+  }
   appendScreenshotScriptFlags(parts, action.flags);
 }
 

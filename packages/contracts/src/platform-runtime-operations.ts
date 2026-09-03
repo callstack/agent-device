@@ -602,35 +602,46 @@ export function resolveSnapshotRuntimePlan(input: {
 
 const captureScreenshotUse = defineUse({ required: ['captureScreenshot'] });
 /**
- * `--overlay-refs` annotates the capture with the refs of a snapshot taken in the same request, so
- * the snapshot is part of what the command requires — not something to discover after the PNG is
+ * Screenshot post-processing that resolves a snapshot taken in the same request — `--overlay-refs`
+ * annotates the capture with snapshot refs, `--crop-on` crops it to a snapshot node's frame. The
+ * snapshot is part of what the command requires, not something to discover after the PNG is
  * already on disk. Declaring it in the use is what lets admission refuse the whole request up
  * front on a target that can capture pixels but not a tree.
  */
-const captureScreenshotWithOverlayRefsUse = defineUse({
+const captureScreenshotWithSnapshotUse = defineUse({
   required: ['captureScreenshot', 'captureSnapshot'],
 });
 
 export const screenshotRuntimePlanUses = Object.freeze([
   captureScreenshotUse,
-  captureScreenshotWithOverlayRefsUse,
+  captureScreenshotWithSnapshotUse,
 ] as const);
 
 export type ScreenshotRuntimePlan =
   | Readonly<{ kind: 'capture'; use: typeof captureScreenshotUse }>
   | Readonly<{
       kind: 'capture-with-overlay-refs';
-      use: typeof captureScreenshotWithOverlayRefsUse;
+      use: typeof captureScreenshotWithSnapshotUse;
+    }>
+  | Readonly<{
+      kind: 'capture-with-crop-on';
+      use: typeof captureScreenshotWithSnapshotUse;
     }>;
 
 /** Selects one owner-fact-backed capture plan from normalized command intent. */
 export function resolveScreenshotRuntimePlan(
-  input: Readonly<{ overlayRefs: boolean }>,
+  input: Readonly<{ overlayRefs: boolean; cropOn: boolean }>,
 ): ScreenshotRuntimePlan {
+  if (input.cropOn) {
+    return Object.freeze({
+      kind: 'capture-with-crop-on',
+      use: captureScreenshotWithSnapshotUse,
+    });
+  }
   return input.overlayRefs
     ? Object.freeze({
         kind: 'capture-with-overlay-refs',
-        use: captureScreenshotWithOverlayRefsUse,
+        use: captureScreenshotWithSnapshotUse,
       })
     : Object.freeze({ kind: 'capture', use: captureScreenshotUse });
 }

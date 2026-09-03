@@ -67,6 +67,8 @@ export type CaptureSnapshotResult = {
 export type CaptureScreenshotOptions = AgentDeviceRequestOverrides & {
   path?: string;
   overlayRefs?: boolean;
+  /** Crop the capture to the frame of the selector resolved on the same screen. */
+  cropOn?: string;
   pixelDensity?: number;
   fullscreen?: boolean;
   scale?: number;
