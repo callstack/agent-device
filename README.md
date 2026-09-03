@@ -26,6 +26,20 @@ maintainer-corrected evaluation.
 | `ios-simulator-ax-bridge-targeted-268a90275.json.gz` | `fa2e01dcb5e2a0229a6836f1a4187169445347dd4c0a42bcb5a29022538c70b2` |
 | `ios-simulator-ax-bridge-corrected-268a90275.json.gz` | `4d70596a39153e6104e37a790622450d967f61b2244745915f39462514ba3bed` |
 
+### Corrected relaunch corpus
+
+These artifacts were captured at repository commit
+`636b1deac98ab88cc8e0e1ed894b5719d8a6c83f`. They replace the targeted decision
+artifact above with 20 Node-direct relaunch samples on each of six representative
+screens. Every timed sample is paired with independently observed readiness for the
+expected application process generation and screen anchor. The supplied idb guest
+binary was verified against its pinned SHA-256 before capture.
+
+| File | sha256 |
+| --- | --- |
+| `ios-simulator-ax-bridge-targeted-636b1deac.json.gz` | `092d3deab3753c1b7a0d230d9e54f703e5fedb87ffc0974f082541ba9b4e687d` |
+| `ios-simulator-ax-bridge-corrected-636b1deac.json.gz` | `a20039b38d4da65fed65518a3214153afa0174faaf6fb38c3950a3bd1362870d` |
+
 ## Fetch into a checkout
 
 ```sh
