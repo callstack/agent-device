@@ -12,6 +12,7 @@ const mechanism = {
   companionArchive: 'idb-companion.macos-arm64.tar.gz',
   companionSha256: 'archive',
   guestBinary: 'Resources/SimulatorFrameworkBridge',
+  guestBinaryExpectedSha256: 'guest',
   guestBinarySha256: 'guest',
   transport: 'socket',
   traversal: 'tree',
@@ -29,7 +30,11 @@ describe('corrected Simulator AX bridge report', () => {
       targeted,
     });
 
-    expect(report.readiness.every((cell) => cell.readinessObservedSamples === 1)).toBe(true);
+    expect(
+      report.readiness.every(
+        (cell) => cell.readinessObservedSamples === (cell.state === 'warm' ? 1 : 2),
+      ),
+    ).toBe(true);
     expect(report.hardGates.relaunch.status).toBe('PASS');
     expect(report.hardGates.boundedResources.status).toBe('PASS');
     expect(report.hardGates.liveRecovery.status).toBe('PASS');
@@ -62,6 +67,42 @@ describe('corrected Simulator AX bridge report', () => {
 
     expect(report.hardGates.boundedResources.status).toBe('FAIL');
     expect(report.decision).toBe('NO-GO');
+  });
+
+  test('fails relaunch when a timed read is not paired to its expected generation', () => {
+    const targeted = targetedArtifact();
+    const first = targeted.relaunch[0]!;
+    const report = buildCorrectedReport({
+      sourcePath: 'broad.json.gz',
+      source: broadReport(),
+      targetedPath: 'targeted.json.gz',
+      targeted: {
+        ...targeted,
+        relaunch: [
+          {
+            ...first,
+            response: successfulResponse('pid:999'),
+          },
+          ...targeted.relaunch.slice(1),
+        ],
+      },
+    });
+
+    expect(report.hardGates.relaunch.status).toBe('FAIL');
+    expect(report.decision).toBe('NO-GO');
+  });
+
+  test('fails relaunch when the configured corpus is incomplete', () => {
+    const targeted = targetedArtifact();
+    const report = buildCorrectedReport({
+      sourcePath: 'broad.json.gz',
+      source: broadReport(),
+      targetedPath: 'targeted.json.gz',
+      targeted: { ...targeted, relaunch: targeted.relaunch.slice(1) },
+    });
+
+    expect(report.hardGates.relaunch.status).toBe('FAIL');
+    expect(report.hardGates.relaunch.evidence).toContain('1/2 Node-direct samples');
   });
 });
 
@@ -96,6 +137,20 @@ function broadReport(): SpikeReport {
       })),
     })),
     decisionReasons: [],
+    preferenceEvidence: {
+      applied: true,
+      restored: true,
+      fixtureLaunchCompatible: true,
+      simulatorStateBefore: 'Shutdown',
+      diffs: [
+        {
+          changes: [
+            { key: 'AutomationEnabled', before: 0, after: true },
+            { key: 'IgnoreAXServerEntitlements', after: true },
+          ],
+        },
+      ],
+    },
   };
 }
 
@@ -126,8 +181,22 @@ function targetedArtifact(): TargetedRawArtifact {
     },
     recoveredResponse: successfulResponse('pid:104'),
   }));
+  const relaunch = Array.from({ length: 2 }, (_, offset) => {
+    const appPid = 200 + offset;
+    return {
+      index: offset + 1,
+      screen: 'list' as const,
+      expectedAnchor: 'Item 20',
+      appPid,
+      readinessMs: 40,
+      readinessAttempts: 1,
+      durationMs: 80,
+      response: successfulResponse(`pid:${appPid}`),
+      stderr: '',
+    };
+  });
   return {
-    schemaVersion: 'ios-simulator-ax-bridge-targeted.v2',
+    schemaVersion: 'ios-simulator-ax-bridge-targeted.v3',
     generatedAt: '2026-09-03T00:00:00.000Z',
     revision,
     command: 'targeted',
@@ -146,6 +215,7 @@ function targetedArtifact(): TargetedRawArtifact {
     limits: DEFAULT_SPIKE_LIMITS,
     config: { states: ['warm', 'relaunch'], screens: ['list'], samples: 2, bootstrapSamples: 5 },
     bootstrap,
+    relaunch,
     recovery,
   };
 }

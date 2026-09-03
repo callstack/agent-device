@@ -4,7 +4,7 @@ This narrow harness supplies the decisive live evidence for [#2192](https://gith
 
 The September 1 broad corpus is retained because it contains the warm and relaunch measurements. Its one-off Python runner and generated NO-GO reports were removed after the corrected contract made them obsolete. Raw artifacts are kept off-tree at immutable tag `evidence/ios-snapshot/268a90275` (commit `fdc52f65ed679f1420f91312204f8d558a8c0061`); their SHA-256 hashes are recorded in the evidence branch README.
 
-Obtain the guest executable from the official arm64 idb v1.5.2 release. The archive SHA-256 is `f17b718a513931705542a7fbfa9cfc11895ee191562c9ffd2343cf7f8254bc08`; `Resources/SimulatorFrameworkBridge` is `3545621d2dc98de32879ebac55e8b0c33dc8eb7cc2bfbc2d0d2d21a002c8de58`.
+Obtain the guest executable from the official arm64 idb v1.5.2 release. The archive SHA-256 is `f17b718a513931705542a7fbfa9cfc11895ee191562c9ffd2343cf7f8254bc08`; `Resources/SimulatorFrameworkBridge` is `3545621d2dc98de32879ebac55e8b0c33dc8eb7cc2bfbc2d0d2d21a002c8de58`. The verifier hashes the supplied `--guest-bridge` before launching it and fails if it is not that binary.
 
 Fetch the broad input before rerunning:
 
@@ -25,4 +25,4 @@ pnpm bench:ios-ax-bridge:targeted -- \
   --guest-bridge /path/to/Resources/SimulatorFrameworkBridge
 ```
 
-It captures five nonresident bootstrap samples after independently observing application readiness, then exercises crash, timeout, cancellation, and stale-generation recovery. Successful reads record guest CPU time and resident memory, and the corrected report fails closed if those metrics are missing or exceed the declared bounds.
+It captures five nonresident bootstrap samples after independently observing application readiness. It then captures 20 relaunches on each of the six representative screens through the Node-direct route; every timed read is paired with a separate readiness probe for the exact relaunched PID and expected screen anchor. Finally it exercises crash, timeout, cancellation, and stale-generation recovery. Successful reads record guest CPU time and resident memory, and the corrected report fails closed if those metrics are missing or exceed the declared bounds.

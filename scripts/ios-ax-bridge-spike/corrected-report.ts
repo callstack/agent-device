@@ -24,13 +24,14 @@ export function buildCorrectedReport(options: {
   targetedPath: string;
   targeted: TargetedRawArtifact;
 }): CorrectedReport {
-  const readiness = options.source.cells
-    .filter(
-      (cell) =>
-        cell.candidate === 'guest-simulator-framework-bridge' &&
-        (cell.state === 'warm' || cell.state === 'relaunch'),
-    )
-    .map(summarizeLatency);
+  const readiness = [
+    ...options.source.cells
+      .filter(
+        (cell) => cell.candidate === 'guest-simulator-framework-bridge' && cell.state === 'warm',
+      )
+      .map(summarizeLatency),
+    ...summarizeTargetedRelaunch(options.targeted),
+  ];
   const coldDiagnostics = options.source.cells
     .filter(
       (cell) =>
@@ -40,16 +41,17 @@ export function buildCorrectedReport(options: {
     .map(summarizeColdDiagnostic);
   const hierarchy = hierarchyEvidence(options.targeted);
   const hardGates = {
-    warm: latencyGate(readiness, 'warm', 'p50 <300 ms and p95 <500 ms per screen'),
+    warm: latencyGate(readiness, 'warm', 'p50 <300 ms and p95 <500 ms per screen', false),
     relaunch: relaunchGate(readiness, options.targeted),
     nonresidentBootstrap: bootstrapGate(options.targeted),
     boundedResources: resourceGate(options.targeted),
     liveRecovery: recoveryGate(options.targeted),
     hierarchy: hierarchy.gate,
+    preferenceControl: preferenceGate(options.source),
   } as const;
   const failedGates = Object.entries(hardGates).filter(([, gate]) => gate.status === 'FAIL');
   return {
-    schemaVersion: 'ios-simulator-ax-bridge-corrected.v2',
+    schemaVersion: 'ios-simulator-ax-bridge-corrected.v3',
     interpretation: 'maintainer-corrected',
     generatedAt: new Date().toISOString(),
     revision: options.targeted.revision,
@@ -84,6 +86,13 @@ export function buildCorrectedReport(options: {
     liveRecovery: options.targeted.recovery,
     bootstrap: options.targeted.bootstrap,
     hierarchy: hierarchy.value,
+    compatibilityRisk: {
+      interface: 'private-idb-simulator-guest',
+      assessment:
+        'SimulatorFrameworkBridge and its accessibility wire protocol are private idb/Apple implementation details with no compatibility guarantee.',
+      control:
+        'Pin the official idb release and observed guest SHA-256, keep this route Simulator-only behind the acquisition adapter, and re-run this verifier for every idb, Xcode, or Simulator runtime change before production adoption.',
+    },
     productionBoundary: 'no-production-routing-changes',
   };
 }
@@ -150,13 +159,54 @@ function summarizeColdDiagnostic(cell: SpikeCell): CorrectedReport['coldDiagnost
   };
 }
 
+function summarizeTargetedRelaunch(targeted: TargetedRawArtifact): LatencySummary[] {
+  return targeted.config.screens.map((screen) => {
+    const samples = targeted.relaunch.filter((sample) => sample.screen === screen);
+    const readable = samples.filter(
+      (sample) =>
+        sample.response.ok &&
+        sample.response.acquisition !== undefined &&
+        sample.response.acquisition.nodes.length > 0 &&
+        sample.response.acquisition.targetGeneration === `pid:${sample.appPid}`,
+    );
+    const observedGenerations = readable.flatMap((sample) =>
+      observedGeneration(sample.response.acquisition?.targetGeneration),
+    );
+    return {
+      state: 'relaunch',
+      screen,
+      samples: samples.length,
+      readableSamples: readable.length,
+      readinessObservedSamples: readable.filter((sample) => sample.readinessAttempts > 0).length,
+      generationCount: new Set(observedGenerations).size,
+      candidateP50Ms: optionalPercentile(
+        readable.map((sample) => sample.durationMs),
+        50,
+      ),
+      candidateP95Ms: optionalPercentile(
+        readable.map((sample) => sample.durationMs),
+        95,
+      ),
+      preparationP95Ms: optionalPercentile(
+        readable.map((sample) => sample.readinessMs),
+        95,
+      ),
+      firstLookP95Ms: optionalPercentile(
+        readable.map((sample) => sample.readinessMs + sample.durationMs),
+        95,
+      ),
+    };
+  });
+}
+
 function latencyGate(
   readiness: readonly LatencySummary[],
   state: 'warm' | 'relaunch',
   target: string,
+  requireReadiness: boolean,
 ): GateResult {
   const cells = readiness.filter((summary) => summary.state === state);
-  const passed = cells.filter(latencyPassed);
+  const passed = cells.filter((summary) => latencyPassed(summary, requireReadiness));
   return {
     status: cells.length > 0 && passed.length === cells.length ? 'PASS' : 'FAIL',
     target,
@@ -168,19 +218,61 @@ function relaunchGate(
   readiness: readonly LatencySummary[],
   targeted: TargetedRawArtifact,
 ): GateResult {
-  const latency = latencyGate(readiness, 'relaunch', 'p95 <500 ms per representative screen');
-  const observedReadiness = targeted.bootstrap.filter(
-    (sample) =>
-      sample.readinessAttempts > 0 &&
-      sample.response.acquisition?.targetGeneration === `pid:${sample.appPid}`,
+  const latency = latencyGate(
+    readiness,
+    'relaunch',
+    'p95 <500 ms per representative screen with every read paired to its expected generation',
+    true,
   );
-  const readinessPassed =
-    targeted.bootstrap.length === 5 && observedReadiness.length === targeted.bootstrap.length;
+  const complete = readiness
+    .filter((summary) => summary.state === 'relaunch')
+    .every((summary) => summary.samples === targeted.config.samples);
+  const expectedSampleCount = targeted.config.screens.length * targeted.config.samples;
+  const representativeScreens = new Set(targeted.relaunch.map((sample) => sample.screen));
+  const corpusComplete =
+    targeted.relaunch.length === expectedSampleCount &&
+    targeted.config.screens.every((screen) => representativeScreens.has(screen));
   return {
-    status: latency.status === 'PASS' && readinessPassed ? 'PASS' : 'FAIL',
+    status: latency.status === 'PASS' && complete && corpusComplete ? 'PASS' : 'FAIL',
     target: 'p95 <500 ms per screen after independently observed new-generation readiness',
-    evidence: `${latency.evidence}; targeted readiness observed for ${observedReadiness.length}/${targeted.bootstrap.length} clean relaunch samples`,
+    evidence: `${latency.evidence}; ${targeted.relaunch.length}/${expectedSampleCount} Node-direct samples across ${representativeScreens.size}/${targeted.config.screens.length} screens`,
   };
+}
+
+function preferenceGate(source: SpikeReport): GateResult {
+  const evidence = source.preferenceEvidence ?? missingPreferenceEvidence();
+  const changes = evidence.diffs.flatMap((diff) => diff.changes);
+  const required = ['AutomationEnabled', 'IgnoreAXServerEntitlements'];
+  const applied = required.filter((key) => hasEnabledPreference(changes, key));
+  const passed = [evidence.applied, evidence.restored, applied.length === required.length].every(
+    Boolean,
+  );
+  return {
+    status: gateStatus(passed),
+    target: 'task-owned Simulator accessibility preferences applied preboot and restored',
+    evidence: `applied=${String(evidence.applied)}; restored=${String(evidence.restored)}; enabled keys=${applied.join(', ')}; fixture launch compatible=${String(evidence.fixtureLaunchCompatible)}`,
+  };
+}
+
+function missingPreferenceEvidence(): NonNullable<SpikeReport['preferenceEvidence']> {
+  return {
+    applied: false,
+    restored: false,
+    fixtureLaunchCompatible: null,
+    simulatorStateBefore: 'unknown',
+    diffs: [],
+  };
+}
+
+function gateStatus(passed: boolean): GateResult['status'] {
+  return passed ? 'PASS' : 'FAIL';
+}
+
+function hasEnabledPreference(
+  changes: NonNullable<SpikeReport['preferenceEvidence']>['diffs'][number]['changes'],
+  key: string,
+): boolean {
+  return changes.some((change) => change.key === key && change.after === true);
 }
 
 function bootstrapGate(targeted: TargetedRawArtifact): GateResult {
@@ -224,6 +316,7 @@ function recoveryGate(targeted: TargetedRawArtifact): GateResult {
 function resourceGate(targeted: TargetedRawArtifact): GateResult {
   const responses = [
     ...targeted.bootstrap.map((sample) => sample.response),
+    ...targeted.relaunch.map((sample) => sample.response),
     ...targeted.recovery.map((probe) => probe.recoveredResponse),
   ].filter((response) => response.ok);
   const measured = responses.filter(
@@ -338,9 +431,10 @@ function observedGeneration(value: string | null | undefined): readonly string[]
   return typeof value === 'string' ? [value] : [];
 }
 
-function latencyPassed(summary: LatencySummary): boolean {
+function latencyPassed(summary: LatencySummary, requireReadiness: boolean): boolean {
   return [
     summary.readableSamples === summary.samples,
+    !requireReadiness || summary.readinessObservedSamples === summary.samples,
     summary.candidateP50Ms !== null,
     summary.candidateP50Ms !== null && summary.candidateP50Ms < 300,
     summary.candidateP95Ms !== null,

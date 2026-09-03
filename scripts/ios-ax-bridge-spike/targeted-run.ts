@@ -9,8 +9,9 @@ import {
   readTargetedArtifact,
   writeCorrectedReport,
 } from './corrected-report.ts';
-import { GUEST_MECHANISM_EVIDENCE } from './guest-adapter.ts';
+import { readVerifiedGuestMechanism } from './guest-binary.ts';
 import { runTargetedEvidence } from './targeted-evidence.ts';
+import { TARGETED_RELAUNCH_SAMPLES, TARGETED_RELAUNCH_SCREENS } from './targeted-relaunch.ts';
 import { TARGETED_SCHEMA_VERSION, type TargetedRawArtifact } from './corrected-types.ts';
 import { readGitRevision, readTarget, readToolchain } from '../ios-snapshot-benchmark/host.ts';
 
@@ -24,10 +25,19 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 
 async function main(argv: readonly string[]): Promise<void> {
   const config = parseConfig(argv);
+  try {
+    await capture(config);
+  } finally {
+    fs.rmSync(config.stateDir, { recursive: true, force: true });
+  }
+}
+
+async function capture(config: ReturnType<typeof parseConfig>): Promise<void> {
   const revision = readGitRevision(config.repoRoot);
   if (revision.dirty) {
     throw new Error('Targeted bridge evidence must be captured from a clean Git revision.');
   }
+  const guestMechanism = readVerifiedGuestMechanism(config.guestBridge);
   const source = readSpikeReport(SOURCE);
   const evidence = await runTargetedEvidence(config);
   const target = readTarget(config.udid, 'com.callstack.agentdevicelab');
@@ -45,15 +55,16 @@ async function main(argv: readonly string[]): Promise<void> {
     target: { udid: target.udid, name: target.name, runtime: target.runtime },
     toolchain: readToolchain(),
     host: evidence.host,
-    guestMechanism: GUEST_MECHANISM_EVIDENCE,
+    guestMechanism,
     limits: config.limits,
     config: {
       states: ['warm', 'relaunch'],
-      screens: ['quiet', 'list', 'nested-scroll', 'alert', 'system-surface', 'xctest-stress'],
-      samples: 20,
+      screens: TARGETED_RELAUNCH_SCREENS,
+      samples: TARGETED_RELAUNCH_SAMPLES,
       bootstrapSamples: evidence.bootstrap.length,
     },
     bootstrap: evidence.bootstrap,
+    relaunch: evidence.relaunch,
     recovery: evidence.recovery,
   };
   fs.writeFileSync(TARGETED, gzipSync(`${JSON.stringify(artifact)}\n`, { level: 9 }));

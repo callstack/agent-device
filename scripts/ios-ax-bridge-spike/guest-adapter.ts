@@ -1,53 +1,24 @@
 import fs from 'node:fs';
-import net from 'node:net';
-import os from 'node:os';
-import path from 'node:path';
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
-import { DEFAULT_SPIKE_LIMITS, validateRawAcquisition } from './limits.ts';
-import { failureResponse } from './protocol.ts';
-import { processUsageDelta, readGuestProcessSample } from './guest-process-metrics.ts';
+import { GuestConnection, GuestConnectionError, processAlive } from './guest-connection.ts';
+import { processUsageDelta } from './guest-process-metrics.ts';
 import {
   acquisitionFromEnvelope,
   encodeGuestFrame,
   failureFromEnvelope,
-  GuestFrameDecoder,
   guestDescribeRequest,
   GuestWireError,
   isTargetNotReady,
   type GuestEnvelope,
 } from './guest-wire.ts';
+import { DEFAULT_SPIKE_LIMITS, validateRawAcquisition } from './limits.ts';
+import { failureResponse } from './protocol.ts';
 import type { AcquisitionAdapter, AdapterOptions } from './adapter.ts';
-import type {
-  GuestMechanismEvidence,
-  ResourceLimits,
-  SpikeFailure,
-  SpikeRequest,
-  SpikeResponse,
-} from './types.ts';
+import type { ResourceLimits, SpikeFailure, SpikeRequest, SpikeResponse } from './types.ts';
 
 const CANDIDATE = 'guest-simulator-framework-bridge' as const;
-
-/** Idle window after which an orphaned guest ends itself; the host never relies on it for teardown. */
-const GUEST_IDLE_TIMEOUT_SECONDS = 300;
-/** Bounded wait for a target whose accessibility server is still registering (fresh launch). */
 const TARGET_NOT_READY_RETRY_MS = 150;
 const TARGET_NOT_READY_RETRIES = 2;
-const CONNECT_POLL_MS = 15;
-
-export const GUEST_MECHANISM_EVIDENCE: GuestMechanismEvidence = {
-  implementation: 'idb',
-  release: 'v1.5.2',
-  companionArchive: 'idb-companion.macos-arm64.tar.gz',
-  companionSha256: 'f17b718a513931705542a7fbfa9cfc11895ee191562c9ffd2343cf7f8254bc08',
-  guestBinary: 'Resources/SimulatorFrameworkBridge',
-  guestBinarySha256: '3545621d2dc98de32879ebac55e8b0c33dc8eb7cc2bfbc2d0d2d21a002c8de58',
-  transport:
-    'xcrun simctl spawn <udid> SimulatorFrameworkBridge accessibility serve <socket> --idle-timeout 300 --exit-on-disconnect true; UNIX socket frames are a 4-byte big-endian length + JSON',
-  traversal:
-    'describe with snapshotTree=true (one XCTest snapshot fetch per read) and automationMode=true asserted per request; no idb_companion, gRPC, or Python client',
-  client: 'node-direct-socket',
-};
 
 export function createGuestSimulatorFrameworkBridgeAdapter(
   options: AdapterOptions,
@@ -81,49 +52,15 @@ function unavailableAdapter(code: string): AcquisitionAdapter {
   };
 }
 
-class GuestError extends Error {
-  readonly kind: SpikeFailure['kind'];
-  readonly code: string;
-
-  constructor(kind: SpikeFailure['kind'], code: string) {
-    super(`${kind}/${code}`);
-    this.name = 'GuestError';
-    this.kind = kind;
-    this.code = code;
-  }
-}
-
-type Pending = Readonly<{
-  resolve: (frame: Buffer) => void;
-  reject: (error: GuestError) => void;
-}>;
-
-/**
- * One guest `accessibility serve` process per session, spawned into the Simulator's launchd domain
- * through `simctl spawn`, reached over a private UNIX socket, and held for the session. The guest is
- * private to this host (`--exit-on-disconnect`), so dropping the socket is the whole teardown; the
- * next request respawns.
- */
 class GuestSession {
-  private readonly socketPath = path.join(
-    socketDirectory(),
-    `${process.pid.toString(36)}-${Math.random().toString(36).slice(2, 8)}.sock`,
-  );
-  private child?: ChildProcess;
-  private socket?: net.Socket;
-  private decoder = new GuestFrameDecoder();
-  private pending?: Pending;
-  private udid?: string;
-  private log = '';
-  private closed = false;
-  private killNext = false;
-  private serial: Promise<unknown> = Promise.resolve();
-  private readonly bridgePath: string;
+  private readonly connection: GuestConnection;
   private readonly limits: ResourceLimits;
+  private closed = false;
+  private serial: Promise<unknown> = Promise.resolve();
 
   constructor(bridgePath: string, limits: ResourceLimits) {
-    this.bridgePath = bridgePath;
     this.limits = limits;
+    this.connection = new GuestConnection(bridgePath, limits.maxResponseBytes);
   }
 
   acquireBatch(
@@ -137,13 +74,11 @@ class GuestSession {
 
   async close(): Promise<void> {
     this.closed = true;
-    this.dropConnection(new GuestError('cancelled', 'process-closed'));
-    await this.reapChild();
-    fs.rmSync(this.socketPath, { force: true });
+    await this.connection.close();
   }
 
   killGuestOnNextRequestForEvidence(): void {
-    this.killNext = true;
+    this.connection.killOnNextRequest();
   }
 
   private async execute(
@@ -152,12 +87,10 @@ class GuestSession {
   ): Promise<{ responses: readonly SpikeResponse[]; stderr: string }> {
     const responses: SpikeResponse[] = [];
     for (const request of requests) {
-      // Each request carries its own bounds; the deadline is the request's duration budget, so a
-      // caller can shorten one read (the timeout probe) without reshaping the session.
       const deadline = performance.now() + request.limits.maxDurationMs;
       responses.push(await this.acquire(request, deadline, signal));
     }
-    return { responses, stderr: this.takeLog() };
+    return { responses, stderr: this.connection.takeLog() };
   }
 
   private async acquire(
@@ -188,11 +121,14 @@ class GuestSession {
     signal: AbortSignal | undefined,
   ): Promise<SpikeResponse> {
     assertRequestActive(signal, this.closed);
-    const wasConnected = this.socket !== undefined && !this.socket.destroyed;
-    await this.ensureConnected(request.simulatorUdid, deadline, signal);
-    const before = wasConnected ? readGuestProcessSample(this.socketPath) : undefined;
+    const wasConnected = await this.connection.ensureConnected(
+      request.simulatorUdid,
+      deadline,
+      signal,
+    );
+    const before = wasConnected ? this.connection.processSample() : undefined;
     const { envelope, responseBytes } = await this.readWithReadinessRetry(frame, deadline, signal);
-    const resources = processUsageDelta(before, readGuestProcessSample(this.socketPath));
+    const resources = processUsageDelta(before, this.connection.processSample());
     return this.responseFor(request, envelope, {
       requestBytes: frame.length,
       responseBytes,
@@ -207,12 +143,12 @@ class GuestSession {
     deadline: number,
     signal: AbortSignal | undefined,
   ): Promise<{ envelope: GuestEnvelope; responseBytes: number }> {
-    let attempt = await this.roundTrip(frame, deadline, signal);
+    let attempt = await this.connection.roundTrip(frame, deadline, signal);
     for (let retry = 0; retry < TARGET_NOT_READY_RETRIES; retry += 1) {
       if (attempt.envelope.ok === true || !isTargetNotReady(attempt.envelope)) break;
       if (performance.now() + TARGET_NOT_READY_RETRY_MS * 2 > deadline) break;
       await sleep(TARGET_NOT_READY_RETRY_MS);
-      attempt = await this.roundTrip(frame, deadline, signal);
+      attempt = await this.connection.roundTrip(frame, deadline, signal);
     }
     return attempt;
   }
@@ -256,235 +192,17 @@ class GuestSession {
       },
     };
   }
-
-  private async ensureConnected(
-    udid: string,
-    deadline: number,
-    signal: AbortSignal | undefined,
-  ): Promise<void> {
-    if (this.socket && !this.socket.destroyed) {
-      if (this.udid !== udid) throw new GuestError('transport-failure', 'guest-udid-changed');
-      return;
-    }
-    this.udid = udid;
-    this.spawnGuest(udid);
-    this.socket = await this.connect(deadline, signal);
-    this.decoder = new GuestFrameDecoder(this.limits.maxResponseBytes);
-    const socket = this.socket;
-    socket.on('data', (chunk: Buffer) => this.consume(chunk));
-    socket.on('close', () => {
-      if (this.socket === socket) this.socket = undefined;
-      this.failPending(new GuestError('process-crash', 'guest-exited'));
-    });
-    socket.on('error', () => {
-      this.failPending(new GuestError('transport-failure', 'guest-socket-error'));
-    });
-  }
-
-  private spawnGuest(udid: string): void {
-    fs.rmSync(this.socketPath, { force: true });
-    const child = spawn(
-      'xcrun',
-      [
-        'simctl',
-        'spawn',
-        udid,
-        this.bridgePath,
-        'accessibility',
-        'serve',
-        this.socketPath,
-        '--idle-timeout',
-        String(GUEST_IDLE_TIMEOUT_SECONDS),
-        '--exit-on-disconnect',
-        'true',
-      ],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    child.stdout?.on('data', (chunk: Buffer) => this.appendLog(chunk));
-    child.stderr?.on('data', (chunk: Buffer) => this.appendLog(chunk));
-    child.on('error', (error) => this.appendLog(Buffer.from(`${error.message}\n`)));
-    child.on('exit', () => {
-      if (this.child === child) this.child = undefined;
-    });
-    this.child = child;
-  }
-
-  private connect(deadline: number, signal: AbortSignal | undefined): Promise<net.Socket> {
-    return new Promise((resolve, reject) => {
-      const attempt = (): void => {
-        if (signal?.aborted) {
-          this.reapChild();
-          reject(new GuestError('cancelled', 'abort-signal'));
-          return;
-        }
-        if (performance.now() > deadline) {
-          this.reapChild();
-          reject(new GuestError('timeout', 'guest-connect-timeout'));
-          return;
-        }
-        if (!this.child) {
-          reject(new GuestError('transport-failure', 'guest-exited-before-ready'));
-          return;
-        }
-        const socket = net.createConnection(this.socketPath);
-        socket.once('connect', () => {
-          socket.removeAllListeners('error');
-          resolve(socket);
-        });
-        socket.once('error', () => {
-          socket.destroy();
-          setTimeout(attempt, CONNECT_POLL_MS);
-        });
-      };
-      attempt();
-    });
-  }
-
-  private roundTrip(
-    frame: Buffer,
-    deadline: number,
-    signal: AbortSignal | undefined,
-  ): Promise<{ envelope: GuestEnvelope; responseBytes: number }> {
-    return new Promise((resolve, reject) => {
-      const socket = this.socket;
-      if (!socket) {
-        reject(new GuestError('transport-failure', 'guest-not-connected'));
-        return;
-      }
-      const timer = setTimeout(
-        () => this.dropConnection(new GuestError('timeout', 'batch-duration-limit')),
-        Math.max(0, deadline - performance.now()),
-      );
-      const onAbort = (): void => this.dropConnection(new GuestError('cancelled', 'abort-signal'));
-      signal?.addEventListener('abort', onAbort, { once: true });
-      const settle = (): void => {
-        clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
-      };
-      this.pending = {
-        resolve: (body) => {
-          settle();
-          try {
-            resolve({
-              envelope: JSON.parse(body.toString('utf8')) as GuestEnvelope,
-              responseBytes: body.length + 4,
-            });
-          } catch {
-            reject(new GuestError('malformed-tree', 'invalid-json'));
-          }
-        },
-        reject: (error) => {
-          settle();
-          reject(error);
-        },
-      };
-      socket.write(frame);
-      if (this.killNext) {
-        this.killNext = false;
-        killGuestProcesses(this.socketPath);
-      }
-    });
-  }
-
-  private consume(chunk: Buffer): void {
-    let frames: Buffer[];
-    try {
-      frames = this.decoder.push(chunk);
-    } catch (error) {
-      const wire = error instanceof GuestWireError ? error : undefined;
-      this.dropConnection(
-        new GuestError(wire?.kind ?? 'malformed-tree', wire?.code ?? 'frame-limit-exceeded'),
-      );
-      return;
-    }
-    for (const frame of frames) {
-      const pending = this.pending;
-      this.pending = undefined;
-      if (pending) pending.resolve(frame);
-    }
-  }
-
-  private failPending(error: GuestError): void {
-    const pending = this.pending;
-    this.pending = undefined;
-    pending?.reject(error);
-  }
-
-  private dropConnection(error: GuestError): void {
-    this.failPending(error);
-    const socket = this.socket;
-    this.socket = undefined;
-    socket?.destroy();
-    killGuestProcesses(this.socketPath);
-  }
-
-  private async reapChild(): Promise<void> {
-    const child = this.child;
-    if (!child || child.exitCode !== null) return;
-    const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
-    child.kill('SIGTERM');
-    await Promise.race([exited, sleep(1_000)]);
-    if (child.exitCode === null) child.kill('SIGKILL');
-  }
-
-  private appendLog(chunk: Buffer): void {
-    if (this.log.length >= 64 * 1024) return;
-    this.log += chunk.toString('utf8').slice(0, 64 * 1024 - this.log.length);
-  }
-
-  private takeLog(): string {
-    const log = this.log;
-    this.log = '';
-    return log;
-  }
 }
 
-/** A private, owner-only directory beneath the per-user temporary directory keeps `sun_path` short. */
-function socketDirectory(): string {
-  const directory = path.join(os.tmpdir(), 'agent-device-ax');
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  fs.chmodSync(directory, 0o700);
-  if (directory.length + 24 >= 104) {
-    throw new Error(`Socket directory path is too long for a UNIX socket: ${directory}`);
-  }
-  return directory;
-}
-
-/** The guest is parented to launchd_sim, not to this process; it is addressed by its socket argv. */
-function killGuestProcesses(socketPath: string): void {
-  const found = spawnSync('pgrep', ['-f', `accessibility serve ${socketPath}`], {
-    encoding: 'utf8',
-  });
-  for (const line of (found.stdout ?? '').split('\n')) {
-    const pid = Number(line.trim());
-    if (Number.isSafeInteger(pid) && pid > 0) {
-      try {
-        process.kill(pid, 'SIGKILL');
-      } catch {
-        // already gone
-      }
-    }
-  }
-}
-
-function processAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function asGuestError(error: unknown): GuestError {
-  if (error instanceof GuestError) return error;
-  if (error instanceof GuestWireError) return new GuestError(error.kind, error.code);
-  return new GuestError('transport-failure', 'guest-unexpected-error');
+function asGuestError(error: unknown): GuestConnectionError {
+  if (error instanceof GuestConnectionError) return error;
+  if (error instanceof GuestWireError) return new GuestConnectionError(error.kind, error.code);
+  return new GuestConnectionError('transport-failure', 'guest-unexpected-error');
 }
 
 function assertRequestActive(signal: AbortSignal | undefined, closed: boolean): void {
-  if (signal?.aborted) throw new GuestError('cancelled', 'abort-signal');
-  if (closed) throw new GuestError('transport-failure', 'guest-adapter-closed');
+  if (signal?.aborted) throw new GuestConnectionError('cancelled', 'abort-signal');
+  if (closed) throw new GuestConnectionError('transport-failure', 'guest-adapter-closed');
 }
 
 function failedGuestRequest(

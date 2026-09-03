@@ -3,6 +3,14 @@ import os from 'node:os';
 import { performance } from 'node:perf_hooks';
 import { createGuestSimulatorFrameworkBridgeAdapter } from './guest-adapter.ts';
 import type { SpikeConfig } from './config.ts';
+import { runTargetedRelaunch } from './targeted-relaunch.ts';
+import { awaitAppReadiness } from './targeted-readiness.ts';
+import {
+  adapterOptions,
+  missingResponse,
+  targetedRequest,
+  usableTree,
+} from './targeted-request.ts';
 import {
   bootSimulator,
   readRunningAppPids,
@@ -13,20 +21,18 @@ import type { SpikeRequest, SpikeResponse } from './types.ts';
 import type {
   HostLoad,
   TargetedBootstrapSample,
+  TargetedRelaunchSample,
   TargetedRecoveryProbe,
 } from './corrected-types.ts';
 
 const APP_ID = 'com.callstack.agentdevicelab';
 const BOOTSTRAP_SAMPLES = 5;
-const READINESS_POLL_MS = 200;
-const READINESS_DEADLINE_MS = 90_000;
-/** Fixture-owned time: the readiness probe may wait for a slow host without shaping the timed sample. */
-const READINESS_PROBE_REQUEST_MS = 60_000;
 
 type GuestAdapter = ReturnType<typeof createGuestSimulatorFrameworkBridgeAdapter>;
 
 export type TargetedRunResult = Readonly<{
   bootstrap: readonly TargetedBootstrapSample[];
+  relaunch: readonly TargetedRelaunchSample[];
   recovery: readonly TargetedRecoveryProbe[];
   host: HostLoad;
 }>;
@@ -45,6 +51,7 @@ export async function runTargetedEvidence(config: SpikeConfig): Promise<Targeted
     const bootstrap = await runNonresidentBootstrap(config);
     return {
       bootstrap,
+      relaunch: await runTargetedRelaunch(config),
       recovery: await runLiveRecovery(config, bootstrap),
       host: hostLoad(),
     };
@@ -68,18 +75,18 @@ async function captureBootstrap(
   index: number,
 ): Promise<TargetedBootstrapSample> {
   const appPid = await relaunchApp(config.udid);
-  const readiness = await awaitAppReadiness(config, appPid);
+  const readiness = await awaitAppReadiness(config, appPid, 'list');
   await assertNoResidentGuest();
   const adapter = createGuestSimulatorFrameworkBridgeAdapter(adapterOptions(config));
   const started = performance.now();
   const result = await adapter.acquireBatch([
-    request(config, `bootstrap-${index}`, {
+    targetedRequest(config, `bootstrap-${index}`, {
       expectedTargetGeneration: `pid:${appPid}`,
     }),
   ]);
   const durationMs = performance.now() - started;
   await adapter.close?.();
-  const response = result.responses[0] ?? failedResponse(`bootstrap-${index}`);
+  const response = result.responses[0] ?? missingResponse(`bootstrap-${index}`);
   return {
     index,
     durationMs,
@@ -91,53 +98,6 @@ async function captureBootstrap(
     readinessAttempts: readiness.attempts,
     host: hostLoad(),
   };
-}
-
-/** Polls a throwaway bridge until the new app generation answers with a tree, then tears it down. */
-async function awaitAppReadiness(
-  config: SpikeConfig,
-  appPid: number,
-): Promise<{ readinessMs: number; attempts: number }> {
-  const probeLimits = { ...config.limits, maxDurationMs: READINESS_PROBE_REQUEST_MS };
-  const probe = createGuestSimulatorFrameworkBridgeAdapter({
-    ...adapterOptions(config),
-    limits: probeLimits,
-  });
-  const started = performance.now();
-  let attempts = 0;
-  try {
-    for (;;) {
-      assertInsideReadinessDeadline(started, appPid);
-      attempts += 1;
-      if (await probeReadiness(config, probe, probeLimits, appPid, attempts)) {
-        return { readinessMs: performance.now() - started, attempts };
-      }
-      await sleep(READINESS_POLL_MS);
-    }
-  } finally {
-    await probe.close?.();
-  }
-}
-
-async function probeReadiness(
-  config: SpikeConfig,
-  probe: GuestAdapter,
-  limits: SpikeConfig['limits'],
-  appPid: number,
-  attempts: number,
-): Promise<boolean> {
-  const result = await probe.acquireBatch([
-    request(config, `readiness-${appPid}-${attempts}`, {
-      expectedTargetGeneration: `pid:${appPid}`,
-      limits,
-    }),
-  ]);
-  return usableTree(result.responses[0] ?? failedResponse('readiness'));
-}
-
-function assertInsideReadinessDeadline(started: number, appPid: number): void {
-  if (performance.now() - started < READINESS_DEADLINE_MS) return;
-  throw new Error(`App ${APP_ID} (pid ${appPid}) did not expose a readable tree in time.`);
 }
 
 /** A killed guest can linger for a moment while launchd_sim reaps it; wait briefly, then fail closed. */
@@ -171,17 +131,22 @@ async function runLiveRecovery(
   const adapter = createGuestSimulatorFrameworkBridgeAdapter(adapterOptions(config));
   try {
     const probes: TargetedRecoveryProbe[] = [];
-    await adapter.acquireBatch([request(config, 'recovery-prime')]);
+    await adapter.acquireBatch([targetedRequest(config, 'recovery-prime')]);
     adapter.evidence?.terminateReaderOnNextBatch?.();
     probes.push(
-      await recoveryProbe(config, adapter, 'process-crash', request(config, 'recovery-crash')),
+      await recoveryProbe(
+        config,
+        adapter,
+        'process-crash',
+        targetedRequest(config, 'recovery-crash'),
+      ),
     );
     probes.push(
       await recoveryProbe(
         config,
         adapter,
         'timeout',
-        request(config, 'recovery-timeout', {
+        targetedRequest(config, 'recovery-timeout', {
           limits: { ...config.limits, maxDurationMs: 1 },
         }),
       ),
@@ -192,7 +157,7 @@ async function runLiveRecovery(
         config,
         adapter,
         'stale-generation',
-        request(config, 'recovery-stale-generation', {
+        targetedRequest(config, 'recovery-stale-generation', {
           expectedTargetGeneration: `pid:${deadGeneration(bootstrap)}`,
         }),
       ),
@@ -220,7 +185,7 @@ async function recoveryProbe(
   return {
     operation,
     request: probeRequest,
-    response: result.responses[0] ?? failedResponse(probeRequest.id),
+    response: result.responses[0] ?? missingResponse(probeRequest.id),
     recoveredResponse: await healthyResponse(config, adapter, `${probeRequest.id}-recovered`),
   };
 }
@@ -229,7 +194,7 @@ async function cancellationProbe(
   config: SpikeConfig,
   adapter: GuestAdapter,
 ): Promise<TargetedRecoveryProbe> {
-  const probeRequest = request(config, 'recovery-cancelled');
+  const probeRequest = targetedRequest(config, 'recovery-cancelled');
   const controller = new AbortController();
   const pending = adapter.acquireBatch([probeRequest], {
     signal: controller.signal,
@@ -239,7 +204,7 @@ async function cancellationProbe(
   return {
     operation: 'cancelled',
     request: probeRequest,
-    response: result.responses[0] ?? failedResponse(probeRequest.id),
+    response: result.responses[0] ?? missingResponse(probeRequest.id),
     recoveredResponse: await healthyResponse(config, adapter, 'recovery-cancelled-recovered'),
   };
 }
@@ -249,52 +214,8 @@ async function healthyResponse(
   adapter: GuestAdapter,
   id: string,
 ): Promise<SpikeResponse> {
-  const result = await adapter.acquireBatch([request(config, id)]);
-  return result.responses[0] ?? failedResponse(id);
-}
-
-function request(
-  config: SpikeConfig,
-  id: string,
-  overrides: Partial<SpikeRequest> = {},
-): SpikeRequest {
-  return {
-    version: 1,
-    id,
-    candidate: 'guest-simulator-framework-bridge',
-    simulatorUdid: config.udid,
-    state: 'warm',
-    screen: 'list',
-    limits: config.limits,
-    ...overrides,
-  };
-}
-
-function failedResponse(id: string): SpikeResponse {
-  return {
-    version: 1,
-    id,
-    candidate: 'guest-simulator-framework-bridge',
-    ok: false,
-    failure: { kind: 'transport-failure', code: 'missing-response' },
-    metrics: {
-      requestBytes: 0,
-      responseBytes: 0,
-      nodeCount: 0,
-      maxTraversalDepth: 0,
-      cpuMs: null,
-      memoryBytes: null,
-      durationMs: 0,
-    },
-  };
-}
-
-function usableTree(response: SpikeResponse): boolean {
-  return (
-    response.ok === true &&
-    response.acquisition !== undefined &&
-    response.acquisition.nodes.length > 0
-  );
+  const result = await adapter.acquireBatch([targetedRequest(config, id)]);
+  return result.responses[0] ?? missingResponse(id);
 }
 
 /** A fresh app generation: terminate, launch, and wait for exactly one running pid. */
@@ -312,10 +233,6 @@ async function relaunchApp(udid: string): Promise<number> {
     await sleep(100);
   }
   throw new Error(`App ${APP_ID} did not start on ${udid}.`);
-}
-
-function adapterOptions(config: SpikeConfig) {
-  return { guestBridge: config.guestBridge, limits: config.limits };
 }
 
 function hostLoad(): HostLoad {

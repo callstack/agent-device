@@ -121,10 +121,21 @@ export type GuestMechanismEvidence = Readonly<{
   companionArchive: 'idb-companion.macos-arm64.tar.gz';
   companionSha256: string;
   guestBinary: 'Resources/SimulatorFrameworkBridge';
+  guestBinaryExpectedSha256?: string;
   guestBinarySha256: string;
   transport: string;
   traversal: string;
   client: 'node-direct-socket';
+}>;
+
+export type PreferenceEvidence = Readonly<{
+  applied: boolean;
+  restored: boolean;
+  fixtureLaunchCompatible: boolean | null;
+  simulatorStateBefore: string;
+  diffs: readonly Readonly<{
+    changes: readonly Readonly<{ key: string; before?: unknown; after?: unknown }>[];
+  }>[];
 }>;
 
 export type SpikeReport = Readonly<{
@@ -134,4 +145,5 @@ export type SpikeReport = Readonly<{
   toolchain: Toolchain;
   cells: readonly SpikeCell[];
   decisionReasons: readonly string[];
+  preferenceEvidence?: PreferenceEvidence;
 }>;

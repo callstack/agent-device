@@ -6,8 +6,8 @@ import type {
   SpikeResponse,
 } from './types.ts';
 
-const CORRECTED_SCHEMA_VERSION = 'ios-simulator-ax-bridge-corrected.v2' as const;
-export const TARGETED_SCHEMA_VERSION = 'ios-simulator-ax-bridge-targeted.v2' as const;
+const CORRECTED_SCHEMA_VERSION = 'ios-simulator-ax-bridge-corrected.v3' as const;
+export const TARGETED_SCHEMA_VERSION = 'ios-simulator-ax-bridge-targeted.v3' as const;
 
 export type TargetedRevision = SpikeReport['revision'];
 
@@ -34,6 +34,18 @@ export type TargetedRecoveryProbe = Readonly<{
   recoveredResponse: SpikeResponse;
 }>;
 
+export type TargetedRelaunchSample = Readonly<{
+  index: number;
+  screen: SpikeCell['screen'];
+  expectedAnchor: string;
+  appPid: number;
+  readinessMs: number;
+  readinessAttempts: number;
+  durationMs: number;
+  response: SpikeResponse;
+  stderr: string;
+}>;
+
 export type TargetedRawArtifact = Readonly<{
   schemaVersion: typeof TARGETED_SCHEMA_VERSION;
   generatedAt: string;
@@ -56,6 +68,7 @@ export type TargetedRawArtifact = Readonly<{
     bootstrapSamples: number;
   }>;
   bootstrap: readonly TargetedBootstrapSample[];
+  relaunch: readonly TargetedRelaunchSample[];
   recovery: readonly TargetedRecoveryProbe[];
 }>;
 
@@ -103,6 +116,7 @@ export type CorrectedReport = Readonly<{
     boundedResources: GateResult;
     liveRecovery: GateResult;
     hierarchy: GateResult;
+    preferenceControl: GateResult;
   }>;
   coldDiagnostics: readonly Readonly<{
     state: 'cold-cold' | 'cold';
@@ -120,6 +134,11 @@ export type CorrectedReport = Readonly<{
     observedTraversalDepth: number;
     depthComplete: boolean;
     interpretation: 'nested-tree' | 'flat-provider-response' | 'not-observed';
+  }>;
+  compatibilityRisk: Readonly<{
+    interface: 'private-idb-simulator-guest';
+    assessment: string;
+    control: string;
   }>;
   productionBoundary: 'no-production-routing-changes';
 }>;
