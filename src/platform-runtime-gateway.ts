@@ -277,7 +277,11 @@ function providerModeMatchesOwner(
     case 'local-family':
       return mode === 'local' || mode === 'transport-composed';
     case 'managed-local':
-      return mode === 'local';
+      // A managed owner delegates to the device's local family owner (`selectExactOwner`'s
+      // `managed-local` arm loads it through the same `loadLocal`), so it inherits that owner's
+      // provider modes verbatim, transport-composed included. This arm is unreachable until a
+      // managed owner is registered; U3 pins it with a binding regression test.
+      return mode === 'local' || mode === 'transport-composed';
     case 'provider-runtime':
       return mode === 'provider-runtime';
   }
