@@ -8,7 +8,6 @@ import {
 } from '../recording/output-path.ts';
 import { uploadArtifact } from './upload-client.ts';
 import { createStderrUploadProgressReporter, type UploadProgressSink } from './upload-progress.ts';
-import { downloadRemoteArtifactFromUrl } from './artifact-download.ts';
 
 // Mirrors `DEFAULT_TEST_ARTIFACTS_ROOT` in `packages/replay-test/src/internal/session-test-artifacts.ts`
 // (the daemon's own default). Duplicated rather than imported: pulling it from
@@ -418,6 +417,9 @@ type DownloadRemoteArtifactParams = {
 export async function downloadRemoteArtifact(
   params: DownloadRemoteArtifactParams,
 ): Promise<string> {
+  // Remote artifact transfer is not part of routine CLI startup. Keep the HTTP/archive owner out
+  // of the eager command graph and load it only after a remote response names an artifact.
+  const { downloadRemoteArtifactFromUrl } = await import('./artifact-download.ts');
   return await downloadRemoteArtifactFromUrl({
     artifactUrl: new URL(buildDaemonArtifactUrl(params.baseUrl, params.artifactId)),
     token: params.token,

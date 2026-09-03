@@ -141,7 +141,7 @@
     "src/remote/daemon-artifacts.ts#DaemonArtifactEndpoint": "sha256:45226717ac52c0af2a62f74e91549582d95f4a4abc49be87989e026291a88c82",
     "src/remote/daemon-artifacts.ts#DownloadRemoteArtifactParams": "sha256:3ec63be2dbdb542e30b19d1500bc16874607823afb7ae392e92b0b535865859e",
     "src/remote/daemon-artifacts.ts#buildDaemonArtifactUrl": "sha256:06dcde057809b507f70f7bb5cdef9bde6515be84b67e45865cf19e70b8636208",
-    "src/remote/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:a1b12d42904722cca19cba742bc601dd8e11bdf6faa7689624f41a186599e831",
+    "src/remote/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:f3ab09ce387577073ecc5bcd2528963e45f91b2c1e4cc57847c3e2732ccbb300",
     "src/remote/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
     "src/remote/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:6a62429723f52231951ef263950f4b304529bad984ab216b73db1750f58c7f84",
     "src/remote/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:db5c44effc41ff9fa40bd094945e56ac60fac89a42fa68c65c9293e6de6fb1dc",
@@ -187,7 +187,7 @@
     },
     {
       "declaration": "src/remote/daemon-artifacts.ts#downloadRemoteArtifact",
-      "digest": "sha256:a1b12d42904722cca19cba742bc601dd8e11bdf6faa7689624f41a186599e831",
+      "digest": "sha256:f3ab09ce387577073ecc5bcd2528963e45f91b2c1e4cc57847c3e2732ccbb300",
       "rationale": "#2246 selects a file or directory destination once. Directory downloads stage and safely extract beside the destination, propagate timeout cancellation through both operations, and atomically rename the complete top-level entry; returning that local path is client-only state. The GET /artifacts/:id request and response framing, and every existing file artifact call site's behavior, are unchanged."
     },
     {
