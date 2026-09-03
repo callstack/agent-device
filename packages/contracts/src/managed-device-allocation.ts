@@ -8,7 +8,7 @@ import type { JsonObject } from './json.ts';
  * and the foundations implement it only as a scripted fake.
  */
 
-/** The allocator's platform vocabulary; the daemon maps its own device families onto it. */
+/** The allocator's platform vocabulary. */
 export type ManagedLeasePlatform = 'ios' | 'android';
 
 /** A managed shape (ADR 0021 §5). The allocator owns canonical resolution against its catalog. */
@@ -25,21 +25,23 @@ export type ManagedShapeRequest = Readonly<{
  */
 export type ManagedLeaseEnvironmentKey = 'SIMLOCK_IOS_DEVICE_SET' | 'ANDROID_ADB_SERVER_PORT';
 
-/** The typed reach projection of a lease's otherwise opaque environment record. */
+/**
+ * The typed reach projection of a lease's otherwise opaque environment record, and the failure a
+ * grant without its platform's key is. The reader that produces either lands with the unit that
+ * first turns a grant into a device; both names are part of the contract now so that reader
+ * cannot invent a second spelling for them.
+ */
+// fallow-ignore-next-line unused-type
 export type ManagedLeaseEnvironment =
   | Readonly<{ platform: 'ios'; deviceSetPath: string }>
   | Readonly<{ platform: 'android'; adbServerPort: number }>;
 
-/** A grant whose platform scoping key is absent or unparsable is unusable, not merely degraded. */
+// fallow-ignore-next-line unused-type
 export type LeaseEnvironmentError = Readonly<{
   code: 'LEASE_ENVIRONMENT_INVALID';
   platform: ManagedLeasePlatform;
   key: ManagedLeaseEnvironmentKey;
 }>;
-
-export type ManagedLeaseEnvironmentOutcome =
-  | Readonly<{ ok: true; environment: ManagedLeaseEnvironment }>
-  | Readonly<{ ok: false; error: LeaseEnvironmentError }>;
 
 /** One granted managed-device lease. `environment` stays the allocator's raw record. */
 export type ManagedLease = Readonly<{
@@ -150,11 +152,4 @@ export type ManagedDeviceAllocatorPort = Readonly<{
   confirmLeaseActivation(proof: LeaseActivationProof): Promise<void>;
   getManagedIdentityStatus(identity: ManagedIdentityRef): Promise<ManagedIdentityStatus>;
   acknowledgeManagedIdentityRemoval(identity: ManagedIdentityRef): Promise<void>;
-  /**
-   * The one reader of a grant's environment record. It is not a call to the allocator: the record
-   * arrives with the lease, and the platform whose key must be present comes from the request.
-   */
-  readLeaseEnvironment(
-    input: Readonly<{ platform: ManagedLeasePlatform; lease: ManagedLease }>,
-  ): ManagedLeaseEnvironmentOutcome;
 }>;

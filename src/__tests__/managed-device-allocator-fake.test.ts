@@ -2,7 +2,6 @@ import type {
   LeaseRequestInput,
   LeaseRequestStatus,
   ManagedIdentityRef,
-  ManagedLease,
 } from '@agent-device/contracts/managed-device-allocation';
 import { describe, expect, test } from 'vitest';
 import { createScriptedManagedDeviceAllocator } from './test-utils/managed-device-allocator.fixtures.ts';
@@ -87,33 +86,5 @@ describe('scripted managed device allocator', () => {
       { method: 'releaseLease', input: { leaseId: 'lease-1' } },
     ]);
     expect(allocator.calls[0]?.input).toBe(request);
-  });
-
-  test('projects a grant environment and refuses one missing its platform key', () => {
-    const allocator = createScriptedManagedDeviceAllocator();
-    const iosLease = granted.lease as ManagedLease;
-    const androidLease: ManagedLease = {
-      ...iosLease,
-      environment: { ANDROID_ADB_SERVER_PORT: '5038' },
-    };
-
-    expect(allocator.readLeaseEnvironment({ platform: 'ios', lease: iosLease })).toEqual({
-      ok: true,
-      environment: { platform: 'ios', deviceSetPath: '/sets/managed' },
-    });
-    expect(allocator.readLeaseEnvironment({ platform: 'android', lease: androidLease })).toEqual({
-      ok: true,
-      environment: { platform: 'android', adbServerPort: 5038 },
-    });
-    expect(allocator.readLeaseEnvironment({ platform: 'android', lease: iosLease })).toEqual({
-      ok: false,
-      error: {
-        code: 'LEASE_ENVIRONMENT_INVALID',
-        platform: 'android',
-        key: 'ANDROID_ADB_SERVER_PORT',
-      },
-    });
-    // Reading a grant already in hand is not a call to the allocator.
-    expect(allocator.calls).toEqual([]);
   });
 });

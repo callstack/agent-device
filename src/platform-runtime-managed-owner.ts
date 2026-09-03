@@ -25,8 +25,18 @@ type ManagedOperationKey = RuntimeOperationKey<PlatformRuntimeOperations>;
  */
 const WITHHELD_MANAGED_OPERATIONS = [
   {
+    // The two deployment cells belong here for the same reason as the explicit boot cells: both
+    // family deployment runtimes ensure device readiness first, and `deployAppUse` requires
+    // `deployApp` alone, so nothing else would have caught `install` on a managed binding.
     hint: 'Managed-device lifecycle belongs to the allocator.',
-    keys: ['ensureReady', 'bootTarget', 'bootTargetHeadless', 'shutdownTarget'],
+    keys: [
+      'ensureReady',
+      'bootTarget',
+      'bootTargetHeadless',
+      'shutdownTarget',
+      'deployApp',
+      'deployMaterializedApp',
+    ],
   },
   {
     // These four are lifecycle-bearing even though they read as application operations: open
@@ -65,7 +75,12 @@ const WITHHELD_MANAGED_OPERATIONS = [
 /**
  * The exact-only runtime owner for one allocator instance. It owns no mechanics of its own: it
  * binds the device's local family owner, republishes that binding under the managed owner, and
- * withholds every cell whose execution would take device lifecycle away from the allocator.
+ * withholds the cells whose declared work is device lifecycle.
+ *
+ * Withholding cells is not a complete lifecycle exclusion and does not claim to be. Several
+ * retained Apple cells — screenshot capture, settings, clipboard, application launch — boot the
+ * simulator lazily inside the family runtime, where cell selection cannot reach; that is the same
+ * class as the pre-binding readiness path, and closing it is a family-runtime change.
  *
  * It delegates with an ordinary intent because a family owner refuses an exact-owner intent that
  * names anyone but itself. The managed intent's fence is not read here: the device-claim gate owns

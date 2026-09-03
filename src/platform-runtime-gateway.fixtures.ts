@@ -77,6 +77,8 @@ export const MANAGED_WITHHELD_OPERATIONS = [
   'bootTarget',
   'bootTargetHeadless',
   'shutdownTarget',
+  'deployApp',
+  'deployMaterializedApp',
   'prepareApplicationOpen',
   'prepareAppleRunner',
   'closeApplication',

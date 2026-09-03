@@ -306,8 +306,8 @@ Compatibility-engine evidence captured since the most recent mutation; mutation 
 An external adapter that owns a device runtime or contributes transport to a platform module.
 
 **Managed device allocator port**:
-The daemon-owned interface to a managed-device allocator: lease request, lookup, renewal, release,
-identity status, activation confirmation, and removal acknowledgement.
+The daemon-owned interface to a managed-device allocator, covering everything the daemon needs to
+obtain, hold, and give back a managed device.
 _Avoid_: Simlock client, lease provider
 
 **Cloud WebDriver runtime**:

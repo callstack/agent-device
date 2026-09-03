@@ -15,6 +15,7 @@ import {
   shutdownTargetUse,
   type PlatformRuntimeHost,
 } from '@agent-device/contracts/platform-runtime-operations';
+import { deployAppUse } from '@agent-device/contracts/app-deployment-runtime-plan';
 import { describe, expect, test } from 'vitest';
 import { createManagedLocalRuntimeOwner } from './platform-runtime-managed-owner.ts';
 import {
@@ -64,7 +65,7 @@ describe('managed local runtime owner', () => {
     const binding = await owner.bind({ device, intent: exactly(), scope });
 
     // A cell dropped from this list would silently stop being covered by the assertions below.
-    expect(MANAGED_WITHHELD_OPERATIONS).toHaveLength(20);
+    expect(MANAGED_WITHHELD_OPERATIONS).toHaveLength(22);
     for (const key of MANAGED_WITHHELD_OPERATIONS) {
       expect(binding.facts.operations[key]).toMatchObject({
         available: false,
@@ -90,6 +91,8 @@ describe('managed local runtime owner', () => {
     expect(thrownBy(() => narrowDeviceBinding(binding, appStateUse))).toMatchObject(refused);
     expect(thrownBy(() => narrowDeviceBinding(binding, bootTargetUse))).toMatchObject(refused);
     expect(thrownBy(() => narrowDeviceBinding(binding, shutdownTargetUse))).toMatchObject(refused);
+    // `deployAppUse` requires `deployApp` alone, so only the cell itself can refuse `install`.
+    expect(thrownBy(() => narrowDeviceBinding(binding, deployAppUse))).toMatchObject(refused);
   });
 
   test('rewrites the owner, delegates under an ordinary intent, and forwards disposal', async () => {

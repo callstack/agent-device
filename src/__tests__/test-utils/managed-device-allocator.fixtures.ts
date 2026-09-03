@@ -1,16 +1,6 @@
-import type {
-  ManagedDeviceAllocatorPort,
-  ManagedLease,
-  ManagedLeaseEnvironmentKey,
-  ManagedLeaseEnvironmentOutcome,
-  ManagedLeasePlatform,
-} from '@agent-device/contracts/managed-device-allocation';
+import type { ManagedDeviceAllocatorPort } from '@agent-device/contracts/managed-device-allocation';
 
-/** The port's calls to the allocator. `readLeaseEnvironment` reads a grant already in hand. */
-export type ScriptedAllocatorMethod = keyof Omit<
-  ManagedDeviceAllocatorPort,
-  'instanceId' | 'readLeaseEnvironment'
->;
+export type ScriptedAllocatorMethod = keyof Omit<ManagedDeviceAllocatorPort, 'instanceId'>;
 
 export type ScriptedAllocatorCall = Readonly<{
   method: ScriptedAllocatorMethod;
@@ -60,33 +50,5 @@ export function createScriptedManagedDeviceAllocator(
     getManagedIdentityStatus: async (identity) => await next('getManagedIdentityStatus', identity),
     acknowledgeManagedIdentityRemoval: async (identity) =>
       await next('acknowledgeManagedIdentityRemoval', identity),
-    readLeaseEnvironment: ({ platform, lease }) => readLeaseEnvironment(platform, lease),
-  });
-}
-
-function readLeaseEnvironment(
-  platform: ManagedLeasePlatform,
-  lease: ManagedLease,
-): ManagedLeaseEnvironmentOutcome {
-  if (platform === 'ios') {
-    const deviceSetPath = lease.environment.SIMLOCK_IOS_DEVICE_SET;
-    return deviceSetPath === undefined || deviceSetPath.length === 0
-      ? environmentInvalid(platform, 'SIMLOCK_IOS_DEVICE_SET')
-      : Object.freeze({ ok: true, environment: Object.freeze({ platform, deviceSetPath }) });
-  }
-  const raw = lease.environment.ANDROID_ADB_SERVER_PORT;
-  const adbServerPort = raw === undefined ? Number.NaN : Number(raw);
-  return Number.isInteger(adbServerPort) && adbServerPort > 0
-    ? Object.freeze({ ok: true, environment: Object.freeze({ platform, adbServerPort }) })
-    : environmentInvalid(platform, 'ANDROID_ADB_SERVER_PORT');
-}
-
-function environmentInvalid(
-  platform: ManagedLeasePlatform,
-  key: ManagedLeaseEnvironmentKey,
-): ManagedLeaseEnvironmentOutcome {
-  return Object.freeze({
-    ok: false,
-    error: Object.freeze({ code: 'LEASE_ENVIRONMENT_INVALID', platform, key }),
   });
 }
