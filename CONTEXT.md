@@ -9,15 +9,14 @@ architecture notes; implementation decisions and procedures belong in ADRs and t
 
 **Platform family**:
 An internal ownership group for related automation platforms: Apple, Android, HarmonyOS, Vega,
-Linux, or web.
+Linux, web.
 
 **Platform leaf**:
 A concrete OS and device shape within a platform family, classified independently: iOS simulator,
 physical iOS, tvOS, or macOS.
 
 **Platform module**:
-A private package that owns one platform family's device mechanics and exposes its metadata and
-runtime bindings.
+A private package owning one platform family's device mechanics, metadata, and runtime bindings.
 
 **Device inventory gateway**:
 The platform-neutral composition of local-family and provider inventory sources.
@@ -40,7 +39,7 @@ A request-lived attachment of cancellation, diagnostics, progress, and admitted 
 runtime owner.
 
 **Bound device runtime**:
-The behavior-bearing view returned after a request binding proves the required runtime operations.
+The view returned once a request binding proves the required runtime operations.
 
 **Runtime facet**:
 A capability-cohesive interface on a bound device runtime with semantic inputs and typed outcomes.
@@ -50,10 +49,10 @@ A typed claim about behavior available for one exact platform leaf, device or ba
 mode.
 
 **Narrowed bound runtime**:
-A projection that exposes required facets, optional preferred facets, and no undeclared facets.
+A projection exposing required facets, optional preferred facets, and no undeclared facets.
 
 **Host capability**:
-Narrow authority supplied to a platform module for host execution, diagnostics, progress, or native
+Narrow authority given to a platform module for host execution, diagnostics, progress, or native
 assets.
 
 **Target**:
@@ -63,7 +62,7 @@ The selected automation destination, such as mobile, TV, or desktop.
 Daemon-owned state for one selected target and its opened app or surface.
 
 **Device key**:
-A stable provider-scoped identity used for device ownership and contention.
+A stable provider-scoped identity for device ownership and contention.
 
 **Device lease**:
 Logical remote ownership of a selected device for a tenant, run, or client.
@@ -111,18 +110,17 @@ A device-scoped pause on agent mutations during human operation.
 ### Commands and routing
 
 **Command surface**:
-The catalog of public command identity, interface exposure, adapter policy, and shared metadata
-across entrypoints.
+The catalog of public command identity, interface exposure, adapter policy, and metadata across
+entrypoints.
 
 **Runtime use**:
 A command's platform-neutral declaration of required operations and optional preferred fast paths.
 
 **Inventory use**:
-An inventory command's platform-neutral declaration for composing device sources without binding a
-selected device.
+An inventory command's platform-neutral declaration for composing device sources without binding one.
 
 **Daemon command registry**:
-The daemon-side source of truth for route ownership and request-policy traits.
+The daemon-side truth for route ownership and request-policy traits.
 
 **Runner command traits**:
 Per-command classifications controlling Apple runner lifecycle and recovery behavior
@@ -132,8 +130,8 @@ independently of the public command surface.
 The integer used to detect breaking compatibility across the remote daemon boundary.
 
 **Version-skew invariant**:
-Local client and daemon versions must match; compatibility handling is reserved for remote daemons,
-separately versioned helpers, persisted artifacts, and released API consumers.
+Local client and daemon versions must match; only remote daemons, separately versioned helpers,
+persisted artifacts, and released API consumers get compatibility handling.
 
 ### Interactions, selectors, and refs
 
@@ -143,7 +141,7 @@ commands.
 _Avoid_: New or migrated command behavior
 
 **Interaction dispatch path**:
-One concrete route an interaction command takes from a resolved target to device execution.
+One route an interaction command takes from a resolved target to device execution.
 
 **Coordinate-first resolved element activation**:
 An Apple interaction that resolves a semantic element and activates its resolved center point
@@ -164,7 +162,7 @@ A fast path that returns semantic failures to the shared path; it establishes fa
 handling, not success-path parity.
 
 **Parity table**:
-A golden cross-language rule table consumed by both TypeScript and native tests.
+A golden rule table consumed by both TypeScript and native tests.
 
 **Coverage manifest**:
 A contract test's declaration of the guarantee cells it proves.
@@ -174,38 +172,38 @@ The session's authorization namespace for mutating `@ref` targets: a frozen obse
 issuance scope.
 
 **Frame expiry seam**:
-The point immediately before a mutating device operation where the active ref frame becomes invalid.
+The point just before a mutating device operation where the active ref frame becomes invalid.
 
 **Mutation admission**:
-The decision that an active ref frame's epoch and issuance scope authorize a requested ref mutation.
+The decision that an active ref frame's epoch and issuance scope authorize a ref mutation.
 
 **Ref generation pin**:
-An optional `~s<n>` suffix that carries the snapshot generation from which an `@ref` was minted.
+An optional `~s<n>` suffix carrying the snapshot generation an `@ref` was minted from.
 
 **Deferred interaction outcome**:
-Post-response state that records whether a mutation may still need outcome retry, stabilization, or
+Post-response state recording whether a mutation still needs outcome retry, stabilization, or
 snapshot freshness recovery.
 
 **Settled observation**:
-An optional post-action observation that waits for a quiet UI and reports the difference from the
-pre-action tree.
+An optional post-action observation that waits for a quiet UI and diffs against the pre-action
+tree.
 
 **Resolution disclosure**:
-Bounded response evidence describing how an interaction target was resolved without issuing new
-actionable refs.
+Bounded response evidence describing how an interaction target resolved, issuing no new actionable
+refs.
 
 ### Gestures and touch
 
 **Gesture plan**:
-A typed, platform-neutral normalization of one- or two-contact gesture intent into bounded pointer
+Typed, platform-neutral normalization of one- or two-contact gesture intent into bounded pointer
 trajectories.
 
 **Android planned-touch executor**:
-The Android boundary that selects a provider-native or instrumentation-backed executor for a
+The Android boundary selecting a provider-native or instrumentation-backed executor for a
 normalized touch plan.
 
 **Multi-touch geometry**:
-The centroid, span, angle, translation, scale, and rotation used to construct two-contact motion.
+The centroid, span, angle, translation, scale, and rotation that construct two-contact motion.
 
 ### Snapshots and capture
 
@@ -213,14 +211,14 @@ The centroid, span, angle, translation, scale, and rotation used to construct tw
 A backend-owned accessibility value before snapshot presentation.
 
 **Snapshot acquisition**:
-One backend attempt's raw accessibility nodes and attempt-level capture facts.
+One backend attempt's raw AX nodes and attempt-level capture facts.
 
 **Snapshot producer**:
 The acquisition component that produced a snapshot's raw tree; presentation, scope, and geometry
 key on the producer, never on the platform channel alone.
 
 **Presentation options**:
-The policy input controlling how one snapshot acquisition becomes a public projection.
+The policy input turning one snapshot acquisition into a public projection.
 
 **Snapshot policy facet**:
 The host-side owner of neutral snapshot policy (presentation, freshness, timeout, overlay);
@@ -233,11 +231,11 @@ traversal depth kept apart from regular presented depth, and narrowing only wher
 prove it complete.
 
 **Regular presented-depth frontier**:
-The acquisition boundary for an unscoped regular snapshot, measured against regular presented
-depth after structural wrappers collapse.
+The acquisition boundary for an unscoped regular snapshot, measured against regular presented depth
+after structural wrappers collapse.
 
 **Snapshot eligibility**:
-Membership in a presented snapshot projection, independent of whether a node is currently hittable.
+Membership in a presented snapshot projection, independent of current hittability.
 
 **Clip fold**:
 The regular projection's single visibility interpreter, run inside presentation for every
@@ -248,11 +246,11 @@ depth. Platform differences enter as a fold policy, never as a backend exception
 A wire-facing snapshot value produced at the presentation boundary.
 
 **Snapshot capture plan**:
-An ordered set of capture backends executed under one shared wall-clock budget.
+An ordered set of capture backends under one shared wall-clock budget.
 
 **Snapshot quality verdict**:
-A structured statement of capture state, backend, degradation reason, effective depth, and collapsed
-content.
+A structured statement of capture state, backend, degradation reason, effective depth, and
+collapsed content.
 
 **Snapshot projection**:
 A view of one acquired tree. Interactive is a subset of regular, and regular is a subset of raw.
@@ -261,8 +259,7 @@ A view of one acquired tree. Interactive is a subset of regular, and regular is 
 A fidelity limit in acquired evidence that presentation cannot repair and must disclose.
 
 **AX-unavailable target invalidation**:
-The Apple behavior that discards a suspect cached application target after a root accessibility
-failure.
+The Apple behavior that discards a suspect cached application target after a root AX failure.
 
 ### Recording and replay
 
@@ -272,31 +269,30 @@ _Avoid_: Screen recording
 
 **Recorded input parameterization**:
 An explicit fill contract that sends literal text to the live app while storing a caller-chosen
-`${VAR}` placeholder in durable records.
+`${VAR}` placeholder durably.
 
 **Open-to-destination script**:
 A self-contained `.ad` script that opens an app, reaches and verifies a destination, and leaves the
 session active.
 
 **Destination guard**:
-A selector-targeted wait near the end of an open-to-destination script that verifies its ready state.
+A selector-targeted wait near the end of an open-to-destination script verifying its ready state.
 
 **Replay script source bundle**:
-The complete caller-resolved set of script paths and contents needed for one replay or test run.
+The complete caller-resolved set of script paths and contents for one replay or test run.
 
 **Screen-recording facet**:
-A runtime facet that starts video capture and returns a live handle plus a durable descriptor.
+A runtime facet that starts video capture and returns a live handle and durable descriptor.
 
 **Live resource handle**:
-Process-local authority to finish or forcibly dispose active logging, recording, or profiling work.
+Process-local authority to finish or forcibly dispose active logging, recording, or profiling.
 
 **Durable resource descriptor**:
-Bounded, versioned identity and recovery state from which the same runtime owner can reattach to a
-resource.
+Bounded, versioned identity and recovery state from which the same runtime owner can reattach.
 
 **Reattachment**:
-A fenced recovery attempt by the descriptor's exact runtime owner that returns a live handle,
-completed result, missing state, or typed refusal.
+A fenced recovery attempt by the descriptor's exact runtime owner returning a live handle, completed
+result, missing state, or typed refusal.
 
 ### Maestro compatibility
 
@@ -304,7 +300,7 @@ completed result, missing state, or typed refusal.
 A source-preserving typed representation of the supported Maestro Flow syntax and behavior.
 
 **Maestro observation generation**:
-Compatibility-engine evidence captured since the most recent mutation; mutation invalidates it.
+Compatibility-engine evidence since the most recent mutation; mutation invalidates it.
 
 ### Providers and tests
 
@@ -317,11 +313,11 @@ obtain, hold, and give back a managed device.
 _Avoid_: Simlock client, lease provider
 
 **Cloud WebDriver runtime**:
-A provider runtime that maps a cloud-owned Appium or WebDriver session into agent-device inventory,
+A provider runtime mapping a cloud-owned Appium or WebDriver session into agent-device inventory,
 leases, runtime behavior, artifacts, and release.
 
 **Cloud artifact**:
-Provider-hosted session output such as video, automation logs, device logs, or dashboard links.
+Provider-hosted session output: video, automation logs, device logs, or dashboard links.
 
 **Daemon artifact type**:
-An optional semantic category supplied by the owner of a daemon-managed downloadable artifact.
+An optional semantic category from the owner of a daemon-managed downloadable artifact.
