@@ -9,6 +9,7 @@ import type {
   RuntimeFacts,
   RuntimeOperationUnavailability,
   RuntimeOwnerRef,
+  RuntimeProviderMode,
 } from './platform-runtime.ts';
 import { screenshotRuntimeOperationFacts } from './screenshot-runtime.ts';
 import { snapshotRuntimeOperationFacts } from './snapshot-runtime.ts';
@@ -147,7 +148,7 @@ export function createUnavailablePlatformRuntimeFacts(
   return Object.freeze({
     device: {
       ...deviceShape(device),
-      providerMode: owner.kind === 'local-family' ? 'local' : 'provider-runtime',
+      providerMode: providerModeForOwner(owner),
     },
     operations: {
       appLogInspect: appLog,
@@ -237,6 +238,17 @@ export function createUnavailablePlatformRuntimeFacts(
       ...lifecycle,
     },
   });
+}
+
+/** A managed local owner executes through its local family, so it reports the local mode. */
+function providerModeForOwner(owner: RuntimeOwnerRef): RuntimeProviderMode {
+  switch (owner.kind) {
+    case 'local-family':
+    case 'managed-local':
+      return 'local';
+    case 'provider-runtime':
+      return 'provider-runtime';
+  }
 }
 
 function freezeUnavailableFacts(

@@ -10,7 +10,6 @@ import {
 } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { ownerIdentityMatches, readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import { publishFileSync, acquireProcessLock } from '@agent-device/host-kit/file';
 
 import {
@@ -73,11 +72,6 @@ export type DeviceClaimAcquireResult =
 export type TransientDeviceClaimResult =
   | DeviceClaimAcquireResult
   | { status: 'covered-by-owned-claim' };
-
-/** Claim policy follows the admitted runtime owner, never request metadata. */
-export function isLocalDeviceClaimTarget(owner: RuntimeOwnerRef): boolean {
-  return owner.kind === 'local-family';
-}
 
 /**
  * The claim `session` recorded for a command-scoped claim. Claim records carry

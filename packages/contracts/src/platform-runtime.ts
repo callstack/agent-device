@@ -49,6 +49,7 @@ export type RuntimeUse<
 
 export type RuntimeOwnerRef =
   | Readonly<{ kind: 'local-family'; family: Platform }>
+  | Readonly<{ kind: 'managed-local'; instance: string }>
   | Readonly<{ kind: 'provider-runtime'; provider: string; instance: string }>;
 
 export function localRuntimeOwner(family: Platform): RuntimeOwnerRef {
@@ -76,10 +77,32 @@ export function providerRuntimeOwner(
   });
 }
 
+/**
+ * One managed local owner per allocator instance: it executes on a local device the allocator
+ * holds by delegating automation mechanics to the device's platform family, and takes no device
+ * lifecycle. Family-agnostic by design: the device carries its family.
+ */
+export function managedLocalRuntimeOwner(
+  instance: string,
+): Extract<RuntimeOwnerRef, { kind: 'managed-local' }> {
+  const normalizedInstance = instance.trim();
+  if (normalizedInstance.length === 0) {
+    throw new TypeError(
+      'Managed local runtime owner requires a non-empty allocator instance identity',
+    );
+  }
+  return Object.freeze({ kind: 'managed-local', instance: normalizedInstance });
+}
+
 export function runtimeOwnerKey(owner: RuntimeOwnerRef): string {
-  return owner.kind === 'local-family'
-    ? `local:${owner.family}`
-    : `provider:${JSON.stringify([owner.provider, owner.instance])}`;
+  switch (owner.kind) {
+    case 'local-family':
+      return `local:${owner.family}`;
+    case 'managed-local':
+      return `managed:${JSON.stringify([owner.instance])}`;
+    case 'provider-runtime':
+      return `provider:${JSON.stringify([owner.provider, owner.instance])}`;
+  }
 }
 
 export function sameRuntimeOwner(left: RuntimeOwnerRef, right: RuntimeOwnerRef): boolean {
@@ -141,6 +164,75 @@ export type ResourceOwnershipFence = Readonly<{
   token: string;
   generation: number;
 }>;
+
+/** The three identities one managed binding fence carries (ADR 0021). */
+export type ManagedBindingIdentity = Readonly<{
+  requesterId: string;
+  requestGeneration: number;
+  identityIncarnationId: string;
+}>;
+
+/**
+ * The managed binding fence: token = the canonical JSON tuple of requester and identity
+ * incarnation, generation = the request generation. The tuple encoding keeps two requesters on
+ * one identity incarnation apart at every generation, the same way {@link runtimeOwnerKey}
+ * keeps provider instances apart. Both ids are fenced exactly as given: the allocator owns their
+ * form, so a blank id is a `TypeError` rather than an id this function quietly rewrote into one
+ * that fences a different request.
+ */
+export function managedBindingFence(identity: ManagedBindingIdentity): ResourceOwnershipFence {
+  if (
+    !isNonBlankString(identity.requesterId) ||
+    !isNonBlankString(identity.identityIncarnationId) ||
+    !isRequestGeneration(identity.requestGeneration)
+  ) {
+    throw new TypeError(
+      'Managed binding fence requires non-empty requester and identity incarnation ids and a non-negative integer request generation',
+    );
+  }
+  return Object.freeze({
+    token: JSON.stringify([identity.requesterId, identity.identityIncarnationId]),
+    generation: identity.requestGeneration,
+  });
+}
+
+/**
+ * Reads back only what {@link managedBindingFence} encoded: the decoded identity must re-encode
+ * to the very same token, so a capture-style opaque token, a non-canonical JSON encoding, or any
+ * other tuple shape yields null.
+ */
+export function decodeManagedBindingFence(
+  fence: ResourceOwnershipFence,
+): ManagedBindingIdentity | null {
+  const tuple = parseJsonTuple(fence.token);
+  if (!tuple || tuple.length !== 2) return null;
+  const [requesterId, identityIncarnationId] = tuple;
+  if (!isNonBlankString(requesterId) || !isNonBlankString(identityIncarnationId)) return null;
+  if (!isRequestGeneration(fence.generation)) return null;
+  const identity = Object.freeze({
+    requesterId,
+    requestGeneration: fence.generation,
+    identityIncarnationId,
+  });
+  return managedBindingFence(identity).token === fence.token ? identity : null;
+}
+
+function isRequestGeneration(value: number): boolean {
+  return Number.isInteger(value) && value >= 0;
+}
+
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function parseJsonTuple(token: string): unknown[] | null {
+  try {
+    const parsed: unknown = JSON.parse(token);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 export type DeviceBindingIntent =
   | Readonly<{ kind: 'ordinary' }>

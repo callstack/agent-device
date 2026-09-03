@@ -1,35 +1,41 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
+import type {
+  DeviceBindingIntent,
+  RuntimeOwnerRef,
+} from '@agent-device/contracts/platform-runtime';
 import type { DeviceClaimPolicy } from '../core/command-descriptor/types.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { deviceClaimConflictError } from './device-claim-conflict.ts';
+import { requireAllocatorHeldDeviceClaim } from './device-claim-allocator.ts';
+import { allocatorHeldAdmissionError, deviceClaimConflictError } from './device-claim-conflict.ts';
+import { deviceClaimRuleForOwner } from './device-claim-rule.ts';
 import {
   acquireTransientDeviceClaim,
   clearDeviceClaim,
-  isLocalDeviceClaimTarget,
   type DeviceClaimReconciler,
   type DeviceClaimSessionOwnership,
 } from './device-claims.ts';
 
 /**
  * The #1320 claim gate a request passes on its way from a device binding to
- * device operations. It is built from the executing command's declared
- * {@link DeviceClaimPolicy}, so `transient-exclusive` enforcement cannot be
- * forgotten by a handler: there is no other way to obtain device operations.
+ * device operations. The device-claim rule of the admitted owner decides what
+ * happens here, under every policy: an ordinary owner takes a transient claim
+ * only when the executing command's declared {@link DeviceClaimPolicy} is
+ * `transient-exclusive`; a managed local owner is verified against its
+ * allocator-held claim; a provider owner takes nothing. There is no other way
+ * to obtain device operations, so none of it can be forgotten by a handler.
  *
  * `admit` is called once per device binding by the request runtime bindings,
- * which is where per-device deduplication already lives.
+ * which is where per-device deduplication already lives, with the binding
+ * intent the gateway bound.
  */
 export type DeviceClaimAdmission = AsyncDisposable &
   Readonly<{
-    /** Throws `DEVICE_IN_USE` when a foreign live claim owns the device. */
-    admit(device: DeviceInfo, owner: RuntimeOwnerRef): Promise<void>;
+    /**
+     * Throws `DEVICE_IN_USE` when a foreign live claim owns the device and
+     * `COMMAND_FAILED` when a managed local owner has no allocator-held claim.
+     */
+    admit(device: DeviceInfo, owner: RuntimeOwnerRef, intent: DeviceBindingIntent): Promise<void>;
   }>;
-
-const NO_CLAIM_INTERACTION: DeviceClaimAdmission = Object.freeze({
-  admit: async () => {},
-  [Symbol.asyncDispose]: async () => {},
-});
 
 export function createDeviceClaimAdmission(params: {
   policy: DeviceClaimPolicy;
@@ -38,29 +44,43 @@ export function createDeviceClaimAdmission(params: {
   stateDir: string;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
 }): DeviceClaimAdmission {
-  // `none`/`observe`/`require-owner` never read or write the claim store, and
-  // `acquire-session`/`release-session` own the session claim through the open
-  // and close lifecycles instead.
-  if (params.policy !== 'transient-exclusive') return NO_CLAIM_INTERACTION;
-
   // The caller admits once per device binding, so this only has to remember what
   // it took in order to give it back.
   const acquired: DeviceClaimSessionOwnership[] = [];
 
   return {
-    admit: async (device, owner) => {
-      // Remote/provider devices are owned by their provider lease, exactly as
-      // `open` decides through the admitted runtime owner rather than flags.
-      if (!isLocalDeviceClaimTarget(owner)) return;
-      const result = await acquireTransientDeviceClaim({
-        device,
-        command: params.command,
-        workspace: params.workspace,
-        stateDir: params.stateDir,
-        reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
-      });
-      if (result.status === 'conflict') throw deviceClaimConflictError(device, result.conflict);
-      if (result.status === 'acquired') acquired.push(result.ownership);
+    admit: async (device, owner, intent) => {
+      switch (deviceClaimRuleForOwner(owner)) {
+        case 'none':
+          return;
+        case 'allocator-held': {
+          const error = allocatorHeldAdmissionError(
+            device,
+            owner,
+            requireAllocatorHeldDeviceClaim({ device, owner, intent }),
+          );
+          if (error) throw error;
+          return;
+        }
+        case 'ordinary': {
+          // `none`/`observe`/`require-owner` never read or write the claim store,
+          // and `acquire-session`/`release-session` own the session claim through
+          // the open and close lifecycles instead.
+          if (params.policy !== 'transient-exclusive') return;
+          const result = await acquireTransientDeviceClaim({
+            device,
+            command: params.command,
+            workspace: params.workspace,
+            stateDir: params.stateDir,
+            reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
+          });
+          if (result.status === 'conflict') {
+            throw deviceClaimConflictError(device, result.conflict);
+          }
+          if (result.status === 'acquired') acquired.push(result.ownership);
+          return;
+        }
+      }
     },
     [Symbol.asyncDispose]: async () => {
       for (const ownership of acquired.splice(0)) {

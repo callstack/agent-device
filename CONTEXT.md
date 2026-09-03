@@ -27,8 +27,13 @@ The platform-neutral boundary that reports runtime facts and binds an admitted d
 runtime owner.
 
 **Runtime owner**:
-The one local platform module or provider runtime selected to execute behavior for an
-ownership-qualified device.
+The one local platform module, managed local owner, or provider runtime selected to execute
+behavior for an ownership-qualified device.
+
+**Managed local owner**:
+The exact-only runtime owner for an allocator-managed local device; it delegates automation
+mechanics to the device's platform module while device lifecycle stays with the allocator.
+_Avoid_: Managed provider, provider runtime
 
 **Request binding**:
 A request-lived attachment of cancellation, diagnostics, progress, and admitted context to a
@@ -76,6 +81,23 @@ command.
 
 **Device-claim policy**:
 A command's observation, ownership, or exclusive-mutation rule.
+
+**Device-claim rule**:
+The per-owner-kind decision at the claim gate: ordinary, allocator-held, or none.
+_Avoid_: Claim policy, device-claim policy
+
+**Managed binding fence**:
+The ownership fence of one managed binding: requester and identity incarnation as its token,
+request generation as its generation.
+
+**Request generation**:
+The per-requester monotonic number of one allocation attempt on an allocation lane; never shared
+across requesters.
+
+**Identity incarnation**:
+The allocator-issued id of one creation of a managed identity, preserved across Android
+clean-baseline reuse; a fresh iOS identity is a new device with a new incarnation.
+_Avoid_: Request generation
 
 **Human-control hold**:
 A device-scoped pause on agent mutations during human operation.

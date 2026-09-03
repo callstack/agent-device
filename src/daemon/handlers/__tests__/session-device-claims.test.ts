@@ -58,6 +58,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeAuthoringSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  bindManagedLocalLifecycleRuntime,
   bindProviderLifecycleRuntime,
   bindLifecycleRuntime,
   inspectProviderLifecycleRuntimeFacts,
@@ -350,6 +351,43 @@ test('provider-owned open creates no host-local device claim from its selected o
   assert.equal(response.ok, true);
   assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
   assert.equal(store.get('remote-open')?.deviceClaim, undefined);
+});
+
+test('a managed local owner open is refused through the real route and creates no host-local device claim', async () => {
+  const { store, stateDir } = setup();
+  mockResolveTargetDevice.mockResolvedValue(android);
+  mockDispatch.mockResolvedValue(undefined);
+
+  const response = await handleOpenCommand({
+    req: {
+      command: 'open',
+      token: 'test',
+      session: 'managed-open',
+      positionals: ['Demo'],
+      flags: { platform: 'android' },
+    },
+    sessionName: 'managed-open',
+    logPath: path.join(stateDir, 'daemon.log'),
+    sessionStore: store,
+    bindDevice: bindManagedLocalLifecycleRuntime,
+  });
+
+  assert.equal(response.ok, false);
+  if (response.ok) return;
+  // Session open binds ordinarily, and a managed local owner executes only under a managed
+  // binding fence, so the route refuses before it can ask for an allocator-held claim.
+  assert.equal(response.error.code, 'COMMAND_FAILED');
+  assert.equal(response.error.retriable, false);
+  assert.equal(response.error.details?.reason, 'runtime-contract-invalid');
+  assert.equal(response.error.details?.owner, 'managed:["fixture-allocator"]');
+  // No host-local claim, no session, and no device effect precede the refusal.
+  assert.deepEqual(inspectDeviceClaims({}), []);
+  assert.equal(store.get('managed-open'), undefined);
+  assert.equal(mockEnsureDeviceReady.mock.calls.length, 0);
+  assert.equal(mockResolveAndroidPackage.mock.calls.length, 0);
+  assert.equal(mockApplyRuntimeHints.mock.calls.length, 0);
+  assert.equal(vi.mocked(activateAndroidTestIme).mock.calls.length, 0);
+  assert.equal(mockDispatch.mock.calls.length, 0);
 });
 
 test('a foreign live claim rejects open before platform preparation or mutation', async () => {
