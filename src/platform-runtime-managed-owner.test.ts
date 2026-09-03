@@ -65,7 +65,7 @@ describe('managed local runtime owner', () => {
     const binding = await owner.bind({ device, intent: exactly(), scope });
 
     // A cell dropped from this list would silently stop being covered by the assertions below.
-    expect(MANAGED_WITHHELD_OPERATIONS).toHaveLength(22);
+    expect(MANAGED_WITHHELD_OPERATIONS).toHaveLength(27);
     for (const key of MANAGED_WITHHELD_OPERATIONS) {
       expect(binding.facts.operations[key]).toMatchObject({
         available: false,

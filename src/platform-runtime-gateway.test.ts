@@ -32,6 +32,7 @@ import {
   LIFECYCLE_FACETS,
   limrunTestDependencies,
   localFamilyRuntimeFixture,
+  MANAGED_RETAINED_OPERATION,
   providerLifecycleOwnerFixture as providerLifecycleOwner,
   providerRuntimeFixture as providerRuntime,
   runtimeOwnerFixture as runtimeOwner,
@@ -653,7 +654,7 @@ describe('managed local owner registration', () => {
       available: false,
       reason: 'owner-capability-missing',
     });
-    expect(binding.facts.operations.captureScreenshot).toEqual({ available: true });
+    expect(binding.facts.operations[MANAGED_RETAINED_OPERATION]).toEqual({ available: true });
   });
 
   test('leaves ordinary selection on the local family owner while a managed owner is registered', async () => {
@@ -678,12 +679,18 @@ describe('managed local owner registration', () => {
     expect(managedModule.owner).toEqual(managed);
   });
 
-  test('rejects a managed binding whose local facts report a transport-composed device', async () => {
+  // A managed owner delegates to the device's local family owner and inherits its provider mode
+  // verbatim (see the "unlaundered" wrapper test), so it must be admitted the same way an ordinary
+  // local-family binding is: local or transport-composed. Rejecting transport-composed here would
+  // refuse every managed binding over a remote-transport local device (e.g. ADB-over-transport, a
+  // web-provider proxy) as a spurious owner/facts mismatch.
+  test('accepts a managed binding whose local facts report a transport-composed device', async () => {
     const { runtimeGateway } = managedGateway('transport-composed');
 
-    await expect(runtimeGateway.bind({ device, intent: exactly(), scope })).rejects.toMatchObject({
-      details: { reason: 'runtime-contract-invalid' },
-    });
+    const binding = await runtimeGateway.bind({ device, intent: exactly(), scope });
+
+    expect(binding.owner).toEqual(managed);
+    expect(binding.facts.device.providerMode).toBe('transport-composed');
   });
 
   // A second bind resolves only because the managed owner is composed once: a fresh wrapper per

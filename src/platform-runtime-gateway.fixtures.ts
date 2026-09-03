@@ -95,10 +95,15 @@ export const MANAGED_WITHHELD_OPERATIONS = [
   'perfNativeCaptureStart',
   'perfNativeCaptureReattach',
   'perfNativeCaptureCleanup',
+  'captureScreenshot',
+  'setSetting',
+  'readClipboard',
+  'writeClipboard',
+  'openApplication',
 ] as const satisfies readonly RuntimeOperationKey<PlatformRuntimeOperations>[];
 
 /** The one cell the family owner offers that a managed binding keeps. */
-export const MANAGED_RETAINED_OPERATION = 'captureScreenshot';
+export const MANAGED_RETAINED_OPERATION = 'tapPoint';
 
 export type LocalFamilyRuntimeFixture = Readonly<{
   module: PlatformRuntimeModule;

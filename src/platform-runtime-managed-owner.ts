@@ -70,6 +70,16 @@ const WITHHELD_MANAGED_OPERATIONS = [
       'perfNativeCaptureCleanup',
     ],
   },
+  {
+    // Below cell-selection granularity, the Apple family runtime can boot the simulator lazily:
+    // screenshot capture retries through a boot on a shutdown failure, and settings, clipboard and
+    // application launch each resolve a local interactor the same way. Closing that path is a
+    // family-runtime change (the same class as the pre-binding readiness bypass named in "Named
+    // out of scope" below); until then, a managed binding withholds these cells outright rather
+    // than leave an allocator-owned device open to an implicit boot.
+    hint: 'Managed-device lifecycle belongs to the allocator; this cell can lazily boot the device.',
+    keys: ['captureScreenshot', 'setSetting', 'readClipboard', 'writeClipboard', 'openApplication'],
+  },
 ] as const satisfies readonly Readonly<{ hint: string; keys: readonly ManagedOperationKey[] }>[];
 
 /**
@@ -77,10 +87,13 @@ const WITHHELD_MANAGED_OPERATIONS = [
  * binds the device's local family owner, republishes that binding under the managed owner, and
  * withholds the cells whose declared work is device lifecycle.
  *
- * Withholding cells is not a complete lifecycle exclusion and does not claim to be. Several
- * retained Apple cells — screenshot capture, settings, clipboard, application launch — boot the
- * simulator lazily inside the family runtime, where cell selection cannot reach; that is the same
- * class as the pre-binding readiness path, and closing it is a family-runtime change.
+ * Withholding cells is not a complete lifecycle exclusion and does not claim to be. Screenshot
+ * capture, settings, clipboard and application launch are withheld here even though their declared
+ * work is not device lifecycle, because their Apple family-runtime implementations can boot the
+ * simulator lazily below cell-selection granularity. Pre-binding readiness is the same class of
+ * gap, one level up: `session-device-resolution` boots a device through direct simctl/adb before
+ * any binding exists, gated only by provider ownership. Closing both is a family-runtime and
+ * daemon change tracked as a follow-up, not attempted here.
  *
  * It delegates with an ordinary intent because a family owner refuses an exact-owner intent that
  * names anyone but itself. The managed intent's fence is not read here: the device-claim gate owns
