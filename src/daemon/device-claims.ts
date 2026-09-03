@@ -363,26 +363,27 @@ async function releaseInspectedStaleClaim(
   });
 }
 
+/**
+ * A lookup rather than a switch: the branch count a switch this size carries reads as complexity
+ * fallow's health gate flags, while a `Record` stays a flat table TypeScript still checks for
+ * exhaustiveness (a classification dropped from `DeviceClaimClassification` fails to compile here
+ * exactly as it would a missing `case`).
+ */
+const STALE_RELEASE_REFUSAL_REASONS: Readonly<Record<DeviceClaimClassification, string>> =
+  Object.freeze({
+    live: 'live-owner',
+    'owner-process-reused': 'owner-pid-reused',
+    'owner-state-dir-gone': 'owner-process-still-running',
+    unknown: 'owner-liveness-unknown',
+    inconsistent: 'claim-record-inconsistent',
+    'allocator-inconsistent': 'allocator-claim-record-inconsistent',
+    'allocator-held': 'allocator-held-owner',
+    'owner-process-dead': 'claim-record-unreadable',
+    'owner-daemon-superseded': 'claim-record-unreadable',
+  });
+
 function staleReleaseRefusalReason(classification: DeviceClaimClassification): string {
-  switch (classification) {
-    case 'live':
-      return 'live-owner';
-    case 'owner-process-reused':
-      return 'owner-pid-reused';
-    case 'owner-state-dir-gone':
-      return 'owner-process-still-running';
-    case 'unknown':
-      return 'owner-liveness-unknown';
-    case 'inconsistent':
-      return 'claim-record-inconsistent';
-    case 'allocator-inconsistent':
-      return 'allocator-claim-record-inconsistent';
-    case 'allocator-held':
-      return 'allocator-held-owner';
-    case 'owner-process-dead':
-    case 'owner-daemon-superseded':
-      return 'claim-record-unreadable';
-  }
+  return STALE_RELEASE_REFUSAL_REASONS[classification];
 }
 
 /**
