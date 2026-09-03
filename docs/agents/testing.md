@@ -158,13 +158,7 @@ TORTURE_SEED=1234 pnpm test:concurrency-torture
 Lock plans come from the production request-lock decisions — never hand-author a parallel plan. The
 modeled boundary is documented in the harness module; every failure prints its exact replay command.
 
-## Real-subprocess-spawn tests
-
-`SUBPROCESS_STUB_TESTS` in `vitest.config.ts` lists the few files that spawn a real subprocess per
-case. No `subprocess-stub` project exists: since #1823 they run un-serialized in `unit-core`'s
-default forks pool, reverted if a timeout-shaped failure appears within 20 consecutive CI runs.
-Only `fuzz-worker` is serialized (`fileParallelism: false`, `maxWorkers: 1`). Both lists stay out
-of the mutation lane (`SERIALIZED_TESTS`). No unit-test retry layer exists — fix or remove flakes.
+## Test evidence and versioned inputs
 
 Run- or commit-stamped benchmark output is never committed under `scripts/`: produce it at run
 time or fetch it from the evidence branch. Versioned inputs (fuzz corpus, Maestro fixtures,
@@ -172,6 +166,7 @@ schemas, `contracts/fixtures/` tables) are unaffected.
 
 ## Speed rules
 
+- Unit tests have no retry layer. Fix or remove flakes instead of hiding them behind retries.
 - Unit tests do not wait production time. Prefer budget-derived cadence, assert the caller passes
   the right timeout to its tool seam, or use an existing clock seam.
 - Vitest parallelizes files, so wall clock is bounded by the slowest file. Splitting a monolith
