@@ -15,7 +15,7 @@ minimumReleaseAgeExclude:
 overrides:
   undici@7: '^7.29.0'
   brace-expansion@5: '^5.0.9'
-  fast-uri: 3.1.5
+  fast-uri: 3.1.6
   postcss: 8.5.23
   qs: 6.15.2
   react-router: 7.18.2
