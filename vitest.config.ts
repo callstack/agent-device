@@ -4,13 +4,12 @@ import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 
 // Files that spawn a real subprocess per case. They used to run one at a time in
 // their own serialized `subprocess-stub` project so broad file parallelism couldn't
-// starve a spawn past its internal budget and turn it into a generic timeout.
-// #1823 is now running that project's own kill criterion: un-serialized here in
-// `unit-core`'s default forks pool, watched for 20 consecutive CI runs with no
-// timeout-shaped failure. Revert (restore the project, restore this list to
-// unit-core's exclude) the moment one appears. Still excluded from the mutation
-// lane via SERIALIZED_TESTS below regardless of this experiment's outcome —
-// thousands of mutant reruns times a real spawn per case is timeout noise either way.
+// starve a spawn past its internal budget and turn it into a generic timeout. #1823's
+// kill criterion — 20 consecutive CI runs un-serialized in `unit-core`'s default forks
+// pool with no timeout-shaped failure — was met, so the project is gone and these
+// files run un-serialized here. The list still feeds SERIALIZED_TESTS below: a real
+// per-case spawn is timeout noise under thousands of mutant reruns regardless of
+// Vitest's own scheduling, so the mutation lane keeps excluding them.
 const SUBPROCESS_STUB_TESTS: readonly string[] = [
   // Stubs npx plus the package managers and spawns a real Metro dev server per case.
   'src/__tests__/client-metro.test.ts',
@@ -106,8 +105,8 @@ export default defineConfig({
             'src/**/*.test.ts',
             'packages/*/src/**/*.test.ts',
             // The subprocess watchdog self-check (#1823): spawns a real node subprocess per
-            // case, one hangs on purpose (#1414). Formerly a `subprocess-stub` member; see
-            // SUBPROCESS_STUB_TESTS above for the kill-criterion experiment this rides.
+            // case, one hangs on purpose (#1414). Formerly a `subprocess-stub` member,
+            // deleted once its kill criterion was met; see SUBPROCESS_STUB_TESTS above.
             'scripts/fuzz/harness.test.ts',
             // The validation fuzz generators' expectation gates (#1781 B2): in-process, no
             // subprocess or worker, so they ride the fast lane unlike their serialized siblings.
