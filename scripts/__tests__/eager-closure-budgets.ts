@@ -20,8 +20,8 @@
 // - An entry absent at the merge-base: a per-category CEILING (`NEW_ENTRY_CEILINGS`). At or
 //   under it, nothing to write. Over it, one `APPROVED_OVER_CEILING` row naming the issue, the
 //   reason, and an owner; the row records no number, and the merge-base carries the entry from
-//   the next PR on. A row for an entry at or under its ceiling, or one that no longer exists,
-//   is stale and fails.
+//   the next PR on. A row is stale once nothing can read it -- the entry is gone, the merge-base
+//   now carries it, or its closure fits the ceiling -- and a stale row fails.
 //
 // Independent of size, a façade entry's closure must never reach a concrete platform
 // implementation (`PLATFORM_IMPLEMENTATION_PATTERNS`) before discovery or binding selects an

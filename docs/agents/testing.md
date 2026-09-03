@@ -176,10 +176,6 @@ schemas, `contracts/fixtures/` tables) are unaffected.
 - Test files over 1,000 lines may be no longer than at the merge-base with `origin/main`, and no
   new test file may cross that line. Split the family before adding tests; shrinking needs no
   gate edit.
-- Package entry surfaces and the designated hub modules may not evaluate more repo modules on
-  import than at the merge-base with `origin/main` (`scripts/__tests__/eager-closure-budgets.ts`);
-  a first-introduced entry fits a per-category ceiling, and a platform façade stays at exactly
-  one module. Shrinking needs no gate edit; growth means moving an import behind `await import`.
 - Keep isolation enabled and the pool on forks — both were measured and did not help. The useful
   optimization is importing the module under test, not a platform barrel.
 - Local Vitest runs use a four-worker cap. Override it when a run needs a different host share:

@@ -125,10 +125,16 @@ const workingTreeReader: SourceTreeReader = {
   readFile: (file) => fs.readFileSync(file, 'utf8'),
 };
 
+/**
+ * `.ts` only, matching what the repo counts as a production source: `tracked-sources.ts` scans
+ * `.ts` pathspecs and `isProductionSourceFile` accepts `.ts`, so a `.tsx` file under a walked root
+ * is invisible to every layering scan. Resolving one here would only produce an edge the committed
+ * tree reader cannot read, which crashes the ratchet instead of failing it.
+ */
 function resolveRelative(from: string, specifier: string, tree: SourceTreeReader): string | null {
   const candidate = path.resolve(path.dirname(from), specifier);
   if (tree.isFile(candidate)) return candidate;
-  for (const suffix of ['.ts', '.tsx', '/index.ts']) {
+  for (const suffix of ['.ts', '/index.ts']) {
     if (tree.exists(`${candidate}${suffix}`)) return `${candidate}${suffix}`;
   }
   return null;

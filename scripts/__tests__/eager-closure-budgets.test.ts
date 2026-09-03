@@ -406,13 +406,18 @@ test.for(introduced)(
 );
 
 test('no APPROVED_OVER_CEILING row is stale', () => {
+  // Only a first-introduced entry consults a ceiling. Once the merge-base carries the entry, the
+  // no-growth rule governs it and nothing reads the row again, so a carried entry's row is stale
+  // for the same reason a shrunk one is: it can no longer change any verdict.
+  const introducedById = new Map(introduced.map((entry) => [entry.entryFile, entry]));
   const stale = Object.keys(APPROVED_OVER_CEILING).filter((id) => {
-    const entry = entries.find((candidate) => candidate.entryFile === id);
+    const entry = introducedById.get(id);
     return !entry || eagerClosureGraphOf(absolute(id)).size <= NEW_ENTRY_CEILINGS[entry.category];
   });
   expect(
     stale,
-    'These approvals name an entry that no longer exists or now fits its ceiling: remove the rows.',
+    'These approvals name an entry that no longer exists, that the merge-base now carries, or ' +
+      'that now fits its ceiling: remove the rows.',
   ).toEqual([]);
 });
 
