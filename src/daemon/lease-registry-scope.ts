@@ -133,7 +133,7 @@ export function normalizeRequiredLeaseId(raw: string | undefined): string {
 export function normalizeLeaseBackend(raw: string | undefined): LeaseBackend {
   const value = (raw ?? '').trim().toLowerCase();
   if (!value || value === 'ios-simulator') return 'ios-simulator';
-  if (value === 'ios-instance' || value === 'android-instance') return value;
+  if (value === 'ios-instance' || value === 'android-instance' || value === 'harmonyos-instance') return value;
   throw new AppError('INVALID_ARGS', `Unsupported lease backend: ${raw ?? ''}`);
 }
 

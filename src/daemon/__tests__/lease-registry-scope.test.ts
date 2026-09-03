@@ -4,8 +4,13 @@ import {
   createLeaseTtlResolver,
   leaseDeviceBindingKey,
   normalizeAllocateLeaseRequest,
+  normalizeLeaseBackend,
 } from '../lease-registry-scope.ts';
 import { HUMAN_CONTROL_LEASE_REQUEST, HUMAN_CONTROL_SCOPE } from './human-control-fixtures.ts';
+
+test('normalizeLeaseBackend accepts HarmonyOS instance backend', () => {
+  assert.equal(normalizeLeaseBackend('harmonyos-instance'), 'harmonyos-instance');
+});
 
 test('allocation and human control share the exact contention identity', () => {
   const scope = normalizeAllocateLeaseRequest(HUMAN_CONTROL_LEASE_REQUEST);

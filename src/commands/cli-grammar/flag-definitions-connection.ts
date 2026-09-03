@@ -105,8 +105,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     key: 'leaseBackend',
     names: ['--lease-backend'],
     type: 'enum',
-    enumValues: ['ios-simulator', 'ios-instance', 'android-instance'],
-    usageLabel: '--lease-backend ios-simulator|ios-instance|android-instance',
+    enumValues: ['ios-simulator', 'ios-instance', 'android-instance', 'harmonyos-instance'],
+    usageLabel: '--lease-backend ios-simulator|ios-instance|android-instance|harmonyos-instance',
     usageDescription: 'Lease backend for remote tenant connection admission',
   },
   {

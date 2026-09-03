@@ -34,7 +34,9 @@ import {
   materializeRemoteConnectionForCommand,
   CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS,
   PROXY_REMOTE_LEASE_TTL_MS,
+  resolveRequestedLeaseBackend,
 } from '../cli/commands/connection-runtime.ts';
+
 import { stopMetroCompanion } from '../metro/client-metro-companion.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -44,6 +46,15 @@ import {
   writeRemoteConnectionState,
 } from '../remote/remote-connection-state.ts';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
+
+test('HarmonyOS platform resolves to its proxy lease backend', () => {
+  assert.equal(
+    resolveRequestedLeaseBackend(
+      forceConnectFlags({ stateDir: '/tmp/agent-device', remoteConfig: '/tmp/remote.json', platform: 'harmonyos' }),
+    ),
+    'harmonyos-instance',
+  );
+});
 
 afterEach(() => {
   vi.clearAllMocks();

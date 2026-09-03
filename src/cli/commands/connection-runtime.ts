@@ -689,6 +689,7 @@ export function resolveRequestedLeaseBackend(flags: CliFlags): LeaseBackend | un
   if (flags.leaseBackend) return flags.leaseBackend;
   if (flags.platform === 'android') return 'android-instance';
   if (flags.platform === 'ios') return 'ios-instance';
+  if (flags.platform === 'harmonyos') return 'harmonyos-instance';
   return undefined;
 }
 
@@ -697,7 +698,7 @@ function requireRequestedLeaseBackend(flags: CliFlags, command: string): LeaseBa
   if (leaseBackend) return leaseBackend;
   throw new AppError(
     'INVALID_ARGS',
-    `${command} requires --platform ios|android or --lease-backend when the remote connection has not resolved a lease yet.`,
+    `${command} requires --platform ios|android|harmonyos or --lease-backend when the remote connection has not resolved a lease yet.`,
   );
 }
 
@@ -733,7 +734,11 @@ function isRuntimeCompatibleWithPlatform(
   runtime: SessionRuntimeHints,
   platform: CliFlags['platform'],
 ): boolean {
-  if (!runtime.platform || !platform || (platform !== 'ios' && platform !== 'android')) {
+  if (
+    !runtime.platform ||
+    !platform ||
+    (platform !== 'ios' && platform !== 'android' && platform !== 'harmonyos')
+  ) {
     return true;
   }
   return runtime.platform === platform;
@@ -931,6 +936,7 @@ function buildProxyDeviceKey(device: DeviceInfo): string {
 function leaseBackendForDevice(device: DeviceInfo): LeaseBackend | undefined {
   if (isIosFamily(device)) return 'ios-instance';
   if (device.platform === 'android') return 'android-instance';
+  if (device.platform === 'harmonyos') return 'harmonyos-instance';
   return undefined;
 }
 

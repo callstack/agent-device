@@ -18,16 +18,16 @@
     "packages/kernel/src/contracts.ts#DaemonResponseData": "sha256:f16e61b7f0ea8cdae82349508383af2f97a4c16c8aa21952d833094673f86afc",
     "packages/kernel/src/contracts.ts#JsonRpcId": "sha256:5a5fdff1cd85971214117d69a8278d0ecaf21a6fa3f4582155d9b3d9cad1fbd0",
     "packages/kernel/src/contracts.ts#JsonRpcRequestEnvelope": "sha256:d6328309fc4f8b310b88680181e46c802329de9b0e45682dd2e0f0c3e8d090e4",
-    "packages/kernel/src/contracts.ts#LEASE_BACKENDS": "sha256:9fb296dcfd56556e4dd020bcb40f3b70890b274600e634aa2c380d860b38c022",
+    "packages/kernel/src/contracts.ts#LEASE_BACKENDS": "sha256:6bec996666d1043a8d23e60d5b1e50ef9341909a02f19060a3132bb72dcc3155",
     "packages/kernel/src/contracts.ts#LeaseBackend": "sha256:dce397343cda82ce4e3e43b534b1f642cd37568ed304f4783caddc3524c1cae5",
     "packages/kernel/src/contracts.ts#RESPONSE_LEVELS": "sha256:cef29c3b56c299e35a7fee8058b90dc4a6f65a46a420e4f11f77c8ca7d0359c8",
     "packages/kernel/src/contracts.ts#ResponseCost": "sha256:2a44de54e8b5c886b36da1500e22d634ec7e12961d2c93b689d2b1aa8c15f186",
     "packages/kernel/src/contracts.ts#ResponseLevel": "sha256:c7329d28e745b5e69b86aa1a686befa314b98248afbe5e0e2d7d395f0d777f9b",
     "packages/kernel/src/contracts.ts#SESSION_ISOLATION_MODES": "sha256:3d4b3048e22bb0ceccc98cf8fd93a87a1a1e2dad96fa03cffff6d0ecedb58689",
     "packages/kernel/src/contracts.ts#SessionIsolationMode": "sha256:beea941fe57b000902da28af15a27aa18d0c957408209e3ec372fcf7f605fa7c",
-    "packages/kernel/src/contracts.ts#SessionRuntimeHints": "sha256:6b945688ad5ab68370ec001d962974e1397c39d47c6f7ca2a65b03f5ccdd91c6",
+    "packages/kernel/src/contracts.ts#SessionRuntimeHints": "sha256:7e055a99bc6adbb3efc37b0691055f5370f35f8b96ae6af73295ccce61e05dfe",
     "packages/kernel/src/contracts.ts#commandRpcParamsSchema": "sha256:d0ce05c236ce5b0b52631ab7b8a75d38859fbfba58cfb28dd3f9d84f2dba2c1f",
-    "packages/kernel/src/contracts.ts#daemonRuntimeSchema": "sha256:010c171164ce9516e1c1b00e89e698a11842ff9c3bac3f2e8e3814de7c8be78c",
+    "packages/kernel/src/contracts.ts#daemonRuntimeSchema": "sha256:859eabaf6679d117feb2b4873b6ac69731cc06989645080817d39c43a24deea5",
     "packages/kernel/src/contracts.ts#jsonRpcRequestSchema": "sha256:67e6b8a28b39a3883424a565ae7033c336dc2ea6b193e9b32bb98eb3e18dca7c",
     "packages/kernel/src/device.ts#PLATFORM_SELECTORS": "sha256:36e9da1cc660c0ddfb4cf52521f7f230341ff20e3ebda3405ba7c1799476c42d",
     "packages/kernel/src/device.ts#PlatformSelector": "sha256:61de3f003507ea2f53b396b0146c17670bf674a2db2132e19c462ca6c10cc8fd",
@@ -227,6 +227,21 @@
       "declaration": "src/daemon/client/daemon-client-rpc.ts#appErrorFromDaemonError",
       "digest": "sha256:ac4761006c71d93ccba9f8e37cbd4cf48283dbb22737c163dc9c1a878e154eea",
       "rationale": "#1862 client-side only: this rehydrates the new optional structured `cause` when present. Released daemons that omit it follow the unchanged path, and no request field or existing response field is narrowed."
+    },
+    {
+      "declaration": "packages/kernel/src/contracts.ts#LEASE_BACKENDS",
+      "digest": "sha256:6bec996666d1043a8d23e60d5b1e50ef9341909a02f19060a3132bb72dcc3155",
+      "rationale": "#2266 adds the additive harmonyos-instance lease backend literal. Protocol-2 peers ignore the new backend unless explicitly requested; existing iOS/Android values and payloads remain unchanged."
+    },
+    {
+      "declaration": "packages/kernel/src/contracts.ts#SessionRuntimeHints",
+      "digest": "sha256:7e055a99bc6adbb3efc37b0691055f5370f35f8b96ae6af73295ccce61e05dfe",
+      "rationale": "#2266 adds the optional HarmonyOS platform value to runtime hints. Existing iOS/Android hints retain their shape and released peers can ignore the additive value."
+    },
+    {
+      "declaration": "packages/kernel/src/contracts.ts#daemonRuntimeSchema",
+      "digest": "sha256:859eabaf6679d117feb2b4873b6ac69731cc06989645080817d39c43a24deea5",
+      "rationale": "#2266 broadens runtime-hint validation to accept the additive HarmonyOS platform value; existing protocol-2 runtime hints remain valid and unchanged."
     }
   ]
 }
