@@ -118,6 +118,8 @@ const ADMITTED_BY_OUTCOME_STATUS: Readonly<Record<AllocatorHeldClaimAdmission['s
   {
     'binding-invalid': false,
     missing: false,
+    covered: true,
+    'incarnation-stale': false,
     conflict: false,
   };
 
@@ -126,6 +128,8 @@ test('every allocator-held verifier outcome is decided, and none of them is deci
   const outcomes: readonly AllocatorHeldClaimAdmission[] = [
     { status: 'binding-invalid' },
     { status: 'missing' },
+    { status: 'covered' },
+    { status: 'incarnation-stale', heldIncarnationId: 'inc-1' },
     { status: 'conflict', conflict: conflict('live') },
   ];
 
