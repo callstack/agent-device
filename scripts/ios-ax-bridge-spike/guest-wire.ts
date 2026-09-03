@@ -12,8 +12,8 @@ import type {
  * length prefix followed by one JSON object; the guest answers `{ ok, tree | error, error_kind, pid,
  * truncated, phases, automation }`.
  */
-export const GUEST_FRAME_HEADER_BYTES = 4;
-export const GUEST_MAX_FRAME_BYTES = 16 * 1024 * 1024;
+const GUEST_FRAME_HEADER_BYTES = 4;
+const GUEST_MAX_FRAME_BYTES = 16 * 1024 * 1024;
 
 const ATTRIBUTE = {
   elementType: 'XC_kAXXCAttributeElementType',
@@ -207,12 +207,12 @@ export function guestDescribeRequest(
   };
 }
 
-export function guestErrorKind(envelope: GuestEnvelope): GuestErrorKind | undefined {
+function guestErrorKind(envelope: GuestEnvelope): GuestErrorKind | undefined {
   const kind = envelope.error_kind;
   return typeof kind === 'string' ? (kind as GuestErrorKind) : undefined;
 }
 
-export function guestErrorText(envelope: GuestEnvelope): string {
+function guestErrorText(envelope: GuestEnvelope): string {
   return typeof envelope.error === 'string' ? envelope.error : '';
 }
 

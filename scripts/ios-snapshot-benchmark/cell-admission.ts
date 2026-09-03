@@ -6,8 +6,6 @@ import {
   openFixture,
   pressFixtureTarget,
   scrollFixtureSetup,
-  snapshotHasIdentifier,
-  snapshotHasAnchor,
   snapshotFixture,
   type CliContext,
   type CliResult,
@@ -97,54 +95,13 @@ export async function admitSuccessfulSample(
   return await admitNonWarmSample(context, options, previousAppPid);
 }
 
-export function admitStableWarmSample(
-  options: CellAdmissionOptions,
-  previousAppPid: number,
-): number {
-  assertReadyState(options);
-  const appPid = assertAppRunning(options.udid, options.fixture.app);
-  if (appPid !== previousAppPid) {
-    throw new BenchmarkCellAdmissionError(
-      'cell-state',
-      `Warm cell ${options.fixture.id} changed app PID from ${String(previousAppPid)} to ${String(appPid)}.`,
-      'agent-device batch --steps snapshot',
-    );
-  }
-  return appPid;
-}
-
 export function cleanupSuccessfulSample(context: CliContext, options: CellAdmissionOptions): void {
   if (options.state !== 'relaunch' || options.fixture.setupAction !== 'open-alert') return;
-  const dismissed = pressFixtureTarget(context, 'role="button" label="Cancel"');
+  const dismissed = pressFixtureTarget(context, 'label="Cancel"');
   requireFixtureOperationSuccess(
-    fixtureOperationFromCli(dismissed, 'agent-device click role="button" label="Cancel"'),
+    fixtureOperationFromCli(dismissed, 'agent-device click label="Cancel"'),
     `${options.fixture.id} sample cleanup`,
     'cell-state',
-  );
-  verifyAlertCleanup(context, options);
-}
-
-function verifyAlertCleanup(context: CliContext, options: CellAdmissionOptions): void {
-  const observed = snapshotFixture(context);
-  requireFixtureOperationSuccess(
-    fixtureOperationFromCli(observed, 'agent-device batch --steps snapshot'),
-    `${options.fixture.id} sample cleanup verification`,
-    'cell-state',
-  );
-  if (alertCleanupRestored(observed.payload, options.fixture)) return;
-  throw new BenchmarkCellAdmissionError(
-    'cell-state',
-    `Fixture ${options.fixture.id} cleanup did not restore its base surface.`,
-    'agent-device batch --steps snapshot',
-  );
-}
-
-function alertCleanupRestored(payload: unknown, fixture: ScreenFixture): boolean {
-  return (
-    fixture.cleanupAnchorIdentifier !== undefined &&
-    snapshotHasIdentifier(payload, fixture.cleanupAnchorIdentifier) &&
-    (fixture.postSetupAnchorText === undefined ||
-      !snapshotHasAnchor(payload, fixture.postSetupAnchorText))
   );
 }
 

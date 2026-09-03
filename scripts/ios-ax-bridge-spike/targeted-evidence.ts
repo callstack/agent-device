@@ -1,25 +1,15 @@
-import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import fs from 'node:fs';
 import os from 'node:os';
 import { performance } from 'node:perf_hooks';
 import { createGuestSimulatorFrameworkBridgeAdapter } from './guest-adapter.ts';
-import { createAdapterOptions } from './runner.ts';
 import type { SpikeConfig } from './config.ts';
-import {
-  applyPrebootPreferences,
-  readSimulatorState,
-  restorePrebootPreferences,
-  simulatorPreferencePaths,
-} from './preferences.ts';
-import { initialPreferenceEvidence } from './preference-experiment.ts';
 import {
   bootSimulator,
   readRunningAppPids,
   shutdownSimulator,
   terminateApp,
 } from '../ios-snapshot-benchmark/lifecycle.ts';
-import type { PreferenceEvidence, SpikeRequest, SpikeResponse } from './types.ts';
+import type { SpikeRequest, SpikeResponse } from './types.ts';
 import type {
   HostLoad,
   TargetedBootstrapSample,
@@ -38,14 +28,7 @@ type GuestAdapter = ReturnType<typeof createGuestSimulatorFrameworkBridgeAdapter
 export type TargetedRunResult = Readonly<{
   bootstrap: readonly TargetedBootstrapSample[];
   recovery: readonly TargetedRecoveryProbe[];
-  preferenceEvidence: PreferenceEvidence;
   host: HostLoad;
-  simulator: Readonly<{
-    finalState: string;
-    accessibilityPlistSha256: string | null;
-    automationEnabledBefore: unknown;
-    automationEnabledAfter: unknown;
-  }>;
 }>;
 
 /**
@@ -54,47 +37,20 @@ export type TargetedRunResult = Readonly<{
  * Boundary: the Simulator is booted and the fixture app is relaunched for every bootstrap sample.
  * App readiness is *observed*, not assumed from a pid: a throwaway probe bridge polls until the new
  * app generation answers with a tree, then is torn down, so the timed sample starts with no resident
- * bridge and a ready app. Automation mode is asserted per request by the guest; the preboot plist
- * experiment runs only when `--apply-preferences` is passed.
+ * bridge and a ready app. Automation mode is asserted per request by the guest.
  */
 export async function runTargetedEvidence(config: SpikeConfig): Promise<TargetedRunResult> {
-  const applied = config.applyPreferences ? applyPreferencesWhileShutdown(config.udid) : undefined;
-  let restored = false;
-  let bootstrap: readonly TargetedBootstrapSample[] = [];
-  let recovery: readonly TargetedRecoveryProbe[] = [];
-  const automationEnabledBefore = readAutomationEnabled(config.udid);
+  bootSimulator(config.udid);
   try {
-    bootSimulator(config.udid);
-    bootstrap = await runNonresidentBootstrap(config);
-    recovery = await runLiveRecovery(config, bootstrap);
+    const bootstrap = await runNonresidentBootstrap(config);
+    return {
+      bootstrap,
+      recovery: await runLiveRecovery(config, bootstrap),
+      host: hostLoad(),
+    };
   } finally {
-    if (applied) {
-      shutdownSimulator(config.udid);
-      restored = restorePrebootPreferences(config.udid, applied.snapshots);
-    } else if (!config.keepDevice) {
-      shutdownSimulator(config.udid);
-    }
+    if (!config.keepDevice) shutdownSimulator(config.udid);
   }
-  const preferenceEvidence = applied
-    ? { ...applied.evidence, restored }
-    : initialPreferenceEvidence(config.udid);
-  return {
-    bootstrap,
-    recovery,
-    preferenceEvidence,
-    host: hostLoad(),
-    simulator: {
-      finalState: readSimulatorState(config.udid),
-      accessibilityPlistSha256: hashFile(simulatorPreferencePaths(config.udid)[0]!),
-      automationEnabledBefore,
-      automationEnabledAfter: readAutomationEnabled(config.udid),
-    },
-  };
-}
-
-function applyPreferencesWhileShutdown(udid: string): ReturnType<typeof applyPrebootPreferences> {
-  shutdownSimulator(udid);
-  return applyPrebootPreferences(udid);
 }
 
 async function runNonresidentBootstrap(
@@ -114,7 +70,7 @@ async function captureBootstrap(
   const appPid = await relaunchApp(config.udid);
   const readiness = await awaitAppReadiness(config, appPid);
   await assertNoResidentGuest();
-  const adapter = createGuestSimulatorFrameworkBridgeAdapter(createAdapterOptions(config));
+  const adapter = createGuestSimulatorFrameworkBridgeAdapter(adapterOptions(config));
   const started = performance.now();
   const result = await adapter.acquireBatch([
     request(config, `bootstrap-${index}`, {
@@ -144,21 +100,16 @@ async function awaitAppReadiness(
 ): Promise<{ readinessMs: number; attempts: number }> {
   const probeLimits = { ...config.limits, maxDurationMs: READINESS_PROBE_REQUEST_MS };
   const probe = createGuestSimulatorFrameworkBridgeAdapter({
-    ...createAdapterOptions(config),
+    ...adapterOptions(config),
     limits: probeLimits,
   });
   const started = performance.now();
   let attempts = 0;
   try {
-    while (performance.now() - started < READINESS_DEADLINE_MS) {
+    for (;;) {
+      assertInsideReadinessDeadline(started, appPid);
       attempts += 1;
-      const result = await probe.acquireBatch([
-        request(config, `readiness-${appPid}-${attempts}`, {
-          expectedTargetGeneration: `pid:${appPid}`,
-          limits: probeLimits,
-        }),
-      ]);
-      if (usableTree(result.responses[0] ?? failedResponse('readiness'))) {
+      if (await probeReadiness(config, probe, probeLimits, appPid, attempts)) {
         return { readinessMs: performance.now() - started, attempts };
       }
       await sleep(READINESS_POLL_MS);
@@ -166,6 +117,26 @@ async function awaitAppReadiness(
   } finally {
     await probe.close?.();
   }
+}
+
+async function probeReadiness(
+  config: SpikeConfig,
+  probe: GuestAdapter,
+  limits: SpikeConfig['limits'],
+  appPid: number,
+  attempts: number,
+): Promise<boolean> {
+  const result = await probe.acquireBatch([
+    request(config, `readiness-${appPid}-${attempts}`, {
+      expectedTargetGeneration: `pid:${appPid}`,
+      limits,
+    }),
+  ]);
+  return usableTree(result.responses[0] ?? failedResponse('readiness'));
+}
+
+function assertInsideReadinessDeadline(started: number, appPid: number): void {
+  if (performance.now() - started < READINESS_DEADLINE_MS) return;
   throw new Error(`App ${APP_ID} (pid ${appPid}) did not expose a readable tree in time.`);
 }
 
@@ -182,19 +153,22 @@ async function assertNoResidentGuest(): Promise<void> {
   }
 }
 
-function residentGuestPids(): string {
+function residentGuestPids(): number[] {
   return execFileSync(
     'sh',
     ['-c', 'pgrep -f "SimulatorFrameworkBridge accessibility serve" || true'],
     { encoding: 'utf8' },
-  ).trim();
+  )
+    .split('\n')
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isSafeInteger(value) && value > 0);
 }
 
 async function runLiveRecovery(
   config: SpikeConfig,
   bootstrap: readonly TargetedBootstrapSample[],
 ): Promise<readonly TargetedRecoveryProbe[]> {
-  const adapter = createGuestSimulatorFrameworkBridgeAdapter(createAdapterOptions(config));
+  const adapter = createGuestSimulatorFrameworkBridgeAdapter(adapterOptions(config));
   try {
     const probes: TargetedRecoveryProbe[] = [];
     await adapter.acquireBatch([request(config, 'recovery-prime')]);
@@ -340,32 +314,15 @@ async function relaunchApp(udid: string): Promise<number> {
   throw new Error(`App ${APP_ID} did not start on ${udid}.`);
 }
 
-function readAutomationEnabled(udid: string): unknown {
-  try {
-    const output = execFileSync(
-      '/usr/libexec/PlistBuddy',
-      ['-c', 'Print :AutomationEnabled', simulatorPreferencePaths(udid)[0]!],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
-    ).trim();
-    return output === 'true' ? true : output === 'false' ? false : output;
-  } catch {
-    return null;
-  }
+function adapterOptions(config: SpikeConfig) {
+  return { guestBridge: config.guestBridge, limits: config.limits };
 }
 
-export function hostLoad(): HostLoad {
+function hostLoad(): HostLoad {
   return {
     loadAverage1m: Number(os.loadavg()[0]?.toFixed(2)),
     cpuCores: os.cpus().length,
   };
-}
-
-function hashFile(filePath: string): string | null {
-  try {
-    return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
-  } catch {
-    return null;
-  }
 }
 
 function sleep(ms: number): Promise<void> {

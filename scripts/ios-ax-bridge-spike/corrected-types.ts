@@ -1,4 +1,10 @@
-import type { SpikeCell, SpikeReport, SpikeRequest, SpikeResponse } from './types.ts';
+import type {
+  ResourceLimits,
+  SpikeCell,
+  SpikeReport,
+  SpikeRequest,
+  SpikeResponse,
+} from './types.ts';
 
 const CORRECTED_SCHEMA_VERSION = 'ios-simulator-ax-bridge-corrected.v2' as const;
 export const TARGETED_SCHEMA_VERSION = 'ios-simulator-ax-bridge-targeted.v2' as const;
@@ -38,12 +44,11 @@ export type TargetedRawArtifact = Readonly<{
     revision: TargetedRevision;
     hostClient: string;
   }>;
-  supersededTargetedArtifact?: Readonly<{ path: string; hostClient: string }>;
   target: SpikeReport['target'];
   toolchain: SpikeReport['toolchain'];
   host: HostLoad;
   guestMechanism: SpikeReport['guestMechanism'];
-  preferenceEvidence: SpikeReport['preferenceEvidence'];
+  limits: ResourceLimits;
   config: Readonly<{
     states: readonly SpikeCell['state'][];
     screens: readonly SpikeCell['screen'][];
@@ -52,12 +57,6 @@ export type TargetedRawArtifact = Readonly<{
   }>;
   bootstrap: readonly TargetedBootstrapSample[];
   recovery: readonly TargetedRecoveryProbe[];
-  simulator: Readonly<{
-    finalState: string;
-    accessibilityPlistSha256: string | null;
-    automationEnabledBefore: unknown;
-    automationEnabledAfter: unknown;
-  }>;
 }>;
 
 export type LatencySummary = Readonly<{
@@ -91,7 +90,6 @@ export type CorrectedReport = Readonly<{
     interpretation: 'superseded-stretch-only';
     hostClient: string;
   }>;
-  supersededTargetedArtifact?: Readonly<{ path: string; hostClient: string }>;
   targetedArtifact: Readonly<{ path: string; revision: TargetedRevision }>;
   target: SpikeReport['target'];
   toolchain: SpikeReport['toolchain'];
@@ -102,6 +100,7 @@ export type CorrectedReport = Readonly<{
     warm: GateResult;
     relaunch: GateResult;
     nonresidentBootstrap: GateResult;
+    boundedResources: GateResult;
     liveRecovery: GateResult;
     hierarchy: GateResult;
   }>;

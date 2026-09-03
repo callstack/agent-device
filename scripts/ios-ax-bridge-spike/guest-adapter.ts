@@ -6,6 +6,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
 import { DEFAULT_SPIKE_LIMITS, validateRawAcquisition } from './limits.ts';
 import { failureResponse } from './protocol.ts';
+import { processUsageDelta, readGuestProcessSample } from './guest-process-metrics.ts';
 import {
   acquisitionFromEnvelope,
   encodeGuestFrame,
@@ -173,27 +174,32 @@ class GuestSession {
       });
     }
     try {
-      if (signal?.aborted) throw new GuestError('cancelled', 'abort-signal');
-      if (this.closed) throw new GuestError('transport-failure', 'guest-adapter-closed');
-      await this.ensureConnected(request.simulatorUdid, deadline, signal);
-      const { envelope, responseBytes } = await this.readWithReadinessRetry(
-        frame,
-        deadline,
-        signal,
-      );
-      return this.responseFor(request, envelope, {
-        requestBytes: frame.length,
-        responseBytes,
-        durationMs: performance.now() - started,
-      });
+      return await this.acquireConnected(request, frame, deadline, started, signal);
     } catch (error) {
-      const guestError = asGuestError(error);
-      return failureResponse(
-        request,
-        { kind: guestError.kind, code: guestError.code },
-        { requestBytes: frame.length, durationMs: performance.now() - started },
-      );
+      return failedGuestRequest(request, frame.length, started, error);
     }
+  }
+
+  private async acquireConnected(
+    request: SpikeRequest,
+    frame: Buffer,
+    deadline: number,
+    started: number,
+    signal: AbortSignal | undefined,
+  ): Promise<SpikeResponse> {
+    assertRequestActive(signal, this.closed);
+    const wasConnected = this.socket !== undefined && !this.socket.destroyed;
+    await this.ensureConnected(request.simulatorUdid, deadline, signal);
+    const before = wasConnected ? readGuestProcessSample(this.socketPath) : undefined;
+    const { envelope, responseBytes } = await this.readWithReadinessRetry(frame, deadline, signal);
+    const resources = processUsageDelta(before, readGuestProcessSample(this.socketPath));
+    return this.responseFor(request, envelope, {
+      requestBytes: frame.length,
+      responseBytes,
+      durationMs: performance.now() - started,
+      cpuMs: resources?.cpuMs ?? null,
+      memoryBytes: resources?.memoryBytes ?? null,
+    });
   }
 
   private async readWithReadinessRetry(
@@ -218,6 +224,8 @@ class GuestSession {
       requestBytes: number;
       responseBytes: number;
       durationMs: number;
+      cpuMs: number | null;
+      memoryBytes: number | null;
     },
   ): SpikeResponse {
     if (envelope.ok !== true) {
@@ -233,6 +241,8 @@ class GuestSession {
     if (!validated.ok) {
       return failureResponse(request, { kind: 'malformed-tree', code: validated.code }, metrics);
     }
+    const resourceFailure = resourceLimitFailure(metrics, request.limits);
+    if (resourceFailure) return failureResponse(request, resourceFailure, metrics);
     return {
       version: 1,
       id: request.id,
@@ -243,8 +253,6 @@ class GuestSession {
         ...metrics,
         nodeCount: parsed.acquisition.nodes.length,
         maxTraversalDepth: validated.maxTraversalDepth,
-        cpuMs: null,
-        memoryBytes: null,
       },
     };
   }
@@ -472,6 +480,38 @@ function asGuestError(error: unknown): GuestError {
   if (error instanceof GuestError) return error;
   if (error instanceof GuestWireError) return new GuestError(error.kind, error.code);
   return new GuestError('transport-failure', 'guest-unexpected-error');
+}
+
+function assertRequestActive(signal: AbortSignal | undefined, closed: boolean): void {
+  if (signal?.aborted) throw new GuestError('cancelled', 'abort-signal');
+  if (closed) throw new GuestError('transport-failure', 'guest-adapter-closed');
+}
+
+function failedGuestRequest(
+  request: SpikeRequest,
+  requestBytes: number,
+  started: number,
+  error: unknown,
+): SpikeResponse {
+  const guestError = asGuestError(error);
+  return failureResponse(
+    request,
+    { kind: guestError.kind, code: guestError.code },
+    { requestBytes, durationMs: performance.now() - started },
+  );
+}
+
+function resourceLimitFailure(
+  metrics: { cpuMs: number | null; memoryBytes: number | null },
+  limits: ResourceLimits,
+): SpikeFailure | undefined {
+  if (metrics.cpuMs !== null && metrics.cpuMs > limits.maxCpuMs) {
+    return { kind: 'transport-failure', code: 'cpu-limit-exceeded' };
+  }
+  if (metrics.memoryBytes !== null && metrics.memoryBytes > limits.maxMemoryBytes) {
+    return { kind: 'transport-failure', code: 'memory-limit-exceeded' };
+  }
+  return undefined;
 }
 
 function sleep(ms: number): Promise<void> {

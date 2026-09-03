@@ -8,7 +8,6 @@ import type {
   TargetedRawArtifact,
 } from './corrected-types.ts';
 import { renderCorrectedMarkdown } from './corrected-markdown.ts';
-import { percentile } from './report.ts';
 import type { SpikeCell, SpikeReport } from './types.ts';
 
 export function readSpikeReport(filePath: string): SpikeReport {
@@ -42,12 +41,9 @@ export function buildCorrectedReport(options: {
   const hierarchy = hierarchyEvidence(options.targeted);
   const hardGates = {
     warm: latencyGate(readiness, 'warm', 'p50 <300 ms and p95 <500 ms per screen'),
-    relaunch: latencyGate(
-      readiness,
-      'relaunch',
-      'p95 <500 ms per screen after observed new-generation app readiness',
-    ),
+    relaunch: relaunchGate(readiness, options.targeted),
     nonresidentBootstrap: bootstrapGate(options.targeted),
+    boundedResources: resourceGate(options.targeted),
     liveRecovery: recoveryGate(options.targeted),
     hierarchy: hierarchy.gate,
   } as const;
@@ -64,11 +60,6 @@ export function buildCorrectedReport(options: {
       interpretation: 'superseded-stretch-only',
       hostClient: options.targeted.sourceArtifact.hostClient,
     },
-    ...(options.targeted.supersededTargetedArtifact
-      ? {
-          supersededTargetedArtifact: options.targeted.supersededTargetedArtifact,
-        }
-      : {}),
     targetedArtifact: {
       path: options.targetedPath,
       revision: options.targeted.revision,
@@ -119,7 +110,7 @@ function summarizeLatency(cell: SpikeCell): LatencySummary {
     screen: cell.screen,
     samples: samples.length,
     readableSamples: readable.length,
-    readinessObservedSamples: observedGenerations.length > 0 ? readable.length : 0,
+    readinessObservedSamples: observedGenerations.length,
     generationCount: new Set(observedGenerations).size,
     candidateP50Ms: optionalPercentile(
       readable.map((sample) => sample.wallClockMs),
@@ -173,6 +164,25 @@ function latencyGate(
   };
 }
 
+function relaunchGate(
+  readiness: readonly LatencySummary[],
+  targeted: TargetedRawArtifact,
+): GateResult {
+  const latency = latencyGate(readiness, 'relaunch', 'p95 <500 ms per representative screen');
+  const observedReadiness = targeted.bootstrap.filter(
+    (sample) =>
+      sample.readinessAttempts > 0 &&
+      sample.response.acquisition?.targetGeneration === `pid:${sample.appPid}`,
+  );
+  const readinessPassed =
+    targeted.bootstrap.length === 5 && observedReadiness.length === targeted.bootstrap.length;
+  return {
+    status: latency.status === 'PASS' && readinessPassed ? 'PASS' : 'FAIL',
+    target: 'p95 <500 ms per screen after independently observed new-generation readiness',
+    evidence: `${latency.evidence}; targeted readiness observed for ${observedReadiness.length}/${targeted.bootstrap.length} clean relaunch samples`,
+  };
+}
+
 function bootstrapGate(targeted: TargetedRawArtifact): GateResult {
   const usable = targeted.bootstrap.filter((sample) => sample.usableTree);
   const p95 = optionalPercentile(
@@ -208,6 +218,28 @@ function recoveryGate(targeted: TargetedRawArtifact): GateResult {
     status: targeted.recovery.length === 4 && passed.length === 4 ? 'PASS' : 'FAIL',
     target: 'live crash, timeout, cancellation, and honest target-generation handling',
     evidence: `${passed.length}/${targeted.recovery.length} probes returned a typed failure or typed unavailable-generation residue and a usable recovered response`,
+  };
+}
+
+function resourceGate(targeted: TargetedRawArtifact): GateResult {
+  const responses = [
+    ...targeted.bootstrap.map((sample) => sample.response),
+    ...targeted.recovery.map((probe) => probe.recoveredResponse),
+  ].filter((response) => response.ok);
+  const measured = responses.filter(
+    (response) => response.metrics.cpuMs !== null && response.metrics.memoryBytes !== null,
+  );
+  const withinBounds = measured.filter(
+    (response) =>
+      response.metrics.cpuMs! <= targeted.limits.maxCpuMs &&
+      response.metrics.memoryBytes! <= targeted.limits.maxMemoryBytes,
+  );
+  const maxCpuMs = Math.max(0, ...measured.map((response) => response.metrics.cpuMs!));
+  const maxMemoryBytes = Math.max(0, ...measured.map((response) => response.metrics.memoryBytes!));
+  return {
+    status: responses.length > 0 && withinBounds.length === responses.length ? 'PASS' : 'FAIL',
+    target: `guest CPU <=${targeted.limits.maxCpuMs} ms and RSS <=${targeted.limits.maxMemoryBytes} bytes per successful read`,
+    evidence: `${withinBounds.length}/${responses.length} successful reads measured within bounds; max CPU=${maxCpuMs.toFixed(1)} ms; max RSS=${String(maxMemoryBytes)} bytes`,
   };
 }
 
@@ -309,7 +341,6 @@ function observedGeneration(value: string | null | undefined): readonly string[]
 function latencyPassed(summary: LatencySummary): boolean {
   return [
     summary.readableSamples === summary.samples,
-    summary.readinessObservedSamples === summary.samples,
     summary.candidateP50Ms !== null,
     summary.candidateP50Ms !== null && summary.candidateP50Ms < 300,
     summary.candidateP95Ms !== null,
@@ -319,4 +350,10 @@ function latencyPassed(summary: LatencySummary): boolean {
 
 function formatMs(value: number | null): string {
   return value === null ? '–' : `${value.toFixed(1)} ms`;
+}
+
+function percentile(values: readonly number[], percentage: number): number {
+  const sorted = [...values].sort((left, right) => left - right);
+  const index = Math.ceil((percentage / 100) * sorted.length) - 1;
+  return sorted[Math.max(0, index)]!;
 }

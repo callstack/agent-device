@@ -130,10 +130,6 @@ export function snapshotHasAnchor(payload: unknown, anchorText: string): boolean
   });
 }
 
-export function snapshotHasIdentifier(payload: unknown, identifier: string): boolean {
-  return snapshotNodes(payload).some((record) => record.identifier === identifier);
-}
-
 export function hasDeepLinkConfirmation(payload: unknown): boolean {
   return snapshotNodes(payload).some((record) => {
     const role = readString(record.role);

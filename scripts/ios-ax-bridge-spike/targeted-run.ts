@@ -15,8 +15,6 @@ import { TARGETED_SCHEMA_VERSION, type TargetedRawArtifact } from './corrected-t
 import { readGitRevision, readTarget, readToolchain } from '../ios-snapshot-benchmark/host.ts';
 
 const SOURCE = 'docs/evidence/ios-simulator-ax-bridge-2026-09-01-final.json.gz';
-const SUPERSEDED_TARGETED =
-  'docs/evidence/ios-simulator-ax-bridge-2026-09-02-targeted-python-prototype.json.gz';
 const TARGETED = 'docs/evidence/ios-simulator-ax-bridge-2026-09-02-targeted.json.gz';
 const CORRECTED = 'docs/evidence/ios-simulator-ax-bridge-2026-09-02-corrected.json.gz';
 
@@ -26,13 +24,17 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 
 async function main(argv: readonly string[]): Promise<void> {
   const config = parseConfig(argv);
+  const revision = readGitRevision(config.repoRoot);
+  if (revision.dirty) {
+    throw new Error('Targeted bridge evidence must be captured from a clean Git revision.');
+  }
   const source = readSpikeReport(SOURCE);
   const evidence = await runTargetedEvidence(config);
   const target = readTarget(config.udid, 'com.callstack.agentdevicelab');
   const artifact: TargetedRawArtifact = {
     schemaVersion: TARGETED_SCHEMA_VERSION,
     generatedAt: new Date().toISOString(),
-    revision: readGitRevision(config.repoRoot),
+    revision,
     command:
       'pnpm bench:ios-ax-bridge:targeted -- --udid <UDID> --guest-bridge <PATH>/Resources/SimulatorFrameworkBridge',
     sourceArtifact: {
@@ -40,19 +42,11 @@ async function main(argv: readonly string[]): Promise<void> {
       revision: source.revision,
       hostClient: String((source.guestMechanism as { client?: unknown }).client ?? 'unknown'),
     },
-    ...(fs.existsSync(SUPERSEDED_TARGETED)
-      ? {
-          supersededTargetedArtifact: {
-            path: SUPERSEDED_TARGETED,
-            hostClient: 'persistent-in-repository-reader (idb_companion + Python idb client)',
-          },
-        }
-      : {}),
     target: { udid: target.udid, name: target.name, runtime: target.runtime },
     toolchain: readToolchain(),
     host: evidence.host,
     guestMechanism: GUEST_MECHANISM_EVIDENCE,
-    preferenceEvidence: evidence.preferenceEvidence,
+    limits: config.limits,
     config: {
       states: ['warm', 'relaunch'],
       screens: ['quiet', 'list', 'nested-scroll', 'alert', 'system-surface', 'xctest-stress'],
@@ -61,7 +55,6 @@ async function main(argv: readonly string[]): Promise<void> {
     },
     bootstrap: evidence.bootstrap,
     recovery: evidence.recovery,
-    simulator: evidence.simulator,
   };
   fs.writeFileSync(TARGETED, gzipSync(`${JSON.stringify(artifact)}\n`, { level: 9 }));
   writeCorrectedReport(

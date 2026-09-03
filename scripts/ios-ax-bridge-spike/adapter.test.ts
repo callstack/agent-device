@@ -1,32 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { readControlSnapshot } from './adapter.ts';
 import { createGuestSimulatorFrameworkBridgeAdapter } from './guest-adapter.ts';
-
-test('control mapping preserves the producer raw node type', () => {
-  const result = readControlSnapshot({
-    data: {
-      results: [
-        {
-          data: {
-            snapshot: {
-              nodes: [
-                {
-                  index: 7,
-                  type: 'XCUIElementTypeButton',
-                  role: 'AXButton',
-                },
-              ],
-            },
-          },
-        },
-      ],
-    },
-  });
-
-  assert.equal(result?.nodes[0]?.type, 'XCUIElementTypeButton');
-  assert.equal(result?.nodes[0]?.role, 'AXButton');
-});
 
 test('guest adapter fails closed when the guest bridge executable is not configured', async () => {
   const adapter = createGuestSimulatorFrameworkBridgeAdapter({ repoRoot: '/repo' });

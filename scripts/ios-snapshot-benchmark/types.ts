@@ -38,7 +38,6 @@ export type ScreenFixture = {
   launchUrl?: string;
   anchorText: string;
   postSetupAnchorText?: string;
-  cleanupAnchorIdentifier?: string;
   setupAction?: 'open-alert';
 };
 
