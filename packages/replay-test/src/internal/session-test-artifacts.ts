@@ -3,7 +3,15 @@ import path from 'node:path';
 import { trimEdgeDashes } from '@agent-device/kernel/collections';
 import type { ReplayTestAttemptOutcome } from '@agent-device/replay-test';
 
-const DEFAULT_TEST_ARTIFACTS_ROOT = '.agent-device/test-artifacts';
+/**
+ * `test`'s default artifacts root when `--artifacts-dir` is not given. `src/remote/daemon-artifacts.ts`
+ * keeps its own copy of this literal (to redirect a remote request without resolving anything
+ * against the daemon's `cwd`, #2246): pulling it from `@agent-device/contracts` instead grew this
+ * package's eager import closure by 3 modules for one string, past its pinned budget
+ * (`scripts/__tests__/eager-closure-budgets.test.ts`) — not worth it for a value that changes
+ * only if this line does.
+ */
+export const DEFAULT_TEST_ARTIFACTS_ROOT = '.agent-device/test-artifacts';
 
 export function resolveReplayTestArtifactsDir(params: {
   artifactsDir?: string;

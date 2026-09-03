@@ -8,7 +8,7 @@
     "packages/kernel/src/contracts.ts#CommandRpcParams": "sha256:3a400b0d815920d9cf4c6236531931f6ba6f9debf7ac26915e0116b493f1c97a",
     "packages/kernel/src/contracts.ts#DAEMON_LOCK_POLICIES": "sha256:625cc33bb574aa6119add45878a0f6adc445244edc2957737da975f91605c786",
     "packages/kernel/src/contracts.ts#DaemonArtifact": "sha256:967c919d878b83b6e0324c56c1bf41e63b0c31c2e42cf41cd5a12902c2b5034a",
-    "packages/kernel/src/contracts.ts#DaemonArtifactKnownType": "sha256:fecca9e18bc5e84ca9c4341d28be2fc16c228d92cde1b0746014e18dfad9568d",
+    "packages/kernel/src/contracts.ts#DaemonArtifactKnownType": "sha256:21886407c3fbc30d8c0c544503b831c78db2408aeaef1b9b2c6a4139144aef28",
     "packages/kernel/src/contracts.ts#DaemonArtifactType": "sha256:5e5017276fefe880b8ab32001888011d2e02a8670f0978afdb9b56a77ab37f09",
     "packages/kernel/src/contracts.ts#DaemonInstallSource": "sha256:fe26e202e62d997cdd3855fd96002511783a6c26a9ce27210d7c6cc084c66e4e",
     "packages/kernel/src/contracts.ts#DaemonLockPolicy": "sha256:f33d0ce7200a7d97c11e91bd2889b5d9bc7f35935a5370a29930118d091468f4",
@@ -137,11 +137,11 @@
     "src/daemon/upload-http.ts#sendJson": "sha256:c2317b4b14a10731684c9160038005965856150f05f8923765a3fa833d2ecae9",
     "src/daemon/upload-http.ts#sendUploadedArtifactResponse": "sha256:9e418403448d58a96284fed605762fa71f9349bf2c70ad79df69b2b3e27487d6",
     "src/remote/daemon-artifacts.ts#DaemonArtifactEndpoint": "sha256:45226717ac52c0af2a62f74e91549582d95f4a4abc49be87989e026291a88c82",
-    "src/remote/daemon-artifacts.ts#DownloadRemoteArtifactParams": "sha256:24f3e577471874ae9147373d6ea0a9108e5a21a39742d2e3931ff1a6a323cd8e",
+    "src/remote/daemon-artifacts.ts#DownloadRemoteArtifactParams": "sha256:3ec63be2dbdb542e30b19d1500bc16874607823afb7ae392e92b0b535865859e",
     "src/remote/daemon-artifacts.ts#buildDaemonArtifactUrl": "sha256:06dcde057809b507f70f7bb5cdef9bde6515be84b67e45865cf19e70b8636208",
-    "src/remote/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:3db8ad2b4660f813583aa9b87e1c3927adbc3ca1e84cdd0d181d82fdc85d747a",
+    "src/remote/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:409cf0e59b698c1864b3567ed42daa3ef84c7a75b71ecd4814805cac79a1ef42",
     "src/remote/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
-    "src/remote/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:1dcab98fba2674f87053ae888c2235b6a6780405aa70648dc57eb6b9077a02fd",
+    "src/remote/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:b71e95e6aa2a200a0371d68684a1e16d3e44cc01a277f294c89b57f006819bb4",
     "src/remote/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:db5c44effc41ff9fa40bd094945e56ac60fac89a42fa68c65c9293e6de6fb1dc",
     "src/remote/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "src/remote/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:bdf63219ecea77d1290f0f5eeef6d5adc55077fa2fa6750ba4608aa3efd540f0",
@@ -173,6 +173,26 @@
     "src/remote/upload-stream.ts#streamFileToHttpRequestAttempt": "sha256:da39a79fa7c1f81e55caf613eedc347c0f3a9a9711b265a4db185677532d9552"
   },
   "compatibleChanges": [
+    {
+      "declaration": "packages/kernel/src/contracts.ts#DaemonArtifactKnownType",
+      "digest": "sha256:21886407c3fbc30d8c0c544503b831c78db2408aeaef1b9b2c6a4139144aef28",
+      "rationale": "#2246 adds the 'test-artifacts' literal for the new remote `test` suite-directory artifact. DaemonArtifactType already widens to `(string & {})`, so an artifactType value outside the known set was always valid on the wire; the literal only sharpens the type hint for code that opts into recognizing it. A released peer that does not know it either never receives it (an old client's daemon-artifacts.ts has no 'test' redirect, so it never sets clientArtifactPaths.artifactsDir, so a new daemon's attachRemoteReplayTestArtifacts never attaches this artifact) or, receiving it from an old daemon that cannot produce it, is a case that cannot occur."
+    },
+    {
+      "declaration": "src/remote/daemon-artifacts.ts#DownloadRemoteArtifactParams",
+      "digest": "sha256:3ec63be2dbdb542e30b19d1500bc16874607823afb7ae392e92b0b535865859e",
+      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state — never serialized, never sent to the daemon — that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before."
+    },
+    {
+      "declaration": "src/remote/daemon-artifacts.ts#downloadRemoteArtifact",
+      "digest": "sha256:409cf0e59b698c1864b3567ed42daa3ef84c7a75b71ecd4814805cac79a1ef42",
+      "rationale": "#2246 selects a DownloadDestinationStrategy (file vs directory) once instead of branching on isDirectory inline, and the directory strategy now extracts through the codebase's safe archive extractor into a staging directory before moving the result into place, rather than a raw tar invocation straight into the destination. Both are internal implementation changes to how a successful download is materialized on disk; the GET /artifacts/:id request and response framing, and every existing (non-directory) call site's behavior, are unchanged."
+    },
+    {
+      "declaration": "src/remote/daemon-artifacts.ts#materializeRemoteArtifacts",
+      "digest": "sha256:b71e95e6aa2a200a0371d68684a1e16d3e44cc01a277f294c89b57f006819bb4",
+      "rationale": "#2246: now passes isDirectory: artifact.artifactType === 'test-artifacts' into downloadRemoteArtifact. For every artifactType that existed before this change this is always false, so materialization behavior for screenshots/recordings is unchanged; the new branch only activates for the new, additive artifact type above."
+    },
     {
       "declaration": "src/daemon/client/daemon-client-rpc.ts#buildHttpRpcPayload",
       "digest": "sha256:efa9a5da4c7288cceae5656b468946ad3a2af0f0f0fb940f8a37987f922aa4b8",

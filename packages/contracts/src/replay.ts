@@ -141,6 +141,13 @@ export type ReplaySuiteResult = {
   durationMs: number;
   failures: ReplaySuiteTestFailed[];
   tests: ReplaySuiteTestResult[];
+  /**
+   * The suite's own artifacts root (the parent of every test's `artifactsDir`), as resolved on
+   * the host that ran the suite. Absent when the suite produced no attempt (e.g. every source
+   * was filtered out). #2246: a remote daemon rewrites this to the caller-local path once the
+   * directory has been transferred back, so it always names a path the caller can open.
+   */
+  artifactsDir?: string;
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
 };
 

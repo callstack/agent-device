@@ -114,7 +114,8 @@ export type DaemonArtifactKnownType =
   | 'screen-recording'
   | 'screen-recording-chunk'
   | 'screen-recording-telemetry'
-  | 'trace-log';
+  | 'trace-log'
+  | 'test-artifacts';
 
 export type DaemonArtifactType = DaemonArtifactKnownType | (string & {});
 

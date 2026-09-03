@@ -1,10 +1,12 @@
 /** Runs the replay-test scheduler and its nested replay attempts. */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
+import type { ReplaySuiteResult, ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../../replay-script-source.ts';
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
-import type { DaemonRequest, DaemonResponse } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../../types.ts';
 import { expandSessionPath } from '../../session-paths.ts';
 import type { ReplayTestCommand } from './command-types.ts';
 import {
@@ -279,8 +281,87 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
     cleanupSession,
   });
   return outcome.status === 'completed'
-    ? { ok: true, data: outcome.data }
+    ? { ok: true, data: attachRemoteReplayTestArtifacts(outcome.data, req) }
     : errorResponse(outcome.error.code, outcome.error.message);
+}
+
+/**
+ * #2246: against a remote daemon, the client redirects `--artifacts-dir` to a temp directory on
+ * THIS host before the suite runs (`prepareRemoteRequestArtifacts` in
+ * `src/remote/daemon-artifacts.ts`) — the caller's real `cwd` names no path here, so the
+ * scheduler above must never resolve suite artifacts against it. `req.meta.clientArtifactPaths`
+ * is how that client tells the daemon the real caller-local ROOT (e.g. `--artifacts-dir`, or its
+ * default) it will pull the directory back into once the request returns — that root is resolved
+ * client-side *before* the suite runs, so it never contains the suite's own invocation id.
+ *
+ * `data.artifactsDir` (the daemon-local suite directory) is always `<redirected root>/<suite
+ * invocation id>`: `createDirectoryArchive` (`src/daemon/artifact-tracking.ts`) tars it as
+ * `-C dirname(daemonRoot) -- basename(daemonRoot)`, so extracting that archive under the
+ * caller-local root reproduces the SAME invocation-id segment there. The caller-facing root is
+ * therefore `path.join(clientRoot, basename(daemonRoot))`, not `clientRoot` itself — every path
+ * this rewrites must land under that, matching where the client will actually put the files.
+ *
+ * Rewriting every artifact path in the response to that root, and registering the directory
+ * itself as one downloadable artifact (the same generic `data.artifacts` -> `trackArtifact`
+ * mechanism `screenshot`/`record` already use), are host concerns: the scheduler only ever
+ * reports paths on its own filesystem.
+ *
+ * A local daemon never sets `clientArtifactPaths` (the client only redirects for a remote one),
+ * so this is a no-op there and the response is returned unchanged.
+ */
+export function attachRemoteReplayTestArtifacts(
+  data: ReplaySuiteResult,
+  req: DaemonRequest,
+): DaemonResponseData {
+  const clientRoot = req.meta?.clientArtifactPaths?.artifactsDir;
+  const daemonRoot = data.artifactsDir;
+  if (!clientRoot || !daemonRoot) return data;
+
+  // The directory the client will actually extract the download into, on ITS filesystem —
+  // `clientRoot` plus the same invocation-id segment `daemonRoot` ends in (see doc comment).
+  const clientSuiteRoot = path.join(clientRoot, path.basename(daemonRoot));
+  const remapArtifactsDir = (candidate: string): string =>
+    candidate === daemonRoot || candidate.startsWith(daemonRoot + path.sep)
+      ? clientSuiteRoot + candidate.slice(daemonRoot.length)
+      : candidate;
+  // `tests` and `failures` both come from the scheduler's own `results` array
+  // (`summarizeReplayTestResults`) and share object references for every failed entry — each
+  // array is rewritten independently so both, not just whichever a caller happens to read, carry
+  // the caller-local path.
+  const rewritten: DaemonResponseData = {
+    ...data,
+    artifactsDir: clientSuiteRoot,
+    tests: data.tests.map((test) =>
+      'artifactsDir' in test && test.artifactsDir
+        ? { ...test, artifactsDir: remapArtifactsDir(test.artifactsDir) }
+        : test,
+    ),
+    failures: data.failures.map((failure) =>
+      failure.artifactsDir
+        ? { ...failure, artifactsDir: remapArtifactsDir(failure.artifactsDir) }
+        : failure,
+    ),
+  };
+
+  // No attempt ever ran (e.g. every source was filtered out), so the directory the client would
+  // try to download was never created — the rewritten paths above are still correct (they name
+  // where the suite WOULD have put its output), just nothing to register a download for.
+  if (!fs.existsSync(daemonRoot)) return rewritten;
+
+  return {
+    ...rewritten,
+    artifacts: [
+      {
+        field: 'artifactsDir',
+        artifactType: 'test-artifacts',
+        path: daemonRoot,
+        // The download destination is the ROOT, not `clientSuiteRoot`: the archive's own
+        // top-level entry already supplies the invocation-id segment on extraction.
+        localPath: clientRoot,
+        fileName: path.basename(daemonRoot),
+      },
+    ],
+  };
 }
 
 /**

@@ -4,10 +4,26 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  DEFAULT_TEST_ARTIFACTS_ROOT,
   materializeReplayTestAttemptArtifacts,
   prepareReplayTestAttemptArtifacts,
+  resolveReplayTestArtifactsDir,
 } from '../session-test-artifacts.ts';
 import type { ReplayTestAttemptOutcome } from '../session-test-types.ts';
+
+test('resolveReplayTestArtifactsDir falls back to the default root when artifactsDir is omitted', () => {
+  const dir = resolveReplayTestArtifactsDir({ cwd: '/repo', suiteInvocationId: 'abc123' });
+  assert.equal(dir, path.resolve('/repo', DEFAULT_TEST_ARTIFACTS_ROOT, 'abc123'));
+});
+
+test('resolveReplayTestArtifactsDir resolves an explicit relative artifactsDir against cwd', () => {
+  const dir = resolveReplayTestArtifactsDir({
+    artifactsDir: 'remote-device-artifacts/ad-test',
+    cwd: '/repo',
+    suiteInvocationId: 'abc123',
+  });
+  assert.equal(dir, path.resolve('/repo', 'remote-device-artifacts/ad-test', 'abc123'));
+});
 
 // Building outcomes from a DaemonResponse is the adapter's job and is pinned on that side; a
 // package test states the neutral outcome directly (#1478 P3b).
