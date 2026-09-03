@@ -879,10 +879,9 @@ there, not about retiring the directory.
 and commit for this measurement are in
 [`0019-end-state-hop-trace.md`](./0019-end-state-hop-trace.md), which supersedes the number
 below. A file-by-file re-trace at HEAD measured 24 hops for both `press`/Android and
-`snapshot`/iOS — matching, to within one file, the independent trace recorded in
-`maintainability-review-2026-09-02.md` ("press/Android = 24 hops … snapshot/iOS = 23"). The
-previously stated 38/29 named no ordered chain, counting definition, or artifact and does not
-reproduce; treat it as superseded, not as a second data point. `src/platform-runtime.ts` (the
+`snapshot`/iOS. The previously stated 38/29 named no ordered chain, counting definition, or
+artifact and does not reproduce; treat it as superseded, not as a second data point.
+`src/platform-runtime.ts` (the
 immutable registry construction) and each platform façade's `loadRuntime` pairing are declared
 boundaries under Decision §1 and §2, not pass-through layers — they stay in any hop count
 regardless of target. Everything else on the traced path is a pass-through candidate only insofar

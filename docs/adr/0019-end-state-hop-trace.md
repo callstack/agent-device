@@ -97,18 +97,11 @@ The façade PRs the plan sheet named as a candidate explanation (#2178, #2222, #
 **before** `e624ef9d3f` — the commit the ADR cites for its 38/29 measurement — so they cannot be
 why that count is higher than this one; they were already in effect when 38/29 was recorded.
 
-This trace lands at 24 hops for both routes, matching the file-by-file trace recorded in
-`maintainability-review-2026-09-02.md` during the 2026-09-02 audit ("press/Android = 24 hops
-(5 pass-through), snapshot/iOS = 23 (6 pass-through)") to within one file — a difference plausibly
-explained by which file either trace treats as the route's start or end boundary, not by a
-different code path. Two independent file-by-file traces using the same unit therefore agree with
-each other and disagree with the ADR's 38/29 by roughly 1.5x. The ADR text names no ordered chain,
-no command/artifact, and no counting definition for 38/29, so the discrepancy cannot be resolved
-against it; the most likely explanation is a different counting unit (e.g. counting every named
-export or every static/type import touched, rather than distinct production files on the call
-path) rather than a different code path, since both real traces walked the same files. **38 and 29
-should be treated as superseded by the 24/24 measured here**, not as a second data point to
-reconcile.
+This trace lands at 24 hops for both routes. The ADR text names no ordered chain, command/artifact,
+or counting definition for 38/29, so the discrepancy cannot be resolved against it. The most likely
+explanation is a different counting unit (for example, named exports or every static/type import
+touched rather than distinct production files on the call path). **Treat 38 and 29 as superseded by
+the auditable 24/24 measured here**, not as a second data point to reconcile.
 
 ## The ≤14 target
 
