@@ -144,23 +144,30 @@ function managedBindingRequiredError(device: DeviceInfo, owner: RuntimeOwnerRef)
   );
 }
 
+/** What a claim gate does about one verifier outcome. An admission carries no error to throw. */
+export type AllocatorHeldAdmissionDecision =
+  | Readonly<{ admitted: true }>
+  | Readonly<{ admitted: false; error: AppError }>;
+
 /**
- * One refusal per verifier outcome. The switch has no default, so an outcome the
- * verifier learns to produce is a compile error here until it is answered; an
- * admitted outcome answers `undefined`.
+ * The single answer both claim gates read. The switch has no default and the return type
+ * excludes `undefined`, so an outcome the verifier learns to produce is a compile error here
+ * until this function answers it. That is why the decision is a value rather than an optional
+ * error: a gate asks whether the outcome was admitted, and an unanswered outcome cannot reach
+ * it as silence that reads like an admission.
  */
-export function allocatorHeldAdmissionError(
+export function decideAllocatorHeldAdmission(
   device: DeviceInfo,
   owner: RuntimeOwnerRef,
   outcome: AllocatorHeldClaimAdmission,
-): AppError | undefined {
+): AllocatorHeldAdmissionDecision {
   switch (outcome.status) {
     case 'binding-invalid':
-      return managedBindingRequiredError(device, owner);
+      return { admitted: false, error: managedBindingRequiredError(device, owner) };
     case 'missing':
-      return allocatorClaimMissingError(device, owner);
+      return { admitted: false, error: allocatorClaimMissingError(device, owner) };
     case 'conflict':
-      return deviceClaimConflictError(device, outcome.conflict);
+      return { admitted: false, error: deviceClaimConflictError(device, outcome.conflict) };
   }
 }
 
@@ -170,8 +177,8 @@ export function buildAllocatorHeldRefusal(
   owner: RuntimeOwnerRef,
   outcome: AllocatorHeldClaimAdmission,
 ): DaemonResponse | undefined {
-  const error = allocatorHeldAdmissionError(device, owner, outcome);
-  return error ? claimRefusalResponse(error) : undefined;
+  const decision = decideAllocatorHeldAdmission(device, owner, outcome);
+  return decision.admitted ? undefined : claimRefusalResponse(decision.error);
 }
 
 function claimRefusalResponse(error: AppError): DaemonResponse {

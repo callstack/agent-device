@@ -2,13 +2,16 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { managedLocalRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   ALLOCATOR_CLAIM_MISSING,
   buildAllocatorHeldRefusal,
   buildDeviceClaimConflictError,
   buildDeviceClaimInspectionCommand,
+  decideAllocatorHeldAdmission,
   isDeviceClaimConflictReason,
 } from '../device-claim-conflict.ts';
+import type { AllocatorHeldClaimAdmission } from '../device-claim-allocator.ts';
 import type { InspectedDeviceClaim } from '../device-claim-inspection.ts';
 
 const device: DeviceInfo = {
@@ -85,6 +88,38 @@ test('a missing allocator-held claim is a permanent COMMAND_FAILED refusal outsi
   assert.match(String(response.error.hint), /allocator-held claim/);
   // Replay retries every conflict reason as infrastructure; a never-activated identity is not one.
   assert.equal(isDeviceClaimConflictReason(ALLOCATOR_CLAIM_MISSING), false);
+});
+
+// Every verifier outcome names its admission here, so an outcome this table does not answer
+// fails to compile. `decideAllocatorHeldAdmission` returns a decision rather than an optional
+// error for the same reason: a gate reads `admitted`, never the absence of an answer.
+const ADMITTED_BY_OUTCOME_STATUS: Readonly<Record<AllocatorHeldClaimAdmission['status'], boolean>> =
+  {
+    'binding-invalid': false,
+    missing: false,
+    conflict: false,
+  };
+
+test('every allocator-held verifier outcome is decided, and none of them is decided by silence', () => {
+  const owner = managedLocalRuntimeOwner('sim-a');
+  const outcomes: readonly AllocatorHeldClaimAdmission[] = [
+    { status: 'binding-invalid' },
+    { status: 'missing' },
+    { status: 'conflict', conflict: conflict('live') },
+  ];
+
+  // The cases below cover the whole union, not whichever members happened to be listed.
+  assert.deepEqual(
+    outcomes.map((outcome) => outcome.status).sort(),
+    Object.keys(ADMITTED_BY_OUTCOME_STATUS).sort(),
+  );
+  for (const outcome of outcomes) {
+    const decision = decideAllocatorHeldAdmission(device, owner, outcome);
+    assert.equal(decision.admitted, ADMITTED_BY_OUTCOME_STATUS[outcome.status], outcome.status);
+    // A refusal always carries the error the gates throw; an unanswered arm would land here
+    // as `undefined` and admit the device instead.
+    if (!decision.admitted) assert.ok(decision.error instanceof AppError, outcome.status);
+  }
 });
 
 test('each allocator-held verifier outcome maps to its own refusal', () => {
