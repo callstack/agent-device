@@ -30,10 +30,7 @@ import {
   type Platform,
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  createManagedLocalRuntimeOwner,
-  type ManagedLocalRuntimeOwnerRef,
-} from './platform-runtime-managed-owner.ts';
+import type { ManagedLocalRuntimeOwnerRef } from './platform-runtime-managed-owner.ts';
 
 export type PlatformRuntimeProviderRegistration = Readonly<{
   runtime: ProviderDeviceRuntime;
@@ -170,14 +167,16 @@ export function createComposedPlatformRuntimeGateway(options: {
       throw error;
     }
   };
-  // A managed owner is composed from a registered ref and this gateway's own local loader, so
-  // there is nothing to load lazily except the family owner it delegates to.
+  // The wrapper module is loaded dynamically so an ordinary bind, which never reaches this arm,
+  // does not pay for it: `src/platform-runtime.ts`'s eager closure is a no-growth hub, and a
+  // static import here would be a permanent edge every command pays at startup.
   const loadManaged = async (ref: ManagedLocalRuntimeOwnerRef) => {
     const key = runtimeOwnerKey(ref);
     const registered = managedByOwner.get(key);
     if (!registered) throw ownerUnavailable(ref);
     const existing = managedLoads.get(key);
     if (existing) return existing;
+    const { createManagedLocalRuntimeOwner } = await import('./platform-runtime-managed-owner.ts');
     const owner = registerOwner(createManagedLocalRuntimeOwner({ owner: registered, loadLocal }));
     managedLoads.set(key, owner);
     return owner;
