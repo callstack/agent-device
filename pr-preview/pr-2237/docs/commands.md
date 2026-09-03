@@ -398,6 +398,7 @@ agent-device wait 1500
 agent-device wait text "Welcome back"
 agent-device wait @e12
 agent-device wait 'role="button" label="Continue"' 5000
+agent-device wait absent 'label="Loading..."' 5000
 agent-device alert
 agent-device alert get
 agent-device alert wait 3000
@@ -405,13 +406,15 @@ agent-device alert accept
 agent-device alert dismiss
 ```
 
-- `wait` accepts a millisecond duration, `text <value>`, a snapshot ref (`@eN`), or a selector.
+- `wait` accepts a millisecond duration, `text <value>`, a snapshot ref (`@eN`), a selector, or strict `absent <selector>`.
 - `wait <selector> [timeoutMs]` polls until the selector resolves or the timeout expires.
+- `wait absent <selector> [timeoutMs]` polls until a complete, readable capture has zero matches. It is strict absence, not a visibility check: hidden or off-screen matches still keep the wait pending.
+- Strict absence rejects `--scope` and `--depth`. Sparse, truncated, incomplete, and Android unreadable-content captures do not count as readable captures and cannot satisfy the wait; they are ridden out until the deadline, and a run with no valid capture preserves its typed unreadable diagnostic.
 - `wait @ref [timeoutMs]` requires an existing session snapshot from a prior `snapshot` command.
 - `wait @ref` resolves the ref to its label/text from that stored snapshot, then polls for that text; it does not track the original node identity.
 - Because `wait @ref` is text-based after resolution, duplicate labels can match a different element than the original ref target.
 - `wait` shares the selector/snapshot resolution flow used by `click`, `fill`, `get`, and `is`.
-- Wait failures carry a structured `error.details.reason` in `--json` output: `wait_target_absent` proves at least one readable capture saw no match; `wait_capture_stalled` means no readable capture arrived and is retriable; `wait_deadline_exceeded` means a later capture consumed the remaining budget after an earlier readable capture; `wait_landmark_identity_mismatch` is a replay destination-guard refusal; and `wait_stable_timeout` means the UI did not settle. Use `readableCaptures` and `waitedMs` instead of parsing error text.
+- Wait failures carry a structured `error.details.reason` in `--json` output: `wait_target_absent` proves a positive wait never found a match; `wait_target_present` means strict `wait absent` reached its deadline with valid captures that still contained matches; `predicate_failed` means strict `wait absent` could not prove absence because no valid capture arrived, with the final observation/diagnostic preserved; `wait_capture_stalled` means no readable capture arrived and is retriable; `wait_deadline_exceeded` means a later capture consumed the remaining budget after an earlier readable capture; `wait_landmark_identity_mismatch` is a replay destination-guard refusal; and `wait_stable_timeout` means the UI did not settle. Use `readableCaptures`, `waitedMs`, `matches`, and `firstMatch` instead of parsing error text. `firstMatch` carries identity/text evidence only; absence failures do not claim visibility or rect evidence.
 - `alert` inspects or handles system alerts on iOS simulator, macOS desktop, and Android native/runtime permission dialogs.
 - `alert` without an action is equivalent to `alert get`.
 - Use `alert get` for an immediate cheap check. Use `alert wait <short-ms>` only when a prompt may appear after async work.
@@ -523,6 +526,7 @@ agent-device is text 'id="greeting"' "Welcome back"
 - `is exists` only checks whether the selector matches in the current snapshot.
 - `is absent` passes only when the selector has zero matches in one readable, complete, unscoped, full-depth accessibility capture. It does not mean hidden; `--scope` and `--depth` are rejected, and sparse, unreadable, or truncated captures fail closed.
 - `wait text` is a text-presence wait, not a hittability assertion.
+- Strict `wait absent` is not exported to Maestro's lenient `notVisible` condition; Maestro export reports it as unsupported unless an exact zero-candidate primitive becomes available.
 - `is text <selector> <value>` compares the resolved element text against the expected value.
 - `is` does not accept snapshot refs like `@e3`; use a selector expression instead.
 - `is` accepts the same selector-oriented snapshot flags as `click`, `fill`, `get`, and `wait`; `is absent` rejects `--scope` and `--depth` because its proof must cover the complete unscoped tree.
