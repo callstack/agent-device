@@ -61,11 +61,14 @@ export type AllocatorHeldDeviceClaim = {
 /** The allocator half of an allocator-held claim's principal. */
 export type AllocatorClaimIdentity = { instanceId: string; identityIncarnationId: string };
 
-/** Anything the claim store can hold for one device. */
-export type DeviceClaimRecord = DeviceClaim | AllocatorHeldDeviceClaim;
+/**
+ * Anything the claim store can hold for one device. Named for the store, not for the claim: the
+ * shutdown ledger's `DeviceClaimRecord` is a different thing (one row of what teardown released).
+ */
+export type StoredDeviceClaim = DeviceClaim | AllocatorHeldDeviceClaim;
 
 export function isAllocatorHeldDeviceClaim(
-  record: DeviceClaimRecord,
+  record: StoredDeviceClaim,
 ): record is AllocatorHeldDeviceClaim {
   return record.schemaVersion === ALLOCATOR_HELD_CLAIM_SCHEMA_VERSION;
 }
@@ -80,7 +83,7 @@ export function allocatorHeldClaimOwner(
   return managedLocalRuntimeOwner(claim.allocator.instanceId);
 }
 
-export function decodeDeviceClaimRecord(value: unknown): DeviceClaimRecord | null {
+export function decodeStoredDeviceClaim(value: unknown): StoredDeviceClaim | null {
   if (!isClaimObject(value)) return null;
   if (value.schemaVersion === ALLOCATOR_HELD_CLAIM_SCHEMA_VERSION) {
     return decodeAllocatorHeldClaim(value);

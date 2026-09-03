@@ -4,12 +4,12 @@ import { publishFileSync, acquireProcessLock } from '@agent-device/host-kit/file
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 
 import { resolveDeviceClaimPath } from './device-claim-paths.ts';
-import type { DeviceClaimRecord } from './device-claim-record.ts';
+import type { StoredDeviceClaim } from './device-claim-record.ts';
 
 const DEVICE_CLAIM_LOCK_TIMEOUT_MS = 30_000;
 
 /** The single writer of a claim file, shared by the process-owned and allocator-held kinds. */
-export function writeDeviceClaim(claim: DeviceClaimRecord): void {
+export function writeDeviceClaim(claim: StoredDeviceClaim): void {
   const claimPath = resolveDeviceClaimPath(claim.deviceKey);
   fs.mkdirSync(path.dirname(claimPath), { recursive: true, mode: 0o700 });
   publishFileSync({

@@ -10,11 +10,11 @@ import {
 import { isSupersededDaemonOwner } from './daemon-registration.ts';
 import { resolveDeviceClaimRoot } from './device-claim-paths.ts';
 import {
-  decodeDeviceClaimRecord,
+  decodeStoredDeviceClaim,
   isAllocatorHeldDeviceClaim,
   type AllocatorHeldDeviceClaim,
   type DeviceClaim,
-  type DeviceClaimRecord,
+  type StoredDeviceClaim,
 } from './device-claim-record.ts';
 
 /**
@@ -96,7 +96,7 @@ function readClaimEntries(
 }
 
 function matchesClaimSelectors(
-  claim: DeviceClaimRecord | undefined,
+  claim: StoredDeviceClaim | undefined,
   selectors: DeviceClaimSelectors,
 ): boolean {
   if (!claim) return true;
@@ -107,16 +107,16 @@ function matchesClaimSelectors(
   ].every(Boolean);
 }
 
-function matchesClaimId(claim: DeviceClaimRecord, expectedId: string | undefined): boolean {
+function matchesClaimId(claim: StoredDeviceClaim, expectedId: string | undefined): boolean {
   return !expectedId || claim.device.id === expectedId;
 }
 
-function matchesClaimDevice(claim: DeviceClaimRecord, device: string | undefined): boolean {
+function matchesClaimDevice(claim: StoredDeviceClaim, device: string | undefined): boolean {
   return !device || claim.device.name === device || claim.device.id === device;
 }
 
 function matchesClaimPlatform(
-  claim: DeviceClaimRecord,
+  claim: StoredDeviceClaim,
   platform: PlatformSelector | undefined,
 ): boolean {
   return matchesPlatformSelector(
@@ -160,7 +160,7 @@ function readDeviceClaimFile(filePath: string): InspectedDeviceClaim | null {
 
 function inspectClaimContents(fileName: string, contents: string): InspectedDeviceClaim {
   try {
-    const record = decodeDeviceClaimRecord(JSON.parse(contents) as unknown);
+    const record = decodeStoredDeviceClaim(JSON.parse(contents) as unknown);
     if (!record) return { fileName, classification: 'inconsistent' };
     if (isAllocatorHeldDeviceClaim(record)) {
       return {
