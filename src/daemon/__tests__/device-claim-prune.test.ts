@@ -3,10 +3,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { reconcileOrphanedDeviceClaims } from '../device-claims.ts';
-import { resolveDeviceClaimPath } from '../device-claim-paths.ts';
+import { deviceClaimIdentity, reconcileOrphanedDeviceClaims } from '../device-claims.ts';
+import { acquireAllocatorHeldDeviceClaim } from '../device-claim-allocator.ts';
+import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from '../device-claim-paths.ts';
 import { acquireProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
+import { ANDROID_EMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { publishDaemonRegistration } from '../../__tests__/test-utils/device-claim-store.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
@@ -181,6 +183,33 @@ test('reconciles a claim whose owning daemon was replaced while still running', 
       fs.existsSync(resolveDeviceClaimPath('local:android:none:superseded.json')),
       false,
     );
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});
+
+test('the startup sweep never examines an allocator-held claim', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-reconciliation-allocator-');
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+  const stateDir = path.join(claimsDir, 'state');
+  try {
+    await acquireAllocatorHeldDeviceClaim({
+      device: ANDROID_EMULATOR,
+      principal: { stateDir, instanceId: 'sim-a', identityIncarnationId: 'incarnation-1' },
+    });
+    const claimPath = resolveDeviceClaimPath(
+      canonicalLocalDeviceKey(deviceClaimIdentity(ANDROID_EMULATOR)),
+    );
+    const before = fs.readFileSync(claimPath, 'utf8');
+
+    // The sweep settles claims whose OWNER PROCESS provably cannot release them. An allocator-held
+    // claim has no owner process, so the reconciler must never even be offered it.
+    const summary = await reconcileOrphanedDeviceClaims(async () => {
+      throw new Error('an allocator-held claim reached the reconciler');
+    }, stateDir);
+
+    assert.deepEqual(summary, { examined: 0, reconciled: 0, retained: 0, changed: 0 });
+    assert.equal(fs.readFileSync(claimPath, 'utf8'), before);
   } finally {
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }

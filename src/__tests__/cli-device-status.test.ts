@@ -241,3 +241,49 @@ test('names a replaced-but-running daemon owner as stale rather than a live hold
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }
 });
+
+test('device status shows an allocator-held claim in the normal view, never as stale', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
+  try {
+    fs.writeFileSync(
+      path.join(claimsDir, 'allocator.json'),
+      JSON.stringify({
+        schemaVersion: 3,
+        kind: 'allocator',
+        deviceKey: 'local:android:none:managed-5554',
+        device: { family: 'android', id: 'managed-5554', name: 'Managed Pixel', kind: 'emulator' },
+        stateDir: '/state/host',
+        allocator: { instanceId: 'sim-a', identityIncarnationId: 'inc-1' },
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      }),
+    );
+
+    const normal = await runCliCapture(['device', 'status'], {
+      env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+    });
+    assert.equal(normal.calls.length, 0);
+    // No pid to classify, so a liveness-driven classification would read inconsistent or unknown.
+    assert.match(
+      normal.stdout,
+      /android Managed Pixel: allocator-held allocator=sim-a incarnation=inc-1 installation=\/state\/host/,
+    );
+    assert.doesNotMatch(normal.stdout, /stale/);
+    assert.doesNotMatch(normal.stdout, /session=undefined/);
+
+    const json = await runCliCapture(['device', 'status', '--json'], {
+      env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+    });
+    const payload = JSON.parse(json.stdout);
+    assert.equal(payload.data.hiddenStaleClaims, 0);
+    assert.equal(payload.data.claims.length, 1);
+    assert.equal(payload.data.claims[0].classification, 'allocator-held');
+    assert.deepEqual(payload.data.claims[0].owner, {
+      kind: 'allocator',
+      stateDir: '/state/host',
+      allocator: { instanceId: 'sim-a', identityIncarnationId: 'inc-1' },
+    });
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});

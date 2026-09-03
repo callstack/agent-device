@@ -12,7 +12,8 @@ import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-l
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { createDeviceClaimReconciler } from '../device-claim-reconciliation.ts';
-import type { DeviceClaim } from '../device-claims.ts';
+import type { AllocatorHeldDeviceClaim, DeviceClaim } from '../device-claim-record.ts';
+import type { DeviceClaimReconciler } from '../device-claims.ts';
 import { appLogResourceStore } from '../app-log-resource-store.ts';
 
 const scope = {
@@ -157,3 +158,24 @@ function makeClaim(stateDir: string): DeviceClaim {
     updatedAtMs: 1,
   };
 }
+
+test('the device-claim reconciler is typed to process-owned claims only', async () => {
+  // The reconciler settles the durable session resources attributed to a claim's `session`. An
+  // allocator-held claim has none, and only its allocator may clear it, so it must not even be
+  // expressible here. `pnpm typecheck` covers test/ and src/: widening `DeviceClaimReconciler`
+  // back to the record union turns this into an unused @ts-expect-error.
+  const reconcile: DeviceClaimReconciler = async () => ({ status: 'reconciled' });
+  const allocatorHeld: AllocatorHeldDeviceClaim = {
+    schemaVersion: 3,
+    kind: 'allocator',
+    deviceKey: 'local:android:none:emulator-5554',
+    device: { family: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
+    stateDir: '/state/host',
+    allocator: { instanceId: 'sim-a', identityIncarnationId: 'incarnation-1' },
+    createdAtMs: 1,
+    updatedAtMs: 1,
+  };
+
+  // @ts-expect-error an allocator-held claim never reaches reconciliation
+  await expect(reconcile(allocatorHeld)).resolves.toEqual({ status: 'reconciled' });
+});

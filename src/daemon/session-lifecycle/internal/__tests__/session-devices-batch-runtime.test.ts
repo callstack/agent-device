@@ -565,6 +565,59 @@ test('devices projects the blocking claim owner and hides provably dead owners',
   }
 });
 
+test('an allocator-held claim does not project claimedBy', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-devices-allocator-claims-');
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+  // ADR 0021 foundations: the public `claimedBy` shape is `{ session, workspace }` and an
+  // allocator-held claim has neither, so a managed identity surfaces unclaimed until the Host
+  // inventory filter lands.
+  fs.writeFileSync(
+    path.join(claimsDir, 'managed.json'),
+    JSON.stringify({
+      schemaVersion: 3,
+      kind: 'allocator',
+      deviceKey: 'local:android:none:emulator-5554',
+      device: { family: 'android', id: 'emulator-5554', name: 'emulator-5554', kind: 'emulator' },
+      stateDir: process.cwd(),
+      allocator: { instanceId: 'sim-a', identityIncarnationId: 'incarnation-1' },
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    }),
+  );
+  const sessionStore = makeSessionStore();
+  const inventory: DeviceInfo[] = [makeAndroidInventoryDevice('emulator-5554')];
+  try {
+    const response = await withTestDeviceInventory(
+      { local: async () => inventory },
+      async () =>
+        await handleSessionCommands({
+          req: {
+            token: 't',
+            session: 'default',
+            command: 'devices',
+            positionals: [],
+            flags: { platform: 'android' },
+          },
+          sessionName: 'default',
+          logPath: path.join(os.tmpdir(), 'daemon.log'),
+          sessionStore,
+          invoke: noopInvoke,
+        }),
+    );
+    expect(response?.ok).toBeTruthy();
+    if (response?.ok) {
+      const devices = response.data?.devices as Array<Record<string, unknown>> | undefined;
+      expect(devices).toHaveLength(1);
+      expect(devices?.[0]?.claimedBy).toBeUndefined();
+    }
+  } finally {
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});
+
 function makeAndroidInventoryDevice(id: string): DeviceInfo {
   return {
     platform: 'android',

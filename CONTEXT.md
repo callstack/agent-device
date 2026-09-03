@@ -76,8 +76,13 @@ A mutual-exclusion guard for a platform helper process. It is not remote client 
 _Avoid_: Device lease, process lease
 
 **Device claim**:
-Host-global exclusive ownership of one local device by an open session or a sessionless mutating
-command.
+Host-global exclusive ownership of one local device by an open session, a sessionless mutating
+command, or an allocator-held claim for a managed identity.
+
+**Allocator-held claim**:
+A device claim whose principal is an installation and an allocator identity incarnation rather than
+a process; sessions and commands execute under it, and only the allocator's removal proof clears it.
+_Avoid_: Stale claim, session claim, synthetic session
 
 **Device-claim policy**:
 A command's observation, ownership, or exclusive-mutation rule.
@@ -95,8 +100,9 @@ The per-requester monotonic number of one allocation attempt on an allocation la
 across requesters.
 
 **Identity incarnation**:
-The allocator-issued id of one creation of a managed identity, preserved across Android
-clean-baseline reuse; a fresh iOS identity is a new device with a new incarnation.
+The allocator-issued id of one creation of a managed identity, stable for that identity's pool
+lifetime and preserved across Android clean-baseline reuse; a fresh iOS identity is a new device
+with a new incarnation, and a different incarnation on a claimed device is a conflict.
 _Avoid_: Request generation
 
 **Human-control hold**:

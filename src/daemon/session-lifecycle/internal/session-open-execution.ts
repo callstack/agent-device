@@ -384,7 +384,12 @@ async function acquireDeviceClaimForOwner(params: {
       const response = buildAllocatorHeldRefusal(
         device,
         owner,
-        requireAllocatorHeldDeviceClaim({ device, owner, intent: { kind: 'ordinary' } }),
+        requireAllocatorHeldDeviceClaim({
+          device,
+          owner,
+          stateDir: sessionStore.resolveDaemonStateDir(),
+          intent: { kind: 'ordinary' },
+        }),
       );
       return response ? { status: 'refused', response } : { status: 'not-required' };
     }

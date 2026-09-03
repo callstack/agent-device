@@ -10,7 +10,6 @@ import {
 } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { ownerIdentityMatches, readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { publishFileSync, acquireProcessLock } from '@agent-device/host-kit/file';
 
 import {
   deviceClaimOwnerCannotRelease,
@@ -25,25 +24,12 @@ import {
   resolveDeviceClaimPath,
   resolveDeviceClaimRoot,
 } from './device-claim-paths.ts';
-
-const DEVICE_CLAIM_SCHEMA_VERSION = 2;
-const DEVICE_CLAIM_LOCK_TIMEOUT_MS = 30_000;
-
-export type DeviceClaim = {
-  schemaVersion: 2;
-  deviceKey: string;
-  device: DeviceIdentity & { name: string };
-  session: string;
-  workspace: string;
-  stateDir: string;
-  ownerPid: number;
-  ownerStartTime: string | null;
-  ownerToken: string;
-  createdAtMs: number;
-  updatedAtMs: number;
-  /** Set by {@link abandonDeviceClaim}; absent while the claim still holds the device for its owner. */
-  abandonedAtMs?: number;
-};
+import {
+  DEVICE_CLAIM_SCHEMA_VERSION,
+  type AllocatorClaimIdentity,
+  type DeviceClaim,
+} from './device-claim-record.ts';
+import { withDeviceClaimLock, writeDeviceClaim } from './device-claim-store.ts';
 
 export type DeviceClaimReconciliationResult =
   | { status: 'reconciled' }
@@ -174,7 +160,7 @@ async function claimHeldDevice(params: {
     createdAtMs: now,
     updatedAtMs: now,
   };
-  writeClaim(claim);
+  writeDeviceClaim(claim);
   return { status: 'acquired', ownership: ownershipFromClaim(claim) };
 }
 
@@ -298,6 +284,8 @@ export type DeviceClaimStaleReleaseOutcome = {
   session?: string;
   workspace?: string;
   stateDir?: string;
+  /** Present only for an allocator-held claim, which this command always refuses. */
+  allocator?: AllocatorClaimIdentity;
 };
 
 /**
@@ -332,6 +320,13 @@ async function releaseInspectedStaleClaim(
           session: claim.session,
           workspace: claim.workspace,
           stateDir: claim.stateDir,
+        }
+      : {}),
+    ...(entry.allocatorClaim
+      ? {
+          device: entry.allocatorClaim.device,
+          stateDir: entry.allocatorClaim.stateDir,
+          allocator: entry.allocatorClaim.allocator,
         }
       : {}),
   };
@@ -380,6 +375,8 @@ function staleReleaseRefusalReason(classification: DeviceClaimClassification): s
       return 'owner-liveness-unknown';
     case 'inconsistent':
       return 'claim-record-inconsistent';
+    case 'allocator-held':
+      return 'allocator-held-owner';
     case 'owner-process-dead':
     case 'owner-daemon-superseded':
       return 'claim-record-unreadable';
@@ -441,7 +438,7 @@ export async function abandonDeviceClaim(
     const claim = inspected.claim;
     if (!claim || !claimMatchesOwnership(claim, ownership)) return 'ownership-changed';
     const now = Date.now();
-    writeClaim({ ...claim, abandonedAtMs: now, updatedAtMs: now });
+    writeDeviceClaim({ ...claim, abandonedAtMs: now, updatedAtMs: now });
     return 'abandoned';
   });
 }
@@ -550,7 +547,8 @@ function sweepMayReconcile(
   return path.resolve(ownerStateDir) === path.resolve(daemonStateDir);
 }
 
-function emitClaimConflict(
+/** The one diagnostic that names who holds a device when an acquisition is refused. */
+export function emitClaimConflict(
   deviceKey: string,
   existing: InspectedDeviceClaim,
   reconciliationReason?: string,
@@ -561,11 +559,22 @@ function emitClaimConflict(
     data: {
       deviceKey,
       classification: existing.classification,
-      ownerSession: existing.claim?.session,
-      ownerStateDir: existing.claim?.stateDir,
+      ...describeClaimOwner(existing),
       ...(reconciliationReason ? { reconciliationReason } : {}),
     },
   });
+}
+
+/** The owner projection of either claim kind, for diagnostics that name who holds the device. */
+function describeClaimOwner(existing: InspectedDeviceClaim): Record<string, unknown> {
+  if (existing.allocatorClaim) {
+    return {
+      ownerStateDir: existing.allocatorClaim.stateDir,
+      allocatorInstanceId: existing.allocatorClaim.allocator.instanceId,
+      identityIncarnationId: existing.allocatorClaim.allocator.identityIncarnationId,
+    };
+  }
+  return { ownerSession: existing.claim?.session, ownerStateDir: existing.claim?.stateDir };
 }
 
 function emitClaimSupersede(deviceKey: string, abandoned: DeviceClaim): void {
@@ -592,31 +601,6 @@ async function settleVerifiedOrphanedClaim(
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
   return { status: 'reconciled' };
-}
-
-function writeClaim(claim: DeviceClaim): void {
-  const claimPath = resolveDeviceClaimPath(claim.deviceKey);
-  fs.mkdirSync(path.dirname(claimPath), { recursive: true, mode: 0o700 });
-  publishFileSync({
-    destination: claimPath,
-    contents: `${JSON.stringify(claim)}\n`,
-    mode: 0o600,
-  });
-}
-
-async function withDeviceClaimLock<T>(deviceKey: string, task: () => Promise<T>): Promise<T> {
-  const owner = readCurrentOwnerIdentity();
-  const release = await acquireProcessLock({
-    lockDirPath: `${resolveDeviceClaimPath(deviceKey)}.lock`,
-    owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
-    timeoutMs: DEVICE_CLAIM_LOCK_TIMEOUT_MS,
-    description: `device claim for ${deviceKey}`,
-  });
-  try {
-    return await task();
-  } finally {
-    await release();
-  }
 }
 
 function ownershipFromClaim(claim: DeviceClaim): DeviceClaimSessionOwnership {

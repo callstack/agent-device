@@ -5,6 +5,14 @@
 - Added strict `wait absent <selector> [timeoutMs]` polling for zero selector matches. Incomplete,
   sparse, truncated, scoped, depth-limited, and Android unreadable captures cannot prove absence;
   deadline diagnostics retain typed capture evidence and stable first-match details (#2236).
+- Added: the device-claim store can hold an allocator-held claim (schema v3) for a device an
+  allocator-managed pool owns. It has no owning process, so `device status` lists it in the normal
+  view (never as stale), `device release --stale` refuses it with `allocator-held-owner`, the
+  daemon-startup sweep and session close leave it alone, and a command that binds the device
+  ordinarily is refused `DEVICE_IN_USE` / `DEVICE_CLAIM_ALLOCATOR_HELD`. Process-owned claim files
+  are unchanged at schema v2. Two notes for mixed installations: a daemon older than this release
+  reads a v3 file as an unreadable claim record and fails closed rather than clearing it, and
+  `devices` reports no `claimedBy` for such a device until the managed-inventory filter lands.
 - Fixed: `settings airplane on|off` now takes an Android device offline. It is applied through
   the connectivity service (`cmd connectivity airplane-mode`), which drives the radios, instead of
   writing `airplane_mode_on` and broadcasting `ACTION_AIRPLANE_MODE_CHANGED` — a broadcast Android

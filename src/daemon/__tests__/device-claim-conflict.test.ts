@@ -9,6 +9,7 @@ import {
   buildDeviceClaimConflictError,
   buildDeviceClaimInspectionCommand,
   decideAllocatorHeldAdmission,
+  DEVICE_CLAIM_ALLOCATOR_HELD,
   isDeviceClaimConflictReason,
 } from '../device-claim-conflict.ts';
 import type { AllocatorHeldClaimAdmission } from '../device-claim-allocator.ts';
@@ -21,7 +22,9 @@ const device: DeviceInfo = {
   kind: 'emulator',
 };
 
-function conflict(classification: InspectedDeviceClaim['classification']): InspectedDeviceClaim {
+function conflict(
+  classification: Exclude<InspectedDeviceClaim['classification'], 'allocator-held'>,
+): InspectedDeviceClaim {
   return {
     fileName: 'claim.json',
     deviceKey: 'local:android:none:emulator-5554',
@@ -36,6 +39,24 @@ function conflict(classification: InspectedDeviceClaim['classification']): Inspe
       ownerPid: 4242,
       ownerStartTime: 'start',
       ownerToken: 'token',
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    },
+  };
+}
+
+function allocatorConflict(): InspectedDeviceClaim {
+  return {
+    fileName: 'claim.json',
+    deviceKey: 'local:android:none:emulator-5554',
+    classification: 'allocator-held',
+    allocatorClaim: {
+      schemaVersion: 3,
+      kind: 'allocator',
+      deviceKey: 'local:android:none:emulator-5554',
+      device: { family: 'android', id: device.id, name: device.name, kind: device.kind },
+      stateDir: '/state/host',
+      allocator: { instanceId: 'sim-a', identityIncarnationId: 'inc-1' },
       createdAtMs: 1,
       updatedAtMs: 1,
     },
@@ -137,4 +158,43 @@ test('each allocator-held verifier outcome maps to its own refusal', () => {
   assert.ok(foreign && !foreign.ok);
   assert.equal(foreign.error.code, 'DEVICE_IN_USE');
   assert.equal(foreign.error.details?.reason, 'DEVICE_CLAIM_LIVE_OWNER');
+
+  // The claim is ours, but for an identity the allocator has since re-provisioned.
+  const stale = buildAllocatorHeldRefusal(device, owner, {
+    status: 'incarnation-stale',
+    heldIncarnationId: 'inc-1',
+  });
+  assert.ok(stale && !stale.ok);
+  assert.equal(stale.error.code, 'COMMAND_FAILED');
+  assert.equal(stale.error.details?.reason, 'allocator-claim-incarnation-stale');
+  assert.equal(stale.error.details?.heldIncarnationId, 'inc-1');
+  assert.equal(stale.error.retriable, false);
+  assert.equal(isDeviceClaimConflictReason('allocator-claim-incarnation-stale'), false);
+
+  // Covered is the admitted outcome: the command executes under the claim, with no refusal.
+  assert.equal(buildAllocatorHeldRefusal(device, owner, { status: 'covered' }), undefined);
+});
+
+test('an allocator-held conflict names the allocator instance and installation and offers no release', () => {
+  const response = buildDeviceClaimConflictError(device, allocatorConflict());
+
+  assert.equal(response.ok, false);
+  if (response.ok) return;
+  assert.equal(response.error.code, 'DEVICE_IN_USE');
+  assert.equal(response.error.details?.reason, DEVICE_CLAIM_ALLOCATOR_HELD);
+  assert.equal(response.error.details?.classification, 'allocator-held');
+  assert.deepEqual(response.error.details?.owner, {
+    kind: 'allocator',
+    stateDir: '/state/host',
+    allocator: { instanceId: 'sim-a', identityIncarnationId: 'inc-1' },
+  });
+  // No session or workspace exists to render, and no stale release is on offer.
+  assert.match(response.error.message, /held by managed-device allocator "sim-a"/);
+  assert.doesNotMatch(response.error.message, /undefined/);
+  assert.deepEqual(response.error.details?.recovery, {
+    command: 'agent-device device status --platform android --serial emulator-5554',
+  });
+  assert.doesNotMatch(String(response.error.hint), /--stale|device release/);
+  // Replay retries every conflict reason as infrastructure; an allocator-held device is not one.
+  assert.equal(isDeviceClaimConflictReason(DEVICE_CLAIM_ALLOCATOR_HELD), false);
 });

@@ -10,6 +10,7 @@ import {
   processOwnsActiveDeviceClaim,
   releaseProvenStaleDeviceClaims,
 } from '../device-claims.ts';
+import { acquireAllocatorHeldDeviceClaim } from '../device-claim-allocator.ts';
 import { canonicalLocalDeviceKey } from '../device-claim-paths.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -897,4 +898,43 @@ test('release reports changed when the claim is replaced between scan and lock a
   assert.equal(reconcile.mock.calls.length, 0);
   const remaining = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
   assert.equal(remaining.ownerToken, 'successor-token');
+});
+
+test('an allocator-held claim conflicts with an ordinary acquire, is never reconciled, and grants no runner authority', async () => {
+  const root = useClaimsRoot();
+  await acquireAllocatorHeldDeviceClaim({
+    device,
+    principal: { stateDir: root, instanceId: 'sim-a', identityIncarnationId: 'incarnation-1' },
+  });
+  const before = fs.readFileSync(claimPath(root), 'utf8');
+  const reconcile = vi.fn(async () => ({ status: 'reconciled' as const }));
+
+  const result = await acquireDeviceClaim({
+    device,
+    session: 'ordinary',
+    workspace: '/worktrees/ordinary',
+    stateDir: root,
+    reconcileOrphanedDeviceClaim: reconcile,
+  });
+
+  assert.equal(result.status, 'conflict');
+  if (result.status !== 'conflict') return;
+  assert.equal(result.conflict.classification, 'allocator-held');
+  assert.equal(result.conflict.claim, undefined);
+  // Never reconciled, never superseded, byte-identical.
+  assert.equal(reconcile.mock.calls.length, 0);
+  assert.equal(fs.readFileSync(claimPath(root), 'utf8'), before);
+  // Apple runner arbitration reads process ownership; an installation principal grants none.
+  assert.equal(processOwnsActiveDeviceClaim(device), false);
+  // Nothing this daemon holds can clear it either: there is no ownership to match.
+  assert.equal(
+    await clearDeviceClaim({
+      deviceKey: canonicalLocalDeviceKey(device),
+      ownerToken: 'anything',
+      ownerPid: process.pid,
+      ownerStartTime: null,
+    }),
+    'ownership-changed',
+  );
+  assert.equal(fs.readFileSync(claimPath(root), 'utf8'), before);
 });

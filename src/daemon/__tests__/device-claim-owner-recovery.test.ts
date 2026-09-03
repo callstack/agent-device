@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { DeviceClaim } from '../device-claims.ts';
+import type { DeviceClaim } from '../device-claim-record.ts';
 import { createOwnerScopedDeviceClaimReconciler } from '../device-claim-owner-recovery.ts';
 
 const scope = {

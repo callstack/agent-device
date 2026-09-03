@@ -5,7 +5,10 @@ import type {
 } from '@agent-device/contracts/platform-runtime';
 import type { DeviceClaimPolicy } from '../core/command-descriptor/types.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { requireAllocatorHeldDeviceClaim } from './device-claim-allocator.ts';
+import {
+  inspectAllocatorHeldDeviceClaim,
+  requireAllocatorHeldDeviceClaim,
+} from './device-claim-allocator.ts';
 import { decideAllocatorHeldAdmission, deviceClaimConflictError } from './device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from './device-claim-rule.ts';
 import {
@@ -52,6 +55,32 @@ export function createDeviceClaimAdmission(params: {
   // it took in order to give it back.
   const acquired: DeviceClaimSessionOwnership[] = [];
 
+  /**
+   * `none` is the one policy that touches no device state at all. Every other policy reaches the
+   * device, and an ordinary owner may not reach an allocator-managed identity through any of them
+   * — `observe` boots it through `ensureReady` just as `transient-exclusive` does — so the
+   * allocator-held inspection runs first and refuses without acquiring anything.
+   *
+   * Beyond that, `observe`/`require-owner` never write the claim store, and
+   * `acquire-session`/`release-session` own the session claim through the open and close
+   * lifecycles instead.
+   */
+  async function admitOrdinaryOwner(device: DeviceInfo): Promise<void> {
+    if (params.policy === 'none') return;
+    const allocatorHeld = inspectAllocatorHeldDeviceClaim(device);
+    if (allocatorHeld) throw deviceClaimConflictError(device, allocatorHeld);
+    if (params.policy !== 'transient-exclusive') return;
+    const result = await acquireTransientDeviceClaim({
+      device,
+      command: params.command,
+      workspace: params.workspace,
+      stateDir: params.stateDir,
+      reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
+    });
+    if (result.status === 'conflict') throw deviceClaimConflictError(device, result.conflict);
+    if (result.status === 'acquired') acquired.push(result.ownership);
+  }
+
   return {
     admit: async (device, owner, intent) => {
       switch (deviceClaimRuleForOwner(owner)) {
@@ -61,29 +90,13 @@ export function createDeviceClaimAdmission(params: {
           const decision = decideAllocatorHeldAdmission(
             device,
             owner,
-            requireAllocatorHeldDeviceClaim({ device, owner, intent }),
+            requireAllocatorHeldDeviceClaim({ device, owner, stateDir: params.stateDir, intent }),
           );
           if (!decision.admitted) throw decision.error;
           return;
         }
-        case 'ordinary': {
-          // `none`/`observe`/`require-owner` never read or write the claim store,
-          // and `acquire-session`/`release-session` own the session claim through
-          // the open and close lifecycles instead.
-          if (params.policy !== 'transient-exclusive') return;
-          const result = await acquireTransientDeviceClaim({
-            device,
-            command: params.command,
-            workspace: params.workspace,
-            stateDir: params.stateDir,
-            reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
-          });
-          if (result.status === 'conflict') {
-            throw deviceClaimConflictError(device, result.conflict);
-          }
-          if (result.status === 'acquired') acquired.push(result.ownership);
-          return;
-        }
+        case 'ordinary':
+          return await admitOrdinaryOwner(device);
       }
     },
     [Symbol.asyncDispose]: async () => {

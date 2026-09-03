@@ -304,3 +304,46 @@ test('recovery is composed per claim from the stale owner state dir, never the c
     fs.rmSync(ownerDirB, { recursive: true, force: true });
   }
 });
+
+test('device release --stale refuses an allocator-held claim and leaves it in place', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-cli-release-');
+  try {
+    const claimPath = hashedClaimPath(claimsDir, 'local:android:none:managed-5554');
+    fs.writeFileSync(
+      claimPath,
+      JSON.stringify({
+        schemaVersion: 3,
+        kind: 'allocator',
+        deviceKey: 'local:android:none:managed-5554',
+        device: { family: 'android', id: 'managed-5554', name: 'Managed Pixel', kind: 'emulator' },
+        stateDir: '/state/host',
+        allocator: { instanceId: 'sim-a', identityIncarnationId: 'inc-1' },
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      }),
+    );
+    const before = fs.readFileSync(claimPath, 'utf8');
+
+    const result = await runCliCapture(['device', 'release', '--stale', '--json'], {
+      env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+    });
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.data.released.length, 0);
+    assert.equal(payload.data.refused.length, 1);
+    assert.equal(payload.data.refused[0].reason, 'allocator-held-owner');
+    assert.equal(payload.data.refused[0].classification, 'allocator-held');
+    assert.deepEqual(payload.data.refused[0].allocator, {
+      instanceId: 'sim-a',
+      identityIncarnationId: 'inc-1',
+    });
+    assert.equal(fs.readFileSync(claimPath, 'utf8'), before);
+
+    const text = await runCliCapture(['device', 'release', '--stale'], {
+      env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+    });
+    assert.match(text.stdout, /refused android Managed Pixel allocator=sim-a incarnation=inc-1/);
+    assert.match(text.stdout, /allocator proves the identity removed/);
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});

@@ -41,15 +41,27 @@ export function isDeviceClaimConflictReason(value: unknown): value is DeviceClai
  */
 export const ALLOCATOR_CLAIM_MISSING = 'allocator-claim-missing';
 
+/**
+ * The refusal reason when the device already carries a live allocator-held claim: a foreign
+ * installation's for a managed owner, or any allocator-held claim for an ordinary owner.
+ * Deliberately not a {@link DeviceClaimConflictReason} either — replay would retry it as
+ * infrastructure, and a managed identity's claim outlives every session that could clear it.
+ */
+export const DEVICE_CLAIM_ALLOCATOR_HELD = 'DEVICE_CLAIM_ALLOCATOR_HELD';
+
+/** The refusal reason when our own allocator-held claim holds a different identity incarnation. */
+const ALLOCATOR_CLAIM_INCARNATION_STALE = 'allocator-claim-incarnation-stale';
+
 export function buildDeviceClaimInspectionCommand(
   device: DeviceInfo,
-  conflict: Pick<InspectedDeviceClaim, 'claim' | 'classification'>,
+  conflict: Pick<InspectedDeviceClaim, 'claim' | 'allocatorClaim' | 'classification'>,
   subcommand: 'status' | 'release' = 'status',
 ): string {
-  const publicPlatform = conflict.claim
+  const held = conflict.claim ?? conflict.allocatorClaim;
+  const publicPlatform = held
     ? publicPlatformString({
-        platform: conflict.claim.device.family,
-        appleOs: conflict.claim.device.appleOs,
+        platform: held.device.family,
+        appleOs: held.device.appleOs,
       })
     : publicPlatformString(device);
   const selector = isApplePlatform(device.platform) ? '--udid' : '--serial';
@@ -72,6 +84,9 @@ export function deviceClaimConflictError(
   device: DeviceInfo,
   conflict: InspectedDeviceClaim,
 ): AppError {
+  if (conflict.classification === 'allocator-held') {
+    return allocatorHeldClaimConflictError(device, conflict);
+  }
   const owner = conflict.claim;
   // A provably dead owner has an exact recovery: settle its resources and
   // release the claim. Everything else gets inspection, never a mutation.
@@ -117,6 +132,41 @@ export function buildDeviceClaimConflictError(
   return claimRefusalResponse(deviceClaimConflictError(device, conflict));
 }
 
+/**
+ * A managed identity's device is held by its allocator, not by a session anyone can close. The
+ * recovery is inspection only: `deviceClaimRequiresStaleInspection` and
+ * `deviceClaimOwnerCannotRelease` are both false for this classification, so the command carries
+ * no `--stale` and never offers a release.
+ */
+function allocatorHeldClaimConflictError(
+  device: DeviceInfo,
+  conflict: InspectedDeviceClaim & { classification: 'allocator-held' },
+): AppError {
+  const held = conflict.allocatorClaim;
+  const publicPlatform = publicPlatformString({
+    platform: held.device.family,
+    appleOs: held.device.appleOs,
+  });
+  const recoveryCommand = buildDeviceClaimInspectionCommand(device, conflict);
+  return new AppError(
+    'DEVICE_IN_USE',
+    `${publicPlatform} device ${device.id} is held by managed-device allocator "${held.allocator.instanceId}" for installation "${held.stateDir}".`,
+    {
+      reason: DEVICE_CLAIM_ALLOCATOR_HELD,
+      classification: conflict.classification,
+      deviceKey: conflict.deviceKey,
+      owner: {
+        kind: 'allocator',
+        stateDir: held.stateDir,
+        allocator: held.allocator,
+      },
+      recovery: { command: recoveryCommand },
+      hint: `This device belongs to a managed pool and is released only after its allocator proves the identity removed; inspect with: ${recoveryCommand}`,
+      retriable: false,
+    },
+  );
+}
+
 function allocatorClaimMissingError(device: DeviceInfo, owner: RuntimeOwnerRef): AppError {
   return new AppError(
     'COMMAND_FAILED',
@@ -127,6 +177,25 @@ function allocatorClaimMissingError(device: DeviceInfo, owner: RuntimeOwnerRef):
       deviceKey: canonicalLocalDeviceKey(deviceClaimIdentity(device)),
       retriable: false,
       hint: 'A managed identity becomes executable only after its allocator activates it and this installation holds its allocator-held claim.',
+    },
+  );
+}
+
+function allocatorClaimIncarnationStaleError(
+  device: DeviceInfo,
+  owner: RuntimeOwnerRef,
+  heldIncarnationId: string,
+): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `${publicPlatformString(device)} device ${device.id} is held for identity incarnation "${heldIncarnationId}", which is not the incarnation this binding fences.`,
+    {
+      reason: ALLOCATOR_CLAIM_INCARNATION_STALE,
+      owner: runtimeOwnerKey(owner),
+      deviceKey: canonicalLocalDeviceKey(deviceClaimIdentity(device)),
+      heldIncarnationId,
+      retriable: false,
+      hint: 'The managed identity was re-provisioned; obtain a new grant from the allocator.',
     },
   );
 }
@@ -166,6 +235,13 @@ export function decideAllocatorHeldAdmission(
       return { admitted: false, error: managedBindingRequiredError(device, owner) };
     case 'missing':
       return { admitted: false, error: allocatorClaimMissingError(device, owner) };
+    case 'covered':
+      return { admitted: true };
+    case 'incarnation-stale':
+      return {
+        admitted: false,
+        error: allocatorClaimIncarnationStaleError(device, owner, outcome.heldIncarnationId),
+      };
     case 'conflict':
       return { admitted: false, error: deviceClaimConflictError(device, outcome.conflict) };
   }
@@ -186,7 +262,9 @@ function claimRefusalResponse(error: AppError): DaemonResponse {
   return errorResponse(error.code, error.message, details, { hint, retriable });
 }
 
-function conflictReason(classification: DeviceClaimClassification): DeviceClaimConflictReason {
+function conflictReason(
+  classification: Exclude<DeviceClaimClassification, 'allocator-held'>,
+): DeviceClaimConflictReason {
   switch (classification) {
     case 'live':
       return 'DEVICE_CLAIM_LIVE_OWNER';
