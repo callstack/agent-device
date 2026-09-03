@@ -8,7 +8,9 @@
 # are scoped to the vulnerable major so unrelated majors elsewhere in the tree
 # stay untouched.
 overrides:
-  '@xmldom/xmldom': 0.8.13
+  '@xmldom/xmldom': 0.8.15
+  browserslist: ^4.28.7
+  decode-uri-component: ^0.5.0
   postcss: 8.5.23
   uuid: 14.0.0
   ws@8: ^8.20.1
