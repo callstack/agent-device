@@ -2,20 +2,19 @@
 
 - Decision: **GO**
 - Interpretation: **maintainer-corrected**
-- Revision: 268a90275e7a30419e581336b6d85eff680a2eb6 (detached)
+- Revision: 636b1deac98ab88cc8e0e1ed894b5719d8a6c83f (detached)
 - Target: ad-2237-axbridge (8CDB4DF1-3A3E-4FB1-AF89-B3D3A17647D5, com.apple.CoreSimulator.SimRuntime.iOS-26-2)
-- Generated: 2026-09-03T18:36:41.976Z
-- Immutable evidence: tag `evidence/ios-snapshot/268a90275`, commit `fdc52f65ed679f1420f91312204f8d558a8c0061`
-- Broad raw artifact: `ios-simulator-ax-bridge-broad-268a90275.json.gz` (SHA-256 `309f974b1dcb90768548a189f6af58b493b5d7b9d56a5bfad060d4335139eb7b`; original NO-GO; interpretation superseded to stretch-only; host client persistent-in-repository-reader)
-- Narrow targeted raw artifact: `ios-simulator-ax-bridge-targeted-268a90275.json.gz` (SHA-256 `fa2e01dcb5e2a0229a6836f1a4187169445347dd4c0a42bcb5a29022538c70b2`; host client node-direct-socket)
-- Corrected raw report: `ios-simulator-ax-bridge-corrected-268a90275.json.gz` (SHA-256 `4d70596a39153e6104e37a790622450d967f61b2244745915f39462514ba3bed`)
-- Host at generation: load average 35.35 on 12 cores
+- Generated: 2026-09-03T20:18:48.756Z
+- Immutable broad raw artifact: `evidence/ios-snapshot/636b1deac:ios-simulator-ax-bridge-broad-268a90275.json.gz` (SHA-256 `309f974b1dcb90768548a189f6af58b493b5d7b9d56a5bfad060d4335139eb7b`; original NO-GO; interpretation superseded to stretch-only; host client persistent-in-repository-reader)
+- Narrow targeted raw artifact: `evidence/ios-snapshot/636b1deac:ios-simulator-ax-bridge-targeted-636b1deac.json.gz` (SHA-256 `092d3deab3753c1b7a0d230d9e54f703e5fedb87ffc0974f082541ba9b4e687d`; host client node-direct-socket)
+- Corrected raw report: `evidence/ios-snapshot/636b1deac:ios-simulator-ax-bridge-corrected-636b1deac.json.gz` (SHA-256 `a20039b38d4da65fed65518a3214153afa0174faaf6fb38c3950a3bd1362870d`)
+- Host at generation: load average 6.13 on 12 cores
 
-The broad raw corpus is preserved unchanged. Its old NO-GO used readiness-inclusive first-look and stretch thresholds; this report evaluates the corrected hard contract. Its slower legacy host client only adds latency around the same in-Simulator reader, so its warm and relaunch cells remain conservative upper bounds for the Node-direct path.
+The broad raw corpus is preserved unchanged. Its old NO-GO used readiness-inclusive first-look and stretch thresholds; this report evaluates the corrected hard contract. The broad warm cells remain conservative upper bounds around the same in-Simulator reader. Relaunch uses the new Node-direct corpus below and does not rely on the legacy relaunch samples.
 
 ## Evaluated guest mechanism
 
-- Guest reader: idb v1.5.2 `Resources/SimulatorFrameworkBridge` (SHA-256 `3545621d2dc98de32879ebac55e8b0c33dc8eb7cc2bfbc2d0d2d21a002c8de58`) from `idb-companion.macos-arm64.tar.gz` (SHA-256 `f17b718a513931705542a7fbfa9cfc11895ee191562c9ffd2343cf7f8254bc08`).
+- Guest reader: idb v1.5.2 `Resources/SimulatorFrameworkBridge` (observed SHA-256 `3545621d2dc98de32879ebac55e8b0c33dc8eb7cc2bfbc2d0d2d21a002c8de58`; required SHA-256 `3545621d2dc98de32879ebac55e8b0c33dc8eb7cc2bfbc2d0d2d21a002c8de58`) from `idb-companion.macos-arm64.tar.gz` (SHA-256 `f17b718a513931705542a7fbfa9cfc11895ee191562c9ffd2343cf7f8254bc08`).
 - Transport: xcrun simctl spawn <udid> SimulatorFrameworkBridge accessibility serve <socket> --idle-timeout 300 --exit-on-disconnect true; UNIX socket frames are a 4-byte big-endian length + JSON.
 - Traversal: describe with snapshotTree=true (one XCTest snapshot fetch per read) and automationMode=true asserted per request; no idb_companion, gRPC, or Python client.
 
@@ -24,15 +23,16 @@ The broad raw corpus is preserved unchanged. Its old NO-GO used readiness-inclus
 | Gate | Status | Target | Evidence |
 |---|---|---|---|
 | warm | **PASS** | p50 <300 ms and p95 <500 ms per screen | 6/6 warm screen cells passed; quiet p50/p95=8.6 ms/9.3 ms ready=1/20; list p50/p95=118.2 ms/120.9 ms ready=1/20; nested-scroll p50/p95=15.1 ms/15.8 ms ready=1/20; alert p50/p95=41.6 ms/43.3 ms ready=1/20; system-surface p50/p95=37.2 ms/39.6 ms ready=1/20; xctest-stress p50/p95=39.6 ms/41.1 ms ready=1/20 |
-| relaunch | **PASS** | p95 <500 ms per screen after independently observed new-generation readiness | 6/6 relaunch screen cells passed; quiet p50/p95=8.9 ms/9.6 ms ready=1/20; list p50/p95=119.2 ms/121.1 ms ready=1/20; nested-scroll p50/p95=15.4 ms/16.5 ms ready=1/20; alert p50/p95=41.1 ms/42.7 ms ready=1/20; system-surface p50/p95=37.3 ms/39.5 ms ready=1/20; xctest-stress p50/p95=40.4 ms/42.6 ms ready=1/20; targeted readiness observed for 5/5 clean relaunch samples |
-| nonresidentBootstrap | **PASS** | nonresident companion + reader bootstrap and first usable tree p95 <2,000 ms | 5/5 usable trees; p95=1134.8 ms; the timer covered guest spawn, socket connect, and the first tree after a throwaway probe observed the relaunched app's readiness (readiness p95=1162.9 ms), with no resident bridge, xcodebuild, XCTest, or agent-device runner in the timed path |
-| boundedResources | **PASS** | guest CPU <=2000 ms and RSS <=268435456 bytes per successful read | 9/9 successful reads measured within bounds; max CPU=220.0 ms; max RSS=84787200 bytes |
+| relaunch | **PASS** | p95 <500 ms per screen after independently observed new-generation readiness | 6/6 relaunch screen cells passed; quiet p50/p95=77.1 ms/84.8 ms ready=20/20; list p50/p95=191.4 ms/198.7 ms ready=20/20; nested-scroll p50/p95=85.8 ms/91.1 ms ready=20/20; alert p50/p95=111.4 ms/130.4 ms ready=20/20; system-surface p50/p95=106.0 ms/118.1 ms ready=20/20; xctest-stress p50/p95=117.2 ms/131.7 ms ready=20/20; 120/120 Node-direct samples across 6/6 screens |
+| nonresidentBootstrap | **PASS** | nonresident companion + reader bootstrap and first usable tree p95 <2,000 ms | 5/5 usable trees; p95=1112.7 ms; the timer covered guest spawn, socket connect, and the first tree after a throwaway probe observed the relaunched app's readiness (readiness p95=1374.9 ms), with no resident bridge, xcodebuild, XCTest, or agent-device runner in the timed path |
+| boundedResources | **PASS** | guest CPU <=2000 ms and RSS <=268435456 bytes per successful read | 129/129 successful reads measured within bounds; max CPU=220.0 ms; max RSS=89423872 bytes |
 | liveRecovery | **PASS** | live crash, timeout, cancellation, and honest target-generation handling | 4/4 probes returned a typed failure or typed unavailable-generation residue and a usable recovered response |
 | hierarchy | **PASS** | structural hierarchy acquired with typed truncation, or its absence typed as residue | nested tree with traversal depth 29 in 5/5 samples; truncated=false |
+| preferenceControl | **PASS** | task-owned Simulator accessibility preferences applied preboot and restored | applied=true; restored=true; enabled keys=AutomationEnabled, IgnoreAXServerEntitlements; fixture launch compatible=true |
 
 ## Readiness boundary and candidate-owned latency
 
-Warm and relaunch timing starts at the bridge acquisition after fixture/app readiness admission. Relaunch readiness is recorded separately; the old first-look value includes Simulator, app, daemon, and runner costs.
+Warm and relaunch timing starts at bridge acquisition after fixture/app readiness admission. Every relaunch row comes from the Node-direct route and is paired with a separate probe that observed the exact relaunched process generation and expected screen anchor. The old first-look value includes Simulator, app, daemon, and runner costs.
 
 | State | Screen | Samples | Readable | Ready generation | Candidate p50/p95 ms | Readiness p95 ms | Old first-look p95 ms | Generations |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
@@ -42,12 +42,12 @@ Warm and relaunch timing starts at the bridge acquisition after fixture/app read
 | warm | alert | 20 | 20 | 1 | 41.6/43.3 | 0.0 | 43.3 | 1 |
 | warm | system-surface | 20 | 20 | 1 | 37.2/39.6 | 0.0 | 39.6 | 1 |
 | warm | xctest-stress | 20 | 20 | 1 | 39.6/41.1 | 0.0 | 41.1 | 1 |
-| relaunch | quiet | 20 | 20 | 1 | 8.9/9.6 | 4390.1 | 4399.3 | 1 |
-| relaunch | list | 20 | 20 | 1 | 119.2/121.1 | 5061.4 | 5177.9 | 1 |
-| relaunch | nested-scroll | 20 | 20 | 1 | 15.4/16.5 | 5078.9 | 5093.8 | 1 |
-| relaunch | alert | 20 | 20 | 1 | 41.1/42.7 | 4418.9 | 4461.2 | 1 |
-| relaunch | system-surface | 20 | 20 | 1 | 37.3/39.5 | 4976.2 | 5013.4 | 1 |
-| relaunch | xctest-stress | 20 | 20 | 1 | 40.4/42.6 | 4463.5 | 4503.0 | 1 |
+| relaunch | quiet | 20 | 20 | 20 | 77.1/84.8 | 1086.6 | 1170.8 | 20 |
+| relaunch | list | 20 | 20 | 20 | 191.4/198.7 | 1177.5 | 1379.3 | 20 |
+| relaunch | nested-scroll | 20 | 20 | 20 | 85.8/91.1 | 1102.3 | 1237.7 | 20 |
+| relaunch | alert | 20 | 20 | 20 | 111.4/130.4 | 1105.8 | 1231.3 | 20 |
+| relaunch | system-surface | 20 | 20 | 20 | 106.0/118.1 | 1103.7 | 1243.5 | 20 |
+| relaunch | xctest-stress | 20 | 20 | 20 | 117.2/131.7 | 1121.2 | 1245.1 | 20 |
 
 ## Cold diagnostics
 
@@ -70,17 +70,17 @@ Cold and cold-cold first-look measurements remain visible for diagnosis, but are
 
 ## Nonresident bootstrap
 
-- 5/5 usable trees; p95=1134.8 ms; the timer covered guest spawn, socket connect, and the first tree after a throwaway probe observed the relaunched app's readiness (readiness p95=1162.9 ms), with no resident bridge, xcodebuild, XCTest, or agent-device runner in the timed path.
-- 9/9 successful reads measured within bounds; max CPU=220.0 ms; max RSS=84787200 bytes.
+- 5/5 usable trees; p95=1112.7 ms; the timer covered guest spawn, socket connect, and the first tree after a throwaway probe observed the relaunched app's readiness (readiness p95=1374.9 ms), with no resident bridge, xcodebuild, XCTest, or agent-device runner in the timed path.
+- 129/129 successful reads measured within bounds; max CPU=220.0 ms; max RSS=89423872 bytes.
 - The timed boundary begins with no resident bridge and ends at the first usable guest tree. Before each timer the fixture app was relaunched and a throwaway probe bridge polled until the new generation answered with a tree (readiness), then exited.
 
 | Sample | Duration ms | CPU ms | RSS MiB | Usable tree | Nodes | Depth | Generation | Readiness ms | Attempts | Host load |
 |---:|---:|---:|---:|---|---:|---:|---|---:|---:|---:|
-| 1 | 1111.5 | 220.0 | 77.6 | true | 155 | 29 | pid:13819 | 1163 | 1 | 49.73 |
-| 2 | 1089.4 | 200.0 | 77.8 | true | 155 | 29 | pid:14329 | 1121 | 1 | 48.22 |
-| 3 | 1134.8 | 220.0 | 77.3 | true | 155 | 29 | pid:14828 | 1152 | 1 | 46.76 |
-| 4 | 1106.0 | 210.0 | 77.7 | true | 155 | 29 | pid:15747 | 1129 | 1 | 40.27 |
-| 5 | 1109.7 | 220.0 | 78.0 | true | 155 | 29 | pid:16245 | 1129 | 1 | 37.2 |
+| 1 | 1106.4 | 200.0 | 77.9 | true | 155 | 29 | pid:75246 | 1375 | 1 | 30.13 |
+| 2 | 1077.6 | 210.0 | 78.2 | true | 155 | 29 | pid:75957 | 1102 | 1 | 32.48 |
+| 3 | 1112.7 | 220.0 | 78.1 | true | 155 | 29 | pid:76441 | 1211 | 1 | 32.84 |
+| 4 | 1072.6 | 200.0 | 77.6 | true | 155 | 29 | pid:76933 | 1152 | 1 | 32.59 |
+| 5 | 1088.7 | 220.0 | 77.9 | true | 155 | 29 | pid:77466 | 1157 | 1 | 31.74 |
 
 ## Live candidate recovery
 
@@ -88,15 +88,25 @@ Cold and cold-cold first-look measurements remain visible for diagnosis, but are
 
 | Operation | Observed failure | Recovery response | Recovered tree |
 |---|---|---|---|
-| process-crash | process-crash/guest-exited | ok | 155 nodes |
-| timeout | timeout/batch-duration-limit | ok | 155 nodes |
-| cancelled | cancelled/abort-signal | ok | 155 nodes |
-| stale-generation | stale-generation/target-generation-mismatch | ok | 155 nodes |
+| process-crash | process-crash/guest-exited | ok | 135 nodes |
+| timeout | timeout/batch-duration-limit | ok | 135 nodes |
+| cancelled | cancelled/abort-signal | ok | 135 nodes |
+| stale-generation | stale-generation/target-generation-mismatch | ok | 135 nodes |
 
 ## Hierarchy
 
 - nested tree with traversal depth 29 in 5/5 samples; truncated=false.
 - Observed traversal depth: 29; depth complete: **true**; interpretation: nested-tree.
+
+## Simulator preference control
+
+- applied=true; restored=true; enabled keys=AutomationEnabled, IgnoreAXServerEntitlements; fixture launch compatible=true.
+- The broad capture applied its accessibility preference changes only to the disposable benchmark Simulator before boot, verified fixture launch compatibility, and restored the prior preference files and Simulator state afterward.
+
+## Private-interface compatibility risk
+
+- SimulatorFrameworkBridge and its accessibility wire protocol are private idb/Apple implementation details with no compatibility guarantee.
+- Control: Pin the official idb release and observed guest SHA-256, keep this route Simulator-only behind the acquisition adapter, and re-run this verifier for every idb, Xcode, or Simulator runtime change before production adoption.
 
 ## Stretch findings
 
@@ -106,7 +116,7 @@ Cold and cold-cold first-look measurements remain visible for diagnosis, but are
 - Original broad-run finding: guest-simulator-framework-bridge relaunch first look missed the 250 ms target.
 - Cold and cold-cold first-look measurements include Simulator, app, daemon, and runner readiness costs; they are diagnostics, not candidate-owned hard gates.
 - The former warm 75/150 ms and relaunch 250 ms thresholds are stretch findings under the corrected contract.
-- Nonresident bootstrap samples were taken on a host with 1-minute load average 35.35 on 12 cores; per-sample load is recorded with each sample.
+- Nonresident bootstrap samples were taken on a host with 1-minute load average 6.13 on 12 cores; per-sample load is recorded with each sample.
 
 ## Production boundary
 

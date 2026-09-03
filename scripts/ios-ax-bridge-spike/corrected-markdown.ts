@@ -13,7 +13,7 @@ export function renderCorrectedMarkdown(report: CorrectedReport): string {
     `- Narrow targeted raw artifact: \`${report.targetedArtifact.path}\` (host client ${report.guestMechanism.client})`,
     `- Host at generation: load average ${report.host.loadAverage1m} on ${report.host.cpuCores} cores`,
     '',
-    'The broad raw corpus is preserved unchanged. Its old NO-GO used readiness-inclusive first-look and stretch thresholds; this report evaluates the corrected hard contract. Its slower legacy host client only adds latency around the same in-Simulator reader, so its warm and relaunch cells remain conservative upper bounds for the Node-direct path.',
+    'The broad raw corpus is preserved unchanged. Its old NO-GO used readiness-inclusive first-look and stretch thresholds; this report evaluates the corrected hard contract. The broad warm cells remain conservative upper bounds around the same in-Simulator reader. Relaunch uses the new Node-direct corpus below and does not rely on the legacy relaunch samples.',
     '',
     '## Evaluated guest mechanism',
     '',
