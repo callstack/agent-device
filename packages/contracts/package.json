@@ -275,6 +275,10 @@
       "types": "./src/logs-runtime-plan.ts",
       "default": "./src/logs-runtime-plan.ts"
     },
+    "./managed-device-allocation": {
+      "types": "./src/managed-device-allocation.ts",
+      "default": "./src/managed-device-allocation.ts"
+    },
     "./managed-web-backend": {
       "types": "./src/managed-web-backend.ts",
       "default": "./src/managed-web-backend.ts"
