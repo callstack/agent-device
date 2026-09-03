@@ -3,6 +3,7 @@ import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import {
   type BoundDeviceRuntime,
   type DeviceBinding,
+  type DeviceBindingIntent,
   type DeviceRuntimeGateway,
   type ResourceOwnershipFence,
   type RuntimeFacts,
@@ -84,19 +85,26 @@ export type RequestRuntimeBindings = AsyncDisposable &
  * device operation exists, and admitting here covers every handler by
  * construction. A refusal rejects the cached promise, so a second `bindDevice`
  * for the same device re-attempts rather than inheriting a rejected binding.
+ * The gate receives the very intent the gateway bound, so an exact-owner fence
+ * reaches claim admission unchanged.
  */
 export function createRequestRuntimeBindings(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
-  admitDeviceClaim: (device: DeviceInfo, owner: RuntimeOwnerRef) => Promise<void>;
+  admitDeviceClaim: (
+    device: DeviceInfo,
+    owner: RuntimeOwnerRef,
+    intent: DeviceBindingIntent,
+  ) => Promise<void>;
 }): RequestRuntimeBindings {
   const cleanups = new AsyncCleanupStack();
   const bindings = new Map<string, Promise<DeviceBinding<PlatformRuntimeOperations>>>();
 
   const admitBinding = async (
     binding: DeviceBinding<PlatformRuntimeOperations>,
+    intent: DeviceBindingIntent,
   ): Promise<DeviceBinding<PlatformRuntimeOperations>> => {
-    await params.admitDeviceClaim(binding.device, binding.owner);
+    await params.admitDeviceClaim(binding.device, binding.owner, intent);
     return binding;
   };
 
@@ -104,14 +112,11 @@ export function createRequestRuntimeBindings(params: {
     const key = deviceIdentityKey(deviceIdentity(device));
     let bindingPromise = bindings.get(key);
     if (!bindingPromise) {
+      const intent: DeviceBindingIntent = { kind: 'ordinary' };
       bindingPromise = params.gateway
-        .bind({
-          device,
-          intent: { kind: 'ordinary' },
-          scope: params.scope,
-        })
+        .bind({ device, intent, scope: params.scope })
         .then((binding) => cleanups.use(binding))
-        .then(admitBinding);
+        .then((binding) => admitBinding(binding, intent));
       bindings.set(key, bindingPromise);
       void bindingPromise.catch(() => {
         if (bindings.get(key) === bindingPromise) bindings.delete(key);
@@ -122,12 +127,9 @@ export function createRequestRuntimeBindings(params: {
 
   // Exact-owner bindings deliberately bypass the cache, so they admit their own.
   const bindExactDevice: BindExactDeviceRuntime = async (device, owner, fence, use, scope) => {
-    const published = await params.gateway.bind({
-      device,
-      intent: { kind: 'exact-owner', owner, fence },
-      scope,
-    });
-    const binding = await admitBinding(await adoptExactBinding(cleanups, published, scope));
+    const intent: DeviceBindingIntent = { kind: 'exact-owner', owner, fence };
+    const published = await params.gateway.bind({ device, intent, scope });
+    const binding = await admitBinding(await adoptExactBinding(cleanups, published, scope), intent);
     return narrowDeviceBinding(binding, use);
   };
 

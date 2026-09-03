@@ -1,6 +1,7 @@
 import {
   type DeviceBinding,
   localRuntimeOwner,
+  managedLocalRuntimeOwner,
   providerRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
 import type {
@@ -397,6 +398,38 @@ describe('composed platform runtime gateway', () => {
     });
     expect(binding.owner).toEqual(ref);
     expect(ownsDevice).not.toHaveBeenCalled();
+  });
+
+  test('an exact managed local owner is unavailable until a managed owner registration exists', async () => {
+    const hostLoad = vi.fn(async () => ({}) as PlatformRuntimeHost);
+    const localLoad = vi.fn(async () =>
+      runtimeOwner({ ref: localRuntimeOwner('apple'), providerMode: 'local' }),
+    );
+    const registration = providerRuntime({ ref: providerRuntimeOwner('limrun', 'stable') });
+    const runtimeGateway = createComposedPlatformRuntimeGateway({
+      modules: new Map([['apple', { family: 'apple', loadRuntime: localLoad }]]),
+      loadHost: hostLoad,
+      providerRuntimes: [registration.runtime],
+      providerModules: [registration],
+    });
+
+    await expect(
+      runtimeGateway.bind({
+        device,
+        intent: {
+          kind: 'exact-owner',
+          owner: managedLocalRuntimeOwner('sim-a'),
+          fence: { token: 'fence', generation: 1 },
+        },
+        scope,
+      }),
+    ).rejects.toMatchObject({
+      code: 'UNSUPPORTED_OPERATION',
+      details: { reason: 'owner-unavailable', owner: 'managed:["sim-a"]' },
+    });
+    // Neither the device's local family nor any provider stands in for a managed owner.
+    expect(localLoad).not.toHaveBeenCalled();
+    expect(hostLoad).not.toHaveBeenCalled();
   });
 
   test('rejects ambiguous ordinary provider ownership', async () => {

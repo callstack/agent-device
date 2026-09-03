@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { isReplayInfrastructureFailure } from '../session-test-infrastructure.ts';
+import { ALLOCATOR_CLAIM_MISSING } from '../../../device-claim-conflict.ts';
 import type { DaemonResponse } from '../../../types.ts';
 import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 
@@ -118,6 +119,20 @@ test('isReplayInfrastructureFailure rejects normal replay failures', () => {
       code: 'ELEMENT_NOT_FOUND',
       message: 'Maestro selector did not match: text="Settings"',
       details: { reason: 'selector_not_found' },
+    },
+  };
+
+  assert.equal(isReplayInfrastructureFailure(response), false);
+});
+
+test('isReplayInfrastructureFailure does not retry a missing allocator-held claim as infrastructure', () => {
+  const response: DaemonResponse = {
+    ok: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      message:
+        'android device emulator-5554 is a managed identity with no allocator-held execution claim for this installation.',
+      details: { reason: ALLOCATOR_CLAIM_MISSING, retriable: false },
     },
   };
 

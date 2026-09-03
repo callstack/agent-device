@@ -273,9 +273,14 @@ function providerModeMatchesOwner(
   mode: DeviceBinding<PlatformRuntimeOperations>['facts']['device']['providerMode'],
   owner: RuntimeOwnerRef,
 ): boolean {
-  return owner.kind === 'local-family'
-    ? mode === 'local' || mode === 'transport-composed'
-    : mode === 'provider-runtime';
+  switch (owner.kind) {
+    case 'local-family':
+      return mode === 'local' || mode === 'transport-composed';
+    case 'managed-local':
+      return mode === 'local';
+    case 'provider-runtime':
+      return mode === 'provider-runtime';
+  }
 }
 
 async function selectExactOwner(
@@ -284,14 +289,21 @@ async function selectExactOwner(
   loadProvider: (module: PlatformRuntimeProviderModule) => Promise<PlatformRuntimeOwner>,
   loadLocal: (family: Platform) => Promise<PlatformRuntimeOwner>,
 ): Promise<PlatformRuntimeOwner> {
-  if (ref.kind === 'local-family') {
-    const owner = await loadLocal(ref.family);
-    if (sameRuntimeOwner(owner.owner, ref)) return owner;
-    throw ownerUnavailable(ref);
+  switch (ref.kind) {
+    case 'local-family': {
+      const owner = await loadLocal(ref.family);
+      if (sameRuntimeOwner(owner.owner, ref)) return owner;
+      throw ownerUnavailable(ref);
+    }
+    case 'managed-local':
+      // No managed owner is registered yet; the exact-only managed registry lands with ADR 0021.
+      throw ownerUnavailable(ref);
+    case 'provider-runtime': {
+      const registration = providersByOwner.get(runtimeOwnerKey(ref));
+      if (registration) return await loadProvider(registration.module);
+      throw ownerUnavailable(ref);
+    }
   }
-  const registration = providersByOwner.get(runtimeOwnerKey(ref));
-  if (registration) return await loadProvider(registration.module);
-  throw ownerUnavailable(ref);
 }
 
 function unavailableProviderBinding(

@@ -1,7 +1,13 @@
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { localRuntimeOwner, providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import {
+  localRuntimeOwner,
+  managedBindingFence,
+  managedLocalRuntimeOwner,
+  providerRuntimeOwner,
+  type DeviceBindingIntent,
+} from '@agent-device/contracts/platform-runtime';
 import { asAppError } from '@agent-device/kernel/errors';
 import { ANDROID_EMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import {
@@ -19,6 +25,17 @@ import type { DeviceClaimPolicy } from '../../core/command-descriptor/types.ts';
 
 const setup = isolatedDeviceClaimStores('agent-device-claim-admission-');
 const localAndroid = localRuntimeOwner('android');
+const managedOwner = managedLocalRuntimeOwner('sim-a');
+const ORDINARY: DeviceBindingIntent = { kind: 'ordinary' };
+const MANAGED_BINDING: DeviceBindingIntent = {
+  kind: 'exact-owner',
+  owner: managedOwner,
+  fence: managedBindingFence({
+    requesterId: 'requester-1',
+    requestGeneration: 1,
+    identityIncarnationId: 'incarnation-1',
+  }),
+};
 
 function makeAdmission(policy: DeviceClaimPolicy, stateDir: string, command = 'made-up-command') {
   return createDeviceClaimAdmission({
@@ -52,7 +69,7 @@ test.for(POLICY_CLAIMS)(
     const { stateDir, claimsDir } = setup();
     const admission = makeAdmission(policy, stateDir);
 
-    await admission.admit(ANDROID_EMULATOR, localAndroid);
+    await admission.admit(ANDROID_EMULATOR, localAndroid, ORDINARY);
     expect(claimedSessions()).toEqual(held);
 
     await admission[Symbol.asyncDispose]();
@@ -76,7 +93,9 @@ test('a foreign live claim refuses the command before it can reach device operat
 
   const admission = makeAdmission('transient-exclusive', stateDir, 'shutdown');
   const error = asAppError(
-    await admission.admit(ANDROID_EMULATOR, localAndroid).catch((error: unknown) => error),
+    await admission
+      .admit(ANDROID_EMULATOR, localAndroid, ORDINARY)
+      .catch((error: unknown) => error),
   );
 
   expect(error.code).toBe('DEVICE_IN_USE');
@@ -102,7 +121,7 @@ test('a claim already held by this daemon covers the command instead of collidin
   });
 
   const admission = makeAdmission('transient-exclusive', stateDir, 'install');
-  await admission.admit(ANDROID_EMULATOR, localAndroid);
+  await admission.admit(ANDROID_EMULATOR, localAndroid, ORDINARY);
   await admission[Symbol.asyncDispose]();
 
   // The session claim is untouched: the command neither replaced nor released it.
@@ -123,7 +142,7 @@ test("an abandoned claim becomes this command's own transient claim and is relea
   expect(await abandonDeviceClaim(aborted.ownership)).toBe('abandoned');
 
   const admission = makeAdmission('transient-exclusive', stateDir, 'install');
-  await admission.admit(ANDROID_EMULATOR, localAndroid);
+  await admission.admit(ANDROID_EMULATOR, localAndroid, ORDINARY);
 
   // Coverage would have left the abandoned record owning the device with nothing to release it.
   expect(claimedSessions()).toEqual(['transient:install']);
@@ -135,11 +154,71 @@ test('a provider-owned device takes no host-local claim', async () => {
   const { stateDir, claimsDir } = setup();
   const admission = makeAdmission('transient-exclusive', stateDir);
 
-  await admission.admit(ANDROID_EMULATOR, providerRuntimeOwner('limrun', 'instance-1'));
+  await admission.admit(ANDROID_EMULATOR, providerRuntimeOwner('limrun', 'instance-1'), ORDINARY);
   await admission[Symbol.asyncDispose]();
 
   expect(fs.existsSync(claimsDir)).toBe(false);
 });
+
+test('a managed local owner is refused allocator-claim-missing under a managed binding fence and never takes a transient claim', async () => {
+  const { stateDir, claimsDir } = setup();
+  const admission = makeAdmission('transient-exclusive', stateDir, 'shutdown');
+
+  const error = asAppError(
+    await admission
+      .admit(ANDROID_EMULATOR, managedOwner, MANAGED_BINDING)
+      .catch((error: unknown) => error),
+  );
+
+  expect(error.code).toBe('COMMAND_FAILED');
+  expect(error.details?.reason).toBe('allocator-claim-missing');
+  expect(error.details?.retriable).toBe(false);
+  expect(error.details?.owner).toBe('managed:["sim-a"]');
+  expect(error.details?.hint).toMatch(/allocator-held claim/);
+  // The verifier never reaches for the store: nothing to acquire, nothing to give back.
+  expect(fs.existsSync(claimsDir)).toBe(false);
+  await admission[Symbol.asyncDispose]();
+  expect(fs.existsSync(claimsDir)).toBe(false);
+});
+
+test('a managed local owner bound without a managed binding fence is refused as a contract violation', async () => {
+  const { stateDir, claimsDir } = setup();
+  const admission = makeAdmission('transient-exclusive', stateDir, 'shutdown');
+
+  const error = asAppError(
+    await admission
+      .admit(ANDROID_EMULATOR, managedOwner, ORDINARY)
+      .catch((error: unknown) => error),
+  );
+
+  expect(error.code).toBe('COMMAND_FAILED');
+  expect(error.details?.reason).toBe('runtime-contract-invalid');
+  expect(fs.existsSync(claimsDir)).toBe(false);
+  await admission[Symbol.asyncDispose]();
+});
+
+// The rule is evaluated under every policy: the ordinary arm alone reads the policy (the
+// POLICY_CLAIMS table above), while a managed local owner is verified even where an ordinary
+// owner would never touch the store, and a provider owner never is.
+test.for(POLICY_CLAIMS.map(([policy]) => policy))(
+  'the device-claim rule is evaluated under the %s policy: managed local owners are verified, provider owners never claim',
+  async (policy, { expect }) => {
+    const { stateDir, claimsDir } = setup();
+    const admission = makeAdmission(policy, stateDir);
+
+    const error = asAppError(
+      await admission
+        .admit(ANDROID_EMULATOR, managedOwner, MANAGED_BINDING)
+        .catch((error: unknown) => error),
+    );
+    expect(error.code).toBe('COMMAND_FAILED');
+    expect(error.details?.reason).toBe('allocator-claim-missing');
+
+    await admission.admit(ANDROID_EMULATOR, providerRuntimeOwner('limrun', 'instance-1'), ORDINARY);
+    await admission[Symbol.asyncDispose]();
+    expect(fs.existsSync(claimsDir)).toBe(false);
+  },
+);
 
 /** Claims visible while one command holds a device binding from the real request scope. */
 async function claimsWhileBound(command: string, stateDir: string) {

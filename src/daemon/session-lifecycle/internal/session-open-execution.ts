@@ -49,12 +49,16 @@ import {
   abandonDeviceClaim,
   acquireDeviceClaim,
   clearDeviceClaim,
-  isLocalDeviceClaimTarget,
   type DeviceClaimAcquireResult,
   type DeviceClaimSessionOwnership,
   type DeviceClaimReconciler,
 } from '../../device-claims.ts';
-import { buildDeviceClaimConflictError } from '../../device-claim-conflict.ts';
+import {
+  buildAllocatorHeldRefusal,
+  buildDeviceClaimConflictError,
+} from '../../device-claim-conflict.ts';
+import { requireAllocatorHeldDeviceClaim } from '../../device-claim-allocator.ts';
+import { deviceClaimRuleForOwner } from '../../device-claim-rule.ts';
 
 type OpenTiming = {
   totalDurationMs?: number;
@@ -357,23 +361,41 @@ function findNewSessionDeviceConflict(params: {
   return buildDeviceInUseBySessionError(inUse, device);
 }
 
-async function acquireLocalDeviceClaim(params: {
+async function acquireDeviceClaimForOwner(params: {
   req: DaemonRequest;
   device: DeviceInfo;
   owner: OpenApplicationRuntime['owner'];
   sessionName: string;
   sessionStore: SessionStore;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
-}): Promise<DeviceClaimAcquireResult | { status: 'not-required' }> {
+}): Promise<
+  | DeviceClaimAcquireResult
+  | { status: 'not-required' }
+  | { status: 'refused'; response: DaemonResponse }
+> {
   const { req, device, owner, sessionName, sessionStore, reconcileOrphanedDeviceClaim } = params;
-  if (!isLocalDeviceClaimTarget(owner)) return { status: 'not-required' };
-  return await acquireDeviceClaim({
-    device,
-    session: sessionName,
-    workspace: req.meta?.cwd ?? process.cwd(),
-    stateDir: sessionStore.resolveDaemonStateDir(),
-    reconcileOrphanedDeviceClaim,
-  });
+  switch (deviceClaimRuleForOwner(owner)) {
+    case 'none':
+      return { status: 'not-required' };
+    case 'allocator-held': {
+      // Session open binds ordinarily and carries no fence; a session admitted under the
+      // allocator-held claim executes under it and records no claim of its own.
+      const response = buildAllocatorHeldRefusal(
+        device,
+        owner,
+        requireAllocatorHeldDeviceClaim({ device, owner, intent: { kind: 'ordinary' } }),
+      );
+      return response ? { status: 'refused', response } : { status: 'not-required' };
+    }
+    case 'ordinary':
+      return await acquireDeviceClaim({
+        device,
+        session: sessionName,
+        workspace: req.meta?.cwd ?? process.cwd(),
+        stateDir: sessionStore.resolveDaemonStateDir(),
+        reconcileOrphanedDeviceClaim,
+      });
+  }
 }
 
 export async function openNewSessionWithDeviceClaim(params: {
@@ -409,7 +431,7 @@ export async function openNewSessionWithDeviceClaim(params: {
   const conflict = findNewSessionDeviceConflict({ req, device, sessionStore });
   if (conflict) return conflict;
 
-  const localClaim = await acquireLocalDeviceClaim({
+  const ownerClaim = await acquireDeviceClaimForOwner({
     req,
     device,
     owner: lifecycle.owner,
@@ -417,9 +439,10 @@ export async function openNewSessionWithDeviceClaim(params: {
     sessionStore,
     reconcileOrphanedDeviceClaim,
   });
-  if (localClaim.status === 'conflict')
-    return buildDeviceClaimConflictError(device, localClaim.conflict);
-  const deviceClaim = localClaim.status === 'acquired' ? localClaim.ownership : undefined;
+  if (ownerClaim.status === 'conflict')
+    return buildDeviceClaimConflictError(device, ownerClaim.conflict);
+  if (ownerClaim.status === 'refused') return ownerClaim.response;
+  const deviceClaim = ownerClaim.status === 'acquired' ? ownerClaim.ownership : undefined;
   const effects: NewSessionOpenEffects = { mayHaveStarted: false };
   const rollbackClaim = async () =>
     await rollbackNewSessionClaim({

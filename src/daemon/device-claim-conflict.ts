@@ -4,7 +4,11 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { runtimeOwnerKey, type RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
+import type { AllocatorHeldClaimAdmission } from './device-claim-allocator.ts';
+import { canonicalLocalDeviceKey } from './device-claim-paths.ts';
+import { deviceClaimIdentity } from './device-claims.ts';
 import {
   deviceClaimOwnerCannotRelease,
   deviceClaimRequiresStaleInspection,
@@ -28,6 +32,14 @@ const DEVICE_CLAIM_CONFLICT_REASONS = new Set<DeviceClaimConflictReason>([
 export function isDeviceClaimConflictReason(value: unknown): value is DeviceClaimConflictReason {
   return DEVICE_CLAIM_CONFLICT_REASONS.has(value as DeviceClaimConflictReason);
 }
+
+/**
+ * The reason of the allocator-held arm's refusal when no allocator-held claim
+ * exists. Deliberately not a {@link DeviceClaimConflictReason}: replay retries
+ * every conflict reason as infrastructure, and a managed identity that no
+ * allocator activated is a permanent condition, not a collision.
+ */
+export const ALLOCATOR_CLAIM_MISSING = 'allocator-claim-missing';
 
 export function buildDeviceClaimInspectionCommand(
   device: DeviceInfo,
@@ -102,7 +114,67 @@ export function buildDeviceClaimConflictError(
   device: DeviceInfo,
   conflict: InspectedDeviceClaim,
 ): DaemonResponse {
-  const error = deviceClaimConflictError(device, conflict);
+  return claimRefusalResponse(deviceClaimConflictError(device, conflict));
+}
+
+function allocatorClaimMissingError(device: DeviceInfo, owner: RuntimeOwnerRef): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `${publicPlatformString(device)} device ${device.id} is a managed identity with no allocator-held execution claim for this installation.`,
+    {
+      reason: ALLOCATOR_CLAIM_MISSING,
+      owner: runtimeOwnerKey(owner),
+      deviceKey: canonicalLocalDeviceKey(deviceClaimIdentity(device)),
+      retriable: false,
+      hint: 'A managed identity becomes executable only after its allocator activates it and this installation holds its allocator-held claim.',
+    },
+  );
+}
+
+function managedBindingRequiredError(device: DeviceInfo, owner: RuntimeOwnerRef): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'A managed local owner executes only under an exact-owner binding that carries a managed binding fence.',
+    {
+      reason: 'runtime-contract-invalid',
+      owner: runtimeOwnerKey(owner),
+      deviceKey: canonicalLocalDeviceKey(deviceClaimIdentity(device)),
+      retriable: false,
+    },
+  );
+}
+
+/**
+ * One refusal per verifier outcome. The switch has no default, so an outcome the
+ * verifier learns to produce is a compile error here until it is answered; an
+ * admitted outcome answers `undefined`.
+ */
+export function allocatorHeldAdmissionError(
+  device: DeviceInfo,
+  owner: RuntimeOwnerRef,
+  outcome: AllocatorHeldClaimAdmission,
+): AppError | undefined {
+  switch (outcome.status) {
+    case 'binding-invalid':
+      return managedBindingRequiredError(device, owner);
+    case 'missing':
+      return allocatorClaimMissingError(device, owner);
+    case 'conflict':
+      return deviceClaimConflictError(device, outcome.conflict);
+  }
+}
+
+/** `open` returns the allocator-held refusal as a response, exactly as it does the conflict. */
+export function buildAllocatorHeldRefusal(
+  device: DeviceInfo,
+  owner: RuntimeOwnerRef,
+  outcome: AllocatorHeldClaimAdmission,
+): DaemonResponse | undefined {
+  const error = allocatorHeldAdmissionError(device, owner, outcome);
+  return error ? claimRefusalResponse(error) : undefined;
+}
+
+function claimRefusalResponse(error: AppError): DaemonResponse {
   const { hint, retriable, ...details } = error.details ?? {};
   return errorResponse(error.code, error.message, details, { hint, retriable });
 }
