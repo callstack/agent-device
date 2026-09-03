@@ -296,7 +296,7 @@ async function selectExactOwner(
       throw ownerUnavailable(ref);
     }
     case 'managed-local':
-      // No managed owner is registered yet; the exact-only managed registry lands with ADR 0021.
+      // No managed owner is registered yet; U3 fills this arm with the exact-only registry.
       throw ownerUnavailable(ref);
     case 'provider-runtime': {
       const registration = providersByOwner.get(runtimeOwnerKey(ref));
