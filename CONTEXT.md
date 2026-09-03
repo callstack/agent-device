@@ -305,6 +305,11 @@ Compatibility-engine evidence captured since the most recent mutation; mutation 
 **Provider**:
 An external adapter that owns a device runtime or contributes transport to a platform module.
 
+**Managed device allocator port**:
+The daemon-owned interface to a managed-device allocator, covering everything the daemon needs to
+obtain, hold, and give back a managed device.
+_Avoid_: Simlock client, lease provider
+
 **Cloud WebDriver runtime**:
 A provider runtime that maps a cloud-owned Appium or WebDriver session into agent-device inventory,
 leases, runtime behavior, artifacts, and release.

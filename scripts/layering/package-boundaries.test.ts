@@ -113,6 +113,7 @@ const CONTRACT_EXPORTS = [
   '@agent-device/contracts/keyboard-runtime',
   '@agent-device/contracts/local-interactor-operation-set',
   '@agent-device/contracts/logs-runtime-plan',
+  '@agent-device/contracts/managed-device-allocation',
   '@agent-device/contracts/managed-web-backend',
   '@agent-device/contracts/navigation',
   '@agent-device/contracts/network-runtime',

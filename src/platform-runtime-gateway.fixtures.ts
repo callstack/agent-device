@@ -7,17 +7,23 @@ import {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   type DeviceBinding,
+  type DeviceBindingRequest,
   type RuntimeFacts,
+  type RuntimeOperationKey,
   type RuntimeOwnerRef,
+  type RuntimeProviderMode,
+  localRuntimeOwner,
   providerRuntimeOwner,
+  sameRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
+  PlatformRuntimeModule,
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import {
   createUnavailableRuntimeFactsForTest,
@@ -59,6 +65,108 @@ export function gatewayFixture(registrations: readonly PlatformRuntimeProviderRe
     loadHost: async () => ({}) as PlatformRuntimeHost,
     providerRuntimes: registrations.map(({ runtime }) => runtime),
     providerModules: registrations,
+  });
+}
+
+/**
+ * Every cell a managed local owner must withhold, listed once so the local family fixture can
+ * offer all of them and the managed tests can assert that none survives the wrapper.
+ */
+export const MANAGED_WITHHELD_OPERATIONS = [
+  'ensureReady',
+  'bootTarget',
+  'bootTargetHeadless',
+  'shutdownTarget',
+  'deployApp',
+  'deployMaterializedApp',
+  'prepareApplicationOpen',
+  'prepareAppleRunner',
+  'closeApplication',
+  'finalizeApplicationClose',
+  'appLogStart',
+  'appLogReattach',
+  'appLogCleanup',
+  'screenRecordingStart',
+  'screenRecordingReattach',
+  'screenRecordingCleanup',
+  'audioProbeStart',
+  'audioProbeReattach',
+  'audioProbeCleanup',
+  'perfNativeCaptureStart',
+  'perfNativeCaptureReattach',
+  'perfNativeCaptureCleanup',
+  'captureScreenshot',
+  'setSetting',
+  'readClipboard',
+  'writeClipboard',
+  'openApplication',
+] as const satisfies readonly RuntimeOperationKey<PlatformRuntimeOperations>[];
+
+/** The one cell the family owner offers that a managed binding keeps. */
+export const MANAGED_RETAINED_OPERATION = 'tapPoint';
+
+export type LocalFamilyRuntimeFixture = Readonly<{
+  module: PlatformRuntimeModule;
+  /** Every bind request the family owner received, in order. */
+  requests: DeviceBindingRequest[];
+  calls: { loads: number; disposals: number };
+}>;
+
+/**
+ * A local family owner that offers every withheld cell plus one retained cell, and that refuses a
+ * foreign exact-owner intent the way the real family runtimes do.
+ */
+export function localFamilyRuntimeFixture(options: {
+  family: Platform;
+  device: DeviceInfo;
+  providerMode?: RuntimeProviderMode;
+}): LocalFamilyRuntimeFixture {
+  const owner = localRuntimeOwner(options.family);
+  const requests: DeviceBindingRequest[] = [];
+  const calls = { loads: 0, disposals: 0 };
+  const base = createUnavailableRuntimeFactsForTest(options.device, owner);
+  const available = Object.freeze({ available: true } as const);
+  const offered: Record<string, unknown> = {};
+  const operations: Record<string, unknown> = {};
+  for (const key of [...MANAGED_WITHHELD_OPERATIONS, MANAGED_RETAINED_OPERATION]) {
+    offered[key] = available;
+    operations[key] = async () => undefined;
+  }
+  const facts = Object.freeze({
+    device: { ...base.device, providerMode: options.providerMode ?? base.device.providerMode },
+    operations: Object.freeze({ ...base.operations, ...offered }),
+  }) as RuntimeFacts<PlatformRuntimeOperations>;
+  const runtimeOwner: PlatformRuntimeOwner = {
+    owner,
+    ownsDevice: () => true,
+    inspectFacts: async () => facts,
+    bind: async (request) => {
+      requests.push(request);
+      if (request.intent.kind === 'exact-owner' && !sameRuntimeOwner(request.intent.owner, owner)) {
+        throw new TypeError('A local family runtime cannot bind a foreign exact owner');
+      }
+      return {
+        device: request.device,
+        owner,
+        facts,
+        operations: operations as DeviceBinding<PlatformRuntimeOperations>['operations'],
+        [Symbol.asyncDispose]: async () => {
+          calls.disposals += 1;
+        },
+      };
+    },
+    shutdown: async () => {},
+  };
+  return Object.freeze({
+    module: {
+      family: options.family,
+      loadRuntime: async () => {
+        calls.loads += 1;
+        return runtimeOwner;
+      },
+    },
+    requests,
+    calls,
   });
 }
 
