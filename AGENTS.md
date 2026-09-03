@@ -18,8 +18,8 @@ task procedures only when needed:
 | Writing issues or PRDs, and triage labels | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
 | Web backend setup or diagnostics | `docs/agents/web-backend.md` |
 
-Versioned CLI help is the source of truth for command behavior. Start workflow planning with
-`agent-device help workflow`, then use the relevant topic help.
+Versioned CLI help is the source of truth for command behavior. Start with `agent-device help
+workflow`, then the relevant topic help.
 
 ## Incident-derived principles
 
@@ -94,11 +94,13 @@ cross-language rules change through golden tables under `contracts/fixtures/`.
   the legacy `interaction.test.ts` or platform `index.test.ts` aggregations. Pure moves carry their
   tests unchanged; rename-only hunks owe no new coverage.
 - Shared fixtures are named exports in a sibling fixture module, not repeated inline literals.
+- `src/daemon/handlers/session.ts` is already over budget; extract the relevant platform-specific
+  concept before adding behavior.
 
 ## Toolchain and worktree traps
 
-- Use `pnpm`; never add `package-lock.json`. OXC owns lint and format. Run `pnpm format` for the
-  repository, not a path-scoped formatter invocation.
+- Use `pnpm`; never add `package-lock.json`. OXC owns lint and format. Run `pnpm format`
+  repository-wide, not path-scoped.
 - A fresh worktree requires `pnpm install --frozen-lockfile && pnpm build`. Until then package and
   optional-peer resolution may point at another checkout and produce false failures.
 - Source-checkout daemon state is worktree-scoped, but devices are not. Use `pnpm daemon:state-dir`
@@ -154,5 +156,5 @@ contents. Keep a sentence in this file only when no gate, lint rule, versioned h
 decision-site comment can own it. `CONTEXT.md` is glossary-only: no implementation paths,
 architecture decisions, migration state, or workflows.
 
-Behavior changes update their owning help/metadata and user docs when relevant. In the final summary,
+Behavior changes update their owning help/metadata and user docs. In the final summary,
 state whether docs or skills changed and why.
