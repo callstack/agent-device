@@ -378,8 +378,9 @@ async function acquireDeviceClaimForOwner(params: {
     case 'none':
       return { status: 'not-required' };
     case 'allocator-held': {
-      // Session open binds ordinarily and carries no fence; a session admitted under the
-      // allocator-held claim executes under it and records no claim of its own.
+      // Session open binds ordinarily, so this literal is the truth of the route and not a
+      // placeholder: the Host open route replaces it with the request's exact intent when it
+      // lands. Until then a managed owner reaches here without a fence and is always refused.
       const response = buildAllocatorHeldRefusal(
         device,
         owner,

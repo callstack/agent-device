@@ -21,12 +21,16 @@ import {
  * happens here, under every policy: an ordinary owner takes a transient claim
  * only when the executing command's declared {@link DeviceClaimPolicy} is
  * `transient-exclusive`; a managed local owner is verified against its
- * allocator-held claim; a provider owner takes nothing. There is no other way
- * to obtain device operations, so none of it can be forgotten by a handler.
+ * allocator-held claim; a provider owner takes nothing.
  *
  * `admit` is called once per device binding by the request runtime bindings,
  * which is where per-device deduplication already lives, with the binding
- * intent the gateway bound.
+ * intent the gateway bound. A command handler has no other way to obtain
+ * device operations, so a handler cannot forget any of this. Two daemon-owned
+ * recovery paths do bind outside the seam and are the known gap:
+ * application-lifecycle-recovery.ts (ordinary intent, daemon shutdown) and
+ * durable-capture-runtime-recovery.ts (exact-owner intent read back from a
+ * durable envelope).
  */
 export type DeviceClaimAdmission = AsyncDisposable &
   Readonly<{
