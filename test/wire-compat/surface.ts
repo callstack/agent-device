@@ -57,6 +57,7 @@ const CLIENT_PROGRESS = 'src/daemon/client/daemon-client-progress.ts';
 const CLIENT_TRANSPORT = 'src/daemon/client/daemon-client-transport.ts';
 const UPLOAD_CLIENT = 'src/remote/upload-client.ts';
 const REMOTE_ARTIFACTS = 'src/remote/daemon-artifacts.ts';
+const ARTIFACT_DOWNLOAD = 'src/remote/artifact-download.ts';
 const UPLOAD_STREAM = 'src/remote/upload-stream.ts';
 
 function from(file: string, ...names: string[]): WireDeclarationRef[] {
@@ -384,6 +385,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'materializeRemoteArtifacts',
         'resolveMaterializedArtifactPath',
       ),
+      ...from(ARTIFACT_DOWNLOAD, 'RemoteArtifactDownload', 'downloadRemoteArtifactFromUrl'),
     ],
   },
 ];

@@ -1,28 +1,14 @@
 import fs from 'node:fs';
-// Type-only: a runtime `node:http` import here would load it eagerly for every CLI command
-// (`cli-startup-import-closure.test.ts` pins this closure — `node:http`/`node:https` cost ~79ms
-// of undici + system-CA init). The actual HTTP stack already loads on demand via
-// `loadNodeHttpRequester` below, only when a remote daemon is actually in play.
-import type http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
-import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import { loadNodeHttpRequester } from '@agent-device/host-kit/transport';
 import type { DaemonArtifact, DaemonRequest, DaemonResponse } from '../daemon/types.ts';
-import {
-  buildDaemonHttpAuthHeaders,
-  buildDaemonHttpTenantHeaders,
-} from '../daemon/http-contract.ts';
 import {
   appendRecordingExtensionWhenMissing,
   recordingExtensionForPlatform,
 } from '../recording/output-path.ts';
 import { uploadArtifact } from './upload-client.ts';
 import { createStderrUploadProgressReporter, type UploadProgressSink } from './upload-progress.ts';
-
-// Mirrors the current daemon RPC timeout, but artifact download timeouts may diverge.
-const REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS = 90_000;
+import { downloadRemoteArtifactFromUrl } from './artifact-download.ts';
 
 // Mirrors `DEFAULT_TEST_ARTIFACTS_ROOT` in `packages/replay-test/src/internal/session-test-artifacts.ts`
 // (the daemon's own default). Duplicated rather than imported: pulling it from
@@ -380,12 +366,12 @@ export async function materializeRemoteArtifacts(
       nextArtifacts.push(artifact);
       continue;
     }
-    const localPath = resolveMaterializedArtifactPath(artifact, req);
-    await downloadRemoteArtifact({
+    const downloadPath = resolveMaterializedArtifactPath(artifact, req);
+    const materializedPath = await downloadRemoteArtifact({
       baseUrl: info.baseUrl,
       token: info.token,
       artifactId: artifact.artifactId,
-      destinationPath: localPath,
+      destinationPath: downloadPath,
       requestScope: req.meta,
       // #2246: `test-artifacts` is the one directory-shaped artifact type today — known from the
       // response, before any bytes arrive, so cleanup-on-error can be decided up front instead of
@@ -393,10 +379,13 @@ export async function materializeRemoteArtifacts(
       // `downloadRemoteArtifact`).
       isDirectory: artifact.artifactType === 'test-artifacts',
     });
-    nextData[artifact.field] = localPath;
+    // Directory artifacts download into a caller-owned root, then atomically publish their one
+    // top-level entry beneath it. Use the path the download actually published rather than the
+    // root hint sent over the wire; otherwise `artifactsDir` loses its suite invocation segment.
+    nextData[artifact.field] = materializedPath;
     nextArtifacts.push({
       ...artifact,
-      localPath,
+      localPath: materializedPath,
     });
   }
   nextData.artifacts = nextArtifacts;
@@ -422,200 +411,22 @@ type DownloadRemoteArtifactParams = {
   destinationPath: string;
   requestScope: DaemonRequest['meta'];
   timeoutMs?: number;
-  /**
-   * `destinationPath` names a directory the caller owns (e.g. `test`'s `--artifacts-dir`, which
-   * may already hold earlier runs) rather than a single file `downloadRemoteArtifact` creates.
-   * Known up front from the artifact's type (#2246) — never inferred from the response, so a
-   * failed request (4xx, timeout) can decide cleanup safely before any bytes arrive.
-   */
+  /** Whether `destinationPath` is a caller-owned root rather than one file to create. */
   isDirectory?: boolean;
 };
 
-/**
- * How the response body becomes a file or directory on disk, and what to undo if it fails
- * partway. Selected once per download (#2246) instead of branching on `params.isDirectory` at
- * every step, so file and directory downloads can't drift out of sync with each other.
- */
-type DownloadDestinationStrategy = {
-  prepareDestination(): Promise<void>;
-  cleanupOnError(): Promise<void>;
-  write(res: http.IncomingMessage): Promise<void>;
-};
-
-function buildDownloadDestinationStrategy(
+export async function downloadRemoteArtifact(
   params: DownloadRemoteArtifactParams,
-): DownloadDestinationStrategy {
-  const { destinationPath } = params;
-  if (params.isDirectory) {
-    return {
-      prepareDestination: async () => {
-        await fs.promises.mkdir(destinationPath, { recursive: true });
-      },
-      // `destinationPath` is a directory the caller owns and may already hold earlier runs (e.g.
-      // `test`'s `--artifacts-dir` root) — never removed wholesale the way a partially-written
-      // single file safely can be. `write` below never touches it until extraction has fully
-      // succeeded, so there is nothing partial to clean up here either.
-      cleanupOnError: async () => {},
-      write: (res) => extractDownloadedDirectoryArtifact(res, destinationPath),
-    };
-  }
-  return {
-    prepareDestination: async () => {
-      await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
-    },
-    cleanupOnError: () => fs.promises.rm(destinationPath, { force: true }),
-    write: (res) => pipeline(res, fs.createWriteStream(destinationPath)),
-  };
-}
-
-export async function downloadRemoteArtifact(params: DownloadRemoteArtifactParams): Promise<void> {
-  const artifactUrl = new URL(buildDaemonArtifactUrl(params.baseUrl, params.artifactId));
-  // `prepareRemoteRequestArtifacts` runs on every CLI request, but only a
-  // remote daemon ever downloads an artifact, so the HTTP stack loads here.
-  const transport = await loadNodeHttpRequester(artifactUrl.protocol);
-  const strategy = buildDownloadDestinationStrategy(params);
-  await strategy.prepareDestination();
-  await new Promise<void>((resolve, reject) => {
-    let settled = false;
-    const timeoutMs = params.timeoutMs ?? REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS;
-    const settle = (error?: Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeoutHandle);
-      if (error) {
-        void strategy.cleanupOnError().finally(() => reject(error));
-        return;
-      }
-      resolve();
-    };
-    const request = transport.request(
-      {
-        protocol: artifactUrl.protocol,
-        host: artifactUrl.hostname,
-        port: artifactUrl.port,
-        method: 'GET',
-        path: artifactUrl.pathname + artifactUrl.search,
-        headers: {
-          ...buildDaemonHttpAuthHeaders(params.token),
-          ...buildDaemonHttpTenantHeaders(params.requestScope?.tenantId),
-        },
-      },
-      (res) => {
-        if ((res.statusCode ?? 500) >= 400) {
-          let body = '';
-          res.setEncoding('utf8');
-          res.on('data', (chunk) => {
-            body += chunk;
-          });
-          res.on('end', () => {
-            settle(
-              new AppError('COMMAND_FAILED', 'Failed to download remote artifact', {
-                artifactId: params.artifactId,
-                statusCode: res.statusCode,
-                requestId: params.requestScope?.requestId,
-                body,
-              }),
-            );
-          });
-          return;
-        }
-        res.on('aborted', () => {
-          settle(
-            new AppError('COMMAND_FAILED', 'Remote artifact download was interrupted', {
-              artifactId: params.artifactId,
-              requestId: params.requestScope?.requestId,
-            }),
-          );
-        });
-        void strategy.write(res).then(
-          () => settle(),
-          (error: unknown) => settle(error instanceof Error ? error : new Error(String(error))),
-        );
-      },
-    );
-    const timeoutHandle = setTimeout(() => {
-      const timeoutError = new AppError('COMMAND_FAILED', 'Remote artifact download timed out', {
-        artifactId: params.artifactId,
-        requestId: params.requestScope?.requestId,
-        timeoutMs,
-      });
-      settle(timeoutError);
-      request.destroy(timeoutError);
-    }, timeoutMs);
-    request.on('error', (error) => {
-      if (error instanceof AppError) {
-        settle(error);
-        return;
-      }
-      settle(
-        new AppError(
-          'COMMAND_FAILED',
-          'Failed to download remote artifact',
-          {
-            artifactId: params.artifactId,
-            requestId: params.requestScope?.requestId,
-            timeoutMs,
-          },
-          error instanceof Error ? error : undefined,
-        ),
-      );
-    });
-    request.end();
+): Promise<string> {
+  return await downloadRemoteArtifactFromUrl({
+    artifactUrl: new URL(buildDaemonArtifactUrl(params.baseUrl, params.artifactId)),
+    token: params.token,
+    artifactId: params.artifactId,
+    destinationPath: params.destinationPath,
+    requestScope: params.requestScope,
+    ...(params.timeoutMs === undefined ? {} : { timeoutMs: params.timeoutMs }),
+    ...(params.isDirectory === undefined ? {} : { isDirectory: params.isDirectory }),
   });
-}
-
-/**
- * Downloads a directory artifact's tar.gz body into a disposable temp file, then extracts it
- * into a FRESH staging directory before moving the one top-level entry into `destinationPath` —
- * a persistent directory the caller owns and may already hold earlier runs (e.g. `test`'s
- * `--artifacts-dir` root, #2246).
- *
- * Extraction goes through `extractArchiveSafely` rather than a raw `tar` invocation: the archive
- * comes from a remote daemon — a different trust domain — and that helper is this codebase's
- * existing guard against zip-slip/path-traversal, symlink entries, and unbounded archive size
- * (the same one `src/daemon/artifact-archive.ts` uses for uploaded app bundles). It requires an
- * output root that does not exist yet, which is exactly why extraction lands in a fresh temp
- * directory first rather than directly in `destinationPath`: nothing is written there — and a
- * truncated or unsafe archive never touches it — until extraction has fully succeeded and the
- * single resulting directory is moved into place as the last step. Loaded on demand: this is the
- * CLI's first client-side use of the archive stack, and importing it eagerly would cost every
- * warm CLI command the way `node:http` did (see the import comment above).
- */
-async function extractDownloadedDirectoryArtifact(
-  res: http.IncomingMessage,
-  destinationPath: string,
-): Promise<void> {
-  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'agent-device-download-'));
-  const archivePath = path.join(tempDir, 'artifact.tar.gz');
-  const stagingRoot = path.join(tempDir, 'extracted');
-  try {
-    await pipeline(res, fs.createWriteStream(archivePath));
-    const { extractArchiveSafely } = await import('@agent-device/host-kit/archive');
-    await extractArchiveSafely({ archivePath, outputRoot: stagingRoot, type: 'tgz' });
-    const [entryName, ...extraEntries] = await fs.promises.readdir(stagingRoot);
-    if (!entryName || extraEntries.length > 0) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        `Downloaded directory artifact has an unexpected shape: expected exactly one top-level entry, found ${extraEntries.length + (entryName ? 1 : 0)}`,
-      );
-    }
-    await moveExtractedDirectoryEntry(
-      path.join(stagingRoot, entryName),
-      path.join(destinationPath, entryName),
-    );
-  } finally {
-    await fs.promises.rm(tempDir, { recursive: true, force: true });
-  }
-}
-
-/** The staging area and `destinationPath` can be on different filesystems/mounts. */
-async function moveExtractedDirectoryEntry(from: string, to: string): Promise<void> {
-  try {
-    await fs.promises.rename(from, to);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
-    await fs.promises.cp(from, to, { recursive: true });
-  }
 }
 
 function buildDaemonArtifactUrl(baseUrl: string, artifactId: string): string {

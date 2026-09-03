@@ -136,12 +136,14 @@
     "src/daemon/upload-http.ts#resolveUploadHttpRoute": "sha256:8837e62933cf57111a8070454877c5859aed65b4dcdba755f145346e30f82835",
     "src/daemon/upload-http.ts#sendJson": "sha256:c2317b4b14a10731684c9160038005965856150f05f8923765a3fa833d2ecae9",
     "src/daemon/upload-http.ts#sendUploadedArtifactResponse": "sha256:9e418403448d58a96284fed605762fa71f9349bf2c70ad79df69b2b3e27487d6",
+    "src/remote/artifact-download.ts#RemoteArtifactDownload": "sha256:f73a888f4f8c9d603701c505bb342787b1ca6559a13b15da2385e60349ecea8e",
+    "src/remote/artifact-download.ts#downloadRemoteArtifactFromUrl": "sha256:5176697267907e3f5e4383a881969721e4ea3f6776128d28c313bdc210128834",
     "src/remote/daemon-artifacts.ts#DaemonArtifactEndpoint": "sha256:45226717ac52c0af2a62f74e91549582d95f4a4abc49be87989e026291a88c82",
     "src/remote/daemon-artifacts.ts#DownloadRemoteArtifactParams": "sha256:3ec63be2dbdb542e30b19d1500bc16874607823afb7ae392e92b0b535865859e",
     "src/remote/daemon-artifacts.ts#buildDaemonArtifactUrl": "sha256:06dcde057809b507f70f7bb5cdef9bde6515be84b67e45865cf19e70b8636208",
-    "src/remote/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:409cf0e59b698c1864b3567ed42daa3ef84c7a75b71ecd4814805cac79a1ef42",
+    "src/remote/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:a1b12d42904722cca19cba742bc601dd8e11bdf6faa7689624f41a186599e831",
     "src/remote/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
-    "src/remote/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:b71e95e6aa2a200a0371d68684a1e16d3e44cc01a277f294c89b57f006819bb4",
+    "src/remote/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:6a62429723f52231951ef263950f4b304529bad984ab216b73db1750f58c7f84",
     "src/remote/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:db5c44effc41ff9fa40bd094945e56ac60fac89a42fa68c65c9293e6de6fb1dc",
     "src/remote/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "src/remote/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:bdf63219ecea77d1290f0f5eeef6d5adc55077fa2fa6750ba4608aa3efd540f0",
@@ -185,13 +187,13 @@
     },
     {
       "declaration": "src/remote/daemon-artifacts.ts#downloadRemoteArtifact",
-      "digest": "sha256:409cf0e59b698c1864b3567ed42daa3ef84c7a75b71ecd4814805cac79a1ef42",
-      "rationale": "#2246 selects a DownloadDestinationStrategy (file vs directory) once instead of branching on isDirectory inline, and the directory strategy now extracts through the codebase's safe archive extractor into a staging directory before moving the result into place, rather than a raw tar invocation straight into the destination. Both are internal implementation changes to how a successful download is materialized on disk; the GET /artifacts/:id request and response framing, and every existing (non-directory) call site's behavior, are unchanged."
+      "digest": "sha256:a1b12d42904722cca19cba742bc601dd8e11bdf6faa7689624f41a186599e831",
+      "rationale": "#2246 selects a file or directory destination once. Directory downloads stage and safely extract beside the destination, propagate timeout cancellation through both operations, and atomically rename the complete top-level entry; returning that local path is client-only state. The GET /artifacts/:id request and response framing, and every existing file artifact call site's behavior, are unchanged."
     },
     {
       "declaration": "src/remote/daemon-artifacts.ts#materializeRemoteArtifacts",
-      "digest": "sha256:b71e95e6aa2a200a0371d68684a1e16d3e44cc01a277f294c89b57f006819bb4",
-      "rationale": "#2246: now passes isDirectory: artifact.artifactType === 'test-artifacts' into downloadRemoteArtifact. For every artifactType that existed before this change this is always false, so materialization behavior for screenshots/recordings is unchanged; the new branch only activates for the new, additive artifact type above."
+      "digest": "sha256:6a62429723f52231951ef263950f4b304529bad984ab216b73db1750f58c7f84",
+      "rationale": "#2246 passes isDirectory only for the new test-artifacts type and uses the exact path the client materializer published. Existing screenshot and recording artifacts still report their requested file path; only the new directory response gains its suite-invocation segment."
     },
     {
       "declaration": "src/daemon/client/daemon-client-rpc.ts#buildHttpRpcPayload",

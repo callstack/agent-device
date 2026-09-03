@@ -201,8 +201,8 @@ const MUTATIONS: readonly WireMutation[] = [
   },
   {
     breakClass: 'artifact consumer: the download request drops its tenant header',
-    file: 'src/remote/daemon-artifacts.ts',
-    name: 'downloadRemoteArtifact',
+    file: 'src/remote/artifact-download.ts',
+    name: 'downloadRemoteArtifactFromUrl',
     from: '...buildDaemonHttpTenantHeaders(params.requestScope?.tenantId),',
     to: '',
   },
