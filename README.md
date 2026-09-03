@@ -13,6 +13,19 @@ summaries live on `main` under `scripts/ios-snapshot-benchmark/`.
 | `ios-snapshot-warm-relaunch-local-71fb2483f.json` | `6d299e8baec69662dca2c1ad8f1348e4361d5afaa781080e9a6b9b3dac362cbf` |
 | `ios-snapshot-proxy-71fb2483f.json` | `b11b7a07be9e4dcf003f3af66943682a6733c6f21f5f43d3d9e88b3fb37b51a7` |
 
+## Simulator accessibility bridge decision evidence
+
+These compressed artifacts support the Node-direct Simulator bridge decision measured at
+repository commit `268a90275e7a30419e581336b6d85eff680a2eb6`. The broad corpus retains the
+September 1 measurements; the targeted and corrected artifacts contain the clean rerun and
+maintainer-corrected evaluation.
+
+| File | sha256 |
+| --- | --- |
+| `ios-simulator-ax-bridge-broad-268a90275.json.gz` | `309f974b1dcb90768548a189f6af58b493b5d7b9d56a5bfad060d4335139eb7b` |
+| `ios-simulator-ax-bridge-targeted-268a90275.json.gz` | `fa2e01dcb5e2a0229a6836f1a4187169445347dd4c0a42bcb5a29022538c70b2` |
+| `ios-simulator-ax-bridge-corrected-268a90275.json.gz` | `4d70596a39153e6104e37a790622450d967f61b2244745915f39462514ba3bed` |
+
 ## Fetch into a checkout
 
 ```sh
