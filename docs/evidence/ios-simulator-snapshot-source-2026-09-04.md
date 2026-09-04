@@ -1,7 +1,8 @@
 # iOS Simulator snapshot-source live evidence
 
 - Issue: #2196
-- Observed: 2026-09-04T07:16:37Z
+- Observed: 2026-09-04T09:03:35Z
+- Revision: `6d39faaa6a36a010b346d36bd576194d936115ac`
 - Target: verified booted `iPhone 17 Pro` Simulator, iOS 26.2
 - UDID: `F7D6F9A4-4FCC-4DD7-AC0B-3280C9319CB9`
 - App: `Agent Device Tester` (`com.callstack.agentdevicelab`), PID `60439`
@@ -11,8 +12,8 @@
 
 | Measurement | Observed |
 |---|---:|
-| Acquisition latency | 1202 ms |
-| Raw nodes | 158 |
+| Acquisition latency | 2560 ms |
+| Raw nodes | 77 |
 | Truncated | false |
 | Viewport | 402 x 874 |
 | Producer | `simulator-ax-bridge` |
@@ -24,16 +25,16 @@ The returned lineage carried the supplied target id and opaque generation. The s
 ## Build and cache
 
 - Protocol version: `1`
-- Source version: `agent-device-simulator-ax-v1.5.2`
-- Source hash: `f9e9b741fc354e82d1fa1a78d5a92cacc5d6bb81f1eb2ab3bcb5748fc150d432`
-- Cache key: `a9807a2888a1dad82709665d837dc0d9`
+- Source version: `agent-device-simulator-ax-v1.5.3`
+- Source hash: `44e0c10dd5f0bf236c35293999e05d6bfaa740b492a98206da6dc1dec6f7d879`
+- Cache key: `0c73362db09451e54089e40d42c8f263`
 - The live acquisition used the prepared cache entry; deterministic tests cover cold publish, atomic concurrent publish, corrupt-entry rejection, source invalidation, and toolchain invalidation.
 
 ## Package size
 
-- Measured npm artifact: 482 files, 1,034,728-byte tarball, 3,507,967 unpacked and clean-installed bytes.
-- Compared with the #2189 published baseline recorded by PR #2204: +20,923 tarball bytes and +69,029 unpacked/clean-installed bytes (baseline 1,013,805 / 3,438,938 bytes).
-- The new `apple-snapshot-bridge` component contributes 25,532 unpacked bytes across five published source/license/readme files.
+- Measured npm artifact at the revision above: 482 files, 1,035,582-byte tarball, 3,512,119 unpacked and clean-installed bytes.
+- The exact base/head delta is supplied by the GitHub Size workflow; its base-aware assertion does not require a bridge asset on a base commit that predates this facet.
+- The `apple-snapshot-bridge` component contributes 29,684 unpacked bytes across five published source/license/readme files.
 
 ## Boundary
 
