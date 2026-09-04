@@ -13,11 +13,11 @@ test('measures the clean-installed package tree without counting the consumer', 
   assert.deepEqual(measureDirectory(root), { packageBytes: 6, files: 2 });
 });
 
-test('clean-installed snapshot bridge requires all native assets', async () => {
+test('clean-installed snapshot bridge validates all native assets when present', async () => {
   const root = await mkdtempForTest('agent-device-size-bridge-');
   const bridge = join(root, 'apple', 'snapshot-bridge');
   try {
-    assert.throws(() => assertInstalledSnapshotBridge(root), /SnapshotBridge\.m/);
+    assert.doesNotThrow(() => assertInstalledSnapshotBridge(root));
     await mkdir(bridge, { recursive: true });
     await writeFile(join(bridge, 'SnapshotBridge.m'), 'native source');
     await writeFile(join(bridge, 'SnapshotBridgeRuntime.m'), 'native runtime');

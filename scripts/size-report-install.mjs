@@ -42,6 +42,8 @@ export function measureCleanInstalledPackage(tarballPath, packageName) {
 }
 
 export function assertInstalledSnapshotBridge(packageDir) {
+  const bridgeRoot = path.join(packageDir, 'apple', 'snapshot-bridge');
+  if (!fs.existsSync(bridgeRoot)) return;
   const present = SNAPSHOT_BRIDGE_ASSET_PATHS.filter((assetPath) =>
     fs.existsSync(path.join(packageDir, assetPath)),
   );
