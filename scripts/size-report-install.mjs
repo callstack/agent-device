@@ -2,10 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {
-  assertSnapshotBridgeAssets,
-  SNAPSHOT_BRIDGE_ASSET_PATHS,
-} from './lib/snapshot-bridge-assets.mjs';
+import { assertSnapshotBridgeAssets, SNAPSHOT_BRIDGE_ASSET_PATHS } from './size-report-package.mjs';
 
 export function measureCleanInstalledPackage(tarballPath, packageName) {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-size-install-'));
