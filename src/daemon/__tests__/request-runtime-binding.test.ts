@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   appLogAdmissionUse,
@@ -11,6 +11,8 @@ import {
   type DeviceRuntimeGateway,
   type RuntimeOwnerRef,
   localRuntimeOwner,
+  managedLocalRuntimeOwner,
+  providerRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { screenRecordingRecoveryUse } from '@agent-device/contracts/screen-recording-runtime-plan';
@@ -18,7 +20,14 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { acquireDurableCaptureRecoveryAuthorityBeforeDeadline } from '../durable-capture-recovery-authority.ts';
-import { createRequestRuntimeBindings } from '../request-runtime-binding.ts';
+import {
+  createRequestRuntimeBindings,
+  ensureBoundDeviceReady,
+} from '../request-runtime-binding.ts';
+import { ensureDeviceReady } from '../device-ready.ts';
+import { admitRuntimeUse } from '../runtime-admission.ts';
+
+vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 const inspectPlan = resolveLogsRuntimePlan({ action: 'path' });
 const doctorPlan = resolveLogsRuntimePlan({ action: 'doctor' });
@@ -35,6 +44,72 @@ const scope = {
 };
 
 const admitDeviceClaim = async () => {};
+const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
+
+beforeEach(() => {
+  mockEnsureDeviceReady.mockReset();
+  mockEnsureDeviceReady.mockResolvedValue(undefined);
+});
+
+test('bound readiness preserves local behavior after the binding fence', async () => {
+  const selected = device('ready-after-bind');
+  const options = { focusExisting: true };
+
+  await ensureBoundDeviceReady({ device: selected, owner: localRuntimeOwner('android') }, options);
+
+  expect(mockEnsureDeviceReady).toHaveBeenCalledWith(selected, options);
+});
+
+test('bound readiness leaves provider-owned devices alone', async () => {
+  await ensureBoundDeviceReady({
+    device: device('provider-ready'),
+    owner: providerRuntimeOwner('test', 'provider-ready'),
+  });
+
+  expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
+});
+
+test('bound readiness refuses managed devices without allocator confirmation', async () => {
+  await expect(
+    ensureBoundDeviceReady({
+      device: device('managed-ready'),
+      owner: managedLocalRuntimeOwner('simlock-test'),
+    }),
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: { reason: 'managed-readiness-unavailable' },
+  });
+  expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
+});
+
+test('runtime readiness follows allocator claim admission', async () => {
+  const events: string[] = [];
+  const runtime = makeGateway();
+  const admit = vi.fn(async () => {
+    events.push('claim');
+  });
+  const bindings = createRequestRuntimeBindings({
+    gateway: runtime.gateway,
+    scope,
+    admitDeviceClaim: admit,
+  });
+  mockEnsureDeviceReady.mockImplementation(async () => {
+    events.push('ready');
+  });
+
+  const admission = await admitRuntimeUse({
+    command: 'logs',
+    device: device('claim-order'),
+    use: appLogInspectUse,
+    inspectFacts: bindings.inspectFacts,
+    bindDevice: bindings.bindDevice,
+    readiness: {},
+  });
+
+  expect(admission.type).toBe('runtime');
+  expect(events).toEqual(['claim', 'ready']);
+  await bindings[Symbol.asyncDispose]();
+});
 
 test('request runtime binding caches one broad owner and projects each declared use', async () => {
   const runtime = makeGateway();

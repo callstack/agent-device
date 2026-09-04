@@ -9,6 +9,7 @@ import {
 import { getRunnerSessionSnapshot } from '@agent-device/platform-apple/runner/operations';
 import { resolveTargetDevice } from '../../core/dispatch-resolve.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
+import { ensureDeviceReady } from '../device-ready.ts';
 
 vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   getRunnerSessionSnapshot: vi.fn(async () => null),
@@ -26,6 +27,7 @@ vi.mock('../device-ready.ts', () => ({
 const mockGetRunnerSessionSnapshot = vi.mocked(getRunnerSessionSnapshot);
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
 const mockIsActiveProviderDevice = vi.mocked(isActiveProviderDevice);
+const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 
 beforeEach(() => {
   mockGetRunnerSessionSnapshot.mockReset();
@@ -33,6 +35,8 @@ beforeEach(() => {
   mockResolveTargetDevice.mockReset();
   mockIsActiveProviderDevice.mockReset();
   mockIsActiveProviderDevice.mockReturnValue(false);
+  mockEnsureDeviceReady.mockReset();
+  mockEnsureDeviceReady.mockResolvedValue(undefined);
 });
 
 const iosSimulatorSession: SessionState = {
@@ -73,12 +77,21 @@ test('resolveCommandDevice keeps an existing session for a platform-only filter'
       await resolveCommandDevice({
         session: iosSimulatorSession,
         flags: { platform: 'ios' },
-        ensureReady: false,
       }),
   );
 
   expect(device).toBe(iosSimulatorSession.device);
   expect(mockResolveTargetDevice).not.toHaveBeenCalled();
+});
+
+test('resolveCommandDevice does not prepare a sessionless device', async () => {
+  const device = { ...iosSimulatorSession.device, id: 'sessionless-sim' };
+  mockResolveTargetDevice.mockResolvedValue(device);
+
+  await resolveCommandDevice({ session: undefined, flags: { platform: 'ios' } });
+
+  expect(mockResolveTargetDevice).toHaveBeenCalledOnce();
+  expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
 });
 
 test('refreshSessionDeviceIfNeeded keeps provider-owned iOS simulators out of local refresh', async () => {

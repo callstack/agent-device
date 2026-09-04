@@ -1,4 +1,5 @@
 import { deviceIdentity, deviceIdentityKey, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import {
   type BoundDeviceRuntime,
@@ -14,6 +15,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import { ensureDeviceReady, type DeviceReadyOptions } from './device-ready.ts';
 
 export type BindDeviceRuntime = <
   const Required extends readonly RuntimeOperationKey<PlatformRuntimeOperations>[],
@@ -67,6 +69,30 @@ export type BindExactDeviceRuntime = <
 export type InspectDeviceRuntimeFacts = (
   device: DeviceInfo,
 ) => Promise<RuntimeFacts<PlatformRuntimeOperations>>;
+
+export type BoundDeviceIdentity = Readonly<{
+  device: DeviceInfo;
+  owner: RuntimeOwnerRef;
+}>;
+
+/** Runs legacy local readiness only after the request has crossed the binding/claim fence. */
+export async function ensureBoundDeviceReady(
+  bound: BoundDeviceIdentity,
+  options: DeviceReadyOptions = {},
+): Promise<void> {
+  switch (bound.owner.kind) {
+    case 'provider-runtime':
+      return;
+    case 'managed-local':
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        'Managed-device readiness is unavailable until allocator confirmation.',
+        { reason: 'managed-readiness-unavailable' },
+      );
+    case 'local-family':
+      await ensureDeviceReady(bound.device, options);
+  }
+}
 
 export type RequestRuntimeBindings = AsyncDisposable &
   Readonly<{

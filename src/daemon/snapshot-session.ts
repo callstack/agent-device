@@ -1,7 +1,6 @@
 import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 import type { DaemonRequest, SessionScope, SessionState } from './types.ts';
-import { ensureDeviceReady } from './device-ready.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import { SessionStore } from './session-store.ts';
 
@@ -12,7 +11,6 @@ export async function resolveSessionDevice(
 ) {
   const session = sessionStore.get(sessionName);
   const device = session?.device ?? (await resolveTargetDevice(flags ?? {}));
-  if (!session) await ensureDeviceReady(device);
   return { session, device };
 }
 
@@ -28,9 +26,9 @@ export async function withSessionlessRunnerCleanup<T>(
   try {
     return await task();
   } finally {
-    // Symmetric with `ensureDeviceReady`: only a device this daemon prepared a local execution
-    // host for can have one to release. A provider-owned device runs on provider infrastructure,
-    // where local teardown drives host tooling at a device id this host does not own.
+    // Only a device this daemon prepared a local execution host for can have one to release. A
+    // provider-owned device runs on provider infrastructure, where local teardown drives host
+    // tooling at a device id this host does not own.
     if (!session && !isActiveProviderDevice(device)) {
       await platformCleanup!.cleanupSessionlessExecutionHost(device);
     }

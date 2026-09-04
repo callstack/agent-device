@@ -77,8 +77,8 @@ describe('managed local runtime owner', () => {
     expect(binding.operations[MANAGED_RETAINED_OPERATION]).toBeTypeOf('function');
   });
 
-  // The exclusion covers binding cells only. Pre-binding readiness still boots a device through
-  // direct platform tooling before any binding exists; moving it under the binding is its own unit.
+  // The exclusion covers binding cells; request-runtime binding owns the separate pre-binding
+  // readiness fence.
   test('refuses every runtime use that needs a withheld cell', async () => {
     const { owner } = managedOwnerFixture();
     const binding = await owner.bind({ device, intent: exactly(), scope });

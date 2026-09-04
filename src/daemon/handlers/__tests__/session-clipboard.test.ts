@@ -17,7 +17,12 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../request-runtime-binding.ts';
-import { makeSession, makeSessionStore, mockResolveTargetDevice } from './session-test-harness.ts';
+import {
+  makeSession,
+  makeSessionStore,
+  mockEnsureDeviceReady,
+  mockResolveTargetDevice,
+} from './session-test-harness.ts';
 import { handleSessionClipboardCommand } from '../session-clipboard.ts';
 
 // File-scoped id, not a shared literal: this owner binding's `local-family` kind reaches the real
@@ -95,6 +100,21 @@ test('clipboard read admits clipboardReadUse and reports the platform-labelled t
   });
   expect(spies.bindDevice).toHaveBeenCalledWith(androidDevice, clipboardReadUse);
   expect(spies.writeClipboard).not.toHaveBeenCalled();
+});
+
+test('clipboard readiness follows runtime binding', async () => {
+  const spies = harness({ read: available, write: available });
+  const response = await handleSessionClipboardCommand({ ...request(['read']), ...spies });
+
+  expect(response.ok).toBe(true);
+  expect(spies.bindDevice).toHaveBeenCalledTimes(1);
+  expect(mockEnsureDeviceReady).toHaveBeenCalledTimes(1);
+  const bindSpy = vi.mocked(spies.bindDevice);
+  const bindOrder = bindSpy.mock.invocationCallOrder[0];
+  const readyOrder = mockEnsureDeviceReady.mock.invocationCallOrder[0];
+  expect(bindOrder).toBeDefined();
+  expect(readyOrder).toBeDefined();
+  expect(bindOrder!).toBeLessThan(readyOrder!);
 });
 
 test('clipboard write joins its positionals and reports the code-point length', async () => {

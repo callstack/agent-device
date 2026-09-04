@@ -19,6 +19,7 @@ import {
 } from '../../platform-runtime-open-target.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { DaemonCommandContext } from '../context.ts';
+import type { DeviceReadyOptions } from '../device-ready.ts';
 
 /**
  * What `runSessionOrSelectorDispatch`'s `prepare` thunk reports: either the early-exit response an
@@ -76,7 +77,6 @@ async function runSessionOrSelectorDispatch(params: {
   const device = await resolveCommandDevice({
     session,
     flags,
-    ensureReady: true,
   });
   const prepared = await prepare(device, session);
   if (!prepared.ok) return prepared.response;
@@ -138,6 +138,7 @@ type SessionRouteRuntimeResolver = (
   params: Readonly<{
     device: DeviceInfo;
     positionals: string[];
+    readiness?: DeviceReadyOptions;
     inspectFacts?: InspectDeviceRuntimeFacts;
     bindDevice?: BindDeviceRuntime;
   }>,
@@ -182,6 +183,7 @@ async function runBoundSessionRoute(
       const bound = await params.resolveRuntime({
         device,
         positionals,
+        readiness: {},
         inspectFacts,
         bindDevice,
       });

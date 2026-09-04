@@ -421,7 +421,6 @@ async function closeWithoutSession(params: {
   const device = await resolveCommandDevice({
     session: undefined,
     flags: req.flags,
-    ensureReady: false,
   });
   const admission = await admitCloseRuntime({
     device,

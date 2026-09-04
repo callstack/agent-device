@@ -54,7 +54,7 @@ export async function handlePrepareCommand(params: {
 
   // Device selection is side-effect free enough for facts admission. The bound lifecycle owns
   // readiness, keeping provider-first facts as the sole support authority.
-  const device = await resolveCommandDevice({ session, flags, ensureReady: false });
+  const device = await resolveCommandDevice({ session, flags });
   const admission = await admitPrepareRuntime({
     device,
     inspectFacts: params.inspectFacts,

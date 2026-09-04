@@ -115,6 +115,7 @@ async function resolveBoundClipboardRuntime(
       use: clipboardReadUse,
       inspectFacts,
       bindDevice,
+      readiness: {},
     });
     if (admission.type === 'response') return { ok: false, response: admission.response };
     const runtime = admission.runtime;
@@ -126,6 +127,7 @@ async function resolveBoundClipboardRuntime(
     use: clipboardWriteUse,
     inspectFacts,
     bindDevice,
+    readiness: {},
   });
   if (admission.type === 'response') return { ok: false, response: admission.response };
   const runtime = admission.runtime;
@@ -152,7 +154,7 @@ export async function handleSessionClipboardCommand(params: {
     return errorResponse('INVALID_ARGS', 'clipboard requires a subcommand: read or write');
   }
 
-  const device = await resolveCommandDevice({ session, flags, ensureReady: true });
+  const device = await resolveCommandDevice({ session, flags });
   const bound = await resolveBoundClipboardRuntime({
     device,
     action,

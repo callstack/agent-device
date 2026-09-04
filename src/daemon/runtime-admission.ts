@@ -12,6 +12,8 @@ import type {
   InspectDeviceRuntimeFacts,
   RuntimeAdmissionBindings,
 } from './request-runtime-binding.ts';
+import { ensureBoundDeviceReady } from './request-runtime-binding.ts';
+import type { DeviceReadyOptions } from './device-ready.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
@@ -36,6 +38,7 @@ export type RuntimeAdmissionRequest = RuntimeAdmissionBindings &
     device: DeviceInfo;
     required: readonly RuntimeOperationKey<PlatformRuntimeOperations>[];
     unavailableResponse?: UnavailableRuntimeResponse;
+    readiness?: DeviceReadyOptions;
   }>;
 
 export type { RuntimeAdmissionBindings };
@@ -91,7 +94,11 @@ export async function admitRuntimeUse<
 > {
   const admitted = await admitRuntimeOperations({ ...request, required: request.use.required });
   if (admitted.type === 'response') return admitted;
-  return { type: 'runtime', runtime: await admitted.bind(request.device, request.use) };
+  const runtime = await admitted.bind(request.device, request.use);
+  if (request.readiness !== undefined) {
+    await ensureBoundDeviceReady(runtime, request.readiness);
+  }
+  return { type: 'runtime', runtime };
 }
 
 /**

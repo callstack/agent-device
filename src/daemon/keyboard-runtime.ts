@@ -27,6 +27,7 @@ import {
 } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
 import type { DaemonFailureResponse } from './response.ts';
+import type { DeviceReadyOptions } from './device-ready.ts';
 
 type KeyboardRuntimeAction = 'status' | 'dismiss' | 'enter';
 
@@ -218,24 +219,46 @@ async function executeKeyboardEnter(
 export async function resolveBoundKeyboardRuntime(
   params: {
     device: DeviceInfo;
+    readiness?: DeviceReadyOptions;
   } & RuntimeAdmissionBindings & { positionals: readonly string[] },
 ): Promise<ResolvedKeyboardExecution> {
   const action = readKeyboardAction(params.positionals);
-  const { device, inspectFacts, bindDevice } = params;
+  const { device, inspectFacts, bindDevice, readiness } = params;
   if (action === 'status') {
     return await admitKeyboardAction(
-      { command: 'keyboard status', device, use: keyboardStatusUse, inspectFacts, bindDevice },
+      {
+        command: 'keyboard status',
+        device,
+        use: keyboardStatusUse,
+        inspectFacts,
+        bindDevice,
+        readiness,
+      },
       (runtime, context) => executeKeyboardStatus(runtime, context),
     );
   }
   if (action === 'dismiss') {
     return await admitKeyboardAction(
-      { command: 'keyboard dismiss', device, use: keyboardDismissUse, inspectFacts, bindDevice },
+      {
+        command: 'keyboard dismiss',
+        device,
+        use: keyboardDismissUse,
+        inspectFacts,
+        bindDevice,
+        readiness,
+      },
       (runtime, context) => executeKeyboardDismiss(runtime, context),
     );
   }
   return await admitKeyboardAction(
-    { command: 'keyboard enter', device, use: keyboardEnterUse, inspectFacts, bindDevice },
+    {
+      command: 'keyboard enter',
+      device,
+      use: keyboardEnterUse,
+      inspectFacts,
+      bindDevice,
+      readiness,
+    },
     (runtime, context) => executeKeyboardEnter(runtime, context),
   );
 }

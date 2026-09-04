@@ -11,7 +11,7 @@ import { isWholeScreenRecordingScope } from '@agent-device/contracts/recording';
 import { deviceIdentity, sameDeviceIdentity } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { resolveTargetDevice } from '../../core/dispatch-resolve.ts';
-import { ensureDeviceReady } from '../device-ready.ts';
+import { ensureBoundDeviceReady } from '../request-runtime-binding.ts';
 import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import {
   adoptStartedScreenRecording,
@@ -69,11 +69,18 @@ async function handleRecordCommandUnsafe(
   if (plan.kind === 'start' && !isWholeScreenRecordingScope(scope) && !existingSession) {
     return missingAppSessionResponse(req);
   }
-  const session = await resolveRecordingSession(params, existingSession);
+  const resolvedSession = await resolveRecordingSession(params, existingSession);
+  const { session } = resolvedSession;
   if (plan.kind === 'start') {
-    return await startRecording(params, session, prepareRecordingRequest(req), plan.use);
+    return await startRecording(
+      params,
+      session,
+      prepareRecordingRequest(req),
+      plan.use,
+      resolvedSession.needsReadiness,
+    );
   }
-  return await stopRecording(params, session, plan.kind);
+  return await stopRecording(params, session, plan.kind, resolvedSession.needsReadiness);
 }
 
 function resolveRecordPlan(req: DaemonRequest, session: SessionState | undefined) {
@@ -91,12 +98,11 @@ function resolveRecordPlan(req: DaemonRequest, session: SessionState | undefined
 async function resolveRecordingSession(
   params: RecordRuntimeHandlerParams,
   existing: SessionState | undefined,
-): Promise<SessionState> {
+): Promise<Readonly<{ session: SessionState; needsReadiness: boolean }>> {
   const device = existing?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
   await params.retainDeviceExecutionLock(device.id);
-  if (existing) return existing;
-  await ensureDeviceReady(device);
-  return createRecordOnlySession(params, device);
+  if (existing) return { session: existing, needsReadiness: false };
+  return { session: createRecordOnlySession(params, device), needsReadiness: true };
 }
 
 async function startRecording(
@@ -104,11 +110,13 @@ async function startRecording(
   session: SessionState,
   prepared: ReturnType<typeof prepareRecordingRequest>,
   use: typeof screenRecordingStartUse,
+  needsReadiness: boolean,
 ): Promise<DaemonResponse> {
   if (session.screenRecording) {
     return { ok: false, error: { code: 'INVALID_ARGS', message: 'recording already in progress' } };
   }
   const admission = await params.bindDevice(session.device, screenRecordingAdmissionUse);
+  if (needsReadiness) await ensureBoundDeviceReady(admission);
   const startFact = admission.facts.screenRecordingStart;
   if (!startFact.available) return buildRecordingUnsupportedResponse(startFact);
   const runtime = await params.bindDevice(session.device, use);
@@ -195,6 +203,7 @@ async function stopRecording(
   params: RecordRuntimeHandlerParams,
   session: SessionState,
   kind: 'stop-live' | 'stop-recovery',
+  needsReadiness: boolean,
 ): Promise<DaemonResponse> {
   let completion;
   try {
@@ -205,7 +214,7 @@ async function stopRecording(
             sessionName: params.sessionName,
             sessionStore: params.sessionStore,
           })
-        : await finishRecovered(params, session);
+        : await finishRecovered(params, session, needsReadiness);
   } catch (error) {
     deleteTerminalRecordOnlySession(params, session);
     throw error;
@@ -237,7 +246,11 @@ function deleteTerminalRecordOnlySession(
   }
 }
 
-async function finishRecovered(params: RecordRuntimeHandlerParams, session: SessionState) {
+async function finishRecovered(
+  params: RecordRuntimeHandlerParams,
+  session: SessionState,
+  needsReadiness: boolean,
+) {
   const resourcePath = screenRecordingDurableResource.store.resolvePath(
     params.sessionStore.resolveSessionDir(params.sessionName),
   );
@@ -270,6 +283,7 @@ async function finishRecovered(params: RecordRuntimeHandlerParams, session: Sess
         screenRecordingRecoveryUse,
         recoveryScope,
       );
+      if (needsReadiness) await ensureBoundDeviceReady(runtime);
       return createScreenRecordingRecoveryControl({ runtime, dispose: async () => {} });
     },
   });

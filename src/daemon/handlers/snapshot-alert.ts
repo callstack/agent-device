@@ -47,10 +47,21 @@ type ResolvedAlertExecution =
  * that wording is parity-pinned.
  */
 async function resolveBoundAlertRuntime(
-  params: Readonly<{ device: DeviceInfo; action: AlertAction }> & RuntimeAdmissionBindings,
+  params: Readonly<{
+    device: DeviceInfo;
+    action: AlertAction;
+    session: SessionState | undefined;
+  }> &
+    RuntimeAdmissionBindings,
 ): Promise<ResolvedAlertExecution> {
   const { device, action, inspectFacts, bindDevice } = params;
-  const shared = { command: 'alert', device, inspectFacts, bindDevice };
+  const shared = {
+    command: 'alert',
+    device,
+    inspectFacts,
+    bindDevice,
+    ...(params.session ? {} : { readiness: {} }),
+  };
   if (action === 'wait') {
     const admission = await admitRuntimeUse({ ...shared, use: alertWaitUse });
     if (admission.type === 'response') return { ok: false, response: admission.response };
@@ -108,7 +119,13 @@ export async function handleAlertCommand(
 ): Promise<DaemonResponse> {
   const { req, logPath, sessionStore, session, device, inspectFacts, bindDevice } = params;
   const action = normalizeAlertAction(req.positionals?.[0]);
-  const bound = await resolveBoundAlertRuntime({ device, action, inspectFacts, bindDevice });
+  const bound = await resolveBoundAlertRuntime({
+    device,
+    action,
+    session,
+    inspectFacts,
+    bindDevice,
+  });
   if (!bound.ok) return bound.response;
   // ADR 0014 side-effect seam: alert accept/dismiss act on the device; get/wait are read-only.
   // The alert resolver returns `may-invalidate` only for the acting subactions, so this covers

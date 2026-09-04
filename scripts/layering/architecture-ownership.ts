@@ -191,10 +191,12 @@ export const ARCHITECTURE_OWNERSHIP = {
       exports: [
         'BindDeviceRuntime',
         'BindExactDeviceRuntime',
+        'BoundDeviceIdentity',
         'InspectDeviceRuntimeFacts',
         'RequestRuntimeBindings',
         'RuntimeAdmissionBindings',
         'createRequestRuntimeBindings',
+        'ensureBoundDeviceReady',
       ],
     },
     {

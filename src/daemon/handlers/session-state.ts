@@ -163,7 +163,6 @@ async function handleAppStateCommand(params: RuntimeCommandHandlerParams): Promi
   const device = await resolveCommandDevice({
     session,
     flags,
-    ensureReady: false,
   });
   if (isIosFamily(device)) {
     return errorResponse('SESSION_NOT_FOUND', IOS_APPSTATE_SESSION_REQUIRED_MESSAGE);
@@ -232,7 +231,6 @@ export async function handleSessionStateCommands(params: {
       device = await resolveCommandDevice({
         session,
         flags,
-        ensureReady: false,
         androidAvdSelection: 'include-stopped',
       });
     } catch (error) {
@@ -298,7 +296,6 @@ export async function handleSessionStateCommands(params: {
     if (guard) return guard;
 
     const device = await resolveCommandDevice({
-      ensureReady: false,
       flags,
       session: activeSession,
       androidAvdSelection: 'include-stopped',

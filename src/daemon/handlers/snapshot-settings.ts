@@ -161,6 +161,7 @@ export async function handleSettingsCommand(
     use: settingsRuntimeUse,
     inspectFacts,
     bindDevice,
+    ...(session ? {} : { readiness: {} }),
   });
   if (admission.type === 'response') return admission.response;
   if (isMacOs(device) && !isMacOsSettingSupported(setting)) {

@@ -11,7 +11,6 @@ import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot'
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
 import { contextFromFlags, type BoundContextFromFlags } from './context.ts';
-import { ensureDeviceReady } from './device-ready.ts';
 import { readTextForNode } from './selector-text-runtime.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import { SessionStore } from './session-store.ts';
@@ -93,7 +92,6 @@ async function resolveSelectorRuntimeDevice(
   const session = params.sessionStore.get(params.sessionName);
   if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
   const device = session?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
-  if (!session) await ensureDeviceReady(device);
   return { ok: true, session, device };
 }
 

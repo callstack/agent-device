@@ -73,10 +73,9 @@ const WITHHELD_MANAGED_OPERATIONS = [
   {
     // Below cell-selection granularity, the Apple family runtime can boot the simulator lazily:
     // screenshot capture retries through a boot on a shutdown failure, and settings, clipboard and
-    // application launch each resolve a local interactor the same way. Closing that path is a
-    // family-runtime change (the same class as the pre-binding readiness bypass named in "Named
-    // out of scope" below); until then, a managed binding withholds these cells outright rather
-    // than leave an allocator-owned device open to an implicit boot.
+    // application launch each resolve a local interactor the same way. The daemon fences its
+    // pre-binding readiness path separately; until these cells are allocator-backed, a managed
+    // binding withholds them rather than leave an allocator-owned device open to an implicit boot.
     hint: 'Managed-device lifecycle belongs to the allocator; this cell can lazily boot the device.',
     keys: ['captureScreenshot', 'setSetting', 'readClipboard', 'writeClipboard', 'openApplication'],
   },
@@ -90,10 +89,9 @@ const WITHHELD_MANAGED_OPERATIONS = [
  * Withholding cells is not a complete lifecycle exclusion and does not claim to be. Screenshot
  * capture, settings, clipboard and application launch are withheld here even though their declared
  * work is not device lifecycle, because their Apple family-runtime implementations can boot the
- * simulator lazily below cell-selection granularity. Pre-binding readiness is the same class of
- * gap, one level up: `session-device-resolution` boots a device through direct simctl/adb before
- * any binding exists, gated only by provider ownership. Closing both is a family-runtime and
- * daemon change tracked as a follow-up, not attempted here.
+ * simulator lazily below cell-selection granularity. The daemon's pre-binding readiness path is
+ * fenced at request-runtime binding, while these lazy cells remain allocator-backed follow-up
+ * work.
  *
  * It delegates with an ordinary intent because a family owner refuses an exact-owner intent that
  * names anyone but itself. The managed intent's fence is not read here: the device-claim gate owns

@@ -144,7 +144,7 @@ async function resolveInstallDevice(
   if (session) {
     return session.device;
   }
-  return await resolveCommandDevice({ session, flags, ensureReady: false });
+  return await resolveCommandDevice({ session, flags });
 }
 
 function normalizePlatform(

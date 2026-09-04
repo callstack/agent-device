@@ -66,7 +66,7 @@ export async function handleAppDeploymentCommand(params: {
       return errorResponse('INVALID_ARGS', `App binary not found: ${appPath}`);
     }
 
-    const device = await resolveCommandDevice({ session, flags, ensureReady: false });
+    const device = await resolveCommandDevice({ session, flags });
     const facts = await requireRuntimeFacts(params.inspectFacts)(device);
     const unsupported = unavailableRuntimeOperationResponse(command, facts.operations.deployApp);
     if (unsupported) return unsupported;
@@ -114,7 +114,7 @@ export async function handlePushNotificationCommand(
     );
   }
   const payload = await readNotificationPayload(resolvePushPayload(payloadArg, req.meta?.cwd));
-  const device = await resolveCommandDevice({ session, flags, ensureReady: false });
+  const device = await resolveCommandDevice({ session, flags });
   const facts = await requireRuntimeFacts(params.inspectFacts)(device);
   const unsupported =
     unavailableRuntimeOperationResponse('push', facts.operations.ensureReady) ??

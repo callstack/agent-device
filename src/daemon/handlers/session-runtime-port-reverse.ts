@@ -38,7 +38,6 @@ export async function handlePortReverseCommand(params: {
   const device = await resolveCommandDevice({
     session,
     flags: req.flags,
-    ensureReady: false,
   });
   const admission = await admitRuntimeUse({
     device,
