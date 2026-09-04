@@ -14,6 +14,7 @@ import {
 import { analyzeReactNativeOverlay } from '../core/react-native-overlay.ts';
 import {
   findNearestAncestor,
+  isMeaningfulSignal,
   isViewportRootNode,
   normalizeType,
 } from '@agent-device/contracts/snapshot';
@@ -294,14 +295,6 @@ function isProxyOverlayNode(node: SnapshotNode): boolean {
 
 function isUsableOverlayTarget(node: SnapshotNode | null): node is SnapshotNode {
   return Boolean(node?.rect && hasPositiveRect(node.rect) && !isViewportRootNode(node));
-}
-
-function isMeaningfulSignal(value: string | undefined): boolean {
-  if (typeof value !== 'string') return false;
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  if (/^(true|false)$/i.test(trimmed)) return false;
-  return true;
 }
 
 function isOverlaySignal(value: string | undefined): boolean {

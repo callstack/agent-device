@@ -1,6 +1,10 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
-import { isViewportRootNode, normalizeType } from '@agent-device/contracts/snapshot';
+import {
+  isMeaningfulSignal,
+  isViewportRootNode,
+  normalizeType,
+} from '@agent-device/contracts/snapshot';
 import { isPositiveFiniteRect, rectArea } from '@agent-device/kernel/rect';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
@@ -121,14 +125,7 @@ function measureSnapshotBounds(nodes: ReadonlyArray<Pick<SnapshotNode, 'rect'>>)
 }
 
 function isSnapshotBoundsOutlier(node: Pick<SnapshotNode, 'type' | 'label'>): boolean {
-  return normalizeType(node.type ?? '') === 'image' && !isMeaningfulBoundsSignal(node.label);
-}
-
-function isMeaningfulBoundsSignal(value: string | undefined): boolean {
-  if (typeof value !== 'string') return false;
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  return !/^(true|false)$/i.test(trimmed);
+  return normalizeType(node.type ?? '') === 'image' && !isMeaningfulSignal(node.label);
 }
 
 function roundRect(rect: Rect): Rect {

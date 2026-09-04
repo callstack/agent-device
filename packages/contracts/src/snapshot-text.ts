@@ -38,6 +38,14 @@ export function isMeaningfulLabel(value: string): boolean {
   return true;
 }
 
+/** A non-empty, non-boolean `label`/`value` is a usable overlay or crop signal. */
+export function isMeaningfulSignal(value: string | undefined): boolean {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return !/^(true|false)$/i.test(trimmed);
+}
+
 export function extractNodeText(
   node: Pick<RawSnapshotNode, 'label' | 'value' | 'identifier'>,
 ): string {

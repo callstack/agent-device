@@ -26,5 +26,6 @@ export {
   extractNodeText,
   isFillableType,
   isMeaningfulLabel,
+  isMeaningfulSignal,
   normalizeType,
 } from '../snapshot-text.ts';

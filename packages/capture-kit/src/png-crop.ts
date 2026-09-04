@@ -5,10 +5,9 @@ import { PNG } from './png.ts';
 import { decodePngAsync, encodePngAsync } from './png-worker-client.ts';
 
 /**
- * Crops a PNG file in place to `box` (daemon screenshot `--crop-on` path). Decode and encode
- * run on the PNG worker thread like the `--scale` resize; the row copy is a straight blit.
- * The box is the caller's already-intersected crop region, so a box outside the image is
- * a caller bug this refuses rather than clamps.
+ * Crops `filePath` in place to `box` (positive integer pixels). `box` is the caller's
+ * already-intersected region, so one outside the image is a caller bug — refused, not clamped.
+ * Decode and encode run on the PNG worker thread; a full-image box is a no-op.
  */
 export async function cropPngFile(filePath: string, box: Rect): Promise<void> {
   if (!isCropBox(box)) {
@@ -32,7 +31,7 @@ export async function cropPngFile(filePath: string, box: Rect): Promise<void> {
   await fs.writeFile(filePath, await encodePngAsync(cropPngBox(source, box)));
 }
 
-function isCropBox(box: Rect): box is Rect {
+function isCropBox(box: Rect): boolean {
   return (
     Number.isInteger(box.x) &&
     box.x >= 0 &&
