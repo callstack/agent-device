@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
 import { isViewportRootNode, normalizeType } from '@agent-device/contracts/snapshot';
+import { isPositiveFiniteRect, rectArea } from '@agent-device/kernel/rect';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 /**
@@ -84,7 +85,7 @@ export function resolveSnapshotBounds(
 ): Rect | null {
   let viewport: Rect | null = null;
   for (const node of nodes) {
-    if (!isViewportRootNode(node) || !hasPositiveRect(node.rect)) continue;
+    if (!isViewportRootNode(node) || !isPositiveFiniteRect(node.rect)) continue;
     if (!viewport || rectArea(node.rect) > rectArea(viewport)) {
       viewport = node.rect;
     }
@@ -92,7 +93,7 @@ export function resolveSnapshotBounds(
   if (viewport) return viewport;
 
   return measureSnapshotBounds(
-    nodes.filter((node) => hasPositiveRect(node.rect) && !isSnapshotBoundsOutlier(node)),
+    nodes.filter((node) => isPositiveFiniteRect(node.rect) && !isSnapshotBoundsOutlier(node)),
   );
 }
 
@@ -102,7 +103,7 @@ function measureSnapshotBounds(nodes: ReadonlyArray<Pick<SnapshotNode, 'rect'>>)
   let maxRight = Number.NEGATIVE_INFINITY;
   let maxBottom = Number.NEGATIVE_INFINITY;
   for (const node of nodes) {
-    if (!node.rect || !hasPositiveRect(node.rect)) continue;
+    if (!isPositiveFiniteRect(node.rect)) continue;
     minX = Math.min(minX, node.rect.x);
     minY = Math.min(minY, node.rect.y);
     maxRight = Math.max(maxRight, node.rect.x + node.rect.width);
@@ -128,14 +129,6 @@ function isMeaningfulBoundsSignal(value: string | undefined): boolean {
   const trimmed = value.trim();
   if (!trimmed) return false;
   return !/^(true|false)$/i.test(trimmed);
-}
-
-function hasPositiveRect(rect: Rect | undefined): rect is Rect {
-  return Boolean(rect && rect.width > 0 && rect.height > 0);
-}
-
-function rectArea(rect: Rect): number {
-  return rect.width * rect.height;
 }
 
 function roundRect(rect: Rect): Rect {

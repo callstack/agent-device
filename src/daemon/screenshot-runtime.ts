@@ -27,11 +27,8 @@ import type {
   ResolvedGenericExecution,
 } from './request-generic-dispatch.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
-import {
-  assertScreenshotCropPolicy,
-  buildScreenshotCropWarnings,
-  cropScreenshotToSelector,
-} from './screenshot-crop.ts';
+import { assertScreenshotCropPolicy } from './screenshot-crop-target.ts';
+import { buildScreenshotCropWarnings, cropScreenshotToSelector } from './screenshot-crop.ts';
 import { annotateScreenshotWithRefs } from './screenshot-overlay.ts';
 import {
   resolveBoundScreenshotRuntime,

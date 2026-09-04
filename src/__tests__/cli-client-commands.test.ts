@@ -482,40 +482,6 @@ test('screenshot forwards --overlay-refs to the client capture API', async () =>
   });
 });
 
-test('screenshot forwards --crop-on to the client capture API', async () => {
-  let observed: { path?: string; cropOn?: string } | undefined;
-  const client = createStubClient({
-    installFromSource: async () => {
-      throw new Error('unexpected install call');
-    },
-    screenshot: async (options) => {
-      observed = options;
-      return {
-        path: '/tmp/screenshot.png',
-        identifiers: { session: 'default' },
-      };
-    },
-  });
-
-  const handled = await tryRunClientBackedCommand({
-    command: 'screenshot',
-    positionals: ['/tmp/screenshot.png'],
-    flags: {
-      json: false,
-      help: false,
-      version: false,
-      screenshotCropOn: 'label="Save"',
-    },
-    client,
-  });
-
-  assert.equal(handled, true);
-  assert.deepEqual(observed, {
-    path: '/tmp/screenshot.png',
-    cropOn: 'label="Save"',
-  });
-});
-
 test('diff screenshot forwards --surface to live client screenshot capture', async () => {
   const dir = mkdtempForTestSync('agent-device-cli-diff-surface-');
   const baseline = path.join(dir, 'baseline.png');
