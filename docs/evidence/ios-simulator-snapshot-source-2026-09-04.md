@@ -59,7 +59,7 @@ lifecycle contract.
 | Retained growth | Scope kept in the facet |
 |---|---|
 | Native runtime | Private AX binding, strict tree materialization, watchdog, and bounded response framing |
-| Host/cache | Toolchain-aware atomic build cache and clean-installed native source validation |
+| Host/cache | Toolchain-aware atomic build cache and clean-installed native source preparation |
 | Lifecycle/wire | Per-simulator generation routing, persistent helper reuse, typed failures, and reap recovery |
 | Proof | Vitest coverage topology, native/TypeScript vocabulary parity, size base/head handling, and live evidence |
 

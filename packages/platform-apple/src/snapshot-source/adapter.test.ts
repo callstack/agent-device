@@ -161,6 +161,7 @@ function createAdapterHost(buildDelayMs = 0): AdapterFixture {
     },
     start: () => new AdapterProcess(),
     connect: async () => new AdapterSocket(() => fixture.responsePid),
+    readTargetProcessStartTime: async () => 'target-start',
   };
   fixture.host = host;
   return fixture;

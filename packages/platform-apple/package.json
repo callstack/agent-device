@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Apple-family platform runtime metadata and implementations for agent-device.",
+  "scripts": {
+    "verify-installed-snapshot-bridge": "node --experimental-strip-types scripts/verify-installed-snapshot-bridge.ts"
+  },
   "dependencies": {
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",

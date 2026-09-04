@@ -48,7 +48,21 @@ export function createSnapshotSourceHost(): SnapshotSourceHost {
     emitDiagnostic,
     withDiagnosticTimer,
     processId: hostProcessId,
+    readTargetProcessStartTime,
   };
+}
+
+async function readTargetProcessStartTime(
+  pid: number,
+  options: { signal?: AbortSignal; timeoutMs: number },
+): Promise<string | null> {
+  const result = await runCmd('ps', ['-p', String(pid), '-o', 'lstart='], {
+    allowFailure: true,
+    signal: options.signal,
+    timeoutMs: options.timeoutMs,
+  });
+  if (result.exitCode !== 0) return null;
+  return result.stdout.trim() || null;
 }
 
 function startSnapshotBridge(
@@ -217,11 +231,16 @@ function appendBoundedLog(current: string, addition: string): string {
     : combined.slice(combined.length - MAX_PROCESS_LOG_BYTES);
 }
 
-export function snapshotSourceSocketPath(host: SnapshotSourceHost, udid: string): string {
+export function snapshotSourceSocketPath(
+  host: SnapshotSourceHost,
+  udid: string,
+  ownerId: string,
+): string {
   const targetKey = createHash('sha256').update(udid).digest('hex').slice(0, 12);
+  const ownerKey = createHash('sha256').update(ownerId).digest('hex').slice(0, 12);
   return path.join(
     SNAPSHOT_SOCKET_ROOT,
-    `agent-device-ax-${targetKey}-${host.processId()}`,
+    `agent-device-ax-${targetKey}-${host.processId()}-${ownerKey}`,
     'snapshot.sock',
   );
 }

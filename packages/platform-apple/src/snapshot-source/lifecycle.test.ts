@@ -106,6 +106,62 @@ test('cancellation while queued prevents a later dispatch', async () => {
   await manager.close();
 });
 
+test('cancelling a middle waiter does not release the following request early', async () => {
+  const fixture = createLifecycleFixture({ responseDelayMs: 120 });
+  const manager = new SnapshotBridgeManager(fixture.host);
+  const first = manager.request({
+    target,
+    bridge,
+    limits,
+    maxDepth: 10,
+    deadline: deadline(undefined, 1000),
+  });
+  await waitForDispatch(fixture);
+
+  const controller = new AbortController();
+  const middle = manager.request({
+    target,
+    bridge,
+    limits,
+    maxDepth: 10,
+    deadline: deadline(controller.signal, 1000),
+  });
+  const last = manager.request({
+    target,
+    bridge,
+    limits,
+    maxDepth: 10,
+    deadline: deadline(undefined, 1000),
+  });
+  controller.abort();
+
+  await assert.rejects(
+    middle,
+    (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'cancelled',
+  );
+  assert.equal(fixture.sockets[0]?.writes, 1);
+  await first;
+  await last;
+  assert.equal(fixture.sockets[0]?.writes, 2);
+  await manager.close();
+});
+
+test('independent managers own distinct sockets for the same Simulator', async () => {
+  const fixture = createLifecycleFixture();
+  const first = new SnapshotBridgeManager(fixture.host);
+  const second = new SnapshotBridgeManager(fixture.host);
+
+  await first.request({ target, bridge, limits, maxDepth: 10, deadline: deadline() });
+  await second.request({ target, bridge, limits, maxDepth: 10, deadline: deadline() });
+
+  assert.equal(fixture.socketPaths.length, 2);
+  assert.notEqual(fixture.socketPaths[0], fixture.socketPaths[1]);
+  await first.close();
+  assert.equal(fixture.processes[1]?.isAlive(), true);
+  await second.request({ target, bridge, limits, maxDepth: 10, deadline: deadline() });
+  await second.close();
+});
+
 test('request cancellation after dispatch reaps the exact helper before recovery', async () => {
   const fixture = createLifecycleFixture({ responseDelayMs: 80 });
   const manager = new SnapshotBridgeManager(fixture.host);
@@ -258,6 +314,20 @@ test('the manager rejects a response carrying a previous target generation as st
   await manager.close();
 });
 
+test('the manager rejects a tree when the target process changes during acquisition', async () => {
+  const fixture = createLifecycleFixture({ targetStartTimes: ['start-1', 'start-2'] });
+  const manager = new SnapshotBridgeManager(fixture.host);
+
+  await assert.rejects(
+    manager.request({ target, bridge, limits, maxDepth: 10, deadline: deadline() }),
+    (error: unknown) =>
+      error instanceof SnapshotSourceError &&
+      error.failureKind === 'stale-target' &&
+      error.failureCode === 'target-process-changed',
+  );
+  await manager.close();
+});
+
 test('typed guest failures retain their kind after target validation', async () => {
   const fixture = createLifecycleFixture({ responseErrorKind: 'application_not_responding' });
   const manager = new SnapshotBridgeManager(fixture.host);
@@ -274,6 +344,7 @@ type LifecycleFixture = {
   processes: FakeProcess[];
   sockets: FakeSocket[];
   diagnostics: Array<Parameters<SnapshotSourceHost['emitDiagnostic']>[0]>;
+  socketPaths: string[];
 };
 
 function deadline(signal?: AbortSignal, timeoutMs = limits.maxDurationMs) {
@@ -295,16 +366,20 @@ function createLifecycleFixture(
     responsePid?: number;
     responseGeneration?: string;
     responseErrorKind?: string;
+    targetStartTimes?: Array<string | null>;
   } = {},
 ): LifecycleFixture {
   const processes: FakeProcess[] = [];
   const sockets: FakeSocket[] = [];
   const diagnostics: LifecycleFixture['diagnostics'] = [];
+  const socketPaths: string[] = [];
   const realHost = createSnapshotSourceHost();
   const host: SnapshotSourceHost = {
     ...realHost,
     emitDiagnostic: (event) => diagnostics.push(event),
-    start: () => {
+    readTargetProcessStartTime: async () => options.targetStartTimes?.shift() ?? 'target-start',
+    start: (_udid, _bridgePath, socketPath) => {
+      socketPaths.push(socketPath);
       const process = new FakeProcess(700 + processes.length);
       processes.push(process);
       return process;
@@ -336,7 +411,7 @@ function createLifecycleFixture(
       return socket;
     },
   };
-  return { host, processes, sockets, diagnostics };
+  return { host, processes, sockets, diagnostics, socketPaths };
 }
 
 class FakeProcess implements SnapshotSourceProcess {

@@ -112,6 +112,10 @@ export type SnapshotSourceHost = Readonly<{
     data?: Record<string, unknown>,
   ): Promise<T>;
   processId(): number;
+  readTargetProcessStartTime(
+    pid: number,
+    options: { signal?: AbortSignal; timeoutMs: number },
+  ): Promise<string | null>;
 }>;
 
 export type SnapshotSourceBridgeBinary = Readonly<{

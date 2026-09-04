@@ -126,6 +126,24 @@ jobs:
           runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
           preferred-device-name: iPhone 17 Pro
 
+      - name: Verify clean-installed Simulator snapshot bridge preparation
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch origin "$BASE_SHA" --depth=1
+          if git diff --quiet "$BASE_SHA"...HEAD -- \
+            apple/snapshot-bridge \
+            packages/platform-apple/src/snapshot-source \
+            scripts/check-package.ts \
+            scripts/size-report-install.mjs \
+            scripts/size-report-package.mjs; then
+            echo "Snapshot bridge packaging is unchanged; skipping preparation proof."
+            exit 0
+          fi
+          pnpm build
+          pnpm check:package -- --verify-snapshot-bridge-preparation
+
       - name: Run targeted iOS runner XCTest regressions
         run: |
           XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"

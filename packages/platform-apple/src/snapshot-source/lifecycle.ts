@@ -44,6 +44,7 @@ type SnapshotBridgeRequest = Readonly<{
 export class SnapshotBridgeManager {
   private readonly sessions = new Map<string, BridgeSession>();
   private readonly requestQueues = new Map<string, Promise<void>>();
+  private readonly ownerId = randomUUID();
   private closed = false;
   private readonly host: SnapshotSourceHost;
 
@@ -65,7 +66,10 @@ export class SnapshotBridgeManager {
     const previousSession = this.sessions.get(input.target.udid);
     const session = await this.ensureSession(input, deadline);
     try {
-      return await this.exchange(session, input, deadline);
+      const targetStartTime = await this.readTargetStartTime(input.target, deadline);
+      const envelope = await this.exchange(session, input, deadline);
+      await this.assertTargetStillCurrent(input.target, targetStartTime, deadline);
+      return envelope;
     } catch (error) {
       const normalized = await this.handleRequestFailure(error, session, previousSession);
       throw normalized;
@@ -94,15 +98,15 @@ export class SnapshotBridgeManager {
     deadline: SnapshotSourceDeadline,
     action: () => Promise<T>,
   ): Promise<T> {
-    const previous = this.requestQueues.get(udid);
+    const previous = this.requestQueues.get(udid) ?? Promise.resolve();
     let release!: () => void;
-    const current = new Promise<void>((resolve) => {
+    const turnFinished = new Promise<void>((resolve) => {
       release = resolve;
     });
+    const current = previous.then(() => turnFinished);
     this.requestQueues.set(udid, current);
     try {
-      if (previous) await waitForSimulatorTurn(previous, deadline);
-      else remainingSnapshotSourceMs(deadline, 'bridge-request-deadline');
+      await waitForSimulatorTurn(previous, deadline);
       return await action();
     } finally {
       release();
@@ -132,7 +136,7 @@ export class SnapshotBridgeManager {
     }
     if (existing) await this.removeSession(existing, true);
 
-    const socketPath = snapshotSourceSocketPath(this.host, input.target.udid);
+    const socketPath = snapshotSourceSocketPath(this.host, input.target.udid, this.ownerId);
     await this.host.ensureDirectory(path.dirname(socketPath));
     await this.host.remove(socketPath);
     const bridgeProcess = this.host.start(input.target.udid, input.bridge.path, socketPath, {
@@ -220,6 +224,42 @@ export class SnapshotBridgeManager {
       expectedGeneration: input.target.generation,
       host: this.host,
     });
+  }
+
+  private async readTargetStartTime(
+    target: SnapshotSourceTarget,
+    deadline: SnapshotSourceDeadline,
+  ): Promise<string> {
+    const startTime = await this.host.readTargetProcessStartTime(target.pid, {
+      signal: deadline.signal,
+      timeoutMs: remainingSnapshotSourceMs(deadline, 'target-identity-deadline'),
+    });
+    if (!startTime) {
+      throw snapshotSourceError('stale-target', 'target-process-unavailable', {
+        pid: target.pid,
+        generation: target.generation,
+      });
+    }
+    return startTime;
+  }
+
+  private async assertTargetStillCurrent(
+    target: SnapshotSourceTarget,
+    expectedStartTime: string,
+    deadline: SnapshotSourceDeadline,
+  ): Promise<void> {
+    const observedStartTime = await this.host.readTargetProcessStartTime(target.pid, {
+      signal: deadline.signal,
+      timeoutMs: remainingSnapshotSourceMs(deadline, 'target-identity-deadline'),
+    });
+    if (observedStartTime !== expectedStartTime) {
+      throw snapshotSourceError('stale-target', 'target-process-changed', {
+        pid: target.pid,
+        generation: target.generation,
+        expectedStartTime,
+        observedStartTime,
+      });
+    }
   }
 
   private async removeSession(session: BridgeSession, stopProcess: boolean): Promise<void> {
