@@ -53,6 +53,14 @@ export const WEB_DESKTOP_DEVICE: DeviceInfo = {
   booted: true,
 };
 
+export const ANDROID_DEVICE: DeviceInfo = {
+  platform: 'android',
+  id: 'and-1',
+  name: 'Pixel 8',
+  kind: 'device',
+  booted: true,
+};
+
 export const ANDROID_TV_DEVICE: DeviceInfo = {
   platform: 'android',
   id: 'and-tv-1',

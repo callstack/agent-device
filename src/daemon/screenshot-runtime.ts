@@ -27,6 +27,11 @@ import type {
   ResolvedGenericExecution,
 } from './request-generic-dispatch.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
+import {
+  assertScreenshotCropPolicy,
+  buildScreenshotCropWarnings,
+  cropScreenshotToSelector,
+} from './screenshot-crop.ts';
 import { annotateScreenshotWithRefs } from './screenshot-overlay.ts';
 import {
   resolveBoundScreenshotRuntime,
@@ -55,15 +60,30 @@ export async function resolveScreenshotGenericExecution(
   assertSupportedScreenshotPixelDensity(session.device, req.flags?.screenshotPixelDensity);
 
   const request = readScreenshotRequest(req);
+  const cropOn =
+    typeof req.flags?.screenshotCropOn === 'string' && req.flags.screenshotCropOn.length > 0
+      ? req.flags.screenshotCropOn
+      : undefined;
+  if (cropOn !== undefined) {
+    assertScreenshotCropPolicy({
+      device: session.device,
+      surface: session.surface,
+      cropOn,
+      overlayRefs: req.flags?.overlayRefs === true,
+      fullscreen: req.flags?.screenshotFullscreen === true,
+    });
+  }
   const resolved = await resolveBoundScreenshotRuntime({
     device: session.device,
     overlayRefs: req.flags?.overlayRefs === true,
+    cropOn,
     inspectFacts: params.inspectFacts,
     bindDevice: params.bindDevice,
   });
   if (!resolved.ok) return resolved;
 
   const runtime = resolved.runtime;
+  const cropRun: ScreenshotCropRun = { warnings: [] };
   return {
     ok: true,
     recorded: request.recorded,
@@ -76,6 +96,8 @@ export async function resolveScreenshotGenericExecution(
         flags: execution.request.flags,
         outPath: request.outPath,
         runtime,
+        cropOn,
+        cropRun,
       }),
   };
 }
@@ -92,6 +114,7 @@ export async function captureScreenshotArtifact(
     outPath?: string;
     dispatchContext: DaemonCommandContext;
     captureScreenshot: BoundScreenshotRuntime['captureScreenshot'];
+    crop?: ScreenshotCropBinding;
   }>,
 ): Promise<CapturedScreenshot> {
   const { session, sessionName, outPath, dispatchContext } = params;
@@ -122,7 +145,18 @@ export async function captureScreenshotArtifact(
  * `commands/`: the daemon sits below the command surface (R2), and this adapter's artifact
  * publisher emits no descriptors, so the destination and its message are the whole result.
  */
-type CapturedScreenshot = Readonly<{ path: string; message?: string }>;
+type CapturedScreenshot = Readonly<{ path: string; message?: string; warnings?: string[] }>;
+
+/** One request's crop state: the backend closure appends, the result record reads. */
+type ScreenshotCropRun = { warnings: string[] };
+
+/** The crop orchestration the backend closure runs after the platform write, before scale. */
+type ScreenshotCropBinding = Readonly<{
+  cropOn: string;
+  captureSnapshot: NonNullable<BoundScreenshotRuntime['captureSnapshot']>;
+  run: ScreenshotCropRun;
+  logPath: string;
+}>;
 
 /**
  * Runner metadata the capture needs; cancellation comes from the request binding, not from here.
@@ -146,20 +180,43 @@ async function executeScreenshot(
     flags: CommandFlags | undefined;
     outPath: string | undefined;
     runtime: BoundScreenshotRuntime;
+    cropOn?: string;
+    cropRun?: ScreenshotCropRun;
   }>,
 ): Promise<Record<string, unknown>> {
   const { session, runtime, flags } = params;
+  const captureSnapshot = runtime.captureSnapshot;
+  const crop =
+    params.cropOn !== undefined && captureSnapshot
+      ? {
+          cropOn: params.cropOn,
+          captureSnapshot,
+          run: params.cropRun,
+          logPath: params.logPath,
+        }
+      : undefined;
   const captured = await captureScreenshotArtifact({
     session,
     sessionName: params.sessionName,
     outPath: params.outPath,
     dispatchContext: params.dispatchContext,
     captureScreenshot: runtime.captureScreenshot,
+    ...(crop
+      ? {
+          crop: {
+            cropOn: crop.cropOn,
+            captureSnapshot: crop.captureSnapshot,
+            run: crop.run ?? { warnings: [] },
+            logPath: crop.logPath,
+          } satisfies ScreenshotCropBinding,
+        }
+      : {}),
   });
-  const captureSnapshot = runtime.captureSnapshot;
+  const warnings = [...(captured.warnings ?? []), ...(crop?.run?.warnings ?? [])];
   return {
     ...captured,
-    ...(captureSnapshot
+    ...(warnings.length > 0 ? { warnings } : {}),
+    ...(captureSnapshot && params.cropOn === undefined
       ? {
           overlayRefs: await annotateScreenshotWithSessionRefs({
             session,
@@ -247,9 +304,10 @@ function createBoundScreenshotBackend(
     session: SessionState;
     dispatchContext: DaemonCommandContext;
     captureScreenshot: BoundScreenshotRuntime['captureScreenshot'];
+    crop?: ScreenshotCropBinding;
   }>,
 ): AgentDeviceBackend {
-  const { session, dispatchContext, captureScreenshot } = params;
+  const { session, dispatchContext, captureScreenshot, crop } = params;
   return {
     platform: publicPlatformString(session.device),
     captureScreenshot: async (_context, outPath, options) => {
@@ -275,6 +333,19 @@ function createBoundScreenshotBackend(
         },
         execution: screenshotExecutionFromContext(dispatchContext),
       });
+      if (crop) {
+        const outcome = await cropScreenshotToSelector({
+          device: session.device,
+          session,
+          surface: session.surface,
+          cropOn: crop.cropOn,
+          screenshotPath: outPath,
+          logPath: crop.logPath,
+          dispatchContext,
+          captureSnapshot: crop.captureSnapshot,
+        });
+        crop.run.warnings.push(...buildScreenshotCropWarnings(outcome));
+      }
     },
   };
 }
