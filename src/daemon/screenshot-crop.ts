@@ -21,10 +21,7 @@ import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts
 import type { BoundScreenshotRuntime } from './screenshot-runtime-binding.ts';
 import type { SessionState } from './types.ts';
 
-export type ScreenshotCropOutcome = Readonly<{
-  cropped: true;
-  partialIntersection: boolean;
-}>;
+export type ScreenshotCropOutcome = Readonly<{ partialIntersection: boolean }>;
 
 const CROP_PARTIAL_INTERSECTION_WARNING = `${SCREENSHOT_CROP_REASONS.partialIntersection}: the selector frame extends past the captured image; the crop was clipped to the image frame`;
 
@@ -100,7 +97,7 @@ export async function cropScreenshotToSelector(params: {
     box.width < projected.width ||
     box.height < projected.height;
   await cropPngFile(screenshotPath, box);
-  return { cropped: true, partialIntersection };
+  return { partialIntersection };
 }
 
 /** Resolve the selector to exactly one framed node, or fail with a typed crop reason. */

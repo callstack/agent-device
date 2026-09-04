@@ -21,8 +21,8 @@ import { writeSolidPng } from './screenshot-runtime-fixture.ts';
 
 test('the warning composition is the single owner: partial intersection and only', () => {
   expect(buildScreenshotCropWarnings(undefined)).toEqual([]);
-  expect(buildScreenshotCropWarnings({ cropped: true, partialIntersection: false })).toEqual([]);
-  const warnings = buildScreenshotCropWarnings({ cropped: true, partialIntersection: true });
+  expect(buildScreenshotCropWarnings({ partialIntersection: false })).toEqual([]);
+  const warnings = buildScreenshotCropWarnings({ partialIntersection: true });
   expect(warnings).toHaveLength(1);
   expect(warnings[0]).toMatch(new RegExp(`^${SCREENSHOT_CROP_REASONS.partialIntersection}: `));
 });
@@ -129,7 +129,7 @@ test('an android crop runs the fresh full-tree capture once and leaves the sessi
   });
   try {
     const outcome = await seam.run();
-    expect(outcome).toEqual({ cropped: true, partialIntersection: false });
+    expect(outcome).toEqual({ partialIntersection: false });
     expect(await readPngSize(seam.screenshotPath)).toEqual({ width: 40, height: 20 });
     expect(seam.captureSnapshot).toHaveBeenCalledTimes(1);
     const options = seam.captureSnapshot.mock.calls[0]?.[0].options;
@@ -153,7 +153,7 @@ test('an iOS simulator crop projects the points-space frame into the 3x capture'
   });
   try {
     const outcome = await seam.run();
-    expect(outcome).toEqual({ cropped: true, partialIntersection: false });
+    expect(outcome).toEqual({ partialIntersection: false });
     expect(await readPngSize(seam.screenshotPath)).toEqual({ width: 300, height: 120 });
   } finally {
     seam.dispose();
@@ -169,7 +169,7 @@ test('a frame that runs past the image is clipped and reported partial', async (
   });
   try {
     const outcome = await seam.run();
-    expect(outcome).toEqual({ cropped: true, partialIntersection: true });
+    expect(outcome).toEqual({ partialIntersection: true });
     expect(await readPngSize(seam.screenshotPath)).toEqual({ width: 20, height: 20 });
   } finally {
     seam.dispose();
