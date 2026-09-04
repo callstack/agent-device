@@ -28,6 +28,12 @@ const PACKAGE_COMPONENTS = [
       entryPath.startsWith('dist/apple/snapshot-presentation/'),
   },
   {
+    id: 'apple-snapshot-bridge',
+    label: 'Apple Simulator snapshot bridge source',
+    matches: (entryPath) =>
+      entryPath === 'apple/snapshot-bridge' || entryPath.startsWith('apple/snapshot-bridge/'),
+  },
+  {
     id: 'macos-helper',
     label: 'macOS helper source',
     matches: (entryPath) =>
@@ -67,6 +73,7 @@ export function collectNpmPack(root) {
 export function assertPublishPackageContents(entries) {
   const paths = entries.map((entry) => entry.path);
   const requiredAssets = [
+    { directory: 'apple/snapshot-bridge/', suffix: 'SnapshotBridge.m' },
     { directory: 'android/snapshot-helper/dist/', suffix: '.apk' },
     { directory: 'android/snapshot-helper/dist/', suffix: '.manifest.json' },
     { directory: 'android/ime-helper/dist/', suffix: '.apk' },

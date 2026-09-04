@@ -53,6 +53,10 @@
       "types": "./src/runner/index.ts",
       "default": "./src/runner/index.ts"
     },
+    "./snapshot-source": {
+      "types": "./src/snapshot-source-facade.ts",
+      "default": "./src/snapshot-source-facade.ts"
+    },
     "./runner/operations": {
       "types": "./src/runner-operations-facade.ts",
       "default": "./src/runner-operations-facade.ts"

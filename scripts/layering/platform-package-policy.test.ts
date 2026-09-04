@@ -40,6 +40,7 @@ function declarations(): PlatformPackageDeclaration[] {
             '@agent-device/platform-apple/runner/operations',
             '@agent-device/platform-apple/runner-owner',
             '@agent-device/platform-apple/simctl',
+            '@agent-device/platform-apple/snapshot-source',
             '@agent-device/platform-apple/simulator',
             '@agent-device/platform-apple/tool-provider',
           ]
@@ -315,6 +316,7 @@ test('the Apple domain facades preserve synchronous helpers without widening the
     '@agent-device/platform-apple/physical-device',
     '@agent-device/platform-apple/runner-owner',
     '@agent-device/platform-apple/simctl',
+    '@agent-device/platform-apple/snapshot-source',
     '@agent-device/platform-apple/simulator',
     '@agent-device/platform-apple/tool-provider',
   ]) {

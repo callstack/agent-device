@@ -301,6 +301,11 @@
       "exports": ["*"]
     },
     {
+      "comment": "Apple Simulator snapshot acquisition is a private package facet consumed by downstream runtime work; Fallow cannot see external consumers through the workspace exports map, so keep the complete named facet surface explicit.",
+      "file": "packages/platform-apple/src/snapshot-source-facade.ts",
+      "exports": ["*"]
+    },
+    {
       "comment": "Deliberately kept off the @agent-device/maestro façade (index.test.ts asserts its absence) and consumed only by the conformance harness under packages/maestro/test/.",
       "file": "packages/maestro/src/internal/program-ir-command-parser.ts",
       "exports": ["SUPPORTED_MAESTRO_COMMAND_NAMES"]

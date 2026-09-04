@@ -209,6 +209,7 @@
     "dist",
     "apple/macos-helper",
     "!apple/macos-helper/**/.build",
+    "apple/snapshot-bridge",
     "android/snapshot-helper/dist",
     "!android/snapshot-helper/dist/*.idsig",
     "!android/snapshot-helper/README.md",
