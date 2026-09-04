@@ -59,4 +59,34 @@ describe('normalizeAgentBrowserSnapshot', () => {
 
     expect(result.nodes[0]?.enabled).toBe(true);
   });
+
+  test('preserves the backend ref so the displayed ref is the actionable one', async () => {
+    // agent-browser mints refs in tree order and skips non-interactive nodes
+    // (the leading `generic` container never gets a ref), so the refs are NOT dense:
+    //   e1 = generic  (skipped here, no ref on it)
+    //   e2 = username textbox
+    //   e3 = passcode textbox   <-- agent presses @e3 expecting username
+    //   e4 = sign-in button
+    // The username textbox is the 2nd NODE in the snapshot but its backend ref is e2.
+    // If agent-device re-mints dense positional refs, the snapshot would show the
+    // username as @e2 while the passcode (node 3) shows @e3 — and an agent that
+    // reads "@e3 = passcode" would land in the passcode field when it meant the
+    // username, because the backend's own e3 resolves to a different element.
+    // Preserving the backend ref keeps display ref == actionable ref.
+    const result = await normalizeAgentBrowserSnapshot({
+      snapshot: [
+        '- textbox "Username" [ref=e2]',
+        '- textbox "Passcode" [ref=e3]',
+        '- button "Sign in" [ref=e4]',
+      ].join('\n'),
+      refs: {
+        e2: { role: 'textbox', name: 'Username' },
+        e3: { role: 'textbox', name: 'Passcode' },
+        e4: { role: 'button', name: 'Sign in' },
+      },
+    });
+
+    expect(result.nodes.map((node) => node.label)).toEqual(['Username', 'Passcode', 'Sign in']);
+    expect(result.nodes.map((node) => node.ref)).toEqual(['e2', 'e3', 'e4']);
+  });
 });

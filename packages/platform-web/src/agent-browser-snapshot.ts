@@ -31,7 +31,13 @@ export async function normalizeAgentBrowserSnapshot(
   if (fetchBox) await attachDraftRects(drafts, fetchBox);
 
   return {
-    nodes: drafts.map((draft, index) => ({ ...draft.node, index })),
+    // Preserve each draft's backend ref as the node's `ref`. agent-browser resolves
+    // actions (click/fill/hover) against its own `@eN` refs, which are minted in tree
+    // order and are NOT dense — so the ref an agent reads off the snapshot must be the
+    // backend ref, not a re-minted dense positional ref. `attachRefs` (downstream) keeps
+    // it. Without this the snapshot could show `@e3` = username while the action on
+    // `@e3` lands on the backend's `@e3` (a different element, e.g. the passcode field).
+    nodes: drafts.map((draft, index) => ({ ...draft.node, index, ref: draft.ref })),
     truncated: readBooleanProperty(data, 'truncated'),
   };
 }
