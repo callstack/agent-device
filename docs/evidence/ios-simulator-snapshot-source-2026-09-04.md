@@ -1,18 +1,22 @@
 # iOS Simulator snapshot-source live evidence
 
 - Issue: #2196
-- Observed: 2026-09-04T09:03:35Z
-- Revision: `6d39faaa6a36a010b346d36bd576194d936115ac`
+- Observed: 2026-09-04T10:14:05Z
+- Revision: `597cb16db1`
 - Target: verified booted `iPhone 17 Pro` Simulator, iOS 26.2
 - UDID: `F7D6F9A4-4FCC-4DD7-AC0B-3280C9319CB9`
-- App: `Agent Device Tester` (`com.callstack.agentdevicelab`), PID `60439`
-- Workflow: `agent-device open` established the session; the private facet was then called directly with an injected host and raw projection. No production routing or proxy path was used.
+- App: `Agent Device Tester` (`com.callstack.agentdevicelab`), initial PID `65124`, final PID `67942`
+- Workflow: `agent-device open` established the session; one instance of the public `@agent-device/platform-apple/snapshot-source` facet was called with raw projection. Eight warm acquires were followed by eight terminate/launch acquires carrying new app generations. No production routing or proxy path was used.
 
 ## Result
 
 | Measurement | Observed |
 |---|---:|
-| Acquisition latency | 2560 ms |
+| Public-facet prime acquire (includes preparation) | 2462.4 ms |
+| Public-facet warm acquire p95 (8 samples) | 14.1 ms |
+| Public-facet relaunch acquire p95 (8 samples) | 97.1 ms |
+| Warm acquire range | 12.1–14.1 ms |
+| Relaunch acquire range | 38.3–97.1 ms |
 | Raw nodes | 77 |
 | Truncated | false |
 | Viewport | 402 x 874 |
@@ -20,7 +24,7 @@
 | Intent | `full` |
 | Residue | `hittability` unavailable |
 
-The returned lineage carried the supplied target id and opaque generation. The source returned raw nodes with the observed target PID and did not claim hittability or interaction-query facts.
+The returned lineage carried each supplied target id and changed opaque generation. Every sample returned 77 raw nodes without truncation; the source did not claim hittability or interaction-query facts. The prime includes the one-time source/toolchain preparation; the source instance retained the successfully prepared binary for all later acquires.
 
 ## Build and cache
 
@@ -28,7 +32,8 @@ The returned lineage carried the supplied target id and opaque generation. The s
 - Source version: `agent-device-simulator-ax-v1.5.3`
 - Source hash: `44e0c10dd5f0bf236c35293999e05d6bfaa740b492a98206da6dc1dec6f7d879`
 - Cache key: `0c73362db09451e54089e40d42c8f263`
-- The live acquisition used the prepared cache entry; deterministic tests cover cold publish, atomic concurrent publish, corrupt-entry rejection, source invalidation, and toolchain invalidation.
+- The prime used the prepared disk-cache entry and completed source/toolchain validation once; deterministic tests cover cold publish, atomic concurrent publish, corrupt-entry rejection, source invalidation, and toolchain invalidation.
+- Closing the source after the measurement left no `snapshot-bridge` or `agent-device-ax-*` helper process.
 
 ## Package size
 
@@ -46,7 +51,8 @@ The returned lineage carried the supplied target id and opaque generation. The s
 
 The implementation remains one reviewable facet with four ownership layers: native AX acquisition,
 the framed wire contract, host-side build/cache, and helper lifecycle. The tests and gates stay beside
-those layers, including a native-source wire parity fixture. The change is intentionally not split into
+those layers, including an explicit wire-vocabulary literal guard rather than a native-produced round
+trip claim. The change is intentionally not split into
 independently publishable commits because each layer is unusable without the adjacent protocol and
 lifecycle contract.
 
