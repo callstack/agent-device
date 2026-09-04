@@ -361,6 +361,15 @@ function summarizeProviderScenarioFlagExclusions() {
       owner: 'runner XCTest unit, snapshot-lines, and snapshot-quality tests',
       keys: ['snapshotCustomActions'],
     },
+    {
+      // The crop is daemon-level post-processing: the platform write happens first, then the
+      // daemon crops the PNG against a fresh snapshot whose pixel/tree identity the fake
+      // provider scenario fixtures cannot fabricate. Covered instead by the daemon crop-leaf
+      // unit tests and the live device verification in the feature's PR evidence.
+      name: 'daemon screenshot selector crop',
+      owner: 'daemon screenshot-crop unit and live device verification',
+      keys: ['screenshotCropOn'],
+    },
   ];
 }
 

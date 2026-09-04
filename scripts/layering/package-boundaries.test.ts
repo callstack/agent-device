@@ -468,6 +468,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/ios-snapshot-planning',
     '@agent-device/capture-kit/mobile-snapshot-semantics',
     '@agent-device/capture-kit/png',
+    '@agent-device/capture-kit/png-crop',
     '@agent-device/capture-kit/png-resize',
     '@agent-device/capture-kit/png-rgb-difference',
     '@agent-device/capture-kit/png-size',
@@ -478,6 +479,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/snapshot-occlusion',
     '@agent-device/capture-kit/snapshot-quality-backend-capabilities',
     '@agent-device/capture-kit/snapshot-quality-verdict',
+    '@agent-device/capture-kit/snapshot-rect-projection',
   ]);
 
   const provisionKitPackage = packages.find((pkg) => pkg.name === '@agent-device/provision-kit');
