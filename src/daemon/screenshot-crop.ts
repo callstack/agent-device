@@ -145,7 +145,7 @@ function classifyAppleCropTarget(
     case 'tvos':
       return 'tvos';
     case 'macos':
-      return surface === 'app' || surface === 'frontmost-app' ? 'macos-app-window' : 'macos-helper';
+      return classifyMacOsCropTarget(surface);
     case 'watchos':
     case 'visionos':
       // Stored records carry the reserved OSes although discovery never populates them; a
@@ -153,6 +153,10 @@ function classifyAppleCropTarget(
       // not a guess.
       throw cropRefusal(appleOs);
   }
+}
+
+function classifyMacOsCropTarget(surface: SessionSurface | undefined): CropTarget {
+  return surface === 'app' || surface === 'frontmost-app' ? 'macos-app-window' : 'macos-helper';
 }
 
 function cropRefusal(target: string): AppError {

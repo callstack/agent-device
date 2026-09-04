@@ -34,6 +34,9 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
   screenshotCommandDescription,
   {
     path: stringField('Output path.'),
+    cropOn: stringField(
+      'Selector expression; the capture is cropped to the frame the selector resolves on the same screen.',
+    ),
     overlayRefs: booleanField(),
     pixelDensity: integerField('Output screenshot pixel density in pixels per logical point.', {
       min: 1,
@@ -77,7 +80,7 @@ export const screenshotCommandFacet = defineCommandFacet({
   text: {
     summary: 'Capture a screenshot',
     cliDetail:
-      'Web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. iOS simulators default to 1x logical-point output; use --pixel-density to request a different screenshot density. macOS app sessions default to the app window; use --fullscreen for full desktop, --scale to downscale, --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator chrome, or --no-stabilize for low-latency Android capture loops.',
+      'Web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. iOS simulators default to 1x logical-point output; use --pixel-density to request a different screenshot density. macOS app sessions default to the app window; use --fullscreen for full desktop, --scale to downscale, --crop-on <selector> to crop the capture to the frame the selector resolves on the same screen (currently iOS simulators and Android emulators), --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator chrome, or --no-stabilize for low-latency Android capture loops.',
   },
   metadata: screenshotCommandMetadata,
   definition: screenshotCommandDefinition,

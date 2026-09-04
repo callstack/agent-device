@@ -28,6 +28,8 @@ test('usageForCommand documents screenshot web aliases and stabilization flags',
   assert.match(help, /low-latency Android capture loops/);
   assert.match(help, /--normalize-status-bar/);
   assert.match(help, /deterministic iOS simulator chrome/);
+  assert.match(help, /--crop-on <selector-expression>/);
+  assert.match(help, /crop the capture to the frame of the selector/);
 });
 
 test('usageForCommand documents screenshot diff normalization', async () => {

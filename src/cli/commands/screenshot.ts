@@ -26,11 +26,13 @@ export const screenshotCommand: ClientCommandHandler = async ({ positionals, fla
     return true;
   }
   const data = pickScreenshotResultData(result);
-  await writeCommandOutput(flags, data, () =>
-    result.overlayRefs
+  await writeCommandOutput(flags, data, () => {
+    const summary = result.overlayRefs
       ? `Annotated ${result.overlayRefs.length} refs onto ${result.path}`
-      : formatScreenshotSummary(result),
-  );
+      : formatScreenshotSummary(result);
+    const warnings = result.warnings ?? [];
+    return warnings.length > 0 ? [summary, ...warnings].join('\n') : summary;
+  });
   return true;
 };
 

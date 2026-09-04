@@ -158,6 +158,28 @@ test('screenshot digest tolerates a path-only result with no overlay refs', () =
   expect(digest).toEqual({ path: '/tmp/s.png', overlayCount: 0, overlayRefs: [] });
 });
 
+test('screenshot digest keeps response-level warnings emitted once', () => {
+  const digest = screenshotView!(
+    {
+      path: '/tmp/s.png',
+      width: 40,
+      height: 20,
+      warnings: [
+        'CROP_PARTIAL_INTERSECTION: the selector frame extends past the captured image; the crop was clipped to the image frame',
+      ],
+    },
+    'digest',
+  );
+  expect(digest).toMatchObject({
+    path: '/tmp/s.png',
+    width: 40,
+    height: 20,
+    warnings: [
+      'CROP_PARTIAL_INTERSECTION: the selector frame extends past the captured image; the crop was clipped to the image frame',
+    ],
+  });
+});
+
 // A verbose matched node as it appears on the `find`/`get` wire: the semantic
 // attributes (kept) plus the geometry/index/process plumbing (the token sink).
 const MATCHED_NODE = {

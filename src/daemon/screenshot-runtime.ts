@@ -185,48 +185,32 @@ async function executeScreenshot(
   }>,
 ): Promise<Record<string, unknown>> {
   const { session, runtime, flags } = params;
-  const captureSnapshot = runtime.captureSnapshot;
-  const crop =
-    params.cropOn !== undefined && captureSnapshot
-      ? {
-          cropOn: params.cropOn,
-          captureSnapshot,
-          run: params.cropRun,
-          logPath: params.logPath,
-        }
-      : undefined;
+  const crop = buildScreenshotCropBinding({
+    cropOn: params.cropOn,
+    captureSnapshot: runtime.captureSnapshot,
+    cropRun: params.cropRun,
+    logPath: params.logPath,
+  });
   const captured = await captureScreenshotArtifact({
     session,
     sessionName: params.sessionName,
     outPath: params.outPath,
     dispatchContext: params.dispatchContext,
     captureScreenshot: runtime.captureScreenshot,
-    ...(crop
-      ? {
-          crop: {
-            cropOn: crop.cropOn,
-            captureSnapshot: crop.captureSnapshot,
-            run: crop.run ?? { warnings: [] },
-            logPath: crop.logPath,
-          } satisfies ScreenshotCropBinding,
-        }
-      : {}),
+    ...(crop ? { crop } : {}),
   });
   const warnings = [...(captured.warnings ?? []), ...(crop?.run?.warnings ?? [])];
   return {
     ...captured,
     ...(warnings.length > 0 ? { warnings } : {}),
-    ...(captureSnapshot && params.cropOn === undefined
-      ? {
-          overlayRefs: await annotateScreenshotWithSessionRefs({
-            session,
-            logPath: params.logPath,
-            screenshotPath: captured.path,
-            dispatchContext: params.dispatchContext,
-            captureSnapshot,
-          }),
-        }
-      : {}),
+    ...(await screenshotOverlayRefsField({
+      session,
+      cropOn: params.cropOn,
+      captureSnapshot: runtime.captureSnapshot,
+      screenshotPath: captured.path,
+      logPath: params.logPath,
+      dispatchContext: params.dispatchContext,
+    })),
     ...(await readScreenshotResultMetadata({
       device: session.device,
       path: captured.path,
@@ -236,10 +220,54 @@ async function executeScreenshot(
   };
 }
 
+/** Present exactly when the admitted plan carries a crop and the snapshot binding to serve it. */
+function buildScreenshotCropBinding(
+  params: Readonly<{
+    cropOn: string | undefined;
+    captureSnapshot: BoundScreenshotRuntime['captureSnapshot'];
+    cropRun: ScreenshotCropRun | undefined;
+    logPath: string;
+  }>,
+): ScreenshotCropBinding | undefined {
+  const { cropOn, captureSnapshot, cropRun } = params;
+  if (cropOn === undefined || captureSnapshot === undefined || cropRun === undefined) {
+    return undefined;
+  }
+  return { cropOn, captureSnapshot, run: cropRun, logPath: params.logPath };
+}
+
 /**
  * `--overlay-refs` republishes the annotated tree as the session's snapshot, so the refs it drew
  * are the refs a following interaction resolves. The tree comes from the same admitted binding as
- * the capture — the plan required both operations before either ran.
+ * the capture — the plan required both operations before either ran. The crop plan binds the
+ * snapshot for the crop alone, so a crop request never annotates or republishes.
+ */
+async function screenshotOverlayRefsField(
+  params: Readonly<{
+    session: SessionState;
+    cropOn: string | undefined;
+    captureSnapshot: BoundScreenshotRuntime['captureSnapshot'];
+    screenshotPath: string;
+    logPath: string;
+    dispatchContext: DaemonCommandContext;
+  }>,
+): Promise<Readonly<Record<string, unknown>>> {
+  const { session, cropOn, captureSnapshot } = params;
+  if (cropOn !== undefined || captureSnapshot === undefined) return {};
+  return {
+    overlayRefs: await annotateScreenshotWithSessionRefs({
+      session,
+      logPath: params.logPath,
+      screenshotPath: params.screenshotPath,
+      dispatchContext: params.dispatchContext,
+      captureSnapshot,
+    }),
+  };
+}
+
+/**
+ * The overlay-refs tree capture: interactive-only, through the same admitted binding as the
+ * screenshot, stored as the session snapshot so the burned-in refs stay the authorized frame.
  */
 async function annotateScreenshotWithSessionRefs(
   params: Readonly<{

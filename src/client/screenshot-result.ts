@@ -1,6 +1,7 @@
 import type { ScreenshotResultData } from '@agent-device/contracts/capture';
+import type { CaptureScreenshotResult } from '@agent-device/contracts/client';
+import { isRecord, parsePoint, parseRect, readRequiredString } from '@agent-device/kernel/record';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
-import { isRecord, parsePoint, parseRect } from '@agent-device/kernel/record';
 
 export function pickScreenshotResultData(value: ScreenshotResultData): ScreenshotResultData {
   return {
@@ -11,6 +12,26 @@ export function pickScreenshotResultData(value: ScreenshotResultData): Screensho
     ...(typeof value.logicalHeight === 'number' ? { logicalHeight: value.logicalHeight } : {}),
     ...(typeof value.pixelDensity === 'number' ? { pixelDensity: value.pixelDensity } : {}),
     ...(value.overlayRefs ? { overlayRefs: value.overlayRefs } : {}),
+    ...(value.warnings && value.warnings.length > 0 ? { warnings: value.warnings } : {}),
+  };
+}
+
+/** The default-level daemon payload, normalized into the typed client result. */
+export function normalizeScreenshotCaptureResult(
+  data: Record<string, unknown>,
+  session: string,
+): CaptureScreenshotResult {
+  const screenshot = readScreenshotResultData(data);
+  return {
+    path: readRequiredString(data, 'path'),
+    width: screenshot?.width,
+    height: screenshot?.height,
+    logicalWidth: screenshot?.logicalWidth,
+    logicalHeight: screenshot?.logicalHeight,
+    pixelDensity: screenshot?.pixelDensity,
+    overlayRefs: screenshot?.overlayRefs,
+    ...(screenshot?.warnings ? { warnings: screenshot.warnings } : {}),
+    identifiers: { session },
   };
 }
 
@@ -22,29 +43,42 @@ type ScreenshotOverlayRefData = {
   center?: unknown;
 };
 
-export function readScreenshotResultData(value: unknown): ScreenshotResultData | undefined {
+function readScreenshotResultData(value: unknown): ScreenshotResultData | undefined {
   if (!isRecord(value)) return undefined;
-  const path = typeof value.path === 'string' ? value.path : undefined;
-  const width = typeof value.width === 'number' ? value.width : undefined;
-  const height = typeof value.height === 'number' ? value.height : undefined;
-  const logicalWidth = typeof value.logicalWidth === 'number' ? value.logicalWidth : undefined;
-  const logicalHeight = typeof value.logicalHeight === 'number' ? value.logicalHeight : undefined;
-  const pixelDensity = typeof value.pixelDensity === 'number' ? value.pixelDensity : undefined;
-  const overlayRefs = Array.isArray(value.overlayRefs)
-    ? value.overlayRefs.filter(isScreenshotOverlayRefData).flatMap((entry) => {
-        const overlayRef = readScreenshotOverlayRef(entry);
-        return overlayRef ? [overlayRef] : [];
-      })
-    : undefined;
+  const warnings = readScreenshotWarnings(value.warnings);
   return pickScreenshotResultData({
-    path,
-    width,
-    height,
-    logicalWidth,
-    logicalHeight,
-    pixelDensity,
-    overlayRefs,
+    path: readStringField(value, 'path'),
+    width: readNumberField(value, 'width'),
+    height: readNumberField(value, 'height'),
+    logicalWidth: readNumberField(value, 'logicalWidth'),
+    logicalHeight: readNumberField(value, 'logicalHeight'),
+    pixelDensity: readNumberField(value, 'pixelDensity'),
+    overlayRefs: readScreenshotOverlayRefs(value.overlayRefs),
+    ...(warnings !== undefined ? { warnings } : {}),
   });
+}
+
+function readNumberField(value: Record<string, unknown>, key: string): number | undefined {
+  const field = value[key];
+  return typeof field === 'number' ? field : undefined;
+}
+
+function readStringField(value: Record<string, unknown>, key: string): string | undefined {
+  const field = value[key];
+  return typeof field === 'string' ? field : undefined;
+}
+
+function readScreenshotOverlayRefs(value: unknown): ScreenshotOverlayRef[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter(isScreenshotOverlayRefData).flatMap((entry) => {
+    const overlayRef = readScreenshotOverlayRef(entry);
+    return overlayRef ? [overlayRef] : [];
+  });
+}
+
+function readScreenshotWarnings(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0);
 }
 
 function readScreenshotOverlayRef(

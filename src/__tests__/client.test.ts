@@ -1192,6 +1192,29 @@ test('client capture.screenshot normalizes overlay refs from daemon response dat
   });
 });
 
+test('client capture.screenshot surfaces response-level warnings', async () => {
+  const setup = createTransport(async () => ({
+    ok: true,
+    data: {
+      path: '/tmp/screenshot.png',
+      width: 40,
+      height: 20,
+      warnings: [
+        'CROP_PARTIAL_INTERSECTION: the selector frame extends past the captured image; the crop was clipped to the image frame',
+      ],
+    },
+  }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.capture.screenshot({});
+
+  assert.equal(result.path, '/tmp/screenshot.png');
+  assert.deepEqual(result.warnings, [
+    'CROP_PARTIAL_INTERSECTION: the selector frame extends past the captured image; the crop was clipped to the image frame',
+  ]);
+  assert.deepEqual(result.identifiers, { session: 'qa' });
+});
+
 test('sessions.stateDir resolves locally without contacting the daemon', async () => {
   const setup = createTransport(async () => {
     throw new Error('unexpected daemon call');

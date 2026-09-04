@@ -79,7 +79,7 @@ import {
 } from './metro/metro-session-hints.ts';
 import { isRecord } from '@agent-device/kernel/record';
 import { createLeaseClient } from './client/lease-client.ts';
-import { readScreenshotResultData } from './client/screenshot-result.ts';
+import { normalizeScreenshotCaptureResult } from './client/screenshot-result.ts';
 
 type ProjectedSystemCommandClient = ProjectedNavigationCommandClient<InternalRequestOptions> &
   Pick<AgentDeviceCommandClient, 'appState' | 'keyboard' | 'clipboard'>;
@@ -372,17 +372,7 @@ export function createAgentDeviceClient(
         // (The caller opted into a non-default level, so the static type is the
         // default shape; the runtime value is the leveled payload.)
         if (isLeveledResponse(options)) return data as unknown as CaptureScreenshotResult;
-        const screenshot = readScreenshotResultData(data);
-        return {
-          path: readRequiredString(data, 'path'),
-          width: screenshot?.width,
-          height: screenshot?.height,
-          logicalWidth: screenshot?.logicalWidth,
-          logicalHeight: screenshot?.logicalHeight,
-          pixelDensity: screenshot?.pixelDensity,
-          overlayRefs: screenshot?.overlayRefs,
-          identifiers: { session },
-        };
+        return normalizeScreenshotCaptureResult(data, session);
       },
       diff: async (options) => await executeCommand<CommandResult<'diff'>>('diff', options),
     },

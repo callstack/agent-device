@@ -76,6 +76,7 @@ function screenshotView(data: DaemonResponseData, level: ResponseLevel): DaemonR
     ...pickScreenshotDigestMetadata(data),
     overlayCount: overlays.length,
     overlayRefs,
+    ...(data.warnings !== undefined ? { warnings: data.warnings } : {}),
     ...(data.artifacts !== undefined ? { artifacts: data.artifacts } : {}),
   };
 }
