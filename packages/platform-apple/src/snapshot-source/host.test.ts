@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { createSnapshotSourceHost, snapshotSourceSocketPath } from './host.ts';
 
 test('snapshot bridge socket paths stay within the AF_UNIX limit and are target-specific', () => {

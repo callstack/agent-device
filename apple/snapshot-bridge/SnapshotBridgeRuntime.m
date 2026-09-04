@@ -11,15 +11,18 @@
 #import <objc/runtime.h>
 
 #import <dlfcn.h>
+#import <signal.h>
+#import <unistd.h>
 
 NSString *const kProtocolVersionKey = @"protocolVersion";
 NSString *const kSourceVersionKey = @"sourceVersion";
 NSString *const kRequestIdKey = @"requestId";
-NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.5.2";
+NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.5.3";
 const NSUInteger kProtocolVersion = 1;
 const uint32_t kMaximumFrameBytes = 16 * 1024 * 1024;
 const NSUInteger kMaximumDepth = 128;
 const NSUInteger kMaximumNodes = 10000;
+const NSUInteger kMaximumDurationMs = 120000;
 
 static NSString *const kAttributeElementType = @"XC_kAXXCAttributeElementType";
 static NSString *const kAttributeElementBaseType = @"XC_kAXXCAttributeElementBaseType";
@@ -73,6 +76,38 @@ static NSDictionary *_Nullable rectDictionary(CGRect rect)
     return nil;
   }
   return @{ @"X" : x, @"Y" : y, @"Width" : width, @"Height" : height };
+}
+
+@interface SnapshotWatchdogState : NSObject
+@property(atomic) BOOL completed;
+@end
+
+@implementation SnapshotWatchdogState
+@end
+
+static dispatch_source_t startRequestWatchdog(NSUInteger durationMs, SnapshotWatchdogState *state)
+{
+  dispatch_source_t watchdog = dispatch_source_create(
+      DISPATCH_SOURCE_TYPE_TIMER,
+      0,
+      0,
+      dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
+  dispatch_source_set_timer(
+      watchdog,
+      dispatch_time(DISPATCH_TIME_NOW, (uint64_t)durationMs * NSEC_PER_MSEC),
+      DISPATCH_TIME_FOREVER,
+      0);
+  dispatch_source_set_event_handler(watchdog, ^{
+    if (!state.completed) kill(getpid(), SIGKILL);
+  });
+  dispatch_resume(watchdog);
+  return watchdog;
+}
+
+static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogState *state)
+{
+  state.completed = YES;
+  dispatch_source_cancel(watchdog);
 }
 
 @implementation BridgeRuntime {
@@ -154,8 +189,12 @@ static NSDictionary *_Nullable rectDictionary(CGRect rect)
                                    maxNodes:(NSUInteger)maxNodes
                                       count:(NSUInteger *)count
                                   truncated:(BOOL *)truncated
+                                  malformed:(BOOL *)malformed
 {
-  if (![snapshot isKindOfClass:NSDictionary.class]) return nil;
+  if (![snapshot isKindOfClass:NSDictionary.class]) {
+    *malformed = YES;
+    return nil;
+  }
   if (*count >= maxNodes) {
     *truncated = YES;
     return nil;
@@ -163,7 +202,10 @@ static NSDictionary *_Nullable rectDictionary(CGRect rect)
   (*count)++;
 
   NSDictionary *attributes = ((NSDictionary *)snapshot)[kSnapshotAttributes];
-  if (![attributes isKindOfClass:NSDictionary.class]) return nil;
+  if (![attributes isKindOfClass:NSDictionary.class]) {
+    *malformed = YES;
+    return nil;
+  }
   NSMutableDictionary *node = [NSMutableDictionary dictionary];
   for (NSNumber *number in attributes) {
     NSString *name = namesByNumber[number];
@@ -173,7 +215,10 @@ static NSDictionary *_Nullable rectDictionary(CGRect rect)
   }
 
   NSArray *children = ((NSDictionary *)snapshot)[kSnapshotChildren];
-  if (![children isKindOfClass:NSArray.class]) children = @[];
+  if (![children isKindOfClass:NSArray.class]) {
+    *malformed = YES;
+    return nil;
+  }
   NSMutableArray *builtChildren = [NSMutableArray array];
   if (depth >= maxDepth) {
     if (children.count > 0) *truncated = YES;
@@ -183,10 +228,13 @@ static NSDictionary *_Nullable rectDictionary(CGRect rect)
                                      namesByNumber:namesByNumber
                                              depth:depth + 1
                                           maxDepth:maxDepth
-                                          maxNodes:maxNodes
+                                             maxNodes:maxNodes
                                              count:count
-                                         truncated:truncated];
+                                         truncated:truncated
+                                         malformed:malformed];
       if (built) [builtChildren addObject:built];
+      if (*malformed) return nil;
+      if (*truncated) break;
       if (*count >= maxNodes) {
         if (builtChildren.count < children.count) *truncated = YES;
         break;
@@ -201,16 +249,22 @@ static NSDictionary *_Nullable rectDictionary(CGRect rect)
                                     maxDepth:(NSUInteger)maxDepth
                                     maxNodes:(NSUInteger)maxNodes
                                   requestId:(NSString *)requestId
+                                generation:(NSString *)generation
+                              maxDurationMs:(NSUInteger)maxDurationMs
                                       error:(NSDictionary *_Nullable *_Nonnull)error
 {
+  SnapshotWatchdogState *watchdogState = [SnapshotWatchdogState new];
+  dispatch_source_t watchdog = startRequestWatchdog(maxDurationMs, watchdogState);
   XCAccessibilityElement *root = [_elementClass elementWithProcessIdentifier:pid];
   if (!root) {
     if (error) *error = failureResponse(requestId, @"application_unavailable", @"application-element-missing", @"application element is unavailable");
+    finishRequestWatchdog(watchdog, watchdogState);
     return nil;
   }
   void *raw = [root AXUIElement];
   if (!raw) {
     if (error) *error = failureResponse(requestId, @"application_unavailable", @"application-element-missing", @"application element is unavailable");
+    finishRequestWatchdog(watchdog, watchdogState);
     return nil;
   }
 
@@ -227,6 +281,7 @@ static NSDictionary *_Nullable rectDictionary(CGRect rect)
   NSArray<NSNumber *> *numbers = _attributeNumbersForNames(names);
   if (![numbers isKindOfClass:NSArray.class] || numbers.count != names.count) {
     if (error) *error = failureResponse(requestId, @"reader_unavailable", @"attribute-vocabulary-mismatch", @"AX attribute vocabulary is incompatible");
+    finishRequestWatchdog(watchdog, watchdogState);
     return nil;
   }
   NSMutableDictionary<NSNumber *, NSString *> *namesByNumber = [NSMutableDictionary dictionary];
@@ -247,6 +302,7 @@ static NSDictionary *_Nullable rectDictionary(CGRect rect)
     snapshot = [_framework userTestingSnapshotForElement:(__bridge id)raw options:options error:&runtimeError];
   } @catch (NSException *exception) {
     if (error) *error = failureResponse(requestId, @"reader_unavailable", @"private-api-exception", exception.reason ?: @"AX snapshot raised an exception");
+    finishRequestWatchdog(watchdog, watchdogState);
     return nil;
   }
   if (!snapshot) {
@@ -255,25 +311,31 @@ static NSDictionary *_Nullable rectDictionary(CGRect rect)
     NSString *kind = code == -25216 ? @"application_not_responding" : @"application_unavailable";
     NSString *message = runtimeError.localizedDescription ?: @"AX snapshot returned no tree";
     if (error) *error = failureResponse(requestId, kind, code == -25216 ? @"application-timeout" : @"application-server-unavailable", message);
+    finishRequestWatchdog(watchdog, watchdogState);
     return nil;
   }
   BOOL truncated = NO;
+  BOOL malformed = NO;
   NSUInteger count = 0;
   NSDictionary *tree = [self nodeFromSnapshot:snapshot
                                 namesByNumber:namesByNumber
                                         depth:0
                                      maxDepth:maxDepth
-                                     maxNodes:maxNodes
+                                        maxNodes:maxNodes
                                         count:&count
-                                    truncated:&truncated];
+                                    truncated:&truncated
+                                    malformed:&malformed];
   if (!tree) {
-    if (error) *error = failureResponse(requestId, @"malformed_tree", @"snapshot-root-invalid", @"AX snapshot did not contain a materialized root node");
+    if (error) *error = failureResponse(requestId, @"malformed_tree", malformed ? @"snapshot-tree-malformed" : @"snapshot-root-invalid", malformed ? @"AX snapshot contained a malformed node" : @"AX snapshot did not contain a materialized root node");
+    finishRequestWatchdog(watchdog, watchdogState);
     return nil;
   }
+  finishRequestWatchdog(watchdog, watchdogState);
   return @{
     kProtocolVersionKey : @(kProtocolVersion),
     kSourceVersionKey : kSourceVersion,
     kRequestIdKey : requestId ?: @"",
+    @"generation" : generation ?: @"",
     @"ok" : @YES,
     @"pid" : @(pid),
     @"tree" : tree,

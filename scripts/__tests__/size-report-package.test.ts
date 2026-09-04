@@ -24,6 +24,7 @@ test('classifies every shipped entry into one named component', () => {
       ['dist/apple/runner/RunnerTests.swift', 'apple-runner'],
       ['dist/apple/snapshot-presentation/Package.swift', 'apple-snapshot-presentation'],
       ['apple/snapshot-bridge/SnapshotBridge.m', 'apple-snapshot-bridge'],
+      ['apple/snapshot-bridge/SnapshotBridgeRuntime.m', 'apple-snapshot-bridge'],
       ['apple/macos-helper/Sources/main.swift', 'macos-helper'],
       ['android/snapshot-helper/dist/helper.apk', 'android-helpers'],
       ['android/snapshot-helper/dist/helper.manifest.json', 'android-helpers'],
@@ -50,6 +51,21 @@ test('publish package requires both Android helpers and excludes benchmark scrip
         fixturePack.files.filter((entry) => !entry.path.startsWith('android/ime-helper/')),
       ),
     /android\/ime-helper/,
+  );
+  assert.throws(
+    () =>
+      assertPublishPackageContents(
+        fixturePack.files.filter(
+          (entry) => entry.path !== 'apple/snapshot-bridge/SnapshotBridgeRuntime.m',
+        ),
+        { requireSnapshotBridge: true },
+      ),
+    /SnapshotBridgeRuntime\.m/,
+  );
+  assert.doesNotThrow(() =>
+    assertPublishPackageContents(
+      fixturePack.files.filter((entry) => !entry.path.startsWith('apple/snapshot-bridge/')),
+    ),
   );
   assert.throws(
     () =>

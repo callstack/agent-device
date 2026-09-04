@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { CaptureHint, IosSnapshotAcquisition } from '@agent-device/contracts/ios-snapshot';
 import { ensureSnapshotBridgeBinary } from './cache.ts';
+import { createSnapshotSourceDeadline, remainingSnapshotSourceMs } from './deadline.ts';
 import { asSnapshotSourceError, snapshotSourceError } from './errors.ts';
 import { SnapshotBridgeManager } from './lifecycle.ts';
 import { resolveSnapshotSourceLimits } from './limits.ts';
@@ -8,12 +9,10 @@ import type { SnapshotBridgeEnvelope } from './protocol.ts';
 import { decodeSnapshotBridgeTree } from './tree.ts';
 import { createSnapshotSourceHost } from './host.ts';
 import type {
-  SnapshotSourceBridgeBinary,
   SnapshotSourceHost,
   SnapshotSourceLimits,
   SnapshotSourceOutcome,
   SnapshotSourceRequest,
-  SnapshotSourceSuccess,
 } from './types.ts';
 
 const SNAPSHOT_SOURCE_PRODUCER = 'simulator-ax-bridge' as const;
@@ -26,11 +25,7 @@ export type SimulatorSnapshotSourceOptions = Readonly<{
 }>;
 
 export type SimulatorSnapshotSource = Readonly<{
-  prepare(
-    input: Readonly<{ runtime: string; signal?: AbortSignal }>,
-  ): Promise<SnapshotSourceBridgeBinary>;
-  acquire(request: SnapshotSourceRequest): Promise<SnapshotSourceSuccess>;
-  acquireOutcome(request: SnapshotSourceRequest): Promise<SnapshotSourceOutcome>;
+  acquire(request: SnapshotSourceRequest): Promise<SnapshotSourceOutcome>;
   close(): Promise<void>;
 }>;
 
@@ -39,69 +34,67 @@ export function createSimulatorSnapshotSource(
 ): SimulatorSnapshotSource {
   const host = options.host ?? createSnapshotSourceHost();
   const manager = new SnapshotBridgeManager(host);
-  const prepared = new Map<string, Promise<SnapshotSourceBridgeBinary>>();
   let closed = false;
 
   const prepare = async (
-    input: Readonly<{ runtime: string; limits: SnapshotSourceLimits; signal?: AbortSignal }>,
+    input: Readonly<{
+      runtime: string;
+      limits: SnapshotSourceLimits;
+      deadline: import('./deadline.ts').SnapshotSourceDeadline;
+    }>,
   ) => {
     if (closed) throw snapshotSourceError('unsupported', 'source-closed');
-    const key = `${input.runtime}\0${input.limits.maxNodes}\0${input.limits.maxTraversalDepth}`;
-    let preparation = prepared.get(key);
-    if (!preparation) {
-      preparation = host.withDiagnosticTimer(
-        'ios.snapshot-source.prepare',
-        async () =>
-          await ensureSnapshotBridgeBinary({
-            host,
-            runtime: input.runtime,
-            limits: input.limits,
-            signal: input.signal,
-            sourceRoot: options.sourceRoot,
-            cacheRoot: options.cacheRoot,
-          }),
-        { producer: SNAPSHOT_SOURCE_PRODUCER },
-      );
-      prepared.set(key, preparation);
-      preparation.catch(() => {
-        if (prepared.get(key) === preparation) prepared.delete(key);
-      });
-    }
-    return await preparation;
-  };
-
-  const acquire = async (request: SnapshotSourceRequest): Promise<SnapshotSourceSuccess> => {
-    if (closed) throw snapshotSourceError('unsupported', 'source-closed');
-    validateRequest(request);
-    const limits = resolveSnapshotSourceLimits({ ...options.limits, ...request.limits });
-    const maxDepth = resolveRequestedDepth(request.hint, limits.maxTraversalDepth);
-    const bridge = await prepare({
-      runtime: request.target.runtime,
-      limits,
-      signal: request.signal,
-    });
     return await host.withDiagnosticTimer(
-      'ios.snapshot-source.acquire',
-      async () => {
-        const envelope = await manager.request({
-          target: request.target,
-          bridge,
-          limits,
-          maxDepth,
-          signal: request.signal,
-        });
-        return {
-          stage: 'acquired',
-          acquisition: createAcquisition(request.hint, request.target, envelope, limits, maxDepth),
-        };
-      },
+      'ios.snapshot-source.prepare',
+      async () =>
+        await ensureSnapshotBridgeBinary({
+          host,
+          runtime: input.runtime,
+          limits: input.limits,
+          deadline: input.deadline,
+          sourceRoot: options.sourceRoot,
+          cacheRoot: options.cacheRoot,
+        }),
       { producer: SNAPSHOT_SOURCE_PRODUCER },
     );
   };
 
-  const acquireOutcome = async (request: SnapshotSourceRequest): Promise<SnapshotSourceOutcome> => {
+  const acquire = async (request: SnapshotSourceRequest): Promise<SnapshotSourceOutcome> => {
     try {
-      return await acquire(request);
+      if (closed) throw snapshotSourceError('unsupported', 'source-closed');
+      validateRequest(request);
+      const limits = resolveSnapshotSourceLimits({ ...options.limits, ...request.limits });
+      const deadline = createSnapshotSourceDeadline(limits.maxDurationMs, request.signal);
+      const maxDepth = resolveRequestedDepth(request.hint, limits.maxTraversalDepth);
+      return await host.withDiagnosticTimer(
+        'ios.snapshot-source.acquire',
+        async () => {
+          const bridge = await prepare({
+            runtime: request.target.runtime,
+            limits,
+            deadline,
+          });
+          const envelope = await manager.request({
+            target: request.target,
+            bridge,
+            limits,
+            maxDepth,
+            deadline,
+          });
+          remainingSnapshotSourceMs(deadline, 'snapshot-decode-deadline');
+          return {
+            stage: 'acquired',
+            acquisition: createAcquisition(
+              request.hint,
+              request.target,
+              envelope,
+              limits,
+              maxDepth,
+            ),
+          };
+        },
+        { producer: SNAPSHOT_SOURCE_PRODUCER },
+      );
     } catch (error) {
       const failure = asSnapshotSourceError(error);
       return {
@@ -116,18 +109,10 @@ export function createSimulatorSnapshotSource(
   };
 
   return {
-    prepare: async (input) =>
-      await prepare({
-        runtime: input.runtime,
-        limits: resolveSnapshotSourceLimits(options.limits),
-        signal: input.signal,
-      }),
     acquire,
-    acquireOutcome,
     close: async () => {
       if (closed) return;
       closed = true;
-      prepared.clear();
       await manager.close();
     },
   };
@@ -188,24 +173,24 @@ function createAcquisition(
     throw snapshotSourceError('malformed-tree', 'truncated-invalid');
   }
   const decoded = decodeSnapshotBridgeTree(tree, { truncated }, limits);
+  const generation = envelope.generation;
+  if (typeof generation !== 'string' || !generation) {
+    throw snapshotSourceError('malformed-tree', 'generation-invalid');
+  }
   const nodes = Object.freeze(
     decoded.nodes.map((node) => Object.freeze({ ...node, pid: target.pid })),
   );
-  const residue = Object.freeze([
-    { kind: 'unavailable-fact', fact: 'hittability' } as const,
-    ...(hint.interactiveOnly
-      ? ([{ kind: 'unavailable-fact', fact: 'interactive-query' }] as const)
-      : []),
-    ...(truncated
-      ? [truncationResidue(decoded.maxTraversalDepth, nodes.length, limits, maxDepth)]
-      : []),
-    ...(decoded.viewport.kind === 'missing'
-      ? ([{ kind: 'missing-viewport', reason: decoded.viewport.reason }] as const)
-      : []),
-  ]);
+  const residue = createAcquisitionResidue(
+    hint,
+    truncated,
+    decoded,
+    limits,
+    maxDepth,
+    nodes.length,
+  );
   const lineage = Object.freeze({
     ...(target.targetId ? { targetId: target.targetId } : {}),
-    generation: target.generation,
+    generation,
   });
   const common = {
     producer: SNAPSHOT_SOURCE_PRODUCER,
@@ -223,6 +208,28 @@ function createAcquisition(
     intent: 'surface-observation',
     hint: { ...hint, acquisitionIntent: 'surface-observation' },
   };
+}
+
+function createAcquisitionResidue(
+  hint: CaptureHint,
+  truncated: boolean,
+  decoded: ReturnType<typeof decodeSnapshotBridgeTree>,
+  limits: SnapshotSourceLimits,
+  maxDepth: number,
+  nodeCount: number,
+) {
+  return Object.freeze([
+    { kind: 'unavailable-fact', fact: 'hittability' } as const,
+    ...(hint.interactiveOnly
+      ? ([{ kind: 'unavailable-fact', fact: 'interactive-query' }] as const)
+      : []),
+    ...(truncated
+      ? [truncationResidue(decoded.maxTraversalDepth, nodeCount, limits, maxDepth)]
+      : []),
+    ...(decoded.viewport.kind === 'missing'
+      ? ([{ kind: 'missing-viewport', reason: decoded.viewport.reason }] as const)
+      : []),
+  ]);
 }
 
 function truncationResidue(

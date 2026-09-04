@@ -58,7 +58,9 @@ export function collectNpmPack(root) {
   );
   const pack = parseNpmPackOutput(stdout);
   const entries = normalizeNpmPackEntries(pack);
-  assertPublishPackageContents(entries);
+  assertPublishPackageContents(entries, {
+    requireSnapshotBridge: fs.existsSync(path.join(root, 'apple', 'snapshot-bridge')),
+  });
   return {
     filename: pack.filename,
     tarballPath: path.join(cachePath, pack.filename),
@@ -70,25 +72,34 @@ export function collectNpmPack(root) {
   };
 }
 
-export function assertPublishPackageContents(entries) {
+export function assertPublishPackageContents(entries, options = {}) {
   const paths = entries.map((entry) => entry.path);
   const requiredAssets = [
-    { directory: 'apple/snapshot-bridge/', suffix: 'SnapshotBridge.m' },
     { directory: 'android/snapshot-helper/dist/', suffix: '.apk' },
     { directory: 'android/snapshot-helper/dist/', suffix: '.manifest.json' },
     { directory: 'android/ime-helper/dist/', suffix: '.apk' },
     { directory: 'android/ime-helper/dist/', suffix: '.manifest.json' },
   ];
-  const missingAssets = requiredAssets.filter(
-    (asset) =>
-      !paths.some(
-        (entryPath) => entryPath.startsWith(asset.directory) && entryPath.endsWith(asset.suffix),
-      ),
+  if (
+    options.requireSnapshotBridge ??
+    paths.some((entryPath) => entryPath.startsWith('apple/snapshot-bridge/'))
+  ) {
+    requiredAssets.unshift(
+      { path: 'apple/snapshot-bridge/SnapshotBridge.m' },
+      { path: 'apple/snapshot-bridge/SnapshotBridgeRuntime.m' },
+    );
+  }
+  const missingAssets = requiredAssets.filter((asset) =>
+    asset.path
+      ? !paths.includes(asset.path)
+      : !paths.some(
+          (entryPath) => entryPath.startsWith(asset.directory) && entryPath.endsWith(asset.suffix),
+        ),
   );
   if (missingAssets.length > 0) {
     throw new Error(
       `npm pack is missing publish assets: ${missingAssets
-        .map((asset) => `${asset.directory}*${asset.suffix}`)
+        .map((asset) => asset.path ?? `${asset.directory}*${asset.suffix}`)
         .join(', ')}`,
     );
   }

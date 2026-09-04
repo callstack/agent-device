@@ -5,6 +5,7 @@ import type {
   IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotSourceDeadline } from './deadline.ts';
 
 export type SnapshotSourceLimits = Readonly<{
   maxRequestBytes: number;
@@ -99,7 +100,10 @@ export type SnapshotSourceHost = Readonly<{
   exists(path: string): boolean;
   rename(sourcePath: string, destinationPath: string): Promise<void>;
   remove(path: string): Promise<void>;
-  acquireLock(path: string): Promise<() => Promise<void>>;
+  acquireLock(
+    path: string,
+    options?: { deadline?: SnapshotSourceDeadline },
+  ): Promise<() => Promise<void>>;
   withKeyedLock<T>(key: string, action: () => Promise<T>): Promise<T>;
   emitDiagnostic(event: {
     level?: 'debug' | 'info' | 'warn' | 'error';

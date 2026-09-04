@@ -301,9 +301,27 @@
       "exports": ["*"]
     },
     {
-      "comment": "Apple Simulator snapshot acquisition is a private package facet consumed by downstream runtime work; Fallow cannot see external consumers through the workspace exports map, so keep the complete named facet surface explicit.",
+      "comment": "Apple Simulator snapshot acquisition is a private package facet consumed by downstream runtime work; Fallow cannot see external consumers through the workspace exports map. Keep only the deliberately narrow public factory, source interface, and request/outcome types here; host injection, cache metadata, and preparation internals stay private.",
       "file": "packages/platform-apple/src/snapshot-source-facade.ts",
-      "exports": ["*"]
+      "exports": [
+        "createSimulatorSnapshotSource",
+        "SimulatorSnapshotSource",
+        "SnapshotSourceFailure",
+        "SnapshotSourceFailureKind",
+        "SnapshotSourceLimits",
+        "SnapshotSourceOutcome",
+        "SnapshotSourceRequest",
+        "SnapshotSourceTarget"
+      ]
+    },
+    {
+      "comment": "The native wire vocabulary is exported only so the parity test can pin the Objective-C literals; it is not part of the snapshot-source package facet.",
+      "file": "packages/platform-apple/src/snapshot-source/protocol.ts",
+      "exports": [
+        "SNAPSHOT_SOURCE_ATTRIBUTE_KEYS",
+        "SNAPSHOT_SOURCE_RESPONSE_KEYS",
+        "SNAPSHOT_SOURCE_WIRE_KEYS"
+      ]
     },
     {
       "comment": "Deliberately kept off the @agent-device/maestro façade (index.test.ts asserts its absence) and consumed only by the conformance harness under packages/maestro/test/.",

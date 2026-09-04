@@ -33,9 +33,28 @@ export function measureCleanInstalledPackage(tarballPath, packageName) {
     if (!fs.existsSync(packageDir)) {
       throw new Error(`Clean install did not create node_modules/${packageName}.`);
     }
+    assertInstalledSnapshotBridge(packageDir);
     return measureDirectory(packageDir);
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
+  }
+}
+
+export function assertInstalledSnapshotBridge(packageDir) {
+  const bridgeRoot = path.join(packageDir, 'apple', 'snapshot-bridge');
+  if (!fs.existsSync(bridgeRoot)) return;
+  const requiredSources = ['SnapshotBridge.m', 'SnapshotBridgeRuntime.m'];
+  const missing = requiredSources.filter((source) => !fs.existsSync(path.join(bridgeRoot, source)));
+  if (missing.length > 0) {
+    throw new Error(`Clean-installed snapshot bridge is missing: ${missing.join(', ')}`);
+  }
+  const source = requiredSources
+    .map((fileName) => fs.readFileSync(path.join(bridgeRoot, fileName), 'utf8'))
+    .join('\n');
+  if (!source.includes('serve') || !source.includes('snapshotForProcess')) {
+    throw new Error(
+      'Clean-installed snapshot bridge does not contain its serve/acquire implementation.',
+    );
   }
 }
 

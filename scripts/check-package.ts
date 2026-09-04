@@ -26,6 +26,7 @@ import {
   auditDependencyClosure,
   type PackedManifest as PackedDependencies,
 } from './lib/shipped-imports.ts';
+import { assertInstalledSnapshotBridge } from './size-report-install.mjs';
 
 type PackedManifest = PackedDependencies & {
   exports: Record<string, unknown>;
@@ -177,6 +178,7 @@ try {
   const tarball = packTarball();
   lintTarball(tarball);
   const installedRoot = installIntoCleanConsumer(tarball);
+  assertInstalledSnapshotBridge(installedRoot);
   const manifest = JSON.parse(
     fs.readFileSync(path.join(installedRoot, 'package.json'), 'utf8'),
   ) as PackedManifest;

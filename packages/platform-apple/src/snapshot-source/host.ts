@@ -24,7 +24,8 @@ import {
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 import { findProjectRoot } from '@agent-device/host-kit/version';
-import { snapshotSourceError } from './errors.ts';
+import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
+import { remainingSnapshotSourceMs } from './deadline.ts';
 import type { SnapshotSourceHost, SnapshotSourceProcess, SnapshotSourceSocket } from './types.ts';
 
 const BRIDGE_IDLE_TIMEOUT_SECONDS = 60;
@@ -166,20 +167,53 @@ async function connectSnapshotBridge(
   });
 }
 
-async function acquireSnapshotSourceLock(lockPath: string): Promise<() => Promise<void>> {
+async function acquireSnapshotSourceLock(
+  lockPath: string,
+  options: Parameters<SnapshotSourceHost['acquireLock']>[1] = {},
+): Promise<() => Promise<void>> {
   const pid = hostProcessId();
-  return await acquireProcessLock({
+  const deadline = options.deadline;
+  const pending = acquireProcessLock({
     lockDirPath: lockPath,
     owner: {
       pid,
       startTime: readProcessStartTime(pid),
       acquiredAtMs: Date.now(),
     },
-    timeoutMs: 180_000,
+    timeoutMs: deadline ? remainingSnapshotSourceMs(deadline, 'cache-lock-deadline') : 180_000,
     pollMs: 100,
     ownerGraceMs: 5_000,
     description: 'iOS Simulator snapshot bridge cache',
   });
+  if (!deadline?.signal) return await pending;
+
+  let canceled = false;
+  let onAbort!: () => void;
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => {
+      canceled = true;
+      reject(snapshotSourceError('cancelled', 'abort-signal'));
+    };
+    deadline.signal!.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([pending, aborted]);
+  } catch (error) {
+    if (canceled)
+      void pending.then(
+        (release) => release(),
+        () => undefined,
+      );
+    if (
+      deadline.clock.isExpired() &&
+      !(error instanceof SnapshotSourceError && error.failureKind === 'cancelled')
+    ) {
+      throw snapshotSourceError('timeout', 'cache-lock-deadline');
+    }
+    throw error;
+  } finally {
+    deadline.signal.removeEventListener('abort', onAbort);
+  }
 }
 
 function appendBoundedLog(current: string, addition: string): string {

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { createSnapshotSourceHost } from './host.ts';
-import { SnapshotSourceError } from './errors.ts';
+import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
 import {
   encodeSnapshotBridgeFrame,
   SNAPSHOT_SOURCE_PROTOCOL_VERSION,
@@ -70,7 +70,7 @@ test('a new target generation does not reuse the previous helper', async () => {
   assert.deepEqual(fixture.processes[1]!.signals, ['SIGTERM']);
 });
 
-test('request cancellation destroys only the socket and leaves a healthy helper alive', async () => {
+test('request cancellation after dispatch reaps the exact helper before recovery', async () => {
   const fixture = createLifecycleFixture({ responseDelayMs: 80 });
   const manager = new SnapshotBridgeManager(fixture.host);
   const controller = new AbortController();
@@ -87,8 +87,68 @@ test('request cancellation destroys only the socket and leaves a healthy helper 
     request,
     (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'cancelled',
   );
-  assert.equal(fixture.processes[0]?.signals.length, 0);
+  assert.deepEqual(fixture.processes[0]?.signals, ['SIGTERM']);
+  assert.equal(fixture.processes[0]?.alive, false);
+  await manager.request({ target, bridge, limits, maxDepth: 10 });
+  assert.equal(fixture.processes.length, 2);
+  await manager.close();
+  assert.deepEqual(fixture.processes[1]?.signals, ['SIGTERM']);
+});
+
+test('pre-dispatch cancellation preserves a healthy helper', async () => {
+  const fixture = createLifecycleFixture({ connectDelayMs: 40 });
+  const manager = new SnapshotBridgeManager(fixture.host);
+  await manager.request({
+    target,
+    bridge,
+    limits: { ...limits, maxDurationMs: 500 },
+    maxDepth: 10,
+  });
+  fixture.sockets[0]!.destroy();
+
+  const controller = new AbortController();
+  const request = manager.request({
+    target,
+    bridge,
+    limits: { ...limits, maxDurationMs: 500 },
+    maxDepth: 10,
+    signal: controller.signal,
+  });
+  setTimeout(() => controller.abort(), 10);
+
+  await assert.rejects(
+    request,
+    (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'cancelled',
+  );
+  assert.equal(fixture.processes.length, 1);
+  assert.deepEqual(fixture.processes[0]?.signals, []);
   assert.equal(fixture.processes[0]?.alive, true);
+
+  await manager.request({
+    target,
+    bridge,
+    limits: { ...limits, maxDurationMs: 500 },
+    maxDepth: 10,
+  });
+  assert.equal(fixture.processes.length, 1);
+  await manager.close();
+  assert.deepEqual(fixture.processes[0]?.signals, ['SIGTERM']);
+});
+
+test('one absolute deadline covers helper connect and response read', async () => {
+  const fixture = createLifecycleFixture({ connectDelayMs: 70, responseDelayMs: 70 });
+  const manager = new SnapshotBridgeManager(fixture.host);
+
+  await assert.rejects(
+    manager.request({
+      target,
+      bridge,
+      limits: { ...limits, maxDurationMs: 100 },
+      maxDepth: 10,
+    }),
+    (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'timeout',
+  );
+  assert.deepEqual(fixture.processes[0]?.signals, ['SIGTERM']);
   await manager.close();
 });
 
@@ -122,6 +182,20 @@ test('the manager rejects a response for a different target process as stale', a
   await manager.close();
 });
 
+test('the manager rejects a response carrying a previous target generation as stale', async () => {
+  const fixture = createLifecycleFixture({ responseGeneration: 'generation-0' });
+  const manager = new SnapshotBridgeManager(fixture.host);
+
+  await assert.rejects(
+    manager.request({ target, bridge, limits, maxDepth: 10 }),
+    (error: unknown) =>
+      error instanceof SnapshotSourceError &&
+      error.failureKind === 'stale-target' &&
+      error.failureCode === 'bridge-generation-mismatch',
+  );
+  await manager.close();
+});
+
 test('typed guest failures retain their kind after target validation', async () => {
   const fixture = createLifecycleFixture({ responseErrorKind: 'application_not_responding' });
   const manager = new SnapshotBridgeManager(fixture.host);
@@ -141,8 +215,10 @@ type LifecycleFixture = {
 
 function createLifecycleFixture(
   options: {
+    connectDelayMs?: number;
     responseDelayMs?: number;
     responsePid?: number;
+    responseGeneration?: string;
     responseErrorKind?: string;
   } = {},
 ): LifecycleFixture {
@@ -156,10 +232,27 @@ function createLifecycleFixture(
       processes.push(process);
       return process;
     },
-    connect: async () => {
+    connect: async (_socketPath, connectOptions) => {
+      if (options.connectDelayMs) {
+        await new Promise<void>((resolve, reject) => {
+          const finish = (error?: SnapshotSourceError) => {
+            clearTimeout(timer);
+            connectOptions.signal?.removeEventListener('abort', onAbort);
+            if (error) reject(error);
+            else resolve();
+          };
+          const timer = setTimeout(() => finish(), options.connectDelayMs);
+          const onAbort = () => {
+            finish(snapshotSourceError('cancelled', 'abort-signal'));
+          };
+          connectOptions.signal?.addEventListener('abort', onAbort, { once: true });
+          if (connectOptions.signal?.aborted) onAbort();
+        });
+      }
       const socket = new FakeSocket(
         options.responseDelayMs ?? 0,
         options.responsePid ?? target.pid,
+        options.responseGeneration,
         options.responseErrorKind,
       );
       sockets.push(socket);
@@ -211,12 +304,19 @@ class FakeSocket extends EventEmitter implements SnapshotSourceSocket {
   destroyed = false;
   private readonly responseDelayMs: number;
   private readonly responsePid: number;
+  private readonly responseGeneration: string | undefined;
   private readonly responseErrorKind: string | undefined;
 
-  constructor(responseDelayMs: number, responsePid: number, responseErrorKind?: string) {
+  constructor(
+    responseDelayMs: number,
+    responsePid: number,
+    responseGeneration: string | undefined,
+    responseErrorKind?: string,
+  ) {
     super();
     this.responseDelayMs = responseDelayMs;
     this.responsePid = responsePid;
+    this.responseGeneration = responseGeneration;
     this.responseErrorKind = responseErrorKind;
   }
 
@@ -225,6 +325,7 @@ class FakeSocket extends EventEmitter implements SnapshotSourceSocket {
     const request = JSON.parse(frame.subarray(4, bodyLength + 4).toString('utf8')) as {
       requestId: string;
       pid: number;
+      generation: string;
     };
     setTimeout(() => {
       if (this.destroyed) return;
@@ -238,6 +339,7 @@ class FakeSocket extends EventEmitter implements SnapshotSourceSocket {
                 requestId: request.requestId,
                 ok: false,
                 pid: this.responsePid || request.pid,
+                generation: this.responseGeneration ?? request.generation,
                 error_kind: this.responseErrorKind,
                 error_code: 'fixture-error',
               }
@@ -247,6 +349,7 @@ class FakeSocket extends EventEmitter implements SnapshotSourceSocket {
                 requestId: request.requestId,
                 ok: true,
                 pid: this.responsePid || request.pid,
+                generation: this.responseGeneration ?? request.generation,
                 truncated: false,
                 automationEnabled: true,
                 tree: {

@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import {
   createIosSnapshotRequest,
   deriveIosCaptureHint,
@@ -23,6 +23,8 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
   const cacheRoot = path.join(root, 'cache');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
   await writeFile(path.join(sourceRoot, 'SnapshotBridge.m'), 'native source');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
   const fixture = createAdapterHost();
   const source = createSimulatorSnapshotSource({
     host: fixture.host,
@@ -63,12 +65,8 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
       { kind: 'unavailable-fact', fact: 'interactive-query' },
     ]);
 
-    const prepared = await source.prepare({ runtime: 'iOS 26.2' });
-    assert.equal(prepared.path.length > 0, true);
-    assert.equal(fixture.builds, 1);
-
     fixture.responsePid = 999;
-    const outcome = await source.acquireOutcome({
+    const outcome = await source.acquire({
       target: {
         udid: 'simulator-1',
         runtime: 'iOS 26.2',
@@ -85,13 +83,49 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
   }
 });
 
+test('preparation consumes the same acquisition deadline as bridge I/O', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agent-device-snapshot-adapter-deadline-'));
+  const sourceRoot = path.join(root, 'source');
+  const cacheRoot = path.join(root, 'cache');
+  await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
+  await writeFile(path.join(sourceRoot, 'SnapshotBridge.m'), 'native source');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
+  const fixture = createAdapterHost(150);
+  const source = createSimulatorSnapshotSource({ host: fixture.host, sourceRoot, cacheRoot });
+  const request = createIosSnapshotRequest();
+  const hint = deriveIosCaptureHint(request);
+
+  try {
+    const outcome = await source.acquire({
+      target: { ...targetForTest(), generation: 'generation-1' },
+      hint,
+      limits: { maxDurationMs: 100 },
+    });
+    assert.equal(outcome.stage, 'failed');
+    if (outcome.stage === 'failed') assert.equal(outcome.failure.kind, 'timeout');
+    assert.equal(fixture.builds, 1);
+  } finally {
+    await source.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 type AdapterFixture = {
   host: SnapshotSourceHost;
   builds: number;
   responsePid: number;
 };
 
-function createAdapterHost(): AdapterFixture {
+function targetForTest() {
+  return {
+    udid: 'simulator-1',
+    runtime: 'iOS 26.2',
+    pid: 321,
+  };
+}
+
+function createAdapterHost(buildDelayMs = 0): AdapterFixture {
   const realHost = createSnapshotSourceHost();
   const fixture: AdapterFixture = { host: undefined as never, builds: 0, responsePid: 321 };
   const host: SnapshotSourceHost = {
@@ -99,6 +133,7 @@ function createAdapterHost(): AdapterFixture {
     run: async (command, args) => {
       if (command === 'xcrun' && args.includes('clang')) {
         fixture.builds += 1;
+        if (buildDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, buildDelayMs));
         await writeFile(args.at(-1)!, 'bridge-binary');
         return { stdout: '', stderr: '', exitCode: 0 };
       }
@@ -162,6 +197,7 @@ class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
     const request = JSON.parse(frame.subarray(4, bodyLength + 4).toString('utf8')) as {
       requestId: string;
       pid: number;
+      generation: string;
     };
     queueMicrotask(() => {
       if (this.destroyed) return;
@@ -174,6 +210,7 @@ class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
             requestId: request.requestId,
             ok: true,
             pid: this.readResponsePid(),
+            generation: request.generation,
             truncated: false,
             automationEnabled: true,
             tree: {

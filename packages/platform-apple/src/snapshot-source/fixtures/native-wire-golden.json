@@ -1,0 +1,51 @@
+{
+  "producer": "SnapshotBridge.m + SnapshotBridgeRuntime.m",
+  "request": {
+    "verb": "describe",
+    "requestId": "golden-request",
+    "pid": 321,
+    "generation": "generation-current",
+    "snapshotTree": true,
+    "automationMode": true,
+    "maxDepth": 8,
+    "maxNodes": 1500,
+    "maxDurationMs": 5000,
+    "maxResponseBytes": 4194304
+  },
+  "success": {
+    "protocolVersion": 1,
+    "sourceVersion": "agent-device-simulator-ax-v1.5.3",
+    "requestId": "golden-request",
+    "generation": "generation-current",
+    "ok": true,
+    "pid": 321,
+    "truncated": false,
+    "automationEnabled": true
+  },
+  "malformed": {
+    "protocolVersion": 1,
+    "sourceVersion": "agent-device-simulator-ax-v1.5.3",
+    "requestId": "golden-request",
+    "generation": "generation-current",
+    "ok": false,
+    "pid": 321,
+    "error_kind": "malformed_tree",
+    "error_code": "snapshot-tree-malformed"
+  },
+  "versionMismatch": {
+    "protocolVersion": 0,
+    "sourceVersion": "agent-device-simulator-ax-v1.5.3",
+    "requestId": "golden-request",
+    "generation": "generation-current"
+  },
+  "staleGeneration": {
+    "protocolVersion": 1,
+    "sourceVersion": "agent-device-simulator-ax-v1.5.3",
+    "requestId": "golden-request",
+    "generation": "generation-previous",
+    "ok": true,
+    "pid": 321,
+    "truncated": false,
+    "automationEnabled": true
+  }
+}

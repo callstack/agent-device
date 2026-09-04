@@ -3,8 +3,47 @@ import { snapshotSourceError } from './errors.ts';
 import type { SnapshotSourceLimits } from './types.ts';
 
 export const SNAPSHOT_SOURCE_PROTOCOL_VERSION = 1;
-export const SNAPSHOT_SOURCE_VERSION = 'agent-device-simulator-ax-v1.5.2';
+export const SNAPSHOT_SOURCE_VERSION = 'agent-device-simulator-ax-v1.5.3';
 const FRAME_HEADER_BYTES = 4;
+
+export const SNAPSHOT_SOURCE_WIRE_KEYS = Object.freeze([
+  'verb',
+  'requestId',
+  'pid',
+  'generation',
+  'snapshotTree',
+  'automationMode',
+  'maxDepth',
+  'maxNodes',
+  'maxDurationMs',
+  'maxResponseBytes',
+] as const);
+
+export const SNAPSHOT_SOURCE_RESPONSE_KEYS = Object.freeze([
+  'protocolVersion',
+  'sourceVersion',
+  'requestId',
+  'generation',
+  'ok',
+  'pid',
+  'tree',
+  'truncated',
+  'automationEnabled',
+  'error_kind',
+  'error_code',
+  'error',
+] as const);
+
+export const SNAPSHOT_SOURCE_ATTRIBUTE_KEYS = Object.freeze([
+  'XC_kAXXCAttributeElementType',
+  'XC_kAXXCAttributeElementBaseType',
+  'XC_kAXXCAttributeLabel',
+  'XC_kAXXCAttributeValue',
+  'XC_kAXXCAttributeIdentifier',
+  'XC_kAXXCAttributeFrame',
+  'XC_kAXXCAttributeAutomationType',
+  'XC_kAXXCAttributeChildren',
+] as const);
 
 export type SnapshotBridgeEnvelope = Readonly<Record<string, unknown>>;
 
@@ -78,18 +117,24 @@ export function createSnapshotBridgeDescribeRequest(
   input: Readonly<{
     requestId: string;
     pid: number;
+    generation: string;
     maxDepth: number;
     maxNodes: number;
+    maxDurationMs: number;
+    maxResponseBytes: number;
   }>,
 ): Readonly<Record<string, unknown>> {
   return Object.freeze({
     verb: 'describe',
     requestId: input.requestId,
     pid: input.pid,
+    generation: input.generation,
     snapshotTree: true,
     automationMode: true,
     maxDepth: input.maxDepth,
     maxNodes: input.maxNodes,
+    maxDurationMs: input.maxDurationMs,
+    maxResponseBytes: input.maxResponseBytes,
   });
 }
 
@@ -117,6 +162,24 @@ export function assertSnapshotBridgeEnvelope(
   }
 }
 
+export function assertSnapshotBridgeTargetIdentity(
+  envelope: SnapshotBridgeEnvelope,
+  expected: Readonly<{ pid: number; generation: string }>,
+): void {
+  if (typeof envelope.pid !== 'number' || envelope.pid !== expected.pid) {
+    throw snapshotSourceError('stale-target', 'bridge-pid-mismatch', {
+      expectedPid: expected.pid,
+      observedPid: envelope.pid,
+    });
+  }
+  if (envelope.generation !== expected.generation) {
+    throw snapshotSourceError('stale-target', 'bridge-generation-mismatch', {
+      expectedGeneration: expected.generation,
+      observedGeneration: envelope.generation,
+    });
+  }
+}
+
 export function bridgeFailureFromEnvelope(envelope: SnapshotBridgeEnvelope): never {
   const kind = envelope.error_kind;
   const code = typeof envelope.error_code === 'string' ? envelope.error_code : 'guest-error';
@@ -131,6 +194,9 @@ export function bridgeFailureFromEnvelope(envelope: SnapshotBridgeEnvelope): nev
     throw snapshotSourceError('transport-failure', code, details);
   }
   if (kind === 'bad_request') throw snapshotSourceError('malformed-tree', code, details);
+  if (kind === 'response_limit_exceeded') {
+    throw snapshotSourceError('transport-failure', code, details);
+  }
   throw snapshotSourceError('transport-failure', code, details);
 }
 

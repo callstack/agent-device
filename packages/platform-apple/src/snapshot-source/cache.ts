@@ -1,6 +1,14 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { snapshotSourceError } from './errors.ts';
+import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
+import { createSnapshotSourceDeadline, remainingSnapshotSourceMs } from './deadline.ts';
+import {
+  fingerprintSnapshotBridgeSource,
+  readSnapshotSourceToolchain,
+  SNAPSHOT_BRIDGE_COMPILE_FILENAMES,
+  SNAPSHOT_BRIDGE_SOURCE_FILENAMES,
+  type SnapshotSourceToolchainIdentity,
+} from './cache-identity.ts';
 import { SNAPSHOT_SOURCE_PROTOCOL_VERSION, SNAPSHOT_SOURCE_VERSION } from './protocol.ts';
 import type {
   SnapshotSourceBridgeBinary,
@@ -8,28 +16,19 @@ import type {
   SnapshotSourceLimits,
 } from './types.ts';
 
-type ToolchainIdentity = Readonly<{
-  xcode: string;
-  macos: string;
-  architecture: 'arm64' | 'x86_64';
-  simulatorSdk: string;
-  simulatorRuntime: string;
-}>;
-
 type SnapshotBridgeCacheManifest = Readonly<{
   schemaVersion: 1;
   protocolVersion: number;
   sourceVersion: string;
   sourceHash: string;
   cacheKey: string;
-  toolchain: ToolchainIdentity;
+  toolchain: SnapshotSourceToolchainIdentity;
   binarySha256: string;
 }>;
 
 const CACHE_SCHEMA_VERSION = 1 as const;
 const BRIDGE_FILENAME = 'snapshot-bridge';
 const MANIFEST_FILENAME = 'manifest.json';
-const SOURCE_FILENAMES = ['SnapshotBridge.m', 'SnapshotBridgeRuntime.m'] as const;
 const BUILD_TIMEOUT_MS = 120_000;
 
 export async function ensureSnapshotBridgeBinary(
@@ -38,41 +37,51 @@ export async function ensureSnapshotBridgeBinary(
     runtime: string;
     limits: SnapshotSourceLimits;
     signal?: AbortSignal;
+    deadline?: import('./deadline.ts').SnapshotSourceDeadline;
     sourceRoot?: string;
     cacheRoot?: string;
   }>,
 ): Promise<SnapshotSourceBridgeBinary> {
+  const deadline =
+    input.deadline ?? createSnapshotSourceDeadline(input.limits.maxDurationMs, input.signal);
   const sourceRoot = input.sourceRoot ?? resolveSnapshotBridgeSourceRoot(input.host);
-  const sourceHash = await fingerprintSource(input.host, sourceRoot);
-  const toolchain = await readToolchainIdentity(input.host, input.runtime, input.signal);
+  const sourceHash = await fingerprintSnapshotBridgeSource(input.host, sourceRoot, deadline);
+  const toolchain = await readSnapshotSourceToolchain(input.host, input.runtime, deadline);
   const cacheKey = hashJson({
     schemaVersion: CACHE_SCHEMA_VERSION,
     protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
     sourceVersion: SNAPSHOT_SOURCE_VERSION,
     sourceHash,
     toolchain,
-    limits: {
-      maxNodes: input.limits.maxNodes,
-      maxTraversalDepth: input.limits.maxTraversalDepth,
-    },
   });
   const cacheRoot =
     input.cacheRoot ?? path.join(input.host.homeDirectory(), '.agent-device', 'snapshot-source');
   const entryPath = path.join(cacheRoot, cacheKey);
-  const releaseLock = await input.host.acquireLock(path.join(cacheRoot, `${cacheKey}.lock`));
+  const releaseLock = await input.host.acquireLock(path.join(cacheRoot, `${cacheKey}.lock`), {
+    deadline,
+  });
   try {
-    const cached = await readValidCache(input.host, entryPath, {
-      sourceHash,
-      cacheKey,
-      toolchain,
-    });
+    const cached = await readValidCache(
+      input.host,
+      entryPath,
+      {
+        sourceHash,
+        cacheKey,
+        toolchain,
+      },
+      deadline,
+    );
     if (cached) return cached;
+    remainingSnapshotSourceMs(deadline, 'native-build-deadline');
     if (input.host.exists(entryPath)) await input.host.remove(entryPath);
 
+    remainingSnapshotSourceMs(deadline, 'native-build-deadline');
     await input.host.ensureDirectory(cacheRoot);
     const temporaryPath = path.join(cacheRoot, `.${cacheKey}.${input.host.processId()}.tmp`);
+    remainingSnapshotSourceMs(deadline, 'native-build-deadline');
     await input.host.remove(temporaryPath);
     try {
+      remainingSnapshotSourceMs(deadline, 'native-build-deadline');
       await input.host.ensureDirectory(temporaryPath);
       const outputPath = path.join(temporaryPath, BRIDGE_FILENAME);
       const result = await input.host.run(
@@ -92,11 +101,20 @@ export async function ensureSnapshotBridgeBinary(
           'Foundation',
           '-framework',
           'CoreGraphics',
-          ...SOURCE_FILENAMES.map((sourceFile) => path.join(sourceRoot, sourceFile)),
+          ...SNAPSHOT_BRIDGE_COMPILE_FILENAMES.map((sourceFile) =>
+            path.join(sourceRoot, sourceFile),
+          ),
           '-o',
           outputPath,
         ],
-        { signal: input.signal, timeoutMs: BUILD_TIMEOUT_MS, allowFailure: true },
+        {
+          signal: deadline.signal,
+          timeoutMs: Math.min(
+            BUILD_TIMEOUT_MS,
+            remainingSnapshotSourceMs(deadline, 'native-build-deadline'),
+          ),
+          allowFailure: true,
+        },
       );
       if (result.exitCode !== 0 || !input.host.exists(outputPath)) {
         throw snapshotSourceError('unsupported', 'native-build-failed', {
@@ -104,8 +122,9 @@ export async function ensureSnapshotBridgeBinary(
           stderr: result.stderr.slice(0, 4096),
         });
       }
+      remainingSnapshotSourceMs(deadline, 'native-build-deadline');
       await input.host.chmod(outputPath, 0o755);
-      const binarySha256 = await sha256File(input.host, outputPath);
+      const binarySha256 = await sha256File(input.host, outputPath, deadline);
       const manifest: SnapshotBridgeCacheManifest = {
         schemaVersion: CACHE_SCHEMA_VERSION,
         protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
@@ -119,6 +138,7 @@ export async function ensureSnapshotBridgeBinary(
         path.join(temporaryPath, MANIFEST_FILENAME),
         `${JSON.stringify(manifest, null, 2)}\n`,
       );
+      remainingSnapshotSourceMs(deadline, 'native-build-deadline');
       await input.host.rename(temporaryPath, entryPath);
       return {
         path: path.join(entryPath, BRIDGE_FILENAME),
@@ -139,9 +159,21 @@ export async function ensureSnapshotBridgeBinary(
 function resolveSnapshotBridgeSourceRoot(host: SnapshotSourceHost): string {
   const projectRoot = host.projectRoot();
   const checkoutRoot = path.join(projectRoot, 'apple', 'snapshot-bridge');
-  if (host.exists(path.join(checkoutRoot, SOURCE_FILENAMES[0]))) return checkoutRoot;
+  if (
+    SNAPSHOT_BRIDGE_SOURCE_FILENAMES.every((sourceFile) =>
+      host.exists(path.join(checkoutRoot, sourceFile)),
+    )
+  ) {
+    return checkoutRoot;
+  }
   const packagedRoot = path.join(projectRoot, 'dist', 'apple', 'snapshot-bridge');
-  if (host.exists(path.join(packagedRoot, SOURCE_FILENAMES[0]))) return packagedRoot;
+  if (
+    SNAPSHOT_BRIDGE_SOURCE_FILENAMES.every((sourceFile) =>
+      host.exists(path.join(packagedRoot, sourceFile)),
+    )
+  ) {
+    return packagedRoot;
+  }
   throw snapshotSourceError('unsupported', 'native-source-missing', { projectRoot });
 }
 
@@ -152,8 +184,9 @@ async function readValidCache(
   expected: Readonly<{
     sourceHash: string;
     cacheKey: string;
-    toolchain: ToolchainIdentity;
+    toolchain: SnapshotSourceToolchainIdentity;
   }>,
+  deadline: import('./deadline.ts').SnapshotSourceDeadline,
 ): Promise<SnapshotSourceBridgeBinary | undefined> {
   const binaryPath = path.join(entryPath, BRIDGE_FILENAME);
   if (!host.exists(binaryPath) || !host.exists(path.join(entryPath, MANIFEST_FILENAME))) {
@@ -174,7 +207,7 @@ async function readValidCache(
     ) {
       return undefined;
     }
-    if ((await sha256File(host, binaryPath)) !== manifest.binarySha256) return undefined;
+    if ((await sha256File(host, binaryPath, deadline)) !== manifest.binarySha256) return undefined;
     return {
       path: binaryPath,
       sourceHash: expected.sourceHash,
@@ -182,83 +215,23 @@ async function readValidCache(
       protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
       sourceVersion: SNAPSHOT_SOURCE_VERSION,
     };
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof SnapshotSourceError &&
+      (error.failureKind === 'cancelled' || error.failureKind === 'timeout')
+    ) {
+      throw error;
+    }
     return undefined;
   }
 }
 
-async function fingerprintSource(host: SnapshotSourceHost, root: string): Promise<string> {
-  const files = await sourceFiles(host, root);
-  const hash = createHash('sha256');
-  for (const filePath of files) {
-    hash.update(path.relative(root, filePath));
-    hash.update('\0');
-    hash.update(await host.readBinary(filePath));
-    hash.update('\0');
-  }
-  return hash.digest('hex');
-}
-
-async function sourceFiles(host: SnapshotSourceHost, root: string): Promise<string[]> {
-  const entries = await host.listDirectory(root);
-  const files: string[] = [];
-  for (const entry of entries) {
-    const entryPath = path.join(root, entry.name);
-    if (entry.isDirectory()) files.push(...(await sourceFiles(host, entryPath)));
-    else if (entry.isFile()) files.push(entryPath);
-  }
-  return files.sort();
-}
-
-async function readToolchainIdentity(
+async function sha256File(
   host: SnapshotSourceHost,
-  simulatorRuntime: string,
-  signal: AbortSignal | undefined,
-): Promise<ToolchainIdentity> {
-  const [xcode, macos, architecture, simulatorSdk] = await Promise.all([
-    toolOutput(host, 'xcodebuild', ['-version'], signal),
-    toolOutput(host, 'sw_vers', ['-productVersion'], signal),
-    toolOutput(host, 'uname', ['-m'], signal),
-    toolOutput(host, 'xcrun', ['--sdk', 'iphonesimulator', '--show-sdk-version'], signal),
-  ]);
-  const runtime = simulatorRuntime.trim();
-  if (!runtime) throw snapshotSourceError('unsupported', 'simulator-runtime-missing');
-  return {
-    xcode,
-    macos,
-    architecture: simulatorArchitecture(architecture),
-    simulatorSdk,
-    simulatorRuntime: runtime,
-  };
-}
-
-function simulatorArchitecture(value: string): 'arm64' | 'x86_64' {
-  if (value === 'arm64' || value === 'x86_64') return value;
-  throw snapshotSourceError('unsupported', 'simulator-architecture-unsupported', {
-    architecture: value,
-  });
-}
-
-async function toolOutput(
-  host: SnapshotSourceHost,
-  command: string,
-  args: string[],
-  signal: AbortSignal | undefined,
+  filePath: string,
+  deadline?: import('./deadline.ts').SnapshotSourceDeadline,
 ): Promise<string> {
-  const result = await host.run(command, args, { allowFailure: true, signal, timeoutMs: 10_000 });
-  if (result.exitCode !== 0) {
-    throw snapshotSourceError('unsupported', 'toolchain-probe-failed', {
-      command,
-      exitCode: result.exitCode,
-      stderr: result.stderr.slice(0, 1024),
-    });
-  }
-  const output = (result.stdout || result.stderr).trim();
-  if (!output) throw snapshotSourceError('unsupported', 'toolchain-probe-empty', { command });
-  return output;
-}
-
-async function sha256File(host: SnapshotSourceHost, filePath: string): Promise<string> {
+  if (deadline) remainingSnapshotSourceMs(deadline, 'native-cache-hash-deadline');
   return createHash('sha256')
     .update(await host.readBinary(filePath))
     .digest('hex');

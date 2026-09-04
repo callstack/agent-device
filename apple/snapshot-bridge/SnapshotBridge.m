@@ -63,15 +63,27 @@ static NSDictionary *handleRequest(NSDictionary *request)
   if (!validBoundInteger(pidValue, 1, INT_MAX, NULL)) {
     return failureResponse(requestId, @"bad_request", @"pid-required", @"describe requires a positive target pid");
   }
+  NSString *generation = [request[@"generation"] isKindOfClass:NSString.class] ? request[@"generation"] : @"";
+  if (generation.length == 0) {
+    return failureResponse(requestId, @"bad_request", @"generation-required", @"describe requires an opaque target generation");
+  }
   id snapshotTree = request[@"snapshotTree"];
-  if (snapshotTree != nil && (![snapshotTree isKindOfClass:NSNumber.class] || ![snapshotTree boolValue])) {
+  if (![snapshotTree isKindOfClass:NSNumber.class] || ![snapshotTree boolValue]) {
     return failureResponse(requestId, @"bad_request", @"snapshot-tree-required", @"snapshotTree must be enabled");
+  }
+  id automationMode = request[@"automationMode"];
+  if (![automationMode isKindOfClass:NSNumber.class] || ![automationMode boolValue]) {
+    return failureResponse(requestId, @"bad_request", @"automation-mode-required", @"automationMode must be enabled");
   }
   NSUInteger maxDepth = 0;
   NSUInteger maxNodes = 0;
+  NSUInteger maxDurationMs = 0;
+  NSUInteger maxResponseBytes = 0;
   if (!validBoundInteger(request[@"maxDepth"], 0, kMaximumDepth, &maxDepth) ||
-      !validBoundInteger(request[@"maxNodes"], 1, kMaximumNodes, &maxNodes)) {
-    return failureResponse(requestId, @"bad_request", @"bounds-invalid", @"maxDepth and maxNodes are outside bridge bounds");
+      !validBoundInteger(request[@"maxNodes"], 1, kMaximumNodes, &maxNodes) ||
+      !validBoundInteger(request[@"maxDurationMs"], 1, kMaximumDurationMs, &maxDurationMs) ||
+      !validBoundInteger(request[@"maxResponseBytes"], 1024, kMaximumFrameBytes, &maxResponseBytes)) {
+    return failureResponse(requestId, @"bad_request", @"bounds-invalid", @"snapshot bridge request bounds are outside the bridge limits");
   }
 
   NSString *setupError = nil;
@@ -79,6 +91,7 @@ static NSDictionary *handleRequest(NSDictionary *request)
   if (!runtime) {
     NSMutableDictionary *unavailable = [failureResponse(requestId, @"unsupported", @"runtime-unavailable", setupError) mutableCopy];
     unavailable[@"pid"] = pidValue;
+    unavailable[@"generation"] = generation;
     return unavailable;
   }
   NSDictionary *error = nil;
@@ -86,11 +99,14 @@ static NSDictionary *handleRequest(NSDictionary *request)
                                                maxDepth:maxDepth
                                                maxNodes:maxNodes
                                              requestId:requestId
+                                           generation:generation
+                                         maxDurationMs:maxDurationMs
                                                  error:&error];
   if (response) return response;
   if (error) {
     NSMutableDictionary *annotated = [error mutableCopy];
     annotated[@"pid"] = pidValue;
+    annotated[@"generation"] = generation;
     return annotated;
   }
   return failureResponse(requestId, @"reader_unavailable", @"empty-response", @"AX bridge returned no response");
@@ -126,18 +142,33 @@ static BOOL writeFully(int fd, const void *buffer, size_t length)
   return YES;
 }
 
-static NSData *serializedResponse(NSDictionary *response)
+static NSData *serializedResponse(NSDictionary *response, NSUInteger maxResponseBytes)
 {
   NSError *error = nil;
+  NSData *data = nil;
   @try {
-    NSData *data = [NSJSONSerialization dataWithJSONObject:response options:0 error:&error];
-    if (data) return data;
+    data = [NSJSONSerialization dataWithJSONObject:response options:0 error:&error];
+    if (data && data.length + sizeof(uint32_t) <= maxResponseBytes) return data;
   } @catch (NSException *exception) {
     bridgeLog(exception.reason ?: @"response serialization raised an exception");
   }
-  NSDictionary *fallback = failureResponse(
-      response[kRequestIdKey], @"malformed_tree", @"response-not-json-safe", error.localizedDescription ?: @"response was not JSON serializable");
+  NSMutableDictionary *fallback = [failureResponse(
+      response[kRequestIdKey],
+      data ? @"response_limit_exceeded" : @"malformed_tree",
+      data ? @"response-too-large" : @"response-not-json-safe",
+      data ? @"snapshot response exceeds the per-request response bound" : (error.localizedDescription ?: @"response was not JSON serializable")) mutableCopy];
+  if (response[@"pid"] != nil) fallback[@"pid"] = response[@"pid"];
+  if (response[@"generation"] != nil) fallback[@"generation"] = response[@"generation"];
   return [NSJSONSerialization dataWithJSONObject:fallback options:0 error:NULL];
+}
+
+static NSUInteger responseLimitForRequest(id request)
+{
+  if (![request isKindOfClass:NSDictionary.class]) return kMaximumFrameBytes;
+  NSNumber *value = request[@"maxResponseBytes"];
+  if (![value isKindOfClass:NSNumber.class]) return kMaximumFrameBytes;
+  NSUInteger result = value.unsignedIntegerValue;
+  return result >= 1024 && result <= kMaximumFrameBytes ? result : kMaximumFrameBytes;
 }
 
 static int serve(NSString *socketPath, int idleTimeoutSeconds, BOOL exitOnDisconnect)
@@ -193,7 +224,7 @@ static int serve(NSString *socketPath, int idleTimeoutSeconds, BOOL exitOnDiscon
         NSDictionary *response = [parsed isKindOfClass:NSDictionary.class]
             ? handleRequest(parsed)
             : failureResponse(@"", @"bad_request", @"json-object-required", @"request frame must be a JSON object");
-        NSData *encoded = serializedResponse(response);
+        NSData *encoded = serializedResponse(response, responseLimitForRequest(parsed));
         if (encoded.length > kMaximumFrameBytes) break;
         uint32_t responseLength = htonl((uint32_t)encoded.length);
         if (!writeFully(connection, &responseLength, sizeof(responseLength)) ||

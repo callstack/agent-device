@@ -3,38 +3,44 @@
  * creates the source; importing this facet keeps the platform package's startup surface inert.
  */
 export type {
-  SnapshotSourceBridgeBinary,
   SnapshotSourceFailure,
   SnapshotSourceFailureKind,
-  SnapshotSourceHost,
   SnapshotSourceLimits,
   SnapshotSourceOutcome,
   SnapshotSourceRequest,
-  SnapshotSourceSuccess,
   SnapshotSourceTarget,
 } from './snapshot-source/types.ts';
-export type {
-  SimulatorSnapshotSource,
-  SimulatorSnapshotSourceOptions,
-} from './snapshot-source/adapter.ts';
 
-export function createSimulatorSnapshotSource(
-  options: import('./snapshot-source/adapter.ts').SimulatorSnapshotSourceOptions = {},
-): import('./snapshot-source/adapter.ts').SimulatorSnapshotSource {
+import type { SnapshotSourceOutcome, SnapshotSourceRequest } from './snapshot-source/types.ts';
+
+export type SimulatorSnapshotSource = Readonly<{
+  acquire(request: SnapshotSourceRequest): Promise<SnapshotSourceOutcome>;
+  close(): Promise<void>;
+}>;
+
+export function createSimulatorSnapshotSource(): SimulatorSnapshotSource {
   let implementation:
     | Promise<import('./snapshot-source/adapter.ts').SimulatorSnapshotSource>
     | undefined;
+  let closed = false;
   const load = async () => {
     implementation ??= import('./snapshot-source/adapter.ts').then(
-      ({ createSimulatorSnapshotSource: create }) => create(options),
+      ({ createSimulatorSnapshotSource: create }) => create(),
     );
     return await implementation;
   };
   return {
-    prepare: async (input) => await (await load()).prepare(input),
-    acquire: async (request) => await (await load()).acquire(request),
-    acquireOutcome: async (request) => await (await load()).acquireOutcome(request),
+    acquire: async (request) => {
+      if (closed) {
+        return {
+          stage: 'failed',
+          failure: { kind: 'unsupported', code: 'source-closed' },
+        };
+      }
+      return await (await load()).acquire(request);
+    },
     close: async () => {
+      closed = true;
       if (implementation) await (await implementation).close();
     },
   };

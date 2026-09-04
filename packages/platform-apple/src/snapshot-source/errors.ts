@@ -53,6 +53,14 @@ export function asSnapshotSourceError(error: unknown): SnapshotSourceError {
   if (isRequestCanceledError(error)) {
     return snapshotSourceError('cancelled', 'abort-signal', {}, error);
   }
+  if (error instanceof AppError && typeof error.details?.timeoutMs === 'number') {
+    return snapshotSourceError(
+      'timeout',
+      'host-operation-timeout',
+      { timeoutMs: error.details.timeoutMs },
+      error,
+    );
+  }
   return snapshotSourceError(
     'transport-failure',
     'unexpected-host-error',

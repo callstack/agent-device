@@ -10,6 +10,7 @@ extern const NSUInteger kProtocolVersion;
 extern const uint32_t kMaximumFrameBytes;
 extern const NSUInteger kMaximumDepth;
 extern const NSUInteger kMaximumNodes;
+extern const NSUInteger kMaximumDurationMs;
 
 NSDictionary *failureResponse(NSString *requestId,
                               NSString *kind,
@@ -22,7 +23,9 @@ NSDictionary *failureResponse(NSString *requestId,
                                     maxDepth:(NSUInteger)maxDepth
                                     maxNodes:(NSUInteger)maxNodes
                                   requestId:(NSString *)requestId
-                                      error:(NSDictionary *_Nullable *_Nonnull)error;
+                                generation:(NSString *)generation
+                              maxDurationMs:(NSUInteger)maxDurationMs
+                                    error:(NSDictionary *_Nullable *_Nonnull)error;
 @end
 
 BridgeRuntime *_Nullable sharedRuntime(NSString *_Nullable *_Nullable error);
