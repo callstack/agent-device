@@ -7,6 +7,7 @@ import type {
 import { decodeDurableResourceEnvelope } from '@agent-device/capture-kit';
 import {
   openVerifiedFileForRead,
+  syncDirectoryBestEffort,
   withAtomicPublishTempPathSync,
 } from '@agent-device/host-kit/file';
 
@@ -141,18 +142,6 @@ function pathEntryExistsWithoutFollowing(resourcePath: string): boolean {
 
 function invalidRecord<K extends string>(message: string): DurableCaptureResourceRecord<K> {
   return { status: 'unreattachable', reason: 'descriptor-invalid', message };
-}
-
-function syncDirectoryBestEffort(directory: string): void {
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(directory, 'r');
-    fs.fsyncSync(descriptor);
-  } catch {
-    // Atomic rename is the correctness boundary; directory fsync support varies by filesystem.
-  } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
-  }
 }
 
 function isMissingFile(error: unknown): boolean {

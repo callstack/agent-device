@@ -63,6 +63,18 @@ export function withAtomicPublishTempPathSync<T>(
   }
 }
 
+/** Syncs a containing directory when the host filesystem supports directory fsync. */
+export function syncDirectoryBestEffort(directory: string): void {
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(directory, 'r');
+    fs.fsyncSync(descriptor);
+  } catch {
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+}
+
 /** Returns the canonical same-directory temp path used by atomic publishers. */
 function createAtomicPublishTempPath(destination: string): string {
   return path.join(

@@ -1,6 +1,7 @@
 export {
   isAtomicPublishTemporaryPath,
   publishFileSync,
+  syncDirectoryBestEffort,
   withAtomicPublishTempPathSync,
 } from './internal/atomic-file.ts';
 export {
