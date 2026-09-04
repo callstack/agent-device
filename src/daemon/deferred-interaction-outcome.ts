@@ -124,7 +124,7 @@ function markPostGestureStabilization(
           baselineSignature,
           // Recorded so the loop can tell a comparable quiet capture from one
           // served by a different backend, which is not comparable at all.
-          baselineBackend: session.snapshot?.snapshotQuality?.backend,
+          baselineBackend: snapshotComparisonKey(session.snapshot),
         }
       : {}),
   };
@@ -350,7 +350,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
         const snapshot = readSnapshot(value);
         return {
           signature: buildInteractionSurfaceSignature(snapshot.nodes),
-          backend: snapshot.snapshotQuality?.backend,
+          backend: snapshotComparisonKey(snapshot),
         };
       },
       signaturesStable: areInteractionSurfaceSignaturesStable,
@@ -361,6 +361,10 @@ export async function capturePostGestureStabilizedResult<T>(params: {
   });
   clearPostGestureStabilization(session);
   return outcome;
+}
+
+function snapshotComparisonKey(snapshot: SnapshotState | undefined): string | undefined {
+  return snapshot?.comparisonKey ?? snapshot?.snapshotQuality?.backend;
 }
 
 function isPostGestureStabilizingAction(

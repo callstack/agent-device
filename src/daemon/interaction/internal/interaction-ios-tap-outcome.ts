@@ -153,6 +153,32 @@ function hasMatchingPresentation(
   after: SnapshotState,
   command: string,
 ): boolean {
+  const identityMatch = compareSnapshotIdentity(baseline, after);
+  if (identityMatch !== undefined) {
+    if (identityMatch) return true;
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'ios_tap_failure_corroboration_identity_mismatch',
+      data: { command },
+    });
+    return false;
+  }
+  return hasMatchingLegacyPresentation(baseline, after, command);
+}
+
+function compareSnapshotIdentity(
+  baseline: SnapshotState,
+  after: SnapshotState,
+): boolean | undefined {
+  if (baseline.comparisonKey === undefined && after.comparisonKey === undefined) return undefined;
+  return baseline.comparisonKey !== undefined && baseline.comparisonKey === after.comparisonKey;
+}
+
+function hasMatchingLegacyPresentation(
+  baseline: SnapshotState,
+  after: SnapshotState,
+  command: string,
+): boolean {
   const baselineBackend = baseline.snapshotQuality?.backend;
   const afterBackend = after.snapshotQuality?.backend;
   if (!baselineBackend || baselineBackend !== afterBackend) {

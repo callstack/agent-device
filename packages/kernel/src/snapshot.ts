@@ -171,7 +171,10 @@ export type SnapshotNode = RawSnapshotNode & {
  * snapshot-provenance.test.ts).
  */
 export type SnapshotProvenance =
-  | { backend: 'xctest'; producer: 'apple-runner' | 'appium-source' | 'limrun-ios-tree' }
+  | {
+      backend: 'xctest';
+      producer: 'apple-runner' | 'simulator-ax-bridge' | 'appium-source' | 'limrun-ios-tree';
+    }
   | { backend: 'android'; producer: 'android-uiautomator' | 'appium-source' }
   | { backend: 'harmonyos-arkui'; producer: 'harmonyos-uitest' }
   | { backend: 'macos-helper'; producer: 'macos-helper' }
@@ -247,6 +250,8 @@ export type SnapshotState = {
   snapshotQuality?: SnapshotQualityVerdict;
   comparisonSafe?: boolean;
   presentationKey?: string;
+  /** Opaque equality key for iOS acquisition and presentation lineage. */
+  comparisonKey?: string;
   /**
    * Android: the capture is an occluding system surface (notification shade, quick settings)
    * rather than app content. Consumers that surface this tree to the agent must disclose the

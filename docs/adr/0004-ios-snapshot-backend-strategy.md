@@ -2,17 +2,18 @@
 
 ## Status
 
-Accepted. Amended after iOS snapshot capture was simplified to two public modes:
-regular interactive snapshots and raw diagnostic snapshots.
+Accepted. Amended after local iOS Simulator acquisition moved to the host AX bridge while the
+public surface remained two modes: regular interactive snapshots and raw diagnostic snapshots.
 
-The runner owns capture-plan acquisition and backend fallback. Host-side iOS validation, semantic
-presentation, and publication are owned by `@agent-device/capture-kit`; structured snapshot quality
-verdicts make degraded or recovered output observable end to end.
+The Apple platform runtime owns acquisition routing and its generation-scoped XCTest fallback.
+Host-side iOS validation, semantic presentation, and publication are owned by
+`@agent-device/capture-kit`; structured snapshot quality verdicts and fallback warnings make
+degraded or recovered output observable end to end.
 
 ## Context
 
-Agent Device exposes iOS UI state through snapshots produced by the long-lived XCTest runner. The
-runner has two durable snapshot needs:
+Agent Device exposes iOS UI state through host AX acquisition on local Simulators and the long-lived
+XCTest runner everywhere else. The snapshot surface has two durable needs:
 
 - agent-facing regular context, where the important contract is the effective user-visible UI,
   fixed controls such as tab bars, and scroll-hidden hints for content outside visible scroll
@@ -35,8 +36,13 @@ predictable.
 
 ## Decision
 
-Keep XCTest as the default iOS automation runner and split iOS snapshot capture into explicit
-strategies:
+Keep XCTest as the iOS automation runner. Route eligible local iOS Simulator snapshots through the
+host AX bridge, present them once through the shared TypeScript engine, and use one typed XCTest
+fallback when bridge acquisition or presentation fails. Disable the bridge for that app generation
+after fallback; a new app generation re-enables it. Physical devices, providers, custom-action
+captures, and interactions remain on their existing owners.
+
+Keep the two public snapshot strategies explicit:
 
 - **Regular visible strategy**: use recursive XCTest snapshots, emit the effective user-visible
   tree plus visible ancestors and scroll-hidden hints, and fall back through the capture plan when
@@ -51,12 +57,10 @@ strategies:
   carry the response, fail explicitly instead of silently truncating the tree at a hard node count.
   If XCTest reports a real AX serialization failure, preserve that error instead of pretending the
   UI is empty.
-- **Future AX-service strategy**: treat Bluesky-class failures as evidence that XCTest is
-  not a complete semantic snapshot backend. A robust semantic fix should add a host-side simulator
-  accessibility backend, similar in role to existing simulator accessibility inspection tools,
-  and acquire its output as `RawAXNode` values. Every backend crosses the same
-  `SnapshotPresentation` construction boundary before producing wire-facing `PresentedNode` values.
-  That backend can be simulator-only; physical devices should use an equivalent non-XCTest semantic
+- **Host AX strategy**: acquire local Simulator trees as raw facts through the bounded host bridge.
+  Every result crosses the same presentation boundary before publication. XCTest fallback carries
+  explicit source residue, and comparisons require matching producer, intent, app generation,
+  presentation key, and residue. Physical devices should use an equivalent non-XCTest semantic
   backend only if Apple exposes a supported channel.
 
 The daemon should make degraded output observable. If an iOS interactive snapshot contains only the

@@ -13,7 +13,7 @@ import type {
   DaemonRequest as WireRequest,
 } from '@agent-device/kernel/contracts';
 import type { DeviceInfo, PlatformSelector } from '@agent-device/kernel/device';
-import type { Rect, SnapshotState, SnapshotCaptureBackend } from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { SnapshotFreshnessWindow } from '../snapshot/snapshot-freshness/index.ts';
 // Type-only import; erased at runtime. ref-frame.ts imports SessionState from
 // here, so this back-edge must stay type-only to avoid a runtime cycle.
@@ -213,7 +213,7 @@ export type PostGestureStabilization = {
    * a different backend can only be re-baselined against, never concluded from
    * (#1569).
    */
-  baselineBackend?: SnapshotCaptureBackend;
+  baselineBackend?: string;
 };
 
 export type PendingInteractionOutcome = {

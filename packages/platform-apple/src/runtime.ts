@@ -70,6 +70,7 @@ import {
   bindAppleFindTextRuntime,
   bindAppleSnapshotRuntime,
 } from './runtime-snapshot.ts';
+import { createAppleSnapshotRoute } from './snapshot-route.ts';
 
 const owner = localRuntimeOwner('apple');
 const available = Object.freeze({ available: true } as const);
@@ -268,6 +269,7 @@ function appleFocusFact(device: DeviceInfo): RuntimeOperationFact {
 
 export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createAppleAppLogRuntime(host);
+  const snapshotRoute = createAppleSnapshotRoute(host);
   const inspectFacts = async (device: DeviceInfo) => {
     const logs = await appLogs.inspectFacts(device);
     const deployment = appleAppDeploymentFacts(device);
@@ -375,10 +377,14 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           }),
         ),
         ...whenAdmitted(facts.operations.captureSnapshot, () =>
-          bindAppleSnapshotRuntime(host, {
-            device: request.device,
-            signal: request.scope.signal,
-          }),
+          bindAppleSnapshotRuntime(
+            host,
+            {
+              device: request.device,
+              signal: request.scope.signal,
+            },
+            snapshotRoute,
+          ),
         ),
         ...whenAdmitted(facts.operations.captureScreenshot, () =>
           bindLocalScreenshotInteractor({
@@ -490,7 +496,9 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         [Symbol.asyncDispose]: async () => await logs[Symbol.asyncDispose](),
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;
     },
-    shutdown: async () => await appLogs.shutdown(),
+    shutdown: async () => {
+      await Promise.all([appLogs.shutdown(), snapshotRoute.shutdown()]);
+    },
   });
 }
 

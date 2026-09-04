@@ -60,6 +60,34 @@ test('buildSnapshotState carries the acquisition producer beside the channel', (
   expect(state.producer).toBe('appium-source');
 });
 
+test('buildSnapshotState preserves the full iOS comparison identity as one opaque key', () => {
+  const comparisonIdentity = {
+    producer: 'simulator-ax-bridge' as const,
+    intent: 'full' as const,
+    lineage: { targetId: 'ios-1:com.example.app', generation: 'launch-a' },
+    presentationKey: {
+      projection: 'regular' as const,
+      interactiveOnly: false,
+      depth: null,
+      scope: null,
+      customActions: false,
+    },
+    residue: [],
+  };
+  const state = buildSnapshotState(
+    {
+      nodes: [{ index: 0, type: 'Application' }],
+      backend: 'xctest',
+      producer: 'simulator-ax-bridge',
+      comparisonIdentity,
+    },
+    undefined,
+  );
+
+  expect(state.comparisonKey).toContain('simulator-ax-bridge');
+  expect(state.comparisonKey).toContain('launch-a');
+});
+
 test('buildSnapshotState preserves Android effective geometry for post-wire consumers', () => {
   const xml = `<hierarchy>
   <node class="android.widget.FrameLayout" bounds="[0,0][400,800]" visible-to-user="true">

@@ -9,8 +9,9 @@ import type { SessionSurface } from './session-surface.ts';
 import type { BackendSnapshotResult } from './snapshot-types.ts';
 import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
 import type {
-  IosProviderAcquisitionProducer,
+  IosAcquisitionProducer,
   IosSnapshotAcquisitionFacts,
+  IosSnapshotComparisonIdentity,
 } from './ios-snapshot.ts';
 import type {
   RawSnapshotNode,
@@ -182,6 +183,8 @@ export type SnapshotOptions = BaseSnapshotOptions & {
   includeRects?: boolean;
   includeHiddenContentHints?: boolean;
   surface?: SessionSurface;
+  /** Internal capture purpose; action outcomes always require the full tree. */
+  acquisitionIntent?: 'full' | 'surface-observation';
 };
 
 /**
@@ -251,11 +254,12 @@ export type KeyboardEnterResult =
  */
 export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & {
   nodes?: RawSnapshotNode[];
+  comparisonIdentity?: IosSnapshotComparisonIdentity;
 } & SnapshotProvenance;
 
 export type SnapshotRuntimeAcquiredResult = Readonly<{
   stage: 'acquired';
-  acquisition: IosSnapshotAcquisitionFacts & Readonly<{ producer: IosProviderAcquisitionProducer }>;
+  acquisition: IosSnapshotAcquisitionFacts & Readonly<{ producer: IosAcquisitionProducer }>;
 }>;
 
 export type SnapshotRuntimeResult = SnapshotResult | SnapshotRuntimeAcquiredResult;

@@ -90,6 +90,16 @@ export function areIosSnapshotComparisonIdentitiesEqual(
   );
 }
 
+export function iosSnapshotComparisonIdentityKey(identity: IosSnapshotComparisonIdentity): string {
+  return JSON.stringify({
+    producer: identity.producer,
+    intent: identity.intent,
+    lineage: identity.lineage,
+    presentationKey: identity.presentationKey,
+    residue: identity.residue.map(residueIdentity).sort(),
+  });
+}
+
 export function buildIosSnapshotComparisonIdentity(
   input: IosSnapshotInput,
   request: IosSnapshotRequest,
