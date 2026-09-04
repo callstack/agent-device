@@ -13,16 +13,18 @@ test('measures the clean-installed package tree without counting the consumer', 
   assert.deepEqual(measureDirectory(root), { packageBytes: 6, files: 2 });
 });
 
-test('clean-installed snapshot bridge keeps both native prepare/acquire sources', async () => {
+test('clean-installed snapshot bridge requires all native assets', async () => {
   const root = await mkdtempForTest('agent-device-size-bridge-');
   const bridge = join(root, 'apple', 'snapshot-bridge');
-  await mkdir(bridge, { recursive: true });
-  await writeFile(join(bridge, 'SnapshotBridge.m'), 'serve');
-  await writeFile(join(bridge, 'SnapshotBridgeRuntime.m'), 'snapshotForProcess');
   try {
+    assert.throws(() => assertInstalledSnapshotBridge(root), /SnapshotBridge\.m/);
+    await mkdir(bridge, { recursive: true });
+    await writeFile(join(bridge, 'SnapshotBridge.m'), 'native source');
+    await writeFile(join(bridge, 'SnapshotBridgeRuntime.m'), 'native runtime');
+    await writeFile(join(bridge, 'SnapshotBridgeRuntime.h'), 'native header');
     assert.doesNotThrow(() => assertInstalledSnapshotBridge(root));
-    await rm(join(bridge, 'SnapshotBridgeRuntime.m'));
-    assert.throws(() => assertInstalledSnapshotBridge(root), /SnapshotBridgeRuntime\.m/);
+    await rm(join(bridge, 'SnapshotBridgeRuntime.h'));
+    assert.throws(() => assertInstalledSnapshotBridge(root), /SnapshotBridgeRuntime\.h/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -3,7 +3,7 @@ import { snapshotSourceError } from './errors.ts';
 
 export type SnapshotSourceDeadline = Readonly<{
   clock: Deadline;
-  signal?: AbortSignal;
+  signal: AbortSignal | undefined;
 }>;
 
 export function createSnapshotSourceDeadline(
@@ -41,5 +41,6 @@ export async function waitForSnapshotSourceDelay(
       action();
     };
     deadline.signal?.addEventListener('abort', onAbort, { once: true });
+    if (deadline.signal?.aborted) onAbort();
   });
 }

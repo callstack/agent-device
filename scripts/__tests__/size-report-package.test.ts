@@ -25,6 +25,7 @@ test('classifies every shipped entry into one named component', () => {
       ['dist/apple/snapshot-presentation/Package.swift', 'apple-snapshot-presentation'],
       ['apple/snapshot-bridge/SnapshotBridge.m', 'apple-snapshot-bridge'],
       ['apple/snapshot-bridge/SnapshotBridgeRuntime.m', 'apple-snapshot-bridge'],
+      ['apple/snapshot-bridge/SnapshotBridgeRuntime.h', 'apple-snapshot-bridge'],
       ['apple/macos-helper/Sources/main.swift', 'macos-helper'],
       ['android/snapshot-helper/dist/helper.apk', 'android-helpers'],
       ['android/snapshot-helper/dist/helper.manifest.json', 'android-helpers'],

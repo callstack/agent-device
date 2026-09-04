@@ -77,7 +77,6 @@ export type SnapshotSourceSocket = Readonly<{
 export type SnapshotSourceHost = Readonly<{
   projectRoot(): string;
   homeDirectory(): string;
-  temporaryDirectory(): string;
   run(command: string, args: string[], options?: ExecOptions): Promise<ExecResult>;
   start(
     udid: string,
@@ -92,9 +91,6 @@ export type SnapshotSourceHost = Readonly<{
   readText(path: string): Promise<string>;
   readBinary(path: string): Promise<Buffer>;
   writeText(path: string, contents: string): Promise<void>;
-  listDirectory(
-    path: string,
-  ): Promise<ReadonlyArray<{ name: string; isFile(): boolean; isDirectory(): boolean }>>;
   ensureDirectory(path: string): Promise<void>;
   chmod(path: string, mode: number): Promise<void>;
   exists(path: string): boolean;
@@ -102,9 +98,8 @@ export type SnapshotSourceHost = Readonly<{
   remove(path: string): Promise<void>;
   acquireLock(
     path: string,
-    options?: { deadline?: SnapshotSourceDeadline },
+    options: { deadline: SnapshotSourceDeadline },
   ): Promise<() => Promise<void>>;
-  withKeyedLock<T>(key: string, action: () => Promise<T>): Promise<T>;
   emitDiagnostic(event: {
     level?: 'debug' | 'info' | 'warn' | 'error';
     phase: string;
@@ -117,7 +112,6 @@ export type SnapshotSourceHost = Readonly<{
     data?: Record<string, unknown>,
   ): Promise<T>;
   processId(): number;
-  readProcessStartTime(pid: number): string | null;
 }>;
 
 export type SnapshotSourceBridgeBinary = Readonly<{

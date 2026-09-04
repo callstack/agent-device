@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { asSnapshotSourceError, snapshotSourceError, SnapshotSourceError } from './errors.ts';
 import {
-  createSnapshotSourceDeadline,
   remainingSnapshotSourceMs,
   waitForSnapshotSourceDelay,
   type SnapshotSourceDeadline,
 } from './deadline.ts';
 import { snapshotSourceSocketPath } from './host.ts';
+import { bridgeProcessExited } from './process.ts';
 import { createSnapshotBridgeDescribeRequest, encodeSnapshotBridgeFrame } from './protocol.ts';
 import { roundTripSnapshotBridge } from './transport.ts';
 import type {
@@ -27,7 +27,6 @@ const SHUTDOWN_KILL_TIMEOUT_MS = 500;
 
 type BridgeSession = {
   readonly udid: string;
-  readonly generation: string;
   readonly bridgePath: string;
   readonly socketPath: string;
   readonly process: SnapshotSourceProcess;
@@ -39,12 +38,12 @@ type SnapshotBridgeRequest = Readonly<{
   bridge: SnapshotSourceBridgeBinary;
   limits: SnapshotSourceLimits;
   maxDepth: number;
-  signal?: AbortSignal;
-  deadline?: SnapshotSourceDeadline;
+  deadline: SnapshotSourceDeadline;
 }>;
 
 export class SnapshotBridgeManager {
   private readonly sessions = new Map<string, BridgeSession>();
+  private readonly requestQueues = new Map<string, Promise<void>>();
   private closed = false;
   private readonly host: SnapshotSourceHost;
 
@@ -54,30 +53,61 @@ export class SnapshotBridgeManager {
 
   async request(input: SnapshotBridgeRequest): Promise<SnapshotBridgeEnvelope> {
     if (this.closed) throw snapshotSourceError('unsupported', 'source-closed');
-    const deadline =
-      input.deadline ?? createSnapshotSourceDeadline(input.limits.maxDurationMs, input.signal);
-    return await this.host.withKeyedLock(`simulator:${input.target.udid}`, async () => {
-      remainingSnapshotSourceMs(deadline, 'bridge-request-deadline');
-      const previousSession = this.sessions.get(input.target.udid);
-      const session = await this.ensureSession(input, deadline);
-      try {
-        return await this.exchange(session, input, deadline);
-      } catch (error) {
-        const normalized = asSnapshotSourceError(error);
-        if (
-          (normalized.failureKind === 'cancelled' || normalized.failureKind === 'timeout') &&
-          (normalized.details?.dispatched === true || previousSession !== session)
-        ) {
-          await this.removeSession(session, true);
-        } else if (normalized.failureKind === 'process-crash') {
-          await this.removeSession(session, false);
-        } else if (normalized.failureKind === 'transport-failure') {
-          session.socket?.destroy();
-          session.socket = undefined;
-        }
-        throw normalized;
-      }
+    return await this.withSimulatorLock(input.target.udid, input.deadline, () =>
+      this.requestInSimulator(input),
+    );
+  }
+
+  private async requestInSimulator(input: SnapshotBridgeRequest): Promise<SnapshotBridgeEnvelope> {
+    if (this.closed) throw snapshotSourceError('unsupported', 'source-closed');
+    const deadline = input.deadline;
+    remainingSnapshotSourceMs(deadline, 'bridge-request-deadline');
+    const previousSession = this.sessions.get(input.target.udid);
+    const session = await this.ensureSession(input, deadline);
+    try {
+      return await this.exchange(session, input, deadline);
+    } catch (error) {
+      const normalized = await this.handleRequestFailure(error, session, previousSession);
+      throw normalized;
+    }
+  }
+
+  private async handleRequestFailure(
+    error: unknown,
+    session: BridgeSession,
+    previousSession: BridgeSession | undefined,
+  ): Promise<SnapshotSourceError> {
+    const normalized = asSnapshotSourceError(error);
+    if (shouldDiscardSession(normalized, session, previousSession)) {
+      await this.removeSession(session, true);
+    } else if (normalized.failureKind === 'process-crash') {
+      await this.removeSession(session, false);
+    } else if (normalized.failureKind === 'transport-failure') {
+      session.socket?.destroy();
+      session.socket = undefined;
+    }
+    return normalized;
+  }
+
+  private async withSimulatorLock<T>(
+    udid: string,
+    deadline: SnapshotSourceDeadline,
+    action: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.requestQueues.get(udid);
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
     });
+    this.requestQueues.set(udid, current);
+    try {
+      if (previous) await waitForSimulatorTurn(previous, deadline);
+      else remainingSnapshotSourceMs(deadline, 'bridge-request-deadline');
+      return await action();
+    } finally {
+      release();
+      if (this.requestQueues.get(udid) === current) this.requestQueues.delete(udid);
+    }
   }
 
   async close(): Promise<void> {
@@ -94,12 +124,7 @@ export class SnapshotBridgeManager {
   ): Promise<BridgeSession> {
     const key = input.target.udid;
     const existing = this.sessions.get(key);
-    if (
-      existing &&
-      existing.generation === input.target.generation &&
-      existing.bridgePath === input.bridge.path &&
-      existing.process.isAlive()
-    ) {
+    if (existing && existing.bridgePath === input.bridge.path && existing.process.isAlive()) {
       if (!existing.socket || existing.socket.destroyed) {
         existing.socket = await this.connectUntilReady(existing, deadline);
       }
@@ -115,7 +140,6 @@ export class SnapshotBridgeManager {
     });
     const session: BridgeSession = {
       udid: input.target.udid,
-      generation: input.target.generation,
       bridgePath: input.bridge.path,
       socketPath,
       process: bridgeProcess,
@@ -137,7 +161,9 @@ export class SnapshotBridgeManager {
     let lastError: unknown;
     while (true) {
       const remainingMs = remainingSnapshotSourceMs(deadline, 'bridge-connect-deadline');
-      if (!session.process.isAlive()) throw bridgeProcessExited(session.process);
+      if (!session.process.isAlive()) {
+        throw await bridgeProcessExited(this.host, session.process);
+      }
       try {
         return await this.host.connect(session.socketPath, {
           signal: deadline.signal,
@@ -192,6 +218,7 @@ export class SnapshotBridgeManager {
       limits: input.limits,
       expectedPid: input.target.pid,
       expectedGeneration: input.target.generation,
+      host: this.host,
     });
   }
 
@@ -215,11 +242,28 @@ export class SnapshotBridgeManager {
   }
 }
 
-function bridgeProcessExited(bridgeProcess: SnapshotSourceProcess): SnapshotSourceError {
-  return snapshotSourceError('process-crash', 'bridge-exited', {
-    pid: bridgeProcess.pid,
-    log: bridgeProcess.readLog().slice(-64 * 1024),
-  });
+async function waitForSimulatorTurn(
+  previous: Promise<void>,
+  deadline: SnapshotSourceDeadline,
+): Promise<void> {
+  const timeoutMs = remainingSnapshotSourceMs(deadline, 'bridge-request-deadline');
+  await Promise.race([
+    previous,
+    waitForSnapshotSourceDelay(deadline, timeoutMs, 'bridge-request-deadline').then(() => {
+      throw snapshotSourceError('timeout', 'bridge-request-deadline');
+    }),
+  ]);
+}
+
+function shouldDiscardSession(
+  error: SnapshotSourceError,
+  session: BridgeSession,
+  previousSession: BridgeSession | undefined,
+): boolean {
+  return (
+    (error.failureKind === 'cancelled' || error.failureKind === 'timeout') &&
+    (error.details?.dispatched === true || previousSession !== session)
+  );
 }
 
 async function waitForProcess(

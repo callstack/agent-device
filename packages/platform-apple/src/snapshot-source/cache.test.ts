@@ -5,6 +5,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { createSnapshotSourceHost } from './host.ts';
 import { ensureSnapshotBridgeBinary } from './cache.ts';
+import { createSnapshotSourceDeadline } from './deadline.ts';
 import { DEFAULT_SNAPSHOT_SOURCE_LIMITS } from './limits.ts';
 import type { SnapshotSourceHost } from './types.ts';
 
@@ -34,6 +35,7 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
       host,
       runtime: 'iOS 26.2',
       limits: DEFAULT_SNAPSHOT_SOURCE_LIMITS,
+      deadline: testDeadline(),
       sourceRoot,
       cacheRoot,
     });
@@ -44,6 +46,7 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
       host,
       runtime: 'iOS 26.2',
       limits: DEFAULT_SNAPSHOT_SOURCE_LIMITS,
+      deadline: testDeadline(),
       sourceRoot,
       cacheRoot,
     });
@@ -55,6 +58,7 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
       host,
       runtime: 'iOS 26.2',
       limits: { ...DEFAULT_SNAPSHOT_SOURCE_LIMITS, maxNodes: 200, maxTraversalDepth: 12 },
+      deadline: testDeadline(),
       sourceRoot,
       cacheRoot,
     });
@@ -65,6 +69,7 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
       host,
       runtime: 'iOS 26.2',
       limits: DEFAULT_SNAPSHOT_SOURCE_LIMITS,
+      deadline: testDeadline(),
       sourceRoot,
       cacheRoot,
     });
@@ -80,6 +85,7 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
       host,
       runtime: 'iOS 26.2',
       limits: DEFAULT_SNAPSHOT_SOURCE_LIMITS,
+      deadline: testDeadline(),
       sourceRoot,
       cacheRoot,
     });
@@ -90,6 +96,7 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
       host,
       runtime: 'iOS 26.2',
       limits: DEFAULT_SNAPSHOT_SOURCE_LIMITS,
+      deadline: testDeadline(),
       sourceRoot,
       cacheRoot,
     });
@@ -101,6 +108,7 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
       host,
       runtime: 'iOS 26.2',
       limits: DEFAULT_SNAPSHOT_SOURCE_LIMITS,
+      deadline: testDeadline(),
       sourceRoot,
       cacheRoot,
     });
@@ -133,6 +141,7 @@ test('concurrent snapshot bridge preparation publishes one cache entry', async (
           host,
           runtime: 'iOS 26.2',
           limits: DEFAULT_SNAPSHOT_SOURCE_LIMITS,
+          deadline: testDeadline(),
           sourceRoot,
           cacheRoot,
         }),
@@ -172,7 +181,7 @@ test('an aborted cache waiter does not cancel an independent preparation', async
       host,
       runtime: 'iOS 26.2',
       limits: { ...DEFAULT_SNAPSHOT_SOURCE_LIMITS, maxDurationMs: 300 },
-      signal: controller.signal,
+      deadline: testDeadline(300, controller.signal),
       sourceRoot,
       cacheRoot,
     });
@@ -182,6 +191,7 @@ test('an aborted cache waiter does not cancel an independent preparation', async
       host,
       runtime: 'iOS 26.2',
       limits: DEFAULT_SNAPSHOT_SOURCE_LIMITS,
+      deadline: testDeadline(),
       sourceRoot,
       cacheRoot,
     });
@@ -203,6 +213,13 @@ async function expectRejectedCancellation(value: Promise<unknown>): Promise<void
       (error as { failureKind: string }).failureKind === 'cancelled'
     );
   });
+}
+
+function testDeadline(
+  timeoutMs = DEFAULT_SNAPSHOT_SOURCE_LIMITS.maxDurationMs,
+  signal?: AbortSignal,
+) {
+  return createSnapshotSourceDeadline(timeoutMs, signal);
 }
 
 function createFakeBuildHost(

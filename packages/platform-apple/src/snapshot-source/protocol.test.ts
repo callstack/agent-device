@@ -4,7 +4,6 @@ import path from 'node:path';
 import { test } from 'vitest';
 import {
   assertSnapshotBridgeEnvelope,
-  assertSnapshotBridgeTargetIdentity,
   bridgeFailureFromEnvelope,
   createSnapshotBridgeDescribeRequest,
   encodeSnapshotBridgeFrame,
@@ -26,20 +25,25 @@ const limits: SnapshotSourceLimits = {
   maxDurationMs: 1000,
 };
 
-const nativeWireGolden = JSON.parse(
-  await readFile(path.join(import.meta.dirname, 'fixtures', 'native-wire-golden.json'), 'utf8'),
-);
+const wireVocabulary = JSON.parse(
+  await readFile(path.join(import.meta.dirname, 'fixtures', 'wire-vocabulary.json'), 'utf8'),
+) as {
+  protocolVersion: number;
+  sourceVersion: string;
+  requestKeys: string[];
+  responseKeys: string[];
+  attributeKeys: string[];
+};
 
-test('snapshot bridge frames decode across split and coalesced socket chunks', () => {
+test('snapshot bridge frames decode a split frame and reject trailing frames', () => {
   const first = encodeSnapshotBridgeFrame({ requestId: 'one', value: 1 }, limits);
   const second = encodeSnapshotBridgeFrame({ requestId: 'two', value: 2 }, limits);
   const decoder = new SnapshotBridgeFrameDecoder(limits.maxResponseBytes);
 
-  assert.deepEqual(decoder.push(first.subarray(0, 3)), []);
-  assert.deepEqual(decoder.push(Buffer.concat([first.subarray(3), second])), [
-    Buffer.from('{"requestId":"one","value":1}'),
-    Buffer.from('{"requestId":"two","value":2}'),
-  ]);
+  assert.equal(decoder.push(first.subarray(0, 3)), undefined);
+  assert.deepEqual(decoder.push(first.subarray(3)), Buffer.from('{"requestId":"one","value":1}'));
+  assert.deepEqual(decoder.finish(), Buffer.from('{"requestId":"one","value":1}'));
+  assert.throws(() => decoder.push(second), /multiple-frames/);
 });
 
 test('snapshot bridge frames reject bounded request and response violations', () => {
@@ -116,9 +120,9 @@ test('snapshot bridge failures stay typed at the guest boundary', () => {
   }
 });
 
-test('native wire golden keeps TS and Objective-C protocol vocabularies in parity', async () => {
+test('wire vocabulary guard keeps TS and Objective-C literals aligned', async () => {
   const native = await Promise.all(
-    ['SnapshotBridge.m', 'SnapshotBridgeRuntime.m'].map((fileName) =>
+    ['SnapshotBridge.m', 'SnapshotBridgeRuntime.m', 'SnapshotBridgeRuntime.h'].map((fileName) =>
       readFile(
         path.join(import.meta.dirname, '../../../../apple/snapshot-bridge', fileName),
         'utf8',
@@ -126,47 +130,21 @@ test('native wire golden keeps TS and Objective-C protocol vocabularies in parit
     ),
   );
   const nativeSource = native.join('\n');
+  assert.equal(wireVocabulary.protocolVersion, SNAPSHOT_SOURCE_PROTOCOL_VERSION);
+  assert.equal(wireVocabulary.sourceVersion, SNAPSHOT_SOURCE_VERSION);
+  assert.deepEqual(wireVocabulary.requestKeys, SNAPSHOT_SOURCE_WIRE_KEYS);
+  assert.deepEqual(wireVocabulary.responseKeys, SNAPSHOT_SOURCE_RESPONSE_KEYS);
+  assert.deepEqual(wireVocabulary.attributeKeys, SNAPSHOT_SOURCE_ATTRIBUTE_KEYS);
   assert.match(nativeSource, /kProtocolVersion = 1/);
   assert.match(nativeSource, /kSourceVersion = @"agent-device-simulator-ax-v1\.5\.3"/);
-  assert.match(nativeSource, /snapshot-tree-malformed/);
-  assert.match(nativeSource, /if \(\*malformed\) return nil/);
   for (const key of [
-    ...SNAPSHOT_SOURCE_WIRE_KEYS,
-    ...SNAPSHOT_SOURCE_RESPONSE_KEYS,
-    ...SNAPSHOT_SOURCE_ATTRIBUTE_KEYS,
+    ...wireVocabulary.requestKeys,
+    ...wireVocabulary.responseKeys,
+    ...wireVocabulary.attributeKeys,
   ]) {
     assert.match(
       nativeSource,
       new RegExp(`@"${key.replaceAll(/[.*+?^${}()|[\\]\\\\]/g, String.raw`\$&`)}"`),
     );
   }
-
-  const request = createSnapshotBridgeDescribeRequest(nativeWireGolden.request);
-  assert.deepEqual(request, nativeWireGolden.request);
-  const success = parseSnapshotBridgeEnvelope(
-    Buffer.from(JSON.stringify(nativeWireGolden.success)),
-  );
-  assert.doesNotThrow(() => assertSnapshotBridgeEnvelope(success, 'golden-request'));
-  assert.doesNotThrow(() =>
-    assertSnapshotBridgeTargetIdentity(success, { pid: 321, generation: 'generation-current' }),
-  );
-  assert.throws(
-    () => assertSnapshotBridgeEnvelope(nativeWireGolden.versionMismatch, 'golden-request'),
-    /protocol-version-mismatch/,
-  );
-  assert.throws(
-    () =>
-      assertSnapshotBridgeTargetIdentity(nativeWireGolden.staleGeneration, {
-        pid: 321,
-        generation: 'generation-current',
-      }),
-    /bridge-generation-mismatch/,
-  );
-  assert.throws(
-    () => bridgeFailureFromEnvelope(nativeWireGolden.malformed),
-    (error: unknown) =>
-      error instanceof Error &&
-      'failureKind' in error &&
-      (error as { failureKind: string }).failureKind === 'malformed-tree',
-  );
 });

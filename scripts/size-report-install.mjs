@@ -2,6 +2,10 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {
+  assertSnapshotBridgeAssets,
+  SNAPSHOT_BRIDGE_ASSET_PATHS,
+} from './lib/snapshot-bridge-assets.mjs';
 
 export function measureCleanInstalledPackage(tarballPath, packageName) {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-size-install-'));
@@ -41,21 +45,10 @@ export function measureCleanInstalledPackage(tarballPath, packageName) {
 }
 
 export function assertInstalledSnapshotBridge(packageDir) {
-  const bridgeRoot = path.join(packageDir, 'apple', 'snapshot-bridge');
-  if (!fs.existsSync(bridgeRoot)) return;
-  const requiredSources = ['SnapshotBridge.m', 'SnapshotBridgeRuntime.m'];
-  const missing = requiredSources.filter((source) => !fs.existsSync(path.join(bridgeRoot, source)));
-  if (missing.length > 0) {
-    throw new Error(`Clean-installed snapshot bridge is missing: ${missing.join(', ')}`);
-  }
-  const source = requiredSources
-    .map((fileName) => fs.readFileSync(path.join(bridgeRoot, fileName), 'utf8'))
-    .join('\n');
-  if (!source.includes('serve') || !source.includes('snapshotForProcess')) {
-    throw new Error(
-      'Clean-installed snapshot bridge does not contain its serve/acquire implementation.',
-    );
-  }
+  const present = SNAPSHOT_BRIDGE_ASSET_PATHS.filter((assetPath) =>
+    fs.existsSync(path.join(packageDir, assetPath)),
+  );
+  assertSnapshotBridgeAssets(present, 'Clean-installed snapshot bridge');
 }
 
 export function measureDirectory(root) {

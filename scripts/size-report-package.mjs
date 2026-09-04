@@ -7,6 +7,10 @@ import {
   formatMaybeBytes,
   formatSignedBytes,
 } from './size-report-format.mjs';
+import {
+  assertSnapshotBridgeAssets,
+  SNAPSHOT_BRIDGE_ASSET_PATHS,
+} from './lib/snapshot-bridge-assets.mjs';
 
 const PACKAGE_COMPONENTS = [
   {
@@ -84,9 +88,9 @@ export function assertPublishPackageContents(entries, options = {}) {
     options.requireSnapshotBridge ??
     paths.some((entryPath) => entryPath.startsWith('apple/snapshot-bridge/'))
   ) {
-    requiredAssets.unshift(
-      { path: 'apple/snapshot-bridge/SnapshotBridge.m' },
-      { path: 'apple/snapshot-bridge/SnapshotBridgeRuntime.m' },
+    assertSnapshotBridgeAssets(
+      paths.filter((entryPath) => SNAPSHOT_BRIDGE_ASSET_PATHS.includes(entryPath)),
+      'npm pack snapshot bridge',
     );
   }
   const missingAssets = requiredAssets.filter((asset) =>

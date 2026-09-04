@@ -1,5 +1,6 @@
 import { asSnapshotSourceError, snapshotSourceError } from './errors.ts';
 import { remainingSnapshotSourceMs, type SnapshotSourceDeadline } from './deadline.ts';
+import { bridgeProcessExited } from './process.ts';
 import {
   assertSnapshotBridgeEnvelope,
   assertSnapshotBridgeTargetIdentity,
@@ -8,7 +9,12 @@ import {
   SnapshotBridgeFrameDecoder,
   type SnapshotBridgeEnvelope,
 } from './protocol.ts';
-import type { SnapshotSourceLimits, SnapshotSourceProcess, SnapshotSourceSocket } from './types.ts';
+import type {
+  SnapshotSourceHost,
+  SnapshotSourceLimits,
+  SnapshotSourceProcess,
+  SnapshotSourceSocket,
+} from './types.ts';
 
 export async function roundTripSnapshotBridge(
   input: Readonly<{
@@ -20,6 +26,7 @@ export async function roundTripSnapshotBridge(
     limits: SnapshotSourceLimits;
     expectedPid: number;
     expectedGeneration: string;
+    host: SnapshotSourceHost;
   }>,
 ): Promise<SnapshotBridgeEnvelope> {
   const decoder = new SnapshotBridgeFrameDecoder(input.limits.maxResponseBytes - 4);
@@ -39,8 +46,8 @@ export async function roundTripSnapshotBridge(
       try {
         if (!Buffer.isBuffer(chunk))
           throw snapshotSourceError('transport-failure', 'bridge-data-invalid');
-        const frames = decoder.push(chunk);
-        for (const body of frames) {
+        const body = decoder.push(chunk);
+        if (body) {
           const envelope = parseSnapshotBridgeEnvelope(body);
           assertSnapshotBridgeEnvelope(envelope, input.requestId);
           assertSnapshotBridgeTargetIdentity(envelope, {
@@ -62,16 +69,16 @@ export async function roundTripSnapshotBridge(
     const onError = (error: unknown) => finishReject(asSnapshotSourceError(error));
     const onClose = () => {
       if (!settled) {
-        finishReject(
-          input.process.isAlive()
-            ? snapshotSourceError('transport-failure', 'bridge-connection-closed')
-            : bridgeProcessExited(input.process),
-        );
+        if (input.process.isAlive()) {
+          finishReject(snapshotSourceError('transport-failure', 'bridge-connection-closed'));
+        } else {
+          void bridgeProcessExited(input.host, input.process).then(finishReject);
+        }
       }
     };
     input.process.wait.then(
       () => {
-        if (!settled) finishReject(bridgeProcessExited(input.process));
+        if (!settled) void bridgeProcessExited(input.host, input.process).then(finishReject);
       },
       (error: unknown) => {
         if (!settled) finishReject(asSnapshotSourceError(error));
@@ -102,12 +109,5 @@ export async function roundTripSnapshotBridge(
       finishReject(asSnapshotSourceError(error));
       input.socket.destroy();
     }
-  });
-}
-
-function bridgeProcessExited(bridgeProcess: SnapshotSourceProcess) {
-  return snapshotSourceError('process-crash', 'bridge-exited', {
-    pid: bridgeProcess.pid,
-    log: bridgeProcess.readLog().slice(-64 * 1024),
   });
 }

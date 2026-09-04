@@ -1,0 +1,40 @@
+{
+  "protocolVersion": 1,
+  "sourceVersion": "agent-device-simulator-ax-v1.5.3",
+  "requestKeys": [
+    "verb",
+    "requestId",
+    "pid",
+    "generation",
+    "snapshotTree",
+    "automationMode",
+    "maxDepth",
+    "maxNodes",
+    "maxDurationMs",
+    "maxResponseBytes"
+  ],
+  "responseKeys": [
+    "protocolVersion",
+    "sourceVersion",
+    "requestId",
+    "generation",
+    "ok",
+    "pid",
+    "tree",
+    "truncated",
+    "automationEnabled",
+    "error_kind",
+    "error_code",
+    "error"
+  ],
+  "attributeKeys": [
+    "XC_kAXXCAttributeElementType",
+    "XC_kAXXCAttributeElementBaseType",
+    "XC_kAXXCAttributeLabel",
+    "XC_kAXXCAttributeValue",
+    "XC_kAXXCAttributeIdentifier",
+    "XC_kAXXCAttributeFrame",
+    "XC_kAXXCAttributeAutomationType",
+    "XC_kAXXCAttributeChildren"
+  ]
+}

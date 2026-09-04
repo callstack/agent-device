@@ -9,11 +9,9 @@ import {
   hostFileExistsSync,
   hostHomeDirectory,
   readHostBinaryFile,
-  readHostDirectory,
   readHostTextFile,
   removeHostPath,
   renameHostPath,
-  hostTemporaryDirectory,
   writeHostTextFile,
 } from '@agent-device/host-kit/host-file';
 import {
@@ -22,7 +20,6 @@ import {
   signalProcessGroupBestEffort,
 } from '@agent-device/host-kit/process';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 import { findProjectRoot } from '@agent-device/host-kit/version';
 import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
 import { remainingSnapshotSourceMs } from './deadline.ts';
@@ -31,7 +28,6 @@ import type { SnapshotSourceHost, SnapshotSourceProcess, SnapshotSourceSocket } 
 const BRIDGE_IDLE_TIMEOUT_SECONDS = 60;
 const MAX_PROCESS_LOG_BYTES = 64 * 1024;
 const SNAPSHOT_SOCKET_ROOT = '/tmp';
-const snapshotSourceLocks = new Map<string, Promise<unknown>>();
 
 export function createSnapshotSourceHost(): SnapshotSourceHost {
   return {
@@ -43,20 +39,15 @@ export function createSnapshotSourceHost(): SnapshotSourceHost {
     readText: readHostTextFile,
     readBinary: readHostBinaryFile,
     writeText: writeHostTextFile,
-    listDirectory: async (directoryPath) =>
-      await readHostDirectory(directoryPath, { withFileTypes: true }),
     ensureDirectory: ensureHostDirectory,
     chmod: chmodHostFile,
     exists: hostFileExistsSync,
     rename: renameHostPath,
     remove: removeHostPath,
     acquireLock: acquireSnapshotSourceLock,
-    withKeyedLock: async (key, action) => await withKeyedLock(snapshotSourceLocks, key, action),
     emitDiagnostic,
     withDiagnosticTimer,
     processId: hostProcessId,
-    readProcessStartTime,
-    temporaryDirectory: hostTemporaryDirectory,
   };
 }
 
@@ -164,12 +155,13 @@ async function connectSnapshotBridge(
     socket.once('error', onError);
     socket.once('close', onClose);
     options.signal?.addEventListener('abort', onAbort, { once: true });
+    if (options.signal?.aborted) onAbort();
   });
 }
 
 async function acquireSnapshotSourceLock(
   lockPath: string,
-  options: Parameters<SnapshotSourceHost['acquireLock']>[1] = {},
+  options: Parameters<SnapshotSourceHost['acquireLock']>[1],
 ): Promise<() => Promise<void>> {
   const pid = hostProcessId();
   const deadline = options.deadline;
@@ -180,12 +172,13 @@ async function acquireSnapshotSourceLock(
       startTime: readProcessStartTime(pid),
       acquiredAtMs: Date.now(),
     },
-    timeoutMs: deadline ? remainingSnapshotSourceMs(deadline, 'cache-lock-deadline') : 180_000,
+    timeoutMs: remainingSnapshotSourceMs(deadline, 'cache-lock-deadline'),
     pollMs: 100,
     ownerGraceMs: 5_000,
     description: 'iOS Simulator snapshot bridge cache',
   });
-  if (!deadline?.signal) return await pending;
+  const signal = deadline.signal;
+  if (!signal) return await pending;
 
   let canceled = false;
   let onAbort!: () => void;
@@ -194,7 +187,8 @@ async function acquireSnapshotSourceLock(
       canceled = true;
       reject(snapshotSourceError('cancelled', 'abort-signal'));
     };
-    deadline.signal!.addEventListener('abort', onAbort, { once: true });
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
   });
   try {
     return await Promise.race([pending, aborted]);
@@ -212,7 +206,7 @@ async function acquireSnapshotSourceLock(
     }
     throw error;
   } finally {
-    deadline.signal.removeEventListener('abort', onAbort);
+    signal.removeEventListener('abort', onAbort);
   }
 }
 

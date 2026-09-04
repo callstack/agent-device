@@ -47,6 +47,7 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
       hint,
     });
     assert.equal(fixture.builds, 1);
+    assert.equal(fixture.runs, 6);
     assert.equal(result.stage, 'acquired');
     assert.equal(result.acquisition.producer, 'simulator-ax-bridge');
     assert.equal(result.acquisition.intent, 'full');
@@ -77,6 +78,7 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
     });
     assert.equal(outcome.stage, 'failed');
     if (outcome.stage === 'failed') assert.equal(outcome.failure.kind, 'stale-target');
+    assert.equal(fixture.runs, 6);
   } finally {
     await source.close();
     await rm(root, { recursive: true, force: true });
@@ -114,6 +116,7 @@ test('preparation consumes the same acquisition deadline as bridge I/O', async (
 type AdapterFixture = {
   host: SnapshotSourceHost;
   builds: number;
+  runs: number;
   responsePid: number;
 };
 
@@ -127,10 +130,16 @@ function targetForTest() {
 
 function createAdapterHost(buildDelayMs = 0): AdapterFixture {
   const realHost = createSnapshotSourceHost();
-  const fixture: AdapterFixture = { host: undefined as never, builds: 0, responsePid: 321 };
+  const fixture: AdapterFixture = {
+    host: undefined as never,
+    builds: 0,
+    runs: 0,
+    responsePid: 321,
+  };
   const host: SnapshotSourceHost = {
     ...realHost,
     run: async (command, args) => {
+      fixture.runs += 1;
       if (command === 'xcrun' && args.includes('clang')) {
         fixture.builds += 1;
         if (buildDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, buildDelayMs));

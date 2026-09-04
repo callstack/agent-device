@@ -10,6 +10,7 @@ import { decodeSnapshotBridgeTree } from './tree.ts';
 import { createSnapshotSourceHost } from './host.ts';
 import type {
   SnapshotSourceHost,
+  SnapshotSourceBridgeBinary,
   SnapshotSourceLimits,
   SnapshotSourceOutcome,
   SnapshotSourceRequest,
@@ -34,6 +35,7 @@ export function createSimulatorSnapshotSource(
 ): SimulatorSnapshotSource {
   const host = options.host ?? createSnapshotSourceHost();
   const manager = new SnapshotBridgeManager(host);
+  const preparedBinaries = new Map<string, SnapshotSourceBridgeBinary>();
   let closed = false;
 
   const prepare = async (
@@ -44,7 +46,9 @@ export function createSimulatorSnapshotSource(
     }>,
   ) => {
     if (closed) throw snapshotSourceError('unsupported', 'source-closed');
-    return await host.withDiagnosticTimer(
+    const prepared = preparedBinaries.get(input.runtime);
+    if (prepared) return prepared;
+    const completed = await host.withDiagnosticTimer(
       'ios.snapshot-source.prepare',
       async () =>
         await ensureSnapshotBridgeBinary({
@@ -57,6 +61,8 @@ export function createSimulatorSnapshotSource(
         }),
       { producer: SNAPSHOT_SOURCE_PRODUCER },
     );
+    preparedBinaries.set(input.runtime, completed);
+    return completed;
   };
 
   const acquire = async (request: SnapshotSourceRequest): Promise<SnapshotSourceOutcome> => {

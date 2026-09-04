@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
-import { createSnapshotSourceDeadline, remainingSnapshotSourceMs } from './deadline.ts';
+import { remainingSnapshotSourceMs, type SnapshotSourceDeadline } from './deadline.ts';
 import {
   fingerprintSnapshotBridgeSource,
   readSnapshotSourceToolchain,
@@ -36,14 +36,12 @@ export async function ensureSnapshotBridgeBinary(
     host: SnapshotSourceHost;
     runtime: string;
     limits: SnapshotSourceLimits;
-    signal?: AbortSignal;
-    deadline?: import('./deadline.ts').SnapshotSourceDeadline;
+    deadline: SnapshotSourceDeadline;
     sourceRoot?: string;
     cacheRoot?: string;
   }>,
 ): Promise<SnapshotSourceBridgeBinary> {
-  const deadline =
-    input.deadline ?? createSnapshotSourceDeadline(input.limits.maxDurationMs, input.signal);
+  const deadline = input.deadline;
   const sourceRoot = input.sourceRoot ?? resolveSnapshotBridgeSourceRoot(input.host);
   const sourceHash = await fingerprintSnapshotBridgeSource(input.host, sourceRoot, deadline);
   const toolchain = await readSnapshotSourceToolchain(input.host, input.runtime, deadline);
@@ -186,7 +184,7 @@ async function readValidCache(
     cacheKey: string;
     toolchain: SnapshotSourceToolchainIdentity;
   }>,
-  deadline: import('./deadline.ts').SnapshotSourceDeadline,
+  deadline: SnapshotSourceDeadline,
 ): Promise<SnapshotSourceBridgeBinary | undefined> {
   const binaryPath = path.join(entryPath, BRIDGE_FILENAME);
   if (!host.exists(binaryPath) || !host.exists(path.join(entryPath, MANIFEST_FILENAME))) {
@@ -229,9 +227,9 @@ async function readValidCache(
 async function sha256File(
   host: SnapshotSourceHost,
   filePath: string,
-  deadline?: import('./deadline.ts').SnapshotSourceDeadline,
+  deadline: SnapshotSourceDeadline,
 ): Promise<string> {
-  if (deadline) remainingSnapshotSourceMs(deadline, 'native-cache-hash-deadline');
+  remainingSnapshotSourceMs(deadline, 'native-cache-hash-deadline');
   return createHash('sha256')
     .update(await host.readBinary(filePath))
     .digest('hex');

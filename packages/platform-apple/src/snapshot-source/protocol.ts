@@ -70,7 +70,12 @@ export function encodeSnapshotBridgeFrame(
 }
 
 export class SnapshotBridgeFrameDecoder {
-  private buffer = Buffer.alloc(0);
+  private readonly header = Buffer.alloc(FRAME_HEADER_BYTES);
+  private headerBytes = 0;
+  private readonly chunks: Buffer[] = [];
+  private payloadBytes = 0;
+  private expectedBodyBytes: number | undefined;
+  private frame: Buffer | undefined;
   private readonly maxFrameBytes: number;
 
   constructor(maxFrameBytes: number) {
@@ -80,23 +85,64 @@ export class SnapshotBridgeFrameDecoder {
     this.maxFrameBytes = maxFrameBytes;
   }
 
-  push(chunk: Buffer): Buffer[] {
-    this.buffer = Buffer.concat([this.buffer, chunk]);
-    const frames: Buffer[] = [];
-    while (this.buffer.length >= FRAME_HEADER_BYTES) {
-      const bodyBytes = this.buffer.readUInt32BE(0);
-      if (bodyBytes === 0 || bodyBytes > this.maxFrameBytes) {
-        throw snapshotSourceError('malformed-tree', 'frame-limit-exceeded', {
-          bodyBytes,
-          maxFrameBytes: this.maxFrameBytes,
-        });
-      }
-      const frameBytes = FRAME_HEADER_BYTES + bodyBytes;
-      if (this.buffer.length < frameBytes) break;
-      frames.push(this.buffer.subarray(FRAME_HEADER_BYTES, frameBytes));
-      this.buffer = this.buffer.subarray(frameBytes);
+  push(chunk: Buffer): Buffer | undefined {
+    if (this.frame) return this.acceptTrailingChunk(chunk);
+    const header = this.readHeader(chunk);
+    if (!header) return undefined;
+    this.appendPayload(chunk, header.offset, header.bodyBytes);
+    if (this.payloadBytes !== header.bodyBytes) return undefined;
+    this.frame = Buffer.concat(this.chunks, header.bodyBytes);
+    return this.frame;
+  }
+
+  private acceptTrailingChunk(chunk: Buffer): Buffer {
+    if (chunk.length > 0) {
+      throw snapshotSourceError('malformed-tree', 'multiple-frames', {
+        trailingBytes: chunk.length,
+      });
     }
-    return frames;
+    return this.frame!;
+  }
+
+  private readHeader(chunk: Buffer): { offset: number; bodyBytes: number } | undefined {
+    if (this.headerBytes === FRAME_HEADER_BYTES) {
+      return { offset: 0, bodyBytes: this.expectedBodyBytes! };
+    }
+    const headerBytes = Math.min(FRAME_HEADER_BYTES - this.headerBytes, chunk.length);
+    chunk.copy(this.header, this.headerBytes, 0, headerBytes);
+    this.headerBytes += headerBytes;
+    if (this.headerBytes < FRAME_HEADER_BYTES) return undefined;
+    const bodyBytes = this.header.readUInt32BE(0);
+    if (bodyBytes === 0 || bodyBytes > this.maxFrameBytes) {
+      throw snapshotSourceError('malformed-tree', 'frame-limit-exceeded', {
+        bodyBytes,
+        maxFrameBytes: this.maxFrameBytes,
+      });
+    }
+    this.expectedBodyBytes = bodyBytes;
+    return { offset: headerBytes, bodyBytes };
+  }
+
+  private appendPayload(chunk: Buffer, offset: number, bodyBytes: number): void {
+    const remainingBytes = bodyBytes - this.payloadBytes;
+    const chunkBytes = chunk.length - offset;
+    if (chunkBytes > remainingBytes) {
+      throw snapshotSourceError('malformed-tree', 'multiple-frames', {
+        trailingBytes: chunkBytes - remainingBytes,
+      });
+    }
+    if (chunkBytes === 0) return;
+    this.chunks.push(chunk.subarray(offset));
+    this.payloadBytes += chunkBytes;
+  }
+
+  finish(): Buffer {
+    if (this.frame) return this.frame;
+    throw snapshotSourceError('transport-failure', 'bridge-frame-incomplete', {
+      headerBytes: this.headerBytes,
+      payloadBytes: this.payloadBytes,
+      expectedBodyBytes: this.expectedBodyBytes,
+    });
   }
 }
 
