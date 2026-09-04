@@ -18,8 +18,12 @@
   writing `airplane_mode_on` and broadcasting `ACTION_AIRPLANE_MODE_CHANGED` — a broadcast Android
   refuses for non-system callers, so the old path failed *after* writing the setting and left the
   device reporting airplane mode with the network still up (#2223). The response now reports the
-  `airplaneMode` the connectivity service holds after the change, and an Android build that does not
-  expose that command is refused with `UNSUPPORTED_OPERATION` before anything is written.
+   `airplaneMode` the connectivity service holds after the change, and an Android build that does not
+   expose that command is refused with `UNSUPPORTED_OPERATION` before anything is written.
+- Fixed: the MCP registry entry (`server.json`) now declares the fixed `mcp` subcommand via
+  `packageArguments`, so a registry-format launcher — the MCP Registry or the website's
+  `/.well-known/mcp.json` discovery manifest — starts the stdio MCP server. Previously it ran
+  `agent-device` with no subcommand, i.e. the bare CLI (#2275).
 - Breaking (0.21): iOS Appium/WebDriver snapshots now expose engine-owned acquisition facts and
   typed fidelity warnings. The SDK snapshot `truncated` field is optional when Appium cannot report
   hierarchy completeness; regular snapshots fail closed without valid viewport evidence, while

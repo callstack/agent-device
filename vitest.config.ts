@@ -147,6 +147,9 @@ export default defineConfig({
             // Publish preparation spawns only fixture-owned scripts and proves both Android
             // helper families are rebuilt through the shared release/size-report owner.
             'scripts/__tests__/prepare-publish-assets.test.ts',
+            // Parse-only guard on the checked-in registry entry: the npm package must declare
+            // the fixed mcp subcommand, or registry-format launchers run the bare CLI.
+            'scripts/__tests__/mcp-metadata.test.ts',
             'scripts/ios-snapshot-benchmark/*.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
