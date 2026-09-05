@@ -10,11 +10,14 @@ import {
   readDaemonSocketProgressResponse,
   shouldReadDaemonProgressStream,
 } from './daemon-client-progress.ts';
-import { buildDaemonHttpAuthHeaders, buildDaemonHttpUrl } from '../http-contract.ts';
+import {
+  buildDaemonHttpAuthHeaders,
+  buildDaemonHttpUrl,
+  DAEMON_RPC_PROTOCOL_VERSION,
+} from '@agent-device/contracts/daemon-http';
 import { buildHttpRpcPayload, handleDaemonHttpResponseBody } from './daemon-client-rpc.ts';
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
-import { DAEMON_RPC_PROTOCOL_VERSION } from '../http-health.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 
 type ResolvedDaemonTransport = 'socket' | 'http';

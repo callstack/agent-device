@@ -32,12 +32,13 @@ import {
   serializeDaemonRpcResponseEnvelope,
   shouldStreamRequestProgress,
 } from '../request-progress-protocol.ts';
-import { buildDaemonHealthPayload } from '../http-health.ts';
 import {
+  buildDaemonHealthPayload,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
-} from '../http-contract.ts';
+} from '@agent-device/contracts/daemon-http';
+import { readVersion } from '@agent-device/host-kit/version';
 import { sendRestJsonError, statusCodeForNormalizedError } from '../http-errors.ts';
 import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
@@ -577,7 +578,7 @@ export async function createDaemonHttpServer(options: {
     if (req.method === 'GET' && req.url === '/health') {
       res.statusCode = 200;
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify(buildDaemonHealthPayload('agent-device-daemon')));
+      res.end(JSON.stringify(buildDaemonHealthPayload('agent-device-daemon', readVersion())));
       return;
     }
 

@@ -10,7 +10,7 @@ import type { DaemonRequestMeta } from '@agent-device/kernel/contracts';
 import {
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpTenantHeaders,
-} from '../daemon/http-contract.ts';
+} from '@agent-device/contracts/daemon-http';
 
 const REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS = 90_000;
 

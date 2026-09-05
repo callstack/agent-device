@@ -86,7 +86,7 @@ const MUTATIONS: readonly WireMutation[] = [
   },
   {
     breakClass: 'auth projection: the client stops sending the bearer form',
-    file: 'src/daemon/http-contract.ts',
+    file: 'packages/contracts/src/daemon-http.ts',
     name: 'buildDaemonHttpAuthHeaders',
     from: 'authorization: `Bearer ${normalizedToken}`,',
     to: '',

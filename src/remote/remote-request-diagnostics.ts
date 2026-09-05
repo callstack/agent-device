@@ -25,7 +25,7 @@ import {
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpTenantHeaders,
   buildDaemonHttpUrl,
-} from '../daemon/http-contract.ts';
+} from '@agent-device/contracts/daemon-http';
 import { resolveRemoteRequestDiagnosticsPath } from '../daemon/session-store.ts';
 
 const REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS = 10_000;

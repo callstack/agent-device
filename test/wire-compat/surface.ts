@@ -42,8 +42,7 @@ const KERNEL_CONTRACTS = 'packages/kernel/src/contracts.ts';
 const KERNEL_ERRORS = 'packages/kernel/src/errors.ts';
 const KERNEL_DEVICE = 'packages/kernel/src/device.ts';
 const REQUEST_PROGRESS = 'packages/contracts/src/request-progress.ts';
-const HTTP_CONTRACT = 'src/daemon/http-contract.ts';
-const HTTP_HEALTH = 'src/daemon/http-health.ts';
+const DAEMON_HTTP = 'packages/contracts/src/daemon-http.ts';
 const HTTP_ERRORS = 'src/daemon/http-errors.ts';
 const HTTP_SERVER = 'src/daemon/server/http-server.ts';
 const UPLOAD_HTTP = 'src/daemon/upload-http.ts';
@@ -68,13 +67,8 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
   {
     adrBullet: 'HTTP route requirements for /health, /rpc, /upload, or /artifacts/*.',
     declarations: [
-      ...from(
-        HTTP_CONTRACT,
-        'DAEMON_HTTP_BASE_PATH',
-        'buildDaemonHttpUrl',
-        'buildDaemonHttpBaseUrl',
-      ),
-      ...from(HTTP_HEALTH, 'DaemonHealthPayload', 'buildDaemonHealthPayload'),
+      ...from(DAEMON_HTTP, 'DAEMON_HTTP_BASE_PATH', 'buildDaemonHttpUrl', 'buildDaemonHttpBaseUrl'),
+      ...from(DAEMON_HTTP, 'DaemonHealthPayload', 'buildDaemonHealthPayload'),
       // A shrunk body limit rejects payloads a released client still sends, so
       // it is a route requirement rather than an implementation detail.
       ...from(HTTP_SERVER, 'MAX_HTTP_RPC_BODY_BYTES'),
@@ -134,7 +128,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
     adrBullet: 'Authentication semantics required to authorize RPC, upload, or artifact requests.',
     declarations: [
       ...from(
-        HTTP_CONTRACT,
+        DAEMON_HTTP,
         'buildDaemonHttpAuthHeaders',
         'DAEMON_HTTP_TENANT_HEADER',
         'buildDaemonHttpTenantHeaders',

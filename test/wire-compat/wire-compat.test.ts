@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { DAEMON_RPC_PROTOCOL_VERSION } from '../../src/daemon/http-health.ts';
+import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 import { isExternalWireSpecifier, WIRE_CLOSURE_WAIVERS } from './closure-policy.ts';
 import { findClosureGaps } from './closure.ts';
 import { digestDeclaration } from './declaration-digest.ts';

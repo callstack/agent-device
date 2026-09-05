@@ -11,7 +11,7 @@ import {
   prepareUploadedArtifact,
   trackDownloadableArtifact,
 } from '../../../src/daemon/artifact-tracking.ts';
-import { DAEMON_RPC_PROTOCOL_VERSION } from '../../../src/daemon/http-health.ts';
+import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
 import {
   emitRequestProgress,

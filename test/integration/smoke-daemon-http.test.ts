@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { DAEMON_RPC_PROTOCOL_VERSION } from '../../src/daemon/http-health.ts';
+import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
 import { stopProcessForTakeover } from '../../src/daemon/daemon-process.ts';
 import { formatResultDebug } from './cli-json.ts';
