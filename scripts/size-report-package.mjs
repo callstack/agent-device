@@ -1,13 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  formatBytes,
-  formatDiff,
-  formatMaybeBytes,
-  formatSignedBytes,
-} from './size-report-format.mjs';
-
 export const SNAPSHOT_BRIDGE_ASSET_PATHS = Object.freeze([
   'apple/snapshot-bridge/SnapshotBridge.m',
   'apple/snapshot-bridge/SnapshotBridgeRuntime.m',
@@ -188,66 +181,4 @@ function summarizeEntries(unpackedSize, entries) {
     );
   }
   return components;
-}
-
-export function formatPackageComponents(currentPack, basePack) {
-  const currentById = new Map(
-    (currentPack.components ?? []).map((component) => [component.id, component]),
-  );
-  const baseById = new Map(
-    (basePack?.components ?? []).map((component) => [component.id, component]),
-  );
-  const rows = PACKAGE_COMPONENTS.map((component) => {
-    const current = currentById.get(component.id)?.unpackedBytes ?? 0;
-    const base = baseById.get(component.id)?.unpackedBytes;
-    return `| ${component.label} | ${formatMaybeBytes(base)} | ${formatBytes(current)} | ${formatDiff(base, current)} |`;
-  });
-  return `### npm unpacked components
-
-| Component | Base | Current | Diff |
-|---|---:|---:|---:|
-${rows.join('\n')}
-`;
-}
-
-export function formatPackedFiles(currentEntries, baseEntries) {
-  if (!baseEntries) return formatTopPackedFiles(currentEntries);
-  const currentByPath = new Map(currentEntries.map((entry) => [entry.path, entry.size]));
-  const baseByPath = new Map(baseEntries.map((entry) => [entry.path, entry.size]));
-  const paths = new Set([...currentByPath.keys(), ...baseByPath.keys()]);
-  const rows = [...paths]
-    .map((filePath) => {
-      const current = currentByPath.get(filePath) ?? 0;
-      const base = baseByPath.get(filePath) ?? 0;
-      return { path: filePath, base, current, diff: current - base };
-    })
-    .filter((entry) => entry.diff !== 0)
-    .sort((left, right) => Math.abs(right.diff) - Math.abs(left.diff))
-    .slice(0, 10)
-    .map(
-      (entry) =>
-        `| \`${entry.path}\` | ${formatBytes(entry.base)} | ${formatBytes(entry.current)} | ${formatSignedBytes(entry.diff)} |`,
-    );
-  if (rows.length === 0) {
-    return '### Top changed packed files\n\nNo changed packed files.\n';
-  }
-  return `### Top changed packed files
-
-| Packed file | Base | Current | Diff |
-|---|---:|---:|---:|
-${rows.join('\n')}
-`;
-}
-
-function formatTopPackedFiles(entries) {
-  const rows = [...entries]
-    .sort((left, right) => right.size - left.size)
-    .slice(0, 10)
-    .map((entry) => `| \`${entry.path}\` | ${formatBytes(entry.size)} |`);
-  return `### Top packed files
-
-| Packed file | Unpacked |
-|---|---:|
-${rows.join('\n')}
-`;
 }

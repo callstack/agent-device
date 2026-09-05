@@ -103,40 +103,37 @@ test('component bytes sum exactly to npm pack unpackedSize', () => {
   );
 });
 
-test('Markdown reports component diffs and changed packed files', () => {
+test('Markdown emphasizes total install size and startup without duplicate breakdowns', () => {
   const current = {
-    js: { rawBytes: 10, gzipBytes: 8 },
+    js: { rawBytes: 300, gzipBytes: 100 },
+    bundled: { rawBytes: 300, gzipBytes: 100 },
     npmPack: {
       tarballBytes: 100,
-      unpackedBytes: 2319,
+      unpackedBytes: 300,
       components: summarizeNpmPackComponents(fixturePack),
       entries: fixturePack.files,
     },
+    cleanInstalled: { packageBytes: 300, totalBytes: 350, files: 3 },
+    startup: { runs: 7, benchmarks: [{ name: 'CLI --help', medianMs: 20 }] },
     chunks: [],
   };
-  const baseEntries = fixturePack.files.map((entry) =>
-    entry.path === 'dist/src/index.js' ? { ...entry, size: 300 } : entry,
-  );
   const base = {
-    js: { rawBytes: 10, gzipBytes: 8 },
-    npmPack: {
-      tarballBytes: 100,
-      unpackedBytes: 2218,
-      components: summarizeNpmPackComponents({
-        ...fixturePack,
-        unpackedSize: 2218,
-        files: baseEntries,
-      }),
-      entries: baseEntries,
-    },
-    chunks: [],
+    ...current,
+    npmPack: { ...current.npmPack, tarballBytes: 90, unpackedBytes: 200 },
+    cleanInstalled: { packageBytes: 200, totalBytes: 900, files: 8 },
+    startup: { runs: 7, benchmarks: [{ name: 'CLI --help', medianMs: 25 }] },
   };
 
   const markdown = formatMarkdown(current, base);
 
-  assert.match(markdown, /### npm unpacked components/);
-  assert.match(markdown, /\| JS \/ dist source \| 402 B \| 503 B \| \+101 B \|/);
-  assert.match(markdown, /\| Other package files \| 177 B \| 177 B \| 0 B \|/);
-  assert.match(markdown, /### Top changed packed files/);
-  assert.match(markdown, /`dist\/src\/index\.js` \| 300 B \| 401 B \| \+101 B/);
+  assert.match(markdown, /<!-- agent-device-size-report -->/);
+  assert.match(markdown, /\| Installed \(including dependencies\) \| 900 B \| 350 B \| -550 B \|/);
+  assert.match(markdown, /\| Package \(unpacked\) \| 200 B \| 300 B \| \+100 B \|/);
+  assert.match(markdown, /\| Package \(download\) \| 90 B \| 100 B \| \+10 B \|/);
+  assert.match(markdown, /\| CLI --help \| 25.0 ms \| 20.0 ms \| -5.0 ms \|/);
+  assert.doesNotMatch(markdown, /JS raw|JS gzip|npm bundled|components|Top.*chunks|packed files/);
+  assert.match(
+    formatMarkdown(current, null),
+    /\| Installed \(including dependencies\) \| - \| 350 B \| - \|/,
+  );
 });

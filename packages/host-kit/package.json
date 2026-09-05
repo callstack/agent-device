@@ -6,13 +6,13 @@
   "description": "Private host-mechanics package: each export is one narrow capability port over the host machine \u2014 running commands, observing and owning processes, diagnostics, retry/deadline, archive extraction, durable files and locks, request-scoped plumbing, and the installed version.",
   "dependencies": {
     "@agent-device/contracts": "workspace:*",
-    "@agent-device/kernel": "workspace:*",
-    "yauzl": "^3.4.0"
+    "@agent-device/kernel": "workspace:*"
   },
   "devDependencies": {
     "@types/tar-stream": "^3.1.4",
     "@types/yauzl": "^3.4.0",
-    "tar-stream": "^3.2.0"
+    "tar-stream": "^3.2.0",
+    "yauzl": "^3.4.0"
   },
   "exports": {
     "./archive": {

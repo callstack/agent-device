@@ -35,7 +35,10 @@ export function measureCleanInstalledPackage(tarballPath, packageName) {
       throw new Error(`Clean install did not create node_modules/${packageName}.`);
     }
     assertInstalledSnapshotBridge(packageDir);
-    return measureDirectory(packageDir);
+    return {
+      ...measureDirectory(packageDir),
+      totalBytes: measureDirectory(path.join(consumerDir, 'node_modules')).packageBytes,
+    };
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
   }

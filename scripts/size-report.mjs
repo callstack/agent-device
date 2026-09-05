@@ -5,17 +5,8 @@ import { execFileSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import {
-  formatBytes,
-  formatDiff,
-  formatMaybeBytes,
-  formatSignedBytes,
-} from './size-report-format.mjs';
-import {
-  collectNpmPack,
-  formatPackageComponents,
-  formatPackedFiles,
-} from './size-report-package.mjs';
+import { formatBytes, formatDiff, formatMaybeBytes } from './size-report-format.mjs';
+import { collectNpmPack } from './size-report-package.mjs';
 import { measureCleanInstalledPackage } from './size-report-install.mjs';
 import { preparePublishAssets } from './prepare-publish-assets.mjs';
 
@@ -228,39 +219,18 @@ function walk(root) {
 
 function formatMarkdown(report, baseReport) {
   const rows = [
-    metricRow('JS raw', baseReport?.js.rawBytes, report.js.rawBytes),
-    metricRow('JS gzip', baseReport?.js.gzipBytes, report.js.gzipBytes),
-    metricRow('npm tarball', baseReport?.npmPack.tarballBytes, report.npmPack.tarballBytes),
-    metricRow('npm unpacked', baseReport?.npmPack.unpackedBytes, report.npmPack.unpackedBytes),
+    metricRow(
+      'Installed (including dependencies)',
+      baseReport?.cleanInstalled?.totalBytes,
+      report.cleanInstalled.totalBytes,
+    ),
+    metricRow(
+      'Package (unpacked)',
+      baseReport?.npmPack.unpackedBytes,
+      report.npmPack.unpackedBytes,
+    ),
+    metricRow('Package (download)', baseReport?.npmPack.tarballBytes, report.npmPack.tarballBytes),
   ];
-  if (report.bundled) {
-    rows.splice(
-      2,
-      0,
-      metricRow('npm bundled raw', baseReport?.bundled?.rawBytes, report.bundled.rawBytes),
-      metricRow('npm bundled gzip', baseReport?.bundled?.gzipBytes, report.bundled.gzipBytes),
-    );
-  }
-  if (report.cleanInstalled) {
-    rows.push(
-      metricRow(
-        'npm clean-installed',
-        baseReport?.cleanInstalled?.packageBytes,
-        report.cleanInstalled.packageBytes,
-      ),
-    );
-  }
-
-  const changedChunks = baseReport
-    ? formatChangedChunks(report.chunks, baseReport.chunks ?? [])
-    : formatTopChunks(report.chunks);
-  const components = formatPackageComponents(report.npmPack, baseReport?.npmPack);
-  const startup = formatStartupBenchmarks(report.startup, baseReport?.startup);
-  const packedFiles = formatPackedFiles(
-    report.npmPack.entries,
-    baseReport ? (baseReport.npmPack?.entries ?? []) : undefined,
-  );
-
   return `${COMMENT_MARKER}
 ## Size Report
 
@@ -268,57 +238,11 @@ function formatMarkdown(report, baseReport) {
 |---|---:|---:|---:|
 ${rows.join('\n')}
 
-${components}
-${startup}
-${changedChunks}
-${packedFiles}
-`;
+${formatStartupBenchmarks(report.startup, baseReport?.startup)}`;
 }
 
 function metricRow(label, base, current) {
   return `| ${label} | ${formatMaybeBytes(base)} | ${formatBytes(current)} | ${formatDiff(base, current)} |`;
-}
-
-function formatTopChunks(chunks) {
-  const rows = chunks.slice(0, 5).map((chunk) => {
-    return `| \`${chunk.path}\` | ${formatBytes(chunk.rawBytes)} | ${formatBytes(chunk.gzipBytes)} |`;
-  });
-  return `Top chunks:
-
-| Chunk | Raw | Gzip |
-|---|---:|---:|
-${rows.join('\n')}
-`;
-}
-
-function formatChangedChunks(currentChunks, baseChunks) {
-  const baseByPath = new Map(baseChunks.map((chunk) => [chunk.path, chunk]));
-  const rows = currentChunks
-    .map((chunk) => {
-      const base = baseByPath.get(chunk.path);
-      return {
-        path: chunk.path,
-        rawDiff: base ? chunk.rawBytes - base.rawBytes : chunk.rawBytes,
-        gzipDiff: base ? chunk.gzipBytes - base.gzipBytes : chunk.gzipBytes,
-      };
-    })
-    .filter((chunk) => chunk.rawDiff !== 0 || chunk.gzipDiff !== 0)
-    .sort((left, right) => Math.abs(right.gzipDiff) - Math.abs(left.gzipDiff))
-    .slice(0, 5)
-    .map((chunk) => {
-      return `| \`${chunk.path}\` | ${formatSignedBytes(chunk.rawDiff)} | ${formatSignedBytes(chunk.gzipDiff)} |`;
-    });
-
-  if (rows.length === 0) {
-    return 'Top changed chunks: no changes in the largest emitted chunks.\n';
-  }
-
-  return `Top changed chunks:
-
-| Chunk | Raw diff | Gzip diff |
-|---|---:|---:|
-${rows.join('\n')}
-`;
 }
 
 function formatStartupBenchmarks(startup, baseStartup) {
