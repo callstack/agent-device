@@ -26,12 +26,16 @@ both routes file-by-file at HEAD, and replaces the unauditable numbers.
   first call that continues toward the platform call (not every branch — e.g. `handleSnapshotCommands`
   routes `alert`/`settings`/`diff`/`wait` too; only the `snapshot` arm is traced), record the file
   and the one line/function that hands off to the next hop.
-- **Commit measured at**: `132ffe1da296717c268e836fc02558d00e61cfbd` (this branch's base,
-  `origin/main` fast-forwarded; the fix in this PR does not touch any traced source file).
+- **Commit measured at**: originally `132ffe1da296717c268e836fc02558d00e61cfbd` (this branch's
+  base, `origin/main` fast-forwarded). PR #2302 (refactor(daemon): inline the touch sub-switch
+  into the interaction dispatcher) merged `interaction-touch.ts` into `interaction.ts`, collapsing
+  hop 6 into hop 5 of the `press`/Android table below; that table (and the counts and hop
+  references that depend on it) has been updated in the same PR so the trace does not go stale
+  on merge.
 
 ## `press` / Android: HTTP entry → `adb input tap`
 
-24 files, 7 pass-through, 9 thin, 7 substantive, 1 terminal.
+23 files, 6 pass-through, 9 thin, 7 substantive, 1 terminal.
 
 | # | File | Hand-off | Class |
 |---|------|----------|-------|
@@ -39,26 +43,25 @@ both routes file-by-file at HEAD, and replaces the unauditable numbers.
 | 2 | `src/daemon/request-router.ts` | `createRequestHandler` → `runRequestHandlerChain` | pass-through |
 | 3 | `src/daemon/request-handler-chain.ts` | routes `command: 'press'` to `runInteractionHandler`, lazy-loads `interaction/index.ts` | thin |
 | 4 | `src/daemon/interaction/index.ts` | re-exports the lazy-loaded internal module's `handleInteractionCommands` | pass-through |
-| 5 | `src/daemon/interaction/internal/interaction.ts` | `handleInteractionCommands` → `handleTouchInteractionCommands` | pass-through |
-| 6 | `src/daemon/interaction/internal/interaction-touch.ts` | switches `press`/`click`/`longpress`/`hover` to `dispatchTargetedTouchViaRuntime` | thin |
-| 7 | `src/daemon/interaction/internal/interaction-touch-press.ts` | admits the touch, tries the direct-iOS fast path (no-op on Android), calls `dispatchRuntimeInteraction` with a `run` callback that calls `runtime.interactions.press` | substantive |
-| 8 | `src/daemon/interaction/internal/interaction-touch-prepare.ts` | `prepareTouchDispatch` → `resolveBoundTouchRuntime` | thin |
-| 9 | `src/daemon/touch-runtime.ts` | resolves the touch plan, calls `bind(device, tapPointUse)`, wraps the result as `BoundTouchExecutor.tapPoint` | substantive |
-| 10 | `src/daemon/runtime-admission.ts` | `admitRuntimeOperations` → `requireDeviceBinding(bindDevice)` | thin |
-| 11 | `src/daemon/request-runtime-binding.ts` | `bindDevice` → per-device-cached `gateway.bind(...)` | substantive |
-| 12 | `src/platform-runtime-gateway.ts` | composed gateway's `loadLocal`: loads the host, calls `module.loadRuntime(host)` | substantive |
-| 13 | `src/platform-runtime.ts` | declared boundary (ADR §1/§2): wires `androidRuntimeModule` into `platformRuntimeModules` and supplies `loadHost` | thin |
-| 14 | `src/platform-runtime-operation-host.ts` | `createPlatformRuntimeHost` builds `host`, incl. `localInteractors: createLocalApplicationInteractorHost()` | thin |
-| 15 | `src/platform-runtime-local-application-interactors.ts` | `resolve()` lazy-imports `core/interactors.ts`, calls `getLocalInteractor` | pass-through |
-| 16 | `src/core/interactors.ts` | `getLocalInteractor` → `getPlugin(device.platform).createInteractor` | pass-through |
-| 17 | `src/core/interactors/register-builtins.ts` | plugin registry; the `android` entry lazy-imports `./android.ts` | thin |
-| 18 | `src/core/interactors/android.ts` | `createAndroidInteractor` builds the `Interactor`, incl. `tap: (x, y) => pressAndroid(device, x, y)` | substantive |
-| 19 | `packages/platform-android/src/index.ts` | declared boundary (ADR §2 `loadRuntime` pairing): lazy-imports `./runtime.ts`, calls `createAndroidPlatformRuntime` | pass-through |
-| 20 | `packages/platform-android/src/runtime.ts` | `createAndroidPlatformRuntime`'s `bind()` builds `operations` via `androidInteractionOperations` | substantive |
-| 21 | `packages/contracts/src/local-interactor-operation-set.ts` | `bindLocalInteractorOperationSet` → `bindLocalTouchInteractor` | pass-through |
-| 22 | `packages/contracts/src/touch-runtime.ts` | `bindTouch`'s `tapPoint` op resolves the interactor (re-enters hop 15's `resolve`), then `executeGenericPress` calls `interactor.tap(x, y)` | substantive |
-| 23 | `packages/platform-android/src/input-actions.ts` | `pressAndroid(device, x, y)` builds the adb argv, calls `runAndroidAdb` | thin |
-| 24 | `packages/platform-android/src/adb.ts` | `runAndroidAdb` issues `adb shell input tap <x> <y>` | **terminal** |
+| 5 | `src/daemon/interaction/internal/interaction.ts` | `handleInteractionCommands` switches `press`/`click`/`longpress`/`hover` to `dispatchTargetedTouchViaRuntime` (`fill` to `dispatchFillViaRuntime`) | thin |
+| 6 | `src/daemon/interaction/internal/interaction-touch-press.ts` | admits the touch, tries the direct-iOS fast path (no-op on Android), calls `dispatchRuntimeInteraction` with a `run` callback that calls `runtime.interactions.press` | substantive |
+| 7 | `src/daemon/interaction/internal/interaction-touch-prepare.ts` | `prepareTouchDispatch` → `resolveBoundTouchRuntime` | thin |
+| 8 | `src/daemon/touch-runtime.ts` | resolves the touch plan, calls `bind(device, tapPointUse)`, wraps the result as `BoundTouchExecutor.tapPoint` | substantive |
+| 9 | `src/daemon/runtime-admission.ts` | `admitRuntimeOperations` → `requireDeviceBinding(bindDevice)` | thin |
+| 10 | `src/daemon/request-runtime-binding.ts` | `bindDevice` → per-device-cached `gateway.bind(...)` | substantive |
+| 11 | `src/platform-runtime-gateway.ts` | composed gateway's `loadLocal`: loads the host, calls `module.loadRuntime(host)` | substantive |
+| 12 | `src/platform-runtime.ts` | declared boundary (ADR §1/§2): wires `androidRuntimeModule` into `platformRuntimeModules` and supplies `loadHost` | thin |
+| 13 | `src/platform-runtime-operation-host.ts` | `createPlatformRuntimeHost` builds `host`, incl. `localInteractors: createLocalApplicationInteractorHost()` | thin |
+| 14 | `src/platform-runtime-local-application-interactors.ts` | `resolve()` lazy-imports `core/interactors.ts`, calls `getLocalInteractor` | pass-through |
+| 15 | `src/core/interactors.ts` | `getLocalInteractor` → `getPlugin(device.platform).createInteractor` | pass-through |
+| 16 | `src/core/interactors/register-builtins.ts` | plugin registry; the `android` entry lazy-imports `./android.ts` | thin |
+| 17 | `src/core/interactors/android.ts` | `createAndroidInteractor` builds the `Interactor`, incl. `tap: (x, y) => pressAndroid(device, x, y)` | substantive |
+| 18 | `packages/platform-android/src/index.ts` | declared boundary (ADR §2 `loadRuntime` pairing): lazy-imports `./runtime.ts`, calls `createAndroidPlatformRuntime` | pass-through |
+| 19 | `packages/platform-android/src/runtime.ts` | `createAndroidPlatformRuntime`'s `bind()` builds `operations` via `androidInteractionOperations` | substantive |
+| 20 | `packages/contracts/src/local-interactor-operation-set.ts` | `bindLocalInteractorOperationSet` → `bindLocalTouchInteractor` | pass-through |
+| 21 | `packages/contracts/src/touch-runtime.ts` | `bindTouch`'s `tapPoint` op resolves the interactor (re-enters hop 14's `resolve`), then `executeGenericPress` calls `interactor.tap(x, y)` | substantive |
+| 22 | `packages/platform-android/src/input-actions.ts` | `pressAndroid(device, x, y)` builds the adb argv, calls `runAndroidAdb` | thin |
+| 23 | `packages/platform-android/src/adb.ts` | `runAndroidAdb` issues `adb shell input tap <x> <y>` | **terminal** |
 
 ## `snapshot` / iOS Simulator (XCTest): HTTP entry → runner fetch
 
@@ -97,11 +100,12 @@ The façade PRs the plan sheet named as a candidate explanation (#2178, #2222, #
 **before** `e624ef9d3f` — the commit the ADR cites for its 38/29 measurement — so they cannot be
 why that count is higher than this one; they were already in effect when 38/29 was recorded.
 
-This trace lands at 24 hops for both routes. The ADR text names no ordered chain, command/artifact,
-or counting definition for 38/29, so the discrepancy cannot be resolved against it. The most likely
-explanation is a different counting unit (for example, named exports or every static/type import
-touched rather than distinct production files on the call path). **Treat 38 and 29 as superseded by
-the auditable 24/24 measured here**, not as a second data point to reconcile.
+This trace lands at 23 hops for `press`/Android and 24 hops for `snapshot`/iOS. The ADR text names
+no ordered chain, command/artifact, or counting definition for 38/29, so the discrepancy cannot be
+resolved against it. The most likely explanation is a different counting unit (for example, named
+exports or every static/type import touched rather than distinct production files on the call
+path). **Treat 38 and 29 as superseded by the auditable 23/24 measured here**, not as a second data
+point to reconcile.
 
 ## The ≤14 target
 
@@ -110,14 +114,14 @@ Splitting each traced route into stages:
 - **Router spine** (shared by every command): hops 1-3, `http-server.ts` → `request-router.ts` →
   `request-handler-chain.ts`. 3 files, fixed.
 - **Admission/binding** (resolve the session's device, admit the plan, obtain a bound
-  capture/tap closure): press hops 4-11 (8 files, 2 substantive); snapshot hops 4-9 (6 files, 3
+  capture/tap closure): press hops 4-10 (7 files, 2 substantive); snapshot hops 4-9 (6 files, 3
   substantive).
 - **Gateway resolution** (the declared `platform-runtime.ts` boundary and its `loadRuntime`
-  pairing): hops 12-14/10-13 (3 files, 2 substantive) on both routes — these files are pinned as
+  pairing): hops 11-13/10-13 (3 files, 2 substantive) on both routes — these files are pinned as
   boundaries by Decision §1/§2 and do not collapse regardless of target.
 - **Interactor resolution** (the local-interactor plugin lookup, a second object graph parallel
   to the operations bind above): 3 pass-through/thin files on both routes.
-- **Platform glue + terminal call**: press hops 18-24 (7 files, 4 substantive incl. terminal);
+- **Platform glue + terminal call**: press hops 17-23 (7 files, 4 substantive incl. terminal);
   snapshot hops 20-24 (5 files, 5 substantive incl. terminal, because the XCTest runner protocol
   — session lifecycle, recycle budget, transport — has no Android equivalent to `adb`'s
   single-process-call shape).
@@ -125,7 +129,7 @@ Splitting each traced route into stages:
 Collapsing every pass-through and thin file in the admission/binding and interactor-resolution
 stages down to one hop each (folding `interaction-touch-prepare.ts` into `interaction-touch-press.ts`,
 `runtime-admission.ts` into `touch-runtime.ts`, the interactor-resolution three-file chain into
-one lookup, etc.) removes roughly 10 files from `press` (24 → ~14) and roughly 9 from `snapshot`
+one lookup, etc.) removes roughly 9 files from `press` (23 → ~14) and roughly 9 from `snapshot`
 (24 → ~15), leaving mostly the substantive hops plus the fixed spine and declared boundaries.
 
 That arithmetic makes ≤14 plausible for `press`/Android under an aggressive but not obviously

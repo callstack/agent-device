@@ -20,7 +20,7 @@ import {
 } from './interaction-touch-fixtures.ts';
 
 // Router ownership: one representative per touch command proves
-// handleTouchInteractionCommands claims press/click/longpress/hover/fill.
+// handleInteractionCommands claims press/click/longpress/hover/fill.
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
