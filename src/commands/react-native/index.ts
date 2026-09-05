@@ -1,7 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { enumField, requiredField } from '../command-input.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { commonInputFromFlags, direct, requiredDaemonString } from '../cli-grammar/common.ts';
@@ -21,11 +20,6 @@ export const reactNativeCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-export const reactNativeCommandDefinition = defineExecutableCommand(
-  reactNativeCommandMetadata,
-  (client, input) => client.command.reactNative(input),
-);
-
 const reactNativeCliSchema = {
   usageOverride: 'react-native dismiss-overlay',
   listUsageOverride: 'react-native dismiss-overlay',
@@ -41,13 +35,13 @@ export const reactNativeDaemonWriter: DaemonWriter = direct(REACT_NATIVE_COMMAND
   requiredDaemonString(input.action, 'react-native requires action'),
 ]);
 
-const reactNativeCommandFacet = defineCommandFacet({
+export const reactNativeCommandFacet = defineCommandFacet({
   name: REACT_NATIVE_COMMAND_NAME,
   text: {
     summary: 'Run React Native automation helpers',
   },
   metadata: reactNativeCommandMetadata,
-  definition: reactNativeCommandDefinition,
+  run: (client, input) => client.command.reactNative(input),
   cliSchema: reactNativeCliSchema,
   cliReader: reactNativeCliReader,
   daemonWriter: reactNativeDaemonWriter,
