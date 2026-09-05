@@ -1,3 +1,4 @@
+import type { CliFlags } from '@agent-device/contracts/command';
 import type {
   AgentDeviceRequestOverrides,
   AgentDeviceSelectionOptions,
@@ -34,10 +35,19 @@ export type CommonCommandInput = Pick<
 export type CommonInputReadOptions = { readTargetAlias?: boolean };
 
 /**
+ * `cli-grammar/common.ts`'s two flag-derived projections a row can join:
+ * `input` is the reader-input shape (`commonInputFromFlags`, compacted), `selection` is the
+ * client-options shape kept by `is`/`find`/`wait`/`settings` (`selectionOptionsFromFlags`,
+ * not compacted). A row absent from both is never read off `CliFlags` at all.
+ */
+export type CommonFlagProjection = 'input' | 'selection';
+
+/**
  * One row per input key every command accepts. The JSON schema, the readers,
- * the client-options projection, and the model-facing audience boundary are all
- * derived from this table, so adding or reclassifying a common key is a one-row
- * edit rather than a matching edit in four parallel enumerations.
+ * the client-options projection, the model-facing audience boundary, and the two
+ * flag-derived projections below are all derived from this table, so adding or
+ * reclassifying a common key is a one-row edit rather than a matching edit across
+ * parallel enumerations.
  */
 type CommonInputFieldSpec = {
   /** Advertised property. Absent for a key each command schema carries itself (`noRecord`). */
@@ -48,7 +58,21 @@ type CommonInputFieldSpec = {
   clientKey?: string;
   /** Who may write the key. Absent means the model — see `input-audience.ts`. */
   audience?: InputAudience;
-};
+} & (
+  | {
+      /** Which of `cli-grammar/common.ts`'s flag-derived projections include this row. */
+      flagIn: readonly CommonFlagProjection[];
+      /**
+       * The `CliFlags` property this key reads, when its spelling differs (e.g. `deviceTarget`
+       * reads `flags.target`) or matches outright. Required together with `flagIn` and typed
+       * against `CliFlags`, so a row can only join a projection by naming a flag that actually
+       * exists — `cwd` and `debug`, which have no `CliFlags` counterpart, cannot declare
+       * `flagIn` at all rather than compiling to a binding that reads `undefined` forever.
+       */
+      flagKey: keyof CliFlags;
+    }
+  | { flagIn?: undefined; flagKey?: undefined }
+);
 
 /**
  * The common operator shape: the value comes from the key's own environment
@@ -64,6 +88,8 @@ const COMMON_INPUT_FIELDS = {
   session: {
     schema: { type: 'string', description: 'Agent-device session name.' },
     read: (record) => optionalString(record, 'session'),
+    flagKey: 'session',
+    flagIn: ['input'],
   },
   platform: {
     schema: {
@@ -72,6 +98,8 @@ const COMMON_INPUT_FIELDS = {
       description: 'Platform selector used to resolve a device.',
     },
     read: (record) => optionalEnum(record, 'platform', PLATFORM_SELECTORS),
+    flagKey: 'platform',
+    flagIn: ['input', 'selection'],
   },
   deviceTarget: {
     schema: {
@@ -81,6 +109,8 @@ const COMMON_INPUT_FIELDS = {
     },
     read: readDeviceTarget,
     clientKey: 'target',
+    flagKey: 'target',
+    flagIn: ['input', 'selection'],
   },
   target: {
     // Read through `deviceTarget` above, which reconciles the two spellings.
@@ -97,6 +127,8 @@ const COMMON_INPUT_FIELDS = {
       description: 'Device name selector (a UDID belongs in udid, a serial in serial).',
     },
     read: (record) => optionalString(record, 'device'),
+    flagKey: 'device',
+    flagIn: ['input', 'selection'],
   },
   udid: {
     schema: {
@@ -105,6 +137,8 @@ const COMMON_INPUT_FIELDS = {
         'Apple device or simulator UDID; the selector that pins one device when several share a name.',
     },
     read: (record) => optionalString(record, 'udid'),
+    flagKey: 'udid',
+    flagIn: ['input', 'selection'],
   },
   serial: {
     schema: {
@@ -112,6 +146,8 @@ const COMMON_INPUT_FIELDS = {
       description: 'Android, HarmonyOS, or Vega VVD serial selector.',
     },
     read: (record) => optionalString(record, 'serial'),
+    flagKey: 'serial',
+    flagIn: ['input', 'selection'],
   },
   iosSimulatorDeviceSet: {
     schema: {
@@ -120,6 +156,8 @@ const COMMON_INPUT_FIELDS = {
     },
     read: (record) => optionalString(record, 'iosSimulatorDeviceSet'),
     audience: operatorAudience({ envFlagKeys: [], operatorConfig: true }),
+    flagKey: 'iosSimulatorDeviceSet',
+    flagIn: ['input', 'selection'],
   },
   iosXctestrunFile: {
     schema: {
@@ -128,6 +166,8 @@ const COMMON_INPUT_FIELDS = {
     },
     read: (record) => optionalString(record, 'iosXctestrunFile'),
     audience: ENV_OR_OPERATOR_CONFIG,
+    flagKey: 'iosXctestrunFile',
+    flagIn: ['input'],
   },
   iosXctestDerivedDataPath: {
     schema: {
@@ -136,6 +176,8 @@ const COMMON_INPUT_FIELDS = {
     },
     read: (record) => optionalString(record, 'iosXctestDerivedDataPath'),
     audience: ENV_OR_OPERATOR_CONFIG,
+    flagKey: 'iosXctestDerivedDataPath',
+    flagIn: ['input'],
   },
   iosXctestEnvDir: {
     schema: {
@@ -144,6 +186,8 @@ const COMMON_INPUT_FIELDS = {
     },
     read: (record) => optionalString(record, 'iosXctestEnvDir'),
     audience: ENV_OR_OPERATOR_CONFIG,
+    flagKey: 'iosXctestEnvDir',
+    flagIn: ['input'],
   },
   androidDeviceAllowlist: {
     schema: {
@@ -151,13 +195,22 @@ const COMMON_INPUT_FIELDS = {
       description: 'Android serial allowlist used for device resolution.',
     },
     read: (record) => optionalString(record, 'androidDeviceAllowlist'),
+    flagKey: 'androidDeviceAllowlist',
+    flagIn: ['input', 'selection'],
   },
   noRecord: {
-    // Seam 2 of 3 for `--no-record` (see `commonInputFromFlags`). `readFieldInput`
-    // keeps ONLY declared metadata fields plus this common input, so a flag
-    // absent here is filtered out of every field-based command's input before
-    // the client ever sees it.
+    // `readFieldInput` keeps ONLY declared metadata fields plus this common
+    // input, so a flag absent here is filtered out of every field-based
+    // command's input before the client ever sees it. `flagIn` below is the
+    // seam that used to be hand-maintained (#1304/#1305, #1311, #1313); it now
+    // rides both flag-derived projections from one row instead of two literals
+    // to keep in sync. That row still has to say so itself — a new common key
+    // that omits `flagIn` still joins neither projection silently, the same
+    // failure mode as before, just now a one-line omission instead of a
+    // missing entry in two hand-written lists.
     read: (record) => optionalBoolean(record, 'noRecord'),
+    flagKey: 'noRecord',
+    flagIn: ['input', 'selection'],
   },
   daemonBaseUrl: {
     schema: { type: 'string', description: 'Remote daemon base URL.' },
@@ -227,14 +280,33 @@ export function commonToClientOptions(
   const options: Record<string, unknown> = {};
   for (const [key, field] of COMMON_INPUT_ROWS) {
     if (!field.read) continue;
-    // Seam 3 of 3 for `--no-record` (see `commonInputFromFlags`). Every
-    // `to*Options` projection (`toPressOptions`, `toGetOptions`, ...) rebuilds
-    // the client options object from this helper plus its own named fields, so
-    // a key absent here is dropped even when the reader forwarded it and
-    // `readCommonInput` kept it.
+    // Every `to*Options` projection (`toPressOptions`, `toGetOptions`, ...)
+    // rebuilds the client options object from this helper plus its own named
+    // fields, so a key absent from the table is dropped here even when the
+    // reader forwarded it and `readCommonInput` kept it (#1304/#1305).
     options[field.clientKey ?? key] = input[key as keyof CommonCommandInput];
   }
   return compactRecord(options) as AgentDeviceRequestOverrides & AgentDeviceSelectionOptions;
+}
+
+/**
+ * `cli-grammar/common.ts`'s two `CliFlags` readers (`commonInputFromFlags`,
+ * `selectionOptionsFromFlags`) project this same table instead of restating
+ * their key lists: a row joins a projection only when `flagIn` names it, and
+ * its output key is the row key for `input`, or `clientKey ?? key` for
+ * `selection` — the same renaming `commonToClientOptions` already applies.
+ */
+export function commonFlagProjection(
+  flags: CliFlags,
+  projection: CommonFlagProjection,
+): Record<string, unknown> {
+  const options: Record<string, unknown> = {};
+  for (const [key, field] of COMMON_INPUT_ROWS) {
+    if (field.flagIn === undefined || !field.flagIn.includes(projection)) continue;
+    const outputKey = projection === 'selection' ? (field.clientKey ?? key) : key;
+    options[outputKey] = flags[field.flagKey];
+  }
+  return options;
 }
 
 function readDeviceTarget(

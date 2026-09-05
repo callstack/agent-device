@@ -11,6 +11,7 @@ import {
   SELECTOR_EXPRESSION_REQUIRED_MESSAGE,
   splitSelectorFromArgs,
 } from '@agent-device/selectors';
+import { commonFlagProjection } from '../common-input-fields.ts';
 import type { SelectorSnapshotInput } from '../command-input.ts';
 import { compactRecord } from '../input-readers.ts';
 import type {
@@ -56,34 +57,28 @@ function readDeviceTarget(value: unknown): InternalRequestOptions['target'] | un
   return value === 'mobile' || value === 'tv' || value === 'desktop' ? value : undefined;
 }
 
+/**
+ * The reader-input shape: every common key whose `commands/common-input-fields.ts`
+ * row lists `input` in `flagIn`, keyed by its own row name (`deviceTarget`, not
+ * the CLI's `--target` spelling). `--no-record` is one such row
+ * (`COMMON_COMMAND_SUPPORTED_FLAG_KEYS`) — it is accepted on, and meaningful
+ * for, every recordable command, and joining the table's `flagIn` is what
+ * makes it ride this projection and `selectionOptionsFromFlags` below without
+ * either reader restating it (#1304/#1305 fixed only the reader layer, so the
+ * flag still never reached the daemon). One row now declares membership for
+ * both projections instead of two hand-written lists to keep in sync; the
+ * `flagKey` a row binds to is checked against `CliFlags` at compile time, but
+ * a *new* common row that omits `flagIn` still joins neither projection
+ * without a compile error — the #1304/#1305 failure mode is narrowed, not
+ * made impossible.
+ *
+ * `--record` deliberately does NOT join `flagIn`: it is scoped to the
+ * observation-only commands the repair-segment exclusion can drop (ADR 0012
+ * decision 6 amendment), so it stays on the narrow
+ * `observationRecordInputFromFlags` seam below.
+ */
 export function commonInputFromFlags(flags: CliFlags): Record<string, unknown> {
-  return compactRecord({
-    // `--no-record` is a COMMON flag (`COMMON_COMMAND_SUPPORTED_FLAG_KEYS`): it
-    // is accepted on, and meaningful for, every recordable command. It rides
-    // the common seam every reader already spreads, so a reader cannot forget
-    // it and a new reader inherits it for free. The three seams it must survive
-    // are this one, `readCommonInput`, and `commonToClientOptions`
-    // (`commands/common-input-fields.ts`) — a drop at any one of them silently
-    // disables the flag (#1304/#1305 fixed only the reader layer, so the flag
-    // still never reached the daemon).
-    //
-    // `--record` deliberately does NOT ride here: it is scoped to the
-    // observation-only commands the repair-segment exclusion can drop
-    // (ADR 0012 decision 6 amendment), so it stays on the narrow
-    // `observationRecordInputFromFlags` seam below.
-    noRecord: flags.noRecord,
-    session: flags.session,
-    platform: flags.platform,
-    deviceTarget: flags.target,
-    device: flags.device,
-    udid: flags.udid,
-    serial: flags.serial,
-    iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
-    iosXctestrunFile: flags.iosXctestrunFile,
-    iosXctestDerivedDataPath: flags.iosXctestDerivedDataPath,
-    iosXctestEnvDir: flags.iosXctestEnvDir,
-    androidDeviceAllowlist: flags.androidDeviceAllowlist,
-  });
+  return compactRecord(commonFlagProjection(flags, 'input'));
 }
 
 /**
@@ -101,25 +96,16 @@ export function observationRecordInputFromFlags(flags: CliFlags): Record<string,
 }
 
 /**
- * The reader layer has TWO parallel common seams, not one: this builds the
- * client-options shape (`target`) for readers that construct a typed Options
- * object directly (`is`/`find`/`wait`/`settings`), while `commonInputFromFlags`
- * above builds the reader-input shape (`deviceTarget`). They are different
- * projections, not duplicates — so `--no-record` has to ride BOTH or the
- * readers using this one silently drop it (which is what #1304/#1305's
- * per-reader helper was papering over).
+ * The client-options shape for readers that construct a typed Options object
+ * directly (`is`/`find`/`wait`/`settings`): every common row that lists
+ * `selection` in `flagIn`, keyed by `clientKey ?? key` (so `deviceTarget`
+ * comes out as `target`, matching `commonToClientOptions`'s renaming). This is
+ * a different projection from `commonInputFromFlags` above, not a duplicate —
+ * unlike that one it is not compacted, so an unset common flag still appears
+ * with an `undefined` value.
  */
 export function selectionOptionsFromFlags(flags: CliFlags): SelectionOptions {
-  return {
-    noRecord: flags.noRecord,
-    platform: flags.platform,
-    target: flags.target,
-    device: flags.device,
-    udid: flags.udid,
-    serial: flags.serial,
-    iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
-    androidDeviceAllowlist: flags.androidDeviceAllowlist,
-  };
+  return commonFlagProjection(flags, 'selection') as SelectionOptions;
 }
 
 export function selectorSnapshotInputFromFlags(flags: CliFlags): Record<string, unknown> {
