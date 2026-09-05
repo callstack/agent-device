@@ -11,7 +11,7 @@
 // spawned as a real process is byte-identical to `press --help`).
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { resolveHelpTargetUsageText } from './cli-help.ts';
+import { buildCommandUsageText, resolveHelpTargetUsageText } from './cli-help.ts';
 import { cliAliasesForCommand } from '../commands/cli-command-aliases.ts';
 import { listCliCommandNames } from '../command-catalog.ts';
 
@@ -24,7 +24,12 @@ test('alias help output matches its canonical command', () => {
   ];
   for (const [alias, canonical] of cases) {
     const aliasHelp = resolveHelpTargetUsageText(alias);
-    const canonicalHelp = resolveHelpTargetUsageText(canonical);
+    // The canonical side deliberately calls `buildCommandUsageText` directly (no alias
+    // normalization), not `resolveHelpTargetUsageText`, so this keeps two independent
+    // sources instead of comparing one composition against itself. If both sides went
+    // through `resolveHelpTargetUsageText`, a degenerate normalizer that maps every
+    // input to one canonical command would still make every case pass.
+    const canonicalHelp = buildCommandUsageText(canonical);
     assert.notEqual(aliasHelp, null, `expected help text for alias "${alias}"`);
     assert.equal(
       aliasHelp,
