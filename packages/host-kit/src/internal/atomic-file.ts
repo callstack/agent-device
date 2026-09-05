@@ -110,7 +110,7 @@ export function withAtomicPublishTempPathSync<T>(
 }
 
 /** Syncs a containing directory when the host filesystem supports directory fsync. */
-export function syncDirectoryBestEffort(directory: string): void {
+function syncDirectoryBestEffort(directory: string): void {
   let descriptor: number | undefined;
   try {
     descriptor = fs.openSync(directory, 'r');
