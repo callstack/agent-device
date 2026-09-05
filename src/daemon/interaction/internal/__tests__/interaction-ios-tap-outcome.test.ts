@@ -30,6 +30,7 @@ import {
   resetGetRuntimeFixture,
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
+import { corroborateIosTapFailure } from '../interaction-ios-tap-outcome.ts';
 
 vi.mock('../../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../../__tests__/legacy-snapshot-capture-fixture.ts');
@@ -286,6 +287,33 @@ test('a changed capture from a different iOS backend keeps the tap failure', asy
   expect(response?.ok).toBe(false);
   if (response && !response.ok) expect(response.error.code).toBe('XCTEST_RECORDED_FAILURE');
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(0);
+});
+
+test('a producer or generation switch cannot corroborate a failed tap', async () => {
+  const sessionName = 'ios-comparison-identity-mismatch';
+  const sessionStore = makeSessionStore();
+  const baseline = snapshot(profileNodes);
+  baseline.comparisonKey = 'simulator-ax-bridge:launch-a';
+  const session = makeIosSession(sessionName, {
+    appBundleId: 'com.example.app',
+    snapshot: baseline,
+  });
+  sessionStore.set(sessionName, session);
+  const after = snapshot(imageViewerNodes);
+  after.comparisonKey = 'apple-runner:launch-a';
+
+  await expect(
+    corroborateIosTapFailure({
+      error: new AppError('XCTEST_RECORDED_FAILURE', 'tap failed'),
+      command: 'click',
+      requestId: undefined,
+      flags: {},
+      session,
+      sessionStore,
+      contextFromFlags,
+      captureSnapshotForSession: async () => after,
+    }),
+  ).resolves.toBeUndefined();
 });
 
 test('a sparse changed capture keeps the tap failure', async () => {

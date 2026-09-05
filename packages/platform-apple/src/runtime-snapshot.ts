@@ -14,11 +14,13 @@ import type {
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import type { AppleSnapshotRoute } from './snapshot-route.ts';
 
 /** Apple-owned selection between app snapshots and explicit macOS surface snapshots. */
 export function bindAppleSnapshotRuntime(
   host: PlatformRuntimeHost,
   request: Readonly<{ device: DeviceInfo; signal: AbortSignal }>,
+  route?: AppleSnapshotRoute,
 ): SnapshotRuntimeOperation {
   const appSnapshot = bindLocalSnapshotInteractor({
     device: request.device,
@@ -37,7 +39,14 @@ export function bindAppleSnapshotRuntime(
         captureSnapshotSignal(request.signal, input),
       );
     }
-    return await appSnapshot.captureSnapshot(input);
+    if (!route) return await appSnapshot.captureSnapshot(input);
+    const signal = captureSnapshotSignal(request.signal, input);
+    return await route.capture(
+      request.device,
+      input,
+      signal,
+      async (fallbackInput) => await appSnapshot.captureSnapshot(fallbackInput),
+    );
   };
   return Object.freeze({
     captureSnapshot,

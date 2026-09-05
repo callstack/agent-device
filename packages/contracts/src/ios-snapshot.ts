@@ -143,6 +143,10 @@ export type IosAcquisitionResidue =
       observed?: IosSnapshotGeneration;
     }>
   | Readonly<{
+      kind: 'unknown-generation';
+      captureId: string;
+    }>
+  | Readonly<{
       kind: 'unavailable-fact';
       fact: IosSnapshotFact;
     }>

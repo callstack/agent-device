@@ -251,7 +251,8 @@ test('a crashed helper is removed and the next request starts a fresh helper', a
   const fixture = createLifecycleFixture({ responseDelayMs: 80 });
   const manager = new SnapshotBridgeManager(fixture.host);
   const request = manager.request({ target, bridge, limits, maxDepth: 10, deadline: deadline() });
-  setTimeout(() => fixture.processes[0]?.crash(), 10);
+  await waitForDispatch(fixture);
+  fixture.processes[0]!.crash();
 
   await assert.rejects(
     request,
@@ -269,7 +270,8 @@ test('a crashed helper emits its bounded log once and keeps exit facts typed', a
   const fixture = createLifecycleFixture({ responseDelayMs: 80 });
   const manager = new SnapshotBridgeManager(fixture.host);
   const request = manager.request({ target, bridge, limits, maxDepth: 10, deadline: deadline() });
-  setTimeout(() => fixture.processes[0]?.crash(), 10);
+  await waitForDispatch(fixture);
+  fixture.processes[0]!.crash();
   let failure: SnapshotSourceError | undefined;
 
   await assert.rejects(request, (error: unknown) => {
@@ -310,6 +312,27 @@ test('the manager rejects a response carrying a previous target generation as st
       error instanceof SnapshotSourceError &&
       error.failureKind === 'stale-target' &&
       error.failureCode === 'bridge-generation-mismatch',
+  );
+  await manager.close();
+});
+
+test('the manager rejects a cached target replaced before acquisition begins', async () => {
+  const fixture = createLifecycleFixture({
+    targetStartTimes: ['replacement-start', 'replacement-start'],
+  });
+  const manager = new SnapshotBridgeManager(fixture.host);
+  await assert.rejects(
+    manager.request({
+      target: { ...target, processStartTime: 'original-start' },
+      bridge,
+      limits,
+      maxDepth: 10,
+      deadline: deadline(),
+    }),
+    (error: unknown) =>
+      error instanceof SnapshotSourceError &&
+      error.failureKind === 'stale-target' &&
+      error.failureCode === 'target-process-changed',
   );
   await manager.close();
 });

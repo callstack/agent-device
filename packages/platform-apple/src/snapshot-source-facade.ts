@@ -1,6 +1,6 @@
 /**
- * Dormant Simulator AX acquisition. The implementation is loaded only when a caller explicitly
- * creates the source; importing this facet keeps the platform package's startup surface inert.
+ * Lazy Simulator AX acquisition. The implementation is loaded on the first eligible local iOS
+ * Simulator snapshot; importing this facet keeps the platform package's startup surface inert.
  */
 export type {
   SnapshotSourceFailure,

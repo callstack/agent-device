@@ -1,6 +1,6 @@
 import {
   IosSnapshotEngineError,
-  presentIosSnapshot,
+  publishIosSnapshot,
   toIosSnapshotEngineErrorDetails,
 } from '@agent-device/capture-kit/ios-snapshot-engine';
 import {
@@ -43,11 +43,12 @@ export function presentIosSnapshotAcquisition(
   const input = iosSnapshotInput(acquired, request);
 
   try {
-    const presentation = presentIosSnapshot(input, request);
+    const presentation = publishIosSnapshot(input, request);
     return {
       backend: 'xctest',
       producer: acquired.acquisition.producer,
-      nodes: presentation.nodes,
+      nodes: [...presentation.payload.nodes],
+      comparisonIdentity: presentation.comparisonIdentity,
       ...(acquired.acquisition.truncated === undefined
         ? {}
         : { truncated: acquired.acquisition.truncated }),

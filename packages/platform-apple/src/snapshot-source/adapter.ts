@@ -149,7 +149,7 @@ function validateRequest(request: SnapshotSourceRequest): void {
 }
 
 function resolveRequestedDepth(hint: CaptureHint, maximum: number): number {
-  const requested = hint.rawTraversalDepth ?? hint.regularPresentedDepth ?? maximum;
+  const requested = hint.rawTraversalDepth ?? maximum;
   if (requested > maximum) {
     throw new AppError('INVALID_ARGS', 'Simulator snapshot source depth exceeds its bound', {
       requested,

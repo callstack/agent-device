@@ -37,3 +37,13 @@ Objective-C runtime, invokes dynamically discovered selectors, and contains
 Objective-C shim for those operations, adding another native boundary. Keeping
 the guest in Objective-C also allows direct lazy compilation with `clang`
 without an Xcode project or Swift module for private headers.
+
+## Foreground ownership
+
+The reader checks AXRuntime's primary foreground application before and after
+acquisition. If the target is covered by system UI, ownership is unavailable,
+or the owner changes during capture, it returns a typed failure without the
+app tree. The existing route then uses XCTest, which owns system-modal
+resolution. Secondary owners such as the return-to-app status-bar control do
+not replace the native primary owner. The route's generation circuit remains
+disabled after fallback until that app relaunches.

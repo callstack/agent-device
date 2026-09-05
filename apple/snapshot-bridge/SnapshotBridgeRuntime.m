@@ -61,6 +61,11 @@ typedef bool (*AutomationEnabledFn)(void);
 + (nullable XCAccessibilityElement *)elementWithProcessIdentifier:(pid_t)pid;
 @end
 
+@protocol AXForegroundElement <NSObject>
++ (nullable id<AXForegroundElement>)primaryApp;
+- (pid_t)pid;
+@end
+
 static NSNumber *finiteNumber(double value)
 {
   return isfinite(value) ? @(value) : nil;
@@ -166,6 +171,14 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
     }
   }
   return _automationEnabled != NULL && _automationEnabled();
+}
+
+- (BOOL)isPrimaryForegroundProcess:(pid_t)pid
+{
+  Class<AXForegroundElement> elementClass = (Class<AXForegroundElement>)objc_lookUpClass("AXElement");
+  if (![elementClass respondsToSelector:@selector(primaryApp)]) return NO;
+  id<AXForegroundElement> application = [elementClass primaryApp];
+  return [application respondsToSelector:@selector(pid)] && [application pid] == pid;
 }
 
 - (nullable id)jsonValue:(id)value name:(NSString *)name
@@ -299,7 +312,17 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
   NSError *runtimeError = nil;
   id snapshot = nil;
   @try {
+    if (![self isPrimaryForegroundProcess:pid]) {
+      if (error) *error = failureResponse(requestId, @"unsupported", @"foreground-owner-unverified", @"target app is not the primary foreground accessibility owner");
+      finishRequestWatchdog(watchdog, watchdogState);
+      return nil;
+    }
     snapshot = [_framework userTestingSnapshotForElement:(__bridge id)raw options:options error:&runtimeError];
+    if (![self isPrimaryForegroundProcess:pid]) {
+      if (error) *error = failureResponse(requestId, @"unsupported", @"foreground-owner-changed", @"foreground accessibility ownership changed during acquisition");
+      finishRequestWatchdog(watchdog, watchdogState);
+      return nil;
+    }
   } @catch (NSException *exception) {
     if (error) *error = failureResponse(requestId, @"reader_unavailable", @"private-api-exception", exception.reason ?: @"AX snapshot raised an exception");
     finishRequestWatchdog(watchdog, watchdogState);

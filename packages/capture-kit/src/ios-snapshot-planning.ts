@@ -90,6 +90,16 @@ export function areIosSnapshotComparisonIdentitiesEqual(
   );
 }
 
+export function iosSnapshotComparisonIdentityKey(identity: IosSnapshotComparisonIdentity): string {
+  return JSON.stringify({
+    producer: identity.producer,
+    intent: identity.intent,
+    lineage: identity.lineage,
+    presentationKey: identity.presentationKey,
+    residue: identity.residue.map(residueIdentity).sort(),
+  });
+}
+
 export function buildIosSnapshotComparisonIdentity(
   input: IosSnapshotInput,
   request: IosSnapshotRequest,
@@ -180,6 +190,8 @@ function residueIdentity(residue: IosAcquisitionResidue): string {
         expected: residue.expected,
         observed: residue.observed,
       });
+    case 'unknown-generation':
+      return JSON.stringify({ kind: residue.kind, captureId: residue.captureId });
     case 'unavailable-fact':
       return JSON.stringify({ kind: residue.kind, fact: residue.fact });
     case 'fallback-source':

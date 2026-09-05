@@ -21,6 +21,7 @@ export type SnapshotSourceTarget = Readonly<{
   pid: number;
   generation: string;
   targetId?: string;
+  processStartTime?: string;
 }>;
 
 export type SnapshotSourceRequest = Readonly<{

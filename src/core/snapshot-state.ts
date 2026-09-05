@@ -23,6 +23,8 @@ import { scopeSnapshotNodes } from '@agent-device/capture-kit/snapshot-desktop-p
 import { normalizeSnapshotTree, pruneGroupNodes } from '../core/snapshot-tree-ingestion.ts';
 import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { IOS_SNAPSHOT_PRODUCER_CAPABILITIES } from '@agent-device/capture-kit/ios-snapshot-acquisition';
+import { iosSnapshotComparisonIdentityKey } from '@agent-device/capture-kit/ios-snapshot-planning';
+import type { IosSnapshotComparisonIdentity } from '@agent-device/contracts/ios-snapshot';
 
 /**
  * The ONE daemon assembly of a captured tree (ADR 0004 / #1797): normalize, group prune,
@@ -38,6 +40,7 @@ export function buildSnapshotState(
     nodes?: RawSnapshotNode[];
     truncated?: boolean;
     quality?: unknown;
+    comparisonIdentity?: IosSnapshotComparisonIdentity;
   } & SnapshotStateProvenance,
   flags:
     | (Pick<CommandFlags, 'snapshotDepth' | 'snapshotInteractiveOnly' | 'snapshotRaw'> &
@@ -73,6 +76,9 @@ export function buildSnapshotState(
     createdAt: Date.now(),
     ...snapshotStateProvenance(data),
     ...(snapshotQuality ? { snapshotQuality } : {}),
+    ...(data.comparisonIdentity
+      ? { comparisonKey: iosSnapshotComparisonIdentityKey(data.comparisonIdentity) }
+      : {}),
     presentationKey: buildSnapshotPresentationKey(snapshotPresentationOptionsFromFlags(flags)),
     // Only broad Android snapshots become freshness baselines. If the user asked for a scoped
     // or filtered view, preserve that output contract but avoid pretending it is safe for
@@ -153,7 +159,11 @@ function iosSnapshotPresentationOwner(
 function iosSnapshotCapabilities(provenance: SnapshotStateProvenance) {
   if (provenance.backend !== 'xctest' || provenance.producer === undefined) return undefined;
   return IOS_SNAPSHOT_PRODUCER_CAPABILITIES[
-    provenance.producer as 'apple-runner' | 'appium-source' | 'limrun-ios-tree'
+    provenance.producer as
+      | 'apple-runner'
+      | 'simulator-ax-bridge'
+      | 'appium-source'
+      | 'limrun-ios-tree'
   ];
 }
 
