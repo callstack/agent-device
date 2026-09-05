@@ -8,7 +8,7 @@ import {
 import {
   createDurableResourceEnvelope,
   decodeDurableResourceEnvelope,
-} from '@agent-device/capture-kit';
+} from '../durable-resource-envelope.ts';
 import { deviceIdentity, sameDeviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -16,11 +16,8 @@ import type {
   AdoptStartedDurableCaptureParams,
   DurableCaptureRecordDefinition,
   DurableCaptureResourceDefinition,
-} from './durable-capture-resource.ts';
-import {
-  capitalizeDurableCaptureLabel,
-  durableCaptureDiagnosticPrefix,
-} from './durable-capture-resource-labels.ts';
+} from './definition.ts';
+import { capitalizeDurableCaptureLabel, durableCaptureDiagnosticPrefix } from './labels.ts';
 
 type AdoptionState<H extends AsyncDisposable> =
   | { kind: 'pending' }

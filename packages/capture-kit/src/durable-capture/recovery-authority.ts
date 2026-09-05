@@ -5,7 +5,7 @@ import type {
 } from '@agent-device/contracts/durable-resource';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
-import { capitalizeDurableCaptureLabel } from './durable-capture-resource-labels.ts';
+import { capitalizeDurableCaptureLabel } from './labels.ts';
 
 export type DurableCaptureRecoveryControl<
   K extends string,

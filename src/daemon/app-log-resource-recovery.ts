@@ -11,11 +11,11 @@ import {
 } from '@agent-device/contracts/platform-runtime-operations';
 import { appLogDurableResource } from './app-log-session-resource.ts';
 import { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
-import type { DurableCaptureRecoveryControl } from './durable-capture-recovery-authority.ts';
+import type { DurableCaptureRecoveryControl } from '@agent-device/capture-kit/durable-capture';
 import type {
   DurableCaptureRecoveryDiagnostic,
   DurableCaptureRecoverySummary,
-} from './durable-capture-resource-recovery.ts';
+} from '@agent-device/capture-kit/durable-capture';
 
 const appLogRecoveryUse = defineUse({
   required: ['appLogReattach', 'appLogCleanup'],

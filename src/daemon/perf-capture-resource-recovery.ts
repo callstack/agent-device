@@ -13,9 +13,9 @@ import {
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { perfCaptureDurableResource } from './perf-capture-session-resource.ts';
-import type { DurableCaptureRecoveryControl } from './durable-capture-recovery-authority.ts';
+import type { DurableCaptureRecoveryControl } from '@agent-device/capture-kit/durable-capture';
 import { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
-import type { DurableCaptureRecoveryDiagnostic } from './durable-capture-resource-recovery.ts';
+import type { DurableCaptureRecoveryDiagnostic } from '@agent-device/capture-kit/durable-capture';
 
 type PerfCaptureRecoveryRuntime = BoundDeviceRuntime<typeof perfNativeCaptureRecoveryUse>;
 

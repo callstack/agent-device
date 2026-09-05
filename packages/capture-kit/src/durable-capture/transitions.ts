@@ -6,16 +6,13 @@ import {
 } from '@agent-device/contracts/durable-resource';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import {
-  withDurableCaptureResourceFence,
-  type DurableCaptureResourceFenceLease,
-} from './durable-capture-resource-fence.ts';
+import { withDurableCaptureResourceFence, type DurableCaptureResourceFenceLease } from './fence.ts';
 import type {
   DurableCaptureRecordDefinition,
   DurableCaptureResourceDefinition,
   DurableCaptureSessionStore,
-} from './durable-capture-resource.ts';
-import { capitalizeDurableCaptureLabel } from './durable-capture-resource-labels.ts';
+} from './definition.ts';
+import { capitalizeDurableCaptureLabel } from './labels.ts';
 
 export async function finishLiveDurableCapture<
   K extends string,

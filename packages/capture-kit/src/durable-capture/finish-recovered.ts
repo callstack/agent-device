@@ -5,20 +5,17 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   acquireDurableCaptureRecoveryAuthorityBeforeDeadline,
   type DurableCaptureRecoveryControl,
-} from './durable-capture-recovery-authority.ts';
-import { allowsDurableCaptureDescriptorCleanup } from './durable-capture-resource-recovery.ts';
-import { withDurableCaptureResourceFence } from './durable-capture-resource-fence.ts';
-import type { DurableCaptureRecordDefinition } from './durable-capture-resource.ts';
-import {
-  capitalizeDurableCaptureLabel,
-  durableCaptureDiagnosticPrefix,
-} from './durable-capture-resource-labels.ts';
+} from './recovery-authority.ts';
+import { allowsDurableCaptureDescriptorCleanup } from './recovery.ts';
+import { withDurableCaptureResourceFence } from './fence.ts';
+import type { DurableCaptureRecordDefinition } from './definition.ts';
+import { capitalizeDurableCaptureLabel, durableCaptureDiagnosticPrefix } from './labels.ts';
 import {
   finishDurableCaptureHandle,
   requireConfirmedDurableCaptureCleanup,
   transitionCleanupOutcome,
   transitionFinishOutcome,
-} from './durable-capture-resource-transitions.ts';
+} from './transitions.ts';
 
 const DEFAULT_FINISH_RECOVERY_DEADLINE_MS = 5_000;
 

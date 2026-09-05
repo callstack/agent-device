@@ -2,12 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
+import { adoptStartedDurableCapture } from './adoption.ts';
 import {
   makeDurableCaptureContext,
   makeDurableCaptureStartResult,
-  testCaptureResource,
+  testCaptureDefinition,
   testCaptureStore,
-} from './durable-capture-resource.fixtures.ts';
+} from './durable-capture.fixtures.ts';
 
 test('canceled adoption cleans the pending handle before terminalizing its manifest', async () => {
   const context = makeDurableCaptureContext();
@@ -15,22 +16,27 @@ test('canceled adoption cleans the pending handle before terminalizing its manif
   const cancellation = new AppError('CANCELED', 'request canceled');
 
   await expect(
-    testCaptureResource.adoptStarted({
-      ...context,
-      ...start,
-      throwIfCanceled: () => {
-        throw cancellation;
+    adoptStartedDurableCapture(
+      testCaptureDefinition,
+      {
+        ...context,
+        ...start,
+        throwIfCanceled: () => {
+          throw cancellation;
+        },
       },
-    }),
+      context.resourcePath,
+    ),
   ).rejects.toBe(cancellation);
   expect(start.forceCleanup).toHaveBeenCalledOnce();
   expect(testCaptureStore.read(context.resourcePath)).toMatchObject({
     status: 'decoded',
     envelope: { lifecycle: 'completed', metadata: { phase: 'completed' } },
   });
+  expect(context.reportUndurableCleanup).toHaveBeenCalledWith(context.device, { confirmed: true });
 });
 
-test('a failed terminal transition preserves the primary error and blocks replacement', async () => {
+test('a failed terminal transition preserves the primary error and reports it unconfirmed', async () => {
   const context = makeDurableCaptureContext();
   const start = makeDurableCaptureStartResult(context, {
     cleanup: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
@@ -40,18 +46,25 @@ test('a failed terminal transition preserves the primary error and blocks replac
 
   try {
     await expect(
-      testCaptureResource.adoptStarted({
-        ...context,
-        ...start,
-        throwIfCanceled: () => {
-          fs.chmodSync(resourceDir, 0o500);
-          throw primary;
+      adoptStartedDurableCapture(
+        testCaptureDefinition,
+        {
+          ...context,
+          ...start,
+          throwIfCanceled: () => {
+            fs.chmodSync(resourceDir, 0o500);
+            throw primary;
+          },
         },
-      }),
+        context.resourcePath,
+      ),
     ).rejects.toBe(primary);
   } finally {
     fs.chmodSync(resourceDir, 0o700);
   }
 
-  expect(() => context.admissionLedger.assertStartAllowed(context.device)).toThrow(/process-local/);
+  expect(context.reportUndurableCleanup).toHaveBeenCalledWith(context.device, {
+    confirmed: false,
+    reason: expect.stringMatching(/./),
+  });
 });

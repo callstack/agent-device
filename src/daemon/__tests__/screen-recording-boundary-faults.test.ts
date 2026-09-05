@@ -20,7 +20,7 @@ import {
 } from '@agent-device/host-kit/diagnostics';
 import { createDurableCaptureAdmissionLedger } from '../durable-capture-admission-ledger.ts';
 import { createDurableCaptureResource } from '../durable-capture-resource.ts';
-import type { DurableCaptureResourceStore } from '../durable-capture-resource-store.ts';
+import type { DurableCaptureResourceStore } from '@agent-device/capture-kit/durable-capture';
 import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';
 import type { SessionState } from '../types.ts';
 

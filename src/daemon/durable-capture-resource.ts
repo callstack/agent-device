@@ -1,97 +1,26 @@
 import path from 'node:path';
-import type { JsonObject } from '@agent-device/contracts/client';
-import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
-import type { LiveResourceHandle } from '@agent-device/contracts/durable-resource';
-import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
-import type {
-  ResourceOwnershipFence,
-  RuntimeOwnerRef,
-} from '@agent-device/contracts/platform-runtime';
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DurableCaptureAdmissionLedger } from './durable-capture-admission-ledger.ts';
-import { adoptStartedDurableCapture } from './durable-capture-resource-adoption.ts';
 import {
+  adoptStartedDurableCapture,
   finishLiveDurableCapture,
+  finishRecoveredDurableCapture,
   forceCleanupLiveDurableCapture,
-} from './durable-capture-resource-transitions.ts';
-import type { DurableCaptureResourceStore } from './durable-capture-resource-store.ts';
-import { createNextDurableCaptureFence } from './durable-capture-start-preflight.ts';
-import {
   recoverDurableCaptureResource,
   recoverDurableCaptureResourcesAfterDaemonLock,
+  type AdoptStartedDurableCaptureParams,
   type DurableCaptureRecoveryParams,
-} from './durable-capture-resource-recovery.ts';
-import {
-  finishRecoveredDurableCapture,
+  type DurableCaptureResourceDefinition,
+  type DurableCaptureSessionStore,
   type FinishRecoveredDurableCaptureParams,
-} from './durable-capture-resource-finish-recovered.ts';
+} from '@agent-device/capture-kit/durable-capture';
+import type { LiveResourceHandle } from '@agent-device/contracts/durable-resource';
+import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { DurableCaptureAdmissionLedger } from './durable-capture-admission-ledger.ts';
+import { createNextDurableCaptureFence } from './durable-capture-start-preflight.ts';
 import { safeSessionName } from './session-paths.ts';
 import type { SessionStore } from './session-store.ts';
 import type { SessionState } from './types.ts';
 import type { DurableSessionResourceKind } from './durable-session-resource-kinds.ts';
-
-/**
- * The whole of the session store the durable-capture mechanics touch: where a session's
- * records live, and how an updated session record is put back.
- */
-export type DurableCaptureSessionStore<S> = Readonly<{
-  set(name: string, session: S): void;
-  resolveSessionDir(name: string): string;
-}>;
-
-export type DurableCaptureSessionResource<K extends string, H extends AsyncDisposable> = Readonly<{
-  handle: H;
-  envelope: DurableResourceEnvelope<K>;
-}>;
-
-export type DurableCaptureSessionSlot<K extends string, H extends AsyncDisposable, S> = Readonly<{
-  read(session: S): DurableCaptureSessionResource<K, H> | undefined;
-  replace(session: S, resource: DurableCaptureSessionResource<K, H> | undefined): S;
-}>;
-
-/**
- * The session-free half of a definition. Recovery reattaches and terminalizes a persisted
- * record with no session in hand, so it names this and never the session type.
- */
-export type DurableCaptureRecordDefinition<K extends string, C> = Readonly<{
-  resourceKind: K;
-  displayName: string;
-  store: DurableCaptureResourceStore<K>;
-  completionMetadata(result: C): JsonObject;
-  messages: Readonly<{
-    noActive: string;
-    cleanupPendingHint: string;
-  }>;
-}>;
-
-export type DurableCaptureResourceDefinition<
-  K extends string,
-  H extends LiveResourceHandle<C>,
-  C,
-  S,
-> = DurableCaptureRecordDefinition<K, C> &
-  Readonly<{ sessionSlot: DurableCaptureSessionSlot<K, H, S> }>;
-
-/**
- * What the mechanics observed about a failed adoption's cleanup. Reporting it keeps the
- * admission decision — block a replacement start, or clear an earlier block — with the daemon.
- */
-export type DurableCaptureCleanupOutcome =
-  | { confirmed: true }
-  | { confirmed: false; reason: string };
-
-export type AdoptStartedDurableCaptureParams<K extends string, H extends AsyncDisposable, S> = {
-  reportUndurableCleanup(device: DeviceInfo, outcome: DurableCaptureCleanupOutcome): void;
-  session: S;
-  sessionName: string;
-  sessionStore: DurableCaptureSessionStore<S>;
-  device: DeviceInfo;
-  owner: RuntimeOwnerRef;
-  fence: ResourceOwnershipFence;
-  pendingHandle: PendingTransferGuard<H>;
-  envelope: DurableResourceEnvelope<K>;
-  throwIfCanceled(): void;
-};
 
 type AdoptStartedSessionCaptureParams<K extends string, H extends AsyncDisposable> = Omit<
   AdoptStartedDurableCaptureParams<K, H, SessionState>,
@@ -104,6 +33,12 @@ type SessionCaptureRecoveryParams<K extends string, H extends LiveResourceHandle
   'definition' | 'resolveSessionDir'
 >;
 
+/**
+ * Where the shared durable-capture mechanics meet the two authorities that stay daemon policy:
+ * the admission ledger, which decides whether a failed adoption blocks a replacement start, and
+ * the session store, whose naming rule turns a session id into the one directory its records
+ * may occupy.
+ */
 export function createDurableCaptureResource<
   K extends DurableSessionResourceKind,
   H extends LiveResourceHandle<C>,

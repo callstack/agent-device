@@ -4,7 +4,7 @@ import type {
   DurableResourceLifecycleState,
 } from '@agent-device/contracts/durable-resource-envelope';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
-import type { DurableCaptureResourceStore } from './durable-capture-resource-store.ts';
+import type { DurableCaptureResourceStore } from './store.ts';
 
 const resourceFenceTails = new Map<string, Promise<void>>();
 

@@ -12,14 +12,11 @@ import {
   DurableCaptureRecoveryDeadlineError,
   type DurableCaptureRecoveryAuthority,
   type DurableCaptureRecoveryControl,
-} from './durable-capture-recovery-authority.ts';
-import {
-  withDurableCaptureResourceFence,
-  type DurableCaptureResourceFenceLease,
-} from './durable-capture-resource-fence.ts';
-import type { DurableCaptureRecordDefinition } from './durable-capture-resource.ts';
-import { durableCaptureDiagnosticPrefix } from './durable-capture-resource-labels.ts';
-import { transitionCleanupOutcome } from './durable-capture-resource-transitions.ts';
+} from './recovery-authority.ts';
+import { withDurableCaptureResourceFence, type DurableCaptureResourceFenceLease } from './fence.ts';
+import type { DurableCaptureRecordDefinition } from './definition.ts';
+import { durableCaptureDiagnosticPrefix } from './labels.ts';
+import { transitionCleanupOutcome } from './transitions.ts';
 
 const DEFAULT_RECOVERY_DEADLINE_MS = 5_000;
 

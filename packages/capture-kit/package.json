@@ -14,6 +14,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./durable-capture": {
+      "types": "./src/durable-capture/index.ts",
+      "default": "./src/durable-capture/index.ts"
+    },
     "./durable-json": {
       "types": "./src/durable-json.ts",
       "default": "./src/durable-json.ts"

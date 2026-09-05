@@ -11,9 +11,9 @@ import type {
   ScreenRecordingLiveHandle,
 } from '@agent-device/contracts/screen-recording-runtime';
 import { screenRecordingRecoveryUse } from '@agent-device/contracts/screen-recording-runtime-plan';
-import type { DurableCaptureRecoveryControl } from './durable-capture-recovery-authority.ts';
+import type { DurableCaptureRecoveryControl } from '@agent-device/capture-kit/durable-capture';
 import { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
-import type { DurableCaptureRecoveryDiagnostic } from './durable-capture-resource-recovery.ts';
+import type { DurableCaptureRecoveryDiagnostic } from '@agent-device/capture-kit/durable-capture';
 import { screenRecordingDurableResource } from './screen-recording-session-resource.ts';
 
 type ScreenRecordingRecoveryRuntime = BoundDeviceRuntime<typeof screenRecordingRecoveryUse>;

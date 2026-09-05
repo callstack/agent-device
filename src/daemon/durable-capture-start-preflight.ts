@@ -3,9 +3,11 @@ import path from 'node:path';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import { deviceIdentity, deviceIdentityKey, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  capitalizeDurableCaptureLabel,
+  type DurableCaptureRecordDefinition,
+} from '@agent-device/capture-kit/durable-capture';
 import type { DurableCaptureAdmissionLedger } from './durable-capture-admission-ledger.ts';
-import type { DurableCaptureRecordDefinition } from './durable-capture-resource.ts';
-import { capitalizeDurableCaptureLabel } from './durable-capture-resource-labels.ts';
 
 export function createNextDurableCaptureFence<K extends string, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
