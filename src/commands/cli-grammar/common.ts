@@ -60,17 +60,8 @@ function readDeviceTarget(value: unknown): InternalRequestOptions['target'] | un
 /**
  * The reader-input shape: every common key whose `commands/common-input-fields.ts`
  * row lists `input` in `flagIn`, keyed by its own row name (`deviceTarget`, not
- * the CLI's `--target` spelling). `--no-record` is one such row
- * (`COMMON_COMMAND_SUPPORTED_FLAG_KEYS`) — it is accepted on, and meaningful
- * for, every recordable command, and joining the table's `flagIn` is what
- * makes it ride this projection and `selectionOptionsFromFlags` below without
- * either reader restating it (#1304/#1305 fixed only the reader layer, so the
- * flag still never reached the daemon). One row now declares membership for
- * both projections instead of two hand-written lists to keep in sync; the
- * `flagKey` a row binds to is checked against `CliFlags` at compile time, but
- * a *new* common row that omits `flagIn` still joins neither projection
- * without a compile error — the #1304/#1305 failure mode is narrowed, not
- * made impossible.
+ * the CLI's `--target` spelling). `--no-record` is one such row — it is
+ * accepted on, and meaningful for, every recordable command (#1304/#1305).
  *
  * `--record` deliberately does NOT join `flagIn`: it is scoped to the
  * observation-only commands the repair-segment exclusion can drop (ADR 0012
@@ -102,7 +93,8 @@ export function observationRecordInputFromFlags(flags: CliFlags): Record<string,
  * comes out as `target`, matching `commonToClientOptions`'s renaming). This is
  * a different projection from `commonInputFromFlags` above, not a duplicate —
  * unlike that one it is not compacted, so an unset common flag still appears
- * with an `undefined` value.
+ * with an `undefined` value. `SelectionOptions` (types.ts) is itself derived
+ * from the table, so this cast cannot drift from what the table computes.
  */
 export function selectionOptionsFromFlags(flags: CliFlags): SelectionOptions {
   return commonFlagProjection(flags, 'selection') as SelectionOptions;

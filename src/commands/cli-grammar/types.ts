@@ -1,6 +1,7 @@
 import type { InternalRequestOptions } from '@agent-device/contracts/client';
 import type { CliFlags, CommandFlags } from '@agent-device/contracts/command';
 import type { ClickButton } from '@agent-device/contracts/click-button';
+import type { CommonInputFieldsTable } from '../common-input-fields.ts';
 
 export type DaemonCommandRequest = {
   command: string;
@@ -71,16 +72,32 @@ export type CommandInput = Omit<InternalRequestOptions, 'batchSteps' | 'target'>
     y?: number;
   } & Record<string, unknown>;
 
+/** The `commands/common-input-fields.ts` rows that join the 'selection' projection. */
+type SelectionRowKey = {
+  [K in keyof CommonInputFieldsTable]: 'selection' extends CommonInputFieldsTable[K]['flagIn'][number]
+    ? K
+    : never;
+}[keyof CommonInputFieldsTable];
+
+/** A selection row's output key: `clientKey` when the row renames it, its own key otherwise. */
+type SelectionRowOutputKey<K extends SelectionRowKey> = CommonInputFieldsTable[K] extends {
+  clientKey: infer ClientKey extends string;
+}
+  ? ClientKey
+  : K;
+
+/**
+ * The client-options shape for readers that construct a typed Options object directly
+ * (`is`/`find`/`wait`/`settings`, via `selectionOptionsFromFlags`): every
+ * `commands/common-input-fields.ts` row that lists `selection` in `flagIn`, keyed by
+ * `clientKey ?? key`. Derived from that table, so a row cannot join or leave the
+ * projection, or rename its output key, without this type moving with it.
+ */
 export type SelectionOptions = {
-  /** `--no-record`: common to every recordable command (see `selectionOptionsFromFlags`). */
-  noRecord?: boolean;
-  platform?: CliFlags['platform'];
-  target?: CliFlags['target'];
-  device?: string;
-  udid?: string;
-  serial?: string;
-  iosSimulatorDeviceSet?: string;
-  androidDeviceAllowlist?: string;
+  [K in SelectionRowKey as SelectionRowOutputKey<K>]?: CliFlags[Extract<
+    CommonInputFieldsTable[K]['flagKey'],
+    keyof CliFlags
+  >];
 };
 
 export type CliInput = Record<string, unknown>;

@@ -63,15 +63,12 @@ type CommonInputFieldSpec = {
       /** Which of `cli-grammar/common.ts`'s flag-derived projections include this row. */
       flagIn: readonly CommonFlagProjection[];
       /**
-       * The `CliFlags` property this key reads, when its spelling differs (e.g. `deviceTarget`
-       * reads `flags.target`) or matches outright. Required together with `flagIn` and typed
-       * against `CliFlags`, so a row can only join a projection by naming a flag that actually
-       * exists — `cwd` and `debug`, which have no `CliFlags` counterpart, cannot declare
-       * `flagIn` at all rather than compiling to a binding that reads `undefined` forever.
+       * The `CliFlags` property this row reads, when its spelling differs (e.g. `deviceTarget`
+       * reads `flags.target`) or matches outright.
        */
       flagKey: keyof CliFlags;
     }
-  | { flagIn?: undefined; flagKey?: undefined }
+  | { flagIn: readonly []; flagKey?: undefined }
 );
 
 /**
@@ -120,6 +117,7 @@ const COMMON_INPUT_FIELDS = {
       description:
         'Alias for deviceTarget on commands without a UI target field. Interaction commands reserve target for the UI element.',
     },
+    flagIn: [],
   },
   device: {
     schema: {
@@ -201,13 +199,7 @@ const COMMON_INPUT_FIELDS = {
   noRecord: {
     // `readFieldInput` keeps ONLY declared metadata fields plus this common
     // input, so a flag absent here is filtered out of every field-based
-    // command's input before the client ever sees it. `flagIn` below is the
-    // seam that used to be hand-maintained (#1304/#1305, #1311, #1313); it now
-    // rides both flag-derived projections from one row instead of two literals
-    // to keep in sync. That row still has to say so itself — a new common key
-    // that omits `flagIn` still joins neither projection silently, the same
-    // failure mode as before, just now a one-line omission instead of a
-    // missing entry in two hand-written lists.
+    // command's input before the client ever sees it (#1304/#1305, #1311, #1313).
     read: (record) => optionalBoolean(record, 'noRecord'),
     flagKey: 'noRecord',
     flagIn: ['input', 'selection'],
@@ -216,23 +208,28 @@ const COMMON_INPUT_FIELDS = {
     schema: { type: 'string', description: 'Remote daemon base URL.' },
     read: (record) => optionalString(record, 'daemonBaseUrl'),
     audience: ENV_OR_OPERATOR_CONFIG,
+    flagIn: [],
   },
   daemonAuthToken: {
     schema: { type: 'string', description: 'Remote daemon auth token.' },
     read: (record) => optionalString(record, 'daemonAuthToken'),
     audience: ENV_OR_OPERATOR_CONFIG,
+    flagIn: [],
   },
   tenant: {
     schema: { type: 'string', description: 'Remote tenant identifier.' },
     read: (record) => optionalString(record, 'tenant'),
+    flagIn: [],
   },
   runId: {
     schema: { type: 'string', description: 'Lease run identifier.' },
     read: (record) => optionalString(record, 'runId'),
+    flagIn: [],
   },
   leaseId: {
     schema: { type: 'string', description: 'Existing lease identifier.' },
     read: (record) => optionalString(record, 'leaseId'),
+    flagIn: [],
   },
   cwd: {
     schema: { type: 'string', description: 'Working directory for command execution.' },
@@ -241,12 +238,17 @@ const COMMON_INPUT_FIELDS = {
       operatorPath:
         'Start the process serving these tools in the desired working directory, or pass absolute paths.',
     }),
+    flagIn: [],
   },
   debug: {
     schema: { type: 'boolean', description: 'Enable debug diagnostics.' },
     read: (record) => optionalBoolean(record, 'debug'),
+    flagIn: [],
   },
 } as const satisfies Record<keyof CommonCommandInput | 'target', CommonInputFieldSpec>;
+
+/** The table's row type, keyed by row name — lets other modules derive types from it (e.g. `SelectionOptions`). */
+export type CommonInputFieldsTable = typeof COMMON_INPUT_FIELDS;
 
 const COMMON_INPUT_ROWS: ReadonlyArray<readonly [string, CommonInputFieldSpec]> =
   Object.entries(COMMON_INPUT_FIELDS);
@@ -302,7 +304,7 @@ export function commonFlagProjection(
 ): Record<string, unknown> {
   const options: Record<string, unknown> = {};
   for (const [key, field] of COMMON_INPUT_ROWS) {
-    if (field.flagIn === undefined || !field.flagIn.includes(projection)) continue;
+    if (field.flagKey === undefined || !field.flagIn.includes(projection)) continue;
     const outputKey = projection === 'selection' ? (field.clientKey ?? key) : key;
     options[outputKey] = flags[field.flagKey];
   }
