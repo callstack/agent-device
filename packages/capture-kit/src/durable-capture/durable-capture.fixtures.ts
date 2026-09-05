@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { vi } from 'vitest';
+import { vi, type Mock } from 'vitest';
 import {
   isConfirmedCleanup,
   type CleanupOutcome,
@@ -11,6 +11,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createDurableResourceEnvelope } from '../durable-resource-envelope.ts';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import type {
+  DurableCaptureCleanupOutcome,
   DurableCaptureResourceDefinition,
   DurableCaptureSessionResource,
   DurableCaptureSessionStore,
@@ -91,8 +92,11 @@ export function makeDurableCaptureContext(
     set: (name, next) => void sessions.set(name, next),
     resolveSessionDir,
   };
+  const reportUndurableCleanup: Mock<
+    (device: DeviceInfo, outcome: DurableCaptureCleanupOutcome) => void
+  > = vi.fn();
   return {
-    reportUndurableCleanup: vi.fn(),
+    reportUndurableCleanup,
     sessions,
     sessionsDir,
     resolveSessionDir,

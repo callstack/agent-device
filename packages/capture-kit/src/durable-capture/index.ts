@@ -10,11 +10,8 @@ export { createDurableCaptureResourceStore } from './store.ts';
 export { finishLiveDurableCapture, forceCleanupLiveDurableCapture } from './transitions.ts';
 export type {
   AdoptStartedDurableCaptureParams,
-  DurableCaptureCleanupOutcome,
   DurableCaptureRecordDefinition,
   DurableCaptureResourceDefinition,
-  DurableCaptureSessionResource,
-  DurableCaptureSessionSlot,
   DurableCaptureSessionStore,
 } from './definition.ts';
 export type { FinishRecoveredDurableCaptureParams } from './finish-recovered.ts';
@@ -24,8 +21,5 @@ export type {
   DurableCaptureRecoveryParams,
   DurableCaptureRecoverySummary,
 } from './recovery.ts';
-export type {
-  DurableCaptureRecoveryAuthority,
-  DurableCaptureRecoveryControl,
-} from './recovery-authority.ts';
-export type { DurableCaptureResourceRecord, DurableCaptureResourceStore } from './store.ts';
+export type { DurableCaptureRecoveryControl } from './recovery-authority.ts';
+export type { DurableCaptureResourceStore } from './store.ts';
