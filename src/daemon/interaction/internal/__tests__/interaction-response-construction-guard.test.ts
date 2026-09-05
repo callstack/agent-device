@@ -1,8 +1,8 @@
-import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { parseSync } from "oxc-parser";
-import { test } from "vitest";
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { parseSync } from 'oxc-parser';
+import { test } from 'vitest';
 
 // ADR 0011 Layer-2 guard: interaction response payloads have exactly ONE
 // construction site — buildInteractionResponseData in
@@ -18,16 +18,10 @@ import { test } from "vitest";
 // stricter, structural rule: each touch case is exactly one `return await
 // <touch handler>(...)`, so no response can be constructed there at all.
 
-const INTERACTION_INTERNAL_DIR = path.resolve(import.meta.dirname, "..");
-const BUILDER_FILE = "interaction-touch-response.ts";
-const DISPATCHER_FILE = "interaction.ts";
-const TOUCH_DISPATCH_COMMANDS = [
-  "press",
-  "click",
-  "longpress",
-  "hover",
-  "fill",
-] as const;
+const INTERACTION_INTERNAL_DIR = path.resolve(import.meta.dirname, '..');
+const BUILDER_FILE = 'interaction-touch-response.ts';
+const DISPATCHER_FILE = 'interaction.ts';
+const TOUCH_DISPATCH_COMMANDS = ['press', 'click', 'longpress', 'hover', 'fill'] as const;
 const TOUCH_HANDLER_MODULE = /^\.\/interaction-touch[\w-]*\.ts$/;
 
 function touchHandlerSourceFiles(): string[] {
@@ -35,9 +29,8 @@ function touchHandlerSourceFiles(): string[] {
     .readdirSync(INTERACTION_INTERNAL_DIR)
     .filter(
       (file) =>
-        (file.startsWith("interaction-touch") ||
-          file === "interaction-common.ts") &&
-        file.endsWith(".ts") &&
+        (file.startsWith('interaction-touch') || file === 'interaction-common.ts') &&
+        file.endsWith('.ts') &&
         file !== BUILDER_FILE,
     );
 }
@@ -55,18 +48,11 @@ const ALLOWED_RHS = [
 
 function findHandRolledResponseData(source: string): string[] {
   // Collapse whitespace so multi-line hand-rolled literals cannot hide.
-  const collapsed = source.replaceAll(/\s+/g, " ");
+  const collapsed = source.replaceAll(/\s+/g, ' ');
   const offenders: string[] = [];
   const assignment = /\bresponseData\s*[:=]\s*/g;
-  for (
-    let match = assignment.exec(collapsed);
-    match;
-    match = assignment.exec(collapsed)
-  ) {
-    const rhs = collapsed.slice(
-      match.index + match[0].length,
-      match.index + match[0].length + 160,
-    );
+  for (let match = assignment.exec(collapsed); match; match = assignment.exec(collapsed)) {
+    const rhs = collapsed.slice(match.index + match[0].length, match.index + match[0].length + 160);
     if (!ALLOWED_RHS.some((pattern) => pattern.test(rhs))) {
       offenders.push(rhs.slice(0, 80));
     }
@@ -77,11 +63,7 @@ function findHandRolledResponseData(source: string): string[] {
 type AstNode = Record<string, unknown> & { type: string };
 
 function isAstNode(value: unknown): value is AstNode {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as AstNode).type === "string"
-  );
+  return typeof value === 'object' && value !== null && typeof (value as AstNode).type === 'string';
 }
 
 function* walkAst(value: unknown): Generator<AstNode> {
@@ -92,14 +74,14 @@ function* walkAst(value: unknown): Generator<AstNode> {
   if (!isAstNode(value)) return;
   yield value;
   for (const [key, child] of Object.entries(value)) {
-    if (key !== "type") yield* walkAst(child);
+    if (key !== 'type') yield* walkAst(child);
   }
 }
 
 function touchHandlerImports(program: AstNode): Set<string> {
   const names = new Set<string>();
   for (const node of walkAst(program)) {
-    if (node.type !== "ImportDeclaration") continue;
+    if (node.type !== 'ImportDeclaration') continue;
     const source = node.source as AstNode;
     if (!TOUCH_HANDLER_MODULE.test(String(source.value))) continue;
     for (const specifier of node.specifiers as AstNode[]) {
@@ -109,13 +91,11 @@ function touchHandlerImports(program: AstNode): Set<string> {
   return names;
 }
 
-function touchCommandOf(
-  switchCase: AstNode,
-): (typeof TOUCH_DISPATCH_COMMANDS)[number] | null {
+function touchCommandOf(switchCase: AstNode): (typeof TOUCH_DISPATCH_COMMANDS)[number] | null {
   const literal = switchCase.test;
-  if (!isAstNode(literal) || literal.type !== "Literal") return null;
+  if (!isAstNode(literal) || literal.type !== 'Literal') return null;
   const command = literal.value;
-  return typeof command === "string" &&
+  return typeof command === 'string' &&
     (TOUCH_DISPATCH_COMMANDS as readonly string[]).includes(command)
     ? (command as (typeof TOUCH_DISPATCH_COMMANDS)[number])
     : null;
@@ -127,22 +107,21 @@ function delegationOf(
   handlers: ReadonlySet<string>,
 ): { handler: string } | { violation: string } {
   const consequent = switchCase.consequent as AstNode[];
-  if (consequent.length !== 1 || consequent[0]?.type !== "ReturnStatement") {
-    return { violation: "the case body is not exactly one return statement" };
+  if (consequent.length !== 1 || consequent[0]?.type !== 'ReturnStatement') {
+    return { violation: 'the case body is not exactly one return statement' };
   }
   const awaited = consequent[0].argument;
-  if (!isAstNode(awaited) || awaited.type !== "AwaitExpression") {
-    return { violation: "the case does not return an awaited call" };
+  if (!isAstNode(awaited) || awaited.type !== 'AwaitExpression') {
+    return { violation: 'the case does not return an awaited call' };
   }
   const call = awaited.argument;
-  if (!isAstNode(call) || call.type !== "CallExpression") {
-    return { violation: "the case does not return an awaited call" };
+  if (!isAstNode(call) || call.type !== 'CallExpression') {
+    return { violation: 'the case does not return an awaited call' };
   }
   const callee = call.callee;
-  if (!isAstNode(callee) || callee.type !== "Identifier") {
+  if (!isAstNode(callee) || callee.type !== 'Identifier') {
     return {
-      violation:
-        "the case calls something other than an imported touch handler",
+      violation: 'the case calls something other than an imported touch handler',
     };
   }
   const handler = String(callee.name);
@@ -159,43 +138,37 @@ function delegationOf(
  * local `responseData`, an inline literal, a second statement — is a violation.
  */
 function touchDispatchViolations(source: string): string[] {
-  const program = parseSync(DISPATCHER_FILE, source)
-    .program as unknown as AstNode;
+  const program = parseSync(DISPATCHER_FILE, source).program as unknown as AstNode;
   const handlers = touchHandlerImports(program);
   const seen = new Map<string, number>();
   const violations: string[] = [];
   for (const node of walkAst(program)) {
-    if (node.type !== "SwitchCase") continue;
+    if (node.type !== 'SwitchCase') continue;
     const command = touchCommandOf(node);
     if (command === null) continue;
     seen.set(command, (seen.get(command) ?? 0) + 1);
     const delegation = delegationOf(node, handlers);
-    if ("violation" in delegation) {
+    if ('violation' in delegation) {
       violations.push(`case '${command}': ${delegation.violation}`);
     }
   }
   for (const command of TOUCH_DISPATCH_COMMANDS) {
     const count = seen.get(command) ?? 0;
     if (count !== 1)
-      violations.push(
-        `case '${command}': expected exactly one case, found ${count}`,
-      );
+      violations.push(`case '${command}': expected exactly one case, found ${count}`);
   }
   return violations;
 }
 
-test("interaction responses are only constructed by buildInteractionResponseData", () => {
+test('interaction responses are only constructed by buildInteractionResponseData', () => {
   const files = touchHandlerSourceFiles();
   assert.ok(
-    files.includes("interaction-touch-press.ts"),
-    "guard lost sight of interaction-touch-press.ts — update touchHandlerSourceFiles()",
+    files.includes('interaction-touch-press.ts'),
+    'guard lost sight of interaction-touch-press.ts — update touchHandlerSourceFiles()',
   );
   const offenders: string[] = [];
   for (const file of files) {
-    const source = fs.readFileSync(
-      path.join(INTERACTION_INTERNAL_DIR, file),
-      "utf8",
-    );
+    const source = fs.readFileSync(path.join(INTERACTION_INTERNAL_DIR, file), 'utf8');
     for (const offender of findHandRolledResponseData(source)) {
       offenders.push(`${file}: responseData = ${offender}...`);
     }
@@ -206,48 +179,39 @@ test("interaction responses are only constructed by buildInteractionResponseData
     `Hand-rolled interaction responseData found. Route it through ` +
       `buildInteractionResponseData (${BUILDER_FILE}) so identity extras ` +
       `(evidence, refLabel, selectorChain, hints) cannot be dropped per-branch:\n` +
-      offenders.map((offender) => `  - ${offender}`).join("\n"),
+      offenders.map((offender) => `  - ${offender}`).join('\n'),
   );
 });
 
-test("every touch command case in the dispatcher only delegates to a touch handler", () => {
-  const source = fs.readFileSync(
-    path.join(INTERACTION_INTERNAL_DIR, DISPATCHER_FILE),
-    "utf8",
-  );
+test('every touch command case in the dispatcher only delegates to a touch handler', () => {
+  const source = fs.readFileSync(path.join(INTERACTION_INTERNAL_DIR, DISPATCHER_FILE), 'utf8');
   const violations = touchDispatchViolations(source);
   assert.deepEqual(
     violations,
     [],
     `The touch dispatch switch in ${DISPATCHER_FILE} must only delegate. Move the logic into ` +
       `an interaction-touch-*.ts handler, which the responseData guard above scans:\n` +
-      violations.map((violation) => `  - ${violation}`).join("\n"),
+      violations.map((violation) => `  - ${violation}`).join('\n'),
   );
 });
 
-test("the guard itself flags a hand-rolled responseData literal", () => {
+test('the guard itself flags a hand-rolled responseData literal', () => {
   assert.equal(
-    findHandRolledResponseData(
-      "const responseData = { ...backendResult, x, y };",
-    ).length,
+    findHandRolledResponseData('const responseData = { ...backendResult, x, y };').length,
+    1,
+  );
+  assert.equal(
+    findHandRolledResponseData('const responseData = result.kind === "ref" ? { a: 1 } : built;')
+      .length,
     1,
   );
   assert.equal(
     findHandRolledResponseData(
-      'const responseData = result.kind === "ref" ? { a: 1 } : built;',
-    ).length,
-    1,
-  );
-  assert.equal(
-    findHandRolledResponseData(
-      "const responseData = buildInteractionResponseData({ source }).responseData;",
+      'const responseData = buildInteractionResponseData({ source }).responseData;',
     ).length,
     0,
   );
-  assert.equal(
-    findHandRolledResponseData("finalize({ result, responseData });").length,
-    0,
-  );
+  assert.equal(findHandRolledResponseData('finalize({ result, responseData });').length, 0);
 });
 
 const DISPATCHER_PREAMBLE = `
@@ -283,11 +247,11 @@ const DELEGATING_CASES = `
       return await dispatchFillViaRuntime(params);
 `;
 
-test("the dispatcher guard accepts a switch whose touch cases only delegate", () => {
+test('the dispatcher guard accepts a switch whose touch cases only delegate', () => {
   assert.deepEqual(touchDispatchViolations(dispatcher(DELEGATING_CASES)), []);
 });
 
-test("the dispatcher guard rejects a hand-rolled responseData hidden behind a nested switch", () => {
+test('the dispatcher guard rejects a hand-rolled responseData hidden behind a nested switch', () => {
   const source = dispatcher(
     DELEGATING_CASES.replace(
       `case 'press':\n      return await dispatchTargetedTouchViaRuntime(params, 'press');`,
@@ -308,7 +272,7 @@ test("the dispatcher guard rejects a hand-rolled responseData hidden behind a ne
   ]);
 });
 
-test("the dispatcher guard rejects a touch case that returns something other than a handler call", () => {
+test('the dispatcher guard rejects a touch case that returns something other than a handler call', () => {
   const inline = dispatcher(
     DELEGATING_CASES.replace(
       `return await dispatchFillViaRuntime(params);`,
@@ -330,11 +294,11 @@ test("the dispatcher guard rejects a touch case that returns something other tha
   ]);
 });
 
-test("the dispatcher guard notices a touch command that left the switch", () => {
+test('the dispatcher guard notices a touch command that left the switch', () => {
   const source = dispatcher(
     DELEGATING_CASES.replace(
       `case 'longpress':\n      return await dispatchTargetedTouchViaRuntime(params, 'longpress');`,
-      "",
+      '',
     ),
   );
   assert.deepEqual(touchDispatchViolations(source), [
