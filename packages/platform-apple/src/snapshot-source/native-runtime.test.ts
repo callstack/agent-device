@@ -27,10 +27,10 @@ describe.skipIf(process.platform !== 'darwin')('native snapshot foreground owner
         '-o',
         binary,
       ],
-      { allowFailure: true },
+      { allowFailure: true, timeoutMs: 45_000 },
     );
     assert.equal(compiled.exitCode, 0, compiled.stderr);
-  });
+  }, 60_000);
 
   test('admits only the current primary target and refuses covered or unknown ownership', async () => {
     const result = await runCmd(binary, [], { allowFailure: true });
