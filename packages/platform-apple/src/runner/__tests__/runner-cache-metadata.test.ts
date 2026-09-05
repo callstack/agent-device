@@ -1,9 +1,9 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { onTestFinished, test } from 'vitest';
+import { expect, test } from 'vitest';
 import assert from 'node:assert/strict';
+import { AppError } from '@agent-device/kernel/errors';
 import { IOS_DEVICE, IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import {
+  diffComparableRunnerCacheMetadata,
   resolveRunnerBundleBuildSettings,
   resolveRunnerMaxConcurrentDestinationsFlag,
   resolveRunnerSigningBuildSettings,
@@ -11,7 +11,9 @@ import {
   resolveRunnerSandboxBuildArgs,
   resolveExpectedRunnerCacheMetadata,
 } from '../runner-cache-metadata.ts';
-import { mkdtempForTestSync } from './tmp-dir.ts';
+import { appleToolchainProbeResult, stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
+
+const runCmdSync = stubAppleToolchainProbes();
 
 test('resolveRunnerMaxConcurrentDestinationsFlag uses simulator flag for simulators', () => {
   assert.equal(
@@ -40,7 +42,10 @@ test('resolveRunnerSigningBuildSettings returns empty args without env overrides
 
 test('resolveRunnerSigningBuildSettings disables signing for macOS desktop builds', () => {
   assert.deepEqual(
-    resolveRunnerSigningBuildSettings({}, true, { platform: 'apple', appleOs: 'macos' }),
+    resolveRunnerSigningBuildSettings({}, true, {
+      platform: 'apple',
+      appleOs: 'macos',
+    }),
     [
       'CODE_SIGNING_ALLOWED=NO',
       'CODE_SIGNING_REQUIRED=NO',
@@ -153,83 +158,229 @@ test('resolveRunnerBundleBuildSettings uses AGENT_DEVICE_IOS_BUNDLE_ID when prov
   );
 });
 
-test('runner cache metadata fingerprints shared snapshot presentation sources', () => {
-  const root = mkdtempForTestSync('agent-device-runner-cache-fingerprint-');
-  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
-  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ version: '0.0.0' }));
-  fs.mkdirSync(path.join(root, 'apple', 'runner', 'AgentDeviceRunner'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'apple', 'snapshot-presentation', 'Sources'), { recursive: true });
-  fs.writeFileSync(
-    path.join(root, 'apple', 'runner', 'AgentDeviceRunner', 'Runner.swift'),
-    'runner\n',
-  );
-  const sharedSource = path.join(
-    root,
-    'apple',
-    'snapshot-presentation',
-    'Sources',
-    'Presentation.swift',
-  );
-  fs.writeFileSync(sharedSource, 'shared-one\n');
+test('metadata diff names only the comparable keys that differ, with expected and actual', () => {
+  const expected = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+  const actual = {
+    ...expected,
+    packageVersion: `${expected.packageVersion}-next`,
+    xcodeBuildVersion: '17A100',
+    runnerPerformanceBuildSettings: ['ENABLE_CODE_COVERAGE=YES'],
+    artifacts: {
+      xctestrunPath: '/tmp/derived/Runner.xctestrun',
+      xctestrunMtimeMs: 1,
+      xctestrunSize: 2,
+      productPaths: [{ path: '/tmp/derived/Runner.app', mtimeMs: 1, size: 2 }],
+    },
+  };
 
-  const before = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, root).runnerSourceFingerprint;
-  fs.writeFileSync(sharedSource, 'shared-two\n');
-  const after = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, root).runnerSourceFingerprint;
-
-  assert.notEqual(after, before);
+  assert.deepEqual(diffComparableRunnerCacheMetadata(expected, actual), [
+    {
+      key: 'runnerPerformanceBuildSettings',
+      expected: JSON.stringify(expected.runnerPerformanceBuildSettings),
+      actual: '["ENABLE_CODE_COVERAGE=YES"]',
+    },
+    { key: 'xcodeBuildVersion', expected: '"17C52"', actual: '"17A100"' },
+  ]);
 });
 
-test('runner cache metadata ignores development-only SwiftPM trees but keeps runner unit tests', () => {
-  const root = mkdtempForTestSync('agent-device-runner-cache-source-roots-');
-  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
-  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ version: '0.0.0' }));
+test('metadata diff reports a key only one side carries as absent', () => {
+  const expected = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+  const { sdkBuildVersion: _sdkBuildVersion, ...withoutSdkBuildVersion } = expected;
 
-  const runnerRoot = path.join(root, 'apple', 'runner', 'AgentDeviceRunner');
-  const runnerUnitTest = path.join(
-    runnerRoot,
-    'AgentDeviceRunnerUITests',
-    'UnitTests',
-    'Invariant.swift',
+  assert.deepEqual(
+    diffComparableRunnerCacheMetadata(expected, withoutSdkBuildVersion as typeof expected),
+    [{ key: 'sdkBuildVersion', expected: '"23C53"', actual: '(absent)' }],
   );
-  const sharedRoot = path.join(root, 'apple', 'snapshot-presentation');
-  fs.mkdirSync(path.dirname(runnerUnitTest), { recursive: true });
-  fs.mkdirSync(path.join(sharedRoot, 'Sources'), { recursive: true });
-  fs.writeFileSync(path.join(runnerRoot, 'Runner.swift'), 'runner\n');
-  fs.writeFileSync(runnerUnitTest, 'unit-one\n');
-  fs.writeFileSync(path.join(sharedRoot, 'Sources', 'Presentation.swift'), 'shared\n');
+});
 
-  for (const directory of [
-    'Tests',
-    'SnapshotPresentationConformance',
-    '.build',
-    '.swiftpm',
-    'xcuserdata',
-  ]) {
-    const file = path.join(sharedRoot, directory, 'Ignored.swift');
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, 'ignored-one\n');
+test('metadata diff is empty for identical metadata', () => {
+  const expected = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+
+  assert.deepEqual(diffComparableRunnerCacheMetadata(expected, { ...expected }), []);
+});
+
+test('metadata diff elides an over-long value in the middle so both ends stay comparable', () => {
+  const expected = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+  const longSetting = (suffix: string) => [`${'A'.repeat(400)}=${suffix}`];
+
+  const [difference] = diffComparableRunnerCacheMetadata(
+    { ...expected, runnerBundleBuildSettings: longSetting('one') },
+    { ...expected, runnerBundleBuildSettings: longSetting('two') },
+  );
+
+  assert.equal(difference?.key, 'runnerBundleBuildSettings');
+  assert.ok((difference?.expected.length ?? 0) <= 300);
+  assert.ok(difference?.expected.startsWith('["AAA'));
+  assert.ok(difference?.expected.endsWith('=one"]'));
+  assert.ok(difference?.actual.endsWith('=two"]'));
+});
+
+function unavailableProbes(): { probe: string; reason: string }[] {
+  try {
+    resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+    return [];
+  } catch (error) {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, 'apple_toolchain_probe_unavailable');
+    const probes = error.details?.probes as { probe: string; reason: string }[];
+    return probes.map(({ probe, reason }) => ({ probe, reason }));
   }
+}
 
-  const before = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, root).runnerSourceFingerprint;
-  for (const directory of [
-    'Tests',
-    'SnapshotPresentationConformance',
-    '.build',
-    '.swiftpm',
-    'xcuserdata',
-  ]) {
-    fs.writeFileSync(path.join(sharedRoot, directory, 'Ignored.swift'), 'ignored-two\n');
+test('a timed-out probe leaves the toolchain unavailable instead of a comparable value', () => {
+  runCmdSync.mockImplementation((command: string, args: readonly string[]) => {
+    if (command === 'xcodebuild') {
+      throw new AppError('COMMAND_FAILED', 'xcodebuild timed out after 5000ms', {
+        timeoutMs: 5_000,
+      });
+    }
+    return appleToolchainProbeResult(command, args);
+  });
+
+  assert.deepEqual(unavailableProbes(), [{ probe: 'xcodebuild -version', reason: 'probe_error' }]);
+});
+
+test('a failing probe reports its exit status rather than a fabricated SDK version', () => {
+  runCmdSync.mockImplementation((command: string, args: readonly string[]) =>
+    command === 'xcrun'
+      ? {
+          exitCode: 70,
+          stdout: '',
+          stderr: 'xcrun: error: SDK cannot be located\n',
+        }
+      : appleToolchainProbeResult(command, args),
+  );
+
+  assert.deepEqual(unavailableProbes(), [
+    {
+      probe: 'xcrun --sdk iphonesimulator --show-sdk-version',
+      reason: 'nonzero_exit',
+    },
+    {
+      probe: 'xcrun --sdk iphonesimulator --show-sdk-build-version',
+      reason: 'nonzero_exit',
+    },
+  ]);
+});
+
+test('unrecognized xcodebuild output is unavailable, not a partially parsed fingerprint', () => {
+  runCmdSync.mockImplementation((command: string, args: readonly string[]) =>
+    command === 'xcodebuild'
+      ? {
+          exitCode: 0,
+          stdout: 'xcode-select: error: tool not configured\n',
+          stderr: '',
+        }
+      : appleToolchainProbeResult(command, args),
+  );
+
+  assert.deepEqual(unavailableProbes(), [
+    { probe: 'xcodebuild -version', reason: 'unparsable_output' },
+  ]);
+});
+
+test('an empty probe answer is unavailable rather than an empty cache key field', () => {
+  runCmdSync.mockImplementation((command: string, args: readonly string[]) =>
+    command === 'xcrun' && args.includes('--show-sdk-build-version')
+      ? { exitCode: 0, stdout: '\n', stderr: '' }
+      : appleToolchainProbeResult(command, args),
+  );
+
+  assert.deepEqual(unavailableProbes(), [
+    {
+      probe: 'xcrun --sdk iphonesimulator --show-sdk-build-version',
+      reason: 'empty_output',
+    },
+  ]);
+});
+
+test('an unavailable toolchain fails the cache decision with a retriable typed error', () => {
+  runCmdSync.mockImplementation(() => {
+    throw new AppError('COMMAND_FAILED', 'xcodebuild timed out after 5000ms', {});
+  });
+
+  try {
+    resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+    assert.fail('expected an unavailable toolchain to fail the cache decision');
+  } catch (error) {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.equal(error.details?.retriable, true);
+    expect(error.message).toContain('xcodebuild -version');
+    expect(String(error.details?.hint)).toContain('xcode-select');
   }
-  const afterIgnoredChanges = resolveExpectedRunnerCacheMetadata(
-    IOS_SIMULATOR,
-    root,
-  ).runnerSourceFingerprint;
-  assert.equal(afterIgnoredChanges, before);
+});
 
-  fs.writeFileSync(runnerUnitTest, 'unit-two\n');
-  const afterRunnerTestChange = resolveExpectedRunnerCacheMetadata(
-    IOS_SIMULATOR,
-    root,
-  ).runnerSourceFingerprint;
-  assert.notEqual(afterRunnerTestChange, afterIgnoredChanges);
+test('an unavailable probe never reaches cache metadata, and is not memoized as one', () => {
+  runCmdSync.mockImplementation(() => {
+    throw new AppError('COMMAND_FAILED', 'xcodebuild timed out after 5000ms', {});
+  });
+  expect(() => resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR)).toThrow(
+    /Could not read the Xcode toolchain versions/,
+  );
+
+  runCmdSync.mockImplementation(appleToolchainProbeResult);
+  const metadata = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+
+  assert.equal(metadata.xcodeVersion, '26.2');
+  assert.equal(metadata.xcodeBuildVersion, '17C52');
+  assert.equal(metadata.sdkVersion, '26.2');
+  assert.equal(metadata.sdkBuildVersion, '23C53');
+});
+
+test('a malformed xcodebuild answer is not memoized: the next request re-probes and recovers', () => {
+  runCmdSync.mockImplementation((command: string, args: readonly string[]) =>
+    command === 'xcodebuild'
+      ? {
+          exitCode: 0,
+          stdout: 'xcode-select: error: tool not configured\n',
+          stderr: '',
+        }
+      : appleToolchainProbeResult(command, args),
+  );
+  assert.deepEqual(unavailableProbes(), [
+    { probe: 'xcodebuild -version', reason: 'unparsable_output' },
+  ]);
+  const probeCallsWhileMalformed = runCmdSync.mock.calls.length;
+
+  runCmdSync.mockImplementation(appleToolchainProbeResult);
+  const metadata = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+
+  assert.equal(metadata.xcodeVersion, '26.2');
+  assert.equal(metadata.xcodeBuildVersion, '17C52');
+  expect(runCmdSync.mock.calls.slice(probeCallsWhileMalformed).map(([command]) => command)).toEqual(
+    ['xcodebuild', 'xcrun', 'xcrun'],
+  );
+});
+
+test('only a complete, parsed toolchain fingerprint is memoized', () => {
+  runCmdSync.mockImplementation((command: string, args: readonly string[]) =>
+    command === 'xcrun' && args.includes('--show-sdk-build-version')
+      ? { exitCode: 0, stdout: '\n', stderr: '' }
+      : appleToolchainProbeResult(command, args),
+  );
+  assert.deepEqual(unavailableProbes(), [
+    {
+      probe: 'xcrun --sdk iphonesimulator --show-sdk-build-version',
+      reason: 'empty_output',
+    },
+  ]);
+
+  runCmdSync.mockImplementation(appleToolchainProbeResult);
+  runCmdSync.mockClear();
+  const first = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+  // The healthy xcodebuild answer from the failed round was not kept either: all three re-run.
+  expect(runCmdSync.mock.calls.map(([command]) => command)).toEqual([
+    'xcodebuild',
+    'xcrun',
+    'xcrun',
+  ]);
+
+  runCmdSync.mockClear();
+  const second = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+  expect(runCmdSync).not.toHaveBeenCalled();
+  assert.deepEqual(
+    [second.xcodeVersion, second.xcodeBuildVersion, second.sdkVersion, second.sdkBuildVersion],
+    [first.xcodeVersion, first.xcodeBuildVersion, first.sdkVersion, first.sdkBuildVersion],
+  );
 });

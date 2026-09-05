@@ -1,14 +1,14 @@
 import crypto from 'node:crypto';
-import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import {
-  runCmdSync,
-  isEnvTruthy,
   createTtlMemo,
+  isEnvTruthy,
   findProjectRoot,
   readVersion,
+  runCmdSync,
   type TtlMemo,
 } from './host.ts';
 import {
@@ -17,23 +17,18 @@ import {
   resolveRunnerPlatformName,
   resolveRunnerSdkName,
 } from './apple-runner-platform.ts';
-import {
-  resolveAppleRunnerSourceRoot,
-  resolveAppleSnapshotPresentationSourceRoot,
-} from './runner-source.ts';
+import { computeRunnerSourceFingerprint } from './runner-source.ts';
 
 const DEFAULT_IOS_RUNNER_APP_BUNDLE_ID = 'com.callstack.agentdevice.runner';
 const RUNNER_DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'apple-runner');
 export const RUNNER_CACHE_METADATA_FILE = '.agent-device-runner-cache.json';
 const RUNNER_CACHE_SCHEMA_VERSION = 2;
-const RUNNER_SOURCE_IGNORED_DIR_NAMES = new Set(['.build', '.swiftpm', 'xcuserdata']);
-const SNAPSHOT_PRESENTATION_SOURCE_IGNORED_DIR_NAMES = new Set([
-  '.build',
-  '.swiftpm',
-  'SnapshotPresentationConformance',
-  'Tests',
-  'xcuserdata',
-]);
+const RUNNER_CACHE_METADATA_VALUE_MAX_LENGTH = 300;
+const TOOLCHAIN_PROBE_TIMEOUT_MS = 5_000;
+const TOOLCHAIN_PROBE_MAX_BUFFER = 128 * 1024;
+const TOOLCHAIN_PROBE_DETAIL_MAX_LENGTH = 200;
+const TOOLCHAIN_PROBE_HINT =
+  'The Apple runner cache is keyed on the toolchain version, so a cache decision cannot be made without it. Retry once the host is less loaded, or check `xcode-select -p` and `xcodebuild -version`.';
 const RUNNER_SANDBOX_BUILD_ARGS = [
   '-IDEPackageSupportDisableManifestSandbox=1',
   '-IDEPackageSupportDisablePluginExecutionSandbox=1',
@@ -43,23 +38,29 @@ const RUNNER_RUNTIME_SWIFT_FLAGS = '$(inherited) -disable-sandbox';
 const RUNNER_UNIT_TEST_SWIFT_FLAGS =
   '$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_UNIT_TESTS';
 
-// Lazy: createTtlMemo is a host capability, and module evaluation happens
-// before the composition root binds the host.
-let lazyAppleToolFingerprintCache: TtlMemo<string, string> | undefined;
-function appleToolFingerprintCache(): TtlMemo<string, string> {
-  lazyAppleToolFingerprintCache ??= createTtlMemo<string, string>();
-  return lazyAppleToolFingerprintCache;
-}
-
-export type RunnerXctestrunCacheMetadata = {
-  schemaVersion: number;
-  packageVersion: string;
-  runnerSourceFingerprint: string;
+/** Toolchain half of the runner cache key. Every field is a probed value. */
+export type RunnerToolchainFingerprint = {
   xcodeVersion: string;
   xcodeBuildVersion: string;
   sdkName: string;
   sdkVersion: string;
   sdkBuildVersion: string;
+};
+
+type ToolchainProbeFailure = {
+  probe: string;
+  reason: 'probe_error' | 'nonzero_exit' | 'empty_output' | 'unparsable_output';
+  detail: string;
+};
+
+type ProbeResult<Value> =
+  | { ok: true; value: Value }
+  | { ok: false; failure: ToolchainProbeFailure };
+
+export type RunnerXctestrunCacheMetadata = RunnerToolchainFingerprint & {
+  schemaVersion: number;
+  packageVersion: string;
+  runnerSourceFingerprint: string;
   platformName: string;
   deviceKind: DeviceInfo['kind'];
   target: NonNullable<DeviceInfo['target']>;
@@ -130,7 +131,7 @@ export function resolveExpectedRunnerCacheMetadata(
     schemaVersion: RUNNER_CACHE_SCHEMA_VERSION,
     packageVersion: readVersion(projectRoot),
     runnerSourceFingerprint: computeRunnerSourceFingerprint(projectRoot),
-    ...resolveRunnerToolchainFingerprint(platformName, device.kind),
+    ...requireRunnerToolchainFingerprint(resolveRunnerSdkName(platformName, device.kind)),
     platformName,
     deviceKind: device.kind,
     target: device.target ?? 'mobile',
@@ -146,54 +147,129 @@ export function resolveExpectedRunnerCacheMetadata(
   };
 }
 
-function resolveRunnerToolchainFingerprint(
-  platformName: ReturnType<typeof resolveRunnerPlatformName>,
-  deviceKind: DeviceInfo['kind'],
-): {
-  xcodeVersion: string;
-  xcodeBuildVersion: string;
-  sdkName: string;
-  sdkVersion: string;
-  sdkBuildVersion: string;
-} {
-  const xcode = parseXcodeVersionOutput(runAppleToolFingerprintCommand('xcodebuild', ['-version']));
-  const sdkName = resolveRunnerSdkName(platformName, deviceKind);
-  return {
-    xcodeVersion: xcode.version,
-    xcodeBuildVersion: xcode.buildVersion,
+// Lazy: createTtlMemo is a host capability, and module evaluation happens
+// before the composition root binds the host. Only a complete, parsed
+// fingerprint is ever memoized, so nothing unavailable can outlive the probe
+// that could not answer.
+let lazyToolchainFingerprintCache: TtlMemo<string, RunnerToolchainFingerprint> | undefined;
+function toolchainFingerprintCache(): TtlMemo<string, RunnerToolchainFingerprint> {
+  lazyToolchainFingerprintCache ??= createTtlMemo<string, RunnerToolchainFingerprint>();
+  return lazyToolchainFingerprintCache;
+}
+
+/**
+ * The toolchain half of the cache key, or a failure. A probe that timed out or
+ * could not be read has no value to compare or persist, and the same
+ * fingerprint also names the derived-data directory, so an unreadable
+ * toolchain fails the cache decision instead of standing in for one.
+ */
+function requireRunnerToolchainFingerprint(sdkName: string): RunnerToolchainFingerprint {
+  const cached = toolchainFingerprintCache().get(sdkName);
+  if (cached) return cached;
+  const fingerprint = readRunnerToolchainFingerprint(sdkName);
+  if (!fingerprint.ok) throw unavailableToolchainError(fingerprint.failures);
+  toolchainFingerprintCache().set(sdkName, fingerprint.value);
+  return fingerprint.value;
+}
+
+function readRunnerToolchainFingerprint(
+  sdkName: string,
+):
+  | { ok: true; value: RunnerToolchainFingerprint }
+  | { ok: false; failures: readonly ToolchainProbeFailure[] } {
+  const xcode = parseXcodeVersionOutput(runToolchainProbe('xcodebuild', ['-version']));
+  const sdkVersion = runToolchainProbe('xcrun', ['--sdk', sdkName, '--show-sdk-version']);
+  const sdkBuildVersion = runToolchainProbe('xcrun', [
+    '--sdk',
     sdkName,
-    sdkVersion: runAppleToolFingerprintCommand('xcrun', ['--sdk', sdkName, '--show-sdk-version']),
-    sdkBuildVersion: runAppleToolFingerprintCommand('xcrun', [
-      '--sdk',
+    '--show-sdk-build-version',
+  ]);
+  if (!xcode.ok || !sdkVersion.ok || !sdkBuildVersion.ok) {
+    return {
+      ok: false,
+      failures: [xcode, sdkVersion, sdkBuildVersion].flatMap((probe) =>
+        probe.ok ? [] : [probe.failure],
+      ),
+    };
+  }
+  return {
+    ok: true,
+    value: {
+      xcodeVersion: xcode.value.version,
+      xcodeBuildVersion: xcode.value.buildVersion,
       sdkName,
-      '--show-sdk-build-version',
-    ]),
+      sdkVersion: sdkVersion.value,
+      sdkBuildVersion: sdkBuildVersion.value,
+    },
   };
 }
 
-function runAppleToolFingerprintCommand(cmd: string, args: string[]): string {
-  const cacheKey = JSON.stringify([cmd, args]);
-  const cached = appleToolFingerprintCache().get(cacheKey);
-  if (cached !== undefined) return cached;
-  try {
-    const result = runCmdSync(cmd, args, {
-      allowFailure: true,
-      timeoutMs: 5_000,
-      maxBuffer: 128 * 1024,
-    });
-    const value = result.exitCode === 0 ? result.stdout.trim() || 'unknown' : 'unknown';
-    appleToolFingerprintCache().set(cacheKey, value);
-    return value;
-  } catch {
-    appleToolFingerprintCache().set(cacheKey, 'unknown');
-    return 'unknown';
-  }
+function unavailableToolchainError(failures: readonly ToolchainProbeFailure[]): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `Could not read the Xcode toolchain versions the Apple runner cache is keyed on (${failures
+      .map((failure) => `${failure.probe}: ${failure.detail}`)
+      .join('; ')})`,
+    {
+      reason: 'apple_toolchain_probe_unavailable',
+      retriable: true,
+      probes: failures,
+      hint: TOOLCHAIN_PROBE_HINT,
+    },
+  );
 }
 
-function parseXcodeVersionOutput(output: string): { version: string; buildVersion: string } {
-  const version = output.match(/^Xcode\s+(.+)$/m)?.[1]?.trim() || 'unknown';
-  const buildVersion = output.match(/^Build version\s+(.+)$/m)?.[1]?.trim() || 'unknown';
-  return { version, buildVersion };
+function runToolchainProbe(cmd: string, args: string[]): ProbeResult<string> {
+  const probe = [cmd, ...args].join(' ');
+  let output: { exitCode: number; stdout: string; stderr: string };
+  try {
+    output = runCmdSync(cmd, args, {
+      allowFailure: true,
+      timeoutMs: TOOLCHAIN_PROBE_TIMEOUT_MS,
+      maxBuffer: TOOLCHAIN_PROBE_MAX_BUFFER,
+    });
+  } catch (error) {
+    return probeFailure(probe, 'probe_error', error instanceof Error ? error.message : `${error}`);
+  }
+  if (output.exitCode !== 0) {
+    return probeFailure(
+      probe,
+      'nonzero_exit',
+      `exit ${output.exitCode}${output.stderr.trim() ? `: ${output.stderr.trim()}` : ''}`,
+    );
+  }
+  const value = output.stdout.trim();
+  return value ? { ok: true, value } : probeFailure(probe, 'empty_output', 'no output');
+}
+
+function parseXcodeVersionOutput(
+  output: ProbeResult<string>,
+): ProbeResult<{ version: string; buildVersion: string }> {
+  if (!output.ok) {
+    return output;
+  }
+  const version = output.value.match(/^Xcode\s+(.+)$/m)?.[1]?.trim();
+  const buildVersion = output.value.match(/^Build version\s+(.+)$/m)?.[1]?.trim();
+  if (!version || !buildVersion) {
+    return probeFailure(
+      'xcodebuild -version',
+      'unparsable_output',
+      `unrecognized output: ${output.value.replaceAll('\n', ' ')}`,
+    );
+  }
+  return { ok: true, value: { version, buildVersion } };
+}
+
+function probeFailure(
+  probe: string,
+  reason: ToolchainProbeFailure['reason'],
+  detail: string,
+): { ok: false; failure: ToolchainProbeFailure } {
+  const bounded =
+    detail.length > TOOLCHAIN_PROBE_DETAIL_MAX_LENGTH
+      ? `${detail.slice(0, TOOLCHAIN_PROBE_DETAIL_MAX_LENGTH)}…`
+      : detail;
+  return { ok: false, failure: { probe, reason, detail: bounded } };
 }
 
 export function resolveRunnerDerivedPath(
@@ -228,6 +304,49 @@ export function comparableRunnerCacheMetadata(
   return comparable;
 }
 
+export type RunnerCacheMetadataDifference = {
+  key: string;
+  expected: string;
+  actual: string;
+};
+
+export function diffComparableRunnerCacheMetadata(
+  expected: RunnerXctestrunCacheMetadata,
+  actual: RunnerXctestrunCacheMetadata,
+): RunnerCacheMetadataDifference[] {
+  const expectedComparable: Record<string, unknown> = comparableRunnerCacheMetadata(expected);
+  const actualComparable: Record<string, unknown> = comparableRunnerCacheMetadata(actual);
+  return [...new Set([...Object.keys(expectedComparable), ...Object.keys(actualComparable)])]
+    .sort((left, right) => left.localeCompare(right))
+    .flatMap((key) => {
+      const expectedValue = renderRunnerCacheMetadataValue(expectedComparable[key]);
+      const actualValue = renderRunnerCacheMetadataValue(actualComparable[key]);
+      return expectedValue === actualValue
+        ? []
+        : [
+            {
+              key,
+              expected: elideRunnerCacheMetadataValue(expectedValue),
+              actual: elideRunnerCacheMetadataValue(actualValue),
+            },
+          ];
+    });
+}
+
+function renderRunnerCacheMetadataValue(value: unknown): string {
+  return value === undefined ? '(absent)' : stableJsonStringify(value);
+}
+
+// Elides the middle: build-setting lists differ in their last entry as often as
+// their first, and a head-only cut would render both sides identically.
+function elideRunnerCacheMetadataValue(value: string): string {
+  if (value.length <= RUNNER_CACHE_METADATA_VALUE_MAX_LENGTH) {
+    return value;
+  }
+  const half = Math.floor((RUNNER_CACHE_METADATA_VALUE_MAX_LENGTH - 1) / 2);
+  return `${value.slice(0, half)}…${value.slice(-half)}`;
+}
+
 export function stableJsonStringify(value: unknown): string {
   return JSON.stringify(sortJsonKeys(value));
 }
@@ -244,124 +363,6 @@ function sortJsonKeys(value: unknown): unknown {
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([key, item]) => [key, sortJsonKeys(item)]),
   );
-}
-
-type RunnerSourceFingerprintCacheEntry = {
-  fileStatsFingerprint: string;
-  sourceFingerprint: string;
-};
-
-const runnerSourceFingerprintCache = new Map<string, RunnerSourceFingerprintCacheEntry>();
-
-function computeRunnerSourceFingerprint(projectRoot: string): string {
-  const sourceRoots = [
-    {
-      path: resolveAppleRunnerSourceRoot(projectRoot),
-      ignoredDirectoryNames: RUNNER_SOURCE_IGNORED_DIR_NAMES,
-    },
-    {
-      path: resolveAppleSnapshotPresentationSourceRoot(projectRoot),
-      ignoredDirectoryNames: SNAPSHOT_PRESENTATION_SOURCE_IGNORED_DIR_NAMES,
-    },
-  ];
-  const files = collectRunnerSourceFiles(sourceRoots);
-  const fileStatsFingerprint = computeRunnerSourceFileStatsFingerprint(projectRoot, files);
-  const cacheKey = JSON.stringify(sourceRoots.map(({ path: sourcePath }) => sourcePath));
-  const cached = runnerSourceFingerprintCache.get(cacheKey);
-  if (cached?.fileStatsFingerprint === fileStatsFingerprint) {
-    return cached.sourceFingerprint;
-  }
-  const hash = crypto.createHash('sha256');
-  for (const file of files) {
-    const relativePath = path.relative(projectRoot, file);
-    hash.update(relativePath);
-    hash.update('\0');
-    hash.update(fs.readFileSync(file));
-    hash.update('\0');
-  }
-  const sourceFingerprint = hash.digest('hex');
-  runnerSourceFingerprintCache.set(cacheKey, { fileStatsFingerprint, sourceFingerprint });
-  return sourceFingerprint;
-}
-
-function computeRunnerSourceFileStatsFingerprint(
-  projectRoot: string,
-  files: readonly string[],
-): string {
-  const hash = crypto.createHash('sha256');
-  for (const file of files) {
-    const relativePath = path.relative(projectRoot, file);
-    const stat = fs.statSync(file);
-    hash.update(relativePath);
-    hash.update('\0');
-    hash.update(String(stat.size));
-    hash.update('\0');
-    hash.update(String(Math.trunc(stat.mtimeMs)));
-    hash.update('\0');
-  }
-  return hash.digest('hex');
-}
-
-type RunnerSourceRoot = Readonly<{
-  path: string;
-  ignoredDirectoryNames: ReadonlySet<string>;
-}>;
-
-function collectRunnerSourceFiles(roots: readonly RunnerSourceRoot[]): string[] {
-  return [
-    ...new Set(
-      roots.flatMap(({ path: sourcePath, ignoredDirectoryNames }) =>
-        collectRunnerSourceFilesUnderRoot(sourcePath, ignoredDirectoryNames),
-      ),
-    ),
-  ].sort((a, b) => a.localeCompare(b));
-}
-
-function collectRunnerSourceFilesUnderRoot(
-  root: string,
-  ignoredDirectoryNames: ReadonlySet<string>,
-): string[] {
-  return fs.existsSync(root)
-    ? collectRunnerSourceFilesInDirectory(root, ignoredDirectoryNames)
-    : [];
-}
-
-function collectRunnerSourceFilesInDirectory(
-  directory: string,
-  ignoredDirectoryNames: ReadonlySet<string>,
-): string[] {
-  const files: string[] = [];
-  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    const fullPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      if (!ignoredDirectoryNames.has(entry.name)) {
-        files.push(...collectRunnerSourceFilesInDirectory(fullPath, ignoredDirectoryNames));
-      }
-    } else if (entry.isFile() && isRunnerSourceFile(entry.name, fullPath)) {
-      files.push(fullPath);
-    }
-  }
-  return files;
-}
-
-function isRunnerSourceFile(fileName: string, filePath: string): boolean {
-  if (fileName === 'project.pbxproj') {
-    return filePath.includes(`${path.sep}.xcodeproj${path.sep}`);
-  }
-  return [
-    '.jpg',
-    '.json',
-    '.png',
-    '.swift',
-    '.m',
-    '.h',
-    '.plist',
-    '.entitlements',
-    '.xctestplan',
-    '.xcconfig',
-    '.storyboard',
-    '.xib',
-  ].includes(path.extname(fileName));
 }
 
 export function resolveRunnerMaxConcurrentDestinationsFlag(device: DeviceInfo): string {

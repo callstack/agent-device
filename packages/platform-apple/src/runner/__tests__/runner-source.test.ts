@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { onTestFinished, test } from 'vitest';
 import {
+  computeRunnerSourceFingerprint,
   resolveAppleRunnerProjectPath,
   resolveAppleRunnerSourceRoot,
   resolveAppleSnapshotPresentationSourceRoot,
@@ -52,6 +53,71 @@ test('resolveAppleSnapshotPresentationSourceRoot falls back to packaged source',
 
   assert.equal(resolveAppleSnapshotPresentationSourceRoot(root), packagedSource);
 });
+
+test('computeRunnerSourceFingerprint covers the shared snapshot presentation sources', () => {
+  const root = makeTempRoot();
+  fs.mkdirSync(path.join(root, 'apple', 'runner', 'AgentDeviceRunner'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'apple', 'snapshot-presentation', 'Sources'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'apple', 'runner', 'AgentDeviceRunner', 'Runner.swift'),
+    'runner\n',
+  );
+  const sharedSource = path.join(
+    root,
+    'apple',
+    'snapshot-presentation',
+    'Sources',
+    'Presentation.swift',
+  );
+  fs.writeFileSync(sharedSource, 'shared-one\n');
+
+  const before = computeRunnerSourceFingerprint(root);
+  fs.writeFileSync(sharedSource, 'shared-two-changed\n');
+
+  assert.notEqual(computeRunnerSourceFingerprint(root), before);
+});
+
+test('computeRunnerSourceFingerprint ignores development-only SwiftPM trees but keeps runner unit tests', () => {
+  const root = makeTempRoot();
+  const runnerRoot = path.join(root, 'apple', 'runner', 'AgentDeviceRunner');
+  const runnerUnitTest = path.join(
+    runnerRoot,
+    'AgentDeviceRunnerUITests',
+    'UnitTests',
+    'Invariant.swift',
+  );
+  const sharedRoot = path.join(root, 'apple', 'snapshot-presentation');
+  fs.mkdirSync(path.dirname(runnerUnitTest), { recursive: true });
+  fs.mkdirSync(path.join(sharedRoot, 'Sources'), { recursive: true });
+  fs.writeFileSync(path.join(runnerRoot, 'Runner.swift'), 'runner\n');
+  fs.writeFileSync(runnerUnitTest, 'unit-one\n');
+  fs.writeFileSync(path.join(sharedRoot, 'Sources', 'Presentation.swift'), 'shared\n');
+
+  for (const directory of IGNORED_SOURCE_DIRECTORY_NAMES) {
+    const file = path.join(sharedRoot, directory, 'Ignored.swift');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, 'ignored-one\n');
+  }
+
+  const before = computeRunnerSourceFingerprint(root);
+  for (const directory of IGNORED_SOURCE_DIRECTORY_NAMES) {
+    fs.writeFileSync(path.join(sharedRoot, directory, 'Ignored.swift'), 'ignored-two-changed\n');
+  }
+  const afterIgnoredChanges = computeRunnerSourceFingerprint(root);
+  assert.equal(afterIgnoredChanges, before);
+
+  fs.writeFileSync(runnerUnitTest, 'unit-two-changed\n');
+
+  assert.notEqual(computeRunnerSourceFingerprint(root), afterIgnoredChanges);
+});
+
+const IGNORED_SOURCE_DIRECTORY_NAMES = [
+  'Tests',
+  'SnapshotPresentationConformance',
+  '.build',
+  '.swiftpm',
+  'xcuserdata',
+];
 
 function makeTempRoot(): string {
   const root = mkdtempForTestSync('agent-device-runner-source-');
