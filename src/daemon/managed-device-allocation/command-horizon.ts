@@ -1,16 +1,23 @@
 import { Deadline } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveDaemonRequestTimeoutMs } from '../request-timeout.ts';
-import { resolveDaemonSessionTeardownTimeoutMs } from '../session-teardown-budget.ts';
+import { resolveCommandTimeoutPolicy } from '../../core/command-descriptor/registry.ts';
+import { resolveCommandRequestTimeoutMs } from '../../core/command-descriptor/timeout-policy.ts';
+import {
+  DAEMON_SESSION_TEARDOWN_TIMEOUT_MS,
+  SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS,
+} from '../session-teardown-budget.ts';
 import type { DaemonRequest } from '../types.ts';
 import type { ManagedCommandHorizon } from './lease-admission.ts';
+
+const MANAGED_COMMAND_TEARDOWN_TIMEOUT_MS =
+  DAEMON_SESSION_TEARDOWN_TIMEOUT_MS + SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS;
 
 /** Reserve recording cleanup even when this command is the one that starts the capture. */
 export function managedCommandHorizon(
   req: Omit<DaemonRequest, 'token'>,
   startedAtMs: number,
 ): ManagedCommandHorizon {
-  const timeoutMs = resolveDaemonRequestTimeoutMs(req);
+  const timeoutMs = resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy(req.command), req);
   if (
     timeoutMs === undefined ||
     !Number.isFinite(timeoutMs) ||
@@ -27,6 +34,6 @@ export function managedCommandHorizon(
   }
   return Object.freeze({
     deadline: Deadline.fromTimeoutMs(timeoutMs, startedAtMs),
-    teardownTimeoutMs: resolveDaemonSessionTeardownTimeoutMs(undefined, true),
+    teardownTimeoutMs: MANAGED_COMMAND_TEARDOWN_TIMEOUT_MS,
   });
 }
