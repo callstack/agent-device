@@ -253,13 +253,12 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation
 // architectural position rather than a misplaced declaration:
 //
 //   commands/mcp -> client (4)   `AgentDeviceClient`, used as an opaque handle ("the client this
-//                                command runs against"). It cannot move below `commands/` because
-//                                the facade is BUILT from the command surface's own projection
-//                                registry: AgentDeviceClient -> AgentDeviceCommandClient ->
-//                                ProjectedNavigationCommandClient -> NAVIGATION_COMMAND_PROJECTIONS
-//                                in commands/system/. That is a genuine zone-level cycle, and
-//                                breaking it means deciding where the projection registry belongs —
-//                                a design call, not a file move. R5 is zero here: nothing imports
+//                                command runs against"). The facade no longer reaches back into
+//                                commands/ — the navigation projection it was once built from is
+//                                retired — so this is no longer a zone-level cycle, just a port
+//                                that would have to cover the whole facade: 4 files NAME it, but 26
+//                                call sites use methods across 13 of its namespaces, so any port
+//                                would re-declare the public API. R5 is zero here: nothing imports
 //                                the client at runtime, only its type.
 //
 //   commands -> daemon-server (1)  `DaemonCommandRoute` is declared in core so descriptors can

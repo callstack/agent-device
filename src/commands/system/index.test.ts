@@ -3,6 +3,7 @@ import type {
   AgentDeviceCommandClient,
   AppSwitcherCommandOptions,
   BackCommandOptions,
+  HomeCommandOptions,
   OrientationCommandOptions,
   TvRemoteCommandOptions,
 } from '../../client/client-types.ts';
@@ -26,7 +27,6 @@ import {
   orientationDaemonWriter,
   tvRemoteCliReader,
   tvRemoteDaemonWriter,
-  systemCommandFamily,
 } from './index.ts';
 import { systemCliOutputFormatters } from './output.ts';
 
@@ -44,9 +44,12 @@ function expectInvalidArgs(fn: () => unknown, messageFragment: string) {
 }
 
 describe('system command interface', () => {
-  test('navigation executable contracts project the public client signatures', () => {
+  test('navigation commands declare the public client signatures', () => {
     expectTypeOf<AgentDeviceCommandClient['back']>().toEqualTypeOf<
       (options?: BackCommandOptions) => Promise<CommandResult<'back'>>
+    >();
+    expectTypeOf<AgentDeviceCommandClient['home']>().toEqualTypeOf<
+      (options?: HomeCommandOptions) => Promise<CommandResult<'home'>>
     >();
     expectTypeOf<AgentDeviceCommandClient['orientation']>().toEqualTypeOf<
       (options: OrientationCommandOptions) => Promise<CommandResult<'orientation'>>
@@ -57,35 +60,6 @@ describe('system command interface', () => {
     expectTypeOf<AgentDeviceCommandClient['tvRemote']>().toEqualTypeOf<
       (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>
     >();
-  });
-
-  test('system command family projects Node client command methods', () => {
-    expect(systemCommandFamily.clientCommandMethods).toEqual({
-      appState: 'appstate',
-      back: 'back',
-      home: 'home',
-      orientation: 'orientation',
-      appSwitcher: 'app-switcher',
-      keyboard: 'keyboard',
-      clipboard: 'clipboard',
-      tvRemote: 'tv-remote',
-    });
-  });
-
-  test('navigation executable contracts own their MCP output schemas', () => {
-    expect(
-      Object.fromEntries(
-        systemCommandFamily.definitions.flatMap((definition) =>
-          'projection' in definition ? [[definition.name, definition.projection.clientMethod]] : [],
-        ),
-      ),
-    ).toEqual({
-      back: 'back',
-      home: 'home',
-      orientation: 'orientation',
-      'app-switcher': 'appSwitcher',
-      'tv-remote': 'tvRemote',
-    });
   });
 
   test('parameterless readers project common selection flags through', () => {

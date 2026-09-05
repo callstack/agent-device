@@ -54,19 +54,13 @@ import {
   readSnapshotNodes,
   resolveSessionName,
 } from './client/client-normalizers.ts';
-import type {
-  AgentDeviceClient,
-  AgentDeviceCommandClient,
-  MetroPrepareResult,
-} from './client/client-types.ts';
+import type { AgentDeviceClient, MetroPrepareResult } from './client/client-types.ts';
 import { INTERNAL_COMMANDS } from './command-catalog.ts';
 import { buildRequestFlags } from './commands/command-flags.ts';
 import {
   prepareDaemonCommandRequest,
   type DaemonCommandName,
 } from './commands/command-projection.ts';
-import { systemCommandFamily } from './commands/system/index.ts';
-import type { ProjectedNavigationCommandClient } from './commands/system/navigation-projection.ts';
 import type { CommandResult } from './core/command-descriptor/command-result.ts';
 import { sendToDaemon } from './daemon/client/daemon-client.ts';
 import { resolveDaemonPaths } from './daemon/config.ts';
@@ -80,9 +74,6 @@ import {
 import { isRecord } from '@agent-device/kernel/record';
 import { createLeaseClient } from './client/lease-client.ts';
 import { normalizeScreenshotCaptureResult } from './client/screenshot-result.ts';
-
-type ProjectedSystemCommandClient = ProjectedNavigationCommandClient<InternalRequestOptions> &
-  Pick<AgentDeviceCommandClient, 'appState' | 'keyboard' | 'clipboard'>;
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
@@ -142,13 +133,25 @@ export function createAgentDeviceClient(
 
   const resolveRequestSession = (options: InternalRequestOptions = {}) =>
     resolveSessionName(mergeClientOptions(config, options).session);
-  const projectedSystemCommands = buildProjectedSystemCommandClient(executeCommand);
 
   return {
     command: {
       wait: async (options) => await executeCommand<CommandResult<'wait'>>('wait', options),
       alert: async (options = {}) => await executeCommand('alert', options),
-      ...projectedSystemCommands,
+      appState: async (options = {}) =>
+        await executeCommand<CommandResult<'appstate'>>('appstate', options),
+      back: async (options = {}) => await executeCommand<CommandResult<'back'>>('back', options),
+      home: async (options = {}) => await executeCommand<CommandResult<'home'>>('home', options),
+      orientation: async (options) =>
+        await executeCommand<CommandResult<'orientation'>>('orientation', options),
+      appSwitcher: async (options = {}) =>
+        await executeCommand<CommandResult<'app-switcher'>>('app-switcher', options),
+      keyboard: async (options = {}) =>
+        await executeCommand<CommandResult<'keyboard'>>('keyboard', options),
+      clipboard: async (options) =>
+        await executeCommand<CommandResult<'clipboard'>>('clipboard', options),
+      tvRemote: async (options) =>
+        await executeCommand<CommandResult<'tv-remote'>>('tv-remote', options),
       reactNative: async (options) => await executeCommand('react-native', options),
       doctor: async (options = {}) =>
         await executeCommand<CommandResult<'doctor'>>('doctor', options),
@@ -543,17 +546,6 @@ function optionalSnapshotResponseFields(
     // so callers can pin refs (`@e12~s<refsGeneration>`) before a mutation.
     ...(typeof data.refsGeneration === 'number' ? { refsGeneration: data.refsGeneration } : {}),
   };
-}
-
-function buildProjectedSystemCommandClient(
-  executeCommand: <T>(command: DaemonCommandName, options?: InternalRequestOptions) => Promise<T>,
-): ProjectedSystemCommandClient {
-  const methods: Record<string, (options?: InternalRequestOptions) => Promise<unknown>> = {};
-  for (const [method, command] of Object.entries(systemCommandFamily.clientCommandMethods ?? {})) {
-    methods[method] = async (options = {}) =>
-      await executeCommand<CommandResult<typeof command>>(command as DaemonCommandName, options);
-  }
-  return methods as unknown as ProjectedSystemCommandClient;
 }
 
 function readObject(value: unknown): Record<string, unknown> | undefined {
