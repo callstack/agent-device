@@ -7,9 +7,9 @@ import type {
   ManagedDeviceAllocatorPort,
   SupersedeLeaseRequestInput,
 } from '@agent-device/contracts/managed-device-allocation';
-import type { ScriptedAllocatorMethod } from '../../../__tests__/test-utils/managed-device-allocator.fixtures.ts';
-import { createScriptedManagedDeviceAllocator } from '../../../__tests__/test-utils/managed-device-allocator.fixtures.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import type { ScriptedAllocatorMethod } from './test-utils/managed-device-allocator.fixtures.ts';
+import { createScriptedManagedDeviceAllocator } from './test-utils/managed-device-allocator.fixtures.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 import { createAllocationOperationJournal, type AllocationBindingHooks } from '../journal.ts';
 import { createAllocationOperationStore, type AllocationOperationStore } from '../store.ts';
 import {

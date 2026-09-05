@@ -1,6 +1,11 @@
 import { isFiniteNumber } from './record-validation.ts';
 import { transitionFromAllocatorStatus } from './status.ts';
 import { applyAllocatorOutcome } from './transition-outcome.ts';
+
+// Public transition surface for the managed runtime binding (ADR 0021 §3), which lands after
+// this move, so fallow sees no importer of the re-export yet.
+// fallow-ignore-next-line unused-export
+export { applyAllocatorOutcome };
 import {
   alreadyApplied,
   applied,

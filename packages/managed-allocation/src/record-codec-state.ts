@@ -3,7 +3,7 @@ import type {
   ManagedLease,
   ManagedShapeRequest,
 } from '@agent-device/contracts/managed-device-allocation';
-import type { AllocationOperationPhase, AllocationOperationRecord } from './record.ts';
+import type { AllocationOperationPhase, AllocationOperationRecord } from './record-types.ts';
 import {
   isFiniteNumber,
   isNonEmptyString,

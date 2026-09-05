@@ -3,8 +3,8 @@ import type {
   ManagedLease,
   ManagedShapeRequest,
 } from '@agent-device/contracts/managed-device-allocation';
-import { isBoundedJsonObject } from '@agent-device/capture-kit';
-import type { NewAllocationOperationInput } from './record.ts';
+import { isBoundedJsonObject } from '@agent-device/capture-kit/durable-json';
+import type { NewAllocationOperationInput } from './record-types.ts';
 
 export function isAllocationRequest(fields: NewAllocationOperationInput): boolean {
   return (

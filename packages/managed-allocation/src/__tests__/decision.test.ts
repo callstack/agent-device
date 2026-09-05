@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { newAllocationOperation } from '../record-factory.ts';
+import { newAllocationOperation } from '../record.ts';
 import { applyAllocationTransition } from '../transitions.ts';
 import { decideAllocationAction } from '../decision.ts';
 import { ALLOCATION_LEASE, ALLOCATION_REQUEST } from './fixtures.ts';
