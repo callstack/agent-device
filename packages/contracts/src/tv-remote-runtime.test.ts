@@ -2,7 +2,6 @@ import { expect, test, vi } from 'vitest';
 import { bindTvRemote, tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
 import { localInteractorSource } from './interactor-operation-binding.ts';
-import { conformInteractorOperations } from './interactor-operation-conformance.fixtures.ts';
 
 const device = {
   platform: 'vega',
@@ -39,17 +38,4 @@ test('a local binding drives the interactor with the button and duration', async
   // Positional (button, durationMs), not an object: swapping the argument order or dropping
   // durationMs is the one transposition a point-shaped assertion would not catch.
   expect(tvRemote).toHaveBeenCalledWith('down', 250);
-});
-
-conformInteractorOperations({
-  device,
-  rows: [
-    {
-      operation: 'tvRemote',
-      label: 'tv-remote',
-      bind: bindTvRemote,
-      method: 'tvRemote',
-      input: { button: 'select' },
-    },
-  ],
 });

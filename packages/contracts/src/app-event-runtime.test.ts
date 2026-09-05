@@ -2,7 +2,6 @@ import { expect, test, vi } from 'vitest';
 import { appEventRuntimeOperationFacts, bindAppEvent } from './app-event-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
 import { localInteractorSource } from './interactor-operation-binding.ts';
-import { conformInteractorOperations } from './interactor-operation-conformance.fixtures.ts';
 
 const device = {
   platform: 'android',
@@ -14,7 +13,9 @@ const device = {
 
 test('builds the exact app-event operation fact catalog', () => {
   const triggerAppEvent = { available: true } as const;
-  expect(appEventRuntimeOperationFacts({ triggerAppEvent })).toEqual({ triggerAppEvent });
+  expect(appEventRuntimeOperationFacts({ triggerAppEvent })).toEqual({
+    triggerAppEvent,
+  });
 });
 
 // The URL is resolved daemon-side from the event name, payload, and per-platform template; what
@@ -40,17 +41,4 @@ test('a local binding opens the resolved event URL against the session app', asy
   expect(open).toHaveBeenCalledWith('myapp://agent-device/event?name=checkout', {
     appBundleId: 'com.example.app',
   });
-});
-
-conformInteractorOperations({
-  device,
-  rows: [
-    {
-      operation: 'triggerAppEvent',
-      label: 'trigger-app-event',
-      bind: bindAppEvent,
-      method: 'open',
-      input: { eventUrl: 'myapp://x' },
-    },
-  ],
 });

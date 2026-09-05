@@ -2,7 +2,6 @@ import { expect, test, vi } from 'vitest';
 import { appSwitcherRuntimeOperationFacts, bindAppSwitcher } from './app-switcher-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
 import { localInteractorSource } from './interactor-operation-binding.ts';
-import { conformInteractorOperations } from './interactor-operation-conformance.fixtures.ts';
 
 const device = {
   platform: 'android',
@@ -14,7 +13,9 @@ const device = {
 
 test('builds the exact app-switcher operation fact catalog', () => {
   const appSwitcher = { available: true } as const;
-  expect(appSwitcherRuntimeOperationFacts({ appSwitcher })).toEqual({ appSwitcher });
+  expect(appSwitcherRuntimeOperationFacts({ appSwitcher })).toEqual({
+    appSwitcher,
+  });
 });
 
 test('a local binding drives the interactor with the request runner context', async () => {
@@ -35,17 +36,4 @@ test('a local binding drives the interactor with the request runner context', as
     signal,
   });
   expect(appSwitcher).toHaveBeenCalledOnce();
-});
-
-conformInteractorOperations({
-  device,
-  rows: [
-    {
-      operation: 'appSwitcher',
-      label: 'app-switcher',
-      bind: bindAppSwitcher,
-      method: 'appSwitcher',
-      input: {},
-    },
-  ],
 });

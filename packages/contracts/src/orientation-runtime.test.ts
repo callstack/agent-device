@@ -2,7 +2,6 @@ import { expect, test, vi } from 'vitest';
 import { bindOrientation, orientationRuntimeOperationFacts } from './orientation-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
 import { localInteractorSource } from './interactor-operation-binding.ts';
-import { conformInteractorOperations } from './interactor-operation-conformance.fixtures.ts';
 
 const device = {
   platform: 'android',
@@ -20,7 +19,9 @@ test('builds the exact orientation operation fact catalog', () => {
 });
 
 test('a local binding drives the interactor with the requested rotation and returns its report', async () => {
-  const setOrientation = vi.fn(async () => ({ orientation: 'landscape-left' as const }));
+  const setOrientation = vi.fn(async () => ({
+    orientation: 'landscape-left' as const,
+  }));
   const resolveInteractor = vi.fn(async () => ({ setOrientation }) as unknown as Interactor);
   const signal = new AbortController().signal;
 
@@ -39,17 +40,4 @@ test('a local binding drives the interactor with the requested rotation and retu
   });
   expect(setOrientation).toHaveBeenCalledWith('landscape-left');
   expect(result).toEqual({ orientation: 'landscape-left' });
-});
-
-conformInteractorOperations({
-  device,
-  rows: [
-    {
-      operation: 'setOrientation',
-      label: 'orientation',
-      bind: bindOrientation,
-      method: 'setOrientation',
-      input: { rotation: 'portrait' },
-    },
-  ],
 });

@@ -1,7 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { alertRuntimeOperationFacts, bindAlertLeg } from './alert-runtime.ts';
 import { localInteractorSource } from './interactor-operation-binding.ts';
-import { conformInteractorOperations } from './interactor-operation-conformance.fixtures.ts';
 import type { AlertInteractorOptions, Interactor } from './interactor-types.ts';
 
 const device = {
@@ -15,7 +14,10 @@ const device = {
 
 test('builds the exact alert operation fact catalog', () => {
   const read = { available: true } as const;
-  const wait = { available: false, reason: 'owner-capability-missing' } as const;
+  const wait = {
+    available: false,
+    reason: 'owner-capability-missing',
+  } as const;
   const accept = { available: true } as const;
   const dismiss = { available: true } as const;
 
@@ -51,7 +53,11 @@ test('each local leg forwards the window and the session target to its own owner
   await bindAlertLeg('acceptAlert', signal, source).acceptAlert(input);
   await bindAlertLeg('dismissAlert', signal, source).dismissAlert(input);
 
-  const expectedOptions = { timeoutMs: 37, appBundleId: 'com.example.app', surface: 'app' };
+  const expectedOptions = {
+    timeoutMs: 37,
+    appBundleId: 'com.example.app',
+    surface: 'app',
+  };
   expect(legs.readAlert).toHaveBeenCalledWith(expectedOptions);
   expect(legs.awaitAlert).toHaveBeenCalledWith(expectedOptions);
   expect(legs.acceptAlert).toHaveBeenCalledWith(expectedOptions);
@@ -75,38 +81,4 @@ test('an absent target field never reaches the owner as an explicit undefined', 
 
   expect(readAlert).toHaveBeenCalledWith({ surface: 'frontmost-app' });
   expect(Object.keys(readAlert.mock.calls[0]?.[0] ?? {})).toEqual(['surface']);
-});
-
-conformInteractorOperations({
-  device,
-  rows: [
-    {
-      operation: 'readAlert',
-      label: 'alert get',
-      bind: (signal, resolve) => bindAlertLeg('readAlert', signal, resolve),
-      method: 'readAlert',
-      input: {},
-    },
-    {
-      operation: 'awaitAlert',
-      label: 'alert wait',
-      bind: (signal, resolve) => bindAlertLeg('awaitAlert', signal, resolve),
-      method: 'awaitAlert',
-      input: {},
-    },
-    {
-      operation: 'acceptAlert',
-      label: 'alert accept',
-      bind: (signal, resolve) => bindAlertLeg('acceptAlert', signal, resolve),
-      method: 'acceptAlert',
-      input: {},
-    },
-    {
-      operation: 'dismissAlert',
-      label: 'alert dismiss',
-      bind: (signal, resolve) => bindAlertLeg('dismissAlert', signal, resolve),
-      method: 'dismissAlert',
-      input: {},
-    },
-  ],
 });

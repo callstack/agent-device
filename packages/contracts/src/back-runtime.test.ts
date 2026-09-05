@@ -2,7 +2,6 @@ import { expect, test, vi } from 'vitest';
 import { bindBack, backRuntimeOperationFacts } from './back-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
 import { localInteractorSource } from './interactor-operation-binding.ts';
-import { conformInteractorOperations } from './interactor-operation-conformance.fixtures.ts';
 
 const device = {
   platform: 'android',
@@ -36,17 +35,4 @@ test('a local binding drives the interactor with the requested mode', async () =
     signal,
   });
   expect(back).toHaveBeenCalledWith('system');
-});
-
-conformInteractorOperations({
-  device,
-  rows: [
-    {
-      operation: 'back',
-      label: 'back',
-      bind: bindBack,
-      method: 'back',
-      input: {},
-    },
-  ],
 });

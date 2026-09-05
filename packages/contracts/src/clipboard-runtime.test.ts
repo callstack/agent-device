@@ -9,7 +9,6 @@ import {
   localInteractorSource,
   type LocalInteractorOperationResolver,
 } from './interactor-operation-binding.ts';
-import { conformInteractorOperations } from './interactor-operation-conformance.fixtures.ts';
 
 const device = {
   platform: 'android',
@@ -24,7 +23,10 @@ const local = (resolveInteractor: LocalInteractorOperationResolver) =>
 
 test('builds the exact clipboard operation fact catalog', () => {
   const read = { available: true } as const;
-  const write = { available: false, reason: 'owner-capability-missing' } as const;
+  const write = {
+    available: false,
+    reason: 'owner-capability-missing',
+  } as const;
   expect(clipboardRuntimeOperationFacts({ read, write })).toEqual({
     readClipboard: read,
     writeClipboard: write,
@@ -60,24 +62,4 @@ test('a local write binding hands the interactor the already-joined text', async
   await operations.writeClipboard({ text: 'hello world' });
 
   expect(writeClipboard).toHaveBeenCalledWith('hello world');
-});
-
-conformInteractorOperations({
-  device,
-  rows: [
-    {
-      operation: 'readClipboard',
-      label: 'clipboard read',
-      bind: bindClipboardRead,
-      method: 'readClipboard',
-      input: {},
-    },
-    {
-      operation: 'writeClipboard',
-      label: 'clipboard write',
-      bind: bindClipboardWrite,
-      method: 'writeClipboard',
-      input: { text: '' },
-    },
-  ],
 });

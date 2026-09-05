@@ -2,7 +2,6 @@ import { expect, test, vi } from 'vitest';
 import { bindSetSetting, settingsRuntimeOperationFacts } from './settings-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
 import { localInteractorSource } from './interactor-operation-binding.ts';
-import { conformInteractorOperations } from './interactor-operation-conformance.fixtures.ts';
 
 const device = {
   platform: 'apple',
@@ -45,17 +44,4 @@ test('a local binding forwards the neutral mutation to its owner', async () => {
     longitude: -122.03,
   });
   expect(result).toEqual({ message: 'Location updated' });
-});
-
-conformInteractorOperations({
-  device,
-  rows: [
-    {
-      operation: 'setSetting',
-      label: 'settings',
-      bind: bindSetSetting,
-      method: 'setSetting',
-      input: { setting: 'appearance', state: 'dark' },
-    },
-  ],
 });

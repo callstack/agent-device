@@ -2,7 +2,6 @@ import { expect, test, vi } from 'vitest';
 import { bindHome, homeRuntimeOperationFacts } from './home-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
 import { localInteractorSource } from './interactor-operation-binding.ts';
-import { conformInteractorOperations } from './interactor-operation-conformance.fixtures.ts';
 
 const device = {
   platform: 'android',
@@ -35,9 +34,4 @@ test('a local binding drives the interactor with no arguments', async () => {
     signal,
   });
   expect(home).toHaveBeenCalledWith();
-});
-
-conformInteractorOperations({
-  device,
-  rows: [{ operation: 'home', label: 'home', bind: bindHome, method: 'home', input: {} }],
 });

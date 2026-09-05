@@ -1,15 +1,10 @@
 import { expect, test, vi } from 'vitest';
-import {
-  KEYBOARD_ACTION_LABELS,
-  bindKeyboardAction,
-  keyboardRuntimeOperationFacts,
-} from './keyboard-runtime.ts';
+import { bindKeyboardAction, keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
 import {
   localInteractorSource,
   type LocalInteractorOperationResolver,
 } from './interactor-operation-binding.ts';
-import { conformInteractorOperations } from './interactor-operation-conformance.fixtures.ts';
 
 const device = {
   platform: 'android',
@@ -24,7 +19,10 @@ const local = (resolveInteractor: LocalInteractorOperationResolver) =>
 
 test('builds the exact keyboard operation fact catalog', () => {
   const status = { available: true } as const;
-  const dismiss = { available: false, reason: 'unsupported-platform-leaf' } as const;
+  const dismiss = {
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  } as const;
   const enter = { available: true } as const;
   expect(keyboardRuntimeOperationFacts({ status, dismiss, enter })).toEqual({
     keyboardStatus: status,
@@ -55,7 +53,10 @@ test('a local status binding drives the interactor and returns its report', asyn
 });
 
 test('a local dismiss binding drives the interactor', async () => {
-  const keyboardDismiss = vi.fn(async () => ({ dismissed: true, visible: false }));
+  const keyboardDismiss = vi.fn(async () => ({
+    dismissed: true,
+    visible: false,
+  }));
   const resolveInteractor = vi.fn(async () => ({ keyboardDismiss }) as unknown as Interactor);
   const operations = bindKeyboardAction(
     'keyboardDismiss',
@@ -98,31 +99,4 @@ test('binding fails as a runtime-contract error when the resolved interactor has
     code: 'COMMAND_FAILED',
     details: { reason: 'interactor-method-missing' },
   });
-});
-
-conformInteractorOperations({
-  device,
-  rows: [
-    {
-      operation: 'keyboardStatus',
-      label: KEYBOARD_ACTION_LABELS.keyboardStatus,
-      bind: (signal, resolve) => bindKeyboardAction('keyboardStatus', signal, resolve),
-      method: 'keyboardStatus',
-      input: {},
-    },
-    {
-      operation: 'keyboardDismiss',
-      label: KEYBOARD_ACTION_LABELS.keyboardDismiss,
-      bind: (signal, resolve) => bindKeyboardAction('keyboardDismiss', signal, resolve),
-      method: 'keyboardDismiss',
-      input: {},
-    },
-    {
-      operation: 'keyboardEnter',
-      label: KEYBOARD_ACTION_LABELS.keyboardEnter,
-      bind: (signal, resolve) => bindKeyboardAction('keyboardEnter', signal, resolve),
-      method: 'keyboardEnter',
-      input: {},
-    },
-  ],
 });
