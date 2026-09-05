@@ -3,32 +3,23 @@ import type {
   ManagedDeviceAllocatorPort,
   SupersedeLeaseRequestInput,
 } from '@agent-device/contracts/managed-device-allocation';
-import type { AllocationAction, AllocationDecisionMode } from './allocation-operation-decision.ts';
-import { decideAllocationAction } from './allocation-operation-decision.ts';
-import type {
-  AllocationOperationRecord,
-  AllocationOperationRef,
-} from './allocation-operation-record.ts';
-import type { AllocationJournalLane } from './allocation-operation-journal-lane.ts';
-import { createAllocationJournalLane } from './allocation-operation-journal-lane.ts';
-import { createAllocationJournalActionRunner } from './allocation-operation-journal-action-runtime.ts';
-import { projectAllocationRecord } from './allocation-operation-journal-projection.ts';
+import type { AllocationAction, AllocationDecisionMode } from './decision.ts';
+import { decideAllocationAction } from './decision.ts';
+import type { AllocationOperationRecord, AllocationOperationRef } from './record.ts';
+import type { AllocationJournalLane } from './journal-lane.ts';
+import { createAllocationJournalLane } from './journal-lane.ts';
+import { createAllocationJournalActionRunner } from './journal-action-runtime.ts';
+import { projectAllocationRecord } from './journal-projection.ts';
 import type {
   AllocationJournalActionRunner,
   AllocationBindingHooks,
   AllocationJournalResult,
   JournalContext,
-} from './allocation-operation-journal-types.ts';
-import type {
-  AllocationOperationRead,
-  AllocationOperationStore,
-} from './allocation-operation-store.ts';
-import { abandoned, blocked, unreadableResult } from './allocation-operation-journal-results.ts';
+} from './journal-types.ts';
+import type { AllocationOperationRead, AllocationOperationStore } from './store.ts';
+import { abandoned, blocked, unreadableResult } from './journal-results.ts';
 
-export type {
-  AllocationBindingHooks,
-  AllocationJournalResult,
-} from './allocation-operation-journal-types.ts';
+export type { AllocationBindingHooks, AllocationJournalResult } from './journal-types.ts';
 
 export type AllocationOperationJournal = Readonly<{
   allocate(input: LeaseRequestInput): Promise<AllocationJournalResult>;

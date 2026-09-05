@@ -71,7 +71,11 @@ export function syncDirectoryBestEffort(directory: string): void {
     fs.fsyncSync(descriptor);
   } catch {
   } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
+    if (descriptor !== undefined) {
+      try {
+        fs.closeSync(descriptor);
+      } catch {}
+    }
   }
 }
 

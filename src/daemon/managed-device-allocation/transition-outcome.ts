@@ -5,19 +5,19 @@ import {
   isValidLease,
   isValidRefusal,
   isVerbatimId,
-} from './allocation-operation-record-validation.ts';
+} from './record-validation.ts';
 import type {
   AllocationAllocatorOutcome,
   AllocationOperationRecord,
   AllocationTransitionResult,
-} from './allocation-operation-record.ts';
+} from './record.ts';
 import {
   alreadyApplied,
   ambiguous,
   applied,
   isTransitionTerminal,
   transitionInvalid,
-} from './allocation-operation-record-transition-support.ts';
+} from './transition-support.ts';
 
 export function applyAllocatorOutcome(
   record: AllocationOperationRecord,

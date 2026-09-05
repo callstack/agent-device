@@ -2,13 +2,9 @@ import type {
   LeaseRequestInput,
   SupersedeLeaseRequestInput,
 } from '@agent-device/contracts/managed-device-allocation';
-import type {
-  AllocationAction,
-  AllocationBinding,
-  AllocationDecisionMode,
-} from './allocation-operation-decision.ts';
-import type { AllocationOperationRecord } from './allocation-operation-record.ts';
-import type { AllocationOperationUnreadable } from './allocation-operation-store.ts';
+import type { AllocationAction, AllocationBinding, AllocationDecisionMode } from './decision.ts';
+import type { AllocationOperationRecord } from './record.ts';
+import type { AllocationOperationUnreadable } from './store.ts';
 
 export type AllocationBindingHooks = Readonly<{
   publish(binding: AllocationBinding): Promise<void>;

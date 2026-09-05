@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { newAllocationOperation } from '../allocation-operation-record-factory.ts';
-import { applyAllocationTransition } from '../allocation-operation-record-transition.ts';
-import { decideAllocationAction } from '../allocation-operation-decision.ts';
-import { ALLOCATION_LEASE, ALLOCATION_REQUEST } from './allocation-operation-fixtures.ts';
+import { newAllocationOperation } from '../record-factory.ts';
+import { applyAllocationTransition } from '../transitions.ts';
+import { decideAllocationAction } from '../decision.ts';
+import { ALLOCATION_LEASE, ALLOCATION_REQUEST } from './fixtures.ts';
 
 const NOW = 1_700_000_000_000;
 

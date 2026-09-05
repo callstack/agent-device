@@ -1,19 +1,16 @@
 import type { ManagedShapeRequest } from '@agent-device/contracts/managed-device-allocation';
 import type { JsonObject } from '@agent-device/contracts/client';
-import type {
-  AllocationOperationPhase,
-  AllocationOperationRecord,
-} from './allocation-operation-record.ts';
-import { allocationOperationFence } from './allocation-operation-fence.ts';
-import { ALLOCATION_OPERATION_SCHEMA_VERSION } from './allocation-operation-schema.ts';
+import type { AllocationOperationPhase, AllocationOperationRecord } from './record.ts';
+import { allocationOperationFence } from './fence.ts';
+import { ALLOCATION_OPERATION_SCHEMA_VERSION } from './schema.ts';
 import {
   isFenceGeneration,
   isFiniteNumber,
   isPlainObject,
   isRequestGeneration,
   isVerbatimId,
-} from './allocation-operation-record-validation.ts';
-import { decodeAllocationAttribution } from './allocation-operation-record-json.ts';
+} from './record-validation.ts';
+import { decodeAllocationAttribution } from './record-json.ts';
 import {
   checkConsistency,
   decodeBinding,
@@ -21,7 +18,7 @@ import {
   decodeRelease,
   decodeShape,
   isActivation,
-} from './allocation-operation-record-codec-state.ts';
+} from './record-codec-state.ts';
 
 export type AllocationOperationDecoding =
   | Readonly<{ status: 'decoded'; record: AllocationOperationRecord }>

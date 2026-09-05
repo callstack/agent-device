@@ -1,29 +1,23 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { openVerifiedFileForRead } from '@agent-device/host-kit/file';
 import type {
   AllocationOperationRecord,
   AllocationOperationRef,
   AllocationTransition,
-} from './allocation-operation-record.ts';
-import { applyAllocationTransition } from './allocation-operation-record-transition.ts';
-import { decodeAllocationOperationRecord } from './allocation-operation-record-codec.ts';
-import { createAllocationRecord } from './allocation-operation-store-creation.ts';
+} from './record.ts';
+import { applyAllocationTransition } from './transitions.ts';
+import { decodeAllocationOperationRecord } from './record-codec.ts';
+import { createAllocationRecord } from './store-creation.ts';
 import {
   errorMessage,
   inspectAllocationOperationDirectories,
   isMissingFile,
   listAllocationOperationPaths,
   publishAllocationRecord,
-} from './allocation-operation-store-filesystem.ts';
-import {
-  acquireAllocationStoreLock,
-  createAllocationStoreLaneLock,
-  hash,
-} from './allocation-operation-store-lock.ts';
-import {
-  allocationOperationUnreadable,
-  allocationOperationWriteResult,
-} from './allocation-operation-store-results.ts';
+} from './store-filesystem.ts';
+import { acquireAllocationStoreLock, createAllocationStoreLaneLock, hash } from './store-lock.ts';
+import { allocationOperationUnreadable, allocationOperationWriteResult } from './store-results.ts';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 
 export type AllocationOperationUnreadable = Readonly<{
@@ -152,26 +146,17 @@ function readPath(
 }
 
 function readRawRecord(recordPath: string): RawRecordRead {
-  let stats: fs.Stats;
+  let descriptor: number | undefined;
   try {
-    stats = fs.lstatSync(recordPath);
+    descriptor = openVerifiedFileForRead(recordPath);
+    if (descriptor === undefined) return { status: 'missing' };
+    return { status: 'value', value: JSON.parse(fs.readFileSync(descriptor, 'utf8')) as unknown };
   } catch (error) {
     return isMissingFile(error)
       ? { status: 'missing' }
       : { status: 'unreadable', message: errorMessage(error) };
-  }
-  if (!stats.isFile()) {
-    return {
-      status: 'unreadable',
-      message: stats.isSymbolicLink()
-        ? 'allocation operation path is a symbolic link'
-        : 'allocation operation path is not a regular file',
-    };
-  }
-  try {
-    return { status: 'value', value: JSON.parse(fs.readFileSync(recordPath, 'utf8')) as unknown };
-  } catch (error) {
-    return { status: 'unreadable', message: errorMessage(error) };
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
   }
 }
 

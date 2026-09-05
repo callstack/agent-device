@@ -1,20 +1,9 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type {
-  AllocationOperationRecord,
-  AllocationTransition,
-} from './allocation-operation-record.ts';
-import type {
-  AllocationJournalResult,
-  PersistedTransition,
-} from './allocation-operation-journal-types.ts';
-import type { AllocationOperationStore } from './allocation-operation-store.ts';
-import {
-  blocked,
-  errorMessage,
-  uncertain,
-  unreadableResult,
-} from './allocation-operation-journal-results.ts';
-import type { AllocationActionRunnerContext } from './allocation-operation-journal-action-context.ts';
+import type { AllocationOperationRecord, AllocationTransition } from './record.ts';
+import type { AllocationJournalResult, PersistedTransition } from './journal-types.ts';
+import type { AllocationOperationStore } from './store.ts';
+import { blocked, errorMessage, uncertain, unreadableResult } from './journal-results.ts';
+import type { AllocationActionRunnerContext } from './journal-action-context.ts';
 
 export async function transition(
   options: AllocationActionRunnerContext,

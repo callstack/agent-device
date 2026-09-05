@@ -7,23 +7,17 @@ import type {
   ManagedDeviceAllocatorPort,
   SupersedeLeaseRequestInput,
 } from '@agent-device/contracts/managed-device-allocation';
-import type { ScriptedAllocatorMethod } from '../../__tests__/test-utils/managed-device-allocator.fixtures.ts';
-import { createScriptedManagedDeviceAllocator } from '../../__tests__/test-utils/managed-device-allocator.fixtures.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import {
-  createAllocationOperationJournal,
-  type AllocationBindingHooks,
-} from '../allocation-operation-journal.ts';
-import {
-  createAllocationOperationStore,
-  type AllocationOperationStore,
-} from '../allocation-operation-store.ts';
+import type { ScriptedAllocatorMethod } from '../../../__tests__/test-utils/managed-device-allocator.fixtures.ts';
+import { createScriptedManagedDeviceAllocator } from '../../../__tests__/test-utils/managed-device-allocator.fixtures.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { createAllocationOperationJournal, type AllocationBindingHooks } from '../journal.ts';
+import { createAllocationOperationStore, type AllocationOperationStore } from '../store.ts';
 import {
   ALLOCATION_GRANTED_STATUS,
   ALLOCATION_PENDING_STATUS,
   ALLOCATION_REFUSED_STATUS,
   ALLOCATION_REQUEST,
-} from './allocation-operation-fixtures.ts';
+} from './fixtures.ts';
 
 const NOW = 1_700_000_000_000;
 

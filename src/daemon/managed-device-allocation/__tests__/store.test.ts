@@ -4,14 +4,11 @@ import path from 'node:path';
 import { test, vi } from 'vitest';
 import { acquireProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { newAllocationOperation } from '../allocation-operation-record-factory.ts';
-import type { AllocationOperationRecord } from '../allocation-operation-record.ts';
-import {
-  createAllocationOperationStore,
-  type AllocationOperationStore,
-} from '../allocation-operation-store.ts';
-import { ALLOCATION_LEASE, ALLOCATION_REQUEST } from './allocation-operation-fixtures.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { newAllocationOperation } from '../record-factory.ts';
+import type { AllocationOperationRecord } from '../record.ts';
+import { createAllocationOperationStore, type AllocationOperationStore } from '../store.ts';
+import { ALLOCATION_LEASE, ALLOCATION_REQUEST } from './fixtures.ts';
 
 const NOW = 1_700_000_000_000;
 
@@ -140,6 +137,40 @@ test('does not follow a symbolic-link destination', () => {
   assert.equal(store.create(record).status, 'unreadable');
   assert.equal(store.read(record).status, 'unreadable');
   assert.equal(fs.readFileSync(outside, 'utf8'), '{}');
+});
+
+test('retains a record as unreadable when its identity changes during read', () => {
+  const { store, record } = fixture();
+  assert.equal(store.create(record).status, 'created');
+  const operationPath = store.resolvePath(record);
+  const replacementPath = `${operationPath}.replacement`;
+  fs.copyFileSync(operationPath, replacementPath);
+  const realLstatSync = fs.lstatSync;
+  let operationLstatCalls = 0;
+  const lstat = vi.spyOn(fs, 'lstatSync').mockImplementation(((
+    target: fs.PathLike,
+    options?: unknown,
+  ) => {
+    if (target.toString() === operationPath) {
+      operationLstatCalls += 1;
+      const resolved = operationLstatCalls === 2 ? replacementPath : target;
+      return (realLstatSync as (path: fs.PathLike, options?: unknown) => fs.Stats)(
+        resolved,
+        options,
+      );
+    }
+    return (realLstatSync as (path: fs.PathLike, options?: unknown) => fs.Stats)(target, options);
+  }) as typeof fs.lstatSync);
+
+  try {
+    const read = store.read(record);
+    assert.equal(read.status, 'unreadable');
+    assert.equal(read.status === 'unreadable' ? read.reason : undefined, 'corrupt');
+    assert.match(read.status === 'unreadable' ? read.message : '', /identity changed/);
+  } finally {
+    lstat.mockRestore();
+    fs.rmSync(replacementPath, { force: true });
+  }
 });
 
 test('does not follow a symbolic-link lane directory', () => {

@@ -2,11 +2,8 @@ import type {
   LeaseRequestRef,
   ManagedLease,
 } from '@agent-device/contracts/managed-device-allocation';
-import type {
-  AllocationOperationRecord,
-  AllocationOperationRef,
-} from './allocation-operation-record.ts';
-import { bindingFenceFor } from './allocation-operation-record.ts';
+import type { AllocationOperationRecord, AllocationOperationRef } from './record.ts';
+import { bindingFenceFor } from './record.ts';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 
 export type AllocationDecisionMode =

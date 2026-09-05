@@ -1,23 +1,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type {
-  AllocationOperationRecord,
-  AllocationOperationRef,
-} from './allocation-operation-record.ts';
+import type { AllocationOperationRecord, AllocationOperationRef } from './record.ts';
 import type {
   AllocationOperationCreate,
   AllocationOperationRead,
   AllocationOperationUnreadable,
-} from './allocation-operation-store.ts';
-import { decodeAllocationOperationRecord } from './allocation-operation-record-codec.ts';
+} from './store.ts';
+import { decodeAllocationOperationRecord } from './record-codec.ts';
 import {
   assertSafeAllocationDirectory,
   errorMessage,
   isAlreadyExists,
   publishAllocationRecord,
-} from './allocation-operation-store-filesystem.ts';
-import { hash } from './allocation-operation-store-lock.ts';
-import { allocationOperationUnreadable } from './allocation-operation-store-results.ts';
+} from './store-filesystem.ts';
+import { hash } from './store-lock.ts';
+import { allocationOperationUnreadable } from './store-results.ts';
 
 type ReadOperation = (
   recordPath: string,

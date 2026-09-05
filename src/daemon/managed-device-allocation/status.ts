@@ -1,9 +1,6 @@
 import type { LeaseRequestStatus } from '@agent-device/contracts/managed-device-allocation';
-import { isRequestGeneration, isVerbatimId } from './allocation-operation-record-validation.ts';
-import type {
-  AllocationOperationRecord,
-  AllocationTransition,
-} from './allocation-operation-record.ts';
+import { isRequestGeneration, isVerbatimId } from './record-validation.ts';
+import type { AllocationOperationRecord, AllocationTransition } from './record.ts';
 
 type TerminalLeaseRequestStatus = LeaseRequestStatus &
   Readonly<{ state: 'superseded' | 'cancelled' }>;

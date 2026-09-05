@@ -3,16 +3,13 @@ import type {
   ManagedLease,
   ManagedShapeRequest,
 } from '@agent-device/contracts/managed-device-allocation';
-import type {
-  AllocationOperationPhase,
-  AllocationOperationRecord,
-} from './allocation-operation-record.ts';
+import type { AllocationOperationPhase, AllocationOperationRecord } from './record.ts';
 import {
   isFiniteNumber,
   isNonEmptyString,
   isPlainObject,
   isVerbatimId,
-} from './allocation-operation-record-validation.ts';
+} from './record-validation.ts';
 
 export function decodePhase(value: unknown): AllocationOperationPhase | null {
   if (!isPlainObject(value)) return null;

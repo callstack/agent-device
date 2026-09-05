@@ -1,22 +1,15 @@
 import type { LeaseRequestStatus } from '@agent-device/contracts/managed-device-allocation';
-import type { AllocationDecisionMode } from './allocation-operation-decision.ts';
-import type { AllocationOperationRecord } from './allocation-operation-record.ts';
+import type { AllocationDecisionMode } from './decision.ts';
+import type { AllocationOperationRecord } from './record.ts';
 import type {
   AllocationJournalActionRunner,
   AllocationJournalResult,
   JournalContext,
-} from './allocation-operation-journal-types.ts';
-import { abandoned, blocked, uncertain } from './allocation-operation-journal-results.ts';
-import type { AllocationActionRunnerContext } from './allocation-operation-journal-action-context.ts';
-import {
-  cleanupBinding,
-  publishBinding,
-  releaseLease,
-} from './allocation-operation-journal-action-binding.ts';
-import {
-  transition,
-  unknownAfterError,
-} from './allocation-operation-journal-action-persistence.ts';
+} from './journal-types.ts';
+import { abandoned, blocked, uncertain } from './journal-results.ts';
+import type { AllocationActionRunnerContext } from './journal-action-context.ts';
+import { cleanupBinding, publishBinding, releaseLease } from './journal-action-binding.ts';
+import { transition, unknownAfterError } from './journal-action-persistence.ts';
 
 type ActionRunnerOptions = AllocationActionRunnerContext;
 

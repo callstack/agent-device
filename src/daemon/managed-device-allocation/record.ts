@@ -9,7 +9,7 @@ import {
   managedBindingFence,
   type ResourceOwnershipFence,
 } from '@agent-device/contracts/platform-runtime';
-import { ALLOCATION_OPERATION_SCHEMA_VERSION } from './allocation-operation-schema.ts';
+import { ALLOCATION_OPERATION_SCHEMA_VERSION } from './schema.ts';
 
 export { ALLOCATION_OPERATION_SCHEMA_VERSION };
 

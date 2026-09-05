@@ -1,10 +1,10 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { allocationOperationFence } from './allocation-operation-fence.ts';
+import { allocationOperationFence } from './fence.ts';
 import type {
   AllocationOperationPhase,
   AllocationOperationRecord,
   AllocationTransitionResult,
-} from './allocation-operation-record.ts';
+} from './record.ts';
 
 export function applied(
   record: AllocationOperationRecord,

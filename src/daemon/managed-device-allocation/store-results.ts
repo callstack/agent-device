@@ -1,9 +1,6 @@
-import type { AllocationOperationRecord } from './allocation-operation-record.ts';
-import type {
-  AllocationOperationUnreadable,
-  AllocationOperationWrite,
-} from './allocation-operation-store.ts';
-import { decodeAllocationOperationRecord } from './allocation-operation-record-codec.ts';
+import type { AllocationOperationRecord } from './record.ts';
+import type { AllocationOperationUnreadable, AllocationOperationWrite } from './store.ts';
+import { decodeAllocationOperationRecord } from './record-codec.ts';
 
 export function allocationOperationUnreadable(
   recordPath: string,

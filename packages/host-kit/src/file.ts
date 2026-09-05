@@ -1,9 +1,5 @@
-export {
-  isAtomicPublishTemporaryPath,
-  publishFileSync,
-  syncDirectoryBestEffort,
-  withAtomicPublishTempPathSync,
-} from './internal/atomic-file.ts';
+export { isAtomicPublishTemporaryPath, publishFileSync } from './internal/atomic-file.ts';
+export { publishDurableFileSync, type DurableFilePublishMode } from './internal/durable-file.ts';
 export {
   lstatIfPresent,
   NOT_REGULAR_FILE_HINT,

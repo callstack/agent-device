@@ -1,10 +1,10 @@
-import type { AllocationOperationRecord } from './allocation-operation-record.ts';
-import type { AllocationOperationUnreadable } from './allocation-operation-store.ts';
+import type { AllocationOperationRecord } from './record.ts';
+import type { AllocationOperationUnreadable } from './store.ts';
 import type {
   AllocationJournalBlockReason,
   AllocationJournalReason,
   AllocationJournalResult,
-} from './allocation-operation-journal-types.ts';
+} from './journal-types.ts';
 
 export function blocked(
   reason: AllocationJournalBlockReason,

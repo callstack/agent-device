@@ -3,24 +3,18 @@ import { test } from 'vitest';
 import type { LeaseRequestStatus } from '@agent-device/contracts/managed-device-allocation';
 import { managedBindingFence } from '@agent-device/contracts/platform-runtime';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  ALLOCATION_OPERATION_SCHEMA_VERSION,
-  bindingFenceFor,
-} from '../allocation-operation-record.ts';
-import { newAllocationOperation } from '../allocation-operation-record-factory.ts';
-import { applyAllocationTransition } from '../allocation-operation-record-transition.ts';
-import type {
-  AllocationOperationRecord,
-  AllocationTransition,
-} from '../allocation-operation-record.ts';
-import { decodeAllocationOperationRecord } from '../allocation-operation-record-codec.ts';
+import { ALLOCATION_OPERATION_SCHEMA_VERSION, bindingFenceFor } from '../record.ts';
+import { newAllocationOperation } from '../record-factory.ts';
+import { applyAllocationTransition } from '../transitions.ts';
+import type { AllocationOperationRecord, AllocationTransition } from '../record.ts';
+import { decodeAllocationOperationRecord } from '../record-codec.ts';
 import {
   ALLOCATION_GRANTED_STATUS,
   ALLOCATION_LEASE,
   ALLOCATION_PENDING_STATUS,
   ALLOCATION_REFUSED_STATUS,
   ALLOCATION_REQUEST,
-} from './allocation-operation-fixtures.ts';
+} from './fixtures.ts';
 
 const NOW = 1_700_000_000_000;
 

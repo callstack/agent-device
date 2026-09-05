@@ -1,15 +1,9 @@
-import type { AllocationAction } from './allocation-operation-decision.ts';
-import type { AllocationOperationRecord } from './allocation-operation-record.ts';
-import type { AllocationJournalResult } from './allocation-operation-journal-types.ts';
-import {
-  abandoned,
-  blocked,
-  cleanupPending,
-  errorMessage,
-  uncertain,
-} from './allocation-operation-journal-results.ts';
-import type { AllocationActionRunnerContext } from './allocation-operation-journal-action-context.ts';
-import { transition } from './allocation-operation-journal-action-persistence.ts';
+import type { AllocationAction } from './decision.ts';
+import type { AllocationOperationRecord } from './record.ts';
+import type { AllocationJournalResult } from './journal-types.ts';
+import { abandoned, blocked, cleanupPending, errorMessage, uncertain } from './journal-results.ts';
+import type { AllocationActionRunnerContext } from './journal-action-context.ts';
+import { transition } from './journal-action-persistence.ts';
 
 export async function publishBinding(
   options: AllocationActionRunnerContext,

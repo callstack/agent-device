@@ -1,6 +1,6 @@
-import type { AllocationOperationRecord } from './allocation-operation-record.ts';
-import type { AllocationJournalResult } from './allocation-operation-journal-types.ts';
-import { blocked, uncertain } from './allocation-operation-journal-results.ts';
+import type { AllocationOperationRecord } from './record.ts';
+import type { AllocationJournalResult } from './journal-types.ts';
+import { blocked, uncertain } from './journal-results.ts';
 
 export function projectAllocationRecord(
   record: AllocationOperationRecord,

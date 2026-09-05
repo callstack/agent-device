@@ -4,11 +4,11 @@ import type {
   ManagedDeviceAllocatorPort,
   SupersedeLeaseRequestInput,
 } from '@agent-device/contracts/managed-device-allocation';
-import { newAllocationOperation } from './allocation-operation-record-factory.ts';
-import type { AllocationOperationRecord } from './allocation-operation-record.ts';
-import type { AllocationJournalResult } from './allocation-operation-journal-types.ts';
-import { blocked, errorMessage, unreadableResult } from './allocation-operation-journal-results.ts';
-import type { AllocationOperationStore } from './allocation-operation-store.ts';
+import { newAllocationOperation } from './record-factory.ts';
+import type { AllocationOperationRecord } from './record.ts';
+import type { AllocationJournalResult } from './journal-types.ts';
+import { blocked, errorMessage, unreadableResult } from './journal-results.ts';
+import type { AllocationOperationStore } from './store.ts';
 
 export type AllocationJournalLane = Readonly<{
   open(

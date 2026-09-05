@@ -1,18 +1,18 @@
-import { isFiniteNumber } from './allocation-operation-record-validation.ts';
-import { transitionFromAllocatorStatus } from './allocation-operation-status.ts';
-import { applyAllocatorOutcome } from './allocation-operation-record-transition-outcome.ts';
+import { isFiniteNumber } from './record-validation.ts';
+import { transitionFromAllocatorStatus } from './status.ts';
+import { applyAllocatorOutcome } from './transition-outcome.ts';
 import {
   alreadyApplied,
   applied,
   isTransitionTerminal,
   terminalOrInvalid,
   transitionInvalid,
-} from './allocation-operation-record-transition-support.ts';
+} from './transition-support.ts';
 import type {
   AllocationOperationRecord,
   AllocationTransition,
   AllocationTransitionResult,
-} from './allocation-operation-record.ts';
+} from './record.ts';
 
 export function applyAllocationTransition(
   record: AllocationOperationRecord,

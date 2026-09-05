@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { acquireProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import type { AllocationOperationStore } from './allocation-operation-store.ts';
+import type { AllocationOperationStore } from './store.ts';
 
 const LOCK_TIMEOUT_MS = 30_000;
 

@@ -1,10 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  syncDirectoryBestEffort,
-  withAtomicPublishTempPathSync,
-} from '@agent-device/host-kit/file';
-import type { AllocationOperationRecord } from './allocation-operation-record.ts';
+import { publishDurableFileSync } from '@agent-device/host-kit/file';
+import type { AllocationOperationRecord } from './record.ts';
 
 export type AllocationOperationPath =
   | Readonly<{ status: 'path'; path: string }>
@@ -15,23 +12,10 @@ export function publishAllocationRecord(
   record: AllocationOperationRecord,
   mode: 'replace' | 'link-exclusive',
 ): void {
-  const directory = path.dirname(recordPath);
-  withAtomicPublishTempPathSync(recordPath, (temporaryPath) => {
-    assertSafeDestination(recordPath);
-    let descriptor: number | undefined;
-    try {
-      descriptor = fs.openSync(temporaryPath, 'wx', 0o600);
-      fs.writeFileSync(descriptor, `${JSON.stringify(record)}\n`, 'utf8');
-      fs.fsyncSync(descriptor);
-      fs.closeSync(descriptor);
-      descriptor = undefined;
-      assertSafeDestination(recordPath);
-      if (mode === 'link-exclusive') fs.linkSync(temporaryPath, recordPath);
-      else fs.renameSync(temporaryPath, recordPath);
-      syncDirectoryBestEffort(directory);
-    } finally {
-      if (descriptor !== undefined) fs.closeSync(descriptor);
-    }
+  publishDurableFileSync({
+    destination: recordPath,
+    contents: `${JSON.stringify(record)}\n`,
+    publish: mode,
   });
 }
 
@@ -152,17 +136,4 @@ function listLanePaths(allocationsDir: string, lane: fs.Dirent): AllocationOpera
 
 function unreadablePath(pathname: string, message: string): AllocationOperationPath {
   return { status: 'unreadable', path: pathname, message };
-}
-
-function assertSafeDestination(recordPath: string): void {
-  let stats: fs.Stats;
-  try {
-    stats = fs.lstatSync(recordPath);
-  } catch (error) {
-    if (isMissingFile(error)) return;
-    throw error;
-  }
-  if (stats.isSymbolicLink())
-    throw new Error('Refusing to replace an allocation operation symbolic link');
-  if (!stats.isFile()) throw new Error('Refusing to replace a non-file allocation operation path');
 }
