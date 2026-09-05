@@ -5,6 +5,7 @@ import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
+import { delegateManagedDeviceReadiness } from '@agent-device/provision-kit/managed-device-scope';
 
 import {
   IOS_BOOT_TIMEOUT_MS,
@@ -85,6 +86,7 @@ export async function ensureBootedSimulator(
 ): Promise<void> {
   if (device.kind !== 'simulator') return;
   options.signal?.throwIfAborted();
+  if (await delegateManagedDeviceReadiness(device)) return;
 
   const state = wasSimulatorRecentlyObservedBooted(device)
     ? 'Booted'

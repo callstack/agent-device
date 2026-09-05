@@ -11,6 +11,15 @@ import type {
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime-operations';
+import {
+  createFullyUnavailablePlatformRuntimeFacts,
+  createUnavailablePlatformRuntimeFacts,
+} from '@agent-device/contracts/platform-runtime-unavailable';
+import { withMethodScope } from '@agent-device/kernel/scoped-provider';
+import {
+  assertManagedDeviceIdentity,
+  withManagedDeviceScope,
+} from '@agent-device/provision-kit/managed-device-scope';
 import type { Platform } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -18,85 +27,24 @@ export type ManagedLocalRuntimeOwnerRef = Extract<RuntimeOwnerRef, { kind: 'mana
 
 type ManagedOperationKey = RuntimeOperationKey<PlatformRuntimeOperations>;
 
-/**
- * What a managed local owner withholds, grouped by the mechanics that make it impossible rather
- * than by catalog family: an operation is here because executing it would boot, shut down, or
- * durably own the allocator's device.
- */
-const WITHHELD_MANAGED_OPERATIONS = [
-  {
-    // The two deployment cells belong here for the same reason as the explicit boot cells: both
-    // family deployment runtimes ensure device readiness first, and `deployAppUse` requires
-    // `deployApp` alone, so nothing else would have caught `install` on a managed binding.
-    hint: 'Managed-device lifecycle belongs to the allocator.',
-    keys: [
-      'ensureReady',
-      'bootTarget',
-      'bootTargetHeadless',
-      'shutdownTarget',
-      'deployApp',
-      'deployMaterializedApp',
-    ],
-  },
-  {
-    // These four are lifecycle-bearing even though they read as application operations: open
-    // preparation and Apple runner preparation boot the target unconditionally, and the close
-    // pair carries the shutdown half of the same sequence.
-    hint: 'Application open and close take device readiness and shutdown steps the allocator owns.',
-    keys: [
-      'prepareApplicationOpen',
-      'prepareAppleRunner',
-      'closeApplication',
-      'finalizeApplicationClose',
-    ],
-  },
-  {
-    // A durable capture is adopted by comparing the envelope's owner with the binding's owner, and
-    // the family runtime stamps envelopes with its own local owner — so a capture started under a
-    // managed binding could never be reattached or cleaned up under it.
-    hint: 'Durable captures are not adoptable under a managed local owner yet.',
-    keys: [
-      'appLogStart',
-      'appLogReattach',
-      'appLogCleanup',
-      'screenRecordingStart',
-      'screenRecordingReattach',
-      'screenRecordingCleanup',
-      'audioProbeStart',
-      'audioProbeReattach',
-      'audioProbeCleanup',
-      'perfNativeCaptureStart',
-      'perfNativeCaptureReattach',
-      'perfNativeCaptureCleanup',
-    ],
-  },
-  {
-    // Below cell-selection granularity, the Apple family runtime can boot the simulator lazily:
-    // screenshot capture retries through a boot on a shutdown failure, and settings, clipboard and
-    // application launch each resolve a local interactor the same way. The daemon fences its
-    // pre-binding readiness path separately; until these cells are allocator-backed, a managed
-    // binding withholds them rather than leave an allocator-owned device open to an implicit boot.
-    hint: 'Managed-device lifecycle belongs to the allocator; this cell can lazily boot the device.',
-    keys: ['captureScreenshot', 'setSetting', 'readClipboard', 'writeClipboard', 'openApplication'],
-  },
-] as const satisfies readonly Readonly<{ hint: string; keys: readonly ManagedOperationKey[] }>[];
+const REVIEWED_MANAGED_OPERATIONS: Partial<Record<ManagedOperationKey, 'both' | 'android'>> = {
+  ensureReady: 'both',
+  deployApp: 'both',
+  materializeAppSource: 'both',
+  deployMaterializedApp: 'both',
+  sendPushNotification: 'both',
+  setSetting: 'both',
+  readClipboard: 'both',
+  writeClipboard: 'both',
+  captureScreenshot: 'android',
+};
 
-/**
- * The exact-only runtime owner for one allocator instance. It owns no mechanics of its own: it
- * binds the device's local family owner, republishes that binding under the managed owner, and
- * withholds the cells whose declared work is device lifecycle.
- *
- * Withholding cells is not a complete lifecycle exclusion and does not claim to be. Screenshot
- * capture, settings, clipboard and application launch are withheld here even though their declared
- * work is not device lifecycle, because their Apple family-runtime implementations can boot the
- * simulator lazily below cell-selection granularity. The daemon's pre-binding readiness path is
- * fenced at request-runtime binding, while these lazy cells remain allocator-backed follow-up
- * work.
- *
- * It delegates with an ordinary intent because a family owner refuses an exact-owner intent that
- * names anyone but itself. The managed intent's fence is not read here: the device-claim gate owns
- * what a managed binding fence proves.
- */
+const unavailable: RuntimeOperationUnavailability = Object.freeze({
+  available: false,
+  reason: 'owner-capability-missing',
+  hint: 'This operation has no verified managed-device automation path.',
+});
+
 export function createManagedLocalRuntimeOwner(params: {
   owner: ManagedLocalRuntimeOwnerRef;
   loadLocal: (family: Platform) => Promise<PlatformRuntimeOwner>;
@@ -107,8 +55,11 @@ export function createManagedLocalRuntimeOwner(params: {
     // claiming a device here would be the one way it could.
     ownsDevice: () => false,
     inspectFacts: async (device) => {
-      const local = await params.loadLocal(device.platform);
-      return projectManagedFacts(await local.inspectFacts(device));
+      return createUnavailablePlatformRuntimeFacts(
+        device,
+        params.owner,
+        createFullyUnavailablePlatformRuntimeFacts(unavailable),
+      );
     },
     bind: async (request) => {
       if (
@@ -121,19 +72,48 @@ export function createManagedLocalRuntimeOwner(params: {
           { reason: 'runtime-contract-invalid' },
         );
       }
+      const managed = request.scope.managedDevice;
+      if (
+        !managed ||
+        !sameRuntimeOwner(managed.owner, params.owner) ||
+        managed.fence.token !== request.intent.fence.token ||
+        managed.fence.generation !== request.intent.fence.generation
+      ) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          'Managed automation requires its exact request authority.',
+          { reason: 'runtime-contract-invalid' },
+        );
+      }
+      assertManagedDeviceIdentity(managed, request.device);
+      const run = <T>(task: () => Promise<T>) =>
+        managed.run(() => withManagedDeviceScope(managed, task));
       const local = await params.loadLocal(request.device.platform);
-      const binding = await local.bind({
-        device: request.device,
-        intent: { kind: 'ordinary' },
-        scope: request.scope,
-      });
+      const binding = await run(() =>
+        local.bind({
+          device: request.device,
+          intent: { kind: 'ordinary' },
+          scope: request.scope,
+        }),
+      );
       const facts = projectManagedFacts(binding.facts);
       return Object.freeze({
         device: binding.device,
         owner: params.owner,
         facts,
-        operations: admittedOperations(binding.operations, facts),
-        [Symbol.asyncDispose]: async () => await binding[Symbol.asyncDispose](),
+        operations: admittedOperations(
+          withMethodScope({ ...binding.operations }, (task) =>
+            run(async () => {
+              request.scope.signal.throwIfAborted();
+              await managed.ensureReady();
+              request.scope.signal.throwIfAborted();
+              return await task();
+            }),
+          ),
+          facts,
+        ),
+        [Symbol.asyncDispose]: async () =>
+          await run(async () => await binding[Symbol.asyncDispose]()),
       });
     },
     // The delegated family owner is registered with the gateway in its own right, which is what
@@ -145,21 +125,22 @@ export function createManagedLocalRuntimeOwner(params: {
 function projectManagedFacts(
   facts: RuntimeFacts<PlatformRuntimeOperations>,
 ): RuntimeFacts<PlatformRuntimeOperations> {
-  const withheld: Partial<Record<ManagedOperationKey, RuntimeOperationFact>> = {};
-  for (const group of WITHHELD_MANAGED_OPERATIONS) {
-    const fact: RuntimeOperationUnavailability = Object.freeze({
-      available: false,
-      reason: 'owner-capability-missing',
-      hint: group.hint,
-    });
-    for (const key of group.keys) withheld[key] = fact;
-  }
-  // The device shape is the family owner's answer, provider mode included: a managed owner
-  // executes on a local device and may not launder a transport-composed one into a local claim.
+  const operations = Object.fromEntries(
+    Object.entries(facts.operations).map(([key, fact]) => {
+      const reviewed = REVIEWED_MANAGED_OPERATIONS[key as ManagedOperationKey];
+      const supported =
+        facts.device.family === 'android' ||
+        (facts.device.family === 'apple' && facts.device.appleOs === 'ios');
+      return [
+        key,
+        supported && (reviewed === 'both' || reviewed === facts.device.family) ? fact : unavailable,
+      ];
+    }),
+  );
   return Object.freeze({
     device: facts.device,
-    operations: Object.freeze({ ...facts.operations, ...withheld }),
-  });
+    operations: Object.freeze(operations),
+  }) as RuntimeFacts<PlatformRuntimeOperations>;
 }
 
 /** Facts are the only admission authority, so an operation cannot outlive its own fact. */
