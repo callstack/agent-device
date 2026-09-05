@@ -28,10 +28,20 @@ export function assertManagedDeviceIdentity(managed: ManagedDeviceScope, device:
   }
 }
 
-export async function delegateManagedDeviceReadiness(device: DeviceInfo): Promise<boolean> {
+export function resolveManagedDeviceReadiness():
+  | ((device: DeviceInfo) => Promise<void>)
+  | undefined {
   const managed = currentManagedDeviceScope();
-  if (!managed) return false;
-  assertManagedDeviceIdentity(managed, device);
-  await managed.ensureReady();
+  if (!managed) return undefined;
+  return async (device) => {
+    assertManagedDeviceIdentity(managed, device);
+    await managed.ensureReady();
+  };
+}
+
+export async function delegateManagedDeviceReadiness(device: DeviceInfo): Promise<boolean> {
+  const ensureReady = resolveManagedDeviceReadiness();
+  if (!ensureReady) return false;
+  await ensureReady(device);
   return true;
 }

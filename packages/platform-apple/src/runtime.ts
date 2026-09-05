@@ -4,6 +4,7 @@ import {
   localRuntimeOwner,
   whenAdmitted,
 } from '@agent-device/contracts/platform-runtime';
+import { bindSimulatorReadiness } from './runtime-simulator-readiness.ts';
 import type { NetworkDumpInput } from '@agent-device/contracts/network-runtime';
 import type {
   PlatformRuntimeHost,
@@ -494,7 +495,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         device: logs.device,
         owner,
         facts,
-        operations: Object.freeze(operations),
+        operations: bindSimulatorReadiness(operations),
         [Symbol.asyncDispose]: async () => await logs[Symbol.asyncDispose](),
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;
     },

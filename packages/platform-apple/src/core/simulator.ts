@@ -5,7 +5,7 @@ import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
-import { delegateManagedDeviceReadiness } from '@agent-device/provision-kit/managed-device-scope';
+import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
 
 import {
   IOS_BOOT_TIMEOUT_MS,
@@ -17,6 +17,17 @@ import { runAppleToolCommand, runXcrun } from './tool-provider.ts';
 
 const IOS_SIMULATOR_HOST_APPS = ['Simulator'] as const;
 const IOS_DEVICE_HUB_HOST_APPS = ['Device Hub', 'Simulator'] as const;
+
+const simulatorReadiness = createScopedProvider<
+  ((device: DeviceInfo) => Promise<void>) | undefined
+>(undefined);
+
+export async function withSimulatorReadiness<T>(
+  ensureReady: (device: DeviceInfo) => Promise<void>,
+  task: () => Promise<T>,
+): Promise<T> {
+  return await simulatorReadiness.run(ensureReady, task);
+}
 
 type OpenIosSimulatorAppOptions = {
   background?: boolean;
@@ -86,7 +97,12 @@ export async function ensureBootedSimulator(
 ): Promise<void> {
   if (device.kind !== 'simulator') return;
   options.signal?.throwIfAborted();
-  if (await delegateManagedDeviceReadiness(device)) return;
+  const ensureReady = simulatorReadiness.resolve();
+  if (ensureReady) {
+    await ensureReady(device);
+    options.signal?.throwIfAborted();
+    return;
+  }
 
   const state = wasSimulatorRecentlyObservedBooted(device)
     ? 'Booted'
