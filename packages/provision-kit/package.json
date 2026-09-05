@@ -7,9 +7,7 @@
   "dependencies": {
     "@agent-device/contracts": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
-    "@agent-device/kernel": "workspace:*",
-    "ipaddr.js": "^2.5.0",
-    "undici": "7.29.0"
+    "@agent-device/kernel": "workspace:*"
   },
   "exports": {
     "./app-resolution-cache": {
@@ -44,5 +42,9 @@
       "types": "./src/toolchain-probe.ts",
       "default": "./src/toolchain-probe.ts"
     }
+  },
+  "devDependencies": {
+    "ipaddr.js": "^2.5.0",
+    "undici": "7.29.0"
   }
 }
