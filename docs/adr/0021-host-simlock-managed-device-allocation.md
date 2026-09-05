@@ -169,6 +169,16 @@ per managed-device lease. A failed or uncertain renewal fences only the affected
 binding, reconciles through Simlock, and either publishes the confirmed deadline or tears down. No
 command continues on Host's cached deadline alone.
 
+The daemon's lease-admission service is `createManagedLeaseAdmission` under
+`src/daemon/managed-device-allocation/`. One instance belongs to one binding incarnation;
+its coordinator must fence it before release, replacement, or supersession. `managedCommandHorizon`
+reuses the command's request envelope and reserves the canonical teardown budget including recording
+finalization. Unbounded commands require a bounded child request before managed execution.
+An `admitted` result reports only allocator-confirmed authority; `teardown-required` leaves that
+binding permanently fenced. Budget reservation is not proof of cleanup or runner quiescence.
+The neutral service enables no managed runtime or readiness path. Integration follows the reviewed
+managed-operation projection and must use canonical teardown before returning the allocation.
+
 Release is durable and retryable. Host does not publish a replacement grant while Simlock may still
 mutate the device. After either daemon restarts, the journal is reconciled through Simlock lookup: a
 live, authorized mapping reattaches; missing, terminal, stale, or unauthorized work follows
