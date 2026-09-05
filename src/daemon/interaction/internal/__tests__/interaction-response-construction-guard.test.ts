@@ -54,8 +54,8 @@ function findHandRolledResponseData(source: string): string[] {
 test('interaction responses are only constructed by buildInteractionResponseData', () => {
   const files = touchHandlerSourceFiles();
   assert.ok(
-    files.includes('interaction-touch.ts'),
-    'guard lost sight of interaction-touch.ts — update touchHandlerSourceFiles()',
+    files.includes('interaction-touch-press.ts'),
+    'guard lost sight of interaction-touch-press.ts — update touchHandlerSourceFiles()',
   );
   const offenders: string[] = [];
   for (const file of files) {

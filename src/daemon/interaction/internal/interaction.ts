@@ -1,6 +1,7 @@
 import type { DaemonResponse, SessionState } from '../../types.ts';
 import type { CaptureSnapshotForSession, InteractionRouteInput } from './types.ts';
-import { handleTouchInteractionCommands } from './interaction-touch.ts';
+import { dispatchFillViaRuntime } from './interaction-touch-fill.ts';
+import { dispatchTargetedTouchViaRuntime } from './interaction-touch-press.ts';
 import { finalizeTouchInteraction } from './interaction-runtime.ts';
 import { refSnapshotFlagGuardResponse } from '../../ref-snapshot-flag-policy.ts';
 import { dispatchGetViaRuntime, dispatchIsViaRuntime } from '../../selector-runtime.ts';
@@ -21,15 +22,19 @@ import {
 export async function handleInteractionCommands(
   params: InteractionRouteInput & { captureSnapshotForSession: CaptureSnapshotForSession },
 ): Promise<DaemonResponse | null> {
-  const touchResponse = await handleTouchInteractionCommands({
-    ...params,
-    refSnapshotFlagGuardResponse,
-  });
-  if (touchResponse) {
-    return touchResponse;
-  }
+  const touchParams = { ...params, refSnapshotFlagGuardResponse };
 
   switch (params.req.command) {
+    case 'press':
+      return await dispatchTargetedTouchViaRuntime(touchParams, 'press');
+    case 'click':
+      return await dispatchTargetedTouchViaRuntime(touchParams, 'click');
+    case 'longpress':
+      return await dispatchTargetedTouchViaRuntime(touchParams, 'longpress');
+    case 'hover':
+      return await dispatchTargetedTouchViaRuntime(touchParams, 'hover');
+    case 'fill':
+      return await dispatchFillViaRuntime(touchParams);
     case PUBLIC_COMMANDS.gesture:
       return await dispatchGestureViaRuntime(params);
     case PUBLIC_COMMANDS.swipe:
