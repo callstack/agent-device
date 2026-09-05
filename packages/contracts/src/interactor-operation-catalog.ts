@@ -51,7 +51,7 @@ type InteractorOperationDefinition = Readonly<{
  * key the caller's facts never define is simply never available — which is how an owner with a
  * narrower, dedicated facts object (Limrun's keyboard-less navigation facts) opts a subset out.
  */
-const INTERACTOR_OPERATIONS = [
+export const INTERACTOR_OPERATIONS = [
   { operation: 'back', label: 'back', bind: bindBack },
   { operation: 'home', label: 'home', bind: bindHome },
   { operation: 'setOrientation', label: 'orientation', bind: bindOrientation },
