@@ -5,7 +5,6 @@ import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { readLocationCoordinate } from '@agent-device/kernel/location-coordinates';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { enumField, numberField, requiredField, stringField } from '../command-input.ts';
 import {
   direct,
@@ -37,11 +36,6 @@ const settingsCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const settingsCommandDefinition = defineExecutableCommand(
-  settingsCommandMetadata,
-  (client, input) => client.settings.update(input as SettingsUpdateOptions),
-);
-
 const settingsCliSchema = {
   usageOverride: SETTINGS_USAGE_OVERRIDE,
   listUsageOverride: 'settings [area] [options]',
@@ -63,7 +57,7 @@ export const settingsCommandFacet = defineCommandFacet({
       'macOS supports only settings appearance <light|dark|toggle> and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>; wifi|airplane|location|animations remain unsupported on macOS. Mobile permission actions use the active session app. On Android, deny|reset of a permission the app currently holds kills a running app; the response reports priorGrantState (granted|not_granted|unknown) and warns for granted and unknown, with open <app> --relaunch to restore it. Permission changes require a resolvable foreground user and fail without mutating if adb cannot report one. Android settings airplane on|off is applied by the connectivity service (Android 11+) and reports the airplaneMode that service holds; older builds fail without changing device state.',
   },
   metadata: settingsCommandMetadata,
-  definition: settingsCommandDefinition,
+  run: (client, input) => client.settings.update(input as SettingsUpdateOptions),
   cliSchema: settingsCliSchema,
   cliReader: settingsCliReader,
   daemonWriter: settingsDaemonWriter,

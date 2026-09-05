@@ -2,7 +2,6 @@ import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { SNAPSHOT_BACKEND_CAPABILITIES } from '@agent-device/capture-kit/snapshot-quality-backend-capabilities';
 import { SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { booleanField, integerField, stringField } from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import {
   commonInputFromFlags,
   direct,
@@ -49,11 +48,6 @@ const snapshotCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const snapshotCommandDefinition = defineExecutableCommand(
-  snapshotCommandMetadata,
-  (client, input) => client.capture.snapshot(input),
-);
-
 const snapshotCliSchema = {
   usageOverride:
     'snapshot [--diff] [-i] [-d <depth>] [-s <scope>] [--raw] [--actions] [--force-full] [--timeout <ms>]',
@@ -88,7 +82,7 @@ export const snapshotCommandFacet = defineCommandFacet({
     cliDetail: `For iOS raw-coordinate fallback after a no-op ref press, inspect rects with snapshot -i --json, press the rect center, then verify with diff snapshot -i or snapshot --diff. iOS backend capability contract: ${snapshotBackendCapabilityHelp}.`,
   },
   metadata: snapshotCommandMetadata,
-  definition: snapshotCommandDefinition,
+  run: (client, input) => client.capture.snapshot(input),
   cliSchema: snapshotCliSchema,
   cliReader: snapshotCliReader,
   daemonWriter: snapshotDaemonWriter,
