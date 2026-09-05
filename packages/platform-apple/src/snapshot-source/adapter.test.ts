@@ -34,16 +34,11 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
   });
   const request = createIosSnapshotRequest({ interactiveOnly: true });
   const hint = deriveIosCaptureHint(request);
+  const sourceTarget = { ...targetForTest(), generation: 'generation-1' };
 
   try {
     const result = await source.acquire({
-      target: {
-        udid: 'simulator-1',
-        runtime: 'iOS 26.2',
-        pid: 321,
-        generation: 'generation-1',
-        targetId: 'target-1',
-      },
+      target: { ...sourceTarget, targetId: 'target-1' },
       hint,
     });
     assert.equal(fixture.builds, 1);
@@ -66,14 +61,23 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
       { kind: 'unavailable-fact', fact: 'interactive-query' },
     ]);
 
+    const regularDepthOne = await source.acquire({
+      target: sourceTarget,
+      hint: deriveIosCaptureHint(createIosSnapshotRequest({ depth: 1 })),
+    });
+    assert.equal(regularDepthOne.stage, 'acquired');
+    assert.equal(fixture.requestedDepths.at(-1), 10);
+
+    const rawDepthOne = await source.acquire({
+      target: sourceTarget,
+      hint: deriveIosCaptureHint(createIosSnapshotRequest({ raw: true, depth: 1 })),
+    });
+    assert.equal(rawDepthOne.stage, 'acquired');
+    assert.equal(fixture.requestedDepths.at(-1), 1);
+
     fixture.responsePid = 999;
     const outcome = await source.acquire({
-      target: {
-        udid: 'simulator-1',
-        runtime: 'iOS 26.2',
-        pid: 321,
-        generation: 'generation-1',
-      },
+      target: sourceTarget,
       hint,
     });
     assert.equal(outcome.stage, 'failed');
@@ -118,6 +122,7 @@ type AdapterFixture = {
   builds: number;
   runs: number;
   responsePid: number;
+  requestedDepths: number[];
 };
 
 function targetForTest() {
@@ -135,6 +140,7 @@ function createAdapterHost(buildDelayMs = 0): AdapterFixture {
     builds: 0,
     runs: 0,
     responsePid: 321,
+    requestedDepths: [],
   };
   const host: SnapshotSourceHost = {
     ...realHost,
@@ -160,7 +166,11 @@ function createAdapterHost(buildDelayMs = 0): AdapterFixture {
       };
     },
     start: () => new AdapterProcess(),
-    connect: async () => new AdapterSocket(() => fixture.responsePid),
+    connect: async () =>
+      new AdapterSocket(
+        () => fixture.responsePid,
+        (depth) => fixture.requestedDepths.push(depth),
+      ),
     readTargetProcessStartTime: async () => 'target-start',
   };
   fixture.host = host;
@@ -196,10 +206,12 @@ class AdapterProcess implements SnapshotSourceProcess {
 class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
   destroyed = false;
   private readonly readResponsePid: () => number;
+  private readonly recordMaxDepth: (depth: number) => void;
 
-  constructor(responsePid: () => number) {
+  constructor(responsePid: () => number, recordMaxDepth: (depth: number) => void) {
     super();
     this.readResponsePid = responsePid;
+    this.recordMaxDepth = recordMaxDepth;
   }
 
   write(frame: Buffer): boolean {
@@ -208,7 +220,9 @@ class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
       requestId: string;
       pid: number;
       generation: string;
+      maxDepth: number;
     };
+    this.recordMaxDepth(request.maxDepth);
     queueMicrotask(() => {
       if (this.destroyed) return;
       this.emit(
