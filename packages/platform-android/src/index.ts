@@ -48,13 +48,27 @@ export async function readAndroidAppStateWithExecutor(
   return await read(run, signal);
 }
 
-export const runtimeModule = Object.freeze({
-  ...metadata,
-  loadRuntime: async (host) => {
-    const { createAndroidPlatformRuntime } = await import('./runtime.ts');
-    return createAndroidPlatformRuntime(host);
-  },
-} satisfies PlatformRuntimeModule);
+/** What the composition root supplies before this package's runtime can reach a device. */
+export type AndroidRuntimeModuleDependencies = Readonly<{
+  /**
+   * Binds the process-wide adb host port (`bindAndroidAdbHost`) the runtime's mechanics run
+   * through. Awaited before the runtime loads, so no caller has to import anything first.
+   */
+  bindAdbHost(): Promise<void>;
+}>;
+
+export function createAndroidRuntimeModule(
+  dependencies: AndroidRuntimeModuleDependencies,
+): PlatformRuntimeModule {
+  return Object.freeze({
+    ...metadata,
+    loadRuntime: async (host) => {
+      await dependencies.bindAdbHost();
+      const { createAndroidPlatformRuntime } = await import('./runtime.ts');
+      return createAndroidPlatformRuntime(host);
+    },
+  } satisfies PlatformRuntimeModule);
+}
 
 export function createAndroidInventoryModule(
   config: AndroidInventoryConfig,

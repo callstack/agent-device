@@ -28,9 +28,9 @@ import {
 import {
   createAndroidObservationAdapter as createPackageAndroidObservationAdapter,
   createAndroidInventoryModule,
+  createAndroidRuntimeModule,
   readAndroidAppStateWithExecutor,
   loadShutdownRuntime as loadAndroidShutdownRuntime,
-  runtimeModule as androidRuntimeModule,
 } from '@agent-device/platform-android';
 import {
   createHarmonyInventoryModule,
@@ -114,17 +114,10 @@ export function createPlatformDeviceInventoryGateways(
   });
 }
 
-/**
- * Android mechanics call adb through a process-wide host that only this root can bind. Root binds it
- * from two places: this registry entry, which covers everything the Android runtime reaches from
- * inside its own package, and `loadAndroidMechanics`, which covers the root host ports that call
- * into mechanics without ever binding a runtime. Neither one subsumes the other.
- */
-const androidRuntimeModuleWithBoundAdbHost: PlatformRuntimeModule = Object.freeze({
-  ...androidRuntimeModule,
-  loadRuntime: async (host) => {
+const androidRuntimeModule = createAndroidRuntimeModule({
+  // Evaluating the root's adb host module binds the process-wide port exactly once.
+  bindAdbHost: async () => {
     await import('./platform-runtime-android-adb-host.ts');
-    return await androidRuntimeModule.loadRuntime(host);
   },
 });
 
@@ -134,7 +127,7 @@ export const platformRuntimeModules: ReadonlyMap<Platform, PlatformRuntimeModule
   PlatformRuntimeModule
 >([
   ['apple', appleRuntimeModule],
-  ['android', androidRuntimeModuleWithBoundAdbHost],
+  ['android', androidRuntimeModule],
   ['harmonyos', harmonyosRuntimeModule],
   ['vega', vegaRuntimeModule],
   ['linux', linuxRuntimeModule],

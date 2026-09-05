@@ -1,6 +1,5 @@
-import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { afterEach, expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vitest';
 
 const adb = vi.hoisted(() => ({ calls: [] as string[][] }));
 
@@ -11,9 +10,17 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
     whichCmd: async (executable: string) => `/usr/bin/${executable}`,
     runCmd: async (cmd: string, args: string[]) => {
       adb.calls.push([cmd, ...args]);
-      return args.includes('query-activities')
-        ? { stdout: 'com.example.app/.MainActivity\n', stderr: '', exitCode: 0 }
-        : { stdout: '', stderr: '', exitCode: 0 };
+      if (args.includes('query-activities')) {
+        return { stdout: 'com.example.app/.MainActivity\n', stderr: '', exitCode: 0 };
+      }
+      if (args.includes('dumpsys')) {
+        return {
+          stdout: 'mCurrentFocus=Window{1 u0 com.example.app/.MainActivity}\n',
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+      return { stdout: '', stderr: '', exitCode: 0 };
     },
   };
 });
@@ -28,6 +35,12 @@ const sessionArtifacts = {
   }),
 };
 
+const scope = {
+  signal: new AbortController().signal,
+  diagnostics: { emit: () => {} },
+  progress: { report: () => {} },
+};
+
 const device: DeviceInfo = {
   platform: 'android',
   id: 'emulator-5554',
@@ -39,15 +52,7 @@ const device: DeviceInfo = {
 
 test('the composed gateway lists Android apps from inside the platform package', async () => {
   const gateway = createPlatformRuntimeGateway(sessionArtifacts);
-  const binding = await gateway.bind({
-    device,
-    intent: { kind: 'ordinary' },
-    scope: {
-      signal: new AbortController().signal,
-      diagnostics: { emit: () => {} },
-      progress: { report: () => {} },
-    },
-  });
+  const binding = await gateway.bind({ device, intent: { kind: 'ordinary' }, scope });
 
   await expect(binding.operations.listApps?.({ device, filter: 'all' })).resolves.toEqual([
     { id: 'com.example.app', name: 'Example' },
@@ -70,37 +75,23 @@ test('the composed gateway lists Android apps from inside the platform package',
   await gateway.shutdown();
 });
 
-afterEach(() => {
-  vi.doUnmock('./platform-runtime-android-adb-host.ts');
-  vi.doUnmock('@agent-device/platform-android');
-  vi.resetModules();
-});
+test('the composed gateway reads Android app state from inside the platform package', async () => {
+  const gateway = createPlatformRuntimeGateway(sessionArtifacts);
+  const binding = await gateway.bind({ device, intent: { kind: 'ordinary' }, scope });
 
-test('the root binds the adb host before it loads the Android runtime module', async () => {
-  const order: string[] = [];
-  vi.resetModules();
-  vi.doMock('./platform-runtime-android-adb-host.ts', () => {
-    order.push('adb-host');
-    return {};
+  await expect(binding.operations.appState?.()).resolves.toEqual({
+    package: 'com.example.app',
+    activity: '.MainActivity',
   });
-  vi.doMock('@agent-device/platform-android', async (importOriginal) => {
-    const original = await importOriginal<typeof import('@agent-device/platform-android')>();
-    return {
-      ...original,
-      runtimeModule: Object.freeze({
-        ...original.runtimeModule,
-        loadRuntime: async (host: PlatformRuntimeHost) => {
-          order.push('android-runtime');
-          return await original.runtimeModule.loadRuntime(host);
-        },
-      }),
-    };
-  });
+  expect(adb.calls).toContainEqual([
+    'adb',
+    '-s',
+    device.id,
+    'shell',
+    'dumpsys',
+    'window',
+    'windows',
+  ]);
 
-  const { createPlatformRuntimeGateway: create } = await import('./platform-runtime.ts');
-  const gateway = create(sessionArtifacts);
-  await gateway.inspectFacts(device).catch(() => {});
-
-  expect(order).toEqual(['adb-host', 'android-runtime']);
   await gateway.shutdown();
 });
