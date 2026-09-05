@@ -878,7 +878,7 @@ there, not about retiring the directory.
 **Entry-to-platform hop count.** Corrected 2026-09-03: the counting definition, ordered chains,
 and commit for this measurement are in
 [`0019-end-state-hop-trace.md`](./0019-end-state-hop-trace.md), which supersedes the number
-below. A file-by-file re-trace at HEAD measured 24 hops for both `press`/Android and
+below. A file-by-file re-trace at HEAD measured 23 hops for `press`/Android and 24 hops for
 `snapshot`/iOS. The previously stated 38/29 named no ordered chain, counting definition, or
 artifact and does not reproduce; treat it as superseded, not as a second data point.
 `src/platform-runtime.ts` (the
