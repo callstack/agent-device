@@ -45,6 +45,7 @@ vi.mock('../../../../platform-runtime-open-target.ts', async (importOriginal) =>
 });
 
 import {
+  createLifecycleDeviceRuntimeGatewaySpies,
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
 } from '../../../__tests__/test-device-runtime-gateway.ts';
@@ -98,13 +99,16 @@ beforeEach(() => {
   mockResolveIosSimulatorDeepLinkBundleId.mockResolvedValue(undefined);
 });
 
-function createHandler(sessionStore: ReturnType<typeof makeSessionStore>) {
+function createHandler(
+  sessionStore: ReturnType<typeof makeSessionStore>,
+  deviceRuntimeGateway = lifecycleDeviceRuntimeGateway,
+) {
   return createRequestHandler({
     logPath: path.join(os.tmpdir(), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
-    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+    deviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
@@ -571,8 +575,12 @@ test('prepare ios-runner starts the XCTest runner on an explicit iOS selector', 
     kind: 'simulator',
     booted: true,
   });
+  const { gateway, inspectFacts, bind } = createLifecycleDeviceRuntimeGatewaySpies();
 
-  const response = await createHandler(sessionStore)(
+  const response = await createHandler(
+    sessionStore,
+    gateway,
+  )(
     sessionRequest(sessionName, 'prepare', {
       positionals: ['ios-runner'],
       flags: { platform: 'ios', udid: 'sim-1', timeoutMs: 240000 },
@@ -581,6 +589,10 @@ test('prepare ios-runner starts the XCTest runner on an explicit iOS selector', 
   );
 
   expect(response.ok).toBe(true);
+  expect(inspectFacts).toHaveBeenCalledTimes(1);
+  expect(bind).toHaveBeenCalledTimes(1);
+  // Readiness runs inside the admitted Apple binding, so `prepare` proves it by reaching the
+  // runner at all rather than by observing a retired root readiness call.
   expect(mockPrepareIosRunner).toHaveBeenCalledTimes(1);
   expect(mockPrepareIosRunner).toHaveBeenCalledWith(
     expect.objectContaining({ platform: 'apple', id: 'sim-1' }),
@@ -732,8 +744,12 @@ test('prepare ios-runner rejects non-Apple runner devices', async () => {
     kind: 'emulator',
     booted: true,
   });
+  const { gateway, inspectFacts, bind } = createLifecycleDeviceRuntimeGatewaySpies();
 
-  const response = await createHandler(sessionStore)(
+  const response = await createHandler(
+    sessionStore,
+    gateway,
+  )(
     sessionRequest('prepare-android', 'prepare', {
       positionals: ['ios-runner'],
       flags: { platform: 'android', serial: 'emulator-5554' },
@@ -745,6 +761,8 @@ test('prepare ios-runner rejects non-Apple runner devices', async () => {
     expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
     expect(response.error.message).toBe('prepare is not supported on this device');
   }
+  expect(inspectFacts).toHaveBeenCalledTimes(1);
+  expect(bind).not.toHaveBeenCalled();
   expect(mockPrepareIosRunner).not.toHaveBeenCalled();
 });
 
