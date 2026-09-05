@@ -1,0 +1,112 @@
+{
+  "success": true,
+  "data": {
+    "nodes": [
+      {
+        "rect": {
+          "width": 320,
+          "x": 41,
+          "height": 283.33333333333337,
+          "y": 309.33333333333337
+        },
+        "enabled": true,
+        "hittable": true,
+        "label": "“Agent Device Tester” would like to access the Microphone.",
+        "index": 0,
+        "type": "Alert",
+        "depth": 0,
+        "ref": "e1"
+      },
+      {
+        "parentIndex": 0,
+        "hittable": true,
+        "type": "Button",
+        "index": 1,
+        "enabled": true,
+        "rect": {
+          "height": 48,
+          "x": 57,
+          "width": 140,
+          "y": 528.6666666666667
+        },
+        "label": "Don’t Allow",
+        "depth": 1,
+        "ref": "e2"
+      },
+      {
+        "parentIndex": 0,
+        "hittable": true,
+        "type": "Button",
+        "index": 2,
+        "enabled": true,
+        "rect": {
+          "height": 48,
+          "x": 205,
+          "width": 140,
+          "y": 528.6666666666667
+        },
+        "label": "Allow",
+        "depth": 1,
+        "ref": "e3"
+      },
+      {
+        "rect": {
+          "height": 42.33333333333337,
+          "x": 71,
+          "width": 260,
+          "y": 420.3333333333333
+        },
+        "depth": 1,
+        "hittable": false,
+        "type": "StaticText",
+        "parentIndex": 0,
+        "index": 3,
+        "enabled": true,
+        "ref": "e4",
+        "inheritsLabel": true
+      },
+      {
+        "label": "Allow Agent Device Tester to exercise microphone permission recovery.",
+        "rect": {
+          "height": 38,
+          "x": 71,
+          "width": 260,
+          "y": 470.3333333333333
+        },
+        "enabled": true,
+        "parentIndex": 0,
+        "index": 4,
+        "hittable": false,
+        "depth": 1,
+        "type": "StaticText",
+        "ref": "e5"
+      }
+    ],
+    "truncated": false,
+    "appName": "com.callstack.agentdevicelab",
+    "appBundleId": "com.callstack.agentdevicelab",
+    "visibility": {
+      "partial": false,
+      "visibleNodeCount": 5,
+      "totalNodeCount": 5,
+      "reasons": []
+    },
+    "warnings": [
+      "Simulator AX snapshot unavailable (foreground-owner-unverified); used XCTest for this app generation."
+    ],
+    "snapshotDiagnostics": {
+      "stats": {
+        "count": 5,
+        "p50Ms": 75,
+        "p95Ms": 2715,
+        "maxMs": 2715,
+        "slowThresholdMs": 1500,
+        "platform": "ios",
+        "backends": {
+          "xctest": 5
+        }
+      }
+    },
+    "refsGeneration": 435513
+  }
+}

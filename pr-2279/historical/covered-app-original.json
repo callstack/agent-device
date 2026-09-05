@@ -1,0 +1,482 @@
+{
+  "success": true,
+  "data": {
+    "nodes": [
+      {
+        "index": 0,
+        "type": "Application",
+        "role": "UIApplication",
+        "label": "Agent Device Tester",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 402,
+          "height": 874
+        },
+        "depth": 0,
+        "pid": 3117,
+        "ref": "e1"
+      },
+      {
+        "index": 1,
+        "parentIndex": 0,
+        "type": "ScrollView",
+        "role": "RCTEnhancedScrollView",
+        "subrole": "UIScrollView",
+        "rect": {
+          "x": 18,
+          "y": 62,
+          "width": 366,
+          "height": 729
+        },
+        "depth": 1,
+        "pid": 3117,
+        "hiddenContentBelow": true,
+        "ref": "e2"
+      },
+      {
+        "index": 2,
+        "parentIndex": 1,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "Agent Device Tester",
+        "rect": {
+          "x": 18,
+          "y": 62,
+          "width": 284.6666564941406,
+          "height": 72
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e3"
+      },
+      {
+        "index": 3,
+        "parentIndex": 1,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "0 in cart",
+        "rect": {
+          "x": 324.9999895095825,
+          "y": 68.33333349227905,
+          "width": 48.666656494140625,
+          "height": 14.333328247070312
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e4"
+      },
+      {
+        "index": 4,
+        "parentIndex": 1,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "An app for testing all the functionality of agent-device.",
+        "rect": {
+          "x": 18,
+          "y": 140,
+          "width": 284.6666564941406,
+          "height": 46
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e5"
+      },
+      {
+        "index": 5,
+        "parentIndex": 1,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "Gesture lab",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 246.66666221618652,
+          "width": 333.33331298828125,
+          "height": 24.999984741210938
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e6"
+      },
+      {
+        "index": 6,
+        "parentIndex": 1,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "Image target for pan, pinch, rotate, and fling. pan changed no, pinch changed no, rotate changed no",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 277.6666622161865,
+          "width": 333.33331298828125,
+          "height": 40
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e7"
+      },
+      {
+        "index": 7,
+        "parentIndex": 1,
+        "type": "Button",
+        "role": "RCTViewComponentView",
+        "subrole": "UIView",
+        "label": "Drag source",
+        "identifier": "drag-source",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 331.66666412353516,
+          "width": 156.6666717529297,
+          "height": 56
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e8"
+      },
+      {
+        "index": 8,
+        "parentIndex": 1,
+        "type": "Button",
+        "role": "RCTViewComponentView",
+        "subrole": "UIView",
+        "label": "Drag destination",
+        "identifier": "drag-destination",
+        "rect": {
+          "x": 211.0000057220459,
+          "y": 331.66666412353516,
+          "width": 156.66665649414062,
+          "height": 56
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e9"
+      },
+      {
+        "index": 9,
+        "parentIndex": 1,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "drag completed no",
+        "identifier": "drag-gesture-status",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 401.6666564941406,
+          "width": 333.33331298828125,
+          "height": 18
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e10"
+      },
+      {
+        "index": 10,
+        "parentIndex": 1,
+        "type": "Other",
+        "role": "RCTViewComponentView",
+        "subrole": "UIView",
+        "label": "Gesture test image",
+        "identifier": "gesture-target",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 433.6666564941406,
+          "width": 333.33331298828125,
+          "height": 220.00003051757812
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e11"
+      },
+      {
+        "index": 11,
+        "parentIndex": 10,
+        "type": "Other",
+        "role": "RCTViewComponentView",
+        "subrole": "UIView",
+        "label": "Transform gesture target",
+        "identifier": "transform-gesture-target",
+        "rect": {
+          "x": 34.66666731238365,
+          "y": 433.99998983740807,
+          "width": 332.66668701171875,
+          "height": 219.33331298828125
+        },
+        "depth": 3,
+        "pid": 3117,
+        "ref": "e12"
+      },
+      {
+        "index": 12,
+        "parentIndex": 10,
+        "type": "Other",
+        "role": "RCTViewComponentView",
+        "subrole": "UIView",
+        "label": "Exact two-pointer pan target",
+        "identifier": "two-pointer-pan-target",
+        "rect": {
+          "x": 34.66666731238365,
+          "y": 433.99998983740807,
+          "width": 166.3333282470703,
+          "height": 219.33331298828125
+        },
+        "depth": 3,
+        "pid": 3117,
+        "ref": "e13"
+      },
+      {
+        "index": 13,
+        "parentIndex": 10,
+        "type": "Image",
+        "role": "RCTUIImageViewAnimated",
+        "subrole": "UIImageView",
+        "label": "Gesture test image",
+        "identifier": "gesture-target-image",
+        "rect": {
+          "x": 81.00000190734863,
+          "y": 463.6666564941406,
+          "width": 240,
+          "height": 160.00003051757812
+        },
+        "depth": 3,
+        "pid": 3117,
+        "ref": "e14"
+      },
+      {
+        "index": 14,
+        "parentIndex": 1,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "gesture canary ready",
+        "identifier": "gesture-canary-ready",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 667.6666717529297,
+          "width": 333.33331298828125,
+          "height": 18
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e15"
+      },
+      {
+        "index": 15,
+        "parentIndex": 1,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "x 0, y 0, scale 1.00, rotate 0",
+        "identifier": "gesture-transform-status",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 691.6666717529297,
+          "width": 333.33331298828125,
+          "height": 18
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e16"
+      },
+      {
+        "index": 16,
+        "parentIndex": 1,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "fling 0",
+        "identifier": "gesture-fling-status",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 715.6666717529297,
+          "width": 333.33331298828125,
+          "height": 18
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e17"
+      },
+      {
+        "index": 17,
+        "parentIndex": 1,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "two-pointer pan activations 0",
+        "identifier": "gesture-two-pointer-pan-status",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 739.6666717529297,
+          "width": 333.33331298828125,
+          "height": 18
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e18"
+      },
+      {
+        "index": 18,
+        "parentIndex": 1,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "pan duration pending",
+        "identifier": "gesture-pan-duration-status",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 763.6666717529297,
+          "width": 333.33331298828125,
+          "height": 18
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e19"
+      },
+      {
+        "index": 19,
+        "parentIndex": 1,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "pan changed no, pinch changed no, rotate changed no",
+        "identifier": "gesture-change-status",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 787.6666717529297,
+          "width": 333.33331298828125,
+          "height": 3.3333282470703125
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e20"
+      },
+      {
+        "index": 20,
+        "parentIndex": 0,
+        "type": "TabBar",
+        "role": "UITabBar",
+        "label": "Tab Bar",
+        "rect": {
+          "x": 0,
+          "y": 791,
+          "width": 402,
+          "height": 83
+        },
+        "depth": 1,
+        "pid": 3117,
+        "ref": "e21"
+      },
+      {
+        "index": 21,
+        "parentIndex": 20,
+        "type": "Button",
+        "role": "_UITabButton",
+        "label": "Home",
+        "rect": {
+          "x": 25,
+          "y": 795,
+          "width": 74,
+          "height": 54
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e22"
+      },
+      {
+        "index": 22,
+        "parentIndex": 20,
+        "type": "Button",
+        "role": "_UITabButton",
+        "label": "Catalog",
+        "rect": {
+          "x": 93.41666666666666,
+          "y": 795,
+          "width": 74.33333333333334,
+          "height": 54
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e23"
+      },
+      {
+        "index": 23,
+        "parentIndex": 20,
+        "type": "Button",
+        "role": "_UITabButton",
+        "label": "Form",
+        "rect": {
+          "x": 162.16666666666666,
+          "y": 795,
+          "width": 74,
+          "height": 54
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e24"
+      },
+      {
+        "index": 24,
+        "parentIndex": 20,
+        "type": "Button",
+        "role": "_UITabButton",
+        "label": "Audio",
+        "rect": {
+          "x": 230.58333333333331,
+          "y": 795,
+          "width": 74,
+          "height": 54
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e25"
+      },
+      {
+        "index": 25,
+        "parentIndex": 20,
+        "type": "Button",
+        "role": "_UITabButton",
+        "label": "Settings",
+        "rect": {
+          "x": 299,
+          "y": 795,
+          "width": 78,
+          "height": 54
+        },
+        "depth": 2,
+        "pid": 3117,
+        "ref": "e26"
+      }
+    ],
+    "truncated": false,
+    "appName": "com.callstack.agentdevicelab",
+    "appBundleId": "com.callstack.agentdevicelab",
+    "visibility": {
+      "partial": true,
+      "visibleNodeCount": 26,
+      "totalNodeCount": 26,
+      "reasons": [
+        "scroll-hidden-below"
+      ]
+    },
+    "warnings": [
+      "iOS snapshot acquisition does not provide hittability evidence; regular snapshots omit unverified hittability while raw snapshots preserve supplied facts."
+    ],
+    "snapshotDiagnostics": {
+      "stats": {
+        "count": 2,
+        "p50Ms": 103,
+        "p95Ms": 2745,
+        "maxMs": 2745,
+        "slowThresholdMs": 1500,
+        "platform": "ios",
+        "backends": {
+          "xctest": 2
+        }
+      }
+    },
+    "refsGeneration": 482474
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "success": true,
+  "data": {
+    "x": 127,
+    "y": 553,
+    "message": "Tapped label=\"Don’t Allow\" (127, 553)",
+    "referenceWidth": 361,
+    "referenceHeight": 592.6666666666667,
+    "targetKind": "selector",
+    "selector": "label=\"Don’t Allow\"",
+    "selectorChain": [
+      "role=\"button\" label=\"Don’t Allow\"",
+      "label=\"Don’t Allow\""
+    ],
+    "refLabel": "Don’t Allow",
+    "resolution": {
+      "source": "runtime",
+      "phase": "pre-action",
+      "kind": "unique"
+    }
+  }
+}

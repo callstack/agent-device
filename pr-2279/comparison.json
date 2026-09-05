@@ -1,0 +1,290 @@
+{
+  "base-warm": {
+    "revision": "7a2d48d160aaacb582c6f4cde98b6af7531bf7af",
+    "samples": 120,
+    "cells": [
+      {
+        "screen": "quiet",
+        "wallClockMs": {
+          "n": 20,
+          "min": 111.42483300001186,
+          "median": 122.92120799999975,
+          "p95": 143.37091700000747,
+          "max": 196.35054200000013,
+          "outlierCount": 1,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "daemonDurationMs": {
+          "n": 20,
+          "min": 42,
+          "median": 46,
+          "p95": 50,
+          "max": 54,
+          "outlierCount": 1,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "failures": 0,
+        "failureCategories": {}
+      },
+      {
+        "screen": "list",
+        "wallClockMs": {
+          "n": 20,
+          "min": 279.01104199999827,
+          "median": 291.8627919999999,
+          "p95": 308.61824999999953,
+          "max": 314.6203749999986,
+          "outlierCount": 1,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "daemonDurationMs": {
+          "n": 20,
+          "min": 201,
+          "median": 211,
+          "p95": 221,
+          "max": 222,
+          "outlierCount": 1,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "failures": 0,
+        "failureCategories": {}
+      },
+      {
+        "screen": "nested-scroll",
+        "wallClockMs": {
+          "n": 20,
+          "min": 153.029916999978,
+          "median": 164.5185829999973,
+          "p95": 197.07291700001224,
+          "max": 204.80795799999032,
+          "outlierCount": 4,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "daemonDurationMs": {
+          "n": 20,
+          "min": 79,
+          "median": 83,
+          "p95": 92,
+          "max": 104,
+          "outlierCount": 4,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "failures": 0,
+        "failureCategories": {}
+      },
+      {
+        "screen": "alert",
+        "wallClockMs": {
+          "n": 20,
+          "min": 166.54904199996963,
+          "median": 220.25404200004414,
+          "p95": 318.1596669999999,
+          "max": 435.0476250000065,
+          "outlierCount": 1,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "daemonDurationMs": {
+          "n": 20,
+          "min": 96,
+          "median": 124,
+          "p95": 141,
+          "max": 142,
+          "outlierCount": 1,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "failures": 0,
+        "failureCategories": {}
+      },
+      {
+        "screen": "system-surface",
+        "wallClockMs": {
+          "n": 20,
+          "min": 176.2178750000894,
+          "median": 188.04954199993517,
+          "p95": 279.48420900001656,
+          "max": 286.41962499998044,
+          "outlierCount": 2,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "daemonDurationMs": {
+          "n": 20,
+          "min": 100,
+          "median": 106,
+          "p95": 124,
+          "max": 134,
+          "outlierCount": 2,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "failures": 0,
+        "failureCategories": {}
+      },
+      {
+        "screen": "xctest-stress",
+        "wallClockMs": {
+          "n": 20,
+          "min": 176.2432919999119,
+          "median": 221.74233400006779,
+          "p95": 293.4175830000313,
+          "max": 306.6720000000205,
+          "outlierCount": 0,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "daemonDurationMs": {
+          "n": 20,
+          "min": 99,
+          "median": 124,
+          "p95": 151,
+          "max": 152,
+          "outlierCount": 0,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "failures": 0,
+        "failureCategories": {}
+      }
+    ]
+  },
+  "candidate-warm": {
+    "revision": "ae26f7afc064c75c65c71e677d32d77cdf2f9709",
+    "samples": 120,
+    "cells": [
+      {
+        "screen": "quiet",
+        "wallClockMs": {
+          "n": 20,
+          "min": 93.61170799999672,
+          "median": 99.39408299999923,
+          "p95": 124.06820799999696,
+          "max": 128.24754199999734,
+          "outlierCount": 2,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "daemonDurationMs": {
+          "n": 20,
+          "min": 21,
+          "median": 24,
+          "p95": 32,
+          "max": 50,
+          "outlierCount": 2,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "failures": 0,
+        "failureCategories": {}
+      },
+      {
+        "screen": "list",
+        "wallClockMs": {
+          "n": 20,
+          "min": 197.85141699999804,
+          "median": 206.30041599998367,
+          "p95": 225.6763749999809,
+          "max": 226.62670799999614,
+          "outlierCount": 0,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "daemonDurationMs": {
+          "n": 20,
+          "min": 123,
+          "median": 127,
+          "p95": 140,
+          "max": 142,
+          "outlierCount": 0,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "failures": 0,
+        "failureCategories": {}
+      },
+      {
+        "screen": "nested-scroll",
+        "wallClockMs": {
+          "n": 20,
+          "min": 100.23829199999454,
+          "median": 109.19112500001211,
+          "p95": 165.96987500000978,
+          "max": 169.79287499998463,
+          "outlierCount": 4,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "daemonDurationMs": {
+          "n": 20,
+          "min": 28,
+          "median": 32,
+          "p95": 55,
+          "max": 71,
+          "outlierCount": 4,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "failures": 0,
+        "failureCategories": {}
+      },
+      {
+        "screen": "alert",
+        "wallClockMs": {
+          "n": 20,
+          "min": 126.42683299997589,
+          "median": 137.42866699997103,
+          "p95": 163.51329199998872,
+          "max": 168.09304099995643,
+          "outlierCount": 2,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "daemonDurationMs": {
+          "n": 20,
+          "min": 49,
+          "median": 54,
+          "p95": 64,
+          "max": 70,
+          "outlierCount": 2,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "failures": 0,
+        "failureCategories": {}
+      },
+      {
+        "screen": "system-surface",
+        "wallClockMs": {
+          "n": 20,
+          "min": 119.09075000009034,
+          "median": 133.66545899998164,
+          "p95": 154.29416699998546,
+          "max": 167.25004199997056,
+          "outlierCount": 1,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "daemonDurationMs": {
+          "n": 20,
+          "min": 45,
+          "median": 51,
+          "p95": 69,
+          "max": 69,
+          "outlierCount": 1,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "failures": 0,
+        "failureCategories": {}
+      },
+      {
+        "screen": "xctest-stress",
+        "wallClockMs": {
+          "n": 20,
+          "min": 117.37116699991748,
+          "median": 137.06462499999907,
+          "p95": 152.30845800007228,
+          "max": 159.86870899994392,
+          "outlierCount": 0,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "daemonDurationMs": {
+          "n": 20,
+          "min": 47,
+          "median": 57,
+          "p95": 66,
+          "max": 82,
+          "outlierCount": 0,
+          "outlierRule": "tukey-1.5-iqr"
+        },
+        "failures": 0,
+        "failureCategories": {}
+      }
+    ]
+  }
+}

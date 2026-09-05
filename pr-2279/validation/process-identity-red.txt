@@ -1,0 +1,44 @@
+[WARN] This project is configured to use 11.17.0 of pnpm. Your current pnpm is v11.21.0
+
+ RUN  v4.1.11 /Users/thymikee/.codex/worktrees/cf12/agent-device
+
+ ❯ |unit-core| packages/platform-apple/src/snapshot-source/lifecycle.test.ts (15 tests | 1 failed | 14 skipped) 6ms
+   ↓ the bridge manager reuses a healthy per-device helper and stops it exactly once
+   ↓ a new target generation reuses the healthy helper and carries generation per request
+   ↓ cancellation while queued prevents a later dispatch
+   ↓ cancelling a middle waiter does not release the following request early
+   ↓ independent managers own distinct sockets for the same Simulator
+   ↓ request cancellation after dispatch reaps the exact helper before recovery
+   ↓ pre-dispatch cancellation preserves a healthy helper
+   ↓ one absolute deadline covers helper connect and response read
+   ↓ a crashed helper is removed and the next request starts a fresh helper
+   ↓ a crashed helper emits its bounded log once and keeps exit facts typed
+   ↓ the manager rejects a response for a different target process as stale
+   ↓ the manager rejects a response carrying a previous target generation as stale
+   × the manager rejects a cached target replaced before acquisition begins 6ms
+   ↓ the manager rejects a tree when the target process changes during acquisition
+   ↓ typed guest failures retain their kind after target validation
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |unit-core| packages/platform-apple/src/snapshot-source/lifecycle.test.ts > the manager rejects a cached target replaced before acquisition begins
+AssertionError: Missing expected rejection.
+
+simple
+
+ ❯ packages/platform-apple/src/snapshot-source/lifecycle.test.ts:322:3
+    320|   });
+    321|   const manager = new SnapshotBridgeManager(fixture.host);
+    322|   await assert.rejects(
+       |   ^
+    323|     manager.request({
+    324|       target: { ...target, processStartTime: 'original-start' },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 skipped (15)
+   Start at  20:50:23
+   Duration  762ms (transform 121ms, setup 24ms, import 135ms, tests 6ms, environment 0ms)
+

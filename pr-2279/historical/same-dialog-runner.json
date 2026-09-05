@@ -1,0 +1,93 @@
+{
+  "success": true,
+  "data": {
+    "nodes": [
+      {
+        "hittable": true,
+        "label": "Open in “Agent Device Tester”?",
+        "index": 0,
+        "rect": {
+          "x": 41,
+          "y": 388,
+          "width": 320,
+          "height": 126
+        },
+        "depth": 0,
+        "enabled": true,
+        "type": "Alert",
+        "ref": "e1"
+      },
+      {
+        "hittable": true,
+        "parentIndex": 0,
+        "label": "Cancel",
+        "index": 1,
+        "rect": {
+          "x": 57,
+          "y": 450,
+          "width": 140,
+          "height": 48
+        },
+        "depth": 1,
+        "enabled": true,
+        "type": "Button",
+        "ref": "e2"
+      },
+      {
+        "hittable": true,
+        "parentIndex": 0,
+        "label": "Open",
+        "index": 2,
+        "rect": {
+          "x": 205,
+          "y": 450,
+          "width": 140,
+          "height": 48
+        },
+        "depth": 1,
+        "enabled": true,
+        "type": "Button",
+        "ref": "e3"
+      },
+      {
+        "hittable": false,
+        "parentIndex": 0,
+        "index": 3,
+        "rect": {
+          "x": 71,
+          "y": 409.6666666666667,
+          "width": 260,
+          "height": 20.333333333333314
+        },
+        "depth": 1,
+        "enabled": true,
+        "type": "StaticText",
+        "ref": "e4",
+        "inheritsLabel": true
+      }
+    ],
+    "truncated": false,
+    "appName": "com.callstack.agentdevicelab",
+    "appBundleId": "com.callstack.agentdevicelab",
+    "visibility": {
+      "partial": false,
+      "visibleNodeCount": 4,
+      "totalNodeCount": 4,
+      "reasons": []
+    },
+    "snapshotDiagnostics": {
+      "stats": {
+        "count": 4,
+        "p50Ms": 107,
+        "p95Ms": 2745,
+        "maxMs": 2745,
+        "slowThresholdMs": 1500,
+        "platform": "ios",
+        "backends": {
+          "xctest": 4
+        }
+      }
+    },
+    "refsGeneration": 482476
+  }
+}

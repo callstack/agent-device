@@ -1,0 +1,2016 @@
+{
+  "packageName": "agent-device",
+  "version": "0.20.11-dev",
+  "generatedAt": "2026-09-05T20:27:12.592Z",
+  "bundled": {
+    "files": 370,
+    "rawBytes": 3480024,
+    "gzipBytes": 1149438
+  },
+  "npmPack": {
+    "filename": "agent-device-0.20.11-dev.tgz",
+    "tarballBytes": 1327301,
+    "unpackedBytes": 4479384,
+    "files": 489,
+    "entries": [
+      {
+        "path": "LICENSE",
+        "size": 1066
+      },
+      {
+        "path": "README.md",
+        "size": 13548
+      },
+      {
+        "path": "android/ime-helper/dist/agent-device-android-ime-helper-0.20.11-dev.apk",
+        "size": 12779
+      },
+      {
+        "path": "android/ime-helper/dist/agent-device-android-ime-helper-0.20.11-dev.apk.sha256",
+        "size": 114
+      },
+      {
+        "path": "android/ime-helper/dist/agent-device-android-ime-helper-0.20.11-dev.manifest.json",
+        "size": 418
+      },
+      {
+        "path": "android/snapshot-helper/dist/agent-device-android-snapshot-helper-0.20.11-dev.apk",
+        "size": 29099
+      },
+      {
+        "path": "android/snapshot-helper/dist/agent-device-android-snapshot-helper-0.20.11-dev.apk.sha256",
+        "size": 119
+      },
+      {
+        "path": "android/snapshot-helper/dist/agent-device-android-snapshot-helper-0.20.11-dev.manifest.json",
+        "size": 814
+      },
+      {
+        "path": "apple/macos-helper/Package.swift",
+        "size": 356
+      },
+      {
+        "path": "apple/macos-helper/Sources/AgentDeviceMacOSHelper/AudioProbe.swift",
+        "size": 9531
+      },
+      {
+        "path": "apple/macos-helper/Sources/AgentDeviceMacOSHelper/main.swift",
+        "size": 24615
+      },
+      {
+        "path": "apple/macos-helper/Sources/AgentDeviceMacOSHelper/SnapshotTraversal.swift",
+        "size": 20343
+      },
+      {
+        "path": "apple/snapshot-bridge/LICENSE.idb",
+        "size": 1274
+      },
+      {
+        "path": "apple/snapshot-bridge/README.md",
+        "size": 2358
+      },
+      {
+        "path": "apple/snapshot-bridge/SnapshotBridge.m",
+        "size": 11357
+      },
+      {
+        "path": "apple/snapshot-bridge/SnapshotBridgeRuntime.h",
+        "size": 1320
+      },
+      {
+        "path": "apple/snapshot-bridge/SnapshotBridgeRuntime.m",
+        "size": 15789
+      },
+      {
+        "path": "bin/agent-device.mjs",
+        "size": 584
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.pbxproj",
+        "size": 18808
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.xcworkspace/contents.xcworkspacedata",
+        "size": 135
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/xcshareddata/xcschemes/AgentDeviceRunner.xcscheme",
+        "size": 4160
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner/AgentDeviceRunnerApp.m",
+        "size": 7176
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests.xctestplan",
+        "size": 571
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/AgentDeviceRunnerUITests-Bridging-Header.h",
+        "size": 150
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/AgentDeviceRunnerUITests.entitlements",
+        "size": 303
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerAXSnapshotBridge.h",
+        "size": 7199
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerAXSnapshotBridge.m",
+        "size": 36668
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerObjCExceptionCatcher.h",
+        "size": 218
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerObjCExceptionCatcher.m",
+        "size": 448
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerSelectorMatchPolicy.swift",
+        "size": 2911
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerStringNormalization.swift",
+        "size": 186
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerSynthesizedGesture.h",
+        "size": 2473
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerSynthesizedGesture.m",
+        "size": 16428
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerSynthesizedTextEntry.h",
+        "size": 1146
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerSynthesizedTextEntry.m",
+        "size": 8180
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTapPointPolicy.swift",
+        "size": 1310
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests.swift",
+        "size": 12520
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Alert.swift",
+        "size": 9464
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+AXSnapshotFallback.swift",
+        "size": 12670
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+BlockingSystemModalResolution.swift",
+        "size": 2562
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+CommandExecution.swift",
+        "size": 76014
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+CommandJournal.swift",
+        "size": 4318
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Environment.swift",
+        "size": 814
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Exceptions.swift",
+        "size": 1499
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Interaction.swift",
+        "size": 41345
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Keyboard.swift",
+        "size": 10694
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Lifecycle.swift",
+        "size": 11127
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift",
+        "size": 9785
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Navigation.swift",
+        "size": 6102
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Orientation.swift",
+        "size": 2677
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+PrivateAXElementTypes.swift",
+        "size": 281
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+PrivateAXPresentation.swift",
+        "size": 4022
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+ScreenRecorder.swift",
+        "size": 8901
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+ScrollGesture.swift",
+        "size": 3882
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SequenceExecution.swift",
+        "size": 9573
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Snapshot.swift",
+        "size": 39144
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SnapshotBackendCapabilities.swift",
+        "size": 2512
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SnapshotCapturePlan.swift",
+        "size": 31530
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SnapshotPresentationInvariant.swift",
+        "size": 558
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SnapshotTiming.swift",
+        "size": 3065
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SynthesizedCommitDeadline.swift",
+        "size": 10277
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SynthesizedGesturePolicy.swift",
+        "size": 4506
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SynthesizedTextEntry.swift",
+        "size": 14119
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SystemModal.swift",
+        "size": 8601
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntry.swift",
+        "size": 8980
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryFocus.swift",
+        "size": 8392
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryReadiness.swift",
+        "size": 6550
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextInputCandidatePolicy.swift",
+        "size": 386
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextTyping.swift",
+        "size": 21569
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Transport.swift",
+        "size": 9280
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TvRemote.swift",
+        "size": 6443
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerXCTestEventBridge.h",
+        "size": 3084
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerXCTestEventBridge.m",
+        "size": 2995
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/RecordingScripts/recording-overlay.swift",
+        "size": 18586
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/RecordingScripts/recording-trim.swift",
+        "size": 3195
+      },
+      {
+        "path": "dist/apple/runner/AgentDeviceRunner/RecordingScripts/RecordingExportSupport.swift",
+        "size": 3903
+      },
+      {
+        "path": "dist/apple/snapshot-presentation/Package.swift",
+        "size": 426
+      },
+      {
+        "path": "dist/apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotGeometry.swift",
+        "size": 1588
+      },
+      {
+        "path": "dist/apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotModels.swift",
+        "size": 6535
+      },
+      {
+        "path": "dist/apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotPresentation.swift",
+        "size": 4577
+      },
+      {
+        "path": "dist/apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotPresentationFailure.swift",
+        "size": 871
+      },
+      {
+        "path": "dist/apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotPresentationInvariant.swift",
+        "size": 2689
+      },
+      {
+        "path": "dist/apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotPresentationProjection.swift",
+        "size": 5038
+      },
+      {
+        "path": "dist/apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotScopePolicy.swift",
+        "size": 1431
+      },
+      {
+        "path": "dist/apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotVisibilityFold.swift",
+        "size": 7495
+      },
+      {
+        "path": "dist/apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotVisibilityFoldProjection.swift",
+        "size": 3149
+      },
+      {
+        "path": "dist/src/adapter.js",
+        "size": 27273
+      },
+      {
+        "path": "dist/src/adb-executor.js",
+        "size": 5762
+      },
+      {
+        "path": "dist/src/adb-failure.js",
+        "size": 4018
+      },
+      {
+        "path": "dist/src/adb-host.js",
+        "size": 724
+      },
+      {
+        "path": "dist/src/agent-browser-lifecycle.js",
+        "size": 2097
+      },
+      {
+        "path": "dist/src/agent-browser-process-record.js",
+        "size": 2455
+      },
+      {
+        "path": "dist/src/agent-browser-provider.js",
+        "size": 16449
+      },
+      {
+        "path": "dist/src/agent-browser-tool.js",
+        "size": 5517
+      },
+      {
+        "path": "dist/src/agent-device-client.js",
+        "size": 18950
+      },
+      {
+        "path": "dist/src/ai-sdk.d.ts",
+        "size": 2879
+      },
+      {
+        "path": "dist/src/ai-sdk.js",
+        "size": 1339
+      },
+      {
+        "path": "dist/src/alert-contract.js",
+        "size": 132
+      },
+      {
+        "path": "dist/src/alert-runtime.js",
+        "size": 8345
+      },
+      {
+        "path": "dist/src/android-adb.d.ts",
+        "size": 3033
+      },
+      {
+        "path": "dist/src/android-adb.js",
+        "size": 626
+      },
+      {
+        "path": "dist/src/android-input-ownership.js",
+        "size": 4588
+      },
+      {
+        "path": "dist/src/android-snapshot-quality.js",
+        "size": 479
+      },
+      {
+        "path": "dist/src/android-system-chrome.js",
+        "size": 401
+      },
+      {
+        "path": "dist/src/android.js",
+        "size": 2369
+      },
+      {
+        "path": "dist/src/api.js",
+        "size": 37532
+      },
+      {
+        "path": "dist/src/app-catalog.js",
+        "size": 1570
+      },
+      {
+        "path": "dist/src/app-deployment-resolution.js",
+        "size": 2242
+      },
+      {
+        "path": "dist/src/app-helpers.js",
+        "size": 1163
+      },
+      {
+        "path": "dist/src/app-inventory-contract.js",
+        "size": 54812
+      },
+      {
+        "path": "dist/src/app-inventory.d.ts",
+        "size": 136
+      },
+      {
+        "path": "dist/src/app-inventory.js",
+        "size": 258
+      },
+      {
+        "path": "dist/src/app-launch.js",
+        "size": 6288
+      },
+      {
+        "path": "dist/src/app-lifecycle-facade.js",
+        "size": 61
+      },
+      {
+        "path": "dist/src/app-lifecycle.js",
+        "size": 2882
+      },
+      {
+        "path": "dist/src/app-lifecycle2.js",
+        "size": 404
+      },
+      {
+        "path": "dist/src/app-log-files.js",
+        "size": 811
+      },
+      {
+        "path": "dist/src/app-log-reconnect.js",
+        "size": 2294
+      },
+      {
+        "path": "dist/src/app-log-runtime.js",
+        "size": 33
+      },
+      {
+        "path": "dist/src/app-log-runtime2.js",
+        "size": 18661
+      },
+      {
+        "path": "dist/src/app-parsers.js",
+        "size": 1242
+      },
+      {
+        "path": "dist/src/app-resolution-cache.js",
+        "size": 554
+      },
+      {
+        "path": "dist/src/app-resolution-facade.js",
+        "size": 295
+      },
+      {
+        "path": "dist/src/app-resolution.js",
+        "size": 6484
+      },
+      {
+        "path": "dist/src/app-state.js",
+        "size": 868
+      },
+      {
+        "path": "dist/src/apple-multitouch-support.js",
+        "size": 943
+      },
+      {
+        "path": "dist/src/apple-os-display-names.js",
+        "size": 115
+      },
+      {
+        "path": "dist/src/application-lifecycle-interaction.js",
+        "size": 4597
+      },
+      {
+        "path": "dist/src/application-lifecycle-runtime.js",
+        "size": 855
+      },
+      {
+        "path": "dist/src/apps-simctl.js",
+        "size": 264
+      },
+      {
+        "path": "dist/src/archive.js",
+        "size": 67313
+      },
+      {
+        "path": "dist/src/artifact-download.js",
+        "size": 2612
+      },
+      {
+        "path": "dist/src/artifacts.d.ts",
+        "size": 535
+      },
+      {
+        "path": "dist/src/artifacts.js",
+        "size": 200
+      },
+      {
+        "path": "dist/src/async-lifecycle.js",
+        "size": 1016
+      },
+      {
+        "path": "dist/src/audio-probe-result.js",
+        "size": 1595
+      },
+      {
+        "path": "dist/src/audio-probe-runtime.js",
+        "size": 189
+      },
+      {
+        "path": "dist/src/audio-probe-support.js",
+        "size": 326
+      },
+      {
+        "path": "dist/src/auth-session.js",
+        "size": 8499
+      },
+      {
+        "path": "dist/src/auth.js",
+        "size": 1298
+      },
+      {
+        "path": "dist/src/back-mode.js",
+        "size": 139
+      },
+      {
+        "path": "dist/src/backend-snapshot-options.js",
+        "size": 392
+      },
+      {
+        "path": "dist/src/base-url.js",
+        "size": 945
+      },
+      {
+        "path": "dist/src/batch.d.ts",
+        "size": 75
+      },
+      {
+        "path": "dist/src/batch.js",
+        "size": 64
+      },
+      {
+        "path": "dist/src/boot-diagnostics.js",
+        "size": 3503
+      },
+      {
+        "path": "dist/src/bounds.js",
+        "size": 235
+      },
+      {
+        "path": "dist/src/byte-limit-stream.js",
+        "size": 398
+      },
+      {
+        "path": "dist/src/capabilities.js",
+        "size": 2086
+      },
+      {
+        "path": "dist/src/capture.js",
+        "size": 5855
+      },
+      {
+        "path": "dist/src/cli-command-aliases.js",
+        "size": 553
+      },
+      {
+        "path": "dist/src/cli-config.js",
+        "size": 5216
+      },
+      {
+        "path": "dist/src/cli-help.js",
+        "size": 92720
+      },
+      {
+        "path": "dist/src/cli-output.js",
+        "size": 143
+      },
+      {
+        "path": "dist/src/cli-runner.js",
+        "size": 476
+      },
+      {
+        "path": "dist/src/cli.js",
+        "size": 25547
+      },
+      {
+        "path": "dist/src/click-button.js",
+        "size": 849
+      },
+      {
+        "path": "dist/src/client-metro-companion.js",
+        "size": 6263
+      },
+      {
+        "path": "dist/src/client-metro.js",
+        "size": 14375
+      },
+      {
+        "path": "dist/src/client-types.d.ts",
+        "size": 56214
+      },
+      {
+        "path": "dist/src/clipboard.js",
+        "size": 207
+      },
+      {
+        "path": "dist/src/cloud-artifacts.d.ts",
+        "size": 2105
+      },
+      {
+        "path": "dist/src/code-signature-cache.js",
+        "size": 1962
+      },
+      {
+        "path": "dist/src/code-signature.js",
+        "size": 1424
+      },
+      {
+        "path": "dist/src/color.js",
+        "size": 236
+      },
+      {
+        "path": "dist/src/command-catalog.js",
+        "size": 373
+      },
+      {
+        "path": "dist/src/command-metadata.js",
+        "size": 372
+      },
+      {
+        "path": "dist/src/command-schema.js",
+        "size": 8251
+      },
+      {
+        "path": "dist/src/command-surface.js",
+        "size": 254
+      },
+      {
+        "path": "dist/src/command-tools.js",
+        "size": 22625
+      },
+      {
+        "path": "dist/src/command.js",
+        "size": 761
+      },
+      {
+        "path": "dist/src/compatibility-policy.js",
+        "size": 1092
+      },
+      {
+        "path": "dist/src/config.js",
+        "size": 1355
+      },
+      {
+        "path": "dist/src/config2.js",
+        "size": 164
+      },
+      {
+        "path": "dist/src/connection-runtime.js",
+        "size": 19743
+      },
+      {
+        "path": "dist/src/connection.js",
+        "size": 23169
+      },
+      {
+        "path": "dist/src/contracts.d.ts",
+        "size": 562
+      },
+      {
+        "path": "dist/src/contracts.js",
+        "size": 123
+      },
+      {
+        "path": "dist/src/daemon-client-lifecycle.js",
+        "size": 41884
+      },
+      {
+        "path": "dist/src/daemon-process.js",
+        "size": 1306
+      },
+      {
+        "path": "dist/src/daemon-registration.js",
+        "size": 492
+      },
+      {
+        "path": "dist/src/daemon-shutdown-report.js",
+        "size": 1591
+      },
+      {
+        "path": "dist/src/daemon.js",
+        "size": 3967
+      },
+      {
+        "path": "dist/src/debug-symbols-facade.js",
+        "size": 14271
+      },
+      {
+        "path": "dist/src/device-claim-inspection.js",
+        "size": 5507
+      },
+      {
+        "path": "dist/src/device-claim-rule.js",
+        "size": 57801
+      },
+      {
+        "path": "dist/src/device-input-state.d.ts",
+        "size": 8699
+      },
+      {
+        "path": "dist/src/device-inventory-context.js",
+        "size": 1108
+      },
+      {
+        "path": "dist/src/device-isolation.js",
+        "size": 275
+      },
+      {
+        "path": "dist/src/device-release.js",
+        "size": 209
+      },
+      {
+        "path": "dist/src/device-rotation.js",
+        "size": 858
+      },
+      {
+        "path": "dist/src/device-selection-resolver.js",
+        "size": 2845
+      },
+      {
+        "path": "dist/src/device-session.js",
+        "size": 9656
+      },
+      {
+        "path": "dist/src/device.js",
+        "size": 862
+      },
+      {
+        "path": "dist/src/device2.js",
+        "size": 4672
+      },
+      {
+        "path": "dist/src/diagnostics.js",
+        "size": 3246
+      },
+      {
+        "path": "dist/src/diagnostics2.js",
+        "size": 34
+      },
+      {
+        "path": "dist/src/dispatch-resolve.js",
+        "size": 2687
+      },
+      {
+        "path": "dist/src/doctor-facade.js",
+        "size": 1646
+      },
+      {
+        "path": "dist/src/doctor-output.js",
+        "size": 632
+      },
+      {
+        "path": "dist/src/doctor-progress.js",
+        "size": 201
+      },
+      {
+        "path": "dist/src/doctor.js",
+        "size": 487
+      },
+      {
+        "path": "dist/src/doctor2.js",
+        "size": 1377
+      },
+      {
+        "path": "dist/src/doctor3.js",
+        "size": 1055
+      },
+      {
+        "path": "dist/src/entities.js",
+        "size": 604
+      },
+      {
+        "path": "dist/src/error.js",
+        "size": 1193
+      },
+      {
+        "path": "dist/src/exec.js",
+        "size": 8152
+      },
+      {
+        "path": "dist/src/file.js",
+        "size": 1388
+      },
+      {
+        "path": "dist/src/find.js",
+        "size": 7213
+      },
+      {
+        "path": "dist/src/finders.d.ts",
+        "size": 178
+      },
+      {
+        "path": "dist/src/finders.js",
+        "size": 132
+      },
+      {
+        "path": "dist/src/format.js",
+        "size": 3272
+      },
+      {
+        "path": "dist/src/generic-settle.js",
+        "size": 883
+      },
+      {
+        "path": "dist/src/generic.js",
+        "size": 956
+      },
+      {
+        "path": "dist/src/gesture-admission.js",
+        "size": 944
+      },
+      {
+        "path": "dist/src/gesture-plan-types.js",
+        "size": 27
+      },
+      {
+        "path": "dist/src/gesture-plan.js",
+        "size": 6092
+      },
+      {
+        "path": "dist/src/gesture-runtime.js",
+        "size": 2057
+      },
+      {
+        "path": "dist/src/harmonyos.js",
+        "size": 1294
+      },
+      {
+        "path": "dist/src/hdc.js",
+        "size": 760
+      },
+      {
+        "path": "dist/src/helper.js",
+        "size": 4439
+      },
+      {
+        "path": "dist/src/host-file.js",
+        "size": 1616
+      },
+      {
+        "path": "dist/src/http-health.js",
+        "size": 655
+      },
+      {
+        "path": "dist/src/human-control-contract.js",
+        "size": 6276
+      },
+      {
+        "path": "dist/src/human-control.js",
+        "size": 1012
+      },
+      {
+        "path": "dist/src/index.d.ts",
+        "size": 649
+      },
+      {
+        "path": "dist/src/index.js",
+        "size": 293
+      },
+      {
+        "path": "dist/src/input-actions.js",
+        "size": 2497
+      },
+      {
+        "path": "dist/src/input-actions2.js",
+        "size": 4447
+      },
+      {
+        "path": "dist/src/install-artifact-facade.js",
+        "size": 3349
+      },
+      {
+        "path": "dist/src/install-source-network-transport.js",
+        "size": 16068
+      },
+      {
+        "path": "dist/src/install-source.d.ts",
+        "size": 579
+      },
+      {
+        "path": "dist/src/install-source.js",
+        "size": 149
+      },
+      {
+        "path": "dist/src/install-source2.js",
+        "size": 7672
+      },
+      {
+        "path": "dist/src/interaction-positionals.js",
+        "size": 2618
+      },
+      {
+        "path": "dist/src/interaction-ref-policy.js",
+        "size": 7712
+      },
+      {
+        "path": "dist/src/interaction.js",
+        "size": 1567
+      },
+      {
+        "path": "dist/src/interaction2.js",
+        "size": 33846
+      },
+      {
+        "path": "dist/src/interactor-operation-catalog.js",
+        "size": 1449
+      },
+      {
+        "path": "dist/src/interactor-types.js",
+        "size": 185
+      },
+      {
+        "path": "dist/src/interactor.js",
+        "size": 31616
+      },
+      {
+        "path": "dist/src/interactor2.js",
+        "size": 2727
+      },
+      {
+        "path": "dist/src/interactors.js",
+        "size": 520
+      },
+      {
+        "path": "dist/src/internal/bin.d.ts",
+        "size": 9
+      },
+      {
+        "path": "dist/src/internal/bin.js",
+        "size": 1461
+      },
+      {
+        "path": "dist/src/internal/companion-tunnel.d.ts",
+        "size": 9
+      },
+      {
+        "path": "dist/src/internal/companion-tunnel.js",
+        "size": 8381
+      },
+      {
+        "path": "dist/src/internal/daemon.d.ts",
+        "size": 9
+      },
+      {
+        "path": "dist/src/internal/daemon.js",
+        "size": 106942
+      },
+      {
+        "path": "dist/src/internal/png-worker.d.ts",
+        "size": 1452
+      },
+      {
+        "path": "dist/src/internal/png-worker.js",
+        "size": 1102
+      },
+      {
+        "path": "dist/src/internal/run-script-http-child.d.ts",
+        "size": 162
+      },
+      {
+        "path": "dist/src/internal/run-script-http-child.js",
+        "size": 3000
+      },
+      {
+        "path": "dist/src/internal/update-check-entry.d.ts",
+        "size": 9
+      },
+      {
+        "path": "dist/src/internal/update-check-entry.js",
+        "size": 128
+      },
+      {
+        "path": "dist/src/inventory.js",
+        "size": 4123
+      },
+      {
+        "path": "dist/src/inventory2.js",
+        "size": 4871
+      },
+      {
+        "path": "dist/src/inventory3.js",
+        "size": 1712
+      },
+      {
+        "path": "dist/src/inventory4.js",
+        "size": 211
+      },
+      {
+        "path": "dist/src/inventory5.js",
+        "size": 1401
+      },
+      {
+        "path": "dist/src/inventory6.js",
+        "size": 107
+      },
+      {
+        "path": "dist/src/io.d.ts",
+        "size": 627
+      },
+      {
+        "path": "dist/src/io.js",
+        "size": 72
+      },
+      {
+        "path": "dist/src/ios-client.js",
+        "size": 106981
+      },
+      {
+        "path": "dist/src/ios-snapshot-acquisition.js",
+        "size": 2325
+      },
+      {
+        "path": "dist/src/ios-snapshot-adapter.js",
+        "size": 1092
+      },
+      {
+        "path": "dist/src/ios-snapshot-planning.js",
+        "size": 1975
+      },
+      {
+        "path": "dist/src/ios-snapshot-runtime.js",
+        "size": 10663
+      },
+      {
+        "path": "dist/src/json.js",
+        "size": 91
+      },
+      {
+        "path": "dist/src/keyboard-actions.js",
+        "size": 97
+      },
+      {
+        "path": "dist/src/keyed-lock.js",
+        "size": 336
+      },
+      {
+        "path": "dist/src/launch-console.js",
+        "size": 177
+      },
+      {
+        "path": "dist/src/lease-context.js",
+        "size": 1116
+      },
+      {
+        "path": "dist/src/lease-scope.js",
+        "size": 2383
+      },
+      {
+        "path": "dist/src/lease.js",
+        "size": 4313
+      },
+      {
+        "path": "dist/src/limrun-runtime-dependencies.js",
+        "size": 2276
+      },
+      {
+        "path": "dist/src/limrun.d.ts",
+        "size": 93718
+      },
+      {
+        "path": "dist/src/limrun.js",
+        "size": 964
+      },
+      {
+        "path": "dist/src/linux.js",
+        "size": 1588
+      },
+      {
+        "path": "dist/src/local-interactor-operation-set.js",
+        "size": 613
+      },
+      {
+        "path": "dist/src/location-coordinates.js",
+        "size": 2348
+      },
+      {
+        "path": "dist/src/logcat.js",
+        "size": 387
+      },
+      {
+        "path": "dist/src/macos-facade.js",
+        "size": 217
+      },
+      {
+        "path": "dist/src/mechanics.js",
+        "size": 155414
+      },
+      {
+        "path": "dist/src/metro.d.ts",
+        "size": 4470
+      },
+      {
+        "path": "dist/src/metro.js",
+        "size": 267
+      },
+      {
+        "path": "dist/src/metro2.js",
+        "size": 171
+      },
+      {
+        "path": "dist/src/mobile-snapshot-semantics.js",
+        "size": 3733
+      },
+      {
+        "path": "dist/src/numeric.js",
+        "size": 84
+      },
+      {
+        "path": "dist/src/observability.js",
+        "size": 27
+      },
+      {
+        "path": "dist/src/observation.js",
+        "size": 3218
+      },
+      {
+        "path": "dist/src/output-path.js",
+        "size": 458
+      },
+      {
+        "path": "dist/src/owner-identity.js",
+        "size": 5026
+      },
+      {
+        "path": "dist/src/parameterized-recorded-fill.js",
+        "size": 8373
+      },
+      {
+        "path": "dist/src/parser.js",
+        "size": 4651
+      },
+      {
+        "path": "dist/src/path-resolution.js",
+        "size": 303
+      },
+      {
+        "path": "dist/src/perf-facade.js",
+        "size": 27252
+      },
+      {
+        "path": "dist/src/perf-runtime-operation-builder.js",
+        "size": 1006
+      },
+      {
+        "path": "dist/src/perf-runtime-plan.js",
+        "size": 12334
+      },
+      {
+        "path": "dist/src/perf-runtime.js",
+        "size": 327
+      },
+      {
+        "path": "dist/src/perf.js",
+        "size": 913
+      },
+      {
+        "path": "dist/src/perf2.js",
+        "size": 1222
+      },
+      {
+        "path": "dist/src/physical-device-control.js",
+        "size": 14620
+      },
+      {
+        "path": "dist/src/physical-device-facade.js",
+        "size": 94
+      },
+      {
+        "path": "dist/src/platform-request-scope.js",
+        "size": 4935
+      },
+      {
+        "path": "dist/src/platform-runtime-android-adb-host.js",
+        "size": 3055
+      },
+      {
+        "path": "dist/src/platform-runtime-android-mechanics.js",
+        "size": 240
+      },
+      {
+        "path": "dist/src/platform-runtime-app-log-android-transport.js",
+        "size": 1194
+      },
+      {
+        "path": "dist/src/platform-runtime-app-log-process.js",
+        "size": 5870
+      },
+      {
+        "path": "dist/src/platform-runtime-apple-resources.js",
+        "size": 492
+      },
+      {
+        "path": "dist/src/platform-runtime-host.js",
+        "size": 2322
+      },
+      {
+        "path": "dist/src/platform-runtime-managed-owner.js",
+        "size": 2062
+      },
+      {
+        "path": "dist/src/platform-runtime-network-web-transport.js",
+        "size": 502
+      },
+      {
+        "path": "dist/src/platform-runtime-open-target.js",
+        "size": 3040
+      },
+      {
+        "path": "dist/src/platform-runtime-operation-host.js",
+        "size": 27776
+      },
+      {
+        "path": "dist/src/platform-runtime-runtime-hints.js",
+        "size": 5087
+      },
+      {
+        "path": "dist/src/platform-runtime-screen-recording-android-host.js",
+        "size": 3776
+      },
+      {
+        "path": "dist/src/platform-runtime-screen-recording-apple-host.js",
+        "size": 1945
+      },
+      {
+        "path": "dist/src/platform-runtime-screen-recording-apple-runner-host.js",
+        "size": 2246
+      },
+      {
+        "path": "dist/src/platform-runtime-screen-recording-apple-runner-transport.js",
+        "size": 2378
+      },
+      {
+        "path": "dist/src/platform-runtime-screen-recording-apple-simulator-host.js",
+        "size": 3286
+      },
+      {
+        "path": "dist/src/platform-runtime-screen-recording-apple-transport.js",
+        "size": 759
+      },
+      {
+        "path": "dist/src/platform-runtime-screen-recording-finalizer-host.js",
+        "size": 3376
+      },
+      {
+        "path": "dist/src/platform-runtime-screen-recording-harmony-host.js",
+        "size": 1173
+      },
+      {
+        "path": "dist/src/platform-runtime-screen-recording-output-host.js",
+        "size": 213
+      },
+      {
+        "path": "dist/src/platform-runtime-screen-recording-process-host.js",
+        "size": 1806
+      },
+      {
+        "path": "dist/src/platform-runtime-screen-recording-web-host.js",
+        "size": 367
+      },
+      {
+        "path": "dist/src/platform-runtime-unavailable.js",
+        "size": 3420
+      },
+      {
+        "path": "dist/src/platform-runtime.js",
+        "size": 11615
+      },
+      {
+        "path": "dist/src/platform-runtime2.js",
+        "size": 11326
+      },
+      {
+        "path": "dist/src/plist-xml.js",
+        "size": 201
+      },
+      {
+        "path": "dist/src/plist.js",
+        "size": 636
+      },
+      {
+        "path": "dist/src/png-resize.js",
+        "size": 4127
+      },
+      {
+        "path": "dist/src/png-worker-contract.js",
+        "size": 30331
+      },
+      {
+        "path": "dist/src/prepare-kind.js",
+        "size": 253
+      },
+      {
+        "path": "dist/src/process-entry.js",
+        "size": 187
+      },
+      {
+        "path": "dist/src/process-exit.js",
+        "size": 322
+      },
+      {
+        "path": "dist/src/process.js",
+        "size": 4691
+      },
+      {
+        "path": "dist/src/project-runtime.js",
+        "size": 456
+      },
+      {
+        "path": "dist/src/provider-device-runtime.js",
+        "size": 3132
+      },
+      {
+        "path": "dist/src/provider-session-ownership.js",
+        "size": 5403
+      },
+      {
+        "path": "dist/src/provider-webdriver.js",
+        "size": 260
+      },
+      {
+        "path": "dist/src/provider.js",
+        "size": 328
+      },
+      {
+        "path": "dist/src/proxy.js",
+        "size": 8624
+      },
+      {
+        "path": "dist/src/react-native-overlay.js",
+        "size": 857
+      },
+      {
+        "path": "dist/src/react-native.js",
+        "size": 3714
+      },
+      {
+        "path": "dist/src/record-runtime.js",
+        "size": 7216
+      },
+      {
+        "path": "dist/src/record-trace.js",
+        "size": 1785
+      },
+      {
+        "path": "dist/src/recording-export-quality.js",
+        "size": 361
+      },
+      {
+        "path": "dist/src/rect-center.js",
+        "size": 712
+      },
+      {
+        "path": "dist/src/register-builtins.js",
+        "size": 1211
+      },
+      {
+        "path": "dist/src/registry.js",
+        "size": 170502
+      },
+      {
+        "path": "dist/src/remote-config.d.ts",
+        "size": 367
+      },
+      {
+        "path": "dist/src/remote-config.js",
+        "size": 80
+      },
+      {
+        "path": "dist/src/remote-config2.js",
+        "size": 1632
+      },
+      {
+        "path": "dist/src/replay-divergence.js",
+        "size": 6344
+      },
+      {
+        "path": "dist/src/replay.js",
+        "size": 9735
+      },
+      {
+        "path": "dist/src/reporting.js",
+        "size": 18261
+      },
+      {
+        "path": "dist/src/request-cancellation.js",
+        "size": 1516
+      },
+      {
+        "path": "dist/src/request-providers.js",
+        "size": 4092
+      },
+      {
+        "path": "dist/src/request-runtime-binding.js",
+        "size": 2610
+      },
+      {
+        "path": "dist/src/request.js",
+        "size": 1344
+      },
+      {
+        "path": "dist/src/result-serialization.js",
+        "size": 3545
+      },
+      {
+        "path": "dist/src/retry.js",
+        "size": 3127
+      },
+      {
+        "path": "dist/src/rolldown-runtime.js",
+        "size": 879
+      },
+      {
+        "path": "dist/src/runner-cache-metadata.js",
+        "size": 9898
+      },
+      {
+        "path": "dist/src/runner-client.js",
+        "size": 41824
+      },
+      {
+        "path": "dist/src/runner-disposal.js",
+        "size": 46355
+      },
+      {
+        "path": "dist/src/runner-operations-facade.js",
+        "size": 834
+      },
+      {
+        "path": "dist/src/runner-owner-facade.js",
+        "size": 132
+      },
+      {
+        "path": "dist/src/runner-owner-state.js",
+        "size": 139
+      },
+      {
+        "path": "dist/src/runner-presentation.js",
+        "size": 5098
+      },
+      {
+        "path": "dist/src/runner-selector-query.js",
+        "size": 175
+      },
+      {
+        "path": "dist/src/runner.js",
+        "size": 4237
+      },
+      {
+        "path": "dist/src/runtime-transport-hints.js",
+        "size": 679
+      },
+      {
+        "path": "dist/src/runtime.js",
+        "size": 71546
+      },
+      {
+        "path": "dist/src/runtime2.js",
+        "size": 44489
+      },
+      {
+        "path": "dist/src/runtime3.js",
+        "size": 705
+      },
+      {
+        "path": "dist/src/runtime4.js",
+        "size": 56497
+      },
+      {
+        "path": "dist/src/runtime5.js",
+        "size": 988
+      },
+      {
+        "path": "dist/src/runtime6.js",
+        "size": 18627
+      },
+      {
+        "path": "dist/src/runtime7.js",
+        "size": 4972
+      },
+      {
+        "path": "dist/src/runtime8.js",
+        "size": 4519
+      },
+      {
+        "path": "dist/src/runtime9.js",
+        "size": 9816
+      },
+      {
+        "path": "dist/src/scoped-provider.js",
+        "size": 380
+      },
+      {
+        "path": "dist/src/screen-recording-completion.js",
+        "size": 401
+      },
+      {
+        "path": "dist/src/screen-recording-live-handle.js",
+        "size": 1207
+      },
+      {
+        "path": "dist/src/screen-recording-options.js",
+        "size": 376
+      },
+      {
+        "path": "dist/src/screen-recording-resource-recovery.js",
+        "size": 18192
+      },
+      {
+        "path": "dist/src/screen-recording-runtime.js",
+        "size": 42
+      },
+      {
+        "path": "dist/src/screenshot-density.js",
+        "size": 1126
+      },
+      {
+        "path": "dist/src/screenshot-result.js",
+        "size": 1779
+      },
+      {
+        "path": "dist/src/screenshot-runtime.js",
+        "size": 20845
+      },
+      {
+        "path": "dist/src/screenshot.js",
+        "size": 594
+      },
+      {
+        "path": "dist/src/screenshot2.js",
+        "size": 125
+      },
+      {
+        "path": "dist/src/screenshot3.js",
+        "size": 5389
+      },
+      {
+        "path": "dist/src/script.js",
+        "size": 20857
+      },
+      {
+        "path": "dist/src/scroll-command.js",
+        "size": 725
+      },
+      {
+        "path": "dist/src/scroll-gesture.js",
+        "size": 3056
+      },
+      {
+        "path": "dist/src/scroll-indicator.js",
+        "size": 504
+      },
+      {
+        "path": "dist/src/sdk-batch-runner.d.ts",
+        "size": 1655
+      },
+      {
+        "path": "dist/src/sdk-batch-runner.js",
+        "size": 84128
+      },
+      {
+        "path": "dist/src/sdk-contracts.d.ts",
+        "size": 18932
+      },
+      {
+        "path": "dist/src/sdk-contracts.js",
+        "size": 11718
+      },
+      {
+        "path": "dist/src/sdk-device.js",
+        "size": 6050
+      },
+      {
+        "path": "dist/src/sdk-finders.d.ts",
+        "size": 1113
+      },
+      {
+        "path": "dist/src/sdk-finders.js",
+        "size": 127
+      },
+      {
+        "path": "dist/src/sdk-io.d.ts",
+        "size": 2298
+      },
+      {
+        "path": "dist/src/sdk-io.js",
+        "size": 1477
+      },
+      {
+        "path": "dist/src/sdk-remote-config.d.ts",
+        "size": 6722
+      },
+      {
+        "path": "dist/src/sdk-remote-config.js",
+        "size": 4688
+      },
+      {
+        "path": "dist/src/sdk-selectors.d.ts",
+        "size": 36392
+      },
+      {
+        "path": "dist/src/sdk-selectors.js",
+        "size": 112
+      },
+      {
+        "path": "dist/src/selection.js",
+        "size": 2078
+      },
+      {
+        "path": "dist/src/selector-runtime.js",
+        "size": 14149
+      },
+      {
+        "path": "dist/src/selectors.d.ts",
+        "size": 499
+      },
+      {
+        "path": "dist/src/selectors.js",
+        "size": 330
+      },
+      {
+        "path": "dist/src/semantic-index.js",
+        "size": 16061
+      },
+      {
+        "path": "dist/src/server.js",
+        "size": 7909
+      },
+      {
+        "path": "dist/src/session-allocation.js",
+        "size": 2024
+      },
+      {
+        "path": "dist/src/session-routing.js",
+        "size": 1576
+      },
+      {
+        "path": "dist/src/session-runtime-admission.js",
+        "size": 1051
+      },
+      {
+        "path": "dist/src/session-snapshot.js",
+        "size": 26974
+      },
+      {
+        "path": "dist/src/session-store.js",
+        "size": 40704
+      },
+      {
+        "path": "dist/src/session-target-evidence.js",
+        "size": 3722
+      },
+      {
+        "path": "dist/src/session.js",
+        "size": 239
+      },
+      {
+        "path": "dist/src/session2.js",
+        "size": 218412
+      },
+      {
+        "path": "dist/src/settings.js",
+        "size": 720
+      },
+      {
+        "path": "dist/src/shared.js",
+        "size": 206
+      },
+      {
+        "path": "dist/src/simctl-facade.js",
+        "size": 70
+      },
+      {
+        "path": "dist/src/simctl.js",
+        "size": 404
+      },
+      {
+        "path": "dist/src/simulator-facade.js",
+        "size": 149
+      },
+      {
+        "path": "dist/src/simulator-state.js",
+        "size": 393
+      },
+      {
+        "path": "dist/src/simulator.js",
+        "size": 2898
+      },
+      {
+        "path": "dist/src/snapshot-capture-annotations.js",
+        "size": 843
+      },
+      {
+        "path": "dist/src/snapshot-desktop-projection.js",
+        "size": 1000
+      },
+      {
+        "path": "dist/src/snapshot-diagnostics.js",
+        "size": 2804
+      },
+      {
+        "path": "dist/src/snapshot-private-evidence.js",
+        "size": 365
+      },
+      {
+        "path": "dist/src/snapshot-process.js",
+        "size": 224
+      },
+      {
+        "path": "dist/src/snapshot-quality-verdict.js",
+        "size": 2063
+      },
+      {
+        "path": "dist/src/snapshot-runtime-binding.js",
+        "size": 6052
+      },
+      {
+        "path": "dist/src/snapshot-runtime.js",
+        "size": 8575
+      },
+      {
+        "path": "dist/src/snapshot-scope.js",
+        "size": 628
+      },
+      {
+        "path": "dist/src/snapshot-state.js",
+        "size": 5801
+      },
+      {
+        "path": "dist/src/snapshot.js",
+        "size": 1165
+      },
+      {
+        "path": "dist/src/snapshot2.js",
+        "size": 2563
+      },
+      {
+        "path": "dist/src/snapshot3.js",
+        "size": 5030
+      },
+      {
+        "path": "dist/src/snapshot4.js",
+        "size": 12019
+      },
+      {
+        "path": "dist/src/src.js",
+        "size": 8514
+      },
+      {
+        "path": "dist/src/src2.js",
+        "size": 661
+      },
+      {
+        "path": "dist/src/src3.js",
+        "size": 2905
+      },
+      {
+        "path": "dist/src/src4.js",
+        "size": 917
+      },
+      {
+        "path": "dist/src/src5.js",
+        "size": 2386
+      },
+      {
+        "path": "dist/src/src6.js",
+        "size": 1581
+      },
+      {
+        "path": "dist/src/src7.js",
+        "size": 46465
+      },
+      {
+        "path": "dist/src/src8.js",
+        "size": 25429
+      },
+      {
+        "path": "dist/src/src9.js",
+        "size": 134746
+      },
+      {
+        "path": "dist/src/startup-recovery-fence.js",
+        "size": 215
+      },
+      {
+        "path": "dist/src/status-markers.js",
+        "size": 432
+      },
+      {
+        "path": "dist/src/string-enum.js",
+        "size": 274
+      },
+      {
+        "path": "dist/src/success-text.js",
+        "size": 195
+      },
+      {
+        "path": "dist/src/surface-snapshot.js",
+        "size": 374
+      },
+      {
+        "path": "dist/src/surface-snapshot2.js",
+        "size": 291
+      },
+      {
+        "path": "dist/src/takeover.js",
+        "size": 1959
+      },
+      {
+        "path": "dist/src/telemetry.js",
+        "size": 689
+      },
+      {
+        "path": "dist/src/timeouts.js",
+        "size": 68
+      },
+      {
+        "path": "dist/src/tool-provider-facade.js",
+        "size": 270
+      },
+      {
+        "path": "dist/src/tool-provider.js",
+        "size": 3942
+      },
+      {
+        "path": "dist/src/tool-provider2.js",
+        "size": 3526
+      },
+      {
+        "path": "dist/src/tool-provider3.js",
+        "size": 1267
+      },
+      {
+        "path": "dist/src/toolchain-probe.js",
+        "size": 272
+      },
+      {
+        "path": "dist/src/touch-runtime.js",
+        "size": 3343
+      },
+      {
+        "path": "dist/src/transport.js",
+        "size": 1276
+      },
+      {
+        "path": "dist/src/ttl-memo.js",
+        "size": 623
+      },
+      {
+        "path": "dist/src/tv-remote.js",
+        "size": 1423
+      },
+      {
+        "path": "dist/src/type-text-runtime.js",
+        "size": 1306
+      },
+      {
+        "path": "dist/src/undici.js",
+        "size": 508813
+      },
+      {
+        "path": "dist/src/update-check.js",
+        "size": 2639
+      },
+      {
+        "path": "dist/src/verified-file.js",
+        "size": 1851
+      },
+      {
+        "path": "dist/src/version.js",
+        "size": 815
+      },
+      {
+        "path": "dist/src/video.js",
+        "size": 8261
+      },
+      {
+        "path": "dist/src/web.js",
+        "size": 1311
+      },
+      {
+        "path": "dist/src/web2.js",
+        "size": 1939
+      },
+      {
+        "path": "dist/src/webdriver-ios-snapshot.js",
+        "size": 359
+      },
+      {
+        "path": "dist/src/webdriver-source.js",
+        "size": 2358
+      },
+      {
+        "path": "linux/atspi-dump.py",
+        "size": 10645
+      },
+      {
+        "path": "package.json",
+        "size": 20212
+      },
+      {
+        "path": "server.json",
+        "size": 716
+      },
+      {
+        "path": "smithery.yaml",
+        "size": 22
+      }
+    ]
+  },
+  "cleanInstalled": {
+    "packageBytes": 4479384,
+    "files": 489,
+    "totalBytes": 4480113
+  },
+  "startup": {
+    "runs": 7,
+    "benchmarks": [
+      {
+        "name": "CLI --version",
+        "command": "agent-device --version",
+        "medianMs": 28.04824699999881,
+        "minMs": 27.46840599999996,
+        "maxMs": 28.778118999998696,
+        "samplesMs": [
+          28.29408599999988,
+          27.46840599999996,
+          28.161738000000696,
+          28.04824699999881,
+          27.544149999999718,
+          27.756945000000997,
+          28.778118999998696
+        ]
+      },
+      {
+        "name": "CLI --help",
+        "command": "agent-device --help",
+        "medianMs": 80.27976499999932,
+        "minMs": 77.33278299999984,
+        "maxMs": 83.75281299999915,
+        "samplesMs": [
+          80.03669999999875,
+          80.27976499999932,
+          79.09928500000024,
+          80.98645699999906,
+          77.33278299999984,
+          83.75281299999915,
+          82.36537100000169
+        ]
+      }
+    ]
+  }
+}

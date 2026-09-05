@@ -1,0 +1,17 @@
+{
+  "commit": "ae26f7afc064c75c65c71e677d32d77cdf2f9709",
+  "command": "pnpm check:affected --run",
+  "exitCode": 0,
+  "result": "all runnable checks passed",
+  "vitestRelated": {
+    "files": 746,
+    "tests": 5691
+  },
+  "additionalVitest": {
+    "files": 1,
+    "tests": 12
+  },
+  "nativeCaptureScenarios": 5,
+  "fullLocalLogSha256": "5acbd2bb1a07ff88c83ab5966f54981d4e2b82d4af808b77d21e9f2fb5424376",
+  "note": "GitHub-authoritative jobs are recorded separately in ci.json. Initial sandbox attempt failed because ps was prohibited; the full host-authorized rerun passed."
+}

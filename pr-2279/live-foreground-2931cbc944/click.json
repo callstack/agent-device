@@ -1,0 +1,23 @@
+{
+  "success": true,
+  "data": {
+    "x": 201,
+    "y": 712,
+    "message": "Tapped id=\"automation-request-microphone\" (201, 712)",
+    "referenceWidth": 402,
+    "referenceHeight": 874,
+    "targetKind": "selector",
+    "selector": "id=\"automation-request-microphone\"",
+    "selectorChain": [
+      "id=\"automation-request-microphone\"",
+      "role=\"button\" label=\"Request microphone permission\"",
+      "label=\"Request microphone permission\""
+    ],
+    "refLabel": "Request microphone permission",
+    "resolution": {
+      "source": "runtime",
+      "phase": "pre-action",
+      "kind": "unique"
+    }
+  }
+}

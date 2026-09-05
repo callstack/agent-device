@@ -1,0 +1,8 @@
+Run: https://github.com/callstack/agent-device/actions/runs/33990052327
+Head: ae26f7afc064c75c65c71e677d32d77cdf2f9709
+
+Smoke Tests	Verify clean-installed Simulator snapshot bridge preparation	2026-09-05T20:33:57.8048050Z ^[[36;1mpnpm exec vitest run packages/platform-apple/src/snapshot-source/native-runtime.test.ts^[[0m
+Smoke Tests	Verify clean-installed Simulator snapshot bridge preparation	2026-09-05T20:36:07.9082200Z  ^[[32m✓^[[39m ^[[30m^[[42m unit-core ^[[49m^[[39m packages/platform-apple/src/snapshot-source/native-runtime.test.ts ^[[2m(^[[22m^[[2m5 tests^[[22m^[[2m)^[[22m^[[33m 18150^[[2mms^[[22m^[[39m
+Smoke Tests	Verify clean-installed Simulator snapshot bridge preparation	2026-09-05T20:36:07.9129240Z ^[[2m Test Files ^[[22m ^[[1m^[[32m1 passed^[[39m^[[22m^[[90m (1)^[[39m
+Smoke Tests	Verify clean-installed Simulator snapshot bridge preparation	2026-09-05T20:36:07.9129950Z ^[[2m      Tests ^[[22m ^[[1m^[[32m5 passed^[[39m^[[22m^[[90m (5)^[[39m
+Smoke Tests	Verify clean-installed Simulator snapshot bridge preparation	2026-09-05T20:36:07.9131980Z ^[[2m   Duration ^[[22m 19.06s^[[2m (transform 87ms, setup 71ms, import 72ms, tests 18.15s, environment 0ms)^[[22m

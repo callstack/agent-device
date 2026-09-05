@@ -1,0 +1,422 @@
+{
+  "success": true,
+  "data": {
+    "nodes": [
+      {
+        "index": 0,
+        "type": "Application",
+        "role": "UIApplication",
+        "label": "Agent Device Tester",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 402,
+          "height": 874
+        },
+        "depth": 0,
+        "pid": 67468,
+        "ref": "e1"
+      },
+      {
+        "index": 1,
+        "parentIndex": 0,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "Inert surface",
+        "identifier": "inert-title",
+        "rect": {
+          "x": 18,
+          "y": 62,
+          "width": 366,
+          "height": 28.666664123535156
+        },
+        "depth": 1,
+        "pid": 67468,
+        "ref": "e2"
+      },
+      {
+        "index": 2,
+        "parentIndex": 0,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "Tapping this text changes nothing on screen.",
+        "identifier": "inert-target",
+        "rect": {
+          "x": 18,
+          "y": 106.66666793823242,
+          "width": 366,
+          "height": 20.333335876464844
+        },
+        "depth": 1,
+        "pid": 67468,
+        "ref": "e3",
+        "hittable": false,
+        "interactionBlocked": "covered",
+        "presentationHints": [
+          "covered"
+        ]
+      },
+      {
+        "index": 3,
+        "parentIndex": 0,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "Nothing here reacts to touch, loads, or animates, so a tap leaves the hierarchy byte-identical and retryTapIfNoChange must re-tap.",
+        "rect": {
+          "x": 18,
+          "y": 143,
+          "width": 366,
+          "height": 63
+        },
+        "depth": 1,
+        "pid": 67468,
+        "ref": "e4"
+      },
+      {
+        "index": 4,
+        "parentIndex": 0,
+        "type": "NavigationBar",
+        "role": "UINavigationBar",
+        "identifier": "Automation",
+        "rect": {
+          "x": 0,
+          "y": 88,
+          "width": 402,
+          "height": 54
+        },
+        "depth": 1,
+        "pid": 67468,
+        "ref": "e5"
+      },
+      {
+        "index": 5,
+        "parentIndex": 4,
+        "type": "StaticText",
+        "role": "UILabel",
+        "label": "Automation",
+        "rect": {
+          "x": 155,
+          "y": 99.66666666666666,
+          "width": 92,
+          "height": 20.66666666666667
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e6"
+      },
+      {
+        "index": 6,
+        "parentIndex": 0,
+        "type": "ScrollView",
+        "role": "RCTEnhancedScrollView",
+        "subrole": "UIScrollView",
+        "rect": {
+          "x": 18,
+          "y": 204,
+          "width": 366,
+          "height": 636.0000000000001
+        },
+        "depth": 1,
+        "pid": 67468,
+        "hiddenContentAbove": true,
+        "ref": "e7"
+      },
+      {
+        "index": 7,
+        "parentIndex": 6,
+        "type": "Button",
+        "role": "RCTViewComponentView",
+        "subrole": "UIView",
+        "label": "Press canary",
+        "identifier": "automation-press",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 204,
+          "width": 333.33331298828125,
+          "height": 36.66668574015296
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e8"
+      },
+      {
+        "index": 8,
+        "parentIndex": 6,
+        "type": "Button",
+        "role": "RCTViewComponentView",
+        "subrole": "UIView",
+        "label": "Long press canary",
+        "identifier": "automation-longpress",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 254.66666666666663,
+          "width": 333.33331298828125,
+          "height": 50.66668701171875
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e9"
+      },
+      {
+        "index": 9,
+        "parentIndex": 6,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "Last input: none",
+        "identifier": "automation-last-input",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 319.3333384195963,
+          "width": 333.33331298828125,
+          "height": 17
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e10"
+      },
+      {
+        "index": 10,
+        "parentIndex": 6,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "Long presses: 0",
+        "identifier": "automation-longpress-count",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 350.3333384195963,
+          "width": 333.33331298828125,
+          "height": 17
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e11"
+      },
+      {
+        "index": 11,
+        "parentIndex": 6,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "Native alert",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 412.00000063578284,
+          "width": 333.33331298828125,
+          "height": 25
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e12"
+      },
+      {
+        "index": 12,
+        "parentIndex": 6,
+        "type": "Button",
+        "role": "RCTViewComponentView",
+        "subrole": "UIView",
+        "label": "Open automation alert",
+        "identifier": "automation-open-alert",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 450.9999987284342,
+          "width": 333.33331298828125,
+          "height": 44.66668701171875
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e13"
+      },
+      {
+        "index": 13,
+        "parentIndex": 6,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "Alert result: none",
+        "identifier": "automation-alert-result",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 509.66666666666663,
+          "width": 333.33331298828125,
+          "height": 17
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e14"
+      },
+      {
+        "index": 14,
+        "parentIndex": 6,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "Native permission",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 571.3333136240641,
+          "width": 333.33331298828125,
+          "height": 25
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e15"
+      },
+      {
+        "index": 15,
+        "parentIndex": 6,
+        "type": "Button",
+        "role": "RCTViewComponentView",
+        "subrole": "UIView",
+        "label": "Request microphone permission",
+        "identifier": "automation-request-microphone",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 610.3333117167155,
+          "width": 333.33331298828125,
+          "height": 44.666748046875
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e16"
+      },
+      {
+        "index": 16,
+        "parentIndex": 6,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "Microphone permission",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 668.9999796549479,
+          "width": 167.6666717529297,
+          "height": 18
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e17"
+      },
+      {
+        "index": 17,
+        "parentIndex": 6,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "undetermined",
+        "identifier": "automation-microphone-permission",
+        "rect": {
+          "x": 273.0000057220459,
+          "y": 669.3333129982153,
+          "width": 94.66665649414062,
+          "height": 17
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e18"
+      },
+      {
+        "index": 18,
+        "parentIndex": 6,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "Android push broadcast",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 731.6666266123453,
+          "width": 333.33331298828125,
+          "height": 25
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e19"
+      },
+      {
+        "index": 19,
+        "parentIndex": 6,
+        "type": "Button",
+        "role": "RCTViewComponentView",
+        "subrole": "UIView",
+        "label": "Refresh push broadcast",
+        "identifier": "automation-refresh-push-broadcast",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 770.6666247049967,
+          "width": 333.33331298828125,
+          "height": 44.6666259765625
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e20"
+      },
+      {
+        "index": 20,
+        "parentIndex": 6,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "Last push broadcast",
+        "rect": {
+          "x": 34.33333396911621,
+          "y": 829.3332926432291,
+          "width": 145.6666717529297,
+          "height": 10.666707356770985
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e21"
+      },
+      {
+        "index": 21,
+        "parentIndex": 6,
+        "type": "StaticText",
+        "role": "RCTParagraphComponentView",
+        "subrole": "UIView",
+        "label": "unavailable",
+        "identifier": "automation-last-push-broadcast",
+        "rect": {
+          "x": 291.6666774749756,
+          "y": 829.6666259864966,
+          "width": 76,
+          "height": 10.333374013503544
+        },
+        "depth": 2,
+        "pid": 67468,
+        "ref": "e22"
+      }
+    ],
+    "truncated": false,
+    "appName": "com.callstack.agentdevicelab",
+    "appBundleId": "com.callstack.agentdevicelab",
+    "visibility": {
+      "partial": true,
+      "visibleNodeCount": 22,
+      "totalNodeCount": 22,
+      "reasons": [
+        "scroll-hidden-above"
+      ]
+    },
+    "warnings": [
+      "iOS snapshot acquisition does not provide hittability evidence; regular snapshots omit unverified hittability while raw snapshots preserve supplied facts."
+    ],
+    "snapshotDiagnostics": {
+      "stats": {
+        "count": 6,
+        "p50Ms": 63,
+        "p95Ms": 3277,
+        "maxMs": 3277,
+        "slowThresholdMs": 1500,
+        "platform": "ios",
+        "backends": {
+          "xctest": 6
+        }
+      }
+    },
+    "refsGeneration": 856578
+  }
+}

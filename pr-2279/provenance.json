@@ -1,0 +1,35 @@
+{
+  "pullRequest": "https://github.com/callstack/agent-device/pull/2279",
+  "originalHead": "37e3ef5c7df2b910915344183f6d4774566573c2",
+  "fixture": {
+    "nativeFingerprint": "7173dc023cd902d66c6e7e37bf17a0c2f5dbd996",
+    "artifactId": 9887312449,
+    "producerRun": "https://github.com/callstack/agent-device/actions/runs/33738198615",
+    "artifactSha256": "8eaa04163f86eb8b6bfcb91e7ec4db423580638833b279fb6739caecddb56121",
+    "repackedJsSha256": "9902b5e8ce2efabbddd85a2c6343a8d92ba8f9b1aac140820a43ee7ee083940b",
+    "appId": "com.callstack.agentdevicelab",
+    "jsRevision": "0da105e3c3b70f9f3db5fa0a0b2d9978a1f63232",
+    "jsChangedByPr": false,
+    "examplesUnchangedBetweenJsRevisionAndAcceptanceBase": true
+  },
+  "method": "Sequential on one dedicated iOS 26.2 iPhone 17 Pro Simulator. Existing benchmark screen definitions, state admission, PID checks, sample extraction and v1 schema reused by compare-route.mjs. Full public CLI responses retained in observations.json. No source instrumentation. CLI wall and daemon durations are separate. Cold lifecycle and proxy acceptance remain #2198 scope.",
+  "acceptanceBase": "7a2d48d160aaacb582c6f4cde98b6af7531bf7af",
+  "acceptanceStatus": "completed",
+  "historicalMeasurements": "historical/*.json are diagnostic Settings-only slices from earlier revisions; they are not the final matched corpus.",
+  "head": "ae26f7afc064c75c65c71e677d32d77cdf2f9709",
+  "historicalBase": "0da105e3c3b70f9f3db5fa0a0b2d9978a1f63232",
+  "nativeGuardProof": "validation/native-capture-guard-proof.md supersedes predicate-only proof for guard deletion; independently contributed real-capture fixture, integrated as f58ff72d75.",
+  "liveProofProductionEquivalentTo": "2931cbc944eef45ef6e6f087d6d6364fee5fc39c",
+  "changedPathsSinceLiveProof": [
+    "packages/platform-apple/src/snapshot-source/fixtures/foreground-owner.m",
+    "packages/platform-apple/src/snapshot-source/lifecycle.test.ts",
+    "packages/platform-apple/src/snapshot-source/native-runtime.test.ts",
+    "src/daemon/session-lifecycle/internal/__tests__/session-open-runtime.test.ts"
+  ],
+  "size": {
+    "workflowRun": "https://github.com/callstack/agent-device/actions/runs/33990052329",
+    "artifactId": 9976369556,
+    "unpackedGrowthBytes": 35845,
+    "tarballGrowthBytes": 10359
+  }
+}

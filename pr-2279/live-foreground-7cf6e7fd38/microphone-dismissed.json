@@ -1,0 +1,374 @@
+{
+  "success": true,
+  "data": {
+    "nodes": [
+      {
+        "type": "Application",
+        "label": "Agent Device Tester",
+        "enabled": true,
+        "rect": {
+          "height": 874,
+          "y": 0,
+          "x": 0,
+          "width": 402
+        },
+        "index": 0,
+        "hittable": false,
+        "depth": 0,
+        "ref": "e1"
+      },
+      {
+        "parentIndex": 0,
+        "rect": {
+          "height": 802,
+          "y": 72,
+          "x": 0,
+          "width": 402
+        },
+        "depth": 1,
+        "enabled": true,
+        "label": "Automation",
+        "type": "Other",
+        "hittable": true,
+        "index": 1,
+        "ref": "e2"
+      },
+      {
+        "parentIndex": 1,
+        "identifier": "Automation",
+        "type": "NavigationBar",
+        "label": "Automation",
+        "rect": {
+          "y": 88,
+          "width": 402,
+          "x": 0,
+          "height": 54
+        },
+        "depth": 2,
+        "hittable": true,
+        "index": 2,
+        "enabled": true,
+        "ref": "e3"
+      },
+      {
+        "label": "Automation lab",
+        "index": 3,
+        "hittable": true,
+        "type": "ScrollView",
+        "depth": 5,
+        "enabled": true,
+        "parentIndex": 1,
+        "hiddenContentAbove": true,
+        "rect": {
+          "x": 18,
+          "y": 204,
+          "height": 636.0000000000001,
+          "width": 366
+        },
+        "ref": "e4"
+      },
+      {
+        "rect": {
+          "x": 18,
+          "y": 204,
+          "height": 636.0000000000001,
+          "width": 366
+        },
+        "label": "Automation lab",
+        "index": 4,
+        "parentIndex": 3,
+        "depth": 6,
+        "enabled": true,
+        "hittable": true,
+        "type": "Other",
+        "ref": "e5"
+      },
+      {
+        "parentIndex": 4,
+        "identifier": "automation-press",
+        "hittable": true,
+        "label": "Press canary",
+        "depth": 7,
+        "rect": {
+          "width": 333.33331298828125,
+          "height": 36.66668574015296,
+          "x": 34.33333396911621,
+          "y": 204
+        },
+        "type": "Button",
+        "index": 5,
+        "enabled": true,
+        "ref": "e6"
+      },
+      {
+        "parentIndex": 4,
+        "identifier": "automation-longpress",
+        "hittable": true,
+        "label": "Long press canary",
+        "depth": 7,
+        "type": "Button",
+        "rect": {
+          "width": 333.33331298828125,
+          "height": 50.66668701171875,
+          "y": 254.66666666666663,
+          "x": 34.33333396911621
+        },
+        "index": 6,
+        "enabled": true,
+        "ref": "e7"
+      },
+      {
+        "parentIndex": 4,
+        "identifier": "automation-last-input",
+        "hittable": true,
+        "label": "Last input: none",
+        "depth": 7,
+        "type": "StaticText",
+        "rect": {
+          "width": 333.33331298828125,
+          "height": 17,
+          "y": 319.3333384195963,
+          "x": 34.33333396911621
+        },
+        "index": 7,
+        "enabled": true,
+        "ref": "e8"
+      },
+      {
+        "parentIndex": 4,
+        "identifier": "automation-longpress-count",
+        "hittable": true,
+        "label": "Long presses: 0",
+        "depth": 7,
+        "type": "StaticText",
+        "rect": {
+          "width": 333.33331298828125,
+          "height": 17,
+          "y": 350.3333384195963,
+          "x": 34.33333396911621
+        },
+        "index": 8,
+        "enabled": true,
+        "ref": "e9"
+      },
+      {
+        "parentIndex": 4,
+        "hittable": true,
+        "depth": 7,
+        "label": "Native alert",
+        "type": "StaticText",
+        "rect": {
+          "width": 333.33331298828125,
+          "height": 25,
+          "y": 412.00000063578284,
+          "x": 34.33333396911621
+        },
+        "index": 9,
+        "enabled": true,
+        "ref": "e10"
+      },
+      {
+        "parentIndex": 4,
+        "identifier": "automation-open-alert",
+        "hittable": true,
+        "label": "Open automation alert",
+        "depth": 7,
+        "type": "Button",
+        "rect": {
+          "width": 333.33331298828125,
+          "height": 44.66668701171875,
+          "y": 450.9999987284342,
+          "x": 34.33333396911621
+        },
+        "index": 10,
+        "enabled": true,
+        "ref": "e11"
+      },
+      {
+        "parentIndex": 4,
+        "identifier": "automation-alert-result",
+        "hittable": true,
+        "label": "Alert result: none",
+        "depth": 7,
+        "type": "StaticText",
+        "rect": {
+          "width": 333.33331298828125,
+          "height": 17,
+          "y": 509.66666666666663,
+          "x": 34.33333396911621
+        },
+        "index": 11,
+        "enabled": true,
+        "ref": "e12"
+      },
+      {
+        "parentIndex": 4,
+        "hittable": true,
+        "depth": 7,
+        "label": "Native permission",
+        "type": "StaticText",
+        "rect": {
+          "width": 333.33331298828125,
+          "height": 25,
+          "y": 571.3333136240641,
+          "x": 34.33333396911621
+        },
+        "index": 12,
+        "enabled": true,
+        "ref": "e13"
+      },
+      {
+        "parentIndex": 4,
+        "identifier": "automation-request-microphone",
+        "hittable": true,
+        "label": "Request microphone permission",
+        "depth": 7,
+        "type": "Button",
+        "rect": {
+          "width": 333.33331298828125,
+          "height": 44.666748046875,
+          "y": 610.3333117167155,
+          "x": 34.33333396911621
+        },
+        "index": 13,
+        "enabled": true,
+        "ref": "e14"
+      },
+      {
+        "parentIndex": 4,
+        "hittable": true,
+        "depth": 7,
+        "label": "Microphone permission",
+        "type": "StaticText",
+        "rect": {
+          "width": 167.6666717529297,
+          "height": 18,
+          "y": 668.9999796549479,
+          "x": 34.33333396911621
+        },
+        "index": 14,
+        "enabled": true,
+        "ref": "e15"
+      },
+      {
+        "parentIndex": 4,
+        "identifier": "automation-microphone-permission",
+        "hittable": true,
+        "label": "denied",
+        "depth": 7,
+        "type": "StaticText",
+        "rect": {
+          "width": 46,
+          "height": 17,
+          "y": 669.3333129982153,
+          "x": 321.6666774749756
+        },
+        "index": 15,
+        "enabled": true,
+        "ref": "e16"
+      },
+      {
+        "parentIndex": 4,
+        "hittable": true,
+        "depth": 7,
+        "label": "Android push broadcast",
+        "type": "StaticText",
+        "rect": {
+          "width": 333.33331298828125,
+          "height": 25,
+          "y": 731.6666266123453,
+          "x": 34.33333396911621
+        },
+        "index": 16,
+        "enabled": true,
+        "ref": "e17"
+      },
+      {
+        "parentIndex": 4,
+        "identifier": "automation-refresh-push-broadcast",
+        "hittable": true,
+        "label": "Refresh push broadcast",
+        "depth": 7,
+        "type": "Button",
+        "rect": {
+          "width": 333.33331298828125,
+          "height": 44.6666259765625,
+          "y": 770.6666247049967,
+          "x": 34.33333396911621
+        },
+        "index": 17,
+        "enabled": true,
+        "ref": "e18"
+      },
+      {
+        "parentIndex": 4,
+        "hittable": true,
+        "depth": 7,
+        "label": "Last push broadcast",
+        "type": "StaticText",
+        "rect": {
+          "width": 145.6666717529297,
+          "height": 10.666707356770985,
+          "y": 829.3332926432291,
+          "x": 34.33333396911621
+        },
+        "index": 18,
+        "enabled": true,
+        "ref": "e19"
+      },
+      {
+        "parentIndex": 4,
+        "identifier": "automation-last-push-broadcast",
+        "hittable": true,
+        "label": "unavailable",
+        "depth": 7,
+        "type": "StaticText",
+        "rect": {
+          "width": 76,
+          "height": 10.333374013503544,
+          "y": 829.6666259864966,
+          "x": 291.6666774749756
+        },
+        "index": 19,
+        "enabled": true,
+        "ref": "e20"
+      }
+    ],
+    "truncated": false,
+    "appName": "com.callstack.agentdevicelab",
+    "appBundleId": "com.callstack.agentdevicelab",
+    "visibility": {
+      "partial": true,
+      "visibleNodeCount": 20,
+      "totalNodeCount": 20,
+      "reasons": [
+        "scroll-hidden-above"
+      ]
+    },
+    "snapshotQuality": {
+      "state": "healthy",
+      "backend": "tree",
+      "timing": {
+        "acquisitionMs": 57.91902542114258,
+        "presentationMs": 0.2009868621826172
+      }
+    },
+    "warnings": [
+      "Simulator AX snapshot unavailable (circuit-disabled); used XCTest for this app generation."
+    ],
+    "snapshotDiagnostics": {
+      "stats": {
+        "count": 10,
+        "p50Ms": 66,
+        "p95Ms": 3277,
+        "maxMs": 3277,
+        "slowThresholdMs": 1500,
+        "platform": "ios",
+        "backends": {
+          "xctest": 10
+        }
+      }
+    },
+    "refsGeneration": 856582
+  }
+}

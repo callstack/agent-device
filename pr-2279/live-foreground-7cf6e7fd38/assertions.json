@@ -1,0 +1,20 @@
+{
+  "head": "7cf6e7fd3841f0e63ae56d5a9cc1459920193b41",
+  "normalBridge": true,
+  "permissionClickSucceeded": {
+    "source": "runtime",
+    "phase": "pre-action",
+    "kind": "unique"
+  },
+  "coveredDialogOnly": true,
+  "typedFallback": "foreground-owner-unverified",
+  "dismissedPermission": "denied",
+  "circuitUntilRelaunch": true,
+  "oldPids": [
+    67468
+  ],
+  "newPids": [
+    73841
+  ],
+  "bridgeRestoredAfterRelaunch": true
+}

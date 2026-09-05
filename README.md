@@ -52,6 +52,15 @@ and supersede the preceding targeted artifacts for the pull-request decision.
 | `ios-simulator-ax-bridge-targeted-44995806ea.json.gz` | `3440d066cb7eea33c4715fece838b5185c5d209694b097e54f5536d48d4984ad` |
 | `ios-simulator-ax-bridge-corrected-44995806ea.json.gz` | `0a34a84402e85154e177adef5122101b26bfd04d74714a0a9b6f0795270edc41` |
 
+## Production routing acceptance (#2279)
+
+[PR #2279 acceptance evidence](pr-2279/README.md) contains the matched six-screen
+warm corpus at `ae26f7afc064c75c65c71e677d32d77cdf2f9709` against
+`7a2d48d160aaacb582c6f4cde98b6af7531bf7af`, public responses, foreground fallback
+proof, regression records, and checksums. The immutable tag is
+`evidence/ios-snapshot/ae26f7afc0`. Timings are bounded observations under
+uncontrolled host load, not a general performance guarantee.
+
 ## Fetch into a checkout
 
 ```sh
