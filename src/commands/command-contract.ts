@@ -1,4 +1,3 @@
-import type { AgentDeviceClient } from '../client/client-types.ts';
 import type { InputAudienceMap } from './input-audience.ts';
 
 export type JsonSchema = {
@@ -51,14 +50,6 @@ export type CommandMetadata<Name extends string, Input> = {
   inputAudience: InputAudienceMap;
 };
 
-export type ExecutableCommandContract<Name extends string, Input, Result> = CommandMetadata<
-  Name,
-  Input
-> & {
-  run: (client: AgentDeviceClient, input: Input) => Promise<Result>;
-  invoke: (client: AgentDeviceClient, input: unknown) => Promise<Result>;
-};
-
 export type CliOutput = {
   data: unknown;
   jsonData?: unknown;
@@ -70,15 +61,4 @@ export function defineCommandMetadata<Name extends string, Input>(
   definition: CommandMetadata<Name, Input>,
 ): CommandMetadata<Name, Input> {
   return definition;
-}
-
-export function defineExecutableCommand<Name extends string, Input, Result>(
-  metadata: CommandMetadata<Name, Input>,
-  run: (client: AgentDeviceClient, input: Input) => Promise<Result>,
-): ExecutableCommandContract<Name, Input, Result> {
-  return {
-    ...metadata,
-    run,
-    invoke: async (client, input) => await run(client, metadata.readInput(input)),
-  };
 }

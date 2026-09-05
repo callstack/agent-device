@@ -1,7 +1,6 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { stringField } from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
@@ -15,11 +14,6 @@ const artifactsCommandMetadata = defineFieldCommandMetadata(
     provider: stringField('Cloud provider name, for example browserstack or aws-device-farm.'),
     providerSessionId: stringField('Cloud provider session id or ARN.'),
   },
-);
-
-const artifactsCommandDefinition = defineExecutableCommand(
-  artifactsCommandMetadata,
-  (client, input) => client.sessions.artifacts(input),
 );
 
 const artifactsCliSchema = {
@@ -42,7 +36,7 @@ export const artifactsCommandFacet = defineCommandFacet({
     summary: 'List daemon or cloud provider session artifacts',
   },
   metadata: artifactsCommandMetadata,
-  definition: artifactsCommandDefinition,
+  run: (client, input) => client.sessions.artifacts(input),
   cliSchema: artifactsCliSchema,
   cliReader: artifactsCliReader,
   daemonWriter: artifactsDaemonWriter,

@@ -1,7 +1,6 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { enumField, integerField, requiredField } from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import {
   commonInputFromFlags,
   direct,
@@ -22,10 +21,6 @@ const prepareCommandMetadata = defineFieldCommandMetadata(
     action: requiredField(enumField(PREPARE_ACTION_VALUES)),
     timeoutMs: integerField('Maximum wall-clock time for the prepare command.'),
   },
-);
-
-const prepareCommandDefinition = defineExecutableCommand(prepareCommandMetadata, (client, input) =>
-  client.command.prepare(input),
 );
 
 const prepareCliSchema = {
@@ -51,7 +46,7 @@ export const prepareCommandFacet = defineCommandFacet({
     summary: 'Pre-warm platform helpers before automation',
   },
   metadata: prepareCommandMetadata,
-  definition: prepareCommandDefinition,
+  run: (client, input) => client.command.prepare(input),
   cliSchema: prepareCliSchema,
   cliReader: prepareCliReader,
   daemonWriter: prepareDaemonWriter,

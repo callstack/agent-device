@@ -18,7 +18,6 @@ import {
   retiredField,
   stringField,
 } from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags, optionalString, request } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
@@ -50,11 +49,6 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const screenshotCommandDefinition = defineExecutableCommand(
-  screenshotCommandMetadata,
-  (client, input) => client.capture.screenshot(input),
-);
-
 const screenshotCliSchema = {
   positionalArgs: ['path?'],
   allowedFlags: SCREENSHOT_COMMAND_FLAG_KEYS,
@@ -83,7 +77,7 @@ export const screenshotCommandFacet = defineCommandFacet({
       'Web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. iOS simulators default to 1x logical-point output; use --pixel-density to request a different screenshot density. macOS app sessions default to the app window; use --fullscreen for full desktop, --scale to downscale, --crop-on <selector> to crop the capture to the frame the selector resolves on the same screen (currently iOS simulators and Android emulators), --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator chrome, or --no-stabilize for low-latency Android capture loops.',
   },
   metadata: screenshotCommandMetadata,
-  definition: screenshotCommandDefinition,
+  run: (client, input) => client.capture.screenshot(input),
   cliSchema: screenshotCliSchema,
   cliReader: screenshotCliReader,
   daemonWriter: screenshotDaemonWriter,

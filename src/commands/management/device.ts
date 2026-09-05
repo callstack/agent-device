@@ -1,7 +1,6 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { booleanField } from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
@@ -34,24 +33,6 @@ const shutdownCommandMetadata = defineFieldCommandMetadata(
   {},
 );
 
-const devicesCommandDefinition = defineExecutableCommand(devicesCommandMetadata, (client, input) =>
-  client.devices.list(input),
-);
-
-const capabilitiesCommandDefinition = defineExecutableCommand(
-  capabilitiesCommandMetadata,
-  (client, input) => client.devices.capabilities(input),
-);
-
-const bootCommandDefinition = defineExecutableCommand(bootCommandMetadata, (client, input) =>
-  client.devices.boot(input),
-);
-
-const shutdownCommandDefinition = defineExecutableCommand(
-  shutdownCommandMetadata,
-  (client, input) => client.devices.shutdown(input),
-);
-
 const bootCliSchema = {
   allowedFlags: ['headless'],
 } as const satisfies CommandSchemaOverride;
@@ -80,7 +61,7 @@ const devicesCommandFacet = defineCommandFacet({
     summary: 'List available devices and simulators',
   },
   metadata: devicesCommandMetadata,
-  definition: devicesCommandDefinition,
+  run: (client, input) => client.devices.list(input),
   cliSchema: devicesCliSchema,
   cliReader: commonCliReader,
   daemonWriter: devicesDaemonWriter,
@@ -94,7 +75,7 @@ const capabilitiesCommandFacet = defineCommandFacet({
     cliDetail: 'Select an explicit target with --platform/--device/--udid/--serial.',
   },
   metadata: capabilitiesCommandMetadata,
-  definition: capabilitiesCommandDefinition,
+  run: (client, input) => client.devices.capabilities(input),
   cliSchema: capabilitiesCliSchema,
   cliReader: commonCliReader,
   daemonWriter: capabilitiesDaemonWriter,
@@ -107,7 +88,7 @@ const bootCommandFacet = defineCommandFacet({
     summary: 'Boot target device/simulator',
   },
   metadata: bootCommandMetadata,
-  definition: bootCommandDefinition,
+  run: (client, input) => client.devices.boot(input),
   cliSchema: bootCliSchema,
   cliReader: bootCliReader,
   daemonWriter: bootDaemonWriter,
@@ -120,7 +101,7 @@ const shutdownCommandFacet = defineCommandFacet({
     summary: 'Shutdown target simulator/emulator',
   },
   metadata: shutdownCommandMetadata,
-  definition: shutdownCommandDefinition,
+  run: (client, input) => client.devices.shutdown(input),
   cliSchema: shutdownCliSchema,
   cliReader: commonCliReader,
   daemonWriter: shutdownDaemonWriter,

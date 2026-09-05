@@ -8,7 +8,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import { isValidSelectorExpression } from '@agent-device/selectors';
 import { booleanField, enumField, integerField, stringField } from '../command-input.ts';
 import { optionalEnum } from '../input-readers.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import {
   direct,
   optionalNumber,
@@ -43,10 +42,6 @@ const waitCommandMetadata = defineFieldCommandMetadata(WAIT_COMMAND_NAME, waitCo
   raw: booleanField(),
 });
 
-const waitCommandDefinition = defineExecutableCommand(waitCommandMetadata, (client, input) =>
-  client.command.wait(waitInputToOptions(input)),
-);
-
 const waitCliSchema = {
   usageOverride:
     'wait <ms>|text <text>|@ref|<selector>|absent <selector> [timeoutMs]|stable [quietMs] [timeoutMs]',
@@ -68,7 +63,7 @@ export const waitCommandFacet = defineCommandFacet({
     summary: 'Wait for a duration, text, selector, strict absence, or stable UI',
   },
   metadata: waitCommandMetadata,
-  definition: waitCommandDefinition,
+  run: (client, input) => client.command.wait(waitInputToOptions(input)),
   cliSchema: waitCliSchema,
   cliReader: waitCliReader,
   daemonWriter: waitDaemonWriter,

@@ -8,7 +8,6 @@ import {
   requiredField,
   stringField,
 } from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags, direct, requiredDaemonString } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
@@ -27,10 +26,6 @@ const diffCommandMetadata = defineFieldCommandMetadata(DIFF_COMMAND_NAME, diffCo
   scope: stringField(),
   raw: booleanField(),
 });
-
-const diffCommandDefinition = defineExecutableCommand(diffCommandMetadata, (client, input) =>
-  client.capture.diff(input),
-);
 
 const diffCliSchema = {
   usageOverride:
@@ -66,7 +61,7 @@ export const diffCommandFacet = defineCommandFacet({
       'Live iOS simulator screenshot diffs normalize status-bar chrome by default; use screenshot --normalize-status-bar when capturing reusable baselines.',
   },
   metadata: diffCommandMetadata,
-  definition: diffCommandDefinition,
+  run: (client, input) => client.capture.diff(input),
   cliSchema: diffCliSchema,
   cliReader: diffCliReader,
   daemonWriter: diffDaemonWriter,

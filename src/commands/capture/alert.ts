@@ -3,7 +3,6 @@ import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { AlertCommandOptions } from '@agent-device/contracts/client';
 import { enumField, integerField } from '../command-input.ts';
 import { compactRecord } from '../input-readers.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import {
   commonInputFromFlags,
   direct,
@@ -30,10 +29,6 @@ const alertCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const alertCommandDefinition = defineExecutableCommand(alertCommandMetadata, (client, input) =>
-  client.command.alert(input),
-);
-
 const alertCliSchema = {
   usageOverride: 'alert [get|accept|dismiss|wait] [timeout]',
   positionalArgs: ['action?', 'timeout?'],
@@ -54,7 +49,7 @@ export const alertCommandFacet = defineCommandFacet({
     summary: 'Inspect, accept, or dismiss a platform alert',
   },
   metadata: alertCommandMetadata,
-  definition: alertCommandDefinition,
+  run: (client, input) => client.command.alert(input),
   cliSchema: alertCliSchema,
   cliReader: alertCliReader,
   daemonWriter: alertDaemonWriter,

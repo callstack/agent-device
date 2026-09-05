@@ -10,7 +10,6 @@ import { parseStringMember } from './string-enum.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { booleanField, enumField, integerField, stringField } from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { LOG_ACTION_VALUES, type LogAction } from './log-command-contract.ts';
 import {
@@ -78,25 +77,6 @@ export const audioCommandMetadata = defineFieldCommandMetadata(
     durationMs: integerField('Probe duration in milliseconds.'),
     bucketMs: integerField('Audio level bucket size in milliseconds.'),
   },
-);
-
-export const logsCommandDefinition = defineExecutableCommand(logsCommandMetadata, (client, input) =>
-  client.observability.logs(input),
-);
-
-export const eventsCommandDefinition = defineExecutableCommand(
-  eventsCommandMetadata,
-  (client, input) => client.observability.events(input),
-);
-
-export const networkCommandDefinition = defineExecutableCommand(
-  networkCommandMetadata,
-  (client, input) => client.observability.network(input),
-);
-
-export const audioCommandDefinition = defineExecutableCommand(
-  audioCommandMetadata,
-  (client, input) => client.observability.audio(input),
 );
 
 const logsCliSchema = {
@@ -172,52 +152,52 @@ export const networkDaemonWriter: DaemonWriter = (input) =>
 export const audioDaemonWriter: DaemonWriter = (input) =>
   request(AUDIO_COMMAND_NAME, audioPositionals(input as AudioOptions), input);
 
-const logsCommandFacet = defineCommandFacet({
+export const logsCommandFacet = defineCommandFacet({
   name: LOGS_COMMAND_NAME,
   text: {
     summary: 'Manage session app logs',
   },
   metadata: logsCommandMetadata,
-  definition: logsCommandDefinition,
+  run: (client, input) => client.observability.logs(input),
   cliSchema: logsCliSchema,
   cliReader: logsCliReader,
   daemonWriter: logsDaemonWriter,
   cliOutputFormatter: observabilityCliOutputFormatters.logs,
 });
 
-const eventsCommandFacet = defineCommandFacet({
+export const eventsCommandFacet = defineCommandFacet({
   name: EVENTS_COMMAND_NAME,
   text: {
     summary: 'Read session event timeline',
   },
   metadata: eventsCommandMetadata,
-  definition: eventsCommandDefinition,
+  run: (client, input) => client.observability.events(input),
   cliSchema: eventsCliSchema,
   cliReader: eventsCliReader,
   daemonWriter: eventsDaemonWriter,
   cliOutputFormatter: observabilityCliOutputFormatters.events,
 });
 
-const networkCommandFacet = defineCommandFacet({
+export const networkCommandFacet = defineCommandFacet({
   name: NETWORK_COMMAND_NAME,
   text: {
     summary: 'Inspect HTTP(S) traffic from session logs',
   },
   metadata: networkCommandMetadata,
-  definition: networkCommandDefinition,
+  run: (client, input) => client.observability.network(input),
   cliSchema: networkCliSchema,
   cliReader: networkCliReader,
   daemonWriter: networkDaemonWriter,
   cliOutputFormatter: observabilityCliOutputFormatters.network,
 });
 
-const audioCommandFacet = defineCommandFacet({
+export const audioCommandFacet = defineCommandFacet({
   name: AUDIO_COMMAND_NAME,
   text: {
     summary: 'Probe audio levels',
   },
   metadata: audioCommandMetadata,
-  definition: audioCommandDefinition,
+  run: (client, input) => client.observability.audio(input),
   cliSchema: audioCliSchema,
   cliReader: audioCliReader,
   daemonWriter: audioDaemonWriter,

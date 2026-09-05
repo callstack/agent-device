@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { debugCliReader, debugCommandDefinition, debugCommandMetadata } from './index.ts';
+import { debugCliReader, debugCommandFacet, debugCommandMetadata } from './index.ts';
 
 describe('debugging command interface', () => {
   test('owns debug public metadata', () => {
     expect(debugCommandMetadata.name).toBe('debug');
-    expect(debugCommandDefinition.name).toBe('debug');
+    expect(debugCommandFacet.definition.name).toBe('debug');
   });
 
   test('reads debug symbols crash artifact inputs', () => {

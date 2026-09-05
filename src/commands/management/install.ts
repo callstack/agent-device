@@ -12,7 +12,6 @@ import {
   integerField,
   stringField,
 } from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import {
   commonInputFromFlags,
   direct,
@@ -53,20 +52,6 @@ const installFromSourceCommandMetadata = defineFieldCommandMetadata(
     retainPaths: booleanField(),
     retentionMs: integerField(),
   },
-);
-
-const installCommandDefinition = defineExecutableCommand(installCommandMetadata, (client, input) =>
-  client.apps.install(input),
-);
-
-const reinstallCommandDefinition = defineExecutableCommand(
-  reinstallCommandMetadata,
-  (client, input) => client.apps.reinstall(input),
-);
-
-const installFromSourceCommandDefinition = defineExecutableCommand(
-  installFromSourceCommandMetadata,
-  (client, input) => client.apps.installFromSource(input),
 );
 
 const installCliSchema = {
@@ -121,7 +106,7 @@ const installCommandFacet = defineCommandFacet({
     summary: 'Install an app binary from a path',
   },
   metadata: installCommandMetadata,
-  definition: installCommandDefinition,
+  run: (client, input) => client.apps.install(input),
   cliSchema: installCliSchema,
   cliReader: installCliReader,
   daemonWriter: installDaemonWriter,
@@ -134,7 +119,7 @@ const reinstallCommandFacet = defineCommandFacet({
     summary: 'Replace an installed app with a new build',
   },
   metadata: reinstallCommandMetadata,
-  definition: reinstallCommandDefinition,
+  run: (client, input) => client.apps.reinstall(input),
   cliSchema: reinstallCliSchema,
   cliReader: reinstallCliReader,
   daemonWriter: reinstallDaemonWriter,
@@ -147,7 +132,7 @@ const installFromSourceCommandFacet = defineCommandFacet({
     summary: 'Install app builds from URLs or CI artifacts',
   },
   metadata: installFromSourceCommandMetadata,
-  definition: installFromSourceCommandDefinition,
+  run: (client, input) => client.apps.installFromSource(input),
   cliSchema: installFromSourceCliSchema,
   cliReader: installFromSourceCliReader,
   daemonWriter: installFromSourceDaemonWriter,

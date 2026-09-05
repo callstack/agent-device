@@ -11,7 +11,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { commonInputFromFlags, direct, optionalString } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import {
   booleanField,
   enumField,
@@ -54,16 +53,6 @@ export const traceCommandMetadata = defineFieldCommandMetadata(
     action: requiredField(enumField(RECORDING_ACTION_VALUES)),
     path: stringField(),
   },
-);
-
-export const recordCommandDefinition = defineExecutableCommand(
-  recordCommandMetadata,
-  (client, input) => client.recording.record(input as RecordOptions),
-);
-
-export const traceCommandDefinition = defineExecutableCommand(
-  traceCommandMetadata,
-  (client, input) => client.recording.trace(input),
 );
 
 const recordCliSchema = {
@@ -109,7 +98,7 @@ export const traceDaemonWriter: DaemonWriter = direct(TRACE_COMMAND_NAME, (input
   recordingPositionals(input as RecordOptions),
 );
 
-const recordCommandFacet = defineCommandFacet({
+export const recordCommandFacet = defineCommandFacet({
   name: RECORD_COMMAND_NAME,
   text: {
     summary: 'Start or stop screen recording',
@@ -117,21 +106,21 @@ const recordCommandFacet = defineCommandFacet({
       'The default --scope app requires an active app session from open <app>; use --scope device/system to explicitly request whole-screen recording where the selected backend supports it. Android record start publishes a durable device manifest, recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks while the daemon stays alive, and daemon-restart recovery uses only manifest-owned chunks. HarmonyOS supports whole-screen recording on physical devices only: use --scope device/system; --fps, --quality, and --hide-touches are unsupported. Use --quality to choose medium or high export quality on supported backends.',
   },
   metadata: recordCommandMetadata,
-  definition: recordCommandDefinition,
+  run: (client, input) => client.recording.record(input as RecordOptions),
   cliSchema: recordCliSchema,
   cliReader: recordCliReader,
   daemonWriter: recordDaemonWriter,
   cliOutputFormatter: recordingCliOutputFormatters.record,
 });
 
-const traceCommandFacet = defineCommandFacet({
+export const traceCommandFacet = defineCommandFacet({
   name: TRACE_COMMAND_NAME,
   text: {
     summary: 'Start or stop trace capture',
     cliDetail: 'Pass that path as the same positional argument to start and stop.',
   },
   metadata: traceCommandMetadata,
-  definition: traceCommandDefinition,
+  run: (client, input) => client.recording.trace(input),
   cliSchema: traceCliSchema,
   cliReader: traceCliReader,
   daemonWriter: traceDaemonWriter,
