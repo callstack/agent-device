@@ -107,6 +107,13 @@ export type RawSnapshotNode = {
   enabled?: boolean;
   selected?: boolean;
   focused?: boolean;
+  /** Native accessibility facts; absent means unavailable, not false. */
+  editable?: boolean;
+  password?: boolean;
+  hintShowing?: boolean;
+  /** Accessibility selection offsets, never a character count or proof of value equality. */
+  selectionStart?: number;
+  selectionEnd?: number;
   visibleToUser?: boolean;
   hittable?: boolean;
   depth?: number;

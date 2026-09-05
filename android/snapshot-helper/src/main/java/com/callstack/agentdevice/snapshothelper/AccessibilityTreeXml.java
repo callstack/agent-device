@@ -34,14 +34,26 @@ final class AccessibilityTreeXml {
     if (windowMetadata != null) {
       appendWindowMetadata(xml, windowMetadata);
     }
-    appendNonEmptyAttribute(xml, "text", node.getText());
+    CharSequence text = node.getText();
+    if (text != null) {
+      appendAttribute(xml, "text", text);
+    }
     // getText() returns the HINT for an empty field on modern Android, so `text` alone cannot
     // distinguish a cleared field from one whose value equals its hint; only this flag can
     // (#2063 empty-fill verification).
-    appendTrueAttribute(
-        xml,
-        "hint-showing",
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && node.isShowingHintText());
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      appendAttribute(xml, "hint-showing", Boolean.toString(node.isShowingHintText()));
+    }
+    appendAttribute(xml, "editable", Boolean.toString(node.isEditable()));
+    if (node.isEditable()) {
+      // These are accessibility offsets, not a measurement of the entered value's length.
+      int selectionStart = node.getTextSelectionStart();
+      int selectionEnd = node.getTextSelectionEnd();
+      if (selectionStart >= 0 && selectionEnd >= 0) {
+        appendAttribute(xml, "selection-start", Integer.toString(selectionStart));
+        appendAttribute(xml, "selection-end", Integer.toString(selectionEnd));
+      }
+    }
     appendNonEmptyAttribute(xml, "resource-id", node.getViewIdResourceName());
     appendAttribute(xml, "class", node.getClassName());
     appendNonEmptyAttribute(xml, "package", node.getPackageName());
@@ -66,7 +78,7 @@ final class AccessibilityTreeXml {
           Boolean.toString(
               hasAccessibilityAction(node, AccessibilityAction.ACTION_SCROLL_BACKWARD)));
     }
-    appendTrueAttribute(xml, "password", node.isPassword());
+    appendAttribute(xml, "password", Boolean.toString(node.isPassword()));
     appendAttribute(
         xml,
         "bounds",

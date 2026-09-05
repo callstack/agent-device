@@ -35,6 +35,9 @@ export type AndroidUiNodeMetadata = {
   focusable?: boolean;
   focused?: boolean;
   password?: boolean;
+  editable?: boolean;
+  selectionStart?: number;
+  selectionEnd?: number;
   /**
    * Helper-only: the `text` attribute is the field's HINT, not its value (an empty input's
    * `getText()` returns the hint on modern Android). Absent in raw uiautomator dumps.
@@ -147,6 +150,9 @@ function readNodeAttributes(node: string): Omit<AndroidUiNodeMetadata, 'rect'> {
     focusable: boolAttr('focusable'),
     focused: boolAttr('focused'),
     password: boolAttr('password'),
+    ...optionalBoolAttr('editable', 'editable'),
+    ...optionalNumberAttr('selectionStart', 'selection-start'),
+    ...optionalNumberAttr('selectionEnd', 'selection-end'),
     ...optionalBoolAttr('hintShowing', 'hint-showing'),
     ...optionalBoolAttr('visibleToUser', 'visible-to-user'),
     ...optionalNumberAttr('drawingOrder', 'drawing-order'),
@@ -300,6 +306,11 @@ function normalizeAndroidUiHierarchyNode(
       rect: attrs.rect,
       enabled: attrs.enabled,
       focused: attrs.focused,
+      editable: attrs.editable,
+      password: attrs.password,
+      hintShowing: attrs.hintShowing,
+      selectionStart: attrs.selectionStart,
+      selectionEnd: attrs.selectionEnd,
       visibleToUser: attrs.visibleToUser,
       clickable: attrs.clickable === true,
       focusable: attrs.focusable === true,
