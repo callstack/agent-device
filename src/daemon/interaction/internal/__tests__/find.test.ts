@@ -17,7 +17,6 @@ vi.mock('../../../../core/dispatch-resolve.ts', async (importOriginal) => {
     resolveTargetDevice: actual.resolveTargetDevice,
   };
 });
-
 vi.mock('../../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../../__tests__/legacy-snapshot-capture-fixture.ts');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };

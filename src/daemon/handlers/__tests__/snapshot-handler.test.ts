@@ -47,7 +47,6 @@ vi.mock('../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../__tests__/legacy-snapshot-capture-fixture.ts');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
-
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
