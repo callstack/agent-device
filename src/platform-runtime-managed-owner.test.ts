@@ -240,6 +240,62 @@ test.skipIf(process.platform === 'win32')(
 );
 
 describe('managed local runtime owner', () => {
+  test('dispatches the real operation inside admission before authority can be fenced', async () => {
+    const events: string[] = [];
+    const cancellation = new AbortController();
+    let cancelOnAdmission = false;
+    const family = localFamilyRuntimeFixture({ family: 'apple', device });
+    const local = await family.module.loadRuntime({} as PlatformRuntimeHost);
+    const owner = createManagedLocalRuntimeOwner({
+      owner: managed,
+      loadLocal: async () => ({
+        ...local,
+        bind: async (request) => {
+          const binding = await local.bind(request);
+          return {
+            ...binding,
+            operations: {
+              ...binding.operations,
+              readClipboard: async () => {
+                events.push('native');
+                expect(events.at(-2)).toBe('admitted');
+                return 'clipboard';
+              },
+            },
+          };
+        },
+      }),
+    });
+    const binding = await owner.bind({
+      device,
+      intent: exactly(),
+      scope: {
+        ...scope,
+        signal: cancellation.signal,
+        managedDevice: {
+          ...scope.managedDevice!,
+          admit: async (task) => {
+            events.push('admitted');
+            if (cancelOnAdmission) cancellation.abort(new Error('cancelled during admission'));
+            try {
+              return await task();
+            } finally {
+              events.push('fenced');
+            }
+          },
+        },
+      },
+    });
+    expect(await binding.operations.readClipboard!({})).toBe('clipboard');
+    cancelOnAdmission = true;
+    await expect(binding.operations.readClipboard!({})).rejects.toThrow(
+      'cancelled during admission',
+    );
+    await binding[Symbol.asyncDispose]();
+    expect(events).toEqual(['admitted', 'native', 'fenced', 'admitted', 'fenced']);
+    expect(family.calls.disposals).toBe(1);
+  });
+
   test('exposes only reviewed operations even when the local family offers every cell', async () => {
     const { owner } = managedOwnerFixture();
 

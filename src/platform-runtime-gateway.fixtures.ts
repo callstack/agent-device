@@ -61,7 +61,7 @@ export function managedGatewayScope(
       device,
       owner,
       fence,
-      ensureReady: async () => {},
+      admit: async (task) => await task(),
       run: async (task) => await task(),
     },
   };

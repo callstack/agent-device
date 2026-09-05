@@ -20,32 +20,31 @@ test('bound simulator readiness captures authority and refuses mismatches or fai
     }),
     async () => {
       const device = { ...IOS_SIMULATOR, simulatorSetPath: '/managed/set' };
-      const ensureReady = vi.fn(async () => {});
+      const admit = vi.fn(async (): Promise<never> => {
+        throw new Error('Deep readiness must not recursively admit');
+      });
       const operations = await withManagedDeviceScope(
         {
           device,
           owner: managedLocalRuntimeOwner('allocator'),
           fence: { token: 'fence', generation: 1 },
-          ensureReady,
+          admit,
           run: async <T>(task: () => Promise<T>) => await task(),
         },
         async () => bindSimulatorReadiness(Object.freeze({ ensureBootedSimulator })),
       );
       await operations.ensureBootedSimulator(device);
-      expect(ensureReady).toHaveBeenCalledOnce();
+      expect(admit).not.toHaveBeenCalled();
       await expect(
         operations.ensureBootedSimulator({ ...device, simulatorSetPath: undefined }),
       ).rejects.toMatchObject({ details: { reason: 'managed-device-transport-mismatch' } });
-      expect(ensureReady).toHaveBeenCalledOnce();
+      expect(admit).not.toHaveBeenCalled();
       const abort = new AbortController();
       abort.abort(new Error('cancelled'));
       await expect(
         operations.ensureBootedSimulator(device, { signal: abort.signal }),
       ).rejects.toThrow('cancelled');
-      expect(ensureReady).toHaveBeenCalledOnce();
-      ensureReady.mockRejectedValueOnce(new Error('lease fenced'));
-      await expect(operations.ensureBootedSimulator(device)).rejects.toThrow('lease fenced');
-      expect(ensureReady).toHaveBeenCalledTimes(2);
+      expect(admit).not.toHaveBeenCalled();
     },
   );
 });

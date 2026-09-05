@@ -105,9 +105,10 @@ export function createManagedLocalRuntimeOwner(params: {
           withMethodScope({ ...binding.operations }, (task) =>
             run(async () => {
               request.scope.signal.throwIfAborted();
-              await managed.ensureReady();
-              request.scope.signal.throwIfAborted();
-              return await task();
+              return await managed.admit(async () => {
+                request.scope.signal.throwIfAborted();
+                return await task();
+              });
             }),
           ),
           facts,

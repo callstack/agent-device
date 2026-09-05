@@ -59,10 +59,11 @@ async function managedAutomationScope(platform: ManagedLeasePlatform) {
     managedDevice: {
       ...scope.managedDevice!,
       run: reachability.run,
-      ensureReady: async () => {
-        const result = await admission.run(horizon, scope.signal, async () => {});
+      admit: async <T>(task: () => Promise<T>) => {
+        const result = await admission.run(horizon, scope.signal, task);
         if (result.status !== 'admitted')
           throw new AppError('COMMAND_FAILED', 'Managed lease refused.', { reason: result.status });
+        return result.value;
       },
     },
   };

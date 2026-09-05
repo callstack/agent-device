@@ -35,7 +35,6 @@ export function resolveManagedDeviceReadiness():
   if (!managed) return undefined;
   return async (device) => {
     assertManagedDeviceIdentity(managed, device);
-    await managed.ensureReady();
   };
 }
 

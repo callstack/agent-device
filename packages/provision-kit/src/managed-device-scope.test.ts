@@ -18,8 +18,8 @@ test('managed readiness scopes isolate concurrent devices and leave ordinary rea
     device,
     owner: managedLocalRuntimeOwner('allocator'),
     fence: { token: 'fence', generation: 1 },
-    ensureReady: async () => {
-      ready.push(device.id);
+    admit: async <T>(_task: () => Promise<T>): Promise<T> => {
+      throw new Error('Readiness must not recursively admit');
     },
     run: async <T>(task: () => Promise<T>) => await task(),
   };
@@ -30,13 +30,11 @@ test('managed readiness scopes isolate concurrent devices and leave ordinary rea
         {
           ...managed,
           device: selected,
-          ensureReady: async () => {
-            ready.push(id);
-          },
         },
         async () => {
           await Promise.resolve();
           expect(await delegateManagedDeviceReadiness(selected)).toBe(true);
+          ready.push(id);
           await expect(
             delegateManagedDeviceReadiness({ ...selected, id: 'foreign' }),
           ).rejects.toMatchObject({ details: { reason: 'managed-device-transport-mismatch' } });
