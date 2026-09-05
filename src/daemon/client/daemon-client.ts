@@ -24,7 +24,6 @@ import {
   type EnsuredDaemon,
 } from './daemon-client-lifecycle.ts';
 import { sendRequest } from './daemon-client-transport.ts';
-import { resolveDaemonRequestTimeoutMs } from '../request-timeout.ts';
 
 export type DaemonRequest = SharedDaemonRequest;
 export type DaemonResponse = SharedDaemonResponse;
@@ -50,6 +49,7 @@ export async function sendToDaemon(
     requestWithoutAuthFlag,
     options.authToken ?? flagAuthToken,
   );
+  const { resolveDaemonRequestTimeoutMs } = await import('../request-timeout.ts');
   const requestTimeoutMs = resolveDaemonRequestTimeoutMs(requestWithoutAuthFlag);
   const daemon = await withDiagnosticTimer(
     'daemon_startup',
