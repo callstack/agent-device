@@ -45,15 +45,10 @@ final class AccessibilityTreeXml {
       appendAttribute(xml, "hint-showing", Boolean.toString(node.isShowingHintText()));
     }
     appendAttribute(xml, "editable", Boolean.toString(node.isEditable()));
-    if (node.isEditable()) {
-      // These are accessibility offsets, not a measurement of the entered value's length.
-      int selectionStart = node.getTextSelectionStart();
-      int selectionEnd = node.getTextSelectionEnd();
-      if (selectionStart >= 0 && selectionEnd >= 0) {
-        appendAttribute(xml, "selection-start", Integer.toString(selectionStart));
-        appendAttribute(xml, "selection-end", Integer.toString(selectionEnd));
-      }
-    }
+    // Accessibility selection offsets, not a measurement of the value's length. Read-only
+    // selectable text exposes a selection too, so they do not depend on `editable`; -1 = unavailable.
+    appendNonNegativeAttribute(xml, "selection-start", node.getTextSelectionStart());
+    appendNonNegativeAttribute(xml, "selection-end", node.getTextSelectionEnd());
     appendNonEmptyAttribute(xml, "resource-id", node.getViewIdResourceName());
     appendAttribute(xml, "class", node.getClassName());
     appendNonEmptyAttribute(xml, "package", node.getPackageName());
@@ -132,6 +127,12 @@ final class AccessibilityTreeXml {
       return;
     }
     appendAttribute(xml, name, value);
+  }
+
+  private static void appendNonNegativeAttribute(StringBuilder xml, String name, int value) {
+    if (value >= 0) {
+      appendAttribute(xml, name, Integer.toString(value));
+    }
   }
 
   private static void appendTrueAttribute(StringBuilder xml, String name, boolean value) {

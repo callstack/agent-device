@@ -20,6 +20,18 @@ test.each([false, true])(
   },
 );
 
+test('selection offsets survive on a read-only selectable node (independent of editable)', () => {
+  const tree = parseUiHierarchyTree(`<hierarchy><node class="android.widget.TextView"
+    resource-id="field" text="Read-only text" bounds="[0,0][200,100]" visible-to-user="true"
+    editable="false" selection-start="2" selection-end="5" /></hierarchy>`);
+  const { nodes } = buildUiHierarchySnapshot(tree, undefined, { raw: true });
+  expect(nodes.find((node) => node.identifier === 'field')).toMatchObject({
+    editable: false,
+    selectionStart: 2,
+    selectionEnd: 5,
+  });
+});
+
 test('missing native field metadata remains unknown instead of becoming false or zero', () => {
   const tree = parseUiHierarchyTree(`<hierarchy><node class="android.widget.EditText"
     resource-id="field" bounds="[0,0][200,100]" focusable="true" /></hierarchy>`);

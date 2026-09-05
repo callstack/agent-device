@@ -90,10 +90,12 @@ function pickScreenshotDigestMetadata(data: DaemonResponseData): DaemonResponseD
   return metadata;
 }
 
-// The semantic attributes of a single matched node an agent reasons about. The
-// verbose framing a digest drops — geometry (`rect`), tree indices
-// (`index`/`parentIndex`/`depth`), and process/app plumbing
-// (`pid`/`bundleId`/`appName`/`windowTitle`/`surface`/…) — is intentionally absent.
+// The semantic attributes of a single matched node an agent reasons about,
+// including the field facts whose explicit false/zero/empty is the signal (#2288:
+// absent means unavailable). The verbose framing a digest drops — geometry
+// (`rect`), tree indices (`index`/`parentIndex`/`depth`), and process/app
+// plumbing (`pid`/`bundleId`/`appName`/`windowTitle`/`surface`/…) — is
+// intentionally absent.
 const SELECTOR_DIGEST_NODE_FIELDS = [
   'role',
   'type',
@@ -104,6 +106,11 @@ const SELECTOR_DIGEST_NODE_FIELDS = [
   'enabled',
   'selected',
   'focused',
+  'editable',
+  'password',
+  'hintShowing',
+  'selectionStart',
+  'selectionEnd',
   'hittable',
 ] as const;
 

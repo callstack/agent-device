@@ -46,14 +46,6 @@ agent-device snapshot --diff             # Alias for the same diff operation
 
 ## Efficient snapshot usage
 
-Android structured snapshot nodes and `get attrs` expose native `editable`, `password`,
-`hintShowing`, `selectionStart`, and `selectionEnd` facts when available. Missing fields mean
-unknown; `hintShowing` requires Android API 26 or later. Selection values are accessibility
-offsets, not character counts, and cannot verify a secure value or its equality to expected text.
-An explicitly empty accessibility text remains `value: ""`; missing text remains unavailable.
-These facts describe the accessibility observation, which may contain a hint or masked text,
-rather than privileged access to an application's backing value.
-
 - iOS and Android share the same mobile snapshot contract: visible-first output, actionable-now refs, and hidden list content communicated via discovery hints.
 - Default to `snapshot -i` for agent loops.
 - Default snapshot text is an agent-facing, token-efficient view for planning and targeting actions. It is visible-first and may collapse helper/accessibility noise; use `--raw` or `--json` when you need the full provider tree.
@@ -119,3 +111,17 @@ the strategy owns which tiers it may use.
   an empty tree.
 - Private-accessibility recovery and `--actions` reads are simulator-specific. Physical iOS devices
   have no equivalent independent semantic backend; they bound the XCTest work with a probe instead.
+
+## Android field metadata
+
+Android snapshot nodes and `get attrs` (including the digest response) carry the native
+`editable`, `password`, `hintShowing`, `selectionStart`, and `selectionEnd` facts whenever the
+accessibility tree reports them. Explicit `false` and `0` are kept; an absent field means the fact
+was unavailable, not false. `hintShowing` needs Android API 26 or later.
+
+- `value: ""` is an explicitly empty accessibility text; a missing `value` means no text was
+  reported. The text of an empty field is its hint on modern Android, so check `hintShowing`
+  before reading `value` as the entered contents.
+- `selectionStart`/`selectionEnd` are accessibility selection offsets. They are independent of
+  `editable` (read-only selectable text exposes them too), they are not a character count, and
+  they do not prove that a masked or secure value equals expected text.
