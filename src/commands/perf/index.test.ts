@@ -1,11 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
-import {
-  perfCliReader,
-  perfCommandDefinition,
-  perfCommandMetadata,
-  perfDaemonWriter,
-} from './index.ts';
+import { perfCliReader, perfCommandFacet, perfCommandMetadata, perfDaemonWriter } from './index.ts';
 
 const NO_FLAGS = {} as CliFlags;
 
@@ -21,7 +16,7 @@ function expectInvalidArgs(fn: () => unknown, messageFragment: string) {
 describe('perf command interface', () => {
   test('owns perf public metadata', () => {
     expect(perfCommandMetadata.name).toBe('perf');
-    expect(perfCommandDefinition.name).toBe('perf');
+    expect(perfCommandFacet.definition.name).toBe('perf');
   });
 
   test('reads perf area, action, kind, and out flags', () => {
