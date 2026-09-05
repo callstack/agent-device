@@ -232,13 +232,6 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation
   });
 }
 
-// The R6 pin the merge-base measurement replaces; deleted in this change's enforcement commit.
-export const TYPE_INVERSION_BASELINE: Readonly<Record<string, number>> = {
-  'commands -> client': 3,
-  'commands -> daemon-server': 1,
-  'mcp -> client': 1,
-};
-
 function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): LayeringViolation[] {
   const types = sources.get('src/daemon/types.ts');
   if (!types) {

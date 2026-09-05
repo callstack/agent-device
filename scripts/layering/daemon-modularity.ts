@@ -11,35 +11,15 @@ import {
 import { targetDagZone, type LayeringViolation, type ResolvedImportEdge } from './model.ts';
 import type { LayeringRatchets } from './ratchet-reference.ts';
 
-const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
-  // co-defined-contract pair (`capabilities.ts` ↔ `runtime.ts` and the four files they
-  // pull in). The standard shrink is a third module holding the shared type.
-  'provider-webdriver': 6,
-};
-
 // R7 ownership pressure and the largest type cycle (whole and per zone) are ratcheted against the
 // merge-base with origin/main (`ratchet-reference.ts`); the importer membership below stays a
 // recorded list, because it names files rather than counting them.
 export const DAEMON_MODULARITY_BASELINE = {
-  sessionState: {
-    // R60 moved `audioProbe` to store-owned. R64 does the same for the neutral `perfCapture`
-    // and `lastPerfProfile` records after retiring the two platform-specific perf fields.
-    writerOwnedFields: 19,
-    ownerFileClaims: 22,
-  },
-  largestTypeCycle: {
-    zoneMembers: LARGEST_TYPE_CYCLE_ZONE_CEILINGS,
-  },
   externalDaemonTypesImporters: [
     'src/client/client-normalizers.ts',
     'src/remote/daemon-artifacts.ts',
   ],
 } as const;
-
-export const TYPE_CYCLE_BASELINE = Object.values(LARGEST_TYPE_CYCLE_ZONE_CEILINGS).reduce(
-  (sum, count) => sum + count,
-  0,
-);
 
 const ENGINE_FILE_PREFIXES = [
   'packages/ad-replay/src/',
