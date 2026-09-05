@@ -91,6 +91,7 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   'kernel',
   'host-kit',
   'capture-kit',
+  'managed-allocation',
   'provision-kit',
   ...PLATFORMS.map((family) => `platform-${family}`),
   'provider-webdriver',

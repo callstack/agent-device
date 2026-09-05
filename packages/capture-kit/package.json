@@ -14,6 +14,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./durable-json": {
+      "types": "./src/durable-json.ts",
+      "default": "./src/durable-json.ts"
+    },
     "./ios-snapshot-acquisition": {
       "types": "./src/ios-snapshot-acquisition.ts",
       "default": "./src/ios-snapshot-acquisition.ts"
