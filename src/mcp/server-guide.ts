@@ -1,5 +1,9 @@
 import type { JsonSchema } from '../commands/command-contract.ts';
-import { buildUsageText, helpTopicIds, resolveHelpTargetUsageText } from '../cli-schema/cli-help.ts';
+import {
+  buildUsageText,
+  helpTopicIds,
+  resolveHelpTargetUsageText,
+} from '../cli-schema/cli-help.ts';
 import { listCliCommandNames } from '../command-catalog.ts';
 import { listMcpExposedCommandNames } from '../core/command-descriptor/registry.ts';
 import type { ToolResult } from './command-tools.ts';
