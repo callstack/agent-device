@@ -1,16 +1,14 @@
 # Adding a CLI Flag
 
-A new flag touches only the layers that need to understand it. Stop at the layer where it stops
-mattering — threading it further is the common failure, not stopping too early.
+Thread a flag only through the layers that consume it:
 
 1. `packages/contracts/src/cli-flags.ts`: add to `CliFlags`; add the definition to the matching
    `src/commands/cli-grammar/flag-definitions-*.ts` owner and the relevant group in `flag-groups.ts`
    (for example `SNAPSHOT_FLAGS`). Then update the command family metadata/schema that exposes the
    flag; find the owner with
    `rg -n "<command>|supportedFlags|allowedFlags" src/commands src/cli-schema src/cli/parser`. For
-   schema-only CLI commands (`cdp`, `auth`, `connect`, `proxy`, `react-devtools`, `web`) the owner is
-   `SCHEMA_ONLY_CLI_COMMAND_SCHEMAS` in `src/cli-schema/command-overrides.ts`. New flags are
-   operator-only by default. Add a flag to `PROJECT_CONFIG_FLAG_KEYS` in
+   schema-only CLI commands, the owner is `SCHEMA_ONLY_CLI_COMMAND_SCHEMAS` in
+   `src/cli-schema/command-overrides.ts`. New flags are operator-only by default. Add a flag to `PROJECT_CONFIG_FLAG_KEYS` in
    `src/cli-schema/cli-config.ts` only when repository control is safe; this positive allowlist is
    the completeness gate.
 2. `src/commands/cli-grammar/*`: read the CLI flag into command input.
