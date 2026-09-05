@@ -462,12 +462,14 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             await ensureAppleReady(host, request.device, request.scope.signal),
         })),
         ...whenAdmitted(facts.operations.listApps, () => ({
-          listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
-            await host.appInventory.apple.listApps(
-              input.device,
-              input.filter,
-              request.scope.signal,
-            ),
+          listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) => {
+            request.scope.signal.throwIfAborted();
+            const { listIosApps } = await import('./core/app-resolution.ts');
+            return (await listIosApps(input.device, input.filter)).map((app) => ({
+              id: app.bundleId,
+              name: app.name,
+            }));
+          },
         })),
         ...availableApplicationLifecycleOperations(
           bindAppleApplicationLifecycle({

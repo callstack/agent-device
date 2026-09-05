@@ -4,10 +4,7 @@ import type {
 } from '@agent-device/contracts/device';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
 import type { OwnedProcessRecordWriter } from '@agent-device/contracts/platform-runtime-host';
-import type {
-  AppStateRuntimeHost,
-  AppStateRuntimeResult,
-} from '@agent-device/contracts/app-state-runtime';
+import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import type { DeviceShutdownRuntimeDependencies } from '@agent-device/contracts/device-shutdown-runtime';
 import {
   type ComposedDeviceInventoryGateways,
@@ -32,7 +29,6 @@ import {
   createAndroidObservationAdapter as createPackageAndroidObservationAdapter,
   createAndroidInventoryModule,
   readAndroidAppStateWithExecutor,
-  readAndroidAppState as readAndroidPackageAppState,
   loadShutdownRuntime as loadAndroidShutdownRuntime,
   runtimeModule as androidRuntimeModule,
 } from '@agent-device/platform-android';
@@ -67,18 +63,11 @@ export type {
   PlatformProviderResolvers,
 } from './platform-runtime/request-providers.ts';
 
-export async function readAndroidAppStateWithHost(
-  host: AppStateRuntimeHost['android'],
-  device: Parameters<AppStateRuntimeHost['android']['run']>[0],
-  signal: AbortSignal,
-): Promise<AppStateRuntimeResult> {
-  return await readAndroidPackageAppState(host, device, signal);
-}
-
 export async function getAndroidAppStateWithAdb(
   adb: Parameters<typeof readAndroidAppStateWithExecutor>[0],
+  signal?: AbortSignal,
 ): Promise<AppStateRuntimeResult> {
-  return await readAndroidAppStateWithExecutor(adb);
+  return await readAndroidAppStateWithExecutor(adb, signal);
 }
 
 const androidInventoryModule = createAndroidInventoryModule({
@@ -125,13 +114,27 @@ export function createPlatformDeviceInventoryGateways(
   });
 }
 
+/**
+ * Android mechanics call adb through a process-wide host that only this root can bind. Root binds it
+ * from two places: this registry entry, which covers everything the Android runtime reaches from
+ * inside its own package, and `loadAndroidMechanics`, which covers the root host ports that call
+ * into mechanics without ever binding a runtime. Neither one subsumes the other.
+ */
+const androidRuntimeModuleWithBoundAdbHost: PlatformRuntimeModule = Object.freeze({
+  ...androidRuntimeModule,
+  loadRuntime: async (host) => {
+    await import('./platform-runtime-android-adb-host.ts');
+    return await androidRuntimeModule.loadRuntime(host);
+  },
+});
+
 /** The root composition registry shared by the gateway and bounded host-contract fixtures. */
 export const platformRuntimeModules: ReadonlyMap<Platform, PlatformRuntimeModule> = new Map<
   Platform,
   PlatformRuntimeModule
 >([
   ['apple', appleRuntimeModule],
-  ['android', androidRuntimeModule],
+  ['android', androidRuntimeModuleWithBoundAdbHost],
   ['harmonyos', harmonyosRuntimeModule],
   ['vega', vegaRuntimeModule],
   ['linux', linuxRuntimeModule],

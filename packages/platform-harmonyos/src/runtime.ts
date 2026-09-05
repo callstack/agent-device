@@ -344,11 +344,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
           ...(facts.operations.appState.available
             ? {
                 appState: async () =>
-                  await readHarmonyAppState(
-                    host.appState.harmonyos,
-                    request.device,
-                    request.scope.signal,
-                  ),
+                  await readHarmonyAppState(request.device, request.scope.signal),
               }
             : {}),
           ensureReady: async () => ({ ...request.device, booted: true }),
@@ -423,12 +419,13 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
                 await host.clock.sleep(milliseconds, request.scope.signal),
             }),
           ),
-          listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
-            await host.appInventory.harmonyos.listApps(
-              input.device,
-              input.filter,
-              request.scope.signal,
-            ),
+          listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) => {
+            request.scope.signal.throwIfAborted();
+            const { listHarmonyApps } = await import('./app-lifecycle.ts');
+            return (
+              await listHarmonyApps(input.device, input.filter, { signal: request.scope.signal })
+            ).map((app) => ({ id: app.package, name: app.name }));
+          },
           ...availableApplicationLifecycleOperations(
             bindHarmonyApplicationLifecycle({
               host: host.localInteractors,

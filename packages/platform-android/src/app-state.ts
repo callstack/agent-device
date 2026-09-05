@@ -1,18 +1,5 @@
-import type {
-  AppStateRuntimeCommand,
-  AppStateRuntimeCommandResult,
-  AppStateRuntimeResult,
-} from '@agent-device/contracts/app-state-runtime';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import { parseAndroidFocusSegment } from './app-parsers.ts';
-
-export type AndroidAppStateHost = Readonly<{
-  run(
-    device: DeviceInfo,
-    command: AppStateRuntimeCommand,
-    signal: AbortSignal,
-  ): Promise<AppStateRuntimeCommandResult>;
-}>;
 
 const FOCUS_COMMANDS = [
   ['shell', 'dumpsys', 'window', 'windows'],
@@ -29,11 +16,12 @@ export type AndroidCommandExecutor = (
 
 export async function readAndroidAppStateWithExecutor(
   run: AndroidCommandExecutor,
+  signal?: AbortSignal,
 ): Promise<AppStateRuntimeResult> {
-  const windowFocus = await readAndroidFocusWithExecutor(run, FOCUS_COMMANDS);
+  const windowFocus = await readAndroidFocusWithExecutor(run, FOCUS_COMMANDS, signal);
   if (windowFocus) return windowFocus;
 
-  const activityFocus = await readAndroidFocusWithExecutor(run, ACTIVITY_COMMANDS);
+  const activityFocus = await readAndroidFocusWithExecutor(run, ACTIVITY_COMMANDS, signal);
   if (activityFocus) return activityFocus;
   return {};
 }
@@ -41,46 +29,20 @@ export async function readAndroidAppStateWithExecutor(
 async function readAndroidFocusWithExecutor(
   run: AndroidCommandExecutor,
   commands: readonly (readonly string[])[],
+  signal?: AbortSignal,
 ): Promise<AppStateRuntimeResult | null> {
   for (const args of commands) {
+    signal?.throwIfAborted();
     const result = await run([...args], { allowFailure: true });
+    signal?.throwIfAborted();
     const parsed = parseAndroidForegroundApp(result.stdout ?? '');
     if (parsed) return parsed;
   }
   return null;
 }
 
-export async function readAndroidAppState(
-  host: AndroidAppStateHost,
-  device: DeviceInfo,
-  signal: AbortSignal,
-): Promise<AppStateRuntimeResult> {
-  const windowFocus = await readAndroidFocus(host, device, FOCUS_COMMANDS, signal);
-  if (windowFocus) return windowFocus;
-
-  const activityFocus = await readAndroidFocus(host, device, ACTIVITY_COMMANDS, signal);
-  if (activityFocus) return activityFocus;
-  return {};
-}
-
 export function parseAndroidForegroundApp(text: string): AppStateRuntimeResult | null {
   return parseAndroidFocusSegment(text, (segment) => parseAndroidComponentFromSegment(segment));
-}
-
-async function readAndroidFocus(
-  host: AndroidAppStateHost,
-  device: DeviceInfo,
-  commands: readonly (readonly string[])[],
-  signal: AbortSignal,
-): Promise<AppStateRuntimeResult | null> {
-  for (const args of commands) {
-    signal.throwIfAborted();
-    const result = await host.run(device, { args, allowFailure: true }, signal);
-    signal.throwIfAborted();
-    const parsed = parseAndroidForegroundApp(result.stdout);
-    if (parsed) return parsed;
-  }
-  return null;
 }
 
 function parseAndroidComponentFromSegment(segment: string): AppStateRuntimeResult | null {

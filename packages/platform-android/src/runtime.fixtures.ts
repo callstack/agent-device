@@ -39,17 +39,6 @@ const audioProbeHost: PlatformRuntimeHost['audioProbe'] = {
   ownedProcesses: { replace: () => {}, clear: () => {} },
 };
 
-export const emptyAppInventory = {
-  apple: { listApps: async () => [] },
-  android: { listApps: async () => [] },
-  harmonyos: { listApps: async () => [] },
-};
-
-const emptyAppState = {
-  android: { run: async () => ({ stdout: '' }) },
-  harmonyos: { run: async () => ({ stdout: '' }) },
-};
-
 function localAndroidScreenRecording() {
   return {
     mode: 'local' as const,
@@ -72,7 +61,6 @@ export function androidRuntimeHost(overrides: Record<string, unknown> = {}): Pla
   return {
     androidTools: { probeClipboardShellSupport: async () => 'supported' as const },
     processTransports: { resolve: async () => ({ mode: 'local' as const }) },
-    appInventory: emptyAppInventory,
     localInteractors: { resolve: async () => ({}) },
     audioProbe: audioProbeHost,
     screenRecording: { android: { resolve: async () => localAndroidScreenRecording() } },
@@ -89,7 +77,6 @@ export function androidNavigationHost(
       probeClipboardShellSupport,
       runAdb: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
     },
-    appState: emptyAppState,
     deviceReadiness: { android: { ensureReady: async (selected: DeviceInfo) => selected } },
   });
 }

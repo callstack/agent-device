@@ -14,27 +14,3 @@ export type ListAppsInput = Readonly<{
 export type AppInventoryRuntimeOperations = Readonly<{
   listApps(input: ListAppsInput): Promise<readonly InstalledAppInfo[]>;
 }>;
-
-export type AppInventoryRuntimeHost = Readonly<{
-  apple: Readonly<{
-    listApps(
-      device: DeviceInfo,
-      filter: AppsFilter,
-      signal: AbortSignal,
-    ): Promise<readonly InstalledAppInfo[]>;
-  }>;
-  android: Readonly<{
-    listApps(
-      device: DeviceInfo,
-      filter: AppsFilter,
-      signal: AbortSignal,
-    ): Promise<readonly InstalledAppInfo[]>;
-  }>;
-  harmonyos: Readonly<{
-    listApps(
-      device: DeviceInfo,
-      filter: AppsFilter,
-      signal: AbortSignal,
-    ): Promise<readonly InstalledAppInfo[]>;
-  }>;
-}>;

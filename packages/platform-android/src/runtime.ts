@@ -53,7 +53,7 @@ import { createAndroidAppLogRuntime } from './logs/runtime.ts';
 import { dumpAndroidNetworkTraffic } from './network/runtime.ts';
 import { bindAndroidScreenRecordingRuntime } from './recording/runtime.ts';
 import { ensureAndroidReady } from './readiness/runtime.ts';
-import { readAndroidAppState } from './app-state.ts';
+import { readAndroidAppStateWithExecutor } from './app-state.ts';
 import { bindAndroidApplicationLifecycle } from './lifecycle.ts';
 import type { AndroidClipboardShellSupport } from '@agent-device/contracts/android-clipboard-support';
 import {
@@ -419,12 +419,18 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           }),
           ...(facts.operations.appState.available
             ? {
-                appState: async () =>
-                  await readAndroidAppState(
-                    host.appState.android,
-                    request.device,
+                appState: async () => {
+                  request.scope.signal.throwIfAborted();
+                  const { runAndroidAdb } = await import('./adb.ts');
+                  return await readAndroidAppStateWithExecutor(
+                    async (args, options) =>
+                      await runAndroidAdb(request.device, args, {
+                        ...options,
+                        signal: request.scope.signal,
+                      }),
                     request.scope.signal,
-                  ),
+                  );
+                },
               }
             : {}),
           networkDump: async (input: NetworkDumpInput) =>
@@ -470,12 +476,14 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
                   ),
               }
             : {}),
-          listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
-            await host.appInventory.android.listApps(
-              input.device,
-              input.filter,
-              request.scope.signal,
-            ),
+          listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) => {
+            request.scope.signal.throwIfAborted();
+            const { listAndroidApps } = await import('./app-lifecycle.ts');
+            return (await listAndroidApps(input.device, input.filter)).map((app) => ({
+              id: app.package,
+              name: app.name,
+            }));
+          },
           ...availableApplicationLifecycleOperations(
             bindAndroidApplicationLifecycle({
               host,

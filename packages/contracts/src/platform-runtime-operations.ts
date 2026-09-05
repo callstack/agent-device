@@ -1,14 +1,11 @@
 import type { AppLogRuntimeHost, AppLogRuntimeOperations } from './app-log-runtime.ts';
-import type {
-  AppInventoryRuntimeHost,
-  AppInventoryRuntimeOperations,
-} from './app-inventory-runtime.ts';
+import type { AppInventoryRuntimeOperations } from './app-inventory-runtime.ts';
 import type {
   AndroidAppDeploymentExecutor,
   AppDeploymentRuntimeOperations,
   AppleAppDeploymentExecutor,
 } from './app-deployment-runtime.ts';
-import type { AppStateRuntimeHost, AppStateRuntimeOperations } from './app-state-runtime.ts';
+import type { AppStateRuntimeOperations } from './app-state-runtime.ts';
 import type { NetworkRuntimeHost, NetworkRuntimeOperations } from './network-runtime.ts';
 import type { ScreenRecordingRuntimeHost } from './screen-recording-runtime-host.ts';
 import type { ScreenRecordingRuntimeOperations } from './screen-recording-runtime.ts';
@@ -721,8 +718,6 @@ export const keyboardRuntimePlanUses = Object.freeze([
 export type PlatformRuntimeHost = AppLogRuntimeHost &
   NetworkRuntimeHost &
   Readonly<{
-    appInventory: AppInventoryRuntimeHost;
-    appState: AppStateRuntimeHost;
     /** Focused native ports; deployment semantics remain in the owning family packages. */
     appleDeployment: AppleAppDeploymentExecutor;
     androidDeployment: AndroidAppDeploymentExecutor;

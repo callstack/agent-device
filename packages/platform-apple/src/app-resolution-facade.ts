@@ -3,7 +3,6 @@ export {
   detectSoleRunningIosSimulatorApp,
   findIosSimulatorInstalledApp,
   invalidateIosAppResolutionCache,
-  listIosApps,
   resolveIosApp,
   resolveIosAppAlias,
   resolveIosSimulatorDeepLinkBundleId,
