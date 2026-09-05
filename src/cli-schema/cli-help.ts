@@ -4,6 +4,7 @@ import {
   MAESTRO_COMPATIBILITY_ADR_URL,
   MAESTRO_COMPATIBILITY_ISSUE_URL,
 } from '@agent-device/maestro';
+import { normalizeCliCommandAlias } from '../commands/cli-command-aliases.ts';
 import { helpBody } from '../commands/command-text.ts';
 import {
   DEVICE_SELECTION_FLAG_KEYS,
@@ -1210,6 +1211,11 @@ export function buildCommandUsageText(commandName: string): string | null {
 
 ${helpBody(schema.text)}${flagsSections}
 `;
+}
+
+/** `--help` text for a command name or one of its aliases; `null` when neither has any. */
+export function resolveHelpTargetUsageText(helpTarget: string): string | null {
+  return buildCommandUsageText(normalizeCliCommandAlias(helpTarget));
 }
 
 /**

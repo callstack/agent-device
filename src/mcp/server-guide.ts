@@ -1,7 +1,10 @@
 import type { JsonSchema } from '../commands/command-contract.ts';
-import { buildCommandUsageText, buildUsageText, helpTopicIds } from '../cli-schema/cli-help.ts';
+import {
+  buildUsageText,
+  helpTopicIds,
+  resolveHelpTargetUsageText,
+} from '../cli-schema/cli-help.ts';
 import { listCliCommandNames } from '../command-catalog.ts';
-import { normalizeCliCommandAlias } from '../commands/cli-command-aliases.ts';
 import { listMcpExposedCommandNames } from '../core/command-descriptor/registry.ts';
 import type { ToolResult } from './command-tools.ts';
 
@@ -62,7 +65,7 @@ export function callHelpTool(input: Record<string, unknown>): ToolResult {
   if (topic !== undefined && typeof topic !== 'string') {
     return textResult('Expected topic to be a string.', true);
   }
-  const text = topic ? buildCommandUsageText(normalizeCliCommandAlias(topic)) : buildUsageText();
+  const text = topic ? resolveHelpTargetUsageText(topic) : buildUsageText();
   if (text === null) {
     return textResult(`Unknown help topic: ${topic}. ${HELP_TOOL.description}`, true);
   }

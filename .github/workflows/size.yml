@@ -99,6 +99,15 @@ jobs:
             --startup-runs 7 \
             --json .tmp/size-report.json \
             --markdown .tmp/size-report.md
+          cp /tmp/agent-device-size-base.json .tmp/size-report-base.json
+
+      - name: Upload detailed size reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: size-report
+          path: .tmp/size-report*.json
+          include-hidden-files: true
+          if-no-files-found: error
 
       - name: Add job summary
         run: cat .tmp/size-report.md >> "$GITHUB_STEP_SUMMARY"

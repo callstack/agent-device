@@ -274,3 +274,30 @@ export function findSessionStateWrites(
     (left, right) => left.file.localeCompare(right.file) || left.line - right.line,
   );
 }
+
+export type SessionStateWritePressure = Readonly<{
+  /** Declared fields that some daemon module writes directly. */
+  writerOwnedFields: number;
+  /** Distinct (field, writing module) pairs — what `SESSION_STATE_FIELD_OWNERS` claims. */
+  ownerFileClaims: number;
+}>;
+
+/**
+ * R10's measurement of R7 pressure: how many declared fields have a direct writer, and how many
+ * module claims that takes. Read from the tree rather than from the ownership table, so the same
+ * function measures a merge-base tree whose table is not in scope. On a tree R7 accepts, both
+ * numbers equal the table's own size.
+ */
+export function sessionStateWritePressure(
+  sources: ReadonlyMap<string, string>,
+): SessionStateWritePressure {
+  const types = sources.get('src/daemon/types.ts');
+  if (!types) return { writerOwnedFields: 0, ownerFileClaims: 0 };
+  const writes = findSessionStateWrites(sources, sessionStateFields(types)).filter(
+    (write) => write.field !== '[computed]',
+  );
+  return {
+    writerOwnedFields: new Set(writes.map((write) => write.field)).size,
+    ownerFileClaims: new Set(writes.map((write) => `${write.field}\0${write.file}`)).size,
+  };
+}

@@ -21,6 +21,7 @@ import { activateCompleteRefFrame } from '../ref-frame.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
 import { resolveBoundBackRuntime } from '../back-runtime.ts';
+import { expectRefusesUnavailableExactOwnerFact } from './runtime-binding-conformance.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 
 // File-scoped id, not the widely shared 'ios-simulator' literal: this owner binding's
@@ -125,27 +126,11 @@ test('forwards the requested back mode from the resolved dispatch context', asyn
 });
 
 test('rejects an unavailable exact-owner fact before binding', async () => {
-  const harness = runtimeHarness(unavailable);
-
-  const resolved = await resolveBoundBackRuntime({
+  await expectRefusesUnavailableExactOwnerFact({
+    command: 'back',
     device: appleDevice,
-    inspectFacts: harness.inspectFacts,
-    bindDevice: harness.bindDevice,
+    unavailable,
   });
-
-  expect(resolved).toEqual({
-    ok: false,
-    response: {
-      ok: false,
-      error: {
-        code: 'UNSUPPORTED_OPERATION',
-        message: 'back is not supported on this device',
-        hint: unavailable.hint,
-      },
-    },
-  });
-  expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
-  expect(harness.bindDevice).not.toHaveBeenCalled();
 });
 
 test('request router joins back admission to execution, recording, and ref invalidation', async () => {

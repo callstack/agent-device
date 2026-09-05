@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runCmdSync } from '@agent-device/host-kit/command';
+import { cliAliasesForCommand } from '../../src/commands/cli-command-aliases.ts';
+import { listCliCommandNames } from '../../src/command-catalog.ts';
 
 function runCli(args: string[]): { status: number; stdout: string; stderr: string } {
   const result = runCmdSync(
@@ -38,4 +40,16 @@ test('cli without command prints usage and exits 1', () => {
   const result = runCli([]);
   assert.equal(result.status, 1, result.stderr);
   assert.match(result.stdout, /agent-device <command>/i);
+});
+
+test('alias --help matches the canonical command help', () => {
+  const aliases = listCliCommandNames().flatMap((command) =>
+    cliAliasesForCommand(command).map((entry) => [entry.alias, command] as const),
+  );
+  assert.ok(aliases.length > 0);
+  for (const [alias, canonical] of aliases) {
+    const result = runCli([alias, '--help']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, runCli([canonical, '--help']).stdout, alias);
+  }
 });

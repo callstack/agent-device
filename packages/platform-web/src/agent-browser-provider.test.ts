@@ -666,6 +666,9 @@ function expectedNode(
 ) {
   return {
     index,
+    // The web normalizer now preserves the backend ref on each node. This fixture's
+    // refs happen to be dense in tree order, so the ref matches the positional `e{index}`.
+    ref: `e${index + 1}`,
     type,
     role: type,
     label,
