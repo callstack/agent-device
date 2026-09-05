@@ -570,29 +570,17 @@ function readCommandContractBlocks(text) {
   for (const match of text.matchAll(/\bconst\s+([A-Z0-9_]+)\s*=\s*['"]([^'"]+)['"]/g)) {
     constants.set(match[1], match[2]);
   }
-
-  const metadataNames = new Map();
-  for (const match of text.matchAll(
-    /\bconst\s+([A-Za-z0-9_]+CommandMetadata)\s*=\s*defineFieldCommandMetadata\(\s*([^,\s)]+)/g,
-  )) {
-    metadataNames.set(match[1], readMetadataName(match[2], constants));
-  }
+  const nameOf = (token) => token.match(/^['"]([^'"]+)['"]$/)?.[1] ?? constants.get(token);
 
   const starts = [
-    ...text.matchAll(/defineExecutableCommand\(\s*metadata\(\s*['"]([^'"]+)['"]\s*\)/g),
-    ...[...text.matchAll(/defineExecutableCommand\(\s*([A-Za-z0-9_]+CommandMetadata)\b/g)].flatMap(
-      (match) => {
-        const name = metadataNames.get(match[1]);
-        return name ? [{ ...match, 1: name }] : [];
-      },
-    ),
-    ...text.matchAll(/defineFieldCommand\(\s*['"]([^'"]+)['"]/g),
-    ...text.matchAll(/defineCommand\(\s*\{[\s\S]*?\bname:\s*['"]([^'"]+)['"]/g),
+    ...text.matchAll(/defineCommandFacet\(\s*\{[\s\S]*?\bname:\s*([A-Za-z0-9_]+|['"][^'"]+['"])/g),
+    ...text.matchAll(/defineFieldCommand\(\s*(['"][^'"]+['"])/g),
+    ...text.matchAll(/defineCommand\(\s*\{[\s\S]*?\bname:\s*(['"][^'"]+['"])/g),
   ]
-    .map((match) => ({
-      index: match.index ?? 0,
-      name: match[1],
-    }))
+    .flatMap((match) => {
+      const name = nameOf(match[1]);
+      return name ? [{ index: match.index ?? 0, name }] : [];
+    })
     .sort((a, b) => a.index - b.index);
 
   return starts.map((start, index) => {
@@ -602,12 +590,6 @@ function readCommandContractBlocks(text) {
       source: text.slice(start.index, end),
     };
   });
-}
-
-function readMetadataName(token, constants) {
-  const literal = token.match(/^['"]([^'"]+)['"]$/);
-  if (literal) return literal[1];
-  return constants.get(token);
 }
 
 function extractProviderScenarioCommandReferences(text, clientCommandMethods) {
