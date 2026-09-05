@@ -1213,14 +1213,7 @@ ${helpBody(schema.text)}${flagsSections}
 `;
 }
 
-/**
- * `bin.ts`'s `--help` fast path calls this instead of composing
- * `buildCommandUsageText(normalizeCliCommandAlias(...))` itself, so an alias like `tap` or
- * `launch` cannot silently miss alias resolution by calling `buildCommandUsageText` raw. A
- * command name the alias registry does not recognize (including `rotate`, which is retired
- * rather than aliased) passes through unchanged and falls back to `null` exactly as
- * `buildCommandUsageText` would.
- */
+/** `--help` text for a command name or one of its aliases; `null` when neither has any. */
 export function resolveHelpTargetUsageText(helpTarget: string): string | null {
   return buildCommandUsageText(normalizeCliCommandAlias(helpTarget));
 }
