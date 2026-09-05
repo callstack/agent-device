@@ -85,7 +85,7 @@ export function gatewayFixture(registrations: readonly PlatformRuntimeProviderRe
   });
 }
 
-export const MANAGED_RETAINED_OPERATION = 'setSetting';
+export const REVIEWED_MANAGED_OPERATION = 'setSetting';
 
 export type LocalFamilyRuntimeFixture = Readonly<{
   module: PlatformRuntimeModule;

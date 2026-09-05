@@ -32,7 +32,7 @@ import {
   LIFECYCLE_FACETS,
   limrunTestDependencies,
   localFamilyRuntimeFixture,
-  MANAGED_RETAINED_OPERATION,
+  REVIEWED_MANAGED_OPERATION,
   managedGatewayScope,
   providerLifecycleOwnerFixture as providerLifecycleOwner,
   providerRuntimeFixture as providerRuntime,
@@ -660,7 +660,7 @@ describe('managed local owner registration', () => {
       available: false,
       reason: 'owner-capability-missing',
     });
-    expect(binding.facts.operations[MANAGED_RETAINED_OPERATION]).toEqual({ available: true });
+    expect(binding.facts.operations[REVIEWED_MANAGED_OPERATION]).toEqual({ available: true });
   });
 
   test('leaves ordinary selection on the local family owner while a managed owner is registered', async () => {

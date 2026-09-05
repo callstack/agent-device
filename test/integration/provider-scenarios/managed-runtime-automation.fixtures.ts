@@ -7,20 +7,20 @@ import type {
   ManagedLease,
   ManagedLeasePlatform,
 } from '@agent-device/contracts/managed-device-allocation';
-import { createManagedLeaseReachability } from './managed-device-reachability.ts';
-import { createManagedLeaseAdmission } from './daemon/managed-device-allocation/lease-admission.ts';
-import { createScriptedManagedDeviceAllocator } from './__tests__/test-utils/managed-device-allocator.fixtures.ts';
+import { createManagedLeaseReachability } from '../../../src/managed-device-reachability.ts';
+import { createManagedLeaseAdmission } from '../../../src/daemon/managed-device-allocation/lease-admission.ts';
+import { createScriptedManagedDeviceAllocator } from '../../../src/__tests__/test-utils/managed-device-allocator.fixtures.ts';
 import {
   ALLOCATION_GRANTED_STATUS,
   ALLOCATION_LEASE,
   ALLOCATION_REQUEST,
-} from './daemon/managed-device-allocation/__tests__/fixtures.ts';
-import { managedGatewayScope } from './platform-runtime-gateway.fixtures.ts';
-import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
-import { platformRuntimeModules } from './platform-runtime.ts';
-import { createPlatformRuntimeHost } from './platform-runtime-operation-host.ts';
-import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
-import './platform-runtime-android-adb-host.ts';
+} from '../../../src/daemon/managed-device-allocation/__tests__/fixtures.ts';
+import { managedGatewayScope } from '../../../src/platform-runtime-gateway.fixtures.ts';
+import { createComposedPlatformRuntimeGateway } from '../../../src/platform-runtime-gateway.ts';
+import { platformRuntimeModules } from '../../../src/platform-runtime.ts';
+import { createPlatformRuntimeHost } from '../../../src/platform-runtime-operation-host.ts';
+import { mkdtempForTestSync } from '../../../src/__tests__/test-utils/tmp-dir.ts';
+import '../../../src/platform-runtime-android-adb-host.ts';
 
 export const AUTOMATION_APP_ID = 'com.example.demo';
 export const AUTOMATION_PNG = Buffer.from('89504e470d0a1a0a0000000049454e44ae426082', 'hex');
