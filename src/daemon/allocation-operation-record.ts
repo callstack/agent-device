@@ -20,6 +20,7 @@ export type AllocationOperationRef = Readonly<{
 
 export type AllocationOperationBinding =
   | 'unpublished'
+  | 'publish-pending'
   | 'published'
   | 'cleanup-pending'
   | 'cleaned'
@@ -83,6 +84,7 @@ export type AllocationTransition =
   | Readonly<{ kind: 'allocator-status'; status: LeaseRequestStatus }>
   | Readonly<{ kind: 'allocator-unknown'; message: string }>
   | Readonly<{ kind: 'allocator-ambiguous'; message: string }>
+  | Readonly<{ kind: 'binding-publish-pending' }>
   | Readonly<{ kind: 'binding-published' }>
   | Readonly<{ kind: 'binding-cleanup-pending'; message?: string }>
   | Readonly<{ kind: 'binding-cleaned' }>

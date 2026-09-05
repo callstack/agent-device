@@ -86,7 +86,12 @@ test('exactly replaying a local transition is idempotent while a stale fence is 
     () => applyAllocationTransition(dispatched, { kind: 'binding-published' }, NOW + 3),
     (error: unknown) => error instanceof AppError && error.details?.reason === 'transition-invalid',
   );
-  const published = apply(granted, { kind: 'binding-published' });
+  assert.throws(
+    () => applyAllocationTransition(granted, { kind: 'binding-published' }, NOW + 3),
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'transition-invalid',
+  );
+  const publishPending = apply(granted, { kind: 'binding-publish-pending' });
+  const published = apply(publishPending, { kind: 'binding-published' });
   assert.equal(
     applyAllocationTransition(published, { kind: 'binding-published' }, NOW + 4).status,
     'already-applied',
@@ -102,7 +107,8 @@ test('cleanup and allocator release are ordered and remain retryable', () => {
       identityIncarnationId: 'incarnation-1',
     },
   });
-  const published = apply(granted, { kind: 'binding-published' });
+  const publishPending = apply(granted, { kind: 'binding-publish-pending' });
+  const published = apply(publishPending, { kind: 'binding-published' });
   const pendingCleanup = apply(published, {
     kind: 'binding-cleanup-pending',
     message: 'binding teardown was not confirmed',

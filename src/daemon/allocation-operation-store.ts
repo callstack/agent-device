@@ -120,7 +120,9 @@ function applyStoredTransition(
 }
 
 function listRecords(allocationsDir: string): AllocationOperationRead[] {
-  return listAllocationOperationPaths(allocationsDir).map((recordPath) => readPath(recordPath));
+  return listAllocationOperationPaths(allocationsDir).map((entry) =>
+    entry.status === 'unreadable' ? corruptRecord(entry.path, entry.message) : readPath(entry.path),
+  );
 }
 
 function operationPath(allocationsDir: string, ref: AllocationOperationRef): string {

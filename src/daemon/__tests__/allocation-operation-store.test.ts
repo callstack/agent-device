@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { acquireProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
@@ -154,6 +154,28 @@ test('does not follow a symbolic-link lane directory', () => {
   assert.equal(store.create(record).status, 'unreadable');
   assert.equal(store.read(record).status, 'unreadable');
   assert.deepEqual(fs.readdirSync(outsideLane), []);
+});
+
+test('retains an unreadable lane enumeration instead of omitting its operations', () => {
+  const { store, record } = fixture();
+  assert.equal(store.create(record).status, 'created');
+  const lanePath = path.dirname(store.resolvePath(record));
+  const originalReaddirSync = fs.readdirSync;
+  const readdir = vi.spyOn(fs, 'readdirSync').mockImplementation((directory, options) => {
+    if (directory.toString() === lanePath) {
+      throw Object.assign(new Error('allocation lane is unreadable'), { code: 'EACCES' });
+    }
+    return originalReaddirSync(directory, options);
+  });
+
+  try {
+    const listed = store.list();
+    assert.equal(listed.length, 1);
+    assert.equal(listed[0]?.status, 'unreadable');
+    assert.equal(listed[0]?.status === 'unreadable' ? listed[0].reason : undefined, 'corrupt');
+  } finally {
+    readdir.mockRestore();
+  }
 });
 
 test('a terminal allocator outcome is retained rather than deleted', async () => {

@@ -6,6 +6,10 @@ import {
 } from '@agent-device/host-kit/file';
 import type { AllocationOperationRecord } from './allocation-operation-record.ts';
 
+export type AllocationOperationPath =
+  | Readonly<{ status: 'path'; path: string }>
+  | Readonly<{ status: 'unreadable'; path: string; message: string }>;
+
 export function publishAllocationRecord(
   recordPath: string,
   record: AllocationOperationRecord,
@@ -31,28 +35,17 @@ export function publishAllocationRecord(
   });
 }
 
-export function listAllocationOperationPaths(allocationsDir: string): string[] {
-  let lanes: fs.Dirent[];
-  try {
-    lanes = fs.readdirSync(allocationsDir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  const paths: string[] = [];
-  for (const lane of lanes) {
-    if (!lane.isDirectory() || lane.name.endsWith('.lane.lock')) continue;
-    const lanePath = path.join(allocationsDir, lane.name);
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(lanePath, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      if (entry.name.endsWith('.json')) paths.push(path.join(lanePath, entry.name));
-    }
-  }
-  return paths.sort();
+export function listAllocationOperationPaths(allocationsDir: string): AllocationOperationPath[] {
+  const rootState = inspectDirectory(allocationsDir);
+  if (rootState === 'missing') return [];
+  if (rootState !== null) return [unreadablePath(allocationsDir, rootState)];
+
+  const lanes = readDirectory(allocationsDir);
+  if (lanes.status === 'missing') return [];
+  if (lanes.status === 'unreadable') return [unreadablePath(allocationsDir, lanes.message)];
+  return lanes.entries
+    .flatMap((lane) => listLanePaths(allocationsDir, lane))
+    .sort((left, right) => left.path.localeCompare(right.path));
 }
 
 export function isAlreadyExists(error: unknown): boolean {
@@ -107,6 +100,58 @@ export function inspectAllocationOperationDirectories(
     if (!stats.isDirectory()) return 'allocation operation directory is not a directory';
   }
   return null;
+}
+
+function inspectDirectory(directory: string): 'missing' | string | null {
+  let stats: fs.Stats;
+  try {
+    stats = fs.lstatSync(directory);
+  } catch (error) {
+    return isMissingFile(error) ? 'missing' : errorMessage(error);
+  }
+  if (stats.isSymbolicLink()) return 'allocation operation directory is a symbolic link';
+  if (!stats.isDirectory()) return 'allocation operation directory is not a directory';
+  return null;
+}
+
+type DirectoryRead =
+  | Readonly<{ status: 'entries'; entries: fs.Dirent[] }>
+  | Readonly<{ status: 'missing' }>
+  | Readonly<{ status: 'unreadable'; message: string }>;
+
+function readDirectory(directory: string): DirectoryRead {
+  try {
+    return { status: 'entries', entries: fs.readdirSync(directory, { withFileTypes: true }) };
+  } catch (error) {
+    return isMissingFile(error)
+      ? { status: 'missing' }
+      : { status: 'unreadable', message: errorMessage(error) };
+  }
+}
+
+function listLanePaths(allocationsDir: string, lane: fs.Dirent): AllocationOperationPath[] {
+  if (lane.name.endsWith('.lane.lock')) return [];
+  const lanePath = path.join(allocationsDir, lane.name);
+  if (!lane.isDirectory()) {
+    return [
+      unreadablePath(
+        lanePath,
+        lane.isSymbolicLink()
+          ? 'allocation operation lane is a symbolic link'
+          : 'allocation operation lane is not a directory',
+      ),
+    ];
+  }
+  const entries = readDirectory(lanePath);
+  if (entries.status === 'missing') return [];
+  if (entries.status === 'unreadable') return [unreadablePath(lanePath, entries.message)];
+  return entries.entries
+    .filter((entry) => entry.name.endsWith('.json'))
+    .map((entry) => ({ status: 'path', path: path.join(lanePath, entry.name) }));
+}
+
+function unreadablePath(pathname: string, message: string): AllocationOperationPath {
+  return { status: 'unreadable', path: pathname, message };
 }
 
 function assertSafeDestination(recordPath: string): void {

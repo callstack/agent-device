@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import type {
   LeaseRequestInput,
   ManagedDeviceAllocatorPort,
@@ -14,7 +14,10 @@ import {
   createAllocationOperationJournal,
   type AllocationBindingHooks,
 } from '../allocation-operation-journal.ts';
-import { createAllocationOperationStore } from '../allocation-operation-store.ts';
+import {
+  createAllocationOperationStore,
+  type AllocationOperationStore,
+} from '../allocation-operation-store.ts';
 import {
   ALLOCATION_GRANTED_STATUS,
   ALLOCATION_PENDING_STATUS,
@@ -76,7 +79,7 @@ function bindingHooks(
         const read = journal.read(binding.operation);
         assert.equal(read.status, 'found');
         assert.equal(read.record.phase.status, 'granted');
-        assert.equal(read.record.binding, 'unpublished');
+        assert.equal(read.record.binding, 'publish-pending');
       }
       published.push(binding.lease.id);
     },
@@ -108,7 +111,7 @@ test('persists intent before request and the allocator outcome before publishing
       const read = store.read(binding.operation);
       assert.equal(read.status, 'found');
       assert.equal(read.record.phase.status, 'granted');
-      assert.equal(read.record.binding, 'unpublished');
+      assert.equal(read.record.binding, 'publish-pending');
     },
     async cleanup() {},
   };
@@ -125,6 +128,66 @@ test('persists intent before request and the allocator outcome before publishing
   assert.deepEqual(
     scripted.calls.map((call) => call.method),
     ['requestLease'],
+  );
+});
+
+test('cleans a binding after publish succeeds but its durable publication state is lost', async () => {
+  const root = mkdtempForTestSync('allocation-operation-publish-recovery-');
+  const baseStore = createAllocationOperationStore({
+    allocationsDir: path.join(root, 'allocations'),
+  });
+  let failPublicationStateWrite = true;
+  const store: AllocationOperationStore = Object.freeze({
+    ...baseStore,
+    async transition(ref, expectedFence, transitionInput, nowMs) {
+      if (failPublicationStateWrite && transitionInput.kind === 'binding-published') {
+        failPublicationStateWrite = false;
+        throw new Error('binding publication state write lost');
+      }
+      return baseStore.transition(ref, expectedFence, transitionInput, nowMs);
+    },
+  });
+  const events: string[] = [];
+  const hooks: AllocationBindingHooks = {
+    async publish() {
+      events.push('publish');
+    },
+    async cleanup() {
+      events.push('cleanup');
+    },
+  };
+  const scriptedAllocator = createScriptedManagedDeviceAllocator({
+    instanceId: 'allocator-1',
+    script: { requestLease: [ALLOCATION_GRANTED_STATUS], releaseLease: [undefined] },
+  });
+  const allocator: ManagedDeviceAllocatorPort = {
+    ...scriptedAllocator,
+    async releaseLease(input) {
+      events.push('release');
+      return scriptedAllocator.releaseLease(input);
+    },
+  };
+  const journal = createAllocationOperationJournal({
+    store,
+    allocator,
+    binding: hooks,
+    now: () => NOW,
+  });
+
+  const publishResult = await journal.allocate(ALLOCATION_REQUEST);
+  assert.equal(publishResult.status, 'blocked');
+  assert.equal(
+    publishResult.status === 'blocked' ? publishResult.reason : undefined,
+    'persistence-failed',
+  );
+  assert.equal(foundRecord(journal).binding, 'publish-pending');
+
+  const released = await journal.release(ALLOCATION_REQUEST);
+  assert.equal(released.status, 'released');
+  assert.deepEqual(events, ['publish', 'cleanup', 'release']);
+  assert.deepEqual(
+    scriptedAllocator.calls.map((call) => call.method),
+    ['requestLease', 'releaseLease'],
   );
 });
 
@@ -396,6 +459,31 @@ test('corrupt state is retained as unreadable evidence and never implies an allo
   const result = await first.journal.recover(ALLOCATION_REQUEST);
   assert.equal(result.status, 'unreadable');
   assert.equal(first.allocator.calls.length, 0);
+});
+
+test('root journal enumeration failure blocks a new allocator attempt', async () => {
+  const setupResult = setup({
+    requestLease: [new Error('response lost'), ALLOCATION_GRANTED_STATUS],
+  });
+  assert.equal((await setupResult.journal.allocate(ALLOCATION_REQUEST)).status, 'uncertain');
+
+  const readdir = vi.spyOn(fs, 'readdirSync').mockImplementationOnce(() => {
+    throw Object.assign(new Error('allocation journal root is unreadable'), { code: 'EACCES' });
+  });
+
+  try {
+    const result = await setupResult.journal.allocate(
+      input({ attemptKey: 'attempt-2', requestGeneration: 2 }),
+    );
+    assert.equal(result.status, 'unreadable');
+    assert.equal(result.status === 'unreadable' ? result.reason : undefined, 'corrupt');
+    assert.deepEqual(
+      setupResult.allocator.calls.map((call) => call.method),
+      ['requestLease'],
+    );
+  } finally {
+    readdir.mockRestore();
+  }
 });
 
 test('cleanup uncertainty blocks release until cleanup is retried, then allocator release is retryable', async () => {

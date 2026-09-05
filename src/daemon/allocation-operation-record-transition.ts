@@ -61,13 +61,18 @@ function isAllocatorUncertaintyTransition(
   return transition.kind === 'allocator-unknown' || transition.kind === 'allocator-ambiguous';
 }
 
-function isBindingTransition(
-  transition: ResolvedAllocationTransition,
-): transition is Extract<
+function isBindingTransition(transition: ResolvedAllocationTransition): transition is Extract<
   ResolvedAllocationTransition,
-  { kind: 'binding-published' | 'binding-cleanup-pending' | 'binding-cleaned' }
+  {
+    kind:
+      | 'binding-publish-pending'
+      | 'binding-published'
+      | 'binding-cleanup-pending'
+      | 'binding-cleaned';
+  }
 > {
   return (
+    transition.kind === 'binding-publish-pending' ||
     transition.kind === 'binding-published' ||
     transition.kind === 'binding-cleanup-pending' ||
     transition.kind === 'binding-cleaned'
@@ -116,14 +121,34 @@ function applyBindingTransition(
   record: AllocationOperationRecord,
   transition: Extract<
     ResolvedAllocationTransition,
-    { kind: 'binding-published' | 'binding-cleanup-pending' | 'binding-cleaned' }
+    {
+      kind:
+        | 'binding-publish-pending'
+        | 'binding-published'
+        | 'binding-cleanup-pending'
+        | 'binding-cleaned';
+    }
   >,
   nowMs: number,
 ): AllocationTransitionResult {
   if (record.phase.status !== 'granted') return terminalOrInvalid(record, transition.kind);
+  if (transition.kind === 'binding-publish-pending') {
+    return applyPublishPendingBinding(record, nowMs);
+  }
   if (transition.kind === 'binding-published') return applyPublishedBinding(record, nowMs);
   if (transition.kind === 'binding-cleaned') return applyCleanedBinding(record, nowMs);
   return applyCleanupPendingBinding(record, nowMs);
+}
+
+function applyPublishPendingBinding(
+  record: AllocationOperationRecord,
+  nowMs: number,
+): AllocationTransitionResult {
+  if (record.binding === 'publish-pending') return alreadyApplied(record);
+  if (record.binding !== 'unpublished' || record.release !== 'not-requested') {
+    return transitionInvalid('binding-publish-pending', record.binding);
+  }
+  return applied(record, { binding: 'publish-pending' }, nowMs);
 }
 
 function applyPublishedBinding(
@@ -131,7 +156,7 @@ function applyPublishedBinding(
   nowMs: number,
 ): AllocationTransitionResult {
   if (record.binding === 'published') return alreadyApplied(record);
-  if (record.binding !== 'unpublished')
+  if (record.binding !== 'publish-pending')
     return transitionInvalid('binding-published', record.binding);
   return applied(record, { binding: 'published' }, nowMs);
 }
@@ -146,6 +171,9 @@ function applyCleanupPendingBinding(
   if (record.binding === 'cleaned' || record.release !== 'not-requested') {
     return transitionInvalid('binding-cleanup-pending', record.binding);
   }
+  if (record.binding !== 'publish-pending' && record.binding !== 'published') {
+    return transitionInvalid('binding-cleanup-pending', record.binding);
+  }
   return applied(record, { binding: 'cleanup-pending' }, nowMs);
 }
 
@@ -154,7 +182,9 @@ function applyCleanedBinding(
   nowMs: number,
 ): AllocationTransitionResult {
   if (record.binding === 'cleaned') return alreadyApplied(record);
-  if (!['unpublished', 'published', 'cleanup-pending'].includes(record.binding)) {
+  if (
+    !['unpublished', 'publish-pending', 'published', 'cleanup-pending'].includes(record.binding)
+  ) {
     return transitionInvalid('binding-cleaned', record.binding);
   }
   return applied(record, { binding: 'cleaned' }, nowMs);

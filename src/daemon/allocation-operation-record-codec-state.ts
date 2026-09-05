@@ -143,6 +143,7 @@ function decodeRefusal(value: unknown): LeaseRefusal | null {
 
 export function decodeBinding(value: unknown): AllocationOperationRecord['binding'] | null {
   return value === 'unpublished' ||
+    value === 'publish-pending' ||
     value === 'published' ||
     value === 'cleanup-pending' ||
     value === 'cleaned' ||

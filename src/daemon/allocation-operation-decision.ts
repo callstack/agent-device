@@ -92,7 +92,9 @@ function decideGrantedCleanup(
   mode: AllocationDecisionMode,
   binding: AllocationBinding,
 ): AllocationAction | undefined {
-  const recoveryCleanup = mode === 'recover' && record.binding === 'cleanup-pending';
+  const recoveryCleanup =
+    mode === 'recover' &&
+    (record.binding === 'publish-pending' || record.binding === 'cleanup-pending');
   if ((mode !== 'release' && !recoveryCleanup) || record.binding === 'cleaned') return undefined;
   return record.release === 'not-requested' ? { kind: 'cleanup', binding } : undefined;
 }
@@ -111,6 +113,12 @@ function decideGrantedBinding(
 ): AllocationAction {
   if (record.binding === 'unpublished') return { kind: 'publish', binding };
   if (record.binding === 'published') return { kind: 'terminal' };
+  if (record.binding === 'publish-pending') {
+    return blocked(
+      'not-releasable',
+      'allocation binding publication is uncertain and requires explicit release recovery',
+    );
+  }
   if (record.binding === 'cleanup-pending') {
     return blocked('not-releasable', 'allocation binding requires explicit release recovery');
   }

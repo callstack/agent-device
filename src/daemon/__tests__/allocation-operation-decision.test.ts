@@ -59,7 +59,19 @@ test('an allocator-unknown record never gets an implicit second request', () => 
 test('grants publish first, and release cleans the binding before calling the allocator', () => {
   const record = granted();
   assert.equal(decideAllocationAction(record, 'continue').kind, 'publish');
-  const published = applyAllocationTransition(record, { kind: 'binding-published' }, NOW + 3);
+  const publishPending = applyAllocationTransition(
+    record,
+    { kind: 'binding-publish-pending' },
+    NOW + 2,
+  );
+  assert.equal(publishPending.status, 'applied');
+  assert.equal(decideAllocationAction(publishPending.record, 'continue').kind, 'blocked');
+  assert.equal(decideAllocationAction(publishPending.record, 'recover').kind, 'cleanup');
+  const published = applyAllocationTransition(
+    publishPending.record,
+    { kind: 'binding-published' },
+    NOW + 3,
+  );
   assert.equal(published.status, 'applied');
   const cleanup = decideAllocationAction(published.record, 'release');
   assert.equal(cleanup.kind, 'cleanup');

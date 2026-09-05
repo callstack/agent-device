@@ -21,12 +21,15 @@ export async function publishBinding(
     return blocked('binding-unavailable', 'managed binding publisher is not configured', record);
   }
   if (record.binding !== 'unpublished') return options.project(record);
+  const pending = await transition(options, record, { kind: 'binding-publish-pending' });
+  if (pending.status !== 'stored') return pending;
+  if (signal?.aborted) return abandoned(pending.record);
   try {
     await options.binding.publish(action.binding);
   } catch (error) {
-    return persistCleanupFailure(options, record, error);
+    return persistCleanupFailure(options, pending.record, error);
   }
-  const published = await transition(options, record, { kind: 'binding-published' });
+  const published = await transition(options, pending.record, { kind: 'binding-published' });
   if (published.status !== 'stored') return published;
   return signal?.aborted ? abandoned(published.record) : options.project(published.record);
 }
