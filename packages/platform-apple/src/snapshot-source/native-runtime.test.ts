@@ -16,6 +16,8 @@ describe.skipIf(process.platform !== 'darwin')('native snapshot foreground owner
         'macosx',
         'clang',
         '-fobjc-arc',
+        '-Ddlopen=fixtureDlopen',
+        '-Ddlsym=fixtureDlsym',
         '-framework',
         'Foundation',
         '-framework',
@@ -32,8 +34,11 @@ describe.skipIf(process.platform !== 'darwin')('native snapshot foreground owner
     assert.equal(compiled.exitCode, 0, compiled.stderr);
   }, 60_000);
 
-  test('admits only the current primary target and refuses covered or unknown ownership', async () => {
-    const result = await runCmd(binary, [], { allowFailure: true });
-    assert.equal(result.exitCode, 0, result.stderr);
-  });
+  test.each(['stable', 'covered', 'changed', 'missing', 'malformed'])(
+    'snapshot capture enforces %s foreground ownership',
+    async (scenario) => {
+      const result = await runCmd(binary, [scenario], { allowFailure: true, timeoutMs: 5_000 });
+      assert.equal(result.exitCode, 0, result.stderr);
+    },
+  );
 });
