@@ -74,9 +74,9 @@ export type CommandInput = Omit<InternalRequestOptions, 'batchSteps' | 'target'>
 
 /** The `commands/common-input-fields.ts` rows that join the 'selection' projection. */
 type SelectionRowKey = {
-  [K in keyof CommonInputFieldsTable]: 'selection' extends CommonInputFieldsTable[K]['flagIn'][number]
-    ? K
-    : never;
+  [
+    K in keyof CommonInputFieldsTable
+  ]: 'selection' extends CommonInputFieldsTable[K]['flagIn'][number] ? K : never;
 }[keyof CommonInputFieldsTable];
 
 /** A selection row's output key: `clientKey` when the row renames it, its own key otherwise. */
