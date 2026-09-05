@@ -7,55 +7,17 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 });
 
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
 import { installFakeManagedAgentBrowser } from '../../__tests__/test-utils/web-managed-agent-browser.ts';
-import { AGENT_BROWSER_TIMEOUT_MS } from '@agent-device/platform-web';
 import { runCmd } from '@agent-device/host-kit/command';
 import { SessionStore } from '../session-store.ts';
-import type { SessionState } from '../types.ts';
-import {
-  resolveDaemonSessionTeardownTimeoutMs,
-  teardownDaemonSessionForShutdown,
-  WEB_BROWSER_SESSION_TEARDOWN_BUDGET_MS,
-} from './daemon-runtime.ts';
+import { makeWebSession } from '../__tests__/session-teardown.fixtures.ts';
+import { teardownDaemonSessionForShutdown } from './daemon-runtime.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
-});
-
-function makeWebSession(name: string): SessionState {
-  return { name, device: WEB_DESKTOP_DEVICE, createdAt: Date.now(), actions: [] };
-}
-
-test('daemon session teardown budget extends for an open web session', () => {
-  const webSession = makeWebSession('budget-web-session');
-  const androidSession: SessionState = {
-    name: 'budget-android-session',
-    device: {
-      platform: 'android',
-      id: 'emulator-5554',
-      name: 'Pixel',
-      kind: 'emulator',
-      booted: true,
-    },
-    createdAt: Date.now(),
-    actions: [],
-  };
-
-  expect(
-    resolveDaemonSessionTeardownTimeoutMs(webSession) -
-      resolveDaemonSessionTeardownTimeoutMs(androidSession),
-  ).toBe(WEB_BROWSER_SESSION_TEARDOWN_BUDGET_MS);
-});
-
-// Pins the "mirrors AGENT_BROWSER_TIMEOUT_MS" comment on WEB_BROWSER_SESSION_TEARDOWN_BUDGET_MS
-// as a checked invariant rather than a claim nothing enforces: if agent-browser-provider.ts's own
-// per-call timeout changes, this budget must move with it in the same PR.
-test('the web-close teardown budget stays pinned to one agent-browser CLI call timeout', () => {
-  expect(WEB_BROWSER_SESSION_TEARDOWN_BUDGET_MS).toBe(AGENT_BROWSER_TIMEOUT_MS);
 });
 
 // The agent-browser CLI call this step makes has its own 30s internal timeout

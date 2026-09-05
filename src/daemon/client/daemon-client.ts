@@ -24,7 +24,7 @@ import {
   type EnsuredDaemon,
 } from './daemon-client-lifecycle.ts';
 import { sendRequest } from './daemon-client-transport.ts';
-import { resolveDaemonRequestTimeoutMs } from './daemon-client-timeout.ts';
+import { resolveDaemonRequestTimeoutMs } from '../request-timeout.ts';
 
 export type DaemonRequest = SharedDaemonRequest;
 export type DaemonResponse = SharedDaemonResponse;
