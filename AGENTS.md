@@ -3,8 +3,25 @@
 `agent-device` is a CLI and daemon for automating Apple, Android, HarmonyOS, Vega, Linux, and web
 targets. A long-lived daemon owns sessions; registry-derived commands route to platform runtimes.
 
-This file contains repository-specific traps and invariants that are expensive to rediscover. Load
-task procedures only when needed:
+## Task execution
+
+- Complete implementation, review, validation, and publication within the requested scope.
+  Resolve routine choices from code and context; ask only when an answer changes scope, correctness,
+  or authorization. Continue independent work while awaiting an answer.
+- User instructions take precedence over repository and skill guidance, subject to system and
+  developer constraints. Reuse approval already granted for the action. If guidance blocks progress,
+  link the exact file, quote the instruction, and explain what remains blocked and why.
+- Incorporate corrections and answer side questions while preserving the active objective unless
+  the user cancels or replaces it. Preserve unrelated work in the checkout.
+- When delegation is available and permitted, use it for independent investigation, implementation
+  with disjoint file ownership, or review when it improves the outcome. Assign bounded scopes and
+  expected evidence; verify results. Serialize full gates and device use.
+- Lead updates and final responses with the outcome. Use concise, plain prose; include changed
+  behavior, relevant validation, and unresolved limits. Finish unblocked work.
+
+## Task routing
+
+Load only the procedures relevant to the task:
 
 | When the task involves | Read |
 | --- | --- |
@@ -14,12 +31,12 @@ task procedures only when needed:
 | Selector capture, polling, or interaction fast paths | `docs/agents/selector-capture.md` |
 | Adding or changing a CLI flag | `docs/agents/cli-flags.md` |
 | Opening or reviewing a PR | `docs/agents/pull-requests.md` |
-| Running against a real device | `docs/agents/device-verification.md` |
+| Apple runner changes or manual device verification | `docs/agents/device-verification.md` |
 | Writing issues or PRDs, and triage labels | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
 | Web backend setup or diagnostics | `docs/agents/web-backend.md` |
 
-Versioned CLI help is the source of truth for command behavior. Start with `agent-device help
-workflow`, then the relevant topic help.
+When running or changing CLI commands, use versioned help as the behavior reference: start with
+`agent-device help workflow`, then the relevant topic help.
 
 ## Incident-derived principles
 
@@ -103,29 +120,14 @@ cross-language rules change through golden tables under `contracts/fixtures/`.
   repository-wide, not path-scoped.
 - A fresh worktree requires `pnpm install --frozen-lockfile && pnpm build`. Until then package and
   optional-peer resolution may point at another checkout and produce false failures.
-- Source-checkout daemon state is worktree-scoped, but devices are not. Use `pnpm daemon:state-dir`
-  to inspect it and different devices for concurrent worktrees.
 - Run one full gate per host at a time. Subprocess-backed tests under concurrent worktrees produce
   timeout-shaped contention failures.
-- Before pushing, run `pnpm check:affected --run && git push`. Use `pnpm check` for broad refactors.
-  GitHub remains authoritative for native, device, provider, and full-coverage lanes.
+- Select gates through `docs/agents/testing.md`; follow `docs/agents/pull-requests.md` before pushing.
 - The layering scan reads tracked files only. Stage a new module before trusting its result.
 - Fallow baselines are path-keyed. Move the matching baseline entry when renaming a file; never bulk
   regenerate baselines to accept unrelated findings.
-- The first Node process after a newly signed Apple runner launches may block during Gatekeeper
-  verification. Warm it with a throwaway `node -e 0` before measuring.
-- `DEVICE_IN_USE` has two flavors. "already in use by session X" is this daemon — follow its
-  `close --session` hint. "owned by session X in workspace Y" is another worktree's device
-  claim — non-retriable; run the error's `device status`/`device release --stale` recovery,
-  never PID hunting.
-- A changing timeout failure set that passes in isolation is host contention. Reproduce the same
-  test on `origin/main` under the same load before treating it as a regression.
 
 ## Runtime and diagnostics seams
-
-The OS-neutral Apple runner lives under `packages/platform-apple/src/runner/`. For connection errors,
-retry policy, or command typing, start at `runner-contract.ts`; transport stays below session/client
-behavior, and xctestrun build/cache logic stays outside request execution.
 
 Diagnostics use `@agent-device/capture-kit/diagnostics`. Request diagnostics belong in the session request log;
 session artifact paths come from `src/daemon/session-store.ts`. App/device logs remain in `app.log`;

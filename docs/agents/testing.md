@@ -32,8 +32,10 @@ Two selection traps recur:
 - A workspace package manifest or TypeScript config can rewire all consumers, so the affected
   selector fails open to the full gate set on purpose.
 
-Docs-only changes with no behavior impact need no runtime tests. Structural guidance gates still
-need a planted violation showing their failure direction.
+Docs-only changes with no runtime behavior impact need no runtime tests or new tests asserting prose.
+Keep required gates; after those and focused checks pass, repeat or broaden only for changes,
+failures, or unresolved risks.
+New or changed structural gates need a planted violation proving their failure direction.
 
 ## Platform and live-device policy
 
@@ -165,6 +167,9 @@ time or fetch it from the evidence branch. Versioned inputs (fuzz corpus, Maestr
 schemas, `contracts/fixtures/` tables) are unaffected.
 
 ## Speed rules
+
+Changing timeout failures that pass alone may be host contention. Reproduce on `origin/main` under
+the same load before classifying them as regressions.
 
 - Unit tests have no retry layer. Fix or remove flakes instead of hiding them behind retries.
 - Unit tests do not wait production time. Prefer budget-derived cadence, assert the caller passes

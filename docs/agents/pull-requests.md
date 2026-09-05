@@ -1,5 +1,12 @@
 # Pull Requests
 
+## Publication scope
+
+A request to ship or open a PR authorizes creating a branch, committing, pushing, and opening the PR
+once validation is complete. It does not authorize merging or releasing. Carry those authorized
+steps through without asking again; a review-only request authorizes inspection, not edits or
+publication. If publication is blocked, finish the reviewable local work and report the blocker.
+
 ## Readiness
 
 - Static gates first: required checks pass, `pnpm check:fallow --base origin/main` is clean when
@@ -32,9 +39,9 @@
 
 ## Validation lifecycle
 
-Focused red/green checks while developing, then review rounds, then final fixes — then one
-**successful** full `pnpm check:affected --run` on the exact commit that is pushed. Run it yourself
-before pushing, or let a serialized gate stage run it on the pushed head and append the exact-head
+Apply the red/green requirements in `docs/agents/testing.md` when changing behavior or enforcement.
+Use focused checks and review appropriate to the change, then one **successful**
+`pnpm check:affected --run` on the exact commit that is pushed. Run it yourself before pushing, or let a serialized gate stage run it on the pushed head and append the exact-head
 result to the PR body; either way the body records that result before the PR is reported as
 published. A failed attempt is diagnostic, not a stop sign: fix the cause, push the fix, and rerun
 until it is clean. Never claim a run you did not see complete on that head; exact-head CI is the
@@ -119,3 +126,10 @@ when asked or when the work is intentionally incomplete. Keep the whole body at 
   owning interface, stronger types, less ceremony, reuse of an existing construction path, or
   deletion of superseded code can make the change materially smaller. The PR should itemize
   justified growth and record why a smaller design was rejected.
+
+## Guidance maintenance
+
+The task-execution and verification guidance applies
+[OpenAI's GPT-6 Astra prompting recommendations](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-6-astra#prompting-best-practices)
+to this repository. Keep model-specific API settings out of contributor instructions; preserve the
+repo's gate ownership, context budgets, and explicit publication scope when updating guidance.

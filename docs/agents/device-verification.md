@@ -1,6 +1,7 @@
 # Manual Device Verification
 
-Read this before running `agent-device` by hand against a simulator, emulator, or physical device.
+Read this for Apple runner changes or manual `agent-device` runs on simulators, emulators, or
+physical devices. Live verification steps apply when exercising a device-facing path.
 
 ## Before the run: defeat staleness
 
@@ -27,6 +28,21 @@ Dev-loop staleness has three layers, and each produces a convincing false negati
   checks must prove the expected app surface is running.
 - For Android RN/Expo/dev-client apps on any local Metro port, `adb reverse tcp:<port> tcp:<port>` is
   harmless and should be run before opening the app or URL.
+
+## Worktree ownership and runner diagnostics
+
+- Source-checkout daemon state is worktree-scoped, but devices are not. Use `pnpm daemon:state-dir`
+  to inspect it and different devices for concurrent worktrees.
+- The first Node process after a newly signed Apple runner launches may block during Gatekeeper
+  verification. Warm it with a throwaway `node -e 0` before measuring.
+- `DEVICE_IN_USE` has two flavors. "already in use by session X" is this daemon — follow its
+  `close --session` hint. "owned by session X in workspace Y" is another worktree's device
+  claim — non-retriable; run the error's `device status`/`device release --stale` recovery,
+  never PID hunting.
+
+The OS-neutral Apple runner lives under `packages/platform-apple/src/runner/`. For connection errors,
+retry policy, or command typing, start at `runner-contract.ts`; transport stays below session/client
+behavior, and xctestrun build/cache logic stays outside request execution.
 
 ## Session hygiene
 
