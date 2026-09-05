@@ -53,17 +53,8 @@ type RefFrameFields = Readonly<{
 }>;
 
 /**
- * The frame as one value. `state`, `scope`, `tree` and `generation` move
- * together or the frame is incoherent, so they are not four fields a caller can
- * step out of agreement: `SessionState.refFrame` is REPLACED whole by this
- * module's transitions and never mutated.
- *
- * The fields are `#`-private behind getters, which buys what a plain object of
- * `readonly` fields does not: the type is NOMINAL, so no object literal is
- * assignable to it — including `{ ...refFrame(session), state: 'expired' }`, the
- * one shape that could otherwise mint an incoherent frame out of a coherent one.
- * This constructor is the only source of a frame, and it is private to this file;
- * the accessors below are the whole read surface.
+ * One value, replaced whole by this module's transitions. The class is not exported, so nothing
+ * outside this file can construct, edit, or derive a frame.
  */
 class SessionRefFrame {
   readonly #fields: RefFrameFields;
@@ -88,15 +79,10 @@ class SessionRefFrame {
     return this.#fields.generation;
   }
 
-  /**
-   * The same frame with authority withdrawn, keeping the scope, tree and epoch an
-   * expiry does not change. An already-expired frame returns ITSELF rather than an
-   * equal copy, so a repeated expiry is a no-op by identity — which is the property
-   * lineage holders test, with `===`.
-   */
-  expired(): SessionRefFrame {
-    if (this.#fields.state === 'expired') return this;
-    return new SessionRefFrame({ ...this.#fields, state: 'expired' });
+  /** Idempotent by identity: an expired frame is returned as is, so repeated expiry compares `===`. */
+  static expire(frame: SessionRefFrame): SessionRefFrame {
+    if (frame.#fields.state === 'expired') return frame;
+    return new SessionRefFrame({ ...frame.#fields, state: 'expired' });
   }
 }
 
@@ -160,7 +146,7 @@ export function refFrameTree(session: SessionState): SnapshotState | undefined {
  */
 export function expireRefFrame(session: SessionState): void {
   advanceSessionRuntimeRevision(session);
-  session.refFrame = refFrame(session).expired();
+  session.refFrame = SessionRefFrame.expire(refFrame(session));
   session.snapshotScopeSource = undefined;
 }
 

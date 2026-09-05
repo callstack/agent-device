@@ -9,6 +9,7 @@ import {
   refFrameEpoch,
   refFrameScope,
   refFrameState,
+  type RefFrame,
   type RefFrameAdmission,
 } from '../ref-frame.ts';
 import type { SessionState } from '../types.ts';
@@ -145,4 +146,19 @@ test('expireRefFrame clears scoped-snapshot lineage at the seam (ADR 0014)', () 
   // A mutation breaks the consecutive `snapshot -s @ref` chain, so a later
   // repeated scoped snapshot cannot borrow stale lineage across the side effect.
   assert.equal(s.snapshotScopeSource, undefined);
+});
+
+test('a frame cannot be constructed, edited, or derived outside ref-frame.ts', () => {
+  const frame = refFrame(session());
+  const rejectedByTsc = [
+    // @ts-expect-error the class value is not exported, so no literal is a frame
+    (): RefFrame => ({ state: 'expired', scope: 'all', tree: undefined, generation: 1 }),
+    // @ts-expect-error a spread drops the #private field
+    (): RefFrame => ({ ...frame, state: 'expired' }),
+    // @ts-expect-error every field is a getter
+    () => void (frame.state = 'expired'),
+    // @ts-expect-error expiry is not on the frame's surface
+    () => frame.expired(),
+  ];
+  assert.equal(rejectedByTsc.length, 4);
 });

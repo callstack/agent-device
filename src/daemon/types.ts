@@ -302,15 +302,8 @@ export type SessionState = {
   /** Source snapshot used to resolve repeated `snapshot -s @ref` after scoped output replaces refs. */
   snapshotScopeSource?: SnapshotState;
   /**
-   * ADR 0014 ref frame: the namespace whose refs a caller may currently use to
-   * target a mutation, as ONE opaque value carrying lifecycle state, issuance
-   * scope, the tree that minted the refs, and the epoch the frame was issued
-   * at. `RefFrame` is nominal, so it cannot be constructed, edited, or derived
-   * from an existing frame outside `src/daemon/ref-frame.ts`; that module owns
-   * the frame by construction rather than by convention. Read it through the
-   * accessors it exports — never by reaching into the value.
-   * Undefined is the pristine frame — complete authority over a namespace
-   * nothing has issued yet.
+   * ADR 0014 ref frame, owned by `ref-frame.ts` by construction: read it through that module's
+   * accessors. Undefined is the pristine frame.
    */
   refFrame?: RefFrame;
   /** Last broad snapshot safe for Android route-freshness comparisons after interactive snapshots. */
