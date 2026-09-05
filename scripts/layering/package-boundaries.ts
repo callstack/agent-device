@@ -80,11 +80,24 @@ export function specifierSites(file: string, source: string): SpecifierSite[] {
  * filtering the output.
  */
 export function readWorkspacePackages(repoRoot: string): WorkspacePackage[] {
+  return workspacePackagesFromManifests(
+    new Map(
+      listTrackedPackageManifests(repoRoot).map((manifestFile) => [
+        manifestFile,
+        fs.readFileSync(path.join(repoRoot, manifestFile), 'utf8'),
+      ]),
+    ),
+  );
+}
+
+/** The same package model over manifest sources already in hand, e.g. read from a git ref. */
+export function workspacePackagesFromManifests(
+  manifests: ReadonlyMap<string, string>,
+): WorkspacePackage[] {
   const packages: WorkspacePackage[] = [];
-  for (const manifestFile of listTrackedPackageManifests(repoRoot).sort()) {
+  for (const manifestFile of [...manifests.keys()].sort()) {
     const entry = path.posix.basename(path.posix.dirname(manifestFile));
-    const manifestPath = path.join(repoRoot, manifestFile);
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
+    const manifest = JSON.parse(manifests.get(manifestFile)!) as {
       name?: string;
       private?: boolean;
       exports?: Record<string, { default?: string } | string>;
@@ -334,8 +347,19 @@ function walkTsFiles(repoRoot: string, relativeDir: string): string[] {
 
 /** Flat `specifier -> repo-relative source` map across all workspace packages. */
 export function workspaceSpecifierTargets(repoRoot: string): Map<string, string> {
+  return specifierTargetsOf(readWorkspacePackages(repoRoot));
+}
+
+/** The same flat map for a manifest set read elsewhere, e.g. at a git ref. */
+export function workspaceSpecifierTargetsFromManifests(
+  manifests: ReadonlyMap<string, string>,
+): Map<string, string> {
+  return specifierTargetsOf(workspacePackagesFromManifests(manifests));
+}
+
+function specifierTargetsOf(packages: readonly WorkspacePackage[]): Map<string, string> {
   const targets = new Map<string, string>();
-  for (const pkg of readWorkspacePackages(repoRoot)) {
+  for (const pkg of packages) {
     for (const [specifier, target] of pkg.exportTargets) targets.set(specifier, target);
   }
   return targets;

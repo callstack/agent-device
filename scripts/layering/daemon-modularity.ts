@@ -9,34 +9,17 @@ import {
   type LogicalModulePolicy,
 } from './architecture-ownership.ts';
 import { targetDagZone, type LayeringViolation, type ResolvedImportEdge } from './model.ts';
-import { SESSION_STATE_FIELD_OWNERS } from './session-state.ts';
+import type { LayeringRatchets } from './ratchet-reference.ts';
 
-const LARGEST_TYPE_CYCLE_ZONE_CEILINGS: Readonly<Record<string, number>> = {
-  // co-defined-contract pair (`capabilities.ts` ↔ `runtime.ts` and the four files they
-  // pull in). The standard shrink is a third module holding the shared type.
-  'provider-webdriver': 6,
-};
-
+// R7 ownership pressure and the largest type cycle (whole and per zone) are ratcheted against the
+// merge-base with origin/main (`ratchet-reference.ts`); the importer membership below stays a
+// recorded list, because it names files rather than counting them.
 export const DAEMON_MODULARITY_BASELINE = {
-  sessionState: {
-    // R60 moved `audioProbe` to store-owned. R64 does the same for the neutral `perfCapture`
-    // and `lastPerfProfile` records after retiring the two platform-specific perf fields.
-    writerOwnedFields: 19,
-    ownerFileClaims: 22,
-  },
-  largestTypeCycle: {
-    zoneMembers: LARGEST_TYPE_CYCLE_ZONE_CEILINGS,
-  },
   externalDaemonTypesImporters: [
     'src/client/client-normalizers.ts',
     'src/remote/daemon-artifacts.ts',
   ],
 } as const;
-
-export const TYPE_CYCLE_BASELINE = Object.values(LARGEST_TYPE_CYCLE_ZONE_CEILINGS).reduce(
-  (sum, count) => sum + count,
-  0,
-);
 
 const ENGINE_FILE_PREFIXES = [
   'packages/ad-replay/src/',
@@ -55,17 +38,18 @@ const ENGINE_FILE_PREFIXES = [
  * Cost: 937 LOC total for the file (323 rule + 614 test; shared with R9's checkTypeCycleBaseline
  *   below, not attributed separately).
  * Kill criterion: none enforced today; retire only by maintainer decision that the daemon
- *   modularity baselines (SessionState field-owner counts, logical-module import policies and
- *   facades, the external daemon/types.ts importer list, per-zone cycle ceilings) no longer
+ *   modularity measurements (SessionState field-owner counts, logical-module import policies and
+ *   facades, the external daemon/types.ts importer list, per-zone cycle membership) no longer
  *   matter. Every one is a count or an import edge the compiler accepts either way.
  */
 export function checkDaemonModularityRatchets(
   edges: readonly ResolvedImportEdge[],
-  largestTypeCycleMembers: readonly string[],
+  measured: LayeringRatchets,
+  reference: LayeringRatchets,
 ): LayeringViolation[] {
   return [
-    ...checkSessionStateBaseline(),
-    ...checkTypeCycleBaseline(largestTypeCycleMembers),
+    ...checkSessionStateBaseline(measured.sessionState, reference.sessionState),
+    ...checkTypeCycleBaseline(measured.largestTypeCycle, reference.largestTypeCycle),
     ...checkDaemonTypesImporters(edges),
     ...checkLogicalModuleImports(edges),
   ];
@@ -132,94 +116,74 @@ export function checkRetiredInteractionPaths(sourceFiles: readonly string[]): La
   );
 }
 
-function checkSessionStateBaseline(): LayeringViolation[] {
-  const actual = {
-    writerOwnedFields: Object.keys(SESSION_STATE_FIELD_OWNERS).length,
-    ownerFileClaims: Object.values(SESSION_STATE_FIELD_OWNERS).reduce(
-      (sum, owners) => sum + owners.length,
-      0,
-    ),
-  };
+function checkSessionStateBaseline(
+  measured: LayeringRatchets['sessionState'],
+  reference: LayeringRatchets['sessionState'],
+): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
   for (const metric of ['writerOwnedFields', 'ownerFileClaims'] as const) {
-    const baseline = DAEMON_MODULARITY_BASELINE.sessionState[metric];
-    if (actual[metric] === baseline) continue;
+    if (measured[metric] <= reference[metric]) continue;
     violations.push({
       rule: 'R10 daemon-modularity',
       file: 'scripts/layering/daemon-modularity.ts',
       line: 1,
       message:
-        actual[metric] > baseline
-          ? `R7 ${metric} grew to ${actual[metric]} (baseline ${baseline}). Route the new write through an existing owner instead.`
-          : `R7 ${metric} dropped to ${actual[metric]} — lower the daemon modularity baseline in the same capability move so it cannot regrow.`,
+        `R7 ${metric} grew to ${measured[metric]} (baseline ${reference[metric]} at the ` +
+        `merge-base). Route the new write through an existing owner instead.`,
     });
   }
   return violations;
 }
 
 /**
- * Catches: the largest type-only import cycle growing past its pinned size, or the baseline
- *   shrinking without the ceiling being lowered to match — R4 keeps the value graph acyclic, so
- *   these cycles cost nothing at runtime, but an ungoverned type cycle can grow without bound
- *   while every individual edge still looks locally reasonable.
+ * Catches: the largest type-only import cycle growing past what the merge-base holds, whole or
+ *   in any one zone — R4 keeps the value graph acyclic, so these cycles cost nothing at runtime,
+ *   but an ungoverned type cycle can grow without bound while every individual edge still looks
+ *   locally reasonable.
  * Evidence: 6984a1e095 (#1852) fixed R10's zone listing when this ceiling trips, evidence the
- *   check fires in practice; ef6ec2995b (#1825, #1781 A6) made the R9 shrink direction
- *   mandatory rather than advisory.
+ *   check fires in practice; ef6ec2995b (#1825, #1781 A6) made a banked shrink mandatory rather
+ *   than advisory, which measuring the merge-base now does without an edit.
  * Cost: 937 LOC total for the file (323 rule + 614 test; shared with R10's ratchets above, not
  *   attributed separately).
  * Kill criterion: none enforced today; retire only by maintainer decision that a bounded
- *   type-only cycle size no longer matters. tsc never rejects a type-only cycle, and emptying
- *   LARGEST_TYPE_CYCLE_ZONE_CEILINGS pins the size at zero rather than retiring the check.
+ *   type-only cycle size no longer matters. tsc never rejects a type-only cycle, and a merge-base
+ *   with no cycle pins the size at zero rather than retiring the check.
  */
-function checkTypeCycleBaseline(members: readonly string[]): LayeringViolation[] {
+function checkTypeCycleBaseline(
+  members: readonly string[],
+  referenceMembers: readonly string[],
+): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
-  const baseline = DAEMON_MODULARITY_BASELINE.largestTypeCycle;
-  if (members.length > TYPE_CYCLE_BASELINE) {
+  if (members.length > referenceMembers.length) {
     violations.push({
       rule: 'R9 type-cycle-size',
       file: 'scripts/layering/daemon-modularity.ts',
       line: 1,
       message:
         `the largest type-level import cycle grew to ${members.length} files (baseline ` +
-        `${TYPE_CYCLE_BASELINE}). A type-only import that closes a loop makes every file in the ` +
-        `loop unreadable in isolation. Declare the shared type below both modules, or if the growth ` +
-        `is genuinely warranted, raise the zone ceilings in the same commit and say why.`,
-    });
-  } else if (members.length < TYPE_CYCLE_BASELINE) {
-    // A ceiling left above the measured size is headroom a later change spends without a
-    // reviewer ever seeing a number move, so the shrink is recorded in the change that earns
-    // it — the same equality pin R6 and the R10 R7 counts already carry.
-    violations.push({
-      rule: 'R9 type-cycle-size',
-      file: 'scripts/layering/daemon-modularity.ts',
-      line: 1,
-      message:
-        `the largest type-level import cycle dropped to ${members.length} files (baseline ` +
-        `${TYPE_CYCLE_BASELINE}). Lower LARGEST_TYPE_CYCLE_ZONE_CEILINGS by the same ${TYPE_CYCLE_BASELINE - members.length} ` +
-        `in this change so the cycle cannot regrow into slack nobody chose.`,
+        `${referenceMembers.length} at the merge-base). A type-only import that closes a loop makes ` +
+        `every file in the loop unreadable in isolation. Declare the shared type below both modules.`,
     });
   }
 
-  const membersByZone = groupBy(members, targetDagZone);
-  for (const [zone, zoneMembers] of membersByZone) {
-    const allowed = baseline.zoneMembers[zone] ?? 0;
+  const referenceByZone = groupBy(referenceMembers, targetDagZone);
+  for (const [zone, zoneMembers] of groupBy(members, targetDagZone)) {
+    const referenceZoneMembers = new Set(referenceByZone.get(zone) ?? []);
+    const allowed = referenceZoneMembers.size;
     if (zoneMembers.length <= allowed) continue;
-    // The ceiling records a count, not a membership, so the gate cannot name the file that
-    // joined; naming the alphabetically-first member instead sent #1837's diagnosis to a file
-    // that had been in the cycle all along. List the whole zone so the joining edge is one
-    // diff away from the author, who knows which of these files the change touched. The
-    // overflow is net growth (a join and a departure cancel out), so it bounds nothing about
-    // how many members are new — only that at least one of the listed files is.
+    // A ceiling recorded a count, so the gate could only list the whole zone and #1837's
+    // diagnosis landed on a file that had been in the cycle all along. The merge-base carries
+    // membership, so the files that joined are named exactly.
+    const joined = zoneMembers.filter((member) => !referenceZoneMembers.has(member));
     violations.push({
       rule: 'R10 daemon-modularity',
       file: 'scripts/layering/daemon-modularity.ts',
       line: 1,
       message:
         `the largest type cycle now contains ${zoneMembers.length} ${zone} file(s) (baseline ` +
-        `${allowed}); extraction must not trade one zone's locality for another's. ` +
-        `${zoneMembers.length - allowed} over the ceiling — the member(s) that joined are among ` +
-        `these ${zone} files: ${zoneMembers.join(', ')}. Cut the edge that pulled them in ` +
-        `rather than raising the ceiling.`,
+        `${allowed} at the merge-base); extraction must not trade one zone's locality for ` +
+        `another's. ${zoneMembers.length - allowed} over the merge-base — the ${zone} file(s) ` +
+        `that joined: ${joined.join(', ')}. Cut the edge that pulled them in.`,
     });
   }
 
@@ -340,11 +304,11 @@ function groupBy(
   return groups;
 }
 
-export function daemonModularitySummary(): string {
-  const session = DAEMON_MODULARITY_BASELINE.sessionState;
+export function daemonModularitySummary(reference: LayeringRatchets): string {
+  const session = reference.sessionState;
   return (
-    `R10 pins R7 at ${session.writerOwnedFields} writer-owned fields / ` +
-    `${session.ownerFileClaims} owner claims, R9 at ${TYPE_CYCLE_BASELINE} files with zone ceilings, ` +
+    `R10 holds R7 at the merge-base's ${session.writerOwnedFields} writer-owned fields / ` +
+    `${session.ownerFileClaims} owner claims, R9 at its ${reference.largestTypeCycle.length} files per zone, ` +
     `${DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters.length} external daemon/types.ts importers, ` +
     'and zero forbidden logical-module imports'
   );

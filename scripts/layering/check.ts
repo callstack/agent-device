@@ -22,10 +22,9 @@
 //     record is store-owned mutable state that any daemon module can write; and the terminal
 //     concrete-platform boundary (R65), which rejects every import form into the retired
 //     src/platforms path or a platform package.
-//   - Over the TYPE GRAPH: the largest type-level import cycle is pinned by
-//     equality (R9). R4 keeps the value graph acyclic, so these cycles are free at
-//     runtime but bound what can be read in isolation; growth fails, and so does a
-//     baseline left above the measured size.
+//   - Over the TYPE GRAPH: the largest type-level import cycle may not grow past the
+//     merge-base (R9). R4 keeps the value graph acyclic, so these cycles are free at
+//     runtime but bound what can be read in isolation.
 //   - Across the DAEMON MODULARITY MIGRATION: R7 ownership pressure and external
 //     daemon/types.ts importers only shrink, R9 zone membership cannot grow or absorb
 //     engine files, and planned logical modules start with zero forbidden/internal imports (R10).
@@ -37,6 +36,9 @@
 //     code cannot manufacture or repair a narrowed runtime proof (R66).
 //   - Over CONTRACTS PRODUCTION SOURCE: contracts owns vocabulary only — host, process, and timer
 //     mechanics belong in capture-kit or an adapter (R18).
+// R6, R9, and the R10 R7 counts are ratchets with no written-down reference: each is the same
+// measurement taken over the merge-base with origin/main (`ratchet-reference.ts`), so growth
+// fails, a shrink needs no edit, and no change can bank headroom.
 // `(root)` holds entrypoints and composition roots. The retired `src/utils` zone is deliberately
 // outside the spine and is rejected separately by R14; extracted workspace package zones are
 // classified separately and held behind R11 instead of the src folder spine.
@@ -56,13 +58,19 @@ import {
 import {
   backEdgePair,
   findValueImportCycles,
-  largestTypeCycleMembers,
+  memoizedImportParser,
   resolveImportEdges,
   topFolder,
-  typeInversionPair,
   type LayeringViolation,
   type ResolvedImportEdge,
 } from './model.ts';
+import { checkTypeInversions } from './type-inversion-ratchet.ts';
+import {
+  measureRatchets,
+  mergeBaseRatchets,
+  type LayeringRatchets,
+  type MergeBaseRatchets,
+} from './ratchet-reference.ts';
 import {
   checkDaemonModularityRatchets,
   checkRetiredInteractionPaths,
@@ -224,110 +232,6 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation
   });
 }
 
-// Catches: a type-only import against the ranked spine's declared order — a design-level
-//   dependency (zone A is stated in terms of zone B) that R5 is blind to because it costs
-//   nothing at runtime, so nothing else flags "the type shape leaks the wrong direction."
-// Evidence: the R5-adjacent commits in check.ts's history introduced this ratchet; the 61-to-5
-//   reduction and the two remaining deliberate inversions are recorded below and in
-//   docs/dependency-graph-findings.md.
-// Cost: not attributed (folded into check.ts's whole-graph pass; no standalone module or test
-//   file to size separately).
-// Kill criterion: none enforced today; retire only by maintainer decision that type-only spine
-//   inversions no longer matter. Reaching zero remaining inversions does not retire it: at zero
-//   the ratchet is what keeps the count from regrowing, and tsc never rejects a type-only edge.
-//
-// R6 ratchet: type-only spine inversions, per zone pair. R5 cannot see these (a type-only import
-// is free at runtime), but "zone A is declared in terms of zone B" is still a boundary claim, and
-// ranking type edges surfaced 61 of them. Down to 5, and every one of the 5 is now a deliberate
-// architectural position rather than a misplaced declaration:
-//
-//   commands/mcp -> client (4)   `AgentDeviceClient`, used as an opaque handle ("the client this
-//                                command runs against"). The facade no longer reaches back into
-//                                commands/ — the navigation projection it was once built from is
-//                                retired — so this is no longer a zone-level cycle, just a port
-//                                that would have to cover the whole facade: 4 files NAME it, but 26
-//                                call sites use methods across 13 of its namespaces, so any port
-//                                would re-declare the public API. R5 is zero here: nothing imports
-//                                the client at runtime, only its type.
-//
-//   commands -> daemon-server (1)  `DaemonCommandRoute` is declared in core so descriptors can
-//                                name a route without importing the daemon. `command-explain.ts`
-//                                still type-imports the re-export from `daemon-command-registry.ts`
-//                                to key an exhaustive `Record<DaemonCommandRoute, string>` of
-//                                owner files; that remaining inversion is the commands-zone
-//                                consumer, not a second source of truth for the union.
-//
-// See docs/dependency-graph-findings.md §0 for the long form. The counts may only go DOWN. Fixing edges without lowering the number fails too, so the baseline
-// cannot quietly stop describing the tree.
-//
-// This gate is the sole owner of the ratchet. The depgraph report reuses the shared inversion
-// classifier for observability, but does not compare its report output with this baseline.
-export const TYPE_INVERSION_BASELINE: Readonly<Record<string, number>> = {
-  'commands -> client': 3,
-  'commands -> daemon-server': 1,
-  'mcp -> client': 1,
-};
-
-function checkTypeInversions(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
-  const seen = new Set<string>();
-  const countsByPair = new Map<string, number>();
-  const firstEdgeByPair = new Map<string, ResolvedImportEdge>();
-  for (const edge of edges) {
-    const pair = typeInversionPair(edge);
-    if (!pair) continue;
-    const identity = `${edge.file} -> ${edge.target}`;
-    if (seen.has(identity)) continue;
-    seen.add(identity);
-    countsByPair.set(pair, (countsByPair.get(pair) ?? 0) + 1);
-    if (!firstEdgeByPair.has(pair)) firstEdgeByPair.set(pair, edge);
-  }
-
-  const violations: LayeringViolation[] = [];
-  for (const [pair, count] of [...countsByPair].sort(([left], [right]) =>
-    left.localeCompare(right),
-  )) {
-    const allowed = TYPE_INVERSION_BASELINE[pair];
-    const edge = firstEdgeByPair.get(pair)!;
-    if (allowed === undefined) {
-      violations.push({
-        rule: 'R6 type-spine-inversion',
-        file: edge.file,
-        line: edge.line,
-        message:
-          `new type-only ${pair} inversion (${count} edge(s), e.g. ${edge.file} -> ${edge.target}). ` +
-          `Declare the shared type below both zones instead of adding it to TYPE_INVERSION_BASELINE.`,
-      });
-      continue;
-    }
-    if (count > allowed) {
-      violations.push({
-        rule: 'R6 type-spine-inversion',
-        file: edge.file,
-        line: edge.line,
-        message:
-          `type-only ${pair} inversions grew to ${count} (baseline ${allowed}). ` +
-          `Move the shared type below both zones; the baseline may only shrink.`,
-      });
-    }
-  }
-
-  for (const [pair, allowed] of Object.entries(TYPE_INVERSION_BASELINE)) {
-    const count = countsByPair.get(pair) ?? 0;
-    if (count >= allowed) continue;
-    const message =
-      count === 0
-        ? `type-only ${pair} inversions are all gone — delete this entry from TYPE_INVERSION_BASELINE.`
-        : `type-only ${pair} inversions dropped to ${count} — lower TYPE_INVERSION_BASELINE to ${count}.`;
-    violations.push({
-      rule: 'R6 type-spine-inversion',
-      file: 'scripts/layering/check.ts',
-      line: 1,
-      message,
-    });
-  }
-  return violations;
-}
-
 function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): LayeringViolation[] {
   const types = sources.get('src/daemon/types.ts');
   if (!types) {
@@ -438,17 +342,23 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Layer
 function report(
   files: readonly string[],
   violations: readonly LayeringViolation[],
-  typeCycle: number,
+  ratchets: LayeringRatchets,
+  reference: MergeBaseRatchets,
 ): number {
   if (violations.length === 0) {
+    const inversions = Object.values(ratchets.typeInversions).reduce(
+      (sum, count) => sum + count,
+      0,
+    );
     process.stdout.write(
       `Layering guard: OK — ${files.length} source files satisfy R2 and contain no ` +
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
-        `back-edges; the ranked spine's type-only inversions match the R6 ratchet (${Object.values(TYPE_INVERSION_BASELINE).reduce((sum, count) => sum + count, 0)} remaining); ` +
+        `back-edges; the ranked spine's type-only inversions hold at or under the merge-base ` +
+        `${reference.ref.slice(0, 10)} per zone pair (R6, ${inversions} remaining); ` +
         `${RETIRED_PATH_RULES.R14.rule} permits no tracked paths under retired src/utils; ` +
         `all ${sessionStateFieldCount()} SessionState fields are classified and every write is ` +
-        `inside its declared owner (R7); the largest type-level cycle is ${typeCycle} files ` +
-        `(R9); ${daemonModularitySummary()}; ` +
+        `inside its declared owner (R7); the largest type-level cycle is ` +
+        `${ratchets.largestTypeCycle.length} files (R9); ${daemonModularitySummary(reference)}; ` +
         `${packageBoundariesSummary(repoRoot)}; ${platformPackagePolicySummary()}; ` +
         `runtime facts remain the only device-command admission authority and daemon code cannot ` +
         `manufacture narrowed runtime proof (R66); and R65 keeps production src/daemon free of ` +
@@ -485,7 +395,10 @@ export type LayeringContext = Readonly<{
   allTypeScriptSources: ReadonlyMap<string, string>;
   trackedSrcUtilsFiles: readonly string[];
   edges: readonly ResolvedImportEdge[];
-  typeCycleMembers: readonly string[];
+  /** The ratcheted measurements of this tree. */
+  ratchets: LayeringRatchets;
+  /** The same measurements at the merge-base with origin/main. */
+  reference: LayeringRatchets;
 }>;
 
 export type LayeringRule = (context: LayeringContext) => LayeringViolation[];
@@ -544,10 +457,11 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
   'selector-pipeline-ownership': (context) =>
     selectorPipelineOwnershipViolations(context.edges, workspaceSpecifierTargets(repoRoot)),
   'back-edges': (context) => checkBackEdges(context.edges),
-  'type-spine-inversions': (context) => checkTypeInversions(context.edges),
+  'type-spine-inversions': (context) =>
+    checkTypeInversions(context.edges, context.reference.typeInversions),
   'session-state-ownership': (context) => checkSessionStateOwnership(context.sources),
   'daemon-modularity-ratchets': (context) => [
-    ...checkDaemonModularityRatchets(context.edges, context.typeCycleMembers),
+    ...checkDaemonModularityRatchets(context.edges, context.ratchets, context.reference),
     ...checkRetiredSessionLifecyclePaths(context.sourceFiles),
     ...checkRetiredSessionObservabilityPaths(context.sourceFiles),
     ...checkRetiredSnapshotExecutionPaths(context.sourceFiles),
@@ -579,20 +493,24 @@ export function main(): number {
   const sources = readSources(sourceFiles);
   const allTypeScriptSources = readSources(listTypeScriptFiles());
   const trackedSrcUtilsFiles = listTrackedSrcUtilsFiles(repoRoot);
-  const edges = resolveImportEdges(sources, workspaceSpecifierTargets(repoRoot));
-  // Computed once and threaded: the rule and the success line must report the same number.
-  const typeCycleMembers = largestTypeCycleMembers(edges);
-  const typeCycle = typeCycleMembers.length;
+  // One memoizing parser for both trees: every file the merge-base shares with the working tree
+  // is parsed once, whichever scan reaches it first.
+  const parse = memoizedImportParser();
+  const edges = resolveImportEdges(sources, workspaceSpecifierTargets(repoRoot), parse);
+  // Measured once and threaded: the rules and the success line must report the same numbers.
+  const ratchets = measureRatchets(sources, edges);
+  const reference = mergeBaseRatchets(repoRoot, parse);
   const context: LayeringContext = {
     sourceFiles,
     sources,
     allTypeScriptSources,
     trackedSrcUtilsFiles,
     edges,
-    typeCycleMembers,
+    ratchets,
+    reference,
   };
   const violations = Object.values(LAYERING_RULES).flatMap((rule) => rule(context));
-  return report(sourceFiles, violations, typeCycle);
+  return report(sourceFiles, violations, ratchets, reference);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

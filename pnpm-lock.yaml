@@ -16,25 +16,6 @@ overrides:
 importers:
 
   .:
-    dependencies:
-      '@limrun/api':
-        specifier: ^0.24.5
-        version: 0.24.5(supports-color@7.2.0)
-      ipaddr.js:
-        specifier: ^2.5.0
-        version: 2.5.0
-      tar-stream:
-        specifier: ^3.2.0
-        version: 3.2.0
-      undici:
-        specifier: ^7.29.0
-        version: 7.29.0
-      yaml:
-        specifier: ^2.9.0
-        version: 2.9.0
-      yauzl:
-        specifier: ^3.4.0
-        version: 3.4.0
     devDependencies:
       '@agent-device/ad-replay':
         specifier: workspace:*
@@ -99,6 +80,9 @@ importers:
       '@chenglou/freerange':
         specifier: ^0.0.4
         version: 0.0.4
+      '@limrun/api':
+        specifier: ^0.24.5
+        version: 0.24.5(supports-color@7.2.0)
       '@nkzw/eslint-plugin':
         specifier: ^2.0.0
         version: 2.0.0(eslint@10.9.1(supports-color@7.2.0))
@@ -144,6 +128,9 @@ importers:
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
+      ipaddr.js:
+        specifier: ^2.5.0
+        version: 2.5.0
       oxc-parser:
         specifier: ^0.146.0
         version: 0.146.0
@@ -159,18 +146,30 @@ importers:
       publint:
         specifier: ^0.3.24
         version: 0.3.24
+      tar-stream:
+        specifier: ^3.2.0
+        version: 3.2.0
       tsdown:
         specifier: ^0.22.14
         version: 0.22.14(@arethetypeswrong/core@0.18.5)(publint@0.3.24)(typescript@7.0.2)
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
+      undici:
+        specifier: ^7.29.0
+        version: 7.29.0
       vite:
         specifier: ^8.2.1
         version: 8.2.1(@types/node@22.20.1)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@22.20.1)(@vitest/coverage-v8@4.1.11)(vite@8.2.1(@types/node@22.20.1)(yaml@2.9.0))
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
+      yauzl:
+        specifier: ^3.4.0
+        version: 3.4.0
 
   packages/ad-replay:
     dependencies:
@@ -236,17 +235,17 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
-      tar-stream:
-        specifier: ^3.2.0
-        version: 3.2.0
-      yauzl:
-        specifier: ^3.4.0
-        version: 3.4.0
     devDependencies:
       '@types/tar-stream':
         specifier: ^3.1.4
         version: 3.1.4
       '@types/yauzl':
+        specifier: ^3.4.0
+        version: 3.4.0
+      tar-stream:
+        specifier: ^3.2.0
+        version: 3.2.0
+      yauzl:
         specifier: ^3.4.0
         version: 3.4.0
 
@@ -263,6 +262,7 @@ importers:
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
+    devDependencies:
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
@@ -386,6 +386,7 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+    devDependencies:
       '@limrun/api':
         specifier: ^0.24.5
         version: 0.24.5(supports-color@7.2.0)
@@ -416,6 +417,7 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+    devDependencies:
       ipaddr.js:
         specifier: ^2.5.0
         version: 2.5.0

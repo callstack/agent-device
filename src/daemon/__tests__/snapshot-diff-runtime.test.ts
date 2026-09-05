@@ -16,6 +16,7 @@ import { makeAndroidSession } from '../../__tests__/test-utils/session-factories
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';
+import { expectRefusesUnavailableExactOwnerFact } from './runtime-binding-conformance.ts';
 import { unavailableDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
 
 const available = Object.freeze({ available: true } as const);
@@ -37,11 +38,7 @@ type SnapshotOperationName =
   | 'captureSnapshotWithCustomActions'
   | 'captureSnapshotWithoutActiveApp';
 
-async function runtimeHarness(params: {
-  captures?: readonly SnapshotResult[];
-  customActionsAvailable?: boolean;
-  withoutActiveAppAvailable?: boolean;
-}) {
+async function runtimeHarness(params: { captures?: readonly SnapshotResult[] }) {
   const session = makeAndroidSession('diff-runtime');
   const device = session.device;
   const baseFacts = await unavailableDeviceRuntimeGateway.inspectFacts(device);
@@ -51,8 +48,8 @@ async function runtimeHarness(params: {
       ...baseFacts.operations,
       ...snapshotRuntimeOperationFacts({
         capture: available,
-        customActions: params.customActionsAvailable === false ? unavailable : available,
-        withoutActiveApp: params.withoutActiveAppAvailable === false ? unavailable : available,
+        customActions: available,
+        withoutActiveApp: available,
       }),
     },
   };
@@ -161,38 +158,18 @@ test.each([
 );
 
 test('rejects an unavailable exact-owner fact before binding', async () => {
-  const harness = await runtimeHarness({ customActionsAvailable: false });
-  const sessionStore = makeSessionStore('agent-device-diff-runtime-unavailable-');
-  sessionStore.set('diff-runtime', {
-    ...harness.session,
-    appBundleId: 'com.example.app',
-  });
-
-  const response = await dispatchSnapshotDiffViaRuntime({
-    req: {
-      command: 'diff',
-      positionals: ['snapshot'],
-      token: 't',
-      session: 'diff-runtime',
-      flags: { snapshotCustomActions: true },
+  await expectRefusesUnavailableExactOwnerFact({
+    command: 'diff',
+    device: makeAndroidSession('diff-runtime').device,
+    unavailable,
+    refusal: {
+      code: 'UNSUPPORTED_OPERATION',
+      message:
+        '--actions requires an iOS simulator: custom actions are read through the private accessibility snapshot backend, which android/emulator targets do not have.',
+      hint: 'Re-run without --actions, or target an iOS simulator.',
+      details: { reason: 'owner-capability-missing' },
     },
-    sessionName: 'diff-runtime',
-    logPath: '/tmp/diff-runtime.log',
-    sessionStore,
-    inspectFacts: harness.inspectFacts,
-    bindDevice: harness.bindDevice,
   });
-
-  expect(response.ok).toBe(false);
-  expect(harness.inspected).toHaveLength(1);
-  expect(harness.boundUses).toEqual([]);
-  expect(response.ok ? undefined : response.error.details?.reason).toBe('owner-capability-missing');
-  expect(response.ok ? undefined : response.error.message).toBe(
-    '--actions requires an iOS simulator: custom actions are read through the private accessibility snapshot backend, which android/emulator targets do not have.',
-  );
-  expect(response.ok ? undefined : response.error.hint).toBe(
-    'Re-run without --actions, or target an iOS simulator.',
-  );
 });
 
 test('preserves initialized, unchanged, and changed diff results through one bound capture', async () => {

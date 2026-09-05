@@ -7,10 +7,9 @@ import {
   checkRetiredSessionObservabilityPaths,
   checkRetiredSnapshotExecutionPaths,
   DAEMON_MODULARITY_BASELINE,
-  TYPE_CYCLE_BASELINE,
 } from './daemon-modularity.ts';
-import { SESSION_STATE_FIELD_OWNERS } from './session-state.ts';
 import { resolveImportEdges, targetDagZone, type ResolvedImportEdge } from './model.ts';
+import type { LayeringRatchets } from './ratchet-reference.ts';
 
 function importEdge(file: string, target: string): ResolvedImportEdge {
   return {
@@ -45,13 +44,8 @@ const ZONE_DIRECTORY: Readonly<Record<string, string>> = {
   'provider-webdriver': 'packages/provider-webdriver/src/',
 };
 
-/**
- * A cycle membership that exactly fills the zone ceilings. R9 is equality-pinned, so a test
- * probing anything else starts from the pinned size the way `baselineEdges` starts from the
- * pinned edges; `overrides` re-counts one zone without disturbing the others.
- */
-function baselineTypeCycleMembers(overrides: Readonly<Record<string, number>> = {}): string[] {
-  const zones = { ...DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers, ...overrides };
+/** A cycle membership of `count` files per zone, so a zone count becomes file paths. */
+function typeCycleMembers(zones: Readonly<Record<string, number>>): string[] {
   return Object.entries(zones).flatMap(([zone, count]) =>
     Array.from(
       { length: count },
@@ -60,18 +54,55 @@ function baselineTypeCycleMembers(overrides: Readonly<Record<string, number>> = 
   );
 }
 
-test('daemon modularity baseline records the measured R7 ownership pressure', () => {
-  assert.equal(
-    Object.keys(SESSION_STATE_FIELD_OWNERS).length,
-    DAEMON_MODULARITY_BASELINE.sessionState.writerOwnedFields,
+/**
+ * The merge-base measurement every test ratchets against. R9 and R10's R7 counts have no recorded
+ * numbers any more, so a test states its own reference tree instead of importing one.
+ */
+const REFERENCE: LayeringRatchets = {
+  typeInversions: {},
+  largestTypeCycle: typeCycleMembers({ 'provider-webdriver': 6 }),
+  sessionState: { writerOwnedFields: 19, ownerFileClaims: 22 },
+};
+
+/** The same measurement as the reference except where a test moves one number. */
+function measured(overrides: Partial<LayeringRatchets> = {}): LayeringRatchets {
+  return { ...REFERENCE, ...overrides };
+}
+
+test('R10 rejects R7 ownership pressure that grew past the merge-base', () => {
+  const grownFields = checkDaemonModularityRatchets(
+    baselineEdges(),
+    measured({ sessionState: { writerOwnedFields: 20, ownerFileClaims: 23 } }),
+    REFERENCE,
   );
-  assert.equal(
-    Object.values(SESSION_STATE_FIELD_OWNERS).reduce((sum, owners) => sum + owners.length, 0),
-    DAEMON_MODULARITY_BASELINE.sessionState.ownerFileClaims,
+  assert.deepEqual(
+    grownFields.map(({ rule, message }) => ({ rule, message })),
+    [
+      {
+        rule: 'R10 daemon-modularity',
+        message:
+          'R7 writerOwnedFields grew to 20 (baseline 19 at the merge-base). Route the new write ' +
+          'through an existing owner instead.',
+      },
+      {
+        rule: 'R10 daemon-modularity',
+        message:
+          'R7 ownerFileClaims grew to 23 (baseline 22 at the merge-base). Route the new write ' +
+          'through an existing owner instead.',
+      },
+    ],
   );
-  assert.equal(TYPE_CYCLE_BASELINE, 6);
-  assert.equal(DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers['provider-webdriver'], 6);
-  assert.equal('daemon-server' in DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers, false);
+});
+
+test('R10 banks an R7 shrink with no edit anywhere', () => {
+  assert.deepEqual(
+    checkDaemonModularityRatchets(
+      baselineEdges(),
+      measured({ sessionState: { writerOwnedFields: 18, ownerFileClaims: 20 } }),
+      REFERENCE,
+    ),
+    [],
+  );
 });
 
 test('external daemon/types.ts importer membership changes require the baseline to change', () => {
@@ -84,14 +115,16 @@ test('external daemon/types.ts importer membership changes require the baseline 
 
   const violations = checkDaemonModularityRatchets(
     [...baselineEdges(), ...edges],
-    baselineTypeCycleMembers(),
+    REFERENCE,
+    REFERENCE,
   );
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.message, /may only shrink from the recorded 2/);
 
   const removed = checkDaemonModularityRatchets(
     baselineDaemonTypesEdges().slice(1),
-    baselineTypeCycleMembers(),
+    REFERENCE,
+    REFERENCE,
   );
   assert.equal(removed.length, 1);
   assert.match(removed[0]!.message, /delete it from externalDaemonTypesImporters/);
@@ -110,7 +143,8 @@ test('logical modules reject forbidden imports', () => {
 
   const violations = checkDaemonModularityRatchets(
     [...baselineEdges(), ...edges],
-    baselineTypeCycleMembers(),
+    REFERENCE,
+    REFERENCE,
   );
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.message, /replay-test must not import/);
@@ -138,7 +172,8 @@ test('replay-test rejects request-global and engine-internal imports', () => {
 
   const violations = checkDaemonModularityRatchets(
     [...baselineEdges(), ...edges],
-    baselineTypeCycleMembers(),
+    REFERENCE,
+    REFERENCE,
   );
   assert.deepEqual(
     violations.map(({ message }) => message.replace(/;.*/, '')),
@@ -162,7 +197,7 @@ test('replay-test may still import its own files inside the package', () => {
   );
 
   assert.deepEqual(
-    checkDaemonModularityRatchets([...baselineEdges(), ...edges], baselineTypeCycleMembers()),
+    checkDaemonModularityRatchets([...baselineEdges(), ...edges], REFERENCE, REFERENCE),
     [],
   );
 });
@@ -177,7 +212,8 @@ test('internal trees reject deep imports globally, including from daemon', () =>
 
   const violations = checkDaemonModularityRatchets(
     [...baselineEdges(), ...edges],
-    baselineTypeCycleMembers(),
+    REFERENCE,
+    REFERENCE,
   );
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.message, /must not import maestro's internal tree/);
@@ -218,7 +254,8 @@ test('daemon replay rejects handler, owner, session-store, and engine deep edges
 
   const violations = checkDaemonModularityRatchets(
     [...baselineEdges(), ...edges],
-    baselineTypeCycleMembers(),
+    REFERENCE,
+    REFERENCE,
   );
   assert.deepEqual(
     violations.map(({ file, line, message }) => ({
@@ -283,7 +320,8 @@ test('session lifecycle rejects handler deep imports in both directions', () => 
 
   const violations = checkDaemonModularityRatchets(
     [...baselineEdges(), ...edges],
-    baselineTypeCycleMembers(),
+    REFERENCE,
+    REFERENCE,
   );
   assert.deepEqual(
     violations.map(({ file, line, message }) => ({
@@ -348,7 +386,8 @@ test('interaction rejects handler crossings and deep imports around its facade',
 
   const violations = checkDaemonModularityRatchets(
     [...baselineEdges(), ...edges],
-    baselineTypeCycleMembers(),
+    REFERENCE,
+    REFERENCE,
   );
   assert.equal(violations.length, 5);
   assert.ok(
@@ -393,7 +432,8 @@ test('session observability rejects handler deep imports in both directions', ()
 
   const violations = checkDaemonModularityRatchets(
     [...baselineEdges(), ...edges],
-    baselineTypeCycleMembers(),
+    REFERENCE,
+    REFERENCE,
   );
   assert.deepEqual(
     violations.map(({ file, line, message }) => ({
@@ -552,17 +592,19 @@ test('session observability rejects restored handler paths', () => {
   );
 });
 
-test('R9 records zone ceilings and keeps engine files outside the largest component', () => {
+test('R9 holds each zone to the merge-base and keeps engine files outside the component', () => {
   // One commands file and one engine file traded for two provider-webdriver ones, so the
-  // total stays at the baseline and only the per-zone claims are on trial.
-  const zones = DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers;
+  // total stays at the merge-base's size and only the per-zone claims are on trial.
   const violations = checkDaemonModularityRatchets(
     baselineEdges(),
-    baselineTypeCycleMembers({
-      commands: 1,
-      'ad-replay': 1,
-      'provider-webdriver': zones['provider-webdriver']! - 2,
+    measured({
+      largestTypeCycle: typeCycleMembers({
+        commands: 1,
+        'ad-replay': 1,
+        'provider-webdriver': 4,
+      }),
     }),
+    REFERENCE,
   );
 
   assert.equal(violations.length, 3);
@@ -573,42 +615,54 @@ test('R9 records zone ceilings and keeps engine files outside the largest compon
 
 // #1837: the zone violation used to name the alphabetically-first zone member — a file that had
 // been in the cycle all along — so the +1 was found only by diffing member lists between commits.
-// The ceiling records a count, not a membership, so the message lists every zone member instead.
-test('R10 zone overflow lists the whole zone so the joining member is visible', () => {
-  const zones = DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers;
-  // Sorts after the provider-webdriver probes: the old first-member pick could not name it by luck.
+// The merge-base carries membership, so the message names exactly the files that joined.
+test('R10 zone overflow names the member that joined the cycle', () => {
+  // Sorts after the provider-webdriver probes: a first-member pick could not name it by luck.
   const joined = 'src/daemon/snapshot-interactor-capture.ts';
-  const members = [
-    ...baselineTypeCycleMembers({ 'provider-webdriver': zones['provider-webdriver']! - 1 }),
-    joined,
-  ].sort();
-  const daemonMembers = members.filter((member) => member.startsWith('src/daemon/'));
-  assert.deepEqual(daemonMembers, [joined]);
+  const members = [...typeCycleMembers({ 'provider-webdriver': 5 }), joined].sort();
 
-  const violations = checkDaemonModularityRatchets(baselineEdges(), members);
+  const violations = checkDaemonModularityRatchets(
+    baselineEdges(),
+    measured({ largestTypeCycle: members }),
+    REFERENCE,
+  );
 
   assert.equal(violations.length, 1);
   const [violation] = violations;
   assert.equal(violation!.rule, 'R10 daemon-modularity');
   assert.equal(violation!.file, 'scripts/layering/daemon-modularity.ts');
-  assert.match(violation!.message, /contains 1 daemon-server file\(s\) \(baseline 0\)/);
-  for (const member of daemonMembers) {
-    assert.ok(violation!.message.includes(member), `${member} missing from: ${violation!.message}`);
-  }
-  assert.match(violation!.message, /1 over the ceiling — the member\(s\) that joined are among/);
+  assert.match(
+    violation!.message,
+    /contains 1 daemon-server file\(s\) \(baseline 0 at the merge-base\)/,
+  );
+  assert.match(
+    violation!.message,
+    new RegExp(`1 over the merge-base — the daemon-server file\\(s\\) that joined: ${joined}\\.`),
+  );
 });
 
-// Growth was always rejected; a baseline left ABOVE the measured size used to be a suggestion
-// in the success line, which is headroom the next change spends without a number moving.
-test('R9 rejects a baseline left above the measured cycle', () => {
-  const zones = DAEMON_MODULARITY_BASELINE.largestTypeCycle.zoneMembers;
+test('R9 rejects a cycle grown past the merge-base', () => {
   const violations = checkDaemonModularityRatchets(
     baselineEdges(),
-    baselineTypeCycleMembers({ 'provider-webdriver': zones['provider-webdriver']! - 1 }),
+    measured({ largestTypeCycle: typeCycleMembers({ 'provider-webdriver': 7 }) }),
+    REFERENCE,
   );
 
-  assert.equal(violations.length, 1);
+  assert.equal(violations.length, 2);
   assert.match(violations[0]!.rule, /^R9 /);
-  assert.match(violations[0]!.message, /dropped to 5 files \(baseline 6\)/);
-  assert.match(violations[0]!.message, /Lower LARGEST_TYPE_CYCLE_ZONE_CEILINGS by the same 1/);
+  assert.match(violations[0]!.message, /grew to 7 files \(baseline 6 at the merge-base\)/);
+  assert.match(violations[1]!.rule, /^R10 /);
+});
+
+// The shrink direction used to need an edit in the same change, or the ceiling kept headroom the
+// next change could spend. Measuring the merge-base banks it on merge, with nothing to lower.
+test('R9 banks a shrink with no edit anywhere', () => {
+  assert.deepEqual(
+    checkDaemonModularityRatchets(
+      baselineEdges(),
+      measured({ largestTypeCycle: typeCycleMembers({ 'provider-webdriver': 5 }) }),
+      REFERENCE,
+    ),
+    [],
+  );
 });

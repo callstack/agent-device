@@ -8,13 +8,15 @@
   "dependencies": {
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*",
-    "@agent-device/selectors": "workspace:*",
-    "yaml": "^2.9.0"
+    "@agent-device/selectors": "workspace:*"
   },
   "exports": {
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     }
+  },
+  "devDependencies": {
+    "yaml": "^2.9.0"
   }
 }

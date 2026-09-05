@@ -5,6 +5,7 @@ import {
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
+  type DeviceBindingRequest,
   type DeviceRuntimeGateway,
   localRuntimeOwner,
   narrowDeviceBinding,
@@ -83,6 +84,28 @@ export const lifecycleDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntime
     bind: async ({ device }) => await lifecycleBindingForTest(device),
     shutdown: async () => {},
   });
+
+/**
+ * A fresh, unfrozen `lifecycleDeviceRuntimeGateway`-equivalent whose `inspectFacts`/`bind` are
+ * `vi.fn()` spies. The shared `lifecycleDeviceRuntimeGateway` above is `Object.freeze`d and reused
+ * across many router-seam suites, so it can't be spied on in place (and spying on it in place
+ * would leak call counts between tests in other files) — call this per test that needs to observe
+ * fact-inspection/binding call counts through the router seam.
+ */
+export function createLifecycleDeviceRuntimeGatewaySpies() {
+  const inspectFacts = vi.fn(
+    async (device: DeviceInfo) => (await lifecycleBindingForTest(device)).facts,
+  );
+  const bind = vi.fn(
+    async (request: DeviceBindingRequest) => await lifecycleBindingForTest(request.device),
+  );
+  const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
+    inspectFacts,
+    bind,
+    shutdown: async () => {},
+  };
+  return { gateway, inspectFacts, bind };
+}
 
 export const unavailableDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> =
   Object.freeze({
