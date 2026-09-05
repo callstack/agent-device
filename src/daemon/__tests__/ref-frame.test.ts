@@ -114,7 +114,9 @@ test('expireRefFrame is idempotent and rejects all refs while expired', () => {
   const expired = refFrame(s);
   expireRefFrame(s); // idempotent
   assert.equal(refFrameState(s), 'expired');
-  assert.deepEqual(refFrame(s), expired);
+  // Identity, not shape: lineage holders compare frames with `===`, so a repeat
+  // expiry must leave the same frame rather than an equal one.
+  assert.equal(refFrame(s), expired);
   assert.equal(
     reason(admitRefMutation({ session: s, refBody: 'e1', mintedGeneration: 42 })),
     'ref_frame_expired',

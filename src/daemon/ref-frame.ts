@@ -45,23 +45,62 @@ export type RefFrameAdmission =
   | { admitted: true }
   | { admitted: false; reason: RefFrameRejectReason };
 
-const REF_FRAME = Symbol('ref-frame');
+type RefFrameFields = Readonly<{
+  state: RefFrameState;
+  scope: RefFrameScope;
+  tree: SnapshotState | undefined;
+  generation: number | undefined;
+}>;
 
 /**
  * The frame as one value. `state`, `scope`, `tree` and `generation` move
  * together or the frame is incoherent, so they are not four fields a caller can
  * step out of agreement: `SessionState.refFrame` is REPLACED whole by this
- * module's transitions and never mutated. The brand key is module-private, so
- * no module outside this file can construct or edit one — the accessors below
- * are the whole read surface.
+ * module's transitions and never mutated.
+ *
+ * The fields are `#`-private behind getters, which buys what a plain object of
+ * `readonly` fields does not: the type is NOMINAL, so no object literal is
+ * assignable to it — including `{ ...refFrame(session), state: 'expired' }`, the
+ * one shape that could otherwise mint an incoherent frame out of a coherent one.
+ * This constructor is the only source of a frame, and it is private to this file;
+ * the accessors below are the whole read surface.
  */
-export type RefFrame = {
-  readonly [REF_FRAME]: true;
-  readonly state: RefFrameState;
-  readonly scope: RefFrameScope;
-  readonly tree: SnapshotState | undefined;
-  readonly generation: number | undefined;
-};
+class SessionRefFrame {
+  readonly #fields: RefFrameFields;
+
+  constructor(fields: RefFrameFields) {
+    this.#fields = fields;
+  }
+
+  get state(): RefFrameState {
+    return this.#fields.state;
+  }
+
+  get scope(): RefFrameScope {
+    return this.#fields.scope;
+  }
+
+  get tree(): SnapshotState | undefined {
+    return this.#fields.tree;
+  }
+
+  get generation(): number | undefined {
+    return this.#fields.generation;
+  }
+
+  /**
+   * The same frame with authority withdrawn, keeping the scope, tree and epoch an
+   * expiry does not change. An already-expired frame returns ITSELF rather than an
+   * equal copy, so a repeated expiry is a no-op by identity — which is the property
+   * lineage holders test, with `===`.
+   */
+  expired(): SessionRefFrame {
+    if (this.#fields.state === 'expired') return this;
+    return new SessionRefFrame({ ...this.#fields, state: 'expired' });
+  }
+}
+
+export type RefFrame = SessionRefFrame;
 
 /**
  * The frame a session has before anything issues refs: complete authority over
@@ -69,13 +108,12 @@ export type RefFrame = {
  * A shared constant, so lineage identity is stable for a session that never
  * reached a transition.
  */
-const PRISTINE_FRAME: RefFrame = {
-  [REF_FRAME]: true,
+const PRISTINE_FRAME = new SessionRefFrame({
   state: 'active',
   scope: 'all',
   tree: undefined,
   generation: undefined,
-};
+});
 
 /**
  * The session's current frame, as one comparable value. Identity changes on
@@ -106,8 +144,10 @@ export function refFrameTree(session: SessionState): SnapshotState | undefined {
 }
 
 /**
- * Expire the current frame at a device side-effect seam (ADR 0014). Idempotent:
- * additional effects while already expired are a no-op. Call this SYNCHRONOUSLY,
+ * Expire the current frame at a device side-effect seam (ADR 0014). The frame
+ * transition is idempotent by identity: an effect crossed while already expired
+ * leaves the SAME frame in place (the runtime revision below still advances, one
+ * per effect, because that is what tracks effects). Call this SYNCHRONOUSLY,
  * immediately before awaiting the operation that may change device-visible
  * element identity, so that a post-dispatch failure (timeout, connection loss,
  * ambiguous error) still leaves the frame expired — there is no success-only
@@ -120,7 +160,7 @@ export function refFrameTree(session: SessionState): SnapshotState | undefined {
  */
 export function expireRefFrame(session: SessionState): void {
   advanceSessionRuntimeRevision(session);
-  session.refFrame = { ...refFrame(session), state: 'expired' };
+  session.refFrame = refFrame(session).expired();
   session.snapshotScopeSource = undefined;
 }
 
@@ -179,13 +219,12 @@ export function activatePartialRefFrame(session: SessionState, scope: ReadonlySe
  * namespace that authorized it.
  */
 function activateRefFrame(session: SessionState, scope: RefFrameScope): void {
-  session.refFrame = {
-    [REF_FRAME]: true,
+  session.refFrame = new SessionRefFrame({
     state: 'active',
     scope,
     tree: session.snapshot,
     generation: session.snapshotGeneration,
-  };
+  });
 }
 
 export function refFrameState(session: SessionState): RefFrameState {

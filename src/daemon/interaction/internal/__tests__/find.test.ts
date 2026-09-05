@@ -620,7 +620,7 @@ test('handleFindCommands list returns every match without acting', async () => {
   // the MCP/CLI layers pin from `matches` + `refsGeneration`).
   expect(typeof response.data?.refsGeneration).toBe('number');
   expect(refFrameState(session)).toBe('active');
-  expect([...(refFrameScope(session) ?? [])].sort()).toEqual(['e2', 'e3', 'e4']);
+  expect([...refFrameScope(session)].sort()).toEqual(['e2', 'e3', 'e4']);
 });
 
 test('handleFindCommands list on a unique match still lists instead of tapping', async () => {

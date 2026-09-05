@@ -305,9 +305,10 @@ export type SessionState = {
    * ADR 0014 ref frame: the namespace whose refs a caller may currently use to
    * target a mutation, as ONE opaque value carrying lifecycle state, issuance
    * scope, the tree that minted the refs, and the epoch the frame was issued
-   * at. `RefFrame` cannot be constructed or edited outside
-   * `src/daemon/ref-frame.ts`, so that module owns the frame by construction
-   * rather than by convention; read it through the accessors it exports.
+   * at. `RefFrame` is nominal, so it cannot be constructed, edited, or derived
+   * from an existing frame outside `src/daemon/ref-frame.ts`; that module owns
+   * the frame by construction rather than by convention. Read it through the
+   * accessors it exports — never by reaching into the value.
    * Undefined is the pristine frame — complete authority over a namespace
    * nothing has issued yet.
    */
