@@ -1,9 +1,11 @@
 import type { JsonSchema } from '../commands/command-contract.ts';
-import { projectedSystemCommandOutputSchemas } from '../commands/system/index.ts';
 import type { CommandResultMap } from '../core/command-descriptor/command-result.ts';
 import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
 import { booleanSchema, looseObjectSchema, stringSchema } from '../commands/command-input.ts';
+import { BACK_MODES } from '@agent-device/contracts/back-mode';
+import { DEVICE_ROTATIONS } from '@agent-device/contracts/device';
 import { SESSION_SURFACES } from '@agent-device/contracts/session';
+import { TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
 import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
 
 /**
@@ -471,9 +473,41 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
     ['width', 'height', 'message'],
   ),
 
-  // packages/contracts/src/navigation.ts, projected from executable command contracts.
-  // The `back` settle observation is grafted by the derivation pass below.
-  ...projectedSystemCommandOutputSchemas,
+  // packages/contracts/src/navigation.ts. `back`'s settle observation is grafted
+  // by the derivation pass below.
+  back: objectSchema(
+    {
+      action: constSchema('back'),
+      mode: enumSchema(BACK_MODES),
+      message: stringSchema(),
+    },
+    ['action', 'mode', 'message'],
+  ),
+  home: objectSchema({ action: constSchema('home'), message: stringSchema() }, [
+    'action',
+    'message',
+  ]),
+  orientation: objectSchema(
+    {
+      action: constSchema('orientation'),
+      orientation: enumSchema(DEVICE_ROTATIONS),
+      message: stringSchema(),
+    },
+    ['action', 'orientation', 'message'],
+  ),
+  'app-switcher': objectSchema({ action: constSchema('app-switcher'), message: stringSchema() }, [
+    'action',
+    'message',
+  ]),
+  'tv-remote': objectSchema(
+    {
+      action: constSchema('tv-remote'),
+      button: enumSchema(TV_REMOTE_BUTTONS),
+      durationMs: numberSchema(),
+      message: stringSchema(),
+    },
+    ['action', 'button', 'message'],
+  ),
 
   // packages/contracts/src/wait.ts — compact public daemon projection.
   wait: objectSchema(

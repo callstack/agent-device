@@ -1,8 +1,12 @@
 // The public API vocabulary for the system and diagnostic commands (wait, alert, keyboard, clipboard, doctor…).
 
 import type { AlertAction } from './alert-contract.ts';
+import type { BackMode } from './back-mode.ts';
 import type { SelectorSnapshotCommandOptions } from './client-capture.ts';
 import type { DeviceCommandBaseOptions } from './client-connection.ts';
+import type { SettleCommandOptions } from './client-gesture.ts';
+import type { DeviceRotation } from './device-rotation.ts';
+import type { TvRemoteButton } from './tv-remote.ts';
 
 export type WaitCommandTarget =
   | {
@@ -74,6 +78,24 @@ export type AlertCommandOptions = DeviceCommandBaseOptions & {
 };
 
 export type AppStateCommandOptions = DeviceCommandBaseOptions;
+
+/** #1638: `back` carries the shared `--settle` triple, and its result may carry the settled diff. */
+export type BackCommandOptions = DeviceCommandBaseOptions & {
+  mode?: BackMode;
+} & SettleCommandOptions;
+
+export type HomeCommandOptions = DeviceCommandBaseOptions;
+
+export type OrientationCommandOptions = DeviceCommandBaseOptions & {
+  orientation: DeviceRotation;
+};
+
+export type AppSwitcherCommandOptions = DeviceCommandBaseOptions;
+
+export type TvRemoteCommandOptions = DeviceCommandBaseOptions & {
+  button: TvRemoteButton;
+  durationMs?: number;
+};
 
 export type KeyboardCommandOptions = DeviceCommandBaseOptions & {
   action?: 'status' | 'dismiss' | 'enter' | 'return';
