@@ -199,7 +199,7 @@ export type PlatformRequestScope = Readonly<{
     device: DeviceInfo;
     owner: Extract<RuntimeOwnerRef, { kind: 'managed-local' }>;
     fence: ResourceOwnershipFence;
-    ensureReady(): Promise<void>;
+    admit<T>(task: () => Promise<T>): Promise<T>;
     run<T>(task: () => Promise<T>): Promise<T>;
   }>;
 }>;
