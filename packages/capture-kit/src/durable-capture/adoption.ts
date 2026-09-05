@@ -5,13 +5,13 @@ import {
   type RuntimeOwnerRef,
   runtimeOwnerKey,
 } from '@agent-device/contracts/platform-runtime';
+import { deviceIdentity, sameDeviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   createDurableResourceEnvelope,
   decodeDurableResourceEnvelope,
 } from '../durable-resource-envelope.ts';
-import { deviceIdentity, sameDeviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type {
   AdoptStartedDurableCaptureParams,
   DurableCaptureRecordDefinition,
