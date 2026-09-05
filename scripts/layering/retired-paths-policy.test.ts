@@ -11,8 +11,15 @@ import {
   listTrackedTypeScriptFiles,
 } from './tracked-sources.ts';
 import { RETIRED_PATH_RULES, retiredPathRuleViolations } from './retired-paths-policy.ts';
+import type { LayeringRatchets } from './ratchet-reference.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
+
+const EMPTY_RATCHETS: LayeringRatchets = {
+  typeInversions: {},
+  largestTypeCycle: [],
+  sessionState: { writerOwnedFields: 0, ownerFileClaims: 0 },
+};
 
 function contextWithFiles(
   files: Partial<Pick<LayeringContext, 'sourceFiles' | 'trackedSrcUtilsFiles'>>,
@@ -23,7 +30,8 @@ function contextWithFiles(
     allTypeScriptSources: new Map(),
     trackedSrcUtilsFiles: [],
     edges: [],
-    typeCycleMembers: [],
+    ratchets: EMPTY_RATCHETS,
+    reference: EMPTY_RATCHETS,
     ...files,
   };
 }

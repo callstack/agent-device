@@ -81,9 +81,10 @@ it returns an empty list, which is the gate passing, not a broken query.
 
 `pnpm check:layering` is. The report reads the same model (`scripts/layering/model.ts`) and applies
 the gate's own counting rule — `typeInversionsByPair` counts once per file pair over the raw edges,
-exactly as `checkTypeInversions` in `scripts/layering/check.ts` does — so `typeInversions` reproduces
-`TYPE_INVERSION_BASELINE` by construction, not by a second measurement. CI used to assert that
-equality; it was a duplicate detector of the same code path and was removed. In particular the count
+exactly as `typeInversionCounts` in `scripts/layering/model.ts` does — so `typeInversions` reproduces
+the gate's R6 measurement by construction, not by a second measurement. The gate compares that
+measurement with the merge-base's; CI used to assert the report agreed with a recorded baseline,
+which was a duplicate detector of the same code path and was removed. In particular the count
 does NOT come from the collapsed edge list, where `dynamic` outranks `type` and a module imported
 both lazily and for its types would drop out.
 

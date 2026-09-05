@@ -22,8 +22,8 @@ const files = listSourceFiles();
 const sources = new Map(files.map((f) => [f, fs.readFileSync(f, 'utf8')]));
 const edges = resolveImportEdges(sources);
 
-// e.g. R6 inversions per zone pair, deduplicated by file pair — reproduces
-// TYPE_INVERSION_BASELINE, so a mismatch means one of the two is stale.
+// e.g. R6 inversions per zone pair, deduplicated by file pair — the same count the gate
+// ratchets against the merge-base with origin/main.
 const seen = new Set<string>();
 const byPair = new Map<string, number>();
 for (const edge of edges) {
@@ -126,8 +126,9 @@ narrow name replaced both.
   from `daemon-command-registry.ts` to key an exhaustive owner-file map; that remaining inversion
   is the commands-zone consumer, not a second source of truth for the union.
 
-All remaining inversions are argued at `TYPE_INVERSION_BASELINE` in `scripts/layering/check.ts`, next
-to the numbers they explain.
+All remaining inversions are argued here. R6 (`scripts/layering/type-inversion-ratchet.ts`) records
+no numbers of its own: its reference is the same count taken at the merge-base with `origin/main`,
+so a zone pair can only shrink.
 
 ## 0b. The biggest structural finding is not an inversion
 
@@ -156,13 +157,13 @@ but it is a comprehension one, and it is the single largest obstacle to reading 
 isolation. At the current measured commit it spans `commands` (33), `daemon-server` (30),
 `platforms` (19), `core` (12), root composition (5), `contracts` (2), and `client` (1).
 
-Now ratcheted for growth by **R9** (`TYPE_CYCLE_BASELINE`, derived from the zone ceilings in
-`scripts/layering/daemon-modularity.ts`), so it cannot get worse
+Now ratcheted for growth by **R9** (`scripts/layering/daemon-modularity.ts`), so it cannot get worse
 while nobody is looking — a type-only import that closes a new loop fails the gate, verified by
 adding one type-only import that closes a loop and watching the gate reject it. It was growth-only
-here; #1781 A6 made it an equality pin, so a baseline left above the measured size fails too and a
-shrink is banked by the change that earns it. The refactor itself is still deliberately not
-attempted; it starts at those four hubs.
+here; #1781 A6 made it an equality pin, and the pin is now the merge-base's own measurement
+(`scripts/layering/ratchet-reference.ts`), so a shrink is banked the moment it merges and there is
+no slack left to spend. The refactor itself is still deliberately not attempted; it starts at those
+four hubs.
 
 ### The facade cycle: investigated, no narrower port exists
 
@@ -183,14 +184,15 @@ duplicate the public API shape — a second source of truth for it — or derive
 carry the same dependency.
 
 Those four files are therefore the minimum number of naming sites, not an accident: they are the
-choke point. Accepted as a position, argued at `TYPE_INVERSION_BASELINE`. The option this section
+choke point. Accepted as a position, argued in §0 above. The option this section
 used to hold open — moving `NAVIGATION_COMMAND_PROJECTIONS` out of `commands/` — was answered by
 deleting it: five direct signatures replaced the registry, so there is no longer a projection
 registry whose home is in question.
 
 ## 1. The two remaining type-inversion clusters
 
-`TYPE_INVERSION_BASELINE` in `scripts/layering/check.ts` holds both, with the reasoning inline.
+§0 above holds both, with the reasoning inline; the gate measures them against the merge-base
+rather than recording them.
 
 **28 + 1 edges → `client/client-types.ts`** — *done, mostly.* Now 5 edges. The vocabulary moved into
 the `contracts/client-*.ts` family files — one file per command/domain family, largest 137 LOC —
