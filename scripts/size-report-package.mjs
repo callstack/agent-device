@@ -15,46 +15,6 @@ export function assertSnapshotBridgeAssets(presentPaths, context) {
   }
 }
 
-const PACKAGE_COMPONENTS = [
-  {
-    id: 'js',
-    label: 'JS / dist source',
-    matches: (entryPath) => entryPath === 'dist/src' || entryPath.startsWith('dist/src/'),
-  },
-  {
-    id: 'apple-runner',
-    label: 'Apple runner source/project',
-    matches: (entryPath) =>
-      entryPath === 'dist/apple/runner' || entryPath.startsWith('dist/apple/runner/'),
-  },
-  {
-    id: 'apple-snapshot-presentation',
-    label: 'Apple snapshot presentation source',
-    matches: (entryPath) =>
-      entryPath === 'dist/apple/snapshot-presentation' ||
-      entryPath.startsWith('dist/apple/snapshot-presentation/'),
-  },
-  {
-    id: 'apple-snapshot-bridge',
-    label: 'Apple Simulator snapshot bridge source',
-    matches: (entryPath) =>
-      entryPath === 'apple/snapshot-bridge' || entryPath.startsWith('apple/snapshot-bridge/'),
-  },
-  {
-    id: 'macos-helper',
-    label: 'macOS helper source',
-    matches: (entryPath) =>
-      entryPath === 'apple/macos-helper' || entryPath.startsWith('apple/macos-helper/'),
-  },
-  {
-    id: 'android-helpers',
-    label: 'Android helper artifacts',
-    matches: (entryPath) =>
-      /^android\/(?:snapshot-helper|ime-helper)\/dist(?:\/|$)/.test(entryPath),
-  },
-  { id: 'other', label: 'Other package files' },
-];
-
 export function collectNpmPack(root) {
   const cachePath = path.join(root, '.tmp', 'npm-cache');
   fs.mkdirSync(cachePath, { recursive: true });
@@ -75,7 +35,6 @@ export function collectNpmPack(root) {
     unpackedBytes: pack.unpackedSize,
     files: entries.length,
     entries,
-    components: summarizeEntries(pack.unpackedSize, entries),
   };
 }
 
@@ -96,17 +55,16 @@ export function assertPublishPackageContents(entries, options = {}) {
       'npm pack snapshot bridge',
     );
   }
-  const missingAssets = requiredAssets.filter((asset) =>
-    asset.path
-      ? !paths.includes(asset.path)
-      : !paths.some(
-          (entryPath) => entryPath.startsWith(asset.directory) && entryPath.endsWith(asset.suffix),
-        ),
+  const missingAssets = requiredAssets.filter(
+    (asset) =>
+      !paths.some(
+        (entryPath) => entryPath.startsWith(asset.directory) && entryPath.endsWith(asset.suffix),
+      ),
   );
   if (missingAssets.length > 0) {
     throw new Error(
       `npm pack is missing publish assets: ${missingAssets
-        .map((asset) => asset.path ?? `${asset.directory}*${asset.suffix}`)
+        .map((asset) => `${asset.directory}*${asset.suffix}`)
         .join(', ')}`,
     );
   }
@@ -138,47 +96,4 @@ function normalizeNpmPackEntries(pack) {
     }
     return { path: entry.path, size: entry.size };
   });
-}
-
-export function classifyNpmPackEntry(entry) {
-  const matches = PACKAGE_COMPONENTS.filter((component) => component.matches?.(entry.path));
-  if (matches.length > 1) {
-    throw new Error(
-      `Package entry ${JSON.stringify(entry.path)} matched ${matches.length} size components`,
-    );
-  }
-  return { ...entry, component: matches[0]?.id ?? 'other' };
-}
-
-export function summarizeNpmPackComponents(pack) {
-  return summarizeEntries(pack.unpackedSize, normalizeNpmPackEntries(pack));
-}
-
-function summarizeEntries(unpackedSize, entries) {
-  if (!Number.isSafeInteger(unpackedSize) || unpackedSize < 0) {
-    throw new Error(`npm pack returned an invalid unpackedSize: ${unpackedSize}`);
-  }
-  const totals = new Map(
-    PACKAGE_COMPONENTS.map((component) => [component.id, { files: 0, unpackedBytes: 0 }]),
-  );
-  for (const entry of entries.map(classifyNpmPackEntry)) {
-    const total = totals.get(entry.component);
-    total.files += 1;
-    total.unpackedBytes += entry.size;
-  }
-  const components = PACKAGE_COMPONENTS.map((component) => ({
-    id: component.id,
-    label: component.label,
-    ...totals.get(component.id),
-  }));
-  const componentBytes = components.reduce(
-    (total, component) => total + component.unpackedBytes,
-    0,
-  );
-  if (componentBytes !== unpackedSize) {
-    throw new Error(
-      `Package component byte sum ${componentBytes} does not match npm pack unpackedSize ${unpackedSize}`,
-    );
-  }
-  return components;
 }

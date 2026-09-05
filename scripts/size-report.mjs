@@ -126,25 +126,12 @@ function collectReport(root, options) {
   }
   preparePublishAssets({ root });
 
-  const chunks = jsFiles
-    .map((file) => {
-      const buffer = fs.readFileSync(file);
-      return {
-        path: path.relative(root, file),
-        rawBytes: buffer.byteLength,
-        gzipBytes: gzipSync(buffer, { level: 9 }).byteLength,
-      };
-    })
-    .sort((left, right) => right.rawBytes - left.rawBytes);
-
-  const js = chunks.reduce(
-    (total, chunk) => ({
-      files: total.files + 1,
-      rawBytes: total.rawBytes + chunk.rawBytes,
-      gzipBytes: total.gzipBytes + chunk.gzipBytes,
-    }),
-    { files: 0, rawBytes: 0, gzipBytes: 0 },
-  );
+  const bundled = { files: jsFiles.length, rawBytes: 0, gzipBytes: 0 };
+  for (const file of jsFiles) {
+    const buffer = fs.readFileSync(file);
+    bundled.rawBytes += buffer.byteLength;
+    bundled.gzipBytes += gzipSync(buffer, { level: 9 }).byteLength;
+  }
 
   const npmPackWithArchive = collectNpmPack(root);
   const { tarballPath, ...npmPack } = npmPackWithArchive;
@@ -154,14 +141,12 @@ function collectReport(root, options) {
     packageName: packageJson.name,
     version: packageJson.version,
     generatedAt: new Date().toISOString(),
-    js,
-    bundled: js,
+    bundled,
     npmPack,
     cleanInstalled,
     ...(options.startupRuns > 0
       ? { startup: collectStartupBenchmarks(root, options.startupRuns) }
       : {}),
-    chunks: chunks.slice(0, 20),
   };
 }
 
