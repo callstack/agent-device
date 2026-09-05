@@ -4,6 +4,15 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCmdSync } from '@agent-device/host-kit/command';
+import { cliAliasesForCommand } from '../../src/commands/cli-command-aliases.ts';
+import { listCliCommandNames } from '../../src/command-catalog.ts';
+
+// Derived from the alias registry itself (not hard-coded) so a future alias is
+// exercised automatically, and so a partial hand-written mapping that covers only
+// today's aliases cannot silently regain a fast-path gap for an alias added later.
+const KNOWN_ALIASES: ReadonlyArray<readonly [string, string]> = listCliCommandNames().flatMap(
+  (command) => cliAliasesForCommand(command).map((entry) => [entry.alias, command] as const),
+);
 
 function runCli(args: string[]): { status: number; stdout: string; stderr: string } {
   const result = runCmdSync(
@@ -82,28 +91,44 @@ test('cli without command prints usage and exits 1', () => {
   assert.match(result.stdout, /agent-device <command>/i);
 });
 
-test('alias --help fast path is byte-identical to its canonical command', () => {
-  const tap = runCli(['tap', '--help']);
-  const press = runCli(['press', '--help']);
-  assert.equal(tap.status, 0, tap.stderr);
-  assert.equal(press.status, 0, press.stderr);
-  assert.equal(tap.stdout, press.stdout);
+test('known alias registry is non-empty and includes every known alias', () => {
+  // Belt-and-braces pin: if the registry were ever emptied by mistake, the two
+  // tests below would vacuously pass (an empty `for` loop asserts nothing). Pin
+  // both the non-empty condition and the concrete alias set so that failure is
+  // loud instead of silent.
+  assert.ok(KNOWN_ALIASES.length > 0, 'expected at least one alias to exercise this test');
+  const aliasNames = KNOWN_ALIASES.map(([alias]) => alias).sort();
+  assert.deepEqual(aliasNames, ['launch', 'long-press', 'relaunch', 'tap'].sort());
+});
 
-  const launch = runCli(['launch', '--help']);
-  const open = runCli(['open', '--help']);
-  assert.equal(launch.status, 0, launch.stderr);
-  assert.equal(open.status, 0, open.stderr);
-  assert.equal(launch.stdout, open.stdout);
+test('alias --help fast path is byte-identical to its canonical command', () => {
+  // The canonical side is always a direct invocation of the canonical command name
+  // (never routed through the alias resolver), so this stays an independent oracle:
+  // a degenerate resolver that maps every alias to one fixed command would still
+  // fail here for the aliases whose canonical command differs.
+  for (const [alias, canonical] of KNOWN_ALIASES) {
+    const aliasResult = runCli([alias, '--help']);
+    const canonicalResult = runCli([canonical, '--help']);
+    assert.equal(aliasResult.status, 0, `${alias} --help: ${aliasResult.stderr}`);
+    assert.equal(canonicalResult.status, 0, `${canonical} --help: ${canonicalResult.stderr}`);
+    assert.equal(
+      aliasResult.stdout,
+      canonicalResult.stdout,
+      `expected "${alias} --help" to be byte-identical to "${canonical} --help"`,
+    );
+  }
 });
 
 test('alias --help fast path bypasses the full CLI bootstrap', () => {
-  const tap = runCliTrackingCoverage(['tap', '--help']);
-  assert.equal(tap.status, 0, tap.stderr);
-  assert.equal(tap.bootstrappedFullCli, false);
-
-  const launch = runCliTrackingCoverage(['launch', '--help']);
-  assert.equal(launch.status, 0, launch.stderr);
-  assert.equal(launch.bootstrappedFullCli, false);
+  for (const [alias] of KNOWN_ALIASES) {
+    const result = runCliTrackingCoverage([alias, '--help']);
+    assert.equal(result.status, 0, `${alias} --help: ${result.stderr}`);
+    assert.equal(
+      result.bootstrappedFullCli,
+      false,
+      `expected "${alias} --help" to bypass ${PROCESS_ENTRY_MARKER}`,
+    );
+  }
 
   // Control: a retired/unmapped command must still fall through to the full CLI
   // bootstrap, proving the coverage signal actually distinguishes the two paths
