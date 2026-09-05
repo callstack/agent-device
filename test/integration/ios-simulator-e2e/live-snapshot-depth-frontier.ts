@@ -6,6 +6,8 @@ import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
 const VISIBLE_DEPTH_DEEP_LINK = 'agent-device-test-app:///snapshot-depth';
 const CHILD_ID = 'visible-depth-projected-child';
+const MISSING_HITTABILITY_WARNING =
+  'iOS snapshot acquisition does not provide hittability evidence; regular snapshots omit unverified hittability while raw snapshots preserve supplied facts.';
 
 type SnapshotNode = {
   depth?: unknown;
@@ -32,7 +34,7 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     '--depth',
     '1',
   ]);
-  assertSnapshotBackend(regular, 'regular depth-1 snapshot');
+  assertSimulatorBridgeSnapshot(regular, 'regular depth-1 snapshot');
   const regularNodes = snapshotNodes(regular);
   const regularRoot = requireRoot(regularNodes, 'regular depth-1 snapshot');
   const projectedChild = requireIdentifier(regularNodes, CHILD_ID, 'regular depth-1 snapshot');
@@ -55,7 +57,7 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     'snapshot',
     '--raw',
   ]);
-  assertSnapshotBackend(rawFull, 'full raw visible-depth snapshot');
+  assertSimulatorBridgeSnapshot(rawFull, 'full raw visible-depth snapshot');
   const rawFullNodes = snapshotNodes(rawFull);
   const rawChild = requireIdentifier(rawFullNodes, CHILD_ID, 'full raw visible-depth snapshot');
   assert.ok(
@@ -69,7 +71,7 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     '--depth',
     '1',
   ]);
-  assertSnapshotBackend(rawDepthOne, 'raw depth-1 visible-depth snapshot');
+  assertSimulatorBridgeSnapshot(rawDepthOne, 'raw depth-1 visible-depth snapshot');
   const rawDepthOneNodes = snapshotNodes(rawDepthOne);
   assert.equal(
     rawDepthOneNodes.some((node) => node.identifier === CHILD_ID),
@@ -127,10 +129,14 @@ function numericDepth(node: SnapshotNode): number {
   return node.depth as number;
 }
 
-function assertSnapshotBackend(result: { json?: any }, description: string): void {
+function assertSimulatorBridgeSnapshot(result: { json?: any }, description: string): void {
   assert.equal(
     result.json?.data?.snapshotQuality?.backend,
-    'tree',
-    `${description} must exercise the recursive tree backend: ${JSON.stringify(result)}`,
+    undefined,
+    `${description} must not carry XCTest tree quality metadata: ${JSON.stringify(result)}`,
+  );
+  assert.ok(
+    result.json?.data?.warnings?.includes(MISSING_HITTABILITY_WARNING),
+    `${description} must disclose the Simulator AX bridge evidence gap: ${JSON.stringify(result)}`,
   );
 }

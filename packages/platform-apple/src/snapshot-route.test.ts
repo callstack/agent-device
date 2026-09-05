@@ -1,5 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { areIosSnapshotComparisonIdentitiesEqual } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
 import type { SimulatorSnapshotSource, SnapshotSourceOutcome } from './snapshot-source-facade.ts';
@@ -81,7 +82,7 @@ test('typed bridge failure falls back once and disables retries for that app gen
 test('a new app generation re-enables the bridge', async () => {
   const source = sourceReturning({
     stage: 'failed',
-    failure: { kind: 'stale-target', code: 'target-generation-changed' },
+    failure: { kind: 'transport-failure', code: 'bridge-disconnected' },
   });
   const resolveTarget = vi
     .fn()
@@ -101,6 +102,27 @@ test('a new app generation re-enables the bridge', async () => {
   expect(source.acquire).toHaveBeenCalledTimes(2);
 });
 
+test('stale bridge acquisition resolves the current generation before XCTest fallback', async () => {
+  const currentTarget = { ...target, pid: 84, generation: '84:launch-b' };
+  const source = sourceReturning({
+    stage: 'failed',
+    failure: { kind: 'stale-target', code: 'target-generation-changed' },
+  });
+  const resolveTarget = vi.fn().mockResolvedValueOnce(target).mockResolvedValueOnce(currentTarget);
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source,
+    resolveTarget,
+  });
+
+  const result = await route.capture(ios, input, signal(), async () => runnerResult());
+
+  expect(resolveTarget).toHaveBeenCalledTimes(2);
+  expect(result.comparisonIdentity?.lineage).toEqual({
+    targetId: currentTarget.targetId,
+    generation: currentTarget.generation,
+  });
+});
+
 test('target-resolution fallback remains incomparable with a bridge publication', async () => {
   const source = sourceReturning(bridgeAcquisition());
   const fallback = vi.fn(async () => runnerResult());
@@ -117,8 +139,29 @@ test('target-resolution fallback remains incomparable with a bridge publication'
   expect(result.comparisonIdentity).toMatchObject({
     producer: 'apple-runner',
     lineage: { targetId: target.targetId },
-    residue: [{ kind: 'fallback-source', producer: 'apple-runner' }],
+    residue: [
+      { kind: 'unknown-generation', captureId: expect.any(String) },
+      { kind: 'fallback-source', producer: 'apple-runner' },
+    ],
   });
+});
+
+test('two target-resolution fallbacks cannot share comparison identity', async () => {
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source: sourceReturning(bridgeAcquisition()),
+    resolveTarget: vi.fn(async () => {
+      throw new Error('launch job unavailable');
+    }),
+  });
+
+  const first = await route.capture(ios, input, signal(), async () => runnerResult());
+  const second = await route.capture(ios, input, signal(), async () => runnerResult());
+
+  expect(first.comparisonIdentity).toBeDefined();
+  expect(second.comparisonIdentity).toBeDefined();
+  expect(
+    areIosSnapshotComparisonIdentitiesEqual(first.comparisonIdentity!, second.comparisonIdentity!),
+  ).toBe(false);
 });
 
 test('runtime shutdown closes the process-owned bridge source', async () => {

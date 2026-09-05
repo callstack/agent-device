@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type {
   CaptureSnapshotInput,
@@ -5,6 +6,7 @@ import type {
   SnapshotRuntimeAcquiredResult,
 } from '@agent-device/contracts/snapshot-runtime';
 import type {
+  IosAcquisitionResidue,
   IosSnapshotComparisonIdentity,
   IosSnapshotLineage,
 } from '@agent-device/contracts/ios-snapshot';
@@ -55,6 +57,7 @@ export function createAppleSnapshotRoute(
       try {
         target = await resolveTarget(device, input.options!.appBundleId!, signal);
       } catch (error) {
+        signal.throwIfAborted();
         emitRouteDiagnostic('target-resolution-failed', device, undefined, error);
         return await runFallback(
           input,
@@ -62,6 +65,7 @@ export function createAppleSnapshotRoute(
           { targetId: `${device.id}:${input.options!.appBundleId!}` },
           requestFor(input),
           'target-resolution-failed',
+          [unknownGenerationResidue()],
         );
       }
       rebaselineGeneration(target, latestGeneration, disabledGenerations);
@@ -84,10 +88,19 @@ export function createAppleSnapshotRoute(
             ...outcome.failure.details,
           });
         }
+        const fallbackIdentity = await resolveFailureFallbackIdentity(
+          outcome.failure,
+          target,
+          device,
+          input.options!.appBundleId!,
+          signal,
+          resolveTarget,
+        );
         return await fallbackAfterFailure(
           input,
           fallback,
           target,
+          fallbackIdentity,
           request,
           outcome.failure,
           disabledGenerations,
@@ -108,6 +121,7 @@ export function createAppleSnapshotRoute(
           input,
           fallback,
           target,
+          { lineage: target, residue: [] },
           request,
           { kind: 'malformed-tree', code: 'presentation-invariant' },
           disabledGenerations,
@@ -132,15 +146,29 @@ function isEligible(device: DeviceInfo, input: CaptureSnapshotInput): boolean {
 async function fallbackAfterFailure(
   input: CaptureSnapshotInput,
   fallback: SnapshotFallback,
-  target: SimulatorSnapshotTarget,
+  failedTarget: SimulatorSnapshotTarget,
+  identity: FallbackIdentity,
   request: ReturnType<typeof createIosSnapshotRequest>,
   failure: SnapshotSourceFailure,
   disabledGenerations: Set<string>,
   cause?: unknown,
 ): Promise<SnapshotResult> {
-  disabledGenerations.add(generationKey(target));
-  emitRouteDiagnostic(failure.code, { id: target.udid }, target.generation, cause, failure.details);
-  return await runFallback(input, fallback, target, request, failure.code);
+  disabledGenerations.add(generationKey(failedTarget));
+  emitRouteDiagnostic(
+    failure.code,
+    { id: failedTarget.udid },
+    failedTarget.generation,
+    cause,
+    failure.details,
+  );
+  return await runFallback(
+    input,
+    fallback,
+    identity.lineage,
+    request,
+    failure.code,
+    identity.residue,
+  );
 }
 
 async function runFallback(
@@ -149,21 +177,62 @@ async function runFallback(
   lineage: IosSnapshotLineage,
   request: ReturnType<typeof createIosSnapshotRequest>,
   reason: string,
+  residue: readonly IosAcquisitionResidue[] = [],
 ): Promise<SnapshotResult> {
   const result = await fallback(input);
   const comparisonIdentity: IosSnapshotComparisonIdentity = Object.freeze({
     producer: 'apple-runner',
     intent: request.acquisitionIntent,
-    lineage: Object.freeze({ ...lineage }),
+    lineage: Object.freeze({
+      ...(lineage.targetId ? { targetId: lineage.targetId } : {}),
+      ...(lineage.generation ? { generation: lineage.generation } : {}),
+    }),
     presentationKey: buildIosSnapshotPresentationKey(request),
-    residue: Object.freeze([{ kind: 'fallback-source', producer: 'apple-runner' } as const]),
+    residue: Object.freeze([
+      ...residue,
+      { kind: 'fallback-source', producer: 'apple-runner' } as const,
+    ]),
   });
-  const warning = `Simulator AX snapshot unavailable (${reason}); used XCTest for this app generation.`;
+  const generation = lineage.generation ? 'this app generation' : 'an unverified app generation';
+  const warning = `Simulator AX snapshot unavailable (${reason}); used XCTest for ${generation}.`;
   return {
     ...result,
     comparisonIdentity,
     warnings: [...(result.warnings ?? []), warning],
   };
+}
+
+type FallbackIdentity = Readonly<{
+  lineage: IosSnapshotLineage;
+  residue: readonly IosAcquisitionResidue[];
+}>;
+
+async function resolveFailureFallbackIdentity(
+  failure: SnapshotSourceFailure,
+  target: SimulatorSnapshotTarget,
+  device: DeviceInfo,
+  appBundleId: string,
+  signal: AbortSignal,
+  resolveTarget: typeof resolveSimulatorSnapshotTarget,
+): Promise<FallbackIdentity> {
+  if (failure.kind !== 'stale-target') return { lineage: target, residue: [] };
+  try {
+    return {
+      lineage: await resolveTarget(device, appBundleId, signal),
+      residue: [],
+    };
+  } catch (error) {
+    signal.throwIfAborted();
+    emitRouteDiagnostic('fallback-target-resolution-failed', device, undefined, error);
+    return {
+      lineage: { targetId: target.targetId },
+      residue: [unknownGenerationResidue()],
+    };
+  }
+}
+
+function unknownGenerationResidue(): IosAcquisitionResidue {
+  return { kind: 'unknown-generation', captureId: randomUUID() };
 }
 
 function requestFor(input: CaptureSnapshotInput) {

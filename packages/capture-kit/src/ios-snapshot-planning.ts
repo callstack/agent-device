@@ -190,6 +190,8 @@ function residueIdentity(residue: IosAcquisitionResidue): string {
         expected: residue.expected,
         observed: residue.observed,
       });
+    case 'unknown-generation':
+      return JSON.stringify({ kind: residue.kind, captureId: residue.captureId });
     case 'unavailable-fact':
       return JSON.stringify({ kind: residue.kind, fact: residue.fact });
     case 'fallback-source':
