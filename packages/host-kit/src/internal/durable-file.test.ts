@@ -3,8 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { isAtomicPublishTemporaryPath } from './atomic-file.ts';
-import { publishDurableFileSync } from './durable-file.ts';
+import { isAtomicPublishTemporaryPath, publishDurableFileSync } from './atomic-file.ts';
 
 const roots: string[] = [];
 
