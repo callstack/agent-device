@@ -293,46 +293,46 @@ test('SessionState field names come from the declaration, not a hand-kept list',
       "    kind: 'cwd';",
       '    id: string;',
       '  };',
-      '  refFrameState?: RefFrameState;',
+      '  refFrame?: RefFrame;',
       '};',
       '',
       'export type Other = { notAField: string };',
     ].join('\n'),
   );
   // Nested object members are not session fields, and neighbouring types are not scanned.
-  assert.deepEqual(fields, ['name', 'sessionScope', 'refFrameState']);
+  assert.deepEqual(fields, ['name', 'sessionScope', 'refFrame']);
 });
 
 test('session-state writes are found by field, and non-daemon or undeclared names are not', () => {
   const writes = findSessionStateWrites(
     new Map([
-      ['src/daemon/ref-frame.ts', "session.refFrameState = 'active';"],
+      ['src/daemon/ref-frame.ts', "session.refFrame = 'active';"],
       ['src/daemon/session-snapshot.ts', 'session.snapshotGeneration += 1;'],
       // the store owns the record and may write anything on it
-      ['src/daemon/session-store.ts', "session.refFrameState = 'expired';"],
+      ['src/daemon/session-store.ts', "session.refFrame = 'expired';"],
       // a runner session outside the daemon is a different type that happens to share a name
-      ['src/platforms/apple/runner-session.ts', 'session.refFrameState = 1;'],
+      ['src/platforms/apple/runner-session.ts', 'session.refFrame = 1;'],
       // a local that is not a declared SessionState field
       ['src/daemon/session-observability/internal/session-audio.ts', 'session.somethingElse = 1;'],
       // reads and comparisons are not writes
       [
         'src/daemon/interaction/internal/find.ts',
-        "if (session.refFrameState === 'active') return;",
+        "if (session.refFrame === 'active') return;",
       ],
       // a write into a sub-object is not a write to the field itself
-      ['src/daemon/handlers/session-probe.ts', 'session.refFrameState.inner = 1;'],
+      ['src/daemon/handlers/session-probe.ts', 'session.refFrame.inner = 1;'],
       // a different binding that happens to have a matching property
       [
         'src/daemon/session-lifecycle/internal/session-close.ts',
-        "other.refFrameState = 'expired';",
+        "other.refFrame = 'expired';",
       ],
     ]),
-    ['refFrameState', 'snapshotGeneration'],
+    ['refFrame', 'snapshotGeneration'],
   );
 
   assert.deepEqual(
     writes.map(({ file, field }) => `${file}:${field}`),
-    ['src/daemon/ref-frame.ts:refFrameState', 'src/daemon/session-snapshot.ts:snapshotGeneration'],
+    ['src/daemon/ref-frame.ts:refFrame', 'src/daemon/session-snapshot.ts:snapshotGeneration'],
   );
 });
 
@@ -340,23 +340,23 @@ test('every assignment form is a write, including the ones a regex forgets', () 
   // A line-based matcher has to enumerate operators, and the ones it misses are the natural
   // ways to write these: `??=` for a default on an optional field, `||=`/`&&=` for a flag.
   const forms = [
-    'session.refFrameState = 1;',
-    'session.refFrameState ??= 1;',
-    'session.refFrameState ||= 1;',
-    'session.refFrameState &&= 1;',
-    'session.refFrameState += 1;',
-    'session.refFrameState -= 1;',
-    'session.refFrameState++;',
-    '--session.refFrameState;',
-    'session\n  .refFrameState = 1;',
+    'session.refFrame = 1;',
+    'session.refFrame ??= 1;',
+    'session.refFrame ||= 1;',
+    'session.refFrame &&= 1;',
+    'session.refFrame += 1;',
+    'session.refFrame -= 1;',
+    'session.refFrame++;',
+    '--session.refFrame;',
+    'session\n  .refFrame = 1;',
   ];
   for (const form of forms) {
     const writes = findSessionStateWrites(new Map([['src/daemon/probe.ts', form]]), [
-      'refFrameState',
+      'refFrame',
     ]);
     assert.deepEqual(
       writes.map(({ field }) => field),
-      ['refFrameState'],
+      ['refFrame'],
       `expected ${JSON.stringify(form)} to count as a write`,
     );
   }
@@ -364,8 +364,8 @@ test('every assignment form is a write, including the ones a regex forgets', () 
 
 test('a computed session write is reported rather than silently unattributed', () => {
   const writes = findSessionStateWrites(
-    new Map([['src/daemon/probe.ts', 'session[key] = 1;\nsession[`refFrameState`] = 2;']]),
-    ['refFrameState'],
+    new Map([['src/daemon/probe.ts', 'session[key] = 1;\nsession[`refFrame`] = 2;']]),
+    ['refFrame'],
   );
   // `[computed]` has no entry in SESSION_STATE_FIELD_OWNERS, so R7 fails on it by
   // construction — a computed write can never pass as an owned one.
@@ -401,19 +401,19 @@ test('a session write counts through an aliased binding, not only one named `ses
         'src/daemon/probe.ts',
         [
           'nextSession.snapshotGeneration = 3;',
-          'preEntrySession.refFrameState = "active";',
+          'preEntrySession.refFrame = "active";',
           'completedSession.saveScriptComplete = true;',
           // Not a session binding, and not a session write.
           'result.snapshotGeneration = 9;',
-          'flags.refFrameState = "x";',
+          'flags.refFrame = "x";',
         ].join('\n'),
       ],
     ]),
-    ['snapshotGeneration', 'refFrameState', 'saveScriptComplete'],
+    ['snapshotGeneration', 'refFrame', 'saveScriptComplete'],
   );
   assert.deepEqual(
     writes.map(({ field, line }) => `${line}:${field}`),
-    ['1:snapshotGeneration', '2:refFrameState', '3:saveScriptComplete'],
+    ['1:snapshotGeneration', '2:refFrame', '3:saveScriptComplete'],
   );
 });
 
