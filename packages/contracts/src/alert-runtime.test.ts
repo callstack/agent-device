@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import { alertRuntimeOperationFacts, bindAlertLeg } from './alert-runtime.ts';
-import { localInteractorSource, providerInteractorSource } from './interactor-operation-binding.ts';
+import { localInteractorSource } from './interactor-operation-binding.ts';
+import { conformInteractorOperations } from './interactor-operation-conformance.fixtures.ts';
 import type { AlertInteractorOptions, Interactor } from './interactor-types.ts';
 
 const device = {
@@ -11,39 +12,6 @@ const device = {
   kind: 'simulator',
   booted: true,
 } as const;
-
-// The composition the interactor catalog performs, spelled out so each assertion below
-// still exercises one facet executor reached through one interactor source.
-const bindLocalAlertReadInteractor = (params: {
-  device: typeof device;
-  signal: AbortSignal;
-  resolveInteractor: any;
-}) => bindAlertLeg('readAlert', params.signal, localInteractorSource(params));
-const bindLocalAlertWaitInteractor = (params: {
-  device: typeof device;
-  signal: AbortSignal;
-  resolveInteractor: any;
-}) => bindAlertLeg('awaitAlert', params.signal, localInteractorSource(params));
-const bindLocalAlertAcceptInteractor = (params: {
-  device: typeof device;
-  signal: AbortSignal;
-  resolveInteractor: any;
-}) => bindAlertLeg('acceptAlert', params.signal, localInteractorSource(params));
-const bindLocalAlertDismissInteractor = (params: {
-  device: typeof device;
-  signal: AbortSignal;
-  resolveInteractor: any;
-}) => bindAlertLeg('dismissAlert', params.signal, localInteractorSource(params));
-const bindProviderAlertAcceptInteractor = (params: {
-  device: typeof device;
-  signal: AbortSignal;
-  resolveInteractor: any;
-}) =>
-  bindAlertLeg(
-    'acceptAlert',
-    params.signal,
-    providerInteractorSource({ ...params, operation: 'alert accept' }),
-  );
 
 test('builds the exact alert operation fact catalog', () => {
   const read = { available: true } as const;
@@ -70,7 +38,7 @@ test('each local leg forwards the window and the session target to its own owner
   };
   const resolveInteractor = vi.fn(async () => legs as unknown as Interactor);
   const signal = new AbortController().signal;
-  const params = { device, signal, resolveInteractor };
+  const source = localInteractorSource({ device, resolveInteractor });
   const input = {
     timeoutMs: 37,
     appBundleId: 'com.example.app',
@@ -78,10 +46,10 @@ test('each local leg forwards the window and the session target to its own owner
     execution: { logPath: '/tmp/daemon.log', requestId: 'alert-1' },
   };
 
-  await bindLocalAlertReadInteractor(params).readAlert(input);
-  await bindLocalAlertWaitInteractor(params).awaitAlert(input);
-  await bindLocalAlertAcceptInteractor(params).acceptAlert(input);
-  await bindLocalAlertDismissInteractor(params).dismissAlert(input);
+  await bindAlertLeg('readAlert', signal, source).readAlert(input);
+  await bindAlertLeg('awaitAlert', signal, source).awaitAlert(input);
+  await bindAlertLeg('acceptAlert', signal, source).acceptAlert(input);
+  await bindAlertLeg('dismissAlert', signal, source).dismissAlert(input);
 
   const expectedOptions = { timeoutMs: 37, appBundleId: 'com.example.app', surface: 'app' };
   expect(legs.readAlert).toHaveBeenCalledWith(expectedOptions);
@@ -99,11 +67,9 @@ test('each local leg forwards the window and the session target to its own owner
 // A frontmost-app session carries no bundle at all, and the option object must not invent one.
 test('an absent target field never reaches the owner as an explicit undefined', async () => {
   const readAlert = vi.fn(async (_options?: AlertInteractorOptions) => ({}));
-  const operations = bindLocalAlertReadInteractor({
-    device,
-    signal: new AbortController().signal,
-    resolveInteractor: async () => ({ readAlert }) as unknown as Interactor,
-  });
+  const resolveInteractor = async () => ({ readAlert }) as unknown as Interactor;
+  const source = localInteractorSource({ device, resolveInteractor });
+  const operations = bindAlertLeg('readAlert', new AbortController().signal, source);
 
   await operations.readAlert({ surface: 'frontmost-app' });
 
@@ -111,32 +77,36 @@ test('an absent target field never reaches the owner as an explicit undefined', 
   expect(Object.keys(readAlert.mock.calls[0]?.[0] ?? {})).toEqual(['surface']);
 });
 
-test('a provider binding fails closed when its exact owner exposes no interactor', async () => {
-  const operations = bindProviderAlertAcceptInteractor({
-    device,
-    signal: new AbortController().signal,
-    resolveInteractor: () => undefined,
-  });
-
-  await expect(operations.acceptAlert({})).rejects.toMatchObject({
-    code: 'UNSUPPORTED_OPERATION',
-    details: { reason: 'provider-runtime-interactor-missing', deviceId: device.id },
-  });
-});
-
-test('an already-cancelled request never resolves an interactor', async () => {
-  const controller = new AbortController();
-  controller.abort();
-  const readAlert = vi.fn(async () => ({}));
-  const resolveInteractor = vi.fn(async () => ({ readAlert }) as unknown as Interactor);
-
-  const operations = bindLocalAlertReadInteractor({
-    device,
-    signal: controller.signal,
-    resolveInteractor,
-  });
-
-  await expect(operations.readAlert({})).rejects.toThrow();
-  expect(resolveInteractor).not.toHaveBeenCalled();
-  expect(readAlert).not.toHaveBeenCalled();
+conformInteractorOperations({
+  device,
+  rows: [
+    {
+      operation: 'readAlert',
+      label: 'alert get',
+      bind: (signal, resolve) => bindAlertLeg('readAlert', signal, resolve),
+      method: 'readAlert',
+      input: {},
+    },
+    {
+      operation: 'awaitAlert',
+      label: 'alert wait',
+      bind: (signal, resolve) => bindAlertLeg('awaitAlert', signal, resolve),
+      method: 'awaitAlert',
+      input: {},
+    },
+    {
+      operation: 'acceptAlert',
+      label: 'alert accept',
+      bind: (signal, resolve) => bindAlertLeg('acceptAlert', signal, resolve),
+      method: 'acceptAlert',
+      input: {},
+    },
+    {
+      operation: 'dismissAlert',
+      label: 'alert dismiss',
+      bind: (signal, resolve) => bindAlertLeg('dismissAlert', signal, resolve),
+      method: 'dismissAlert',
+      input: {},
+    },
+  ],
 });

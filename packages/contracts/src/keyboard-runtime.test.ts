@@ -5,7 +5,11 @@ import {
   keyboardRuntimeOperationFacts,
 } from './keyboard-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
-import { localInteractorSource, providerInteractorSource } from './interactor-operation-binding.ts';
+import {
+  localInteractorSource,
+  type LocalInteractorOperationResolver,
+} from './interactor-operation-binding.ts';
+import { conformInteractorOperations } from './interactor-operation-conformance.fixtures.ts';
 
 const device = {
   platform: 'android',
@@ -15,53 +19,8 @@ const device = {
   booted: true,
 } as const;
 
-// The composition the interactor catalog performs, spelled out so each assertion below
-// still exercises one facet executor reached through one interactor source.
-const bindLocalKeyboardStatusInteractor = (params: {
-  device: typeof device;
-  signal: AbortSignal;
-  resolveInteractor: any;
-}) => bindKeyboardAction('keyboardStatus', params.signal, localInteractorSource(params));
-const bindLocalKeyboardDismissInteractor = (params: {
-  device: typeof device;
-  signal: AbortSignal;
-  resolveInteractor: any;
-}) => bindKeyboardAction('keyboardDismiss', params.signal, localInteractorSource(params));
-const bindLocalKeyboardEnterInteractor = (params: {
-  device: typeof device;
-  signal: AbortSignal;
-  resolveInteractor: any;
-}) => bindKeyboardAction('keyboardEnter', params.signal, localInteractorSource(params));
-const bindProviderKeyboardStatusInteractor = (params: {
-  device: typeof device;
-  signal: AbortSignal;
-  resolveInteractor: any;
-}) =>
-  bindKeyboardAction(
-    'keyboardStatus',
-    params.signal,
-    providerInteractorSource({ ...params, operation: KEYBOARD_ACTION_LABELS.keyboardStatus }),
-  );
-const bindProviderKeyboardDismissInteractor = (params: {
-  device: typeof device;
-  signal: AbortSignal;
-  resolveInteractor: any;
-}) =>
-  bindKeyboardAction(
-    'keyboardDismiss',
-    params.signal,
-    providerInteractorSource({ ...params, operation: KEYBOARD_ACTION_LABELS.keyboardDismiss }),
-  );
-const bindProviderKeyboardEnterInteractor = (params: {
-  device: typeof device;
-  signal: AbortSignal;
-  resolveInteractor: any;
-}) =>
-  bindKeyboardAction(
-    'keyboardEnter',
-    params.signal,
-    providerInteractorSource({ ...params, operation: KEYBOARD_ACTION_LABELS.keyboardEnter }),
-  );
+const local = (resolveInteractor: LocalInteractorOperationResolver) =>
+  localInteractorSource({ device, resolveInteractor });
 
 test('builds the exact keyboard operation fact catalog', () => {
   const status = { available: true } as const;
@@ -79,7 +38,7 @@ test('a local status binding drives the interactor and returns its report', asyn
   const resolveInteractor = vi.fn(async () => ({ keyboardStatus }) as unknown as Interactor);
   const signal = new AbortController().signal;
 
-  const operations = bindLocalKeyboardStatusInteractor({ device, signal, resolveInteractor });
+  const operations = bindKeyboardAction('keyboardStatus', signal, local(resolveInteractor));
   const result = await operations.keyboardStatus({
     options: { appBundleId: 'com.example.app' },
     execution: { logPath: '/tmp/daemon.log', requestId: 'keyboard-1' },
@@ -98,11 +57,11 @@ test('a local status binding drives the interactor and returns its report', asyn
 test('a local dismiss binding drives the interactor', async () => {
   const keyboardDismiss = vi.fn(async () => ({ dismissed: true, visible: false }));
   const resolveInteractor = vi.fn(async () => ({ keyboardDismiss }) as unknown as Interactor);
-  const operations = bindLocalKeyboardDismissInteractor({
-    device,
-    signal: new AbortController().signal,
-    resolveInteractor,
-  });
+  const operations = bindKeyboardAction(
+    'keyboardDismiss',
+    new AbortController().signal,
+    local(resolveInteractor),
+  );
 
   const result = await operations.keyboardDismiss({});
 
@@ -113,65 +72,27 @@ test('a local dismiss binding drives the interactor', async () => {
 test('a local enter binding drives the interactor', async () => {
   const keyboardEnter = vi.fn(async () => ({}));
   const resolveInteractor = vi.fn(async () => ({ keyboardEnter }) as unknown as Interactor);
-  const operations = bindLocalKeyboardEnterInteractor({
-    device,
-    signal: new AbortController().signal,
-    resolveInteractor,
-  });
+  const operations = bindKeyboardAction(
+    'keyboardEnter',
+    new AbortController().signal,
+    local(resolveInteractor),
+  );
 
   await operations.keyboardEnter({});
 
   expect(keyboardEnter).toHaveBeenCalledTimes(1);
 });
 
-test('a provider binding drives its own resolved interactor', async () => {
-  const keyboardStatus = vi.fn(async () => ({ visible: false }));
-  const resolveInteractor = vi.fn(() => ({ keyboardStatus }) as unknown as Interactor);
-  const signal = new AbortController().signal;
-
-  const operations = bindProviderKeyboardStatusInteractor({ device, signal, resolveInteractor });
-  await operations.keyboardStatus({ execution: { requestId: 'keyboard-2' } });
-
-  expect(resolveInteractor).toHaveBeenCalledWith({
-    requestId: 'keyboard-2',
-    appBundleId: undefined,
-    signal,
-  });
-  expect(keyboardStatus).toHaveBeenCalledTimes(1);
-});
-
-test('a provider binding fails closed when its exact owner exposes no interactor at all', async () => {
-  const dismissOperations = bindProviderKeyboardDismissInteractor({
-    device,
-    signal: new AbortController().signal,
-    resolveInteractor: () => undefined,
-  });
-  const enterOperations = bindProviderKeyboardEnterInteractor({
-    device,
-    signal: new AbortController().signal,
-    resolveInteractor: () => undefined,
-  });
-
-  await expect(dismissOperations.keyboardDismiss({})).rejects.toMatchObject({
-    code: 'UNSUPPORTED_OPERATION',
-    details: { reason: 'provider-runtime-interactor-missing', deviceId: device.id },
-  });
-  await expect(enterOperations.keyboardEnter({})).rejects.toMatchObject({
-    code: 'UNSUPPORTED_OPERATION',
-    details: { reason: 'provider-runtime-interactor-missing', deviceId: device.id },
-  });
-});
-
 test('binding fails as a runtime-contract error when the resolved interactor has no method — `Interactor.keyboardStatus`/`keyboardDismiss`/`keyboardEnter` are optional, so an owner whose fact admitted the operation but whose interactor omits it is a contract bug, not a normal refusal', async () => {
-  // The interactor is resolved (unlike the "no interactor at all" case above), but it does not
-  // implement `keyboardEnter` — parity with `hover`, which platforms with no keyboard concept
-  // simply omit.
+  // The interactor is resolved (unlike the "no interactor at all" case the conformance rows
+  // cover), but it does not implement `keyboardEnter` — parity with `hover`, which platforms
+  // with no keyboard concept simply omit.
   const resolveInteractor = vi.fn(async () => ({}) as unknown as Interactor);
-  const operations = bindLocalKeyboardEnterInteractor({
-    device,
-    signal: new AbortController().signal,
-    resolveInteractor,
-  });
+  const operations = bindKeyboardAction(
+    'keyboardEnter',
+    new AbortController().signal,
+    local(resolveInteractor),
+  );
 
   await expect(operations.keyboardEnter({})).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
@@ -179,19 +100,29 @@ test('binding fails as a runtime-contract error when the resolved interactor has
   });
 });
 
-test('an already-cancelled request never resolves an interactor', async () => {
-  const controller = new AbortController();
-  controller.abort();
-  const keyboardStatus = vi.fn(async () => ({ visible: true }));
-  const resolveInteractor = vi.fn(async () => ({ keyboardStatus }) as unknown as Interactor);
-
-  const operations = bindLocalKeyboardStatusInteractor({
-    device,
-    signal: controller.signal,
-    resolveInteractor,
-  });
-
-  await expect(operations.keyboardStatus({})).rejects.toThrow();
-  expect(resolveInteractor).not.toHaveBeenCalled();
-  expect(keyboardStatus).not.toHaveBeenCalled();
+conformInteractorOperations({
+  device,
+  rows: [
+    {
+      operation: 'keyboardStatus',
+      label: KEYBOARD_ACTION_LABELS.keyboardStatus,
+      bind: (signal, resolve) => bindKeyboardAction('keyboardStatus', signal, resolve),
+      method: 'keyboardStatus',
+      input: {},
+    },
+    {
+      operation: 'keyboardDismiss',
+      label: KEYBOARD_ACTION_LABELS.keyboardDismiss,
+      bind: (signal, resolve) => bindKeyboardAction('keyboardDismiss', signal, resolve),
+      method: 'keyboardDismiss',
+      input: {},
+    },
+    {
+      operation: 'keyboardEnter',
+      label: KEYBOARD_ACTION_LABELS.keyboardEnter,
+      bind: (signal, resolve) => bindKeyboardAction('keyboardEnter', signal, resolve),
+      method: 'keyboardEnter',
+      input: {},
+    },
+  ],
 });
