@@ -239,8 +239,9 @@ test(ANDROID_TOUCH_CONTRACT_EVIDENCE.testName, async () => {
 });
 
 test('Provider-backed integration Android alert handles runtime permission dialog', async () => {
+  const dialog = dismissibleDialog(androidRuntimePermissionXml);
   await withProviderScenarioResource(
-    async () => await createAndroidSettingsWorld({ snapshotXml: androidRuntimePermissionXml }),
+    async () => await createAndroidSettingsWorld(dialog),
     async (world) => {
       const client = world.daemon.client();
       await client.apps.open({ app: 'com.example.demo', ...world.selection });
@@ -263,6 +264,7 @@ test('Provider-backed integration Android alert handles runtime permission dialo
         [['shell', 'input', 'tap', '274', '638']],
       );
 
+      dialog.show();
       const alertDismiss = await client.command.alert({ action: 'dismiss', ...world.selection });
       assert.equal(alertDismiss.kind, 'alertHandled');
       assert.equal(alertDismiss.button, 'Don’t allow');
@@ -275,8 +277,9 @@ test('Provider-backed integration Android alert handles runtime permission dialo
 });
 
 test('Provider-backed integration Android alert handles native AlertDialog actions', async () => {
+  const dialog = dismissibleDialog(androidNativeAlertXml);
   await withProviderScenarioResource(
-    async () => await createAndroidSettingsWorld({ snapshotXml: androidNativeAlertXml }),
+    async () => await createAndroidSettingsWorld(dialog),
     async (world) => {
       const client = world.daemon.client();
       await client.apps.open({ app: 'com.example.demo', ...world.selection });
@@ -293,6 +296,7 @@ test('Provider-backed integration Android alert handles native AlertDialog actio
 
       const alertAccept = await client.command.alert({ action: 'accept', ...world.selection });
       assert.equal(alertAccept.button, 'Discard');
+      dialog.show();
       const alertDismiss = await client.command.alert({ action: 'dismiss', ...world.selection });
       assert.equal(alertDismiss.button, 'Cancel');
       assert.deepEqual(
@@ -310,7 +314,7 @@ test('Provider-backed integration Android alert handles native AlertDialog actio
 
 test('Provider-backed integration Android alert handles system dialogs', async () => {
   await withProviderScenarioResource(
-    async () => await createAndroidSettingsWorld({ snapshotXml: androidSystemDialogXml }),
+    async () => await createAndroidSettingsWorld(dismissibleDialog(androidSystemDialogXml)),
     async (world) => {
       const client = world.daemon.client();
       await client.apps.open({ app: 'com.example.demo', ...world.selection });
@@ -408,7 +412,7 @@ test('Provider-backed integration Android external ANR fails with actionable con
 
 test('Provider-backed integration Android alert dismiss falls back to Back without a dismiss button', async () => {
   await withProviderScenarioResource(
-    async () => await createAndroidSettingsWorld({ snapshotXml: androidButtonlessAlertXml }),
+    async () => await createAndroidSettingsWorld(dismissibleDialog(androidButtonlessAlertXml)),
     async (world) => {
       const client = world.daemon.client();
       await client.apps.open({ app: 'com.example.demo', ...world.selection });
@@ -417,6 +421,24 @@ test('Provider-backed integration Android alert dismiss falls back to Back witho
       assert.equal(alertDismiss.kind, 'alertHandled');
       assert.equal(alertDismiss.button, 'Back');
       assertCommandCall(world.adbCalls, ['shell', 'input', 'keyevent', '4']);
+    },
+  );
+});
+
+test('Provider-backed integration Android alert accept fails when the dialog stays visible', async () => {
+  await withProviderScenarioResource(
+    async () => await createAndroidSettingsWorld({ snapshotXml: androidNativeAlertXml }),
+    async (world) => {
+      const client = world.daemon.client();
+      await client.apps.open({ app: 'com.example.demo', ...world.selection });
+
+      await assert.rejects(
+        client.command.alert({ action: 'accept', ...world.selection }),
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message === 'alert accept did not dismiss the visible alert',
+      );
+      assertCommandCall(world.adbCalls, ['shell', 'input', 'tap', '274', '638']);
     },
   );
 });
@@ -702,6 +724,25 @@ function androidButtonlessAlertXml(): string {
     textNode(2, 'Unsaved changes', 'android:id/alertTitle'),
     textNode(3, 'Leave without saving?', 'android:id/message'),
   ]);
+}
+
+/**
+ * A dialog the way a device shows one: in the tree until its button is tapped (or Back is
+ * sent), then gone, with the app-owned surface underneath. `show()` brings it back for a
+ * second action on the same fixture.
+ */
+function dismissibleDialog(dialogXml: () => string) {
+  let visible = true;
+  return {
+    show: () => {
+      visible = true;
+    },
+    snapshotXml: () => (visible ? dialogXml() : androidAppOwnedSheetXml()),
+    onAdbExec: (args: string[]) => {
+      if (args[0] !== 'shell' || args[1] !== 'input') return;
+      if (args[2] === 'tap' || (args[2] === 'keyevent' && args[3] === '4')) visible = false;
+    },
+  };
 }
 
 function androidAppOwnedSheetXml(): string {
