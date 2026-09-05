@@ -16,6 +16,8 @@ export type ResolveManagedRequestLease = (
   intent: Extract<DeviceBindingIntent, { kind: 'exact-owner' }>,
 ) => ManagedRequestLease | undefined;
 
+export type ManagedRequestAdmission = ReturnType<typeof createManagedRequestAdmission>;
+
 export function createManagedRequestAdmission(params: {
   device: DeviceInfo;
   intent: Extract<DeviceBindingIntent, { kind: 'exact-owner' }>;

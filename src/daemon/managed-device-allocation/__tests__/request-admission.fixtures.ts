@@ -1,6 +1,9 @@
 import { vi } from 'vitest';
 import type { ManagedLease } from '@agent-device/contracts/managed-device-allocation';
-import type { DeviceBindingRequest } from '@agent-device/contracts/platform-runtime';
+import {
+  managedLocalRuntimeOwner,
+  type DeviceBindingRequest,
+} from '@agent-device/contracts/platform-runtime';
 import { clipboardReadUse } from '@agent-device/contracts/platform-runtime-operations';
 import { gatewayFixtureScope } from '../../../platform-runtime-gateway.fixtures.ts';
 import { createComposedPlatformRuntimeGateway } from '../../../platform-runtime-gateway.ts';
@@ -26,6 +29,29 @@ export const renewedRequestLease = (overrides: Partial<ManagedLease> = {}): Mana
     ...overrides,
   });
 
+export const mismatchedRequestAuthorities = {
+  owner: (lease) => ({ ...lease, owner: managedLocalRuntimeOwner('foreign') }),
+  token: (lease) => ({ ...lease, fence: { ...lease.fence, token: 'foreign' } }),
+  generation: (lease) => ({
+    ...lease,
+    fence: { ...lease.fence, generation: lease.fence.generation + 1 },
+  }),
+  device: (lease) => ({
+    ...lease,
+    reachability: {
+      ...lease.reachability,
+      device: { ...lease.reachability.device, id: 'foreign' },
+    },
+  }),
+  simulatorSet: (lease) => ({
+    ...lease,
+    reachability: {
+      ...lease.reachability,
+      device: { ...lease.reachability.device, simulatorSetPath: '/foreign' },
+    },
+  }),
+} satisfies Record<string, (lease: ManagedLeaseAdmission) => ManagedLeaseAdmission>;
+
 export async function setupRequest(
   options: Parameters<typeof setupAdmission>[0] & {
     missingClaim?: boolean;
@@ -34,6 +60,8 @@ export async function setupRequest(
     beforePublication?: Promise<void>;
     beforeDisposal?: Promise<void>;
     afterAdmission?: () => void;
+    beforeProjection?: () => void;
+    overrideLease?: (lease: ManagedLeaseAdmission) => ManagedLeaseAdmission;
     controller?: AbortController;
   } = {},
 ) {
@@ -89,6 +117,21 @@ export async function setupRequest(
     loadHost: async () => host,
     managedOwners: [admission.owner],
   });
+  const bindingGateway = {
+    ...gateway,
+    bind: async (request: DeviceBindingRequest) => {
+      const binding = await gateway.bind(request);
+      const beforeProjection = options.beforeProjection;
+      if (!beforeProjection) return binding;
+      return {
+        ...binding,
+        get operations() {
+          beforeProjection();
+          return binding.operations;
+        },
+      };
+    },
+  };
   const claims = createDeviceClaimAdmission({
     policy: 'observe',
     command: 'clipboard',
@@ -114,12 +157,12 @@ export async function setupRequest(
     signal: (options.controller ?? new AbortController()).signal,
   };
   const bindings = createRequestRuntimeBindings({
-    gateway,
+    gateway: bindingGateway,
     scope,
     admitDeviceClaim: claims.admit,
     resolveManagedLease: options.missingAdmission
       ? undefined
-      : () => ({ lease: requestLease, horizon }),
+      : () => ({ lease: options.overrideLease?.(requestLease) ?? requestLease, horizon }),
   });
   const bind = () =>
     bindings.bindExactDevice(

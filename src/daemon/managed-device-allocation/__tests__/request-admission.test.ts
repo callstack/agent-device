@@ -3,7 +3,11 @@ import type { ManagedLease } from '@agent-device/contracts/managed-device-alloca
 import { ensureBoundDeviceReady } from '../../request-runtime-binding.ts';
 import { withManagedAdbFixture } from '../../../platform-runtime-managed-owner.fixtures.ts';
 import { NOW, deferred, unknownStatus } from './lease-admission.fixtures.ts';
-import { setupRequest, renewedRequestLease } from './request-admission.fixtures.ts';
+import {
+  setupRequest,
+  renewedRequestLease,
+  mismatchedRequestAuthorities,
+} from './request-admission.fixtures.ts';
 
 beforeEach(() => vi.spyOn(Date, 'now').mockReturnValue(NOW));
 afterEach(() => vi.restoreAllMocks());
@@ -75,6 +79,25 @@ test('insufficient confirmed command-plus-teardown horizon refuses before any pl
   expect(setup.probe).not.toHaveBeenCalled();
   await setup.bindings[Symbol.asyncDispose]();
 });
+
+test.each(Object.entries(mismatchedRequestAuthorities))(
+  'mismatched resolved %s is refused before allocator work or binding',
+  async (_name, overrideLease) => {
+    const setup = await setupRequest({
+      overrideLease,
+      script: { renewLease: [renewedRequestLease({ ttlDeadline: NOW + 200_000 })] },
+    });
+    const error = await setup.bind().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(setup.allocator.calls).toEqual([]);
+    expect(setup.requests).toEqual([]);
+    expect(setup.probe).not.toHaveBeenCalled();
+    expect(error).toMatchObject({ details: { reason: 'managed-lease-admission-unavailable' } });
+    await setup.bindings[Symbol.asyncDispose]();
+  },
+);
 
 test.skipIf(process.platform === 'win32')(
   'request disposal and command expiry revoke captured operations and readiness',
@@ -153,6 +176,33 @@ test.skipIf(process.platform === 'win32')(
       expect(result).toMatchObject({ error: { details: { reason: 'request_canceled' } } });
       expect(survivor).toMatchObject({ status: 'admitted', value: 'confirmed' });
       expect(setup.allocator.calls).toHaveLength(1);
+    });
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'disposal during operation projection refuses activation after successful adoption',
+  async () => {
+    await withManagedAdbFixture(async (native) => {
+      let disposing: Promise<void> | undefined;
+      const setup = await setupRequest({
+        beforeProjection: () => {
+          disposing ??= setup.bindings[Symbol.asyncDispose]();
+        },
+        script: { renewLease: [renewedRequestLease({ ttlDeadline: NOW + 200_000 })] },
+      });
+      const error = await setup.bind().then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(disposing).toBeDefined();
+      await disposing;
+      expect(setup.dispose).toHaveBeenCalledOnce();
+      expect(native.calls()).toHaveLength(1);
+      expect(error).toMatchObject({ details: { reason: 'request_canceled' } });
+      await expect(
+        setup.requests[0]?.scope.managedDevice?.admit(async () => {}),
+      ).rejects.toMatchObject({ details: { reason: 'managed-request-not-admitted' } });
     });
   },
 );

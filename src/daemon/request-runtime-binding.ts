@@ -16,7 +16,10 @@ import {
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { ensureDeviceReady, type DeviceReadyOptions } from './device-ready.ts';
-import type { ResolveManagedRequestLease } from './managed-device-allocation/request-admission.ts';
+import type {
+  ManagedRequestAdmission,
+  ResolveManagedRequestLease,
+} from './managed-device-allocation/request-admission.ts';
 
 const managedReadiness = new WeakMap<BoundDeviceIdentity, () => Promise<void>>();
 
@@ -152,18 +155,18 @@ export function createRequestRuntimeBindings(params: {
 
   const bindExactDevice: BindExactDeviceRuntime = async (device, owner, fence, use, scope) => {
     const intent: DeviceBindingIntent = { kind: 'exact-owner', owner, fence };
-    const managed =
-      owner.kind === 'managed-local'
-        ? (
-            await import('./managed-device-allocation/request-admission.ts')
-          ).createManagedRequestAdmission({
-            device,
-            intent,
-            scope,
-            lifetime: managedLifetime.signal,
-            resolve: params.resolveManagedLease,
-          })
-        : undefined;
+    let managed: ManagedRequestAdmission | undefined;
+    if (owner.kind === 'managed-local') {
+      const { createManagedRequestAdmission } =
+        await import('./managed-device-allocation/request-admission.ts');
+      managed = createManagedRequestAdmission({
+        device,
+        intent,
+        scope,
+        lifetime: managedLifetime.signal,
+        resolve: params.resolveManagedLease,
+      });
+    }
     if (managed) await params.admitDeviceClaim(device, owner, intent);
     const published = managed
       ? await managed.bind(() => params.gateway.bind({ device, intent, scope: managed.scope }))
