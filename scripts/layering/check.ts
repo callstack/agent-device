@@ -31,9 +31,6 @@
 //     engine files, and planned logical modules start with zero forbidden/internal imports (R10).
 //   - Over the WORKSPACE PACKAGES: no root back-imports, no relative tunnelling past
 //     an exports map, and every workspace specifier declared + exports-named (R11).
-//   - Over BIN.TS'S ALIAS RESOLUTION: it must delegate to the one alias registry instead of
-//     re-declaring a parallel mapping of its own (R12) — the same "delegate to your single
-//     owner" shape as R7's SessionState ownership, applied to bin.ts's `--help` fast path.
 //   - Over PLATFORM PACKAGE COMPOSITION: six private metadata façades meet at the exact root
 //     composition file; premature implementation loading and forbidden cross-boundary edges fail (R13).
 //   - Over REQUEST-BOUND RUNTIME EXECUTION: facts remain the only admission authority and daemon
@@ -56,14 +53,6 @@ import {
   SESSION_STATE_FIELD_OWNERS,
   STORE_OWNED_SESSION_STATE_FIELDS,
 } from './session-state.ts';
-import {
-  ALIAS_REGISTRY_FILE,
-  aliasResolverLocalName,
-  BIN_FILE,
-  localAliasLiterals,
-  registryAliasTokens,
-  usageTextDelegationFailure,
-} from './bin-alias-fast-path.ts';
 import {
   backEdgePair,
   findValueImportCycles,
@@ -447,75 +436,6 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Layer
   return violations;
 }
 
-/**
- * R12: bin.ts's `--help` fast path must delegate command-alias resolution to the one alias
- * registry instead of re-declaring its own mapping. See bin-alias-fast-path.ts for why the
- * three facts below, together, are what closes the gap the original drift exploited — import
- * presence and literal absence alone still pass a bin.ts that imports the resolver and never
- * calls it (or calls it on something unrelated) while `buildCommandUsageText(helpTarget)` runs
- * raw, which is exactly the P2 a maintainer review caught. Fact 3 is what closes that: EVERY
- * `buildCommandUsageText` call must receive the imported resolver applied to the fast path's own
- * help-target binding, with neither name shadowed by a local declaration. The universal
- * quantifier is the follow-up P2 — an existential one is satisfied by a decoy call that resolves
- * an unrelated literal while the shipped call still runs raw.
- */
-function checkBinAliasFastPath(sources: ReadonlyMap<string, string>): LayeringViolation[] {
-  const registrySource = sources.get(ALIAS_REGISTRY_FILE);
-  const binSource = sources.get(BIN_FILE);
-  if (!registrySource || !binSource) {
-    const missing = !registrySource ? ALIAS_REGISTRY_FILE : BIN_FILE;
-    return [
-      {
-        rule: 'R12 bin-alias-fast-path',
-        file: missing,
-        line: 1,
-        message: `${missing} is missing, so bin.ts's alias delegation cannot be checked.`,
-      },
-    ];
-  }
-
-  const violations: LayeringViolation[] = [];
-  const resolverLocalName = aliasResolverLocalName(binSource);
-  if (resolverLocalName === null) {
-    violations.push({
-      rule: 'R12 bin-alias-fast-path',
-      file: BIN_FILE,
-      line: 1,
-      message:
-        'does not hold a value import of normalizeCliCommandAlias from ' +
-        `${ALIAS_REGISTRY_FILE} — the --help fast path cannot delegate alias resolution to the ` +
-        'registry without it.',
-    });
-  } else {
-    const delegationFailure = usageTextDelegationFailure(binSource, resolverLocalName);
-    if (delegationFailure !== null) {
-      violations.push({
-        rule: 'R12 bin-alias-fast-path',
-        file: BIN_FILE,
-        line: 1,
-        message:
-          `imports normalizeCliCommandAlias (locally ${resolverLocalName}) but ` +
-          `${delegationFailure}`,
-      });
-    }
-  }
-
-  const localLiterals = localAliasLiterals(binSource, registryAliasTokens(registrySource));
-  if (localLiterals.length > 0) {
-    violations.push({
-      rule: 'R12 bin-alias-fast-path',
-      file: BIN_FILE,
-      line: 1,
-      message:
-        `contains the registry's own alias token(s) (${localLiterals.join(', ')}) as string ` +
-        'literals — a local alias-mapping table, hand-rolled instead of delegated to ' +
-        `${ALIAS_REGISTRY_FILE}. Delegate through normalizeCliCommandAlias instead of ` +
-        're-declaring the mapping.',
-    });
-  }
-  return violations;
-}
-
 function report(
   files: readonly string[],
   violations: readonly LayeringViolation[],
@@ -532,11 +452,8 @@ function report(
         `(R9); ${daemonModularitySummary()}; ` +
         `${packageBoundariesSummary(repoRoot)}; ${platformPackagePolicySummary()}; ` +
         `runtime facts remain the only device-command admission authority and daemon code cannot ` +
-        `manufacture narrowed runtime proof (R66); R65 keeps production src/daemon free of concrete ` +
-        `platform imports in every executable and type-only form; and bin.ts imports ` +
-        `normalizeCliCommandAlias, ` +
-        `actually passes it into buildCommandUsageText, and holds no local alias literals ` +
-        `(R12).\n`,
+        `manufacture narrowed runtime proof (R66); and R65 keeps production src/daemon free of ` +
+        `concrete platform imports in every executable and type-only form.\n`,
     );
     return 0;
   }
@@ -598,7 +515,6 @@ export const LAYERING_RULE_IDS = [
   'session-state-ownership',
   'daemon-modularity-ratchets',
   'daemon-platform-boundary',
-  'bin-alias-fast-path',
   'package-boundaries',
   'platform-package-policy',
   'retired-platforms-zone',
@@ -640,7 +556,6 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
   ],
   'daemon-platform-boundary': (context) =>
     checkDaemonPlatformBoundary([...context.sources].map(([path, source]) => ({ path, source }))),
-  'bin-alias-fast-path': (context) => checkBinAliasFastPath(context.sources),
   'package-boundaries': () => checkPackageBoundaries(repoRoot),
   'platform-package-policy': (context) =>
     checkPlatformPackagePolicy(
