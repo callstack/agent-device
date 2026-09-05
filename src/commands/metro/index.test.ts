@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { metroCliReader, metroCommandDefinition, metroCommandMetadata } from './index.ts';
+import { metroCliReader, metroCommandFacet, metroCommandMetadata } from './index.ts';
 
 function flags(overrides: Partial<CliFlags> = {}): CliFlags {
   return overrides as CliFlags;
@@ -18,7 +18,7 @@ function expectInvalidArgs(fn: () => unknown, messageFragment: string) {
 describe('metro command interface', () => {
   test('owns public metadata', () => {
     expect(metroCommandMetadata.name).toBe('metro');
-    expect(metroCommandDefinition.name).toBe('metro');
+    expect(metroCommandFacet.definition.name).toBe('metro');
   });
 
   test('reads prepare input from flags', () => {

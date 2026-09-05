@@ -17,7 +17,6 @@ import {
   stringSchema,
 } from '../command-input.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import type { CliReader } from '../cli-grammar/types.ts';
 import { METRO_PREPARE_FLAGS, METRO_RELOAD_FLAGS } from '../cli-grammar/flag-groups.ts';
@@ -69,14 +68,6 @@ export const metroCommandMetadata = defineFieldCommandMetadata(
 );
 
 type MetroInput = { action: 'prepare' | 'reload' } & MetroPrepareOptions & MetroReloadOptions;
-
-export const metroCommandDefinition = defineExecutableCommand(
-  metroCommandMetadata,
-  async (client, input): Promise<MetroPrepareResult | MetroReloadResult> =>
-    input.action === 'prepare'
-      ? await client.metro.prepare(toMetroPrepareOptions(input))
-      : await client.metro.reload(toMetroReloadOptions(input)),
-);
 
 const metroCliSchema = {
   usageOverride:
@@ -132,7 +123,7 @@ export const metroCliReader: CliReader = (positionals, flags) => {
   };
 };
 
-const metroCommandFacet = defineCommandFacet({
+export const metroCommandFacet = defineCommandFacet({
   name: METRO_COMMAND_NAME,
   text: {
     summary: 'Prepare the dev server or reload apps',
@@ -142,7 +133,10 @@ const metroCommandFacet = defineCommandFacet({
       'The binding is cleared when the session closes, and a fresh open without runtime hints also clears any leftover binding from a previous same-name session.',
   },
   metadata: metroCommandMetadata,
-  definition: metroCommandDefinition,
+  run: async (client, input): Promise<MetroPrepareResult | MetroReloadResult> =>
+    input.action === 'prepare'
+      ? await client.metro.prepare(toMetroPrepareOptions(input))
+      : await client.metro.reload(toMetroReloadOptions(input)),
   cliSchema: metroCliSchema,
   cliReader: metroCliReader,
   cliOutputFormatter: metroCliOutputFormatters.metro,
