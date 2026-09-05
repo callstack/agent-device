@@ -4,6 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 import { INTERACTOR_OPERATIONS } from './interactor-operation-catalog.ts';
 
+// Note: this gate matches the catalog against conformance rows in lockstep, so it
+// cannot catch a coordinated deletion (a catalog row and its conformance rows removed
+// together in the same change) — both sets shrink together and neither assertion trips.
+// Closing that gap would need an independent count (e.g. a golden minimum for
+// INTERACTOR_OPERATIONS.length) outside this file's registry-vs-registry comparison.
+
 const sourceDir = dirname(fileURLToPath(import.meta.url));
 const conformanceImport = "from './interactor-operation-conformance.fixtures.ts'";
 const conformanceRow = /\boperation: '(\w+)'/g;
