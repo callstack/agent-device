@@ -7,13 +7,15 @@ import { resolveFacetText, type FacetCommandText } from '../command-text.ts';
 
 export type AnyCommandMetadata<Name extends string = string> = CommandMetadata<Name, unknown>;
 
-export type AnyCommandDefinition<Name extends string = string> = {
+export type CommandDefinition<Name extends string = string, Result = unknown> = {
   name: Name;
   description: string;
   mcpDetail?: string;
   inputSchema: JsonSchema;
-  invoke: (client: AgentDeviceClient, input: unknown) => Promise<unknown>;
+  invoke: (client: AgentDeviceClient, input: unknown) => Promise<Result>;
 };
+
+export type AnyCommandDefinition<Name extends string = string> = CommandDefinition<Name, unknown>;
 
 export type CommandFamilyFacet<TCommandName extends string = string> = {
   name: string;
@@ -27,26 +29,49 @@ export type CommandFamilyFacet<TCommandName extends string = string> = {
 };
 
 /**
- * What a command file authors. `cliSchema` carries grammar only and may be omitted entirely;
- * `text` is required, because a command with no list line has nowhere to appear in `--help`.
+ * What a command file authors: metadata plus the one function that runs the command. `run`'s
+ * `Input` is inferred from `metadata.readInput`, so there is nowhere else to declare the
+ * executable definition — `defineCommandFacet` derives `name`, `description`, `mcpDetail`,
+ * `inputSchema`, and `invoke` from these two fields. `cliSchema` carries grammar only and may be
+ * omitted entirely; `text` is required, because a command with no list line has nowhere to
+ * appear in `--help`.
  */
-export type CommandFacetInput<TCommandName extends string = string> = {
+export type CommandFacetInput<
+  TCommandName extends string = string,
+  Input = unknown,
+  Result = unknown,
+  Formatter extends CliOutputFormatter | undefined = CliOutputFormatter | undefined,
+> = {
   name: TCommandName;
-  metadata: AnyCommandMetadata<TCommandName>;
-  definition: AnyCommandDefinition<TCommandName>;
+  metadata: CommandMetadata<TCommandName, Input>;
+  run: (client: AgentDeviceClient, input: Input) => Promise<Result>;
   cliSchema?: CommandSchemaOverride;
   cliReader: CliReader;
   daemonWriter?: AnyDaemonWriter;
-  cliOutputFormatter?: CliOutputFormatter;
+  cliOutputFormatter?: Formatter;
   text: FacetCommandText;
 };
 
 /**
- * What `defineCommandFacet` returns: the same facet with its schema completed. Stating this as a
- * distinct type is what lets the registry read `cliSchema` without asserting it is populated.
+ * What `defineCommandFacet` returns: the authored facet with its schema completed and the
+ * executable `definition` derived from `metadata` and `run`. Stating this as a distinct type is
+ * what lets the registry read `cliSchema` and `definition` without asserting they are populated.
+ * `Result` carries the command's specific return type through to `definition.invoke`, the same way
+ * `CommandExecutionResult` recovers it per command name from the family registry.
  */
-export type CommandFacet<TCommandName extends string = string> = CommandFacetInput<TCommandName> & {
+export type CommandFacet<
+  TCommandName extends string = string,
+  Result = unknown,
+  Formatter extends CliOutputFormatter | undefined = CliOutputFormatter | undefined,
+> = {
+  name: TCommandName;
+  metadata: AnyCommandMetadata<TCommandName>;
+  definition: CommandDefinition<TCommandName, Result>;
   cliSchema: CommandSchema;
+  cliReader: CliReader;
+  daemonWriter?: AnyDaemonWriter;
+  cliOutputFormatter?: Formatter;
+  text: FacetCommandText;
 };
 
 type CommandFacetMetadata<TCommands extends readonly CommandFacet[]> = {
@@ -61,17 +86,33 @@ type CommandFacetName<TCommands extends readonly CommandFacet[]> = TCommands[num
 
 export function defineCommandFacet<
   const TCommandName extends string,
-  const TCommand extends CommandFacetInput<TCommandName>,
->(command: TCommand): TCommand & { cliSchema: CommandSchema } {
+  Input,
+  Result,
+  Formatter extends CliOutputFormatter | undefined = undefined,
+>(
+  command: CommandFacetInput<TCommandName, Input, Result, Formatter>,
+): CommandFacet<TCommandName, Result, Formatter> {
   // The metadata already holds the canonical description, so the facet never repeats it; the
   // resolved text is what every surface renders from.
   const text = resolveFacetText(command.text, command.metadata.description);
   const mcpTail = text.mcpDetail ? { mcpDetail: text.mcpDetail } : {};
+  const metadata = { ...command.metadata, ...mcpTail };
+  const definition: CommandDefinition<TCommandName, Result> = {
+    name: metadata.name,
+    description: metadata.description,
+    inputSchema: metadata.inputSchema,
+    ...mcpTail,
+    invoke: async (client, input) => await command.run(client, metadata.readInput(input)),
+  };
   return {
-    ...command,
-    metadata: { ...command.metadata, ...mcpTail },
-    definition: { ...command.definition, ...mcpTail },
+    name: command.name,
+    metadata,
+    definition,
     cliSchema: { ...command.cliSchema, text },
+    cliReader: command.cliReader,
+    daemonWriter: command.daemonWriter,
+    cliOutputFormatter: command.cliOutputFormatter,
+    text,
   };
 }
 
