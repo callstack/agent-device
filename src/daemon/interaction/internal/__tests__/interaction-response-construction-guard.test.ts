@@ -101,35 +101,32 @@ function touchCommandOf(switchCase: AstNode): (typeof TOUCH_DISPATCH_COMMANDS)[n
     : null;
 }
 
+/** The callee of a case body that is exactly one `return await <callee>(...)`, else undefined. */
+function awaitedCallee(switchCase: AstNode): AstNode | undefined {
+  const [statement, ...rest] = switchCase.consequent as AstNode[];
+  if (rest.length > 0 || statement?.type !== 'ReturnStatement') return undefined;
+  const awaited = statement.argument;
+  if (!isAstNode(awaited) || awaited.type !== 'AwaitExpression') return undefined;
+  const call = awaited.argument;
+  return isAstNode(call) && call.type === 'CallExpression' ? (call.callee as AstNode) : undefined;
+}
+
 /** The touch handler a case delegates to, or why it is not a pure delegation. */
 function delegationOf(
   switchCase: AstNode,
   handlers: ReadonlySet<string>,
 ): { handler: string } | { violation: string } {
-  const consequent = switchCase.consequent as AstNode[];
-  if (consequent.length !== 1 || consequent[0]?.type !== 'ReturnStatement') {
-    return { violation: 'the case body is not exactly one return statement' };
+  const callee = awaitedCallee(switchCase);
+  if (callee === undefined) {
+    return { violation: 'the case body is not exactly one `return await <handler>(...)`' };
   }
-  const awaited = consequent[0].argument;
-  if (!isAstNode(awaited) || awaited.type !== 'AwaitExpression') {
-    return { violation: 'the case does not return an awaited call' };
-  }
-  const call = awaited.argument;
-  if (!isAstNode(call) || call.type !== 'CallExpression') {
-    return { violation: 'the case does not return an awaited call' };
-  }
-  const callee = call.callee;
-  if (!isAstNode(callee) || callee.type !== 'Identifier') {
-    return {
-      violation: 'the case calls something other than an imported touch handler',
-    };
+  if (callee.type !== 'Identifier') {
+    return { violation: 'the case calls something other than an imported touch handler' };
   }
   const handler = String(callee.name);
   return handlers.has(handler)
     ? { handler }
-    : {
-        violation: `\`${handler}\` is not imported from an interaction-touch*.ts handler`,
-      };
+    : { violation: `\`${handler}\` is not imported from an interaction-touch*.ts handler` };
 }
 
 /**
@@ -268,7 +265,7 @@ test('the dispatcher guard rejects a hand-rolled responseData hidden behind a ne
     ),
   );
   assert.deepEqual(touchDispatchViolations(source), [
-    "case 'press': the case body is not exactly one return statement",
+    "case 'press': the case body is not exactly one `return await <handler>(...)`",
   ]);
 });
 
@@ -280,7 +277,7 @@ test('the dispatcher guard rejects a touch case that returns something other tha
     ),
   );
   assert.deepEqual(touchDispatchViolations(inline), [
-    "case 'fill': the case does not return an awaited call",
+    "case 'fill': the case body is not exactly one `return await <handler>(...)`",
   ]);
 
   const foreign = dispatcher(
