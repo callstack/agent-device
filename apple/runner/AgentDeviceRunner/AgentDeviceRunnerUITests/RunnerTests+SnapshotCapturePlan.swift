@@ -645,7 +645,11 @@ extension RunnerTests {
       // Legacy human text for older daemons that read message instead of snapshotQuality.
       message: Self.legacyQualityMessage(quality) ?? payload.message,
       nodes: payload.nodes,
-      truncated: payload.truncated == true || state != "healthy" || capture.effectiveDepth != nil,
+      // Completeness, never provenance: a whole tree that a later backend produced (state
+      // "recovered") stays untruncated, so strict absence reads can trust it. Only a real cap
+      // (payload truncation, a depth-limited private AX capture) or a sparse terminal payload
+      // is truncated.
+      truncated: payload.truncated == true || state == "sparse" || capture.effectiveDepth != nil,
       qualityPayload: capture.qualityPayload.flatMap { quality in
         guard let nodes = quality.nodes else { return nil }
         return SnapshotQualityPayload(nodes: nodes, truncated: quality.truncated == true)
@@ -884,6 +888,46 @@ extension RunnerTests {
 
     XCTAssertEqual(payload.snapshotQuality?.timing, timing)
     XCTAssertEqual(payload.nodes?.count, 1)
+  }
+
+  func testStampedPayloadTruncationTracksCompletenessNotRecoveryProvenance() {
+    let complete = SnapshotBackendCapture(
+      payload: DataPayload(
+        nodes: [
+          planTestNode(index: 0, type: "Application", label: "App"),
+          planTestNode(index: 1, type: "Button", label: "Open", parentIndex: 0),
+        ],
+        truncated: false
+      ),
+      effectiveDepth: nil
+    )
+    let deferred: (reason: String, code: String) = (
+      "XCTest-backed snapshot tiers were deferred after recent slow accessibility work", "deferred"
+    )
+
+    // The CI signature behind `is absent ... capture was truncated`: a complete private AX
+    // tree selected while the XCTest channel is penalized is whole, and must say so.
+    let recovered = stampedSnapshotPayload(
+      complete, backend: .privateAX, state: "recovered", reason: deferred)
+    XCTAssertEqual(recovered.snapshotQuality?.state, "recovered")
+    XCTAssertEqual(recovered.truncated, false)
+
+    let depthLimited = stampedSnapshotPayload(
+      SnapshotBackendCapture(payload: complete.payload, effectiveDepth: 56),
+      backend: .privateAX, state: "recovered", reason: deferred)
+    XCTAssertEqual(depthLimited.truncated, true)
+
+    let cappedPayload = stampedSnapshotPayload(
+      SnapshotBackendCapture(
+        payload: DataPayload(nodes: complete.payload.nodes ?? [], truncated: true),
+        effectiveDepth: nil),
+      backend: .recursiveTree, state: "healthy", reason: nil)
+    XCTAssertEqual(cappedPayload.truncated, true)
+
+    let sparse = stampedSnapshotPayload(
+      complete, backend: .querySweep, state: "sparse",
+      reason: ("snapshot returned no semantic controls or content", "sparse-tree"))
+    XCTAssertEqual(sparse.truncated, true)
   }
 
   func testSnapshotQualityCarriesUnscopedQualityPayload() {

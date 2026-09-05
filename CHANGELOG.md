@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Fixed: iOS snapshots no longer report `truncated: true` merely because a later backend produced
+  them. The runner stamped every recovered capture as truncated — including a complete private-AX
+  tree taken while the XCTest channel was penalized as slow — so a strict `is absent` / `wait absent`
+  refused it with "capture was truncated" on loaded CI hosts. `truncated` now tracks completeness
+  only: payload truncation, a depth-limited capture, or a sparse terminal payload.
+- Fixed: Android `alert accept` / `alert dismiss` return only once the dialog has left the
+  accessibility tree (a different alert taking its place counts as dismissed), matching the iOS
+  runner's re-check. Previously they returned right after the button press, so the next read could
+  still see only the dialog window. A dialog that stays visible past the action budget now fails with
+  `alert <action> did not dismiss the visible alert`.
 - Added strict `wait absent <selector> [timeoutMs]` polling for zero selector matches. Incomplete,
   sparse, truncated, scoped, depth-limited, and Android unreadable captures cannot prove absence;
   deadline diagnostics retain typed capture evidence and stable first-match details (#2236).

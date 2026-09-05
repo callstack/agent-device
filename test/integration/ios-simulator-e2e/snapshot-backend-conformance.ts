@@ -82,13 +82,14 @@ export function assertSnapshotBackendConformance(
     quality?.state === 'healthy' || quality?.state === 'recovered',
     `${backend} capture must have a non-sparse quality verdict: ${JSON.stringify(quality)}`,
   );
-  // The existing wire contract marks any recovered capture as truncated, including a complete
-  // private-AX payload selected after the XCTest channel was deferred. Assert that relationship
-  // instead of conflating recovery provenance with missing fixture controls.
+  // `truncated` is a completeness fact, never recovery provenance: a complete capture stays
+  // untruncated even when a later backend produced it after the XCTest channel was deferred
+  // (state "recovered"). The fixture screen fits every backend's budget, so truncation here is
+  // a wire regression, not missing fixture controls.
   assert.equal(
     snapshot.truncated,
-    quality.state !== 'healthy',
-    `${backend} quality/truncation flags disagree: ${JSON.stringify(quality)}`,
+    false,
+    `${backend} reported a truncated capture of the fixture screen: ${JSON.stringify(quality)}`,
   );
   assert.ok(
     snapshot.nodes.length >= fixture.minimumNodeCount,
