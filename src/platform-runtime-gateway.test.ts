@@ -516,6 +516,37 @@ describe('composed platform runtime gateway', () => {
     expect(localLoad).not.toHaveBeenCalled();
   });
 
+  test('reports identical facts for a provider without a module on both the bind and inspect paths', async () => {
+    const runtimeGateway = createComposedPlatformRuntimeGateway({
+      modules: new Map([
+        [
+          'apple',
+          {
+            family: 'apple',
+            loadRuntime: async () =>
+              runtimeOwner({ ref: { kind: 'local-family', family: 'apple' } }),
+          },
+        ],
+      ]),
+      loadHost: async () => ({}) as PlatformRuntimeHost,
+      providerRuntimes: [
+        {
+          provider: 'webdriver',
+          leaseLifecycle: {},
+          deviceInventoryProvider: async () => null,
+          ownsDevice: () => true,
+          getInteractor: () => undefined,
+          shutdown: async () => {},
+        },
+      ],
+    });
+    const binding = await runtimeGateway.bind({ device, intent: { kind: 'ordinary' }, scope });
+    const inspected = await runtimeGateway.inspectFacts(device);
+    // The bind and inspect arms build this fact set independently; both must derive from the same
+    // construction path rather than two hand-maintained maps that can drift from each other.
+    expect(binding.facts).toEqual(inspected);
+  });
+
   test.each(LIFECYCLE_FACETS)(
     'keeps provider-owned unsupported $0 operations closed without loading a local runtime',
     async (facet, operations) => {
