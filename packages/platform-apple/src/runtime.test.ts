@@ -1,4 +1,11 @@
 import { expect, test, vi } from 'vitest';
+
+vi.mock('./core/app-resolution.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./core/app-resolution.ts')>()),
+  listIosApps: vi.fn(async () => [{ bundleId: 'com.example.app', name: 'Example' }]),
+}));
+
+import { listIosApps } from './core/app-resolution.ts';
 import type { DeviceBinding, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { SnapshotRuntimeHost } from '@agent-device/contracts/snapshot-runtime';
@@ -398,16 +405,10 @@ test('macOS readiness is a no-op while boot remains unavailable', async () => {
   expect(binding.operations.bootTarget).toBeUndefined();
 });
 
-test('routes Apple app inventory through the injected host facet', async () => {
-  const host = platformRuntimeHostFixture();
-  const listApps = vi.fn(async () => [{ id: 'com.example.app', name: 'Example' }]);
-  const runtime = createApplePlatformRuntime({
-    ...host,
-    appInventory: {
-      ...host.appInventory,
-      apple: { listApps },
-    },
-  });
+test('lists Apple apps through the package-owned resolver', async () => {
+  const listApps = vi.mocked(listIosApps);
+  listApps.mockClear();
+  const runtime = createApplePlatformRuntime(platformRuntimeHostFixture());
   const device = appleDevice();
   const binding = await runtime.bind({
     device,
@@ -422,7 +423,7 @@ test('routes Apple app inventory through the injected host facet', async () => {
   await expect(binding.operations.listApps?.({ device, filter: 'all' })).resolves.toEqual([
     { id: 'com.example.app', name: 'Example' },
   ]);
-  expect(listApps).toHaveBeenCalledWith(device, 'all', expect.any(AbortSignal));
+  expect(listApps).toHaveBeenCalledWith(device, 'all');
 });
 
 type LegacyLifecycleCell = Readonly<{

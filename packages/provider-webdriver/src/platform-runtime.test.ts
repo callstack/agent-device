@@ -407,10 +407,6 @@ function host(run: PlatformRuntimeHost['commands']['run']): PlatformRuntimeHost 
       },
       androidEmulator: { discover: async () => [], launch: () => 1, terminate: async () => {} },
     },
-    appState: {
-      android: { run: async () => ({ stdout: '' }) },
-      harmonyos: { run: async () => ({ stdout: '' }) },
-    },
     deviceShutdown: {
       apple: {
         shutdownTarget: async () => ({ success: true, exitCode: 0, stdout: '', stderr: '' }),
@@ -470,11 +466,6 @@ function host(run: PlatformRuntimeHost['commands']['run']): PlatformRuntimeHost 
       }),
     },
     networkTransports: { resolve: async () => ({ mode: 'local' }) },
-    appInventory: {
-      apple: { listApps: async () => [] },
-      android: { listApps: async () => [] },
-      harmonyos: { listApps: async () => [] },
-    },
     screenRecording: {
       outputs: { prepare: async () => {} },
       apple: {

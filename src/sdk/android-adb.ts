@@ -13,9 +13,10 @@ import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-ru
 
 export async function getAndroidAppStateWithAdb(
   adb: AndroidAdbExecutor,
+  signal?: AbortSignal,
 ): Promise<AppStateRuntimeResult> {
   const { getAndroidAppStateWithAdb: read } = await import('../platform-runtime.ts');
-  return await read(adb);
+  return await read(adb, signal);
 }
 
 export {

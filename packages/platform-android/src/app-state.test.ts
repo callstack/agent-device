@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { parseAndroidForegroundApp } from './app-state.ts';
+import { parseAndroidForegroundApp, readAndroidAppStateWithExecutor } from './app-state.ts';
 
 test('parses Android window and activity foreground markers', () => {
   expect(
@@ -27,4 +27,19 @@ test('scans repeated uncontrolled focus text without regular-expression backtrac
   expect(
     parseAndroidForegroundApp(`ResumedActivity:${'ResumedActivity:a'.repeat(20_000)}`),
   ).toBeNull();
+});
+
+test('stops between dumpsys attempts once the request is aborted', async () => {
+  const controller = new AbortController();
+  const issued: string[][] = [];
+  const run = async (args: string[]) => {
+    issued.push(args);
+    controller.abort(new Error('request canceled'));
+    return { exitCode: 0, stdout: 'mCurrentFocus=Window{1 u0 StatusBar}', stderr: '' };
+  };
+
+  await expect(readAndroidAppStateWithExecutor(run, controller.signal)).rejects.toThrow(
+    'request canceled',
+  );
+  expect(issued).toEqual([['shell', 'dumpsys', 'window', 'windows']]);
 });

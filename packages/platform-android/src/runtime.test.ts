@@ -7,13 +7,13 @@ import type {
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidPlatformRuntime } from './runtime.ts';
+import { bindAndroidAdbHostStub } from './adb-host.fixtures.ts';
 import {
   ANDROID_EMULATOR,
   UNKNOWN_KIND_DEVICE,
   androidNavigationHost,
   androidRuntimeHost,
   bindOrdinary,
-  emptyAppInventory,
 } from './runtime.fixtures.ts';
 
 const appStateUnavailable = {
@@ -27,10 +27,20 @@ test.each([
   ['device', { ...ANDROID_EMULATOR, kind: 'device' as const }],
   ['unknown', UNKNOWN_KIND_DEVICE],
 ])('classifies the Android %s runtime denominator', async (_name, runtimeDevice) => {
-  const listApps = vi.fn(async () => [{ id: 'com.example.app', name: 'Example' }]);
-  const appState = vi.fn(async () => ({
-    stdout: 'mCurrentFocus=Window{1 u0 com.example.app/.MainActivity}',
-  }));
+  const execSerialAdb = vi.fn(async (_serial: string, args: string[]) => {
+    if (args.includes('query-activities')) {
+      return { stdout: 'com.example.app/.MainActivity\n', stderr: '', exitCode: 0 };
+    }
+    if (args.includes('dumpsys')) {
+      return {
+        stdout: 'mCurrentFocus=Window{1 u0 com.example.app/.MainActivity}',
+        stderr: '',
+        exitCode: 0,
+      };
+    }
+    return { stdout: '', stderr: '', exitCode: 0 };
+  });
+  bindAndroidAdbHostStub({ execSerialAdb });
   const host = androidRuntimeHost({
     commands: {
       which: async () => 'tool',
@@ -38,11 +48,6 @@ test.each([
     },
     toolchains: { prepare: async () => {} },
     clock: { now: () => 1, sleep: async () => {} },
-    appInventory: { ...emptyAppInventory, android: { listApps } },
-    appState: {
-      android: { run: appState },
-      harmonyos: { run: async () => ({ stdout: '' }) },
-    },
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },
       appleAutomation: {
@@ -95,7 +100,11 @@ test.each([
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
   ).resolves.toEqual([{ id: 'com.example.app', name: 'Example' }]);
-  expect(listApps).toHaveBeenCalledWith(runtimeDevice, 'all', expect.any(AbortSignal));
+  expect(execSerialAdb).toHaveBeenCalledWith(
+    runtimeDevice.id,
+    expect.arrayContaining(['query-activities']),
+    expect.objectContaining({ allowFailure: true }),
+  );
 
   await expect(binding.operations.bootTarget?.({})).resolves.toMatchObject({
     id: runtimeDevice.id,
@@ -105,10 +114,10 @@ test.each([
     package: 'com.example.app',
     activity: '.MainActivity',
   });
-  expect(appState).toHaveBeenCalledWith(
-    runtimeDevice,
-    { args: ['shell', 'dumpsys', 'window', 'windows'], allowFailure: true },
-    expect.any(AbortSignal),
+  expect(execSerialAdb).toHaveBeenCalledWith(
+    runtimeDevice.id,
+    ['shell', 'dumpsys', 'window', 'windows'],
+    expect.objectContaining({ allowFailure: true }),
   );
 
   if (runtimeDevice.kind === 'emulator') {
@@ -124,10 +133,6 @@ test.each([
 test('rejects the non-discovered Android simulator cell for appstate', async () => {
   const runtimeDevice = { ...ANDROID_EMULATOR, kind: 'simulator' as const };
   const host = androidRuntimeHost({
-    appState: {
-      android: { run: async () => ({ stdout: '' }) },
-      harmonyos: { run: async () => ({ stdout: '' }) },
-    },
     deviceReadiness: { android: { ensureReady: async (selected: DeviceInfo) => selected } },
   });
   const binding = await bindOrdinary(createAndroidPlatformRuntime(host), runtimeDevice);

@@ -1,30 +1,17 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type {
-  AppStateRuntimeCommand,
-  AppStateRuntimeCommandResult,
-  AppStateRuntimeResult,
-} from '@agent-device/contracts/app-state-runtime';
+import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-export type HarmonyAppStateHost = Readonly<{
-  run(
-    device: DeviceInfo,
-    command: AppStateRuntimeCommand,
-    signal: AbortSignal,
-  ): Promise<AppStateRuntimeCommandResult>;
-}>;
-
 export async function readHarmonyAppState(
-  host: HarmonyAppStateHost,
   device: DeviceInfo,
   signal: AbortSignal,
 ): Promise<AppStateRuntimeResult> {
   signal.throwIfAborted();
-  const result = await host.run(
-    device,
-    { args: ['shell', 'aa', 'dump', '-l'], timeoutMs: 15_000 },
+  const { runHarmonyHdc } = await import('./hdc.ts');
+  const result = await runHarmonyHdc(device, ['shell', 'aa', 'dump', '-l'], {
+    timeoutMs: 15_000,
     signal,
-  );
+  });
   signal.throwIfAborted();
   const foreground = parseHarmonyForegroundApp(result.stdout);
   if (!foreground) {

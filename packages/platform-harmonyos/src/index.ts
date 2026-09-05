@@ -32,9 +32,6 @@ export const runtimeModule = Object.freeze({
 
 export type { HarmonyInventoryConfig } from './inventory-config.ts';
 
-export const listHarmonyApps = deferred<(typeof import('./app-lifecycle.ts'))['listHarmonyApps']>(
-  async () => (await import('./app-lifecycle.ts')).listHarmonyApps,
-);
 export const openHarmonyApp = deferred<(typeof import('./app-lifecycle.ts'))['openHarmonyApp']>(
   async () => (await import('./app-lifecycle.ts')).openHarmonyApp,
 );

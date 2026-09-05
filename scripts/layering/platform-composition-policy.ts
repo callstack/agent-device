@@ -76,7 +76,6 @@ function isAllowedCompositionImport(specifier: string): boolean {
     specifier === './platform-runtime-android-adb-host.ts' ||
     specifier === './platform-runtime-android-observation-host.ts' ||
     specifier === './platform-runtime-operation-host.ts' ||
-    specifier === './platform-runtime-app-state-host.ts' ||
     specifier === './platform-runtime-device-inventory.ts' ||
     specifier === './platform-runtime-host.ts' ||
     specifier === './platform-runtime/request-providers.ts' ||
