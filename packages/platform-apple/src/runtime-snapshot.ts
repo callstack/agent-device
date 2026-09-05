@@ -13,7 +13,7 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import type { AppleSnapshotRoute } from './snapshot-route.ts';
 
 /** Apple-owned selection between app snapshots and explicit macOS surface snapshots. */
@@ -71,7 +71,11 @@ type SnapshotRuntimeOperation = Pick<
  *   answer would describe the wrong surface. Reporting `false` sends the poll to the desktop
  *   surface capture, which is the reading that matches the request.
  *
- * Both report `found: false` — "not proven here" — never an error, so the caller's canonical tree
+ * - Local Simulator without a live runner: the runner's answer would cost its startup, which an
+ *   observation never needs while the canonical tree comes from the host AX bridge. A runner that
+ *   is already alive keeps answering.
+ *
+ * All report `found: false` — "not proven here" — never an error, so the caller's canonical tree
  * remains the complete path (ADR 0019 section 2).
  */
 export function bindAppleFindTextRuntime(
@@ -90,6 +94,7 @@ export function bindAppleFindTextRuntime(
           ? request.signal
           : AbortSignal.any([request.signal, input.signal]);
       signal.throwIfAborted();
+      if (await simulatorRunnerNotLive(host, request.device)) return { found: false };
       const interactor = await host.localInteractors.resolve(request.device, {
         ...input.execution,
         appBundleId,
@@ -121,6 +126,7 @@ export function bindAppleFindSelectorRuntime(
         ? AbortSignal.any([request.signal, input.signal])
         : request.signal;
       signal.throwIfAborted();
+      if (await simulatorRunnerNotLive(host, request.device)) return { found: false };
       const interactor = await host.localInteractors.resolve(request.device, {
         ...input.execution,
         appBundleId,
@@ -130,4 +136,13 @@ export function bindAppleFindSelectorRuntime(
       return await interactor.findSelector(input.selector, { appBundleId, signal });
     },
   });
+}
+
+/** A local iOS Simulator whose runner session is not alive; see the find-runtime doc above. */
+async function simulatorRunnerNotLive(
+  host: Pick<PlatformRuntimeHost, 'appleApplications'>,
+  device: DeviceInfo,
+): Promise<boolean> {
+  if (!isIosFamily(device) || device.kind !== 'simulator') return false;
+  return !(await host.appleApplications.hasLiveRunnerSession(device.id));
 }

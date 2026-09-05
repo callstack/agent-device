@@ -76,6 +76,11 @@ export function createAppleApplicationTools(): AppleApplicationTools {
       const { stopIosRunnerSession } = await loadRunnerOperations();
       await stopIosRunnerSession(deviceId);
     },
+    hasLiveRunnerSession: async (deviceId) => {
+      const { getRunnerSessionSnapshot } =
+        await import('@agent-device/platform-apple/runner/operations');
+      return getRunnerSessionSnapshot(deviceId)?.alive === true;
+    },
     scheduleRunnerIdleStop: (deviceId) => {
       void loadRunnerOperations().then(({ scheduleIosRunnerIdleStop }) =>
         scheduleIosRunnerIdleStop(deviceId),

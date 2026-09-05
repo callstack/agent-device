@@ -1,3 +1,4 @@
+import type { ExecutionPlan } from './execution-plan.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { GestureExecutionProfile } from '@agent-device/contracts/gesture-plan-types';
 import type { PreresolvedInteractionTarget } from '@agent-device/contracts/interaction';
@@ -52,6 +53,12 @@ export type DaemonOpenLifecycle = {
 type DaemonRequestInternal = {
   publicNetworkOnly?: true;
   openLifecycle?: DaemonOpenLifecycle;
+  /**
+   * The steps a batch still has ahead of this one. The open seam derives platform readiness
+   * policy (runner demand) from it; the transport strips `internal`, so it never arrives from a
+   * client.
+   */
+  executionPlan?: ExecutionPlan;
   /**
    * Request-owned capability used when a fresh replay discovers its device
    * only inside the first open. The router retains that device's execution

@@ -126,6 +126,12 @@ The daemon-side truth for route ownership and request-policy traits.
 Per-command classifications controlling Apple runner lifecycle and recovery behavior
 independently of the public command surface.
 
+**Runner demand**:
+The Apple owner's decision, per local-Simulator open, of how much the XCTest runner is known to be
+needed by the steps still ahead in the same batch: `none` starts no runner, `possible` (unknown
+plan) prewarms without ever awaiting readiness, `required` prepares readiness for the first
+runner-dependent step. Derived from the commands' declared runtime operations, never a public flag.
+
 **Daemon RPC protocol version**:
 The integer used to detect breaking compatibility across the remote daemon boundary.
 

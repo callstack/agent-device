@@ -17,6 +17,7 @@ import {
 } from '@agent-device/contracts/application-lifecycle-interaction';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { ensureAppleReady } from './readiness/runtime.ts';
+import { resolveAppleSimulatorRunnerDemand } from './runner-demand.ts';
 import { isApplePlatform, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -92,11 +93,18 @@ async function openAppleApplication(
   const timing: MutableOpenTiming = {};
   const localIosSimulator = isIosSimulator(binding.device);
   const runner = createRunnerPrewarm(host, binding, input, timing);
+  // Only a local Simulator has a runner-free observation path (the host AX bridge), so only it
+  // consults the plan. Physical devices keep their runner lifecycle unchanged.
+  const runnerDemand = localIosSimulator
+    ? resolveAppleSimulatorRunnerDemand(input.plan)
+    : undefined;
+  if (runnerDemand) timing.runnerDemand = runnerDemand;
   const shouldPrewarmRunner =
     isIosFamily(binding.device) &&
     input.surface === 'app' &&
     input.positionals.length > 0 &&
-    Boolean(input.appBundleId);
+    Boolean(input.appBundleId) &&
+    runnerDemand !== 'none';
   const retainRunnerForRelaunch = shouldRetainRunnerForRelaunch(
     binding.device,
     input,
@@ -116,7 +124,13 @@ async function openAppleApplication(
     await prewarmAppleRunnerBeforeOpen(runner, shouldPrewarmRunner, input.prewarmRunnerBeforeOpen);
     const runnerTargetPredatesOpen = runner.wasAwaited();
     await dispatchAppleOpen(binding, input, localIosSimulator, timing);
-    await finishAppleRunnerPrewarm(runner, shouldPrewarmRunner, input.relaunch);
+    // A Simulator open never waits for runner readiness: bridge observation does not need it and
+    // the first runner-dependent command awaits the same startup under the runner session lock.
+    await finishAppleRunnerPrewarm(
+      runner,
+      shouldPrewarmRunner,
+      input.relaunch && !localIosSimulator,
+    );
     await notifyAppleRunnerRelaunch(
       host,
       binding,
@@ -253,6 +267,14 @@ async function notifyAppleRunnerRelaunch(
     !isIosFamily(binding.device) ||
     (!localIosSimulator && !retainRunnerForRelaunch) ||
     (!input.relaunch && !runnerTargetPredatesOpen)
+  ) {
+    return;
+  }
+  // Only a runner that is already alive can hold a stale cached target. A starting runner has
+  // none, and asking it would await its startup; a fresh one re-resolves the target on first use.
+  if (
+    localIosSimulator &&
+    !(await host.appleApplications.hasLiveRunnerSession(binding.device.id))
   ) {
     return;
   }

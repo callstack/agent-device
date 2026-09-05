@@ -66,6 +66,23 @@ export type OpenApplicationPreparationInput = Readonly<{
   execution: ApplicationLifecycleExecution;
 }>;
 
+/**
+ * The declared runtime operations of the steps known to follow this open inside the same plan
+ * (today: the remaining steps of a `batch`). The daemon derives it from the command descriptors'
+ * declared runtime uses; it is never a public flag and never crosses the wire. Absent when the
+ * future of the session is unknown (a standalone `open`).
+ */
+export type OpenApplicationPlan = Readonly<{ operations: readonly string[] }>;
+
+/**
+ * How much the platform's interaction host (the XCTest runner on iOS) is known to be needed by
+ * the plan that contains an open. `none`: every following step is proven observation-only, so no
+ * runner is started or retained. `possible`: the plan is unknown, so a speculative prewarm may run
+ * but observation never awaits it. `required`: a following step needs the runner, so readiness is
+ * prepared now and awaited by that step.
+ */
+export type OpenApplicationRunnerDemand = 'none' | 'possible' | 'required';
+
 /** The normalized public application launch, independent of daemon request shape. */
 export type OpenApplicationInput = Readonly<{
   target?: string;
@@ -77,6 +94,7 @@ export type OpenApplicationInput = Readonly<{
   hasExistingSession: boolean;
   relaunch: boolean;
   prewarmRunnerBeforeOpen: boolean;
+  plan?: OpenApplicationPlan;
   enableTestIme: boolean;
   stateDir: string;
   runtimeHints: RuntimeHintValues;
@@ -92,6 +110,8 @@ export type OpenApplicationInput = Readonly<{
 export type OpenApplicationTiming = Readonly<{
   relaunchCloseDurationMs?: number;
   runtimeHintsDurationMs?: number;
+  /** The runner demand the platform resolved for this open, when the platform decides one. */
+  runnerDemand?: OpenApplicationRunnerDemand;
   runnerPrewarmKind?: 'session' | 'xctestrun';
   runnerPrewarmScheduled?: boolean;
   runnerPrewarmWaited?: boolean;
@@ -273,6 +293,11 @@ export type AppleApplicationTools = Readonly<{
     signal: AbortSignal,
   ): Promise<void>;
   stopRunnerSession(deviceId: string): Promise<void>;
+  /**
+   * Whether a runner session for this device is already alive. A starting session is not alive:
+   * observation paths use this to avoid awaiting runner readiness they do not need.
+   */
+  hasLiveRunnerSession(deviceId: string): Promise<boolean>;
   scheduleRunnerIdleStop(deviceId: string): void;
   prepareRunner(
     device: DeviceInfo,
