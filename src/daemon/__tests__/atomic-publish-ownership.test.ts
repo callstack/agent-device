@@ -22,14 +22,18 @@ test('simple same-directory publishers use the shared atomic publish owner', () 
   }
 });
 
-test('durable capture publication keeps its specialized fsync and destination checks', () => {
-  const source = fs.readFileSync(
+test('durable publishers share the host-kit durable publication owner', () => {
+  const sourcePaths = [
     new URL('../durable-capture-resource-store.ts', import.meta.url),
-    'utf8',
-  );
-  assert.match(source, /withAtomicPublishTempPathSync/);
-  assert.match(source, /fs\.openSync\([^\n]+['"]wx['"]/);
-  assert.match(source, /fs\.fsyncSync/);
-  assert.match(source, /fs\.renameSync/);
-  assert.match(source, /assertSafeDestination/);
+    new URL('../managed-device-allocation/store-filesystem.ts', import.meta.url),
+  ];
+  for (const sourcePath of sourcePaths) {
+    const source = fs.readFileSync(sourcePath, 'utf8');
+    assert.match(source, /publishDurableFileSync/);
+    assert.doesNotMatch(
+      source,
+      /fs\.(?:openSync|writeFileSync|fsyncSync|renameSync|linkSync)\s*\(/,
+    );
+    assert.doesNotMatch(source, /assertSafeDestination/);
+  }
 });
