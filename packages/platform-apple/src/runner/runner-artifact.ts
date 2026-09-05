@@ -20,6 +20,7 @@ import {
   cleanRunnerDerivedArtifacts,
   cleanRunnerDerivedBeforeEvaluation,
   emitRunnerXctestrunDecision,
+  emitRunnerXctestrunRebuildDecision,
   evaluateExistingXctestrun,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerBundleBuildSettings,
@@ -169,13 +170,7 @@ async function ensureXctestrunUnderCacheLock(params: {
   const cache =
     existing.reason === 'reuse_ready' ? 'exact' : existing.xctestrunPath ? 'restore-key' : 'miss';
   if (existing.reason !== 'reuse_ready') {
-    emitRunnerXctestrunDecision('rebuild', existing.reason, {
-      derived,
-      xctestrunPath: existing.xctestrunPath,
-      ...(existing.reason === 'cache_metadata_mismatch'
-        ? { metadataDifferences: existing.metadataDifferences }
-        : {}),
-    });
+    emitRunnerXctestrunRebuildDecision(existing, derived);
   }
   const reusable = await resolveReusableXctestrunArtifact({
     device,

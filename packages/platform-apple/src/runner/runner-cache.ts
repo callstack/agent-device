@@ -438,6 +438,23 @@ export async function evaluateExistingXctestrun(options: {
   return { reason: 'reuse_ready', xctestrunPath, productPaths, source };
 }
 
+/**
+ * Reports why a cache state cannot be reused, naming the differing keys when the
+ * cause is a metadata mismatch.
+ */
+export function emitRunnerXctestrunRebuildDecision(
+  existing: Exclude<ExistingXctestrunState, { reason: 'reuse_ready' }>,
+  derived: string,
+): void {
+  emitRunnerXctestrunDecision('rebuild', existing.reason, {
+    derived,
+    xctestrunPath: existing.xctestrunPath,
+    ...(existing.reason === 'cache_metadata_mismatch'
+      ? { metadataDifferences: existing.metadataDifferences }
+      : {}),
+  });
+}
+
 export function emitRunnerXctestrunDecision(
   action: 'clean' | 'reuse' | 'rebuild' | 'build' | 'preserve',
   reason:
