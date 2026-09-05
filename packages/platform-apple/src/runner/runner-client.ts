@@ -2,6 +2,7 @@ import { retryWithPolicy, emitDiagnostic } from './host.ts';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   ensureRunnerSession,
+  getRunnerSessionSnapshot,
   stopIosRunnerSession,
   validateRunnerDevice,
 } from './runner-session.ts';
@@ -176,8 +177,22 @@ function resolveAppleRunnerRuntime(
   });
 }
 
+/**
+ * Whether asking this device's runner now would wait for a startup. Observation paths use it to
+ * stay runner-free while no session is alive; a runner that is already up keeps answering.
+ */
+export function hasLiveIosRunnerSession(
+  device: DeviceInfo,
+  options: { requestId?: string } = {},
+): boolean {
+  if (!isIosFamily(device)) return false;
+  const provider = resolveAppleRunnerRuntime(device, options);
+  return provider.hasLiveSession ? provider.hasLiveSession(device) : true;
+}
+
 const LOCAL_APPLE_RUNNER_RUNTIME = createLocalAppleRunnerProvider(executeRunnerCommand, {
   prepare: prepareLocalIosRunner,
+  hasLiveSession: (device) => getRunnerSessionSnapshot(device.id)?.alive === true,
   prewarm: async (device, options) => {
     const { healthCheck, ...runnerOptions } = options;
     if (healthCheck === false) {

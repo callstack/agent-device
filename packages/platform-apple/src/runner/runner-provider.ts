@@ -74,6 +74,11 @@ export type AppleRunnerProvider = {
    * Starts runner setup opportunistically. This must remain best-effort.
    */
   prewarm?: AppleRunnerPrewarmExecutor;
+  /**
+   * Whether a command sent now is answered without waiting for a runner startup. A provider with
+   * no startup cost (scripted, request-scoped transports) omits this and counts as live.
+   */
+  hasLiveSession?: (device: DeviceInfo) => boolean;
 };
 
 export type AppleRunnerProviderScopeOptions = {
@@ -91,7 +96,7 @@ const appleRunnerProviderScope = new AsyncLocalStorage<AppleRunnerProviderScope>
 
 export function createLocalAppleRunnerProvider(
   runCommand: AppleRunnerCommandExecutor,
-  lifecycle: Pick<AppleRunnerProvider, 'prepare' | 'prewarm'> = {},
+  lifecycle: Pick<AppleRunnerProvider, 'prepare' | 'prewarm' | 'hasLiveSession'> = {},
 ): AppleRunnerProvider {
   return { runCommand, ...lifecycle };
 }

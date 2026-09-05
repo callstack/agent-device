@@ -291,9 +291,11 @@ async function notifyAppleRunnerRelaunch(
   }
   // Only a runner that is already alive can hold a stale cached target. A starting runner has
   // none, and asking it would await its startup; a fresh one re-resolves the target on first use.
+  // An awaited prewarm proved liveness already.
   if (
     localIosSimulator &&
-    !(await host.appleApplications.hasLiveRunnerSession(binding.device.id))
+    !runnerTargetPredatesOpen &&
+    !(await host.appleApplications.hasLiveRunnerSession(binding.device, input.execution))
   ) {
     return;
   }

@@ -294,10 +294,14 @@ export type AppleApplicationTools = Readonly<{
   ): Promise<void>;
   stopRunnerSession(deviceId: string): Promise<void>;
   /**
-   * Whether a runner session for this device is already alive. A starting session is not alive:
-   * observation paths use this to avoid awaiting runner readiness they do not need.
+   * Whether asking this device's runner now would be answered without a startup wait. A starting
+   * session is not live; a runner with no startup cost is. Observation paths use it to avoid
+   * awaiting runner readiness they do not need.
    */
-  hasLiveRunnerSession(deviceId: string): Promise<boolean>;
+  hasLiveRunnerSession(
+    device: DeviceInfo,
+    execution: Readonly<{ requestId?: string }>,
+  ): Promise<boolean>;
   scheduleRunnerIdleStop(deviceId: string): void;
   prepareRunner(
     device: DeviceInfo,

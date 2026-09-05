@@ -384,7 +384,7 @@ test('a Simulator relaunch resets the target only on a runner that is already al
 
   await lifecycle.openApplication({ ...openInput(), relaunch: true });
 
-  expect(hasLiveRunnerSession).toHaveBeenCalledWith(simulator.id);
+  expect(hasLiveRunnerSession).toHaveBeenCalledWith(simulator, {});
   expect(notifyRunnerAppRelaunched).toHaveBeenCalledWith(simulator, {}, signal);
   expect(events).toEqual(['prewarm', 'open', 'reset']);
 });

@@ -127,6 +127,7 @@ async function admitAppleNativeFind(
   request: Readonly<{ device: DeviceInfo; signal: AbortSignal }>,
   input: Readonly<{
     options?: Readonly<{ appBundleId?: string; surface?: string }>;
+    execution?: Readonly<{ requestId?: string }>;
     signal?: AbortSignal;
   }>,
 ): Promise<AdmittedAppleNativeFind | undefined> {
@@ -136,7 +137,7 @@ async function admitAppleNativeFind(
   if (isMacOs(request.device) && surface !== undefined && surface !== 'app') return undefined;
   const signal = input.signal ? AbortSignal.any([request.signal, input.signal]) : request.signal;
   signal.throwIfAborted();
-  if (await simulatorRunnerNotLive(host, request.device)) return undefined;
+  if (await simulatorRunnerNotLive(host, request.device, input.execution)) return undefined;
   return { appBundleId, signal };
 }
 
@@ -144,7 +145,8 @@ async function admitAppleNativeFind(
 async function simulatorRunnerNotLive(
   host: Pick<PlatformRuntimeHost, 'appleApplications'>,
   device: DeviceInfo,
+  execution: Readonly<{ requestId?: string }> | undefined,
 ): Promise<boolean> {
   if (!isIosFamily(device) || device.kind !== 'simulator') return false;
-  return !(await host.appleApplications.hasLiveRunnerSession(device.id));
+  return !(await host.appleApplications.hasLiveRunnerSession(device, execution ?? {}));
 }
