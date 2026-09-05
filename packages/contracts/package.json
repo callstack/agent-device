@@ -163,6 +163,10 @@
       "types": "./src/command-platform-execution.ts",
       "default": "./src/command-platform-execution.ts"
     },
+    "./daemon-http": {
+      "types": "./src/daemon-http.ts",
+      "default": "./src/daemon-http.ts"
+    },
     "./daemon-owner-cleanup": {
       "types": "./src/daemon-owner-cleanup.ts",
       "default": "./src/daemon-owner-cleanup.ts"

@@ -1,6 +1,14 @@
 {
   "protocolVersion": 2,
   "declarations": {
+    "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_BASE_PATH": "sha256:a1ada25c6f90d9c69c8c836538e8882547bf239559f7c1accacd0654355802dd",
+    "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_TENANT_HEADER": "sha256:ed49119d232500885f014ac73f6123d298d404c6c176abdae59cf324825927e5",
+    "packages/contracts/src/daemon-http.ts#DaemonHealthPayload": "sha256:050650184ad3e61d9359bf5866e7fc1e15e13f14f736a8c92ca57cad6d388967",
+    "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload": "sha256:709899c02b2a5f6ec2a995350ac7b5791d67db12a631b109af5074427291edda",
+    "packages/contracts/src/daemon-http.ts#buildDaemonHttpAuthHeaders": "sha256:5548a44d6248ed858d19a0b2985ec4ae8a7181bae8294b85edf3c1b3b58e80d4",
+    "packages/contracts/src/daemon-http.ts#buildDaemonHttpBaseUrl": "sha256:f92697208d9f42ec0dcfb006b6f2dce761bd5307db27ce2e52927fd7742e3a9a",
+    "packages/contracts/src/daemon-http.ts#buildDaemonHttpTenantHeaders": "sha256:e38a5f0b5ab07ee3a5fe3db229d0de750888660c55bf31692e100002be96de1d",
+    "packages/contracts/src/daemon-http.ts#buildDaemonHttpUrl": "sha256:d38f1f8877588fbcb1fea8c52a5cb7dc205043e3fc698b3d78fdcf821fa80471",
     "packages/contracts/src/request-progress.ts#CommandProgressEvent": "sha256:2dc6ff7f3b619d9b917210d47ebf9eee8095563389c8956b4e9f2bd994e1942d",
     "packages/contracts/src/request-progress.ts#ReplayTestProgressEvent": "sha256:61df00308d0e21f2acfc4f73cb2c07cd0c251e827f1c87628e2d08338e1b5c84",
     "packages/contracts/src/request-progress.ts#ReplayTestSuiteProgressEvent": "sha256:2d6599bfcf1e94596c61f85a8a986874b59b8c05e82e5e00dd31e381a5b0fe84",
@@ -64,18 +72,10 @@
     "src/daemon/downloadable-artifact-http.ts#readArtifactId": "sha256:3472ee52d951fdf7ef00ee500298602c68f0e1e3b8c44ff51b09981efabf348c",
     "src/daemon/downloadable-artifact-http.ts#readRequestPathname": "sha256:6b3a49c72365cf7da4552abef59862c073461f746025e28d409048815dd586f2",
     "src/daemon/downloadable-artifact-http.ts#resolveDownloadableArtifactHttpRoute": "sha256:9fcdc9619e8d378e8f04ef7b3584863af446e855702ddce83a16ec194a6d98af",
-    "src/daemon/http-contract.ts#DAEMON_HTTP_BASE_PATH": "sha256:a1ada25c6f90d9c69c8c836538e8882547bf239559f7c1accacd0654355802dd",
-    "src/daemon/http-contract.ts#DAEMON_HTTP_TENANT_HEADER": "sha256:ed49119d232500885f014ac73f6123d298d404c6c176abdae59cf324825927e5",
-    "src/daemon/http-contract.ts#buildDaemonHttpAuthHeaders": "sha256:5548a44d6248ed858d19a0b2985ec4ae8a7181bae8294b85edf3c1b3b58e80d4",
-    "src/daemon/http-contract.ts#buildDaemonHttpBaseUrl": "sha256:f92697208d9f42ec0dcfb006b6f2dce761bd5307db27ce2e52927fd7742e3a9a",
-    "src/daemon/http-contract.ts#buildDaemonHttpTenantHeaders": "sha256:e38a5f0b5ab07ee3a5fe3db229d0de750888660c55bf31692e100002be96de1d",
-    "src/daemon/http-contract.ts#buildDaemonHttpUrl": "sha256:d38f1f8877588fbcb1fea8c52a5cb7dc205043e3fc698b3d78fdcf821fa80471",
     "src/daemon/http-errors.ts#NormalizedHttpError": "sha256:2c2111802fe5f193acbeacc454de9cfab82bc8e4274b896f485e19a14f5518cf",
     "src/daemon/http-errors.ts#failStreamedHttpResponse": "sha256:7199933eca7244bc801e0601b17cc1aed584bc2353879830fd0686e99f1200c4",
     "src/daemon/http-errors.ts#sendRestJsonError": "sha256:981abb859649419604d555601b5c4bd6616e78215327e055e5f8023c6c15f556",
     "src/daemon/http-errors.ts#statusCodeForNormalizedError": "sha256:20ad272162e28425920bd2dcb4da5ec104bd7e8be2028b902b05bfa4da3df966",
-    "src/daemon/http-health.ts#DaemonHealthPayload": "sha256:050650184ad3e61d9359bf5866e7fc1e15e13f14f736a8c92ca57cad6d388967",
-    "src/daemon/http-health.ts#buildDaemonHealthPayload": "sha256:5eebf35539d04e3693bb6d7081ffdfcb0d2d8b7d53066e30ca6b4017fa4a55a3",
     "src/daemon/http-request-target.ts#decodeUriSegment": "sha256:b37622771ea4e61d1a9820169dbdc5809b5c38889bfad79277d7b22f3c3f1ef1",
     "src/daemon/request-diagnostics-http.ts#REQUEST_DIAGNOSTICS_CONTENT_TYPE": "sha256:16bbd9ae7eaeaaa8c8cbd6e65c4ce786a6c5230c5351288228bbf1a6f11bdcdc",
     "src/daemon/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer": "sha256:20761c39f434c675bb3405838dded5640bb623737957257e0452ebd46035eef1",
@@ -176,6 +176,11 @@
   },
   "compatibleChanges": [
     {
+      "declaration": "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload",
+      "digest": "sha256:709899c02b2a5f6ec2a995350ac7b5791d67db12a631b109af5074427291edda",
+      "rationale": "#2318 moves the daemon HTTP wire contract into @agent-device/contracts and hands buildDaemonHealthPayload the version its caller advertises instead of reading the package version itself. The added parameter is caller-local \u2014 each side passes its own readVersion() \u2014 and the /health payload a released peer sends or parses is byte-identical."
+    },
+    {
       "declaration": "packages/kernel/src/contracts.ts#DaemonArtifactKnownType",
       "digest": "sha256:21886407c3fbc30d8c0c544503b831c78db2408aeaef1b9b2c6a4139144aef28",
       "rationale": "#2246 adds the 'test-artifacts' literal for the new remote `test` suite-directory artifact. DaemonArtifactType already widens to `(string & {})`, so an artifactType value outside the known set was always valid on the wire; the literal only sharpens the type hint for code that opts into recognizing it. A released peer that does not know it either never receives it (an old client's daemon-artifacts.ts has no 'test' redirect, so it never sets clientArtifactPaths.artifactsDir, so a new daemon's attachRemoteReplayTestArtifacts never attaches this artifact) or, receiving it from an old daemon that cannot produce it, is a case that cannot occur."
@@ -183,7 +188,7 @@
     {
       "declaration": "src/remote/daemon-artifacts.ts#DownloadRemoteArtifactParams",
       "digest": "sha256:3ec63be2dbdb542e30b19d1500bc16874607823afb7ae392e92b0b535865859e",
-      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state — never serialized, never sent to the daemon — that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before."
+      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state \u2014 never serialized, never sent to the daemon \u2014 that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before."
     },
     {
       "declaration": "src/remote/daemon-artifacts.ts#downloadRemoteArtifact",
