@@ -103,6 +103,7 @@ async function handleAndroidAlertAction(
   const button = chooseAndroidAlertButton(candidate.buttons, action);
   if (button) {
     await pressAndroid(device, button.x, button.y);
+    await confirmAndroidAlertDismissed(candidate.alert, action, captureNodes);
     return buildAndroidAlertHandledResponse(action, candidate.alert, button.label, {
       x: button.x,
       y: button.y,
@@ -111,6 +112,7 @@ async function handleAndroidAlertAction(
 
   if (action === 'dismiss') {
     await backAndroid(device);
+    await confirmAndroidAlertDismissed(candidate.alert, action, captureNodes);
     return buildAndroidAlertHandledResponse(action, candidate.alert, 'Back');
   }
 
@@ -118,6 +120,35 @@ async function handleAndroidAlertAction(
     alert: candidate.alert,
     hint: 'Inspect alert get --json for visible buttons, then use press by visible label/ref if needed.',
   });
+}
+
+/**
+ * `alert accept|dismiss` means the dialog is gone, not that a button was pressed: the next
+ * command reads the app, and a capture that lands while the dialog window is still up sees
+ * only the dialog. A different alert taking its place counts as dismissed. Bounded by the
+ * same budget the pre-press lookup uses; iOS's runner applies the same re-check.
+ */
+async function confirmAndroidAlertDismissed(
+  dismissed: AndroidAlertInfo,
+  action: 'accept' | 'dismiss',
+  captureNodes: AndroidAlertOptions['captureNodes'],
+): Promise<void> {
+  const start = Date.now();
+  for (;;) {
+    const current = await readAndroidAlertCandidate(captureNodes);
+    if (!current || !sameAndroidAlert(current.alert, dismissed)) return;
+    if (Date.now() - start >= ALERT_ACTION_RETRY_MS) {
+      throw new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
+        alert: dismissed,
+        hint: 'The alert button was pressed but the dialog is still visible. Inspect alert get --json, then press the visible button by label/ref or retry.',
+      });
+    }
+    await sleep(ALERT_POLL_INTERVAL_MS);
+  }
+}
+
+function sameAndroidAlert(left: AndroidAlertInfo, right: AndroidAlertInfo): boolean {
+  return left.title === right.title && left.buttons.join('\u0000') === right.buttons.join('\u0000');
 }
 
 async function pollAndroidAlertCandidate(
