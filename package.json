@@ -268,7 +268,6 @@
   "dependencies": {
     "@limrun/api": "^0.24.5",
     "ipaddr.js": "^2.5.0",
-    "tar-stream": "^3.2.0",
     "undici": "7.29.0",
     "yaml": "^2.9.0",
     "yauzl": "^3.4.0"
@@ -323,6 +322,7 @@
     "oxlint": "^1.79.0",
     "pngjs": "^7.0.0",
     "publint": "^0.3.24",
+    "tar-stream": "^3.2.0",
     "tsdown": "^0.22.14",
     "typescript": "^7.0.2",
     "vite": "^8.2.1",

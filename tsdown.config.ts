@@ -76,8 +76,16 @@ export default defineConfig({
     'internal/update-check-entry': 'src/cli/update-check-entry.ts',
   },
   deps: {
-    alwaysBundle: [/^@agent-device\//, 'pngjs'],
-    onlyBundle: ['pngjs'],
+    alwaysBundle: [/^@agent-device\//],
+    onlyBundle: [
+      'pngjs',
+      'tar-stream',
+      'streamx',
+      'fast-fifo',
+      'b4a',
+      'text-decoder',
+      'events-universal',
+    ],
   },
   inputOptions: {
     // A build with missing workspace links resolves nothing under `alwaysBundle` and emits the

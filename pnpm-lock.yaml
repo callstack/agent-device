@@ -23,9 +23,6 @@ importers:
       ipaddr.js:
         specifier: ^2.5.0
         version: 2.5.0
-      tar-stream:
-        specifier: ^3.2.0
-        version: 3.2.0
       undici:
         specifier: ^7.29.0
         version: 7.29.0
@@ -159,6 +156,9 @@ importers:
       publint:
         specifier: ^0.3.24
         version: 0.3.24
+      tar-stream:
+        specifier: ^3.2.0
+        version: 3.2.0
       tsdown:
         specifier: ^0.22.14
         version: 0.22.14(@arethetypeswrong/core@0.18.5)(publint@0.3.24)(typescript@7.0.2)
@@ -236,9 +236,6 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
-      tar-stream:
-        specifier: ^3.2.0
-        version: 3.2.0
       yauzl:
         specifier: ^3.4.0
         version: 3.4.0
@@ -249,6 +246,9 @@ importers:
       '@types/yauzl':
         specifier: ^3.4.0
         version: 3.4.0
+      tar-stream:
+        specifier: ^3.2.0
+        version: 3.2.0
 
   packages/kernel: {}
 
