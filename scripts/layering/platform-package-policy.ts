@@ -36,8 +36,6 @@ const COMPOSITION_FILES = new Set([COMPOSITION_FILE, REQUEST_PROVIDER_COMPOSITIO
 const RULE = 'R13 platform-package-substrate';
 const RAW_PROCESS_SPECIFIERS = new Set(['child_process', 'node:child_process']);
 const PLATFORM_RUNTIME_HOST_FILES = new Set([
-  'src/platform-runtime-app-inventory-host.ts',
-  'src/platform-runtime-app-state-host.ts',
   'src/platform-runtime-audio-probe-host.ts',
   'src/platform-runtime-host-diagnostics.ts',
   'src/platform-runtime-managed-web-backend.ts',
