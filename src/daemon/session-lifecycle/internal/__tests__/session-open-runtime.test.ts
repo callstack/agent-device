@@ -15,6 +15,19 @@ vi.mock('../../../../core/dispatch-resolve.ts', async (importOriginal) => {
   };
 });
 vi.mock('../../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../../../../platform-runtime-apple-application-tools.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('../../../../platform-runtime-apple-application-tools.ts')
+    >();
+  return {
+    ...actual,
+    createAppleApplicationTools: () => ({
+      ...actual.createAppleApplicationTools(),
+      prewarmRunnerSession: vi.fn(async () => {}),
+    }),
+  };
+});
 vi.mock('../../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../../../platform-runtime-runtime-hints.ts')>();
