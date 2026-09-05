@@ -314,6 +314,27 @@ test('the manager rejects a response carrying a previous target generation as st
   await manager.close();
 });
 
+test('the manager rejects a cached target replaced before acquisition begins', async () => {
+  const fixture = createLifecycleFixture({
+    targetStartTimes: ['replacement-start', 'replacement-start'],
+  });
+  const manager = new SnapshotBridgeManager(fixture.host);
+  await assert.rejects(
+    manager.request({
+      target: { ...target, processStartTime: 'original-start' },
+      bridge,
+      limits,
+      maxDepth: 10,
+      deadline: deadline(),
+    }),
+    (error: unknown) =>
+      error instanceof SnapshotSourceError &&
+      error.failureKind === 'stale-target' &&
+      error.failureCode === 'target-process-changed',
+  );
+  await manager.close();
+});
+
 test('the manager rejects a tree when the target process changes during acquisition', async () => {
   const fixture = createLifecycleFixture({ targetStartTimes: ['start-1', 'start-2'] });
   const manager = new SnapshotBridgeManager(fixture.host);

@@ -240,6 +240,14 @@ export class SnapshotBridgeManager {
         generation: target.generation,
       });
     }
+    if (target.processStartTime !== undefined && target.processStartTime !== startTime) {
+      throw snapshotSourceError('stale-target', 'target-process-changed', {
+        pid: target.pid,
+        generation: target.generation,
+        expectedStartTime: target.processStartTime,
+        observedStartTime: startTime,
+      });
+    }
     return startTime;
   }
 

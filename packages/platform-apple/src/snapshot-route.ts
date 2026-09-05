@@ -23,7 +23,11 @@ import {
   type SimulatorSnapshotSource,
   type SnapshotSourceFailure,
 } from './snapshot-source-facade.ts';
-import { resolveSimulatorSnapshotTarget, type SimulatorSnapshotTarget } from './snapshot-target.ts';
+import {
+  createSimulatorSnapshotTargetResolver,
+  type SimulatorSnapshotTarget,
+  type SimulatorSnapshotTargetResolver,
+} from './snapshot-target.ts';
 
 type SnapshotFallback = (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
 
@@ -41,11 +45,11 @@ export function createAppleSnapshotRoute(
   host: PlatformRuntimeHost,
   options: Readonly<{
     source?: SimulatorSnapshotSource;
-    resolveTarget?: typeof resolveSimulatorSnapshotTarget;
+    resolveTarget?: SimulatorSnapshotTargetResolver;
   }> = {},
 ): AppleSnapshotRoute {
   const source = options.source ?? createSimulatorSnapshotSource();
-  const resolveTarget = options.resolveTarget ?? resolveSimulatorSnapshotTarget;
+  const resolveTarget = options.resolveTarget ?? createSimulatorSnapshotTargetResolver();
   const disabledGenerations = new Set<string>();
   const latestGeneration = new Map<string, string>();
 
@@ -213,12 +217,12 @@ async function resolveFailureFallbackIdentity(
   device: DeviceInfo,
   appBundleId: string,
   signal: AbortSignal,
-  resolveTarget: typeof resolveSimulatorSnapshotTarget,
+  resolveTarget: SimulatorSnapshotTargetResolver,
 ): Promise<FallbackIdentity> {
   if (failure.kind !== 'stale-target') return { lineage: target, residue: [] };
   try {
     return {
-      lineage: await resolveTarget(device, appBundleId, signal),
+      lineage: await resolveTarget(device, appBundleId, signal, 'refresh'),
       residue: [],
     };
   } catch (error) {

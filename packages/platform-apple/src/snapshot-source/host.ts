@@ -24,6 +24,7 @@ import { findProjectRoot } from '@agent-device/host-kit/version';
 import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
 import { remainingSnapshotSourceMs } from './deadline.ts';
 import type { SnapshotSourceHost, SnapshotSourceProcess, SnapshotSourceSocket } from './types.ts';
+import { readSnapshotTargetProcessStartTime } from '../snapshot-process.ts';
 
 const BRIDGE_IDLE_TIMEOUT_SECONDS = 60;
 const MAX_PROCESS_LOG_BYTES = 64 * 1024;
@@ -48,21 +49,8 @@ export function createSnapshotSourceHost(): SnapshotSourceHost {
     emitDiagnostic,
     withDiagnosticTimer,
     processId: hostProcessId,
-    readTargetProcessStartTime,
+    readTargetProcessStartTime: readSnapshotTargetProcessStartTime,
   };
-}
-
-async function readTargetProcessStartTime(
-  pid: number,
-  options: { signal?: AbortSignal; timeoutMs: number },
-): Promise<string | null> {
-  const result = await runCmd('ps', ['-p', String(pid), '-o', 'lstart='], {
-    allowFailure: true,
-    signal: options.signal,
-    timeoutMs: options.timeoutMs,
-  });
-  if (result.exitCode !== 0) return null;
-  return result.stdout.trim() || null;
 }
 
 function startSnapshotBridge(

@@ -21,6 +21,7 @@ const target = {
   pid: 42,
   generation: '42:launch-a',
   targetId: `${ios.id}:com.example.app`,
+  processStartTime: 'target-start',
 } as const;
 
 const input = { options: { appBundleId: 'com.example.app' } } as const;
@@ -117,6 +118,12 @@ test('stale bridge acquisition resolves the current generation before XCTest fal
   const result = await route.capture(ios, input, signal(), async () => runnerResult());
 
   expect(resolveTarget).toHaveBeenCalledTimes(2);
+  expect(resolveTarget).toHaveBeenLastCalledWith(
+    ios,
+    input.options.appBundleId,
+    expect.any(AbortSignal),
+    'refresh',
+  );
   expect(result.comparisonIdentity?.lineage).toEqual({
     targetId: currentTarget.targetId,
     generation: currentTarget.generation,
