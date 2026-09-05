@@ -90,52 +90,61 @@ type FrozenUnavailablePlatformRuntimeFacts = Readonly<
 type UnavailableCellKey = keyof Omit<UnavailablePlatformRuntimeFacts, 'lifecycle'>;
 
 /**
- * Whether a cell left unclassified by its owner falls back to the caller's network gap, or must be
- * stated by the owner itself. Only `apps`, `appDeployment`, `appState`, `screenRecording`,
- * `snapshot`, `readiness`, `shutdown`, and `perf` inherit: an owner that did not classify one of
- * these families has, by construction, the same reason its transport does. Every other cell is
- * owner-stated (#1873) — capture, interaction, navigation, keyboard, clipboard, the app switcher,
- * app-event delivery, settings, and alerts each differ by family or leaf in a way a transport gap
- * cannot speak for, so none of them may inherit a sibling's or the network's reason.
+ * Every cell name, for iteration. Whether a cell left unclassified by its owner falls back to the
+ * caller's network gap, or must be stated by the owner itself, is decided by
+ * `UnavailablePlatformRuntimeFacts` alone: an optional property inherits `network`, a required one
+ * is owner-stated (#1873) and always present. No second table restates that split — a misclassified
+ * cell there would fail to type-check rather than silently produce a malformed fact.
  */
-const UNAVAILABLE_CELL_POLICY = {
-  appLog: 'owner-stated',
-  apps: 'inherits-network',
-  appDeployment: 'inherits-network',
-  appState: 'inherits-network',
-  network: 'owner-stated',
-  screenRecording: 'inherits-network',
-  screenshot: 'owner-stated',
-  snapshot: 'inherits-network',
-  viewport: 'owner-stated',
-  focus: 'owner-stated',
-  gesture: 'owner-stated',
-  scroll: 'owner-stated',
-  typeText: 'owner-stated',
-  touch: 'owner-stated',
-  elementText: 'owner-stated',
-  back: 'owner-stated',
-  home: 'owner-stated',
-  orientation: 'owner-stated',
-  tvRemote: 'owner-stated',
-  keyboardStatus: 'owner-stated',
-  keyboardDismiss: 'owner-stated',
-  keyboardEnter: 'owner-stated',
-  readClipboard: 'owner-stated',
-  writeClipboard: 'owner-stated',
-  appSwitcher: 'owner-stated',
-  triggerAppEvent: 'owner-stated',
-  setSetting: 'owner-stated',
-  readAlert: 'owner-stated',
-  awaitAlert: 'owner-stated',
-  acceptAlert: 'owner-stated',
-  dismissAlert: 'owner-stated',
-  audioProbeCapture: 'owner-stated',
-  audioProbeQuery: 'owner-stated',
-  perf: 'inherits-network',
-  readiness: 'inherits-network',
-  shutdown: 'inherits-network',
-} satisfies Record<UnavailableCellKey, 'owner-stated' | 'inherits-network'>;
+const UNAVAILABLE_CELLS = {
+  appLog: true,
+  apps: true,
+  appDeployment: true,
+  appState: true,
+  network: true,
+  screenRecording: true,
+  screenshot: true,
+  snapshot: true,
+  viewport: true,
+  focus: true,
+  gesture: true,
+  scroll: true,
+  typeText: true,
+  touch: true,
+  elementText: true,
+  back: true,
+  home: true,
+  orientation: true,
+  tvRemote: true,
+  keyboardStatus: true,
+  keyboardDismiss: true,
+  keyboardEnter: true,
+  readClipboard: true,
+  writeClipboard: true,
+  appSwitcher: true,
+  triggerAppEvent: true,
+  setSetting: true,
+  readAlert: true,
+  awaitAlert: true,
+  acceptAlert: true,
+  dismissAlert: true,
+  audioProbeCapture: true,
+  audioProbeQuery: true,
+  perf: true,
+  readiness: true,
+  shutdown: true,
+} satisfies Record<UnavailableCellKey, true>;
+
+/** Fills every cell name through `fn`, in the one place a cell record is assembled by key. */
+function mapUnavailableCells<Value>(
+  fn: (cell: UnavailableCellKey) => Value,
+): Record<UnavailableCellKey, Value> {
+  const result = {} as Record<UnavailableCellKey, Value>;
+  for (const cell of Object.keys(UNAVAILABLE_CELLS) as UnavailableCellKey[]) {
+    result[cell] = fn(cell);
+  }
+  return result;
+}
 
 /**
  * A complete facts value for one unavailability reason, for owners with no runtime module at all:
@@ -146,9 +155,7 @@ export function createFullyUnavailablePlatformRuntimeFacts(
   unavailable: RuntimeOperationUnavailability,
 ): UnavailablePlatformRuntimeFacts {
   return Object.freeze({
-    ...(Object.fromEntries(
-      Object.keys(UNAVAILABLE_CELL_POLICY).map((cell) => [cell, unavailable]),
-    ) as Record<UnavailableCellKey, RuntimeOperationUnavailability>),
+    ...mapUnavailableCells(() => unavailable),
     lifecycle: applicationLifecycleOperationFacts({
       resolveOpenTarget: unavailable,
       prepareApplicationOpen: unavailable,
@@ -295,19 +302,10 @@ function providerModeForOwner(owner: RuntimeOwnerRef): RuntimeProviderMode {
 function freezeUnavailableFacts(
   unavailable: UnavailablePlatformRuntimeFacts,
 ): FrozenUnavailablePlatformRuntimeFacts {
-  const cells = {} as Record<UnavailableCellKey, RuntimeOperationUnavailability>;
-  for (const cell of Object.keys(UNAVAILABLE_CELL_POLICY) as UnavailableCellKey[]) {
-    const stated = unavailable[cell] as RuntimeOperationUnavailability | undefined;
-    // Every optional cell falls back to the caller's network gap; every owner-stated cell is
-    // required by the input type, so `stated` is always defined for it.
-    const resolved: RuntimeOperationUnavailability =
-      UNAVAILABLE_CELL_POLICY[cell] === 'inherits-network'
-        ? (stated ?? unavailable.network)
-        : (stated as RuntimeOperationUnavailability);
-    cells[cell] = Object.freeze({ ...resolved });
-  }
   return Object.freeze({
-    ...cells,
+    ...mapUnavailableCells((cell) =>
+      Object.freeze({ ...(unavailable[cell] ?? unavailable.network) }),
+    ),
     lifecycle: applicationLifecycleOperationFacts(unavailable.lifecycle),
   });
 }
