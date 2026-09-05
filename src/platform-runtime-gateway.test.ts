@@ -514,6 +514,10 @@ describe('composed platform runtime gateway', () => {
     });
     expect(hostLoad).not.toHaveBeenCalled();
     expect(localLoad).not.toHaveBeenCalled();
+    const inspected = await runtimeGateway.inspectFacts(device);
+    // The bind and inspect arms build this fact set independently; both must derive from the same
+    // construction path rather than two hand-maintained maps that can drift from each other.
+    expect(binding.facts).toStrictEqual(inspected);
   });
 
   test.each(LIFECYCLE_FACETS)(

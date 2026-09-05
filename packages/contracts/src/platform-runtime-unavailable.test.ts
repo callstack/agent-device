@@ -92,6 +92,11 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
     available: false,
     reason: 'unsupported-provider-mode',
   });
+  // `apps` is left unclassified above (an optional cell): it inherits the network gap's reason.
+  assert.deepEqual(binding.facts.operations.listApps, {
+    available: false,
+    reason: 'owner-capability-missing',
+  });
   assert.deepEqual(binding.operations, {});
   await binding[Symbol.asyncDispose]();
 });
