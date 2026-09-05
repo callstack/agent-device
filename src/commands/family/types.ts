@@ -28,14 +28,7 @@ export type CommandFamilyFacet<TCommandName extends string = string> = {
   cliOutputFormatters?: Readonly<Partial<Record<TCommandName, CliOutputFormatter>>>;
 };
 
-/**
- * What a command file authors: metadata plus the one function that runs the command. `run`'s
- * `Input` is inferred from `metadata.readInput`, so there is nowhere else to declare the
- * executable definition — `defineCommandFacet` derives `name`, `description`, `mcpDetail`,
- * `inputSchema`, and `invoke` from these two fields. `cliSchema` carries grammar only and may be
- * omitted entirely; `text` is required, because a command with no list line has nowhere to
- * appear in `--help`.
- */
+/** What a command file authors: metadata plus `run`; the facet derives the executable from them. */
 export type CommandFacetInput<
   TCommandName extends string = string,
   Input = unknown,
@@ -52,13 +45,7 @@ export type CommandFacetInput<
   text: FacetCommandText;
 };
 
-/**
- * What `defineCommandFacet` returns: the authored facet with its schema completed and the
- * executable `definition` derived from `metadata` and `run`. Stating this as a distinct type is
- * what lets the registry read `cliSchema` and `definition` without asserting they are populated.
- * `Result` carries the command's specific return type through to `definition.invoke`, the same way
- * `CommandExecutionResult` recovers it per command name from the family registry.
- */
+/** The authored facet with `cliSchema` completed and `definition` derived, typed per command. */
 export type CommandFacet<
   TCommandName extends string = string,
   Result = unknown,
