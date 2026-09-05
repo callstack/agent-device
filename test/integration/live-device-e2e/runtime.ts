@@ -169,13 +169,13 @@ export function createLiveDeviceHarness<
     const unexpectedFailure =
       result.status !== 0 && !failedAsExpected && stepOptions.allowFailure !== true;
     if (unexpectedFailure) {
-      const screenshotPath =
-        fullArgs[0] === 'wait' ? await captureWaitTimeoutScreenshot(context) : undefined;
+      const evidence = await captureFailedStepEvidence(context);
       const message = [
         formatResultDebug(step, fullArgs, result),
         `scenario: ${context.currentScenario}`,
         `artifacts: ${context.artifactDir}`,
-        `screenshot: ${screenshotPath ?? '(capture failed or not applicable)'}`,
+        `screenshot: ${evidence.screenshotPath ?? '(capture failed)'}`,
+        `snapshot: ${evidence.snapshotPath ?? '(capture failed)'}`,
       ].join('\n');
       fs.writeFileSync(path.join(context.artifactDir, 'failed-step.txt'), message);
       assert.fail(message);
@@ -185,21 +185,37 @@ export function createLiveDeviceHarness<
     }
   }
 
-  /** Best-effort: never throws, returns undefined on a failed capture. */
-  async function captureWaitTimeoutScreenshot(context: Context): Promise<string | undefined> {
-    const screenshotPath = path.join(
-      context.artifactDir,
-      `wait-timeout-${context.stepHistory.length}.png`,
-    );
+  /**
+   * What the device showed when a step failed: the pixels and the accessibility tree the
+   * next capture would have read. Best-effort, never throws; a failed capture yields undefined.
+   */
+  async function captureFailedStepEvidence(
+    context: Context,
+  ): Promise<{ screenshotPath?: string; snapshotPath?: string }> {
+    const stem = path.join(context.artifactDir, `failed-step-${context.stepHistory.length}`);
+    const screenshotPath = `${stem}.png`;
+    const snapshotPath = `${stem}-snapshot.json`;
+    const runCli = options.runCli ?? runBuiltCliJson;
+    const evidence: { screenshotPath?: string; snapshotPath?: string } = {};
     try {
-      const capture = await (options.runCli ?? runBuiltCliJson)(
+      const screenshot = await runCli(
         options.commonFlags(context, ['screenshot', screenshotPath]),
         context.env,
       );
-      return capture.status === 0 ? screenshotPath : undefined;
+      if (screenshot.status === 0) evidence.screenshotPath = screenshotPath;
     } catch {
-      return undefined;
+      // evidence only
     }
+    try {
+      const snapshot = await runCli(options.commonFlags(context, ['snapshot']), context.env);
+      if (snapshot.status === 0 && snapshot.json !== undefined) {
+        fs.writeFileSync(snapshotPath, JSON.stringify(snapshot.json, null, 2));
+        evidence.snapshotPath = snapshotPath;
+      }
+    } catch {
+      // evidence only
+    }
+    return evidence;
   }
 
   function updateSessionState(context: Context, command: string | undefined, status: number): void {

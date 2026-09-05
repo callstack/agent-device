@@ -164,9 +164,13 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
   const alert = await runStep(context, 'inspect Android native alert', ['alert', 'get']);
   assertJsonContains(alert, 'Automation confirmation', 'alert get should expose fixture dialog');
   await runStep(context, 'dismiss Android native alert', ['alert', 'dismiss']);
+  // The dismissal is confirmed, but the fixture's re-render after the button callback is the
+  // app's own timing: wait for the outcome, then pin it to the canary element.
+  await assertWaitText(context, 'Alert result: cancelled');
   await assertElementText(context, 'id="automation-alert-result"', 'Alert result: cancelled');
   await runStep(context, 'reopen Android native alert', ['click', 'id="automation-open-alert"']);
   await runStep(context, 'accept Android native alert', ['alert', 'accept']);
+  await assertWaitText(context, 'Alert result: accepted');
   await assertElementText(context, 'id="automation-alert-result"', 'Alert result: accepted');
   verifyCommand(context, C.alert, 'alert wait/get/dismiss/accept produce fixture-visible results');
 
