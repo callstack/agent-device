@@ -1,7 +1,8 @@
 export {
   isAtomicPublishTemporaryPath,
+  publishDurableFileSync,
   publishFileSync,
-  withAtomicPublishTempPathSync,
+  type DurableFilePublishMode,
 } from './internal/atomic-file.ts';
 export {
   lstatIfPresent,

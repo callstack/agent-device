@@ -1,6 +1,6 @@
 // Catches: the daemon record owner reaching past its declared coordinators to spawn or poll a
-//   native process/timer directly — the same "delegate to your single owner" shape as R7 and
-//   R12, applied to record's runtime mechanics; a type check cannot see this because runCmd and
+//   native process/timer directly — the same "delegate to your single owner" shape as R7,
+//   applied to record's runtime mechanics; a type check cannot see this because runCmd and
 //   setInterval are both fully typed, legal calls from anywhere.
 // Evidence: 1b2e786128 (#1724) moved screen recording onto the platform runtime, the migration
 //   this ownership boundary protects against regressing.

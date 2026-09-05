@@ -22,8 +22,8 @@ const files = listSourceFiles();
 const sources = new Map(files.map((f) => [f, fs.readFileSync(f, 'utf8')]));
 const edges = resolveImportEdges(sources);
 
-// e.g. R6 inversions per zone pair, deduplicated by file pair — reproduces
-// TYPE_INVERSION_BASELINE, so a mismatch means one of the two is stale.
+// e.g. R6 inversions per zone pair, deduplicated by file pair — the same count the gate
+// ratchets against the merge-base with origin/main.
 const seen = new Set<string>();
 const byPair = new Map<string, number>();
 for (const edge of edges) {
@@ -114,20 +114,21 @@ narrow name replaced both.
 **The remaining 5 are positions, not debt** — each for a mechanical reason, not an appeal to an ADR:
 
 - **4 × `AgentDeviceClient`** (`commands/command-contract.ts`, `commands/command-surface.ts`,
-  `commands/family/types.ts`, `mcp/command-tools.ts`). The facade cannot move below `commands/`
-  because it is *built from* the command surface: `client/client-types.ts` imports
-  `ProjectedNavigationCommandClient` from `commands/system/navigation-projection.ts`. That is a real
-  zone-level type cycle, and breaking it means deciding where the projection registry belongs — a
-  design call, not a file move. A narrower port does not exist either: 4 files *name* the facade,
-  but 26 call sites use methods across 13 of its namespaces, so any port would re-declare it.
+  `commands/family/types.ts`, `mcp/command-tools.ts`). The zone-level type cycle this bullet used to
+  cite is gone: retiring the navigation projection left `client/client-types.ts` with no import from
+  `commands/` at all, and the facade now declares its 14 command methods directly. What keeps the
+  facade above `commands/` is the remaining argument: a narrower port does not exist — 4 files
+  *name* the facade, but 26 call sites use methods across 13 of its namespaces, so any port would
+  re-declare it.
 - **1 × `DaemonCommandRoute`** (`commands/command-explain.ts`). The union lives in core so
   descriptors can name a route without importing the daemon, and the handler table covers it with
   `satisfies Record<DaemonCommandRoute, …>`. `command-explain.ts` still type-imports the re-export
   from `daemon-command-registry.ts` to key an exhaustive owner-file map; that remaining inversion
   is the commands-zone consumer, not a second source of truth for the union.
 
-All remaining inversions are argued at `TYPE_INVERSION_BASELINE` in `scripts/layering/check.ts`, next
-to the numbers they explain.
+All remaining inversions are argued here. R6 (`scripts/layering/type-inversion-ratchet.ts`) records
+no numbers of its own: its reference is the same count taken at the merge-base with `origin/main`,
+so a zone pair can only shrink.
 
 ## 0b. The biggest structural finding is not an inversion
 
@@ -156,13 +157,13 @@ but it is a comprehension one, and it is the single largest obstacle to reading 
 isolation. At the current measured commit it spans `commands` (33), `daemon-server` (30),
 `platforms` (19), `core` (12), root composition (5), `contracts` (2), and `client` (1).
 
-Now ratcheted for growth by **R9** (`TYPE_CYCLE_BASELINE`, derived from the zone ceilings in
-`scripts/layering/daemon-modularity.ts`), so it cannot get worse
+Now ratcheted for growth by **R9** (`scripts/layering/daemon-modularity.ts`), so it cannot get worse
 while nobody is looking — a type-only import that closes a new loop fails the gate, verified by
 adding one type-only import that closes a loop and watching the gate reject it. It was growth-only
-here; #1781 A6 made it an equality pin, so a baseline left above the measured size fails too and a
-shrink is banked by the change that earns it. The refactor itself is still deliberately not
-attempted; it starts at those four hubs.
+here; #1781 A6 made it an equality pin, and the pin is now the merge-base's own measurement
+(`scripts/layering/ratchet-reference.ts`), so a shrink is banked the moment it merges and there is
+no slack left to spend. The refactor itself is still deliberately not attempted; it starts at those
+four hubs.
 
 ### The facade cycle: investigated, no narrower port exists
 
@@ -183,13 +184,15 @@ duplicate the public API shape — a second source of truth for it — or derive
 carry the same dependency.
 
 Those four files are therefore the minimum number of naming sites, not an accident: they are the
-choke point. Accepted as a position, argued at `TYPE_INVERSION_BASELINE`. The remaining option is
-the one that was always the real question — whether `NAVIGATION_COMMAND_PROJECTIONS` belongs in
-`commands/` — and that is a design decision about the command surface, not a dependency cleanup.
+choke point. Accepted as a position, argued in §0 above. The option this section
+used to hold open — moving `NAVIGATION_COMMAND_PROJECTIONS` out of `commands/` — was answered by
+deleting it: five direct signatures replaced the registry, so there is no longer a projection
+registry whose home is in question.
 
 ## 1. The two remaining type-inversion clusters
 
-`TYPE_INVERSION_BASELINE` in `scripts/layering/check.ts` holds both, with the reasoning inline.
+§0 above holds both, with the reasoning inline; the gate measures them against the merge-base
+rather than recording them.
 
 **28 + 1 edges → `client/client-types.ts`** — *done, mostly.* Now 5 edges. The vocabulary moved into
 the `contracts/client-*.ts` family files — one file per command/domain family, largest 137 LOC —
@@ -201,13 +204,13 @@ changed). `index.d.ts` in fact got *smaller* — 1,726 → 1,682 lines — becau
 `main` duplicated into it (the Metro option/result shapes, `ScrollInputDirection`) now resolve
 through a shared chunk once the vocabulary sits below both its consumers.
 
-The mutual coupling this section already warned about is what set the floor. Eight shapes could NOT
-move down, because each is stated in terms of a HIGHER-ranked zone:
+The mutual coupling this section already warned about is what set the floor. Eight shapes could not
+move down at the time; three still cannot, because each is stated in terms of a HIGHER-ranked zone:
 
 | Shape(s) | Blocked by |
 |---|---|
 | `ScrollOptions` | `ScrollInputDirection` (`commands/interaction/runtime/gestures.ts`) |
-| `BackCommandOptions`, `OrientationCommandOptions`, `AppSwitcherCommandOptions`, `TvRemoteCommandOptions`, `AgentDeviceCommandClient` | `NavigationCommandOptions` / `ProjectedNavigationCommandClient` (`commands/system/navigation-projection.ts`) |
+| ~~`BackCommandOptions`, `OrientationCommandOptions`, `AppSwitcherCommandOptions`, `TvRemoteCommandOptions`, `AgentDeviceCommandClient`~~ | ~~`NavigationCommandOptions` / `ProjectedNavigationCommandClient` (`commands/system/navigation-projection.ts`)~~ — unblocked: the projection was retired, the four Options types (plus a new `HomeCommandOptions`) now live in `contracts/client-system.ts`, and the facade declares its methods directly |
 | `MetroPrepareResult`, `MetroReloadResult` | `PrepareMetroRuntimeResult` / `ReloadMetroResult` (`metro/client-metro.ts`) |
 
 Declaring those in `contracts/` would have traded 28 `commands -> client` inversions for
@@ -226,11 +229,11 @@ Two keystone moves made the other 84 shapes movable, and both are worth noting a
   `SessionRuntimeHints` — the same type, three zones lower.
 
 **Remaining `commands -> client` (5) needs the upstream declarations to come down first**: move
-`ScrollInputDirection` and the navigation-projection types out of `commands/`, and the Metro
-prepare/reload result payloads out of `metro/`. Each is small; the sequencing is the point. The
-`mcp -> client` edge is different in kind — it is the `AgentDeviceClient` facade itself, i.e. the
-question of whether a command surface should know the client type. That is a design decision, not a
-misplaced declaration.
+`ScrollInputDirection` out of `commands/`, and the Metro prepare/reload result payloads out of
+`metro/`. The navigation-projection leg of this list is done. Each is small; the sequencing is the
+point. The `mcp -> client` edge is different in kind — it is the `AgentDeviceClient` facade itself,
+i.e. the question of whether a command surface should know the client type. That is a design
+decision, not a misplaced declaration.
 
 **5 + 1 edges → `daemon/daemon-command-registry.ts` and `daemon/types.ts`.** `core`'s descriptor
 registry composes the ADR 0003 daemon facet, whose shape the daemon declares. ADR 0003's
@@ -460,8 +463,9 @@ implementation-pattern checks so reintroduction fails closed.
    completed by #1435. Eliminate the four remaining external production importers with
    caller-specific public contracts or daemon-owned adapters; keep `DaemonRequest` private.
 2. ~~**Split `client/client-types.ts`** (§1).~~ Done — 42 → 18 total inversions. The follow-up is
-   the upstream moves that unblock the last 5 (§1): `ScrollInputDirection` and the
-   navigation-projection types out of `commands/`, Metro result payloads out of `metro/`.
+   the upstream moves that unblock the last 5 (§1): `ScrollInputDirection` out of `commands/`,
+   Metro result payloads out of `metro/`. The navigation-projection move is done — the projection
+   was retired rather than relocated.
 3. **Retire platform branches into plugin facets** (§5b), highest-count files first.
 4. **Share the remaining duplicated validators** (§6), following the `checkIsArgs` shape.
 5. Optional: give `daemon/handlers/` the directory structure its filenames already imply (§5).

@@ -100,8 +100,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # The layering ratchets (R6/R9/R10) measure the merge-base with origin/main, which a
+      # shallow checkout cannot reach.
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
 
       # The layering gate parses production sources with `oxc-parser`, so
       # dependencies are required; keep install-deps enabled.
@@ -117,7 +121,7 @@ jobs:
 
       # Model tests for the dependency-graph report and its blast-radius query. The report
       # reads the gate's model (scripts/layering/model.ts) and applies the gate's own R6
-      # counting rule, so it is not a second measurement of TYPE_INVERSION_BASELINE.
+      # counting rule, so it is not a second measurement of the R6 ratchet.
       - name: Check the depgraph report model
         uses: ./.github/actions/run-gate
         with: { gate: depgraph }

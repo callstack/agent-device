@@ -1,4 +1,5 @@
 import type {
+  BackCommandOptions,
   ClickOptions,
   FillOptions,
   HoverOptions,
@@ -8,7 +9,6 @@ import type {
   SettleCommandOptions,
 } from '@agent-device/contracts/client';
 import type { PostActionObservationCommandName } from '../core/command-descriptor/post-action-observation.ts';
-import type { NavigationCommandOptions } from './system/navigation-projection.ts';
 
 /**
  * Compile-time completeness for the contracts half of the `--settle` surface
@@ -28,7 +28,7 @@ const SETTLE_CAPABLE_CLIENT_OPTION_TYPES = {
   hover: {} as HoverOptions,
   fill: {} as FillOptions,
   scroll: {} as ScrollOptions,
-  back: {} as NavigationCommandOptions<'back'>,
+  back: {} as BackCommandOptions,
 } as const satisfies Record<PostActionObservationCommandName, SettleCommandOptions>;
 
 export type SettleCapableClientOptionCommands =

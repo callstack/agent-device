@@ -5,10 +5,7 @@ import type {
   DurableResourceEnvelope,
 } from '@agent-device/contracts/durable-resource-envelope';
 import { decodeDurableResourceEnvelope } from '@agent-device/capture-kit';
-import {
-  openVerifiedFileForRead,
-  withAtomicPublishTempPathSync,
-} from '@agent-device/host-kit/file';
+import { openVerifiedFileForRead, publishDurableFileSync } from '@agent-device/host-kit/file';
 
 export type DurableCaptureResourceRecord<K extends string> =
   | Readonly<{ status: 'missing' }>
@@ -60,21 +57,9 @@ export function createDurableCaptureResourceStore<K extends string>(
     write(resourcePath: string, envelope: DurableResourceEnvelope<K>): void {
       const directory = path.dirname(resourcePath);
       fs.mkdirSync(directory, { recursive: true });
-      withAtomicPublishTempPathSync(resourcePath, (temporaryPath) => {
-        let descriptor: number | undefined;
-        try {
-          assertSafeDestination(resourcePath, options.displayName);
-          descriptor = fs.openSync(temporaryPath, 'wx', 0o600);
-          fs.writeFileSync(descriptor, `${JSON.stringify(envelope)}\n`, 'utf8');
-          fs.fsyncSync(descriptor);
-          fs.closeSync(descriptor);
-          descriptor = undefined;
-          assertSafeDestination(resourcePath, options.displayName);
-          fs.renameSync(temporaryPath, resourcePath);
-          syncDirectoryBestEffort(directory);
-        } finally {
-          if (descriptor !== undefined) fs.closeSync(descriptor);
-        }
+      publishDurableFileSync({
+        destination: resourcePath,
+        contents: `${JSON.stringify(envelope)}\n`,
       });
     },
     list(sessionsDir: string): string[] {
@@ -112,24 +97,6 @@ function assertFileName(fileName: string): void {
   }
 }
 
-function assertSafeDestination(resourcePath: string, displayName: string): void {
-  let destination: fs.Stats;
-  try {
-    destination = fs.lstatSync(resourcePath);
-  } catch (error) {
-    if (isMissingFile(error)) return;
-    throw error;
-  }
-  if (destination.isSymbolicLink()) {
-    throw new Error(`Refusing to replace a ${displayName.toLowerCase()} resource symbolic link`);
-  }
-  if (!destination.isFile()) {
-    throw new Error(
-      `Refusing to replace a ${displayName.toLowerCase()} resource that is not a regular file`,
-    );
-  }
-}
-
 function pathEntryExistsWithoutFollowing(resourcePath: string): boolean {
   try {
     fs.lstatSync(resourcePath);
@@ -141,18 +108,6 @@ function pathEntryExistsWithoutFollowing(resourcePath: string): boolean {
 
 function invalidRecord<K extends string>(message: string): DurableCaptureResourceRecord<K> {
   return { status: 'unreattachable', reason: 'descriptor-invalid', message };
-}
-
-function syncDirectoryBestEffort(directory: string): void {
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(directory, 'r');
-    fs.fsyncSync(descriptor);
-  } catch {
-    // Atomic rename is the correctness boundary; directory fsync support varies by filesystem.
-  } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
-  }
 }
 
 function isMissingFile(error: unknown): boolean {

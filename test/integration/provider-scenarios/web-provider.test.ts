@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { WEB_DESKTOP_DEVICE } from '../../../src/__tests__/test-utils/device-fixtures.ts';
-import type { WebProvider } from '@agent-device/platform-web';
+import { createAgentBrowserWebProvider, type WebProvider } from '@agent-device/platform-web';
+import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
+import { mkdtempForTestSync } from '../../../src/__tests__/test-utils/tmp-dir.ts';
+import {
+  installFakeManagedAgentBrowser,
+  withNodeRuntime,
+} from '../../../src/__tests__/test-utils/web-managed-agent-browser.ts';
 import { createProviderScenarioHarness } from './harness.ts';
 
 test('web provider is scoped through the request router and dispatch path', async () => {
@@ -199,4 +205,86 @@ test('web provider is scoped through the request router and dispatch path', asyn
   } finally {
     await harness.close();
   }
+});
+
+test('non-dense browser refs survive snapshot storage and routed fill and click', async () => {
+  const calls: string[][] = [];
+  const values: Record<string, string> = { '@e2': '', '@e3': '' };
+  let signedIn = false;
+  const stateDir = mkdtempForTestSync('web-ref-route-');
+  installFakeManagedAgentBrowser(stateDir);
+  await withNodeRuntime({ version: '24.0.0' }, async () => {
+    const provider = await createAgentBrowserWebProvider({ stateDir });
+    await withCommandExecutorOverride(
+      async (_command, args) => {
+        const [command, ref, text] = args.slice(1);
+        let data: unknown = {};
+        if (command === 'snapshot') {
+          data = {
+            snapshot: [
+              '- textbox "Username" [ref=e2]',
+              '- textbox "Passcode" [ref=e3]',
+              '- button "Sign in" [ref=e4]',
+            ].join('\n'),
+            refs: {
+              e2: { role: 'textbox', name: 'Username' },
+              e3: { role: 'textbox', name: 'Passcode' },
+              e4: { role: 'button', name: 'Sign in' },
+            },
+          };
+        } else if (command === 'fill') {
+          calls.push(['fill', ref!, text!]);
+          values[ref!] = text!;
+        } else if (command === 'click') {
+          calls.push(['click', ref!]);
+          signedIn = ref === '@e4';
+        } else {
+          assert.ok(command === 'open' || command === 'close', `Unexpected command: ${args}`);
+        }
+        return { stdout: JSON.stringify({ success: true, data }), stderr: '', exitCode: 0 };
+      },
+      async () => {
+        const harness = await createProviderScenarioHarness({
+          deviceInventoryProvider: async () => [WEB_DESKTOP_DEVICE],
+          platformRuntime: true,
+          webProvider: () => provider,
+        });
+        try {
+          const open = await harness.callCommand('open', ['https://example.test/login'], {
+            platform: 'web',
+          });
+          assert.equal(open.json.error, undefined);
+          const snapshot = await harness.callCommand('snapshot', [], { platform: 'web' });
+          assert.equal(snapshot.json.error, undefined);
+          const nodes = snapshot.json.result.data.nodes;
+          assert.deepEqual(
+            nodes.map((node: { label: string; ref: string }) => [node.label, node.ref]),
+            [
+              ['Username', 'e2'],
+              ['Passcode', 'e3'],
+              ['Sign in', 'e4'],
+            ],
+          );
+          const fill = await harness.callCommand('fill', [`@${nodes[0].ref}`, 'Ada']);
+          assert.equal(fill.json.error, undefined);
+          assert.deepEqual(values, { '@e2': 'Ada', '@e3': '' });
+
+          const refreshed = await harness.callCommand('snapshot');
+          assert.equal(refreshed.json.error, undefined);
+          const button = refreshed.json.result.data.nodes.find(
+            (node: { label: string }) => node.label === 'Sign in',
+          );
+          const click = await harness.callCommand('click', [`@${button.ref}`]);
+          assert.equal(click.json.error, undefined);
+          assert.equal(signedIn, true);
+          assert.deepEqual(calls, [
+            ['fill', '@e2', 'Ada'],
+            ['click', '@e4'],
+          ]);
+        } finally {
+          await harness.close();
+        }
+      },
+    );
+  });
 });

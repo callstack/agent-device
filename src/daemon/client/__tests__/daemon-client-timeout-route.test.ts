@@ -59,6 +59,7 @@ function dummyStatePaths(): DaemonPaths {
     infoPath: path.join(baseDir, 'daemon.json'),
     lockPath: path.join(baseDir, 'daemon.lock'),
     logPath: path.join(baseDir, 'daemon.log'),
+    allocationsDir: path.join(baseDir, 'allocations'),
     sessionsDir: path.join(baseDir, 'sessions'),
   };
 }

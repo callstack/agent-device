@@ -110,10 +110,12 @@ authorization and attribution around the same boundary. Plain local device selec
 
 Before acquisition, agent-device durably records a non-authoritative allocation operation: the
 logical requester, idempotency key, immutable shape request, deadline, and Host attribution when
-applicable. After Simlock responds, it records the allocator handle/outcome and whether Host
-published or cleaned it. This journal exists only to recover the Host-to-Simlock handoff. It never
-mirrors Simlock's queue, provisioning, lease, cleanup, health, or capacity states, and it never
-decides whether a device is reusable.
+applicable. After Simlock responds, it records the allocator handle/outcome. Before invoking an
+external Host binding publisher, it durably records a pending publication; publication success is
+then recorded separately, and recovery conservatively cleans a pending or uncertain binding before
+releasing the allocator lease. This journal exists only to recover the Host-to-Simlock handoff. It
+never mirrors Simlock's queue, provisioning, lease, cleanup, health, or capacity states, and it
+never decides whether a device is reusable.
 
 Each logical requester is a restart-stable allocation lane; concurrent leases use distinct lanes.
 Replaying the same attempt key returns the same durable outcome, including a refusal. Disconnect,

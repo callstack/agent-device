@@ -1,5 +1,4 @@
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
-import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   type DeviceBinding,
   type DeviceBindingRequest,
@@ -17,6 +16,7 @@ import type {
   PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform-runtime-operations';
 import {
+  createFullyUnavailablePlatformRuntimeFacts,
   createUnavailablePlatformRuntimeBinding,
   createUnavailablePlatformRuntimeFacts,
 } from '@agent-device/contracts/platform-runtime-unavailable';
@@ -342,111 +342,30 @@ async function selectExactOwner(
   }
 }
 
+/** Missing provider modules must fail closed per operation, never via a shared lifecycle bucket. */
+const UNSUPPORTED_PROVIDER_MODE = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+} as const);
+
 function unavailableProviderBinding(
   runtime: ProviderDeviceRuntime,
   device: DeviceInfo,
 ): DeviceBinding<PlatformRuntimeOperations> {
   const owner = providerRuntimeOwner(runtime.provider, 'default');
-  const unavailable = Object.freeze({
-    available: false,
-    reason: 'unsupported-provider-mode',
-  });
-  return createUnavailablePlatformRuntimeBinding(device, owner, {
-    appLog: unavailable,
-    appState: unavailable,
-    network: unavailable,
-    screenshot: unavailable,
-    viewport: unavailable,
-    focus: unavailable,
-    gesture: unavailable,
-    scroll: unavailable,
-    typeText: unavailable,
-    touch: unavailable,
-    elementText: unavailable,
-    back: unavailable,
-    home: unavailable,
-    orientation: unavailable,
-    tvRemote: unavailable,
-    keyboardStatus: unavailable,
-    keyboardDismiss: unavailable,
-    keyboardEnter: unavailable,
-    readClipboard: unavailable,
-    writeClipboard: unavailable,
-    appSwitcher: unavailable,
-    triggerAppEvent: unavailable,
-    setSetting: unavailable,
-    readAlert: unavailable,
-    awaitAlert: unavailable,
-    acceptAlert: unavailable,
-    dismissAlert: unavailable,
-    audioProbeCapture: unavailable,
-    audioProbeQuery: unavailable,
-    lifecycle: unavailableProviderLifecycleFacts(unavailable),
-  });
-}
-
-function unavailableProviderFacts(runtime: ProviderDeviceRuntime, device: DeviceInfo) {
-  const unavailable = Object.freeze({
-    available: false,
-    reason: 'unsupported-provider-mode',
-  } as const);
-  return createUnavailablePlatformRuntimeFacts(
+  return createUnavailablePlatformRuntimeBinding(
     device,
-    providerRuntimeOwner(runtime.provider, 'default'),
-    {
-      appLog: unavailable,
-      appState: unavailable,
-      network: unavailable,
-      screenshot: unavailable,
-      viewport: unavailable,
-      focus: unavailable,
-      gesture: unavailable,
-      scroll: unavailable,
-      typeText: unavailable,
-      touch: unavailable,
-      elementText: unavailable,
-      back: unavailable,
-      home: unavailable,
-      orientation: unavailable,
-      tvRemote: unavailable,
-      keyboardStatus: unavailable,
-      keyboardDismiss: unavailable,
-      keyboardEnter: unavailable,
-      readClipboard: unavailable,
-      writeClipboard: unavailable,
-      appSwitcher: unavailable,
-      triggerAppEvent: unavailable,
-      setSetting: unavailable,
-      readAlert: unavailable,
-      awaitAlert: unavailable,
-      acceptAlert: unavailable,
-      dismissAlert: unavailable,
-      audioProbeCapture: unavailable,
-      audioProbeQuery: unavailable,
-      readiness: unavailable,
-      lifecycle: unavailableProviderLifecycleFacts(unavailable),
-    },
+    owner,
+    createFullyUnavailablePlatformRuntimeFacts(UNSUPPORTED_PROVIDER_MODE),
   );
 }
 
-/** Missing provider modules must fail closed per operation, never via a shared lifecycle bucket. */
-function unavailableProviderLifecycleFacts(
-  unavailable: Extract<
-    DeviceBinding<PlatformRuntimeOperations>['facts']['operations'][keyof PlatformRuntimeOperations],
-    { available: false }
-  >,
-) {
-  return applicationLifecycleOperationFacts({
-    resolveOpenTarget: unavailable,
-    prepareApplicationOpen: unavailable,
-    openApplication: unavailable,
-    applyRuntimeHints: unavailable,
-    clearRuntimeHints: unavailable,
-    closeApplication: unavailable,
-    finalizeApplicationClose: unavailable,
-    prepareAppleRunner: unavailable,
-    configureProviderPortReverse: unavailable,
-  });
+function unavailableProviderFacts(runtime: ProviderDeviceRuntime, device: DeviceInfo) {
+  return createUnavailablePlatformRuntimeFacts(
+    device,
+    providerRuntimeOwner(runtime.provider, 'default'),
+    createFullyUnavailablePlatformRuntimeFacts(UNSUPPORTED_PROVIDER_MODE),
+  );
 }
 
 function ownerUnavailable(owner: RuntimeOwnerRef): AppError {

@@ -7,9 +7,8 @@
 // both surfaces need has to sit below both.
 //
 // What is still declared HERE is the `AgentDeviceClient` facade plus the shapes that are themselves
-// stated in terms of a HIGHER-ranked zone: `commands/system/navigation-projection.ts` (the projected
-// navigation client) and `core/` (`CommandResult`, `BatchRunResult`). Declaring those in contracts/
-// would trade 28 commands->client inversions for contracts->commands and contracts->core ones — the
+// stated in terms of a HIGHER-ranked zone: `core/` (`CommandResult`, `BatchRunResult`). Declaring
+// those in contracts/ would trade 28 commands->client inversions for contracts->core ones — the
 // foundation depending on the layers above it, which is worse. They can move once their upstream
 // declarations do; see docs/dependency-graph-findings.md §0, which also explains why the facade's
 // own 4 remaining inversions are a position rather than debt.
@@ -69,8 +68,10 @@ import type {
   AppOpenResult,
   AppPushOptions,
   AppStateCommandOptions,
+  AppSwitcherCommandOptions,
   AppTriggerEventOptions,
   AudioOptions,
+  BackCommandOptions,
   BatchRunOptions,
   CaptureDiffOptions,
   CaptureScreenshotOptions,
@@ -82,7 +83,6 @@ import type {
   CloudArtifactsOptions,
   CommandRequestResult,
   DeviceBootOptions,
-  DeviceCommandBaseOptions,
   DeviceShutdownOptions,
   DoctorCommandOptions,
   DragOptions,
@@ -92,6 +92,7 @@ import type {
   FlingOptions,
   FocusOptions,
   GetOptions,
+  HomeCommandOptions,
   HoverOptions,
   IsOptions,
   KeyboardCommandOptions,
@@ -105,6 +106,7 @@ import type {
   MaterializationReleaseOptions,
   MaterializationReleaseResult,
   NetworkOptions,
+  OrientationCommandOptions,
   PanOptions,
   PerfOptions,
   PinchOptions,
@@ -124,6 +126,7 @@ import type {
   SwipeOptions,
   TraceOptions,
   TransformGestureOptions,
+  TvRemoteCommandOptions,
   TypeTextOptions,
   ViewportCommandOptions,
   WaitCommandOptions,
@@ -134,11 +137,6 @@ import type {
   MetroReloadOptions,
   MetroReloadResult,
 } from '@agent-device/contracts/remote';
-
-import type {
-  NavigationCommandOptions,
-  ProjectedNavigationCommandClient,
-} from '../commands/system/navigation-projection.ts';
 
 import type { BatchRunResult } from '../core/batch.ts';
 
@@ -162,18 +160,12 @@ export type {
 export type { RecordingCommandResult, TraceCommandResult } from '@agent-device/contracts/recording';
 export type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contracts/replay';
 
-export type BackCommandOptions = DeviceCommandBaseOptions & NavigationCommandOptions<'back'>;
-
-export type OrientationCommandOptions = DeviceCommandBaseOptions &
-  NavigationCommandOptions<'orientation'>;
-
-export type AppSwitcherCommandOptions = DeviceCommandBaseOptions &
-  NavigationCommandOptions<'app-switcher'>;
-
-export type TvRemoteCommandOptions = DeviceCommandBaseOptions &
-  NavigationCommandOptions<'tv-remote'>;
-
-type NonNavigationCommandClient = {
+export type AgentDeviceCommandClient = {
+  back: (options?: BackCommandOptions) => Promise<CommandResult<'back'>>;
+  home: (options?: HomeCommandOptions) => Promise<CommandResult<'home'>>;
+  orientation: (options: OrientationCommandOptions) => Promise<CommandResult<'orientation'>>;
+  appSwitcher: (options?: AppSwitcherCommandOptions) => Promise<CommandResult<'app-switcher'>>;
+  tvRemote: (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>;
   wait: (options: WaitCommandOptions) => Promise<CommandResult<'wait'>>;
   alert: (options?: AlertCommandOptions) => Promise<CommandRequestResult>;
   appState: (options?: AppStateCommandOptions) => Promise<CommandResult<'appstate'>>;
@@ -188,9 +180,6 @@ type NonNavigationCommandClient = {
   prepare: (options: PrepareCommandOptions) => Promise<CommandResult<'prepare'>>;
   viewport: (options: ViewportCommandOptions) => Promise<CommandResult<'viewport'>>;
 };
-
-export type AgentDeviceCommandClient = ProjectedNavigationCommandClient<DeviceCommandBaseOptions> &
-  NonNavigationCommandClient;
 
 export type AgentDeviceClient = {
   command: AgentDeviceCommandClient;

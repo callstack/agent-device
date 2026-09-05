@@ -16,6 +16,8 @@ export type AndroidAdbExecutorOptions = {
   binaryStdout?: boolean;
   stdin?: string | Buffer;
   signal?: AbortSignal;
+  env?: Record<string, string | undefined>;
+  serverPort?: number;
 };
 
 export type AndroidAdbExecutorResult = {
@@ -30,7 +32,6 @@ type AndroidAdbStdioOption = 'overlapped' | 'pipe' | 'ignore' | 'inherit';
 
 export type AndroidAdbSpawnOptions = AndroidAdbExecutorOptions & {
   cwd?: string;
-  env?: Record<string, string | undefined>;
   detached?: boolean;
   /** Max stdout/stderr bytes for synchronous runs (default Node ~1MB). */
   maxBuffer?: number;
@@ -184,6 +185,7 @@ export type AndroidAdbProvider = AndroidAdbProviderBase & AndroidTouchCapabiliti
 
 export type AndroidAdbProviderScopeOptions = {
   serial: string;
+  serverPort?: number;
 };
 
 export type ScopedAndroidAdbBackgroundTransport =

@@ -20,17 +20,12 @@ import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { enumField, integerField, requiredField, stringField } from '../command-input.ts';
 import { compactRecord } from '../input-readers.ts';
-import {
-  defineCommandFacet,
-  defineCommandFamilyFromFacets,
-  projectCommandOutputSchemas,
-} from '../family/types.ts';
+import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import {
   postActionObservationCliFlags,
   postActionObservationFields,
 } from '../post-action-observation-grammar.ts';
-import { NAVIGATION_COMMAND_PROJECTIONS } from './navigation-projection.ts';
 import { systemCliOutputFormatters } from './output.ts';
 
 const APPSTATE_COMMAND_NAME = 'appstate';
@@ -128,28 +123,22 @@ const appStateCommandDefinition = defineExecutableCommand(
   (client, input) => client.command.appState(input),
 );
 
-const backCommandDefinition = defineExecutableCommand(
-  backCommandMetadata,
-  (client, input) => client.command.back(input),
-  NAVIGATION_COMMAND_PROJECTIONS.back,
+const backCommandDefinition = defineExecutableCommand(backCommandMetadata, (client, input) =>
+  client.command.back(input),
 );
 
-const homeCommandDefinition = defineExecutableCommand(
-  homeCommandMetadata,
-  (client, input) => client.command.home(input),
-  NAVIGATION_COMMAND_PROJECTIONS.home,
+const homeCommandDefinition = defineExecutableCommand(homeCommandMetadata, (client, input) =>
+  client.command.home(input),
 );
 
 const orientationCommandDefinition = defineExecutableCommand(
   orientationCommandMetadata,
   (client, input) => client.command.orientation(input),
-  NAVIGATION_COMMAND_PROJECTIONS.orientation,
 );
 
 const appSwitcherCommandDefinition = defineExecutableCommand(
   appSwitcherCommandMetadata,
   (client, input) => client.command.appSwitcher(input),
-  NAVIGATION_COMMAND_PROJECTIONS['app-switcher'],
 );
 
 const keyboardCommandDefinition = defineExecutableCommand(
@@ -165,7 +154,6 @@ const clipboardCommandDefinition = defineExecutableCommand(
 const tvRemoteCommandDefinition = defineExecutableCommand(
   tvRemoteCommandMetadata,
   (client, input) => client.command.tvRemote(input),
-  NAVIGATION_COMMAND_PROJECTIONS['tv-remote'],
 );
 
 const appStateCliSchema = {} as const satisfies CommandSchemaOverride;
@@ -267,7 +255,6 @@ const appStateCommandFacet = defineCommandFacet({
   },
   metadata: appStateCommandMetadata,
   definition: appStateCommandDefinition,
-  clientMethod: 'appState',
   cliSchema: appStateCliSchema,
   cliReader: appStateCliReader,
   daemonWriter: appStateDaemonWriter,
@@ -333,7 +320,6 @@ const keyboardCommandFacet = defineCommandFacet({
   },
   metadata: keyboardCommandMetadata,
   definition: keyboardCommandDefinition,
-  clientMethod: 'keyboard',
   cliSchema: keyboardCliSchema,
   cliReader: keyboardCliReader,
   daemonWriter: keyboardDaemonWriter,
@@ -347,7 +333,6 @@ const clipboardCommandFacet = defineCommandFacet({
   },
   metadata: clipboardCommandMetadata,
   definition: clipboardCommandDefinition,
-  clientMethod: 'clipboard',
   cliSchema: clipboardCliSchema,
   cliReader: clipboardCliReader,
   daemonWriter: clipboardDaemonWriter,
@@ -381,10 +366,6 @@ export const systemCommandFamily = defineCommandFamilyFromFacets({
     tvRemoteCommandFacet,
   ],
 });
-
-export const projectedSystemCommandOutputSchemas = projectCommandOutputSchemas(
-  systemCommandFamily.definitions,
-);
 
 function readBackMode(value: unknown): BackMode | undefined {
   return value === 'in-app' || value === 'system' ? value : undefined;
