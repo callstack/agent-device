@@ -1,7 +1,6 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import * as commandInput from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
@@ -19,10 +18,6 @@ const doctorCommandMetadata = defineFieldCommandMetadata(
       'Check remote connection setup instead of local device inventory.',
     ),
   },
-);
-
-const doctorCommandDefinition = defineExecutableCommand(doctorCommandMetadata, (client, input) =>
-  client.command.doctor(input),
 );
 
 const doctorCliSchema = {
@@ -49,7 +44,7 @@ export const doctorCommandFacet = defineCommandFacet({
       'On iOS simulators it also warms the XCTest runner build cache in the background when missing, so run it before the first Apple snapshot or interaction of a session.',
   },
   metadata: doctorCommandMetadata,
-  definition: doctorCommandDefinition,
+  run: (client, input) => client.command.doctor(input),
   cliSchema: doctorCliSchema,
   cliReader: doctorCliReader,
   daemonWriter: doctorDaemonWriter,
