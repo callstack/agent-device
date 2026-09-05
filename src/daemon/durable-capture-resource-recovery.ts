@@ -17,10 +17,9 @@ import {
   withDurableCaptureResourceFence,
   type DurableCaptureResourceFenceLease,
 } from './durable-capture-resource-fence.ts';
-import type { DurableCaptureResourceDefinition } from './durable-capture-resource.ts';
+import type { DurableCaptureRecordDefinition } from './durable-capture-resource.ts';
 import { durableCaptureDiagnosticPrefix } from './durable-capture-resource-labels.ts';
 import { transitionCleanupOutcome } from './durable-capture-resource-transitions.ts';
-import { safeSessionName } from './session-paths.ts';
 
 const DEFAULT_RECOVERY_DEADLINE_MS = 5_000;
 
@@ -39,8 +38,13 @@ export type DurableCaptureRecoveryDiagnostic = Readonly<{
 }>;
 
 export type DurableCaptureRecoveryParams<K extends string, H extends LiveResourceHandle<C>, C> = {
-  definition: DurableCaptureResourceDefinition<K, H, C>;
+  definition: DurableCaptureRecordDefinition<K, C>;
   sessionsDir: string;
+  /**
+   * The one directory a record for `sessionId` may occupy. A record found anywhere else is
+   * retained rather than recovered, so the caller owns how a session name becomes a directory.
+   */
+  resolveSessionDir(sessionId: string): string;
   scope: PlatformRequestScope;
   acquireControl(
     envelope: DurableResourceEnvelope<K>,
@@ -120,7 +124,7 @@ function readRecoveryCandidate<K extends string, H extends LiveResourceHandle<C>
     return { status: 'ignored' };
   }
   const canonicalPath = params.definition.store.resolvePath(
-    path.join(params.sessionsDir, safeSessionName(record.envelope.sessionId)),
+    params.resolveSessionDir(record.envelope.sessionId),
   );
   if (path.resolve(resourcePath) !== path.resolve(canonicalPath)) {
     report(params, 'session_path_mismatch', resourcePath, {

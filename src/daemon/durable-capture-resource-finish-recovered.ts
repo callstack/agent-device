@@ -8,7 +8,7 @@ import {
 } from './durable-capture-recovery-authority.ts';
 import { allowsDurableCaptureDescriptorCleanup } from './durable-capture-resource-recovery.ts';
 import { withDurableCaptureResourceFence } from './durable-capture-resource-fence.ts';
-import type { DurableCaptureResourceDefinition } from './durable-capture-resource.ts';
+import type { DurableCaptureRecordDefinition } from './durable-capture-resource.ts';
 import {
   capitalizeDurableCaptureLabel,
   durableCaptureDiagnosticPrefix,
@@ -41,7 +41,7 @@ export async function finishRecoveredDurableCapture<
   H extends LiveResourceHandle<C>,
   C,
 >(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
+  definition: DurableCaptureRecordDefinition<K, C>,
   params: FinishRecoveredDurableCaptureParams<K, H, C>,
 ): Promise<C> {
   const record = definition.store.read(params.resourcePath);
@@ -127,7 +127,7 @@ export async function finishRecoveredDurableCapture<
 }
 
 function noRecoverableResource(
-  definition: DurableCaptureResourceDefinition<string, LiveResourceHandle<unknown>, unknown>,
+  definition: DurableCaptureRecordDefinition<string, unknown>,
   status: 'missing' | 'decoded' | 'unreattachable',
 ): AppError {
   return new AppError(

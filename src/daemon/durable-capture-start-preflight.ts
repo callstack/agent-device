@@ -1,15 +1,14 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import type { LiveResourceHandle } from '@agent-device/contracts/durable-resource';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import { deviceIdentity, deviceIdentityKey, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DurableCaptureAdmissionLedger } from './durable-capture-admission-ledger.ts';
-import type { DurableCaptureResourceDefinition } from './durable-capture-resource.ts';
+import type { DurableCaptureRecordDefinition } from './durable-capture-resource.ts';
 import { capitalizeDurableCaptureLabel } from './durable-capture-resource-labels.ts';
 
-export function createNextDurableCaptureFence<K extends string, H extends LiveResourceHandle<C>, C>(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
+export function createNextDurableCaptureFence<K extends string, C>(
+  definition: DurableCaptureRecordDefinition<K, C>,
   params: {
     admissionLedger: DurableCaptureAdmissionLedger;
     resourcePath: string;
@@ -25,8 +24,8 @@ export function createNextDurableCaptureFence<K extends string, H extends LiveRe
   });
 }
 
-function assertNoConflictingManifest<K extends string, H extends LiveResourceHandle<C>, C>(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
+function assertNoConflictingManifest<K extends string, C>(
+  definition: DurableCaptureRecordDefinition<K, C>,
   resourcePath: string,
   device: DeviceInfo,
 ): void {

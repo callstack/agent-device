@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { JsonObject } from '@agent-device/contracts/client';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { LiveResourceHandle } from '@agent-device/contracts/durable-resource';
@@ -24,32 +25,38 @@ import {
   finishRecoveredDurableCapture,
   type FinishRecoveredDurableCaptureParams,
 } from './durable-capture-resource-finish-recovered.ts';
+import { safeSessionName } from './session-paths.ts';
 import type { SessionStore } from './session-store.ts';
 import type { SessionState } from './types.ts';
 import type { DurableSessionResourceKind } from './durable-session-resource-kinds.ts';
+
+/**
+ * The whole of the session store the durable-capture mechanics touch: where a session's
+ * records live, and how an updated session record is put back.
+ */
+export type DurableCaptureSessionStore<S> = Readonly<{
+  set(name: string, session: S): void;
+  resolveSessionDir(name: string): string;
+}>;
 
 export type DurableCaptureSessionResource<K extends string, H extends AsyncDisposable> = Readonly<{
   handle: H;
   envelope: DurableResourceEnvelope<K>;
 }>;
 
-export type DurableCaptureSessionSlot<K extends string, H extends AsyncDisposable> = Readonly<{
-  read(session: SessionState): DurableCaptureSessionResource<K, H> | undefined;
-  replace(
-    session: SessionState,
-    resource: DurableCaptureSessionResource<K, H> | undefined,
-  ): SessionState;
+export type DurableCaptureSessionSlot<K extends string, H extends AsyncDisposable, S> = Readonly<{
+  read(session: S): DurableCaptureSessionResource<K, H> | undefined;
+  replace(session: S, resource: DurableCaptureSessionResource<K, H> | undefined): S;
 }>;
 
-export type DurableCaptureResourceDefinition<
-  K extends string,
-  H extends LiveResourceHandle<C>,
-  C,
-> = Readonly<{
+/**
+ * The session-free half of a definition. Recovery reattaches and terminalizes a persisted
+ * record with no session in hand, so it names this and never the session type.
+ */
+export type DurableCaptureRecordDefinition<K extends string, C> = Readonly<{
   resourceKind: K;
   displayName: string;
   store: DurableCaptureResourceStore<K>;
-  sessionSlot: DurableCaptureSessionSlot<K, H>;
   completionMetadata(result: C): JsonObject;
   messages: Readonly<{
     noActive: string;
@@ -57,11 +64,27 @@ export type DurableCaptureResourceDefinition<
   }>;
 }>;
 
-export type AdoptStartedDurableCaptureParams<K extends string, H extends AsyncDisposable> = {
-  admissionLedger: DurableCaptureAdmissionLedger;
-  session: SessionState;
+export type DurableCaptureResourceDefinition<
+  K extends string,
+  H extends LiveResourceHandle<C>,
+  C,
+  S,
+> = DurableCaptureRecordDefinition<K, C> &
+  Readonly<{ sessionSlot: DurableCaptureSessionSlot<K, H, S> }>;
+
+/**
+ * What the mechanics observed about a failed adoption's cleanup. Reporting it keeps the
+ * admission decision — block a replacement start, or clear an earlier block — with the daemon.
+ */
+export type DurableCaptureCleanupOutcome =
+  | { confirmed: true }
+  | { confirmed: false; reason: string };
+
+export type AdoptStartedDurableCaptureParams<K extends string, H extends AsyncDisposable, S> = {
+  reportUndurableCleanup(device: DeviceInfo, outcome: DurableCaptureCleanupOutcome): void;
+  session: S;
   sessionName: string;
-  sessionStore: SessionStore;
+  sessionStore: DurableCaptureSessionStore<S>;
   device: DeviceInfo;
   owner: RuntimeOwnerRef;
   fence: ResourceOwnershipFence;
@@ -70,13 +93,33 @@ export type AdoptStartedDurableCaptureParams<K extends string, H extends AsyncDi
   throwIfCanceled(): void;
 };
 
+type AdoptStartedSessionCaptureParams<K extends string, H extends AsyncDisposable> = Omit<
+  AdoptStartedDurableCaptureParams<K, H, SessionState>,
+  'reportUndurableCleanup'
+> &
+  Readonly<{ admissionLedger: DurableCaptureAdmissionLedger }>;
+
+type SessionCaptureRecoveryParams<K extends string, H extends LiveResourceHandle<C>, C> = Omit<
+  DurableCaptureRecoveryParams<K, H, C>,
+  'definition' | 'resolveSessionDir'
+>;
+
 export function createDurableCaptureResource<
   K extends DurableSessionResourceKind,
   H extends LiveResourceHandle<C>,
   C,
->(definition: DurableCaptureResourceDefinition<K, H, C>) {
-  const resourcePath = (sessionStore: SessionStore, sessionName: string): string =>
-    definition.store.resolvePath(sessionStore.resolveSessionDir(sessionName));
+>(definition: DurableCaptureResourceDefinition<K, H, C, SessionState>) {
+  const resourcePath = (
+    sessionStore: DurableCaptureSessionStore<SessionState>,
+    sessionName: string,
+  ): string => definition.store.resolvePath(sessionStore.resolveSessionDir(sessionName));
+  const recoveryParams = (
+    params: SessionCaptureRecoveryParams<K, H, C>,
+  ): DurableCaptureRecoveryParams<K, H, C> => ({
+    definition,
+    resolveSessionDir: (sessionId) => path.join(params.sessionsDir, safeSessionName(sessionId)),
+    ...params,
+  });
 
   return Object.freeze({
     store: definition.store,
@@ -87,10 +130,16 @@ export function createDurableCaptureResource<
     }): ResourceOwnershipFence {
       return createNextDurableCaptureFence(definition, params);
     },
-    adoptStarted(params: AdoptStartedDurableCaptureParams<K, H>): Promise<void> {
+    adoptStarted(params: AdoptStartedSessionCaptureParams<K, H>): Promise<void> {
       return adoptStartedDurableCapture(
         definition,
-        params,
+        {
+          ...params,
+          reportUndurableCleanup: (device, outcome) => {
+            if (outcome.confirmed) params.admissionLedger.clearUndurableCleanup(device);
+            else params.admissionLedger.blockUndurableCleanup(device, outcome.reason);
+          },
+        },
         resourcePath(params.sessionStore, params.sessionName),
       );
     },
@@ -116,14 +165,11 @@ export function createDurableCaptureResource<
     }): Promise<void> {
       return forceCleanupLiveDurableCapture(definition, params);
     },
-    recoverAll(params: Omit<DurableCaptureRecoveryParams<K, H, C>, 'definition'>) {
-      return recoverDurableCaptureResourcesAfterDaemonLock({ definition, ...params });
+    recoverAll(params: SessionCaptureRecoveryParams<K, H, C>) {
+      return recoverDurableCaptureResourcesAfterDaemonLock(recoveryParams(params));
     },
-    recoverOne(
-      params: Omit<DurableCaptureRecoveryParams<K, H, C>, 'definition'>,
-      resourcePath: string,
-    ) {
-      return recoverDurableCaptureResource({ definition, ...params }, resourcePath);
+    recoverOne(params: SessionCaptureRecoveryParams<K, H, C>, resourcePath: string) {
+      return recoverDurableCaptureResource(recoveryParams(params), resourcePath);
     },
   });
 }
