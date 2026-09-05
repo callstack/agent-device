@@ -4,6 +4,7 @@ import {
   MAESTRO_COMPATIBILITY_ADR_URL,
   MAESTRO_COMPATIBILITY_ISSUE_URL,
 } from '@agent-device/maestro';
+import { normalizeCliCommandAlias } from '../commands/cli-command-aliases.ts';
 import { helpBody } from '../commands/command-text.ts';
 import {
   DEVICE_SELECTION_FLAG_KEYS,
@@ -1210,6 +1211,18 @@ export function buildCommandUsageText(commandName: string): string | null {
 
 ${helpBody(schema.text)}${flagsSections}
 `;
+}
+
+/**
+ * `bin.ts`'s `--help` fast path calls this instead of composing
+ * `buildCommandUsageText(normalizeCliCommandAlias(...))` itself, so an alias like `tap` or
+ * `launch` cannot silently miss alias resolution by calling `buildCommandUsageText` raw. A
+ * command name the alias registry does not recognize (including `rotate`, which is retired
+ * rather than aliased) passes through unchanged and falls back to `null` exactly as
+ * `buildCommandUsageText` would.
+ */
+export function resolveHelpTargetUsageText(helpTarget: string): string | null {
+  return buildCommandUsageText(normalizeCliCommandAlias(helpTarget));
 }
 
 /**

@@ -39,3 +39,17 @@ test('cli without command prints usage and exits 1', () => {
   assert.equal(result.status, 1, result.stderr);
   assert.match(result.stdout, /agent-device <command>/i);
 });
+
+test('alias --help fast path is byte-identical to its canonical command', () => {
+  const tap = runCli(['tap', '--help']);
+  const press = runCli(['press', '--help']);
+  assert.equal(tap.status, 0, tap.stderr);
+  assert.equal(press.status, 0, press.stderr);
+  assert.equal(tap.stdout, press.stdout);
+
+  const launch = runCli(['launch', '--help']);
+  const open = runCli(['open', '--help']);
+  assert.equal(launch.status, 0, launch.stderr);
+  assert.equal(open.status, 0, open.stderr);
+  assert.equal(launch.stdout, open.stdout);
+});

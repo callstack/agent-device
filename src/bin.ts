@@ -1,5 +1,3 @@
-import { normalizeCliCommandAlias } from './commands/cli-command-aliases.ts';
-
 const argv = process.argv.slice(2);
 
 declare const __AGENT_DEVICE_VERSION__: string;
@@ -51,12 +49,12 @@ function runHelpFastPath(argv: string[]): boolean {
   if (helpTarget === undefined) return false;
 
   import('./cli-schema/cli-help.ts')
-    .then(({ buildCommandUsageText, buildUsageText }) => {
+    .then(({ resolveHelpTargetUsageText, buildUsageText }) => {
       if (helpTarget === null) {
         process.stdout.write(`${buildUsageText()}\n`);
         return;
       }
-      const commandHelp = buildCommandUsageText(normalizeCliCommandAlias(helpTarget));
+      const commandHelp = resolveHelpTargetUsageText(helpTarget);
       if (commandHelp) {
         process.stdout.write(commandHelp);
         return;
