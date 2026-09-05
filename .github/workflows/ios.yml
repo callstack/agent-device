@@ -142,6 +142,7 @@ jobs:
             exit 0
           fi
           pnpm build
+          pnpm exec vitest run packages/platform-apple/src/snapshot-source/native-runtime.test.ts
           pnpm check:package -- --verify-snapshot-bridge-preparation
 
       - name: Run targeted iOS runner XCTest regressions
