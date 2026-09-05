@@ -32,7 +32,7 @@ import type {
   ReplayTargetGuardDenotation,
   TargetAnnotationV1,
 } from '@agent-device/contracts/replay';
-import type { RefFrameScope, RefFrameState } from './ref-frame.ts';
+import type { RefFrame } from './ref-frame.ts';
 export type DaemonInstallSource = PublicDaemonInstallSource;
 export type SessionRuntimeHints = PublicSessionRuntimeHints;
 export type DaemonArtifact = PublicDaemonArtifact;
@@ -302,43 +302,10 @@ export type SessionState = {
   /** Source snapshot used to resolve repeated `snapshot -s @ref` after scoped output replaces refs. */
   snapshotScopeSource?: SnapshotState;
   /**
-   * ADR 0014 ref-frame lifecycle state. Undefined is treated as `active`. A
-   * device side effect transitions the frame to `expired` (wired at the
-   * side-effect seam in a later migration step); an expired frame admits no ref
-   * mutation. Managed only through `src/daemon/ref-frame.ts`.
+   * ADR 0014 ref frame, owned by `ref-frame.ts` by construction: read it through that module's
+   * accessors. Undefined is the pristine frame.
    */
-  refFrameState?: RefFrameState;
-  /**
-   * ADR 0014 issuance scope of the current ref frame. Undefined is treated as
-   * `all` (a complete namespace). A bounded set names the ref bodies a partial
-   * publication (`find`, settled diff, replay divergence) actually issued, which
-   * are the only bodies a pinned mutation may target. Managed only through
-   * `src/daemon/ref-frame.ts`.
-   */
-  refFrameScope?: RefFrameScope;
-  /**
-   * ADR 0014 immutable source tree of the current ref frame: the tree that
-   * minted the frame's refs, retained so a ref resolves to the node the caller
-   * was authorized against — never to a different element by positional
-   * coincidence in a newer operational observation (`snapshot`). Shares the
-   * capture object with `snapshot` at activation (no deep copy); an Android
-   * freshness or other read-only capture advances `snapshot` WITHOUT touching
-   * this, so the two intentionally diverge. Managed only through
-   * `src/daemon/ref-frame.ts` and the partial-issuance writer. Undefined falls
-   * back to `snapshot` (pre-frame sessions).
-   */
-  refFrameTree?: SnapshotState;
-  /**
-   * ADR 0014 ref-frame epoch, frozen at the generation the frame was issued at
-   * (the `refsGeneration` the client received). A later read-only capture
-   * advances `snapshotGeneration` (the observation counter) WITHOUT reissuing
-   * refs, so admission and pin comparisons use this frame-pinned epoch — a
-   * correct pin from the issuing frame is not falsely rejected because an
-   * intervening read bumped the observation counter. Undefined falls back to
-   * `snapshotGeneration`. Managed only through `src/daemon/ref-frame.ts` and the
-   * partial-issuance writer.
-   */
-  refFrameGeneration?: number;
+  refFrame?: RefFrame;
   /** Last broad snapshot safe for Android route-freshness comparisons after interactive snapshots. */
   lastComparisonSafeSnapshot?: SnapshotState;
   androidSnapshotFreshness?: SnapshotFreshnessWindow;

@@ -47,7 +47,6 @@ vi.mock('../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../__tests__/legacy-snapshot-capture-fixture.ts');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
-
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
@@ -64,6 +63,7 @@ vi.mock('../../ios-app-session-hint.ts', () => ({
 
 import { runAppleRunnerCommand } from '@agent-device/platform-apple/runner/operations';
 import { buildIosOpenCommandHint } from '../../ios-app-session-hint.ts';
+import { expireRefFrame, refFrame, refFrameState, refFrameTree } from '../../ref-frame.ts';
 
 const mockRunnerCommand = vi.mocked(runAppleRunnerCommand);
 const mockBuildIosOpenCommandHint = vi.mocked(buildIosOpenCommandHint);
@@ -445,7 +445,7 @@ test('snapshot re-activates a complete frame; diff preserves it (ADR 0014)', asy
     backend: 'android',
   };
   // A prior device action expired the frame.
-  session.refFrameState = 'expired';
+  expireRefFrame(session);
   sessionStore.set(sessionName, session);
   legacyDispatchCapture.mockResolvedValue({
     nodes: [{ index: 0, depth: 0, type: 'android.widget.Button', label: 'Fresh' }],
@@ -463,7 +463,7 @@ test('snapshot re-activates a complete frame; diff preserves it (ADR 0014)', asy
   // The snapshot response hands every stored node's ref to the client: it
   // re-activates a complete frame, so refs are current again.
   expect(snapshotResponse?.ok).toBe(true);
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('active');
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('active');
 
   const diffResponse = await handleSnapshotCommands({
     req: snapshotRequest(sessionName, 'diff', { positionals: ['snapshot'] }),
@@ -475,7 +475,7 @@ test('snapshot re-activates a complete frame; diff preserves it (ADR 0014)', asy
   // diff replaces the observation but is a read (summary response): it preserves
   // the authorized frame rather than expiring it.
   expect(diffResponse?.ok).toBe(true);
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('active');
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('active');
 });
 
 // #1076 versioned refs — shared harness for the refsGeneration tests below.
@@ -517,8 +517,8 @@ function expectInternalObservationResult(params: {
   expect(params.response?.ok ? params.response.data?.refsGeneration : undefined).toBeUndefined();
   expect(params.session?.snapshotGeneration).toBe((params.publishedGeneration as number) + 1);
   expect(params.session?.snapshot).not.toBe(params.publishedTree);
-  expect(params.session?.refFrameGeneration).toBe(params.publishedGeneration);
-  expect(params.session?.refFrameTree).toBe(params.publishedTree);
+  expect(refFrame(params.session!).generation).toBe(params.publishedGeneration);
+  expect(refFrameTree(params.session!)).toBe(params.publishedTree);
 }
 
 test('snapshot responses carry refsGeneration and advance it per capture (#1076 versioned refs)', async () => {
@@ -560,8 +560,8 @@ test('daemon-private snapshot observation advances capture state without publish
 
   await runVersionedRefsCommand({ sessionStore, sessionName, command: 'snapshot' });
   const published = sessionStore.get(sessionName);
-  const publishedGeneration = published?.refFrameGeneration;
-  const publishedTree = published?.refFrameTree;
+  const publishedGeneration = refFrame(published!).generation;
+  const publishedTree = refFrameTree(published!);
 
   legacyDispatchCapture.mockResolvedValue({
     nodes: [{ index: 0, depth: 0, type: 'android.widget.Button', label: 'Internal' }],

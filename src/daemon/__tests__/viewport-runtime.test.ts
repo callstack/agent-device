@@ -17,7 +17,7 @@ import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { activateCompleteRefFrame } from '../ref-frame.ts';
+import { activateCompleteRefFrame, refFrameState } from '../ref-frame.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
 import { resolveBoundViewportRuntime } from '../viewport-runtime.ts';
@@ -189,7 +189,7 @@ test('request router joins viewport admission to execution, recording, and ref i
     ok: true,
     data: { width: 1280, height: 900, message: 'Viewport set: 1280x900' },
   });
-  expect(session.refFrameState).toBe('expired');
+  expect(refFrameState(session)).toBe('expired');
   expect(session.actions.at(-1)).toMatchObject({
     command: 'viewport',
     positionals: ['1280', '900'],

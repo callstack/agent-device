@@ -13,6 +13,7 @@ import { androidObservation } from '../../platform-runtime.ts';
 import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 import { makeAndroidSnapshotCapture } from '../../__tests__/test-utils/android-snapshot-capture.ts';
+import { refFrameState } from '../ref-frame.ts';
 
 const recoverAndroidBlockingSystemDialog = (
   params: Omit<Parameters<typeof recoverOwnedAndroidBlockingSystemDialog>[0], 'observation'>,
@@ -45,12 +46,12 @@ test('android blocking-dialog recovery expires the ref frame before its recovery
     outPath: '/tmp/anr.mp4',
     startedAt: 0,
   });
-  expect(session.refFrameState).toBeUndefined(); // active
+  expect(refFrameState(session)).toBe('active');
 
   const result = await recoverAndroidBlockingSystemDialog({ session });
 
   // The recovery tap was dispatched, and the frame is expired as a result.
   expect(vi.mocked(runAndroidAdb)).toHaveBeenCalled();
-  expect(session.refFrameState).toBe('expired');
+  expect(refFrameState(session)).toBe('expired');
   expect(result.status).not.toBe('absent');
 });

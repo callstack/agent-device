@@ -25,8 +25,10 @@
 // the set of writers that exist, so the gate's job is to stop the set from growing quietly.
 // Adding a field to `SessionState` forces a deliberate owner; writing an existing field from
 // a new module fails until that module is either declared an owner or, better, calls the
-// owner instead. ADR 0014's ref frame is the worked example — its four fields moved together
-// across two modules until `activateRefFrame` took the transition.
+// owner instead. ADR 0014's ref frame is the worked example, and the one that has since been
+// taken further than this table can go: its four fields moved together across two modules
+// until `activateRefFrame` took the transition, and they are now a single value whose nominal
+// type no other module can construct, edit, or derive from an existing frame.
 //
 // Detection is AST-based (`oxc-parser`, already a devDependency) rather than a line regex. A
 // regex has to enumerate assignment operators, and the ones it forgets are exactly the ones
@@ -49,12 +51,13 @@ export type SessionStateWrite = {
  * owner list has one entry is a field only that module can get wrong.
  */
 export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string[]>> = {
-  // ADR 0014 ref frame: the four frame fields move together or the frame is incoherent, so
-  // both issuance forms go through ref-frame.ts.
-  refFrameState: ['src/daemon/ref-frame.ts'],
-  refFrameScope: ['src/daemon/ref-frame.ts'],
-  refFrameTree: ['src/daemon/ref-frame.ts'],
-  refFrameGeneration: ['src/daemon/ref-frame.ts'],
+  // ADR 0014 ref frame. The four frame fields this row replaced moved together or the frame was
+  // incoherent, and only this table said so; `RefFrame` is now a nominal type (`#`-private
+  // fields) that no other module can construct, edit, or spread into a new frame, and the
+  // transitions replace it whole. The row stays because the type cannot judge a whole frame
+  // moved unchanged: assigning `undefined` (a reset to the pristine frame) and assigning a
+  // frame read off another session.
+  refFrame: ['src/daemon/ref-frame.ts'],
   // Scoped-snapshot lineage is cleared at two distinct events: crossing a device side-effect
   // seam (ref-frame.ts) and replacing the stored observation (session-snapshot.ts).
   snapshotScopeSource: ['src/daemon/ref-frame.ts', 'src/daemon/session-snapshot.ts'],

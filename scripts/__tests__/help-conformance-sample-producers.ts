@@ -23,7 +23,7 @@ import { buildAmbiguousMatchError } from '../../src/daemon/selector-match-errors
 import { refMutationAdmissionResponse } from '../../src/daemon/interaction/index.ts';
 import { buildDeviceInUseBySessionError } from '../../src/daemon/session-recovery-hints.ts';
 import { buildDeviceClaimConflictError } from '../../src/daemon/device-claim-conflict.ts';
-import { readRefMutationFrame } from '../../src/daemon/ref-frame.ts';
+import { activateCompleteRefFrame, readRefMutationFrame } from '../../src/daemon/ref-frame.ts';
 import { resolveRefStalenessWarning } from '../../src/daemon/session-snapshot.ts';
 import type { SessionState } from '../../src/daemon/types.ts';
 import { buildAppNotInstalledError } from '@agent-device/platform-apple/app-resolution';
@@ -423,7 +423,10 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     producer: 'the real ADR 0014 admission rejection and staleness hint',
     sample: STALE_REF_SAMPLE,
     render: () => {
-      const session = { refFrameGeneration: 7 } as SessionState;
+      const session = { snapshotGeneration: 7 } as SessionState;
+      // Pin the epoch in the frame itself, as a real published namespace does, so the
+      // sample exercises the frame epoch rather than the pre-frame fallback.
+      activateCompleteRefFrame(session);
       const response = refMutationAdmissionResponse({
         session,
         ref: '@e12',

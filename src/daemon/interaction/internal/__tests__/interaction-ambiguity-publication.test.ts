@@ -57,5 +57,5 @@ test('non-ambiguity errors do not change ref authority', () => {
     }),
     original,
   );
-  assert.equal(state.refFrameScope, undefined);
+  assert.equal(state.refFrame, undefined);
 });

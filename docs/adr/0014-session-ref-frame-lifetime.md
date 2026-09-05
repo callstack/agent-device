@@ -17,8 +17,12 @@ ref-frame vocabulary is promoted into `CONTEXT.md`.
 
 - A session owns at most one **ref frame** — the authorization namespace for mutation refs (epoch
   exposed as `refsGeneration`, immutable source tree, `active`/`expired` state, `all` or bounded
-  issuance scope) — owned by `src/daemon/ref-frame.ts` and kept separate from the latest
-  operational observation (`session.snapshot`).
+  issuance scope) — kept separate from the latest operational observation (`session.snapshot`).
+  The frame is one value on `SessionState`, replaced whole by a transition and never edited in
+  place; its type is nominal (`#`-private fields), so no module outside
+  `src/daemon/ref-frame.ts` can construct a frame, edit one, or derive one from an existing
+  frame. What the type cannot judge is a whole frame moved unchanged — clearing the field, or
+  assigning another session's frame — which the field-owner gate still covers.
 - A complete snapshot activates an `all` frame; `find`, settled diffs, and replay divergence
   screens activate a bounded partial frame that supersedes the prior one; internal read-only
   captures never activate, reindex, or expire a frame.
