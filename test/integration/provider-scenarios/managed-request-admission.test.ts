@@ -1,13 +1,17 @@
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
 import type { ManagedLease } from '@agent-device/contracts/managed-device-allocation';
-import { ensureBoundDeviceReady } from '../../request-runtime-binding.ts';
-import { withManagedAdbFixture } from '../../../platform-runtime-managed-owner.fixtures.ts';
-import { NOW, deferred, unknownStatus } from './lease-admission.fixtures.ts';
+import { ensureBoundDeviceReady } from '../../../src/daemon/request-runtime-binding.ts';
+import { withManagedAdbFixture } from './managed-runtime-automation.fixtures.ts';
+import {
+  NOW,
+  deferred,
+  unknownStatus,
+} from '../../../src/daemon/managed-device-allocation/__tests__/lease-admission.fixtures.ts';
 import {
   setupRequest,
   renewedRequestLease,
   mismatchedRequestAuthorities,
-} from './request-admission.fixtures.ts';
+} from './managed-request-admission.fixtures.ts';
 
 beforeEach(() => vi.spyOn(Date, 'now').mockReturnValue(NOW));
 afterEach(() => vi.restoreAllMocks());
@@ -184,7 +188,7 @@ test.skipIf(process.platform === 'win32')(
   'disposal during operation projection refuses activation after successful adoption',
   async () => {
     await withManagedAdbFixture(async (native) => {
-      let disposing: Promise<void> | undefined;
+      let disposing: PromiseLike<void> | undefined;
       const setup = await setupRequest({
         beforeProjection: () => {
           disposing ??= setup.bindings[Symbol.asyncDispose]();

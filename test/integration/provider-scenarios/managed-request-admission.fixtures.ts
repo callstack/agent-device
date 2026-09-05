@@ -5,20 +5,25 @@ import {
   type DeviceBindingRequest,
 } from '@agent-device/contracts/platform-runtime';
 import { clipboardReadUse } from '@agent-device/contracts/platform-runtime-operations';
-import { gatewayFixtureScope } from '../../../platform-runtime-gateway.fixtures.ts';
-import { createComposedPlatformRuntimeGateway } from '../../../platform-runtime-gateway.ts';
-import { platformRuntimeModules } from '../../../platform-runtime.ts';
-import { managedAutomationHost } from '../../../platform-runtime-managed-owner.fixtures.ts';
+import { gatewayFixtureScope } from '../../../src/platform-runtime-gateway.fixtures.ts';
+import { createComposedPlatformRuntimeGateway } from '../../../src/platform-runtime-gateway.ts';
+import { platformRuntimeModules } from '../../../src/platform-runtime.ts';
+import { managedAutomationHost } from './managed-runtime-automation.fixtures.ts';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
-} from '../../../__tests__/test-utils/device-claim-store.ts';
-import { createDeviceClaimAdmission } from '../../device-claim-admission.ts';
-import { acquireAllocatorHeldDeviceClaim } from '../../device-claim-allocator.ts';
-import { createRequestRuntimeBindings } from '../../request-runtime-binding.ts';
-import { managedCommandHorizon } from '../command-horizon.ts';
-import type { ManagedLeaseAdmission } from '../lease-admission.ts';
-import { NOW, granted, renewedLease, setupAdmission } from './lease-admission.fixtures.ts';
+} from '../../../src/__tests__/test-utils/device-claim-store.ts';
+import { createDeviceClaimAdmission } from '../../../src/daemon/device-claim-admission.ts';
+import { acquireAllocatorHeldDeviceClaim } from '../../../src/daemon/device-claim-allocator.ts';
+import { createRequestRuntimeBindings } from '../../../src/daemon/request-runtime-binding.ts';
+import { managedCommandHorizon } from '../../../src/daemon/managed-device-allocation/command-horizon.ts';
+import type { ManagedLeaseAdmission } from '../../../src/daemon/managed-device-allocation/lease-admission.ts';
+import {
+  NOW,
+  granted,
+  renewedLease,
+  setupAdmission,
+} from '../../../src/daemon/managed-device-allocation/__tests__/lease-admission.fixtures.ts';
 
 const stores = isolatedDeviceClaimStores('managed-request-admission-');
 
