@@ -251,7 +251,8 @@ test('a crashed helper is removed and the next request starts a fresh helper', a
   const fixture = createLifecycleFixture({ responseDelayMs: 80 });
   const manager = new SnapshotBridgeManager(fixture.host);
   const request = manager.request({ target, bridge, limits, maxDepth: 10, deadline: deadline() });
-  setTimeout(() => fixture.processes[0]?.crash(), 10);
+  await waitForDispatch(fixture);
+  fixture.processes[0]!.crash();
 
   await assert.rejects(
     request,
@@ -269,7 +270,8 @@ test('a crashed helper emits its bounded log once and keeps exit facts typed', a
   const fixture = createLifecycleFixture({ responseDelayMs: 80 });
   const manager = new SnapshotBridgeManager(fixture.host);
   const request = manager.request({ target, bridge, limits, maxDepth: 10, deadline: deadline() });
-  setTimeout(() => fixture.processes[0]?.crash(), 10);
+  await waitForDispatch(fixture);
+  fixture.processes[0]!.crash();
   let failure: SnapshotSourceError | undefined;
 
   await assert.rejects(request, (error: unknown) => {
