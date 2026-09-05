@@ -1,9 +1,44 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
-import { assertInstalledSnapshotBridge, measureDirectory } from '../size-report-install.mjs';
+import {
+  assertInstalledSnapshotBridge,
+  measureCleanInstalledPackage,
+  measureDirectory,
+} from '../size-report-install.mjs';
+
+vi.mock('node:child_process', () => ({ execFileSync: vi.fn() }));
+
+test('clean install includes hoisted, scoped, and nested dependencies but excludes consumer and cache files', () => {
+  vi.mocked(execFileSync).mockImplementation((_command, args) => {
+    const argv = args as string[];
+    const consumer = argv[argv.indexOf('--prefix') + 1]!;
+    const files = {
+      'node_modules/agent-device/index.js': '1234',
+      'node_modules/agent-device/node_modules/nested/index.js': '123',
+      'node_modules/hoisted/index.js': '123456',
+      'node_modules/@scope/dependency/index.js': '12345',
+      'package.json': 'consumer metadata',
+      '../npm-cache/download': 'cached tarball',
+    };
+    for (const [relative, content] of Object.entries(files)) {
+      const file = join(consumer, relative);
+      fs.mkdirSync(join(file, '..'), { recursive: true });
+      fs.writeFileSync(file, content);
+    }
+    return '';
+  });
+
+  assert.deepEqual(measureCleanInstalledPackage('fixture.tgz', 'agent-device'), {
+    packageBytes: 7,
+    files: 2,
+    totalBytes: 18,
+  });
+});
 
 test('measures the clean-installed package tree without counting the consumer', async () => {
   const root = await mkdtempForTest('agent-device-size-tree-');
