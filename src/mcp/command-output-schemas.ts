@@ -335,8 +335,7 @@ function withSettleObservation(schema: JsonSchema): JsonSchema {
  * properties per schema. The base map below carries no settle property
  * anywhere; this pass grafts it onto exactly the trait-capable entries.
  * Copies only — press and click share one base schema object, so an in-place
- * graft would leak across them, and non-trait entries must stay the SAME
- * object identity their projection tests pin.
+ * graft would leak across them.
  */
 function deriveSettleObservationSchemas(
   schemas: Record<keyof CommandResultMap, JsonSchema>,

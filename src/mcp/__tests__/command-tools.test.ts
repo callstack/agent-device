@@ -508,6 +508,11 @@ test('MCP navigation output schemas advertise the closed dispatch shapes', () =>
       properties?: Record<string, unknown>;
       required?: unknown;
     };
+    assert.deepEqual(
+      Object.keys(schema).sort(),
+      ['properties', 'required', 'type'],
+      `${name}: must advertise exactly type/properties/required at the top level`,
+    );
     assert.equal(schema.type, 'object', `${name}: must advertise an object schema`);
     const { settle, ...dispatchProperties } = schema.properties ?? {};
     assert.equal(
