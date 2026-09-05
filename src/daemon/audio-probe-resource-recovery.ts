@@ -11,10 +11,12 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import type {
+  DurableCaptureRecoveryControl,
+  DurableCaptureRecoveryDiagnostic,
+} from '@agent-device/capture-kit/durable-capture';
 import { audioProbeDurableResource } from './audio-probe-session-resource.ts';
-import type { DurableCaptureRecoveryControl } from '@agent-device/capture-kit/durable-capture';
 import { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
-import type { DurableCaptureRecoveryDiagnostic } from '@agent-device/capture-kit/durable-capture';
 
 type AudioProbeRecoveryRuntime = BoundDeviceRuntime<typeof audioProbeRecoveryUse>;
 
