@@ -65,8 +65,12 @@ function readDeviceTarget(value: unknown): InternalRequestOptions['target'] | un
  * for, every recordable command, and joining the table's `flagIn` is what
  * makes it ride this projection and `selectionOptionsFromFlags` below without
  * either reader restating it (#1304/#1305 fixed only the reader layer, so the
- * flag still never reached the daemon; the table now makes that drop
- * impossible rather than merely documented against).
+ * flag still never reached the daemon). One row now declares membership for
+ * both projections instead of two hand-written lists to keep in sync; the
+ * `flagKey` a row binds to is checked against `CliFlags` at compile time, but
+ * a *new* common row that omits `flagIn` still joins neither projection
+ * without a compile error — the #1304/#1305 failure mode is narrowed, not
+ * made impossible.
  *
  * `--record` deliberately does NOT join `flagIn`: it is scoped to the
  * observation-only commands the repair-segment exclusion can drop (ADR 0012

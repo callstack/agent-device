@@ -53,8 +53,11 @@ export const REPLAY_FLAGS = flagKeys('replayUpdate', 'replayEnv');
 // structured command input, while the table's `cwd` and `debug` are not flags
 // and its `deviceTarget` row is spelled `target` here. Deriving this list from
 // that table would mean 25 rows carrying no schema, reader, or projection, so
-// the two stay separate; the table declares only `envFlagKeys`, where a flag key
-// names the environment variable an operator-owned input comes from.
+// the two stay separate; the table declares `envFlagKeys` (which environment
+// variable an operator-owned input comes from) and `flagKey`/`flagIn` (which
+// `CliFlags` property a row reads and which reader projections it joins) —
+// this list stays the parser-side axis, naming every flag the CLI grammar
+// accepts regardless of whether a common-input-fields row reads it at all.
 export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'remoteConfig',
   'stateDir',
