@@ -153,6 +153,7 @@ function adbInvocation<Options extends AndroidAdbExecutorOptions>(
       env: {
         ...environment,
         ...(withoutServerPort.env ?? {}),
+        ADB_SERVER_SOCKET: undefined,
         ANDROID_ADB_SERVER_PORT: String(serverPort),
         ANDROID_ADB_SERVER_ADDRESS: '127.0.0.1',
       },
@@ -177,15 +178,33 @@ function withServerPort(args: string[], serverPort: number): string[] {
       index += 2;
       continue;
     }
-    if (
-      argument?.startsWith('-') ||
-      ['nodaemon', 'server', 'fork-server'].includes(argument ?? '')
-    ) {
-      throw transportMismatch();
-    }
+    if (argument?.startsWith('-')) throw transportMismatch();
     break;
   }
-  return [...normalized, ...args.slice(index)];
+  const command = args.slice(index);
+  assertManagedAdbCommand(command);
+  return [...normalized, ...command];
+}
+
+function assertManagedAdbCommand(args: string[]): void {
+  const command = args.find((argument) => !argument.startsWith('wait-for-'));
+  if (
+    [
+      'nodaemon',
+      'server',
+      'fork-server',
+      'kill-server',
+      'start-server',
+      'connect',
+      'disconnect',
+      'reconnect',
+      'attach',
+      'detach',
+      'pair',
+    ].includes(command ?? '')
+  ) {
+    throw transportMismatch();
+  }
 }
 
 function transportMismatch(): AppError {
