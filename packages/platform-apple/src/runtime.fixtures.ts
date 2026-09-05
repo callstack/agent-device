@@ -1,3 +1,4 @@
+import { inertAudioProbeHost } from '@agent-device/host-kit/audio-probe-fixtures';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { hostFixture } from './logs/runtime.fixtures.ts';
@@ -29,23 +30,7 @@ export function platformRuntimeHostFixture(): PlatformRuntimeHost {
       },
     },
     localInteractors: { resolve: async () => ({}) as Interactor },
-    audioProbe: {
-      hostCapture: {
-        info: {
-          source: 'system-audio',
-          backend: 'fixture',
-          sourceCount: 0,
-          notes: () => [],
-        },
-        start: async () => {
-          throw new Error('Audio probe is outside this runtime fixture.');
-        },
-        inspectProcess: async () => 'missing',
-        terminateProcess: async () => 'already-missing',
-      },
-      web: { resolve: async () => undefined },
-      ownedProcesses: { replace: () => {}, clear: () => {} },
-    },
+    audioProbe: inertAudioProbeHost(),
     applicationResources: {
       recoverStartupResources: async () => {},
       detachForDaemonShutdown: async () => {},

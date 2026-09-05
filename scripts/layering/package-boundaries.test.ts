@@ -452,6 +452,8 @@ test('the real tree parses, declares, and passes R11', () => {
   );
   assert.deepEqual([...hostKitPackage.exportTargets.keys()].sort(), [
     '@agent-device/host-kit/archive',
+    // Test-only entry: the one inert audio-probe double the platform runtime fixtures share.
+    '@agent-device/host-kit/audio-probe-fixtures',
     '@agent-device/host-kit/command',
     '@agent-device/host-kit/diagnostics',
     '@agent-device/host-kit/file',

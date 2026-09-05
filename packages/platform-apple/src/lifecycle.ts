@@ -5,6 +5,7 @@ import {
   type CloseApplicationInput,
   type OpenApplicationInput,
   type OpenApplicationOutcome,
+  type OpenApplicationRunnerDemand,
   type PrepareAppleRunnerInput,
   type PrepareAppleRunnerResult,
   hasRuntimeTransportHintValues,
@@ -85,6 +86,39 @@ export function bindAppleApplicationLifecycle(
 
 type BoundAppleInteractor = ReturnType<typeof bindLocalApplicationLifecycleInteractor>;
 
+type RunnerPrewarmPolicy = Readonly<{
+  runnerDemand?: OpenApplicationRunnerDemand;
+  shouldPrewarmRunner: boolean;
+  awaitPrewarmAfterOpen: boolean;
+}>;
+
+/**
+ * Only a local Simulator has a runner-free observation path (the host AX bridge), so only it
+ * consults the plan and never waits for runner readiness after the open: bridge observation does
+ * not need it, and the first runner-dependent command awaits the same startup under the runner
+ * session lock. Physical devices keep their runner lifecycle unchanged.
+ */
+function resolveRunnerPrewarmPolicy(
+  device: DeviceInfo,
+  input: OpenApplicationInput,
+  localIosSimulator: boolean,
+): RunnerPrewarmPolicy {
+  const runnerDemand = localIosSimulator
+    ? resolveAppleSimulatorRunnerDemand(input.plan)
+    : undefined;
+  const shouldPrewarmRunner =
+    isIosFamily(device) &&
+    input.surface === 'app' &&
+    input.positionals.length > 0 &&
+    Boolean(input.appBundleId) &&
+    runnerDemand !== 'none';
+  return {
+    ...(runnerDemand ? { runnerDemand } : {}),
+    shouldPrewarmRunner,
+    awaitPrewarmAfterOpen: input.relaunch && !localIosSimulator,
+  };
+}
+
 async function openAppleApplication(
   host: AppleLifecycleHost,
   binding: BoundAppleInteractor,
@@ -93,18 +127,9 @@ async function openAppleApplication(
   const timing: MutableOpenTiming = {};
   const localIosSimulator = isIosSimulator(binding.device);
   const runner = createRunnerPrewarm(host, binding, input, timing);
-  // Only a local Simulator has a runner-free observation path (the host AX bridge), so only it
-  // consults the plan. Physical devices keep their runner lifecycle unchanged.
-  const runnerDemand = localIosSimulator
-    ? resolveAppleSimulatorRunnerDemand(input.plan)
-    : undefined;
-  if (runnerDemand) timing.runnerDemand = runnerDemand;
-  const shouldPrewarmRunner =
-    isIosFamily(binding.device) &&
-    input.surface === 'app' &&
-    input.positionals.length > 0 &&
-    Boolean(input.appBundleId) &&
-    runnerDemand !== 'none';
+  const policy = resolveRunnerPrewarmPolicy(binding.device, input, localIosSimulator);
+  if (policy.runnerDemand) timing.runnerDemand = policy.runnerDemand;
+  const { shouldPrewarmRunner } = policy;
   const retainRunnerForRelaunch = shouldRetainRunnerForRelaunch(
     binding.device,
     input,
@@ -124,13 +149,7 @@ async function openAppleApplication(
     await prewarmAppleRunnerBeforeOpen(runner, shouldPrewarmRunner, input.prewarmRunnerBeforeOpen);
     const runnerTargetPredatesOpen = runner.wasAwaited();
     await dispatchAppleOpen(binding, input, localIosSimulator, timing);
-    // A Simulator open never waits for runner readiness: bridge observation does not need it and
-    // the first runner-dependent command awaits the same startup under the runner session lock.
-    await finishAppleRunnerPrewarm(
-      runner,
-      shouldPrewarmRunner,
-      input.relaunch && !localIosSimulator,
-    );
+    await finishAppleRunnerPrewarm(runner, shouldPrewarmRunner, policy.awaitPrewarmAfterOpen);
     await notifyAppleRunnerRelaunch(
       host,
       binding,

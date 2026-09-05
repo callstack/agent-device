@@ -84,24 +84,14 @@ export function bindAppleFindTextRuntime(
 ): Pick<PlatformRuntimeOperations, 'findText'> {
   return Object.freeze({
     findText: async (input: FindTextInput): Promise<FindTextResult> => {
-      const appBundleId = input.options?.appBundleId;
-      if (appBundleId === undefined) return { found: false };
-      if (isMacOs(request.device) && input.options?.surface !== undefined) {
-        if (input.options.surface !== 'app') return { found: false };
-      }
-      const signal =
-        input.signal === undefined
-          ? request.signal
-          : AbortSignal.any([request.signal, input.signal]);
-      signal.throwIfAborted();
-      if (await simulatorRunnerNotLive(host, request.device)) return { found: false };
+      const admitted = await admitAppleNativeFind(host, request, input);
+      if (!admitted) return { found: false };
       const interactor = await host.localInteractors.resolve(request.device, {
         ...input.execution,
-        appBundleId,
-        signal,
+        ...admitted,
       });
       if (!interactor.findText) return { found: false };
-      return await interactor.findText(input.text, { appBundleId, signal });
+      return await interactor.findText(input.text, admitted);
     },
   });
 }
@@ -113,29 +103,41 @@ export function bindAppleFindSelectorRuntime(
 ): Pick<PlatformRuntimeOperations, 'findSelector'> {
   return Object.freeze({
     findSelector: async (input: FindSelectorInput): Promise<FindSelectorResult> => {
-      const appBundleId = input.options?.appBundleId;
-      if (appBundleId === undefined) return { found: false };
-      if (
-        isMacOs(request.device) &&
-        input.options?.surface !== undefined &&
-        input.options.surface !== 'app'
-      ) {
-        return { found: false };
-      }
-      const signal = input.signal
-        ? AbortSignal.any([request.signal, input.signal])
-        : request.signal;
-      signal.throwIfAborted();
-      if (await simulatorRunnerNotLive(host, request.device)) return { found: false };
+      const admitted = await admitAppleNativeFind(host, request, input);
+      if (!admitted) return { found: false };
       const interactor = await host.localInteractors.resolve(request.device, {
         ...input.execution,
-        appBundleId,
-        signal,
+        ...admitted,
       });
       if (!interactor.findSelector) return { found: false };
-      return await interactor.findSelector(input.selector, { appBundleId, signal });
+      return await interactor.findSelector(input.selector, admitted);
     },
   });
+}
+
+type AdmittedAppleNativeFind = Readonly<{ appBundleId: string; signal: AbortSignal }>;
+
+/**
+ * The one admission both native find ports share (conditions listed on `bindAppleFindTextRuntime`).
+ * `undefined` means "not proven here"; an admitted find carries the app scope and the composed
+ * request/poll signal the runner call needs.
+ */
+async function admitAppleNativeFind(
+  host: Pick<PlatformRuntimeHost, 'appleApplications'>,
+  request: Readonly<{ device: DeviceInfo; signal: AbortSignal }>,
+  input: Readonly<{
+    options?: Readonly<{ appBundleId?: string; surface?: string }>;
+    signal?: AbortSignal;
+  }>,
+): Promise<AdmittedAppleNativeFind | undefined> {
+  const appBundleId = input.options?.appBundleId;
+  if (appBundleId === undefined) return undefined;
+  const surface = input.options?.surface;
+  if (isMacOs(request.device) && surface !== undefined && surface !== 'app') return undefined;
+  const signal = input.signal ? AbortSignal.any([request.signal, input.signal]) : request.signal;
+  signal.throwIfAborted();
+  if (await simulatorRunnerNotLive(host, request.device)) return undefined;
+  return { appBundleId, signal };
 }
 
 /** A local iOS Simulator whose runner session is not alive; see the find-runtime doc above. */

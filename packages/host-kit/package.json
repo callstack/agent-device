@@ -19,6 +19,10 @@
       "types": "./src/archive.ts",
       "default": "./src/archive.ts"
     },
+    "./audio-probe-fixtures": {
+      "types": "./src/audio-probe.fixtures.ts",
+      "default": "./src/audio-probe.fixtures.ts"
+    },
     "./command": {
       "types": "./src/command.ts",
       "default": "./src/command.ts"
