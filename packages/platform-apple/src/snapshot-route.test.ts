@@ -238,3 +238,161 @@ function runnerResult() {
 function signal(): AbortSignal {
   return new AbortController().signal;
 }
+
+const OWNER_UNVERIFIED = {
+  stage: 'failed',
+  failure: { kind: 'unsupported', code: 'foreground-owner-unverified' },
+} as const satisfies SnapshotSourceOutcome;
+
+function lstart(msAgo: number, nowMs: number): string {
+  return new Date(nowMs - msAgo).toString().replace(/ GMT.*$/, '');
+}
+
+function launchGraceRoute(
+  outcomes: readonly SnapshotSourceOutcome[],
+  processStartTime: string,
+  clock: { now(): number; sleep(ms: number, signal?: AbortSignal): Promise<void> },
+) {
+  const acquire = vi.fn(
+    async () => outcomes[Math.min(acquire.mock.calls.length - 1, outcomes.length - 1)]!,
+  );
+  const presentIosAcquisition = vi.fn(async () => ({
+    backend: 'xctest' as const,
+    producer: 'simulator-ax-bridge' as const,
+    nodes: [{ index: 0, type: 'Application' }],
+  }));
+  const fallback = vi.fn(async () => runnerResult());
+  const route = createAppleSnapshotRoute(
+    {
+      ...platformRuntimeHostFixture(),
+      clock,
+      snapshot: { captureSurface: vi.fn(), presentIosAcquisition },
+    },
+    {
+      source: { acquire, close: vi.fn(async () => {}) },
+      resolveTarget: vi.fn(async () => ({ ...target, processStartTime })),
+    },
+  );
+  return { route, acquire, fallback, presentIosAcquisition };
+}
+
+test('a foreground-owner miss on a just-launched target is re-read inside the launch grace', async () => {
+  const nowMs = Date.parse('2026-09-06T00:00:10.000Z');
+  const sleep = vi.fn(async () => {});
+  const { route, acquire, fallback } = launchGraceRoute(
+    [OWNER_UNVERIFIED, bridgeAcquisition()],
+    lstart(800, nowMs),
+    { now: () => nowMs, sleep },
+  );
+
+  await expect(route.capture(ios, input, signal(), fallback)).resolves.toMatchObject({
+    producer: 'simulator-ax-bridge',
+  });
+  expect(acquire).toHaveBeenCalledTimes(2);
+  expect(sleep).toHaveBeenCalledOnce();
+  expect(fallback).not.toHaveBeenCalled();
+});
+
+test('an unregistered AX server on a just-launched target is re-read inside the launch grace', async () => {
+  const nowMs = Date.parse('2026-09-06T00:00:10.000Z');
+  const { route, acquire, fallback } = launchGraceRoute(
+    [
+      {
+        stage: 'failed',
+        failure: { kind: 'transport-failure', code: 'application-server-unavailable' },
+      },
+      bridgeAcquisition(),
+    ],
+    lstart(1_200, nowMs),
+    { now: () => nowMs, sleep: async () => {} },
+  );
+
+  await expect(route.capture(ios, input, signal(), fallback)).resolves.toMatchObject({
+    producer: 'simulator-ax-bridge',
+  });
+  expect(acquire).toHaveBeenCalledTimes(2);
+  expect(fallback).not.toHaveBeenCalled();
+});
+
+test('a bridge transport loss on a just-launched target is not a launch transition', async () => {
+  const nowMs = Date.parse('2026-09-06T00:00:10.000Z');
+  const { route, acquire, fallback } = launchGraceRoute(
+    [{ stage: 'failed', failure: { kind: 'transport-failure', code: 'bridge-disconnected' } }],
+    lstart(500, nowMs),
+    { now: () => nowMs, sleep: async () => {} },
+  );
+
+  await route.capture(ios, input, signal(), fallback);
+  expect(acquire).toHaveBeenCalledOnce();
+  expect(fallback).toHaveBeenCalledOnce();
+});
+
+test('a foreground-owner miss on an established target falls back at once', async () => {
+  const nowMs = Date.parse('2026-09-06T00:00:10.000Z');
+  const sleep = vi.fn(async () => {});
+  const { route, acquire, fallback } = launchGraceRoute(
+    [OWNER_UNVERIFIED, bridgeAcquisition()],
+    lstart(60_000, nowMs),
+    { now: () => nowMs, sleep },
+  );
+
+  await expect(route.capture(ios, input, signal(), fallback)).resolves.toMatchObject({
+    warnings: [expect.stringContaining('foreground-owner-unverified')],
+  });
+  expect(acquire).toHaveBeenCalledOnce();
+  expect(sleep).not.toHaveBeenCalled();
+  expect(fallback).toHaveBeenCalledOnce();
+});
+
+test('the ownership grace is one second from the first miss, then the typed fallback applies', async () => {
+  let nowMs = Date.parse('2026-09-06T00:00:10.000Z');
+  const startedAt = lstart(4_000, nowMs);
+  const sleep = vi.fn(async () => {
+    nowMs += 400;
+  });
+  const { route, acquire, fallback } = launchGraceRoute([OWNER_UNVERIFIED], startedAt, {
+    now: () => nowMs,
+    sleep,
+  });
+
+  await expect(route.capture(ios, input, signal(), fallback)).resolves.toMatchObject({
+    warnings: [expect.stringContaining('foreground-owner-unverified')],
+  });
+  expect(acquire.mock.calls.length).toBeGreaterThan(1);
+  expect(acquire.mock.calls.length).toBeLessThanOrEqual(4);
+  expect(fallback).toHaveBeenCalledOnce();
+});
+
+test('the AX-server grace outlives the bridge cold start that consumed the launch', async () => {
+  // First failure observed 6 s after the process appeared (a cold bridge start), still young.
+  let nowMs = Date.parse('2026-09-06T00:00:10.000Z');
+  const startedAt = lstart(6_000, nowMs);
+  const sleep = vi.fn(async () => {
+    nowMs += 500;
+  });
+  const { route, acquire, fallback } = launchGraceRoute(
+    [
+      {
+        stage: 'failed',
+        failure: { kind: 'transport-failure', code: 'application-server-unavailable' },
+      },
+      {
+        stage: 'failed',
+        failure: { kind: 'transport-failure', code: 'application-server-unavailable' },
+      },
+      {
+        stage: 'failed',
+        failure: { kind: 'transport-failure', code: 'application-server-unavailable' },
+      },
+      bridgeAcquisition(),
+    ],
+    startedAt,
+    { now: () => nowMs, sleep },
+  );
+
+  await expect(route.capture(ios, input, signal(), fallback)).resolves.toMatchObject({
+    producer: 'simulator-ax-bridge',
+  });
+  expect(acquire).toHaveBeenCalledTimes(4);
+  expect(fallback).not.toHaveBeenCalled();
+});

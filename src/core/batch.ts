@@ -41,7 +41,10 @@ export type BatchRequest = Omit<DaemonRequest, 'flags'> & {
 export type BatchStepContext = Readonly<{
   stepNumber: number;
   totalSteps: number;
-  remainingCommands: readonly string[];
+  remainingSteps: readonly Readonly<{
+    command: string;
+    input?: Readonly<Record<string, unknown>>;
+  }>[];
 }>;
 
 export type BatchInvoke = (req: BatchRequest, context: BatchStepContext) => Promise<DaemonResponse>;
@@ -101,7 +104,10 @@ export async function runBatch(
       const stepResponse = await runBatchStep(req, sessionName, step, invoke, {
         stepNumber: index + 1,
         totalSteps: steps.length,
-        remainingCommands: steps.slice(index + 1).map((remaining) => remaining.command),
+        remainingSteps: steps.slice(index + 1).map((remaining) => ({
+          command: remaining.command,
+          ...(remaining.input === undefined ? {} : { input: remaining.input }),
+        })),
       });
       if (!stepResponse.ok) {
         return {

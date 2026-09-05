@@ -2,6 +2,15 @@ import type { InventoryUse } from './platform-module.ts';
 import type { RuntimeUseDeclaration } from './platform-runtime.ts';
 import { runtimeUseIdentity } from './platform-runtime-use.ts';
 
+/**
+ * Plan-time selection of the runtime uses one structured step input can reach, for a command whose
+ * declared alternatives differ in what they execute. Session-dependent splits (active app) stay
+ * open, so a selector returns every alternative the input still admits.
+ */
+export type RuntimeUseStepSelector = (
+  input: Readonly<Record<string, unknown>> | undefined,
+) => readonly RuntimeUseDeclaration[];
+
 export type CommandPlatformExecution =
   | Readonly<{ kind: 'none' }>
   /**
@@ -15,6 +24,7 @@ export type CommandPlatformExecution =
   | Readonly<{
       kind: 'device-runtime';
       uses: readonly [RuntimeUseDeclaration, ...RuntimeUseDeclaration[]];
+      selectUses?: RuntimeUseStepSelector;
     }>;
 
 // The discriminated union cannot prove uniqueness or operation-category disjointness inside
@@ -44,6 +54,14 @@ export function assertCommandPlatformExecution(
   if (
     declaration['kind'] === 'device-runtime' &&
     sameKeys(keys, ['kind', 'uses']) &&
+    hasRuntimeUseDeclarations(declaration['uses'])
+  ) {
+    return;
+  }
+  if (
+    declaration['kind'] === 'device-runtime' &&
+    sameKeys(keys, ['kind', 'selectUses', 'uses']) &&
+    typeof declaration['selectUses'] === 'function' &&
     hasRuntimeUseDeclarations(declaration['uses'])
   ) {
     return;

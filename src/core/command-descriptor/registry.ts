@@ -29,10 +29,14 @@ import { audioRuntimePlanUses } from '@agent-device/contracts/audio-runtime-plan
 import { networkDumpUse } from '@agent-device/contracts/network-runtime-plan';
 import { inventoryUse } from '@agent-device/contracts/platform-module';
 import {
-  appsRuntimeUse,
+  alertRuntimePlanUses,
+  appEventRuntimeUse,
   appStateRuntimeUses,
+  appSwitcherRuntimeUse,
+  appsRuntimeUse,
   backRuntimeUse,
   clickRuntimeUses,
+  clipboardRuntimePlanUses,
   deviceBootRuntimeUses,
   fillRuntimeUses,
   findRuntimePlanUses,
@@ -41,12 +45,6 @@ import {
   gestureViewportRuntimeUse,
   homeRuntimeUse,
   hoverRuntimeUses,
-  appEventRuntimeUse,
-  settingsRuntimeUse,
-  alertRuntimePlanUses,
-  appSwitcherRuntimeUse,
-  tapPointUse,
-  clipboardRuntimePlanUses,
   keyboardRuntimePlanUses,
   longPressRuntimeUses,
   orientationRuntimeUse,
@@ -54,11 +52,15 @@ import {
   pressRuntimeUses,
   screenshotRuntimePlanUses,
   scrollRuntimePlanUses,
-  swipeRuntimePlanUses,
+  selectFindStepUses,
+  selectSnapshotStepUses,
   selectorCaptureRuntimePlanUses,
   selectorTextCaptureRuntimePlanUses,
+  settingsRuntimeUse,
   shutdownTargetUse,
   snapshotRuntimePlanUses,
+  swipeRuntimePlanUses,
+  tapPointUse,
   tvRemoteRuntimeUse,
   typeTextRuntimeUse,
   viewportRuntimeUse,
@@ -1016,7 +1018,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // widens the envelope, and a timeout must not tear down the daemon.
     timeoutPolicy: { ...PRESERVE_DAEMON_TIMEOUT_POLICY, budget: { source: 'flag' } },
     batchable: true,
-    platformExecution: { kind: 'device-runtime', uses: snapshotRuntimePlanUses },
+    platformExecution: {
+      kind: 'device-runtime',
+      uses: snapshotRuntimePlanUses,
+      selectUses: selectSnapshotStepUses,
+    },
   },
   {
     name: 'diff',
@@ -1029,7 +1035,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'snapshot', refFrameEffect: 'preserve' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: { kind: 'device-runtime', uses: snapshotRuntimePlanUses },
+    platformExecution: {
+      kind: 'device-runtime',
+      uses: snapshotRuntimePlanUses,
+      selectUses: selectSnapshotStepUses,
+    },
   },
   {
     name: 'wait',
@@ -1165,7 +1175,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: { kind: 'device-runtime', uses: findRuntimePlanUses },
+    platformExecution: {
+      kind: 'device-runtime',
+      uses: findRuntimePlanUses,
+      selectUses: selectFindStepUses,
+    },
   },
 
   // -- interaction (route: interaction) --

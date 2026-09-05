@@ -12,7 +12,7 @@ export async function runBatchCommands(
       ...step,
       internal: {
         ...step.internal,
-        executionPlan: { remainingCommands: context.remainingCommands },
+        executionPlan: { remainingSteps: context.remainingSteps },
       },
     });
   });

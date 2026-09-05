@@ -1,5 +1,8 @@
 import type { OpenApplicationPlan } from '@agent-device/contracts/application-lifecycle-runtime';
-import { resolvePlannedRuntimeOperations } from '../core/command-descriptor/planned-operations.ts';
+import {
+  resolvePlannedRuntimeOperations,
+  type PlannedStep,
+} from '../core/command-descriptor/planned-operations.ts';
 
 /**
  * The part of a multi-step plan (a `batch`) that is still ahead of the request being executed.
@@ -7,7 +10,7 @@ import { resolvePlannedRuntimeOperations } from '../core/command-descriptor/plan
  * which the transport strips from every wire request, so a remote client cannot steer platform
  * readiness policy with it and ADR 0006 stays untouched.
  */
-export type ExecutionPlan = Readonly<{ remainingCommands: readonly string[] }>;
+export type ExecutionPlan = Readonly<{ remainingSteps: readonly PlannedStep[] }>;
 
 /**
  * The declared runtime operations of the steps still ahead of an `open`, or `undefined` when the
@@ -17,7 +20,7 @@ export type ExecutionPlan = Readonly<{ remainingCommands: readonly string[] }>;
 export function resolveOpenApplicationPlan(
   plan: ExecutionPlan | undefined,
 ): OpenApplicationPlan | undefined {
-  if (plan === undefined || plan.remainingCommands.length === 0) return undefined;
-  const operations = resolvePlannedRuntimeOperations(plan.remainingCommands);
+  if (plan === undefined || plan.remainingSteps.length === 0) return undefined;
+  const operations = resolvePlannedRuntimeOperations(plan.remainingSteps);
   return operations === undefined ? undefined : { operations };
 }

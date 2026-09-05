@@ -31,6 +31,25 @@ import {
 
 type SnapshotFallback = (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
 
+/**
+ * A freshly launched app is not yet the primary foreground owner while SpringBoard animates it in,
+ * and its accessibility server registers a moment after its process appears. The bridge reports
+ * those states as typed failures. Falling back on them would start the XCTest runner for a snapshot
+ * the bridge serves a moment later, so a young target is re-read for a bounded grace before the
+ * typed fallback applies. The grace is measured from the first failure, because the bridge's own
+ * cold start may already have consumed the launch, and it is short for ownership misses: a system
+ * dialog produces the same code and must still reach the fallback quickly. An established target
+ * gets no grace at all.
+ */
+const LAUNCH_YOUNG_TARGET_MS = 10_000;
+const LAUNCH_GRACE_POLL_MS = 150;
+const LAUNCH_GRACE_BY_CODE: ReadonlyMap<string, number> = new Map([
+  ['application-element-missing', 5_000],
+  ['application-server-unavailable', 5_000],
+  ['foreground-owner-unverified', 1_000],
+  ['foreground-owner-changed', 1_000],
+]);
+
 export type AppleSnapshotRoute = Readonly<{
   capture(
     device: DeviceInfo,
@@ -79,11 +98,24 @@ export function createAppleSnapshotRoute(
       }
 
       const request = requestFor(input);
-      const outcome = await source.acquire({
-        target,
-        hint: deriveIosCaptureHint(request),
-        signal,
-      });
+      const acquire = async () =>
+        await source.acquire({ target, hint: deriveIosCaptureHint(request), signal });
+      let outcome = await acquire();
+      if (outcome.stage === 'failed') {
+        const graceMs = launchGraceFor(outcome.failure, target, host.clock.now());
+        const deadline = host.clock.now() + graceMs;
+        while (
+          outcome.stage === 'failed' &&
+          LAUNCH_GRACE_BY_CODE.has(outcome.failure.code) &&
+          host.clock.now() < deadline
+        ) {
+          emitRouteDiagnostic('launch-grace-retry', device, target.generation, undefined, {
+            code: outcome.failure.code,
+          });
+          await host.clock.sleep(LAUNCH_GRACE_POLL_MS, signal);
+          outcome = await acquire();
+        }
+      }
       if (outcome.stage === 'failed') {
         if (outcome.failure.kind === 'cancelled') {
           signal.throwIfAborted();
@@ -233,6 +265,19 @@ async function resolveFailureFallbackIdentity(
       residue: [unknownGenerationResidue()],
     };
   }
+}
+
+function launchGraceFor(
+  failure: SnapshotSourceFailure,
+  target: SimulatorSnapshotTarget,
+  nowMs: number,
+): number {
+  const graceMs = LAUNCH_GRACE_BY_CODE.get(failure.code);
+  if (graceMs === undefined) return 0;
+  // `ps -o lstart=` text; an unparseable start time counts as established, never as young.
+  const startedAtMs = Date.parse(target.processStartTime);
+  if (Number.isNaN(startedAtMs)) return 0;
+  return Math.max(0, nowMs - startedAtMs) < LAUNCH_YOUNG_TARGET_MS ? graceMs : 0;
 }
 
 function unknownGenerationResidue(): IosAcquisitionResidue {
