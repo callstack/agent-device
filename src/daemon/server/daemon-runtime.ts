@@ -1,4 +1,3 @@
-import { resolveDaemonSessionTeardownTimeoutMs } from '../session-teardown-budget.ts';
 import crypto from 'node:crypto';
 import { asAppError, AppError } from '@agent-device/kernel/errors';
 import { resolveSessionRequestLogPath, SessionStore } from '../session-store.ts';
@@ -22,6 +21,7 @@ import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts'
 import { clearDaemonShutdownReport, writeDaemonShutdownReport } from '../daemon-shutdown-report.ts';
 import { createRequestHandler } from '../request-router.ts';
 import { stopSessionAppLog, teardownSessionResources } from '../session-teardown.ts';
+import { resolveDaemonSessionTeardownTimeoutMs } from '../session-teardown-budget.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
 import { runtimeHintValues } from '../session-runtime.ts';
 import { closeDaemonServers } from './server-shutdown.ts';
