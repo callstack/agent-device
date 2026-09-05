@@ -1,6 +1,5 @@
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import {
   booleanField,
   booleanSchema,
@@ -93,15 +92,6 @@ export const testCommandMetadata = defineFieldCommandMetadata(
     shardAll: integerField(),
     shardSplit: integerField(),
   },
-);
-
-export const replayCommandDefinition = defineExecutableCommand(
-  replayCommandMetadata,
-  (client, input) => client.replay.run(withCommandRuntimeHints(input)),
-);
-
-export const testCommandDefinition = defineExecutableCommand(testCommandMetadata, (client, input) =>
-  client.replay.test(withCommandRuntimeHints(input)),
 );
 
 const replayCliSchema = {
@@ -235,7 +225,7 @@ export const testDaemonWriter: AsyncDaemonWriter = async (input) => {
   });
 };
 
-const replayCommandFacet = defineCommandFacet({
+export const replayCommandFacet = defineCommandFacet({
   name: REPLAY_COMMAND_NAME,
   text: {
     summary: 'Replay a recorded session or Maestro flow',
@@ -243,19 +233,19 @@ const replayCommandFacet = defineCommandFacet({
       'For Maestro YAML compatibility flows, use replay <flow.yaml> --maestro and keep the target binding such as --platform ios on the replay command. A script with no terminal close leaves its session (and daemon) running until you close it or it idle-reaps — no different from a session opened interactively. For native .ad scripts, --keep-session suppresses exactly an authored terminal close so you can continue interactively.',
   },
   metadata: replayCommandMetadata,
-  definition: replayCommandDefinition,
+  run: (client, input) => client.replay.run(withCommandRuntimeHints(input)),
   cliSchema: replayCliSchema,
   cliReader: replayCliReader,
   daemonWriter: replayDaemonWriter,
 });
 
-const testCommandFacet = defineCommandFacet({
+export const testCommandFacet = defineCommandFacet({
   name: TEST_COMMAND_NAME,
   text: {
     summary: 'Run replay test suites',
   },
   metadata: testCommandMetadata,
-  definition: testCommandDefinition,
+  run: (client, input) => client.replay.test(withCommandRuntimeHints(input)),
   cliSchema: testCliSchema,
   cliReader: testCliReader,
   daemonWriter: testDaemonWriter,
