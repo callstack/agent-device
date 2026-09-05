@@ -7,12 +7,12 @@
   "dependencies": {
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*",
-    "tar-stream": "^3.2.0",
     "yauzl": "^3.4.0"
   },
   "devDependencies": {
     "@types/tar-stream": "^3.1.4",
-    "@types/yauzl": "^3.4.0"
+    "@types/yauzl": "^3.4.0",
+    "tar-stream": "^3.2.0"
   },
   "exports": {
     "./archive": {

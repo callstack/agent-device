@@ -76,7 +76,7 @@ export default defineConfig({
     'internal/update-check-entry': 'src/cli/update-check-entry.ts',
   },
   deps: {
-    alwaysBundle: [/^@agent-device\//, 'pngjs', 'tar-stream'],
+    alwaysBundle: [/^@agent-device\//],
     onlyBundle: [
       'pngjs',
       'tar-stream',
