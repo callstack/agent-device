@@ -8,7 +8,15 @@ import {
   setSnapshotLineage,
   STALE_SNAPSHOT_REFS_WARNING,
 } from '../session-snapshot.ts';
-import { activateCompleteRefFrame, refFrameEpoch } from '../ref-frame.ts';
+import {
+  activateCompleteRefFrame,
+  activatePartialRefFrame,
+  expireRefFrame,
+  refFrame,
+  refFrameEpoch,
+  refFrameScope,
+  refFrameState,
+} from '../ref-frame.ts';
 
 function makeSession(): SessionState {
   return {
@@ -35,7 +43,7 @@ test('setSessionSnapshot advances the generation on every tree replacement (#107
   expect(seeded).toBeGreaterThanOrEqual(100_000);
   expect(seeded).toBeLessThan(1_000_000);
   // ADR 0014: replacing the observation does NOT touch the ref frame.
-  expect(session.refFrameState).toBeUndefined();
+  expect(session.refFrame).toBeUndefined();
 
   // Storing the SAME snapshot object again is not a replacement.
   setSessionSnapshot(session, first);
@@ -71,11 +79,11 @@ test('a reopened session reseeds so pins from a previous lifetime do not silentl
 test('resolveRefStalenessWarning: frame expiry is checked before the epoch (ADR 0014 evidence #17)', () => {
   const session = makeSession();
   session.snapshotGeneration = 15;
-  session.refFrameGeneration = 15;
+  activateCompleteRefFrame(session);
 
   // Expired frame: ANY read is stale, even a pin matching the epoch — a matching
   // pin proves identity within the retained frame, not that the UI is current.
-  session.refFrameState = 'expired';
+  expireRefFrame(session);
   expect(resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: 15 })).toBe(
     STALE_SNAPSHOT_REFS_WARNING,
   );
@@ -85,7 +93,7 @@ test('resolveRefStalenessWarning: frame expiry is checked before the epoch (ADR 
 
   // Active frame: a pin matching the epoch and a plain ref are both clean; a pin
   // from another epoch gets the precise generation warning.
-  session.refFrameState = 'active';
+  activateCompleteRefFrame(session);
   expect(
     resolveRefStalenessWarning({ session, ref: '@e37', mintedGeneration: 15 }),
   ).toBeUndefined();
@@ -101,14 +109,13 @@ test('resolveRefStalenessWarning names the frozen frame epoch, not the bumped ob
   const session = makeSession();
   // A frame was issued at generation 15.
   session.snapshotGeneration = 15;
-  session.refFrameGeneration = 15;
-  session.refFrameState = 'active';
+  activateCompleteRefFrame(session);
 
   // A read-only capture replaces the observation and advances the observation
   // counter WITHOUT re-issuing the frame — the frame epoch stays frozen at 15.
   setSessionSnapshot(session, makeSnapshot());
   expect(session.snapshotGeneration).toBe(16);
-  expect(session.refFrameGeneration).toBe(15);
+  expect(refFrame(session).generation).toBe(15);
 
   // A pin matching the FROZEN frame epoch is clean, even though the observation
   // generation has since advanced past it.
@@ -134,21 +141,24 @@ test('resolveRefStalenessWarning treats a missing stored generation as s0', () =
 test('markSessionPartialRefsIssued: an empty result leaves all frame state untouched (ADR 0014)', () => {
   const session = makeSession();
   // A useful prior frame exists.
-  session.refFrameState = 'active';
-  session.refFrameScope = new Set(['e1']);
-  session.refFrameGeneration = 7;
+  session.snapshotGeneration = 7;
+  activatePartialRefFrame(session, new Set(['e1']));
+  const priorFrame = refFrame(session);
 
   // An empty partial publication (no refs) must not supersede that authority.
   markSessionPartialRefsIssued(session, []);
-  expect(session.refFrameState).toBe('active');
-  expect(session.refFrameScope).toEqual(new Set(['e1']));
-  expect(session.refFrameGeneration).toBe(7);
+  // The frame is one value, so "untouched" is one identity check rather than a
+  // field-by-field comparison that can miss the field nobody thought to assert.
+  expect(refFrame(session)).toBe(priorFrame);
+  expect(refFrameState(session)).toBe('active');
+  expect(refFrameScope(session)).toEqual(new Set(['e1']));
+  expect(refFrame(session).generation).toBe(7);
 
   // A non-empty result supersedes with exactly its bodies.
   session.snapshotGeneration = 9;
   markSessionPartialRefsIssued(session, ['@e5~s7', 'e6']);
-  expect(session.refFrameScope).toEqual(new Set(['e5', 'e6']));
-  expect(session.refFrameGeneration).toBe(9);
+  expect(refFrameScope(session)).toEqual(new Set(['e5', 'e6']));
+  expect(refFrame(session).generation).toBe(9);
 });
 
 // The observation counter and the authorization epoch are different clocks, and conflating them

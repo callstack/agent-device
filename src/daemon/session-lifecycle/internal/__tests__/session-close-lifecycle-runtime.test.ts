@@ -3,7 +3,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { SessionStore } from '../../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../../types.ts';
-import { readSessionRuntimeRevision } from '../../../ref-frame.ts';
+import {
+  activateCompleteRefFrame,
+  readSessionRuntimeRevision,
+  refFrameState,
+} from '../../../ref-frame.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const runtimeHintsModule = vi.hoisted(() => ({
@@ -83,7 +87,7 @@ test('an app-only close without a target fails before admission or ref-frame exp
     booted: true,
   };
   const session = makeSession(sessionName, device);
-  session.refFrameState = 'active';
+  activateCompleteRefFrame(session);
   sessionStore.set(sessionName, session);
   const revisionBeforeClose = readSessionRuntimeRevision(session);
 
@@ -101,7 +105,7 @@ test('an app-only close without a target fails before admission or ref-frame exp
   expect(mockBindDeviceRuntime).not.toHaveBeenCalled();
   expect(mockDispatch).not.toHaveBeenCalled();
   expect(readSessionRuntimeRevision(session)).toBe(revisionBeforeClose);
-  expect(session.refFrameState).toBe('active');
+  expect(refFrameState(session)).toBe('active');
   expect(sessionStore.get(sessionName)).toBe(session);
 });
 
@@ -329,7 +333,7 @@ test('close expires the ref frame immediately before its admitted platform mutat
   session.appBundleId = 'com.example.app';
   sessionStore.set(sessionName, session);
   mockDispatch.mockImplementationOnce(async () => {
-    expect(session.refFrameState).toBe('expired');
+    expect(refFrameState(session)).toBe('expired');
   });
 
   const response = await close({

@@ -3,7 +3,7 @@ import type { SnapshotBackend } from '@agent-device/kernel/snapshot';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { activateCompleteRefFrame } from '../ref-frame.ts';
+import { activateCompleteRefFrame, refFrameState } from '../ref-frame.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
@@ -215,7 +215,7 @@ test('scroll --settle answers with the settled diff against the stored pre-actio
   // The settled tree became the stored snapshot, and its refs were published:
   // a partial frame is active at the generation the payload reports.
   const stored = sessionStore.get(sessionName) as SessionState;
-  expect(stored.refFrameState).toBe('active');
+  expect(refFrameState(stored)).toBe('active');
   expect(settle.refsGeneration).toBe(stored.snapshotGeneration);
   expect(stored.snapshot?.nodes.some((node) => node.label === 'Load more')).toBe(true);
 });
@@ -288,7 +288,7 @@ test('scroll without --settle takes no observation captures and issues no refs',
   expect(captureObservations).toEqual([]);
   // ADR 0014: the leaf side-effect seam expired the frame and nothing
   // re-published it.
-  expect((sessionStore.get(sessionName) as SessionState).refFrameState).toBe('expired');
+  expect(refFrameState(sessionStore.get(sessionName) as SessionState)).toBe('expired');
 });
 
 test('a settle observation that cannot build a runtime degrades instead of failing the action', async () => {

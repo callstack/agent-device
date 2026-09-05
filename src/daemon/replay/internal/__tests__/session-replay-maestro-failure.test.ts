@@ -34,6 +34,7 @@ import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,
 } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
+import { refFrameScope } from '../../../ref-frame.ts';
 
 const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
@@ -368,7 +369,7 @@ test('typed Maestro failure publishes exactly the refs exposed by its divergence
 
   expect(divergence.screen.state).toBe('available');
   expect(exposedRefs).toEqual(['e2']);
-  expect(scenario.sessionStore.get(scenario.sessionName)?.refFrameScope).toEqual(
+  expect(refFrameScope(scenario.sessionStore.get(scenario.sessionName)!)).toEqual(
     new Set(exposedRefs),
   );
 });

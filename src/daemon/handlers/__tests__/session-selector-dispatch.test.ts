@@ -27,6 +27,7 @@ import {
 } from './session-test-harness.ts';
 import type { SessionState } from '../../types.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
+import { refFrameState } from '../../ref-frame.ts';
 
 const available = Object.freeze({ available: true } as const);
 
@@ -97,7 +98,7 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
     inspectFacts,
     bindDevice,
   });
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
 
   // status is a read-only probe → frame preserved (undefined === active).
   sessionStore.set(sessionName, makeSession(sessionName, device));
@@ -116,7 +117,7 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
     inspectFacts,
     bindDevice,
   });
-  expect(sessionStore.get(sessionName)?.refFrameState).toBeUndefined();
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('active');
 });
 
 // ADR 0014 requires the frame to expire immediately before the mutating call, with no
@@ -137,7 +138,7 @@ test('keyboard dismiss expires the frame before the invocation runs, even when i
   const logPath = path.join(os.tmpdir(), 'daemon.log');
   const { inspectFacts, bindDevice } = keyboardCapableRuntime(device, {
     keyboardDismiss: () => {
-      expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+      expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
       return Promise.reject(new AppError('COMMAND_FAILED', 'runner timed out'));
     },
   });
@@ -160,7 +161,7 @@ test('keyboard dismiss expires the frame before the invocation runs, even when i
       bindDevice,
     }),
   ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
 });
 
 test('keyboard requires an active session or explicit device selector', async () => {

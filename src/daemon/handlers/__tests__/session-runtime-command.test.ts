@@ -19,6 +19,7 @@ import {
   gestureInspectFacts,
   gestureRuntimeSpies,
 } from '../../__tests__/test-device-runtime-gateway.ts';
+import { refFrameState } from '../../ref-frame.ts';
 
 test('runtime set/show/clear manages session-scoped runtime hints before open', async () => {
   const sessionStore = makeSessionStore();
@@ -151,7 +152,7 @@ test('runtime clear expires the ref frame at the admitted hint mutation boundary
   });
   mockClearRuntimeHints.mockImplementationOnce(async () => {
     // Planted route witness: deleting the handler's pre-mutation expiry leaves this frame active.
-    expect(session.refFrameState).toBe('expired');
+    expect(refFrameState(session)).toBe('expired');
   });
 
   const response = await handleSessionCommands({
@@ -170,7 +171,7 @@ test('runtime clear expires the ref frame at the admitted hint mutation boundary
 
   expect(response?.ok).toBe(true);
   expect(mockClearRuntimeHints).toHaveBeenCalledOnce();
-  expect(session.refFrameState).toBe('expired');
+  expect(refFrameState(session)).toBe('expired');
 });
 
 test('runtime clear rejects a false runtime-hints fact before its one implementation bind', async () => {

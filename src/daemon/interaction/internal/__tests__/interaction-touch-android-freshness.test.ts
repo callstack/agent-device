@@ -43,6 +43,7 @@ import {
   getAndroidScreenSize,
 } from '@agent-device/platform-android/mechanics';
 import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
+import { activateCompleteRefFrame } from '../../../ref-frame.ts';
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
@@ -151,7 +152,7 @@ test('ADR 0014: Android freshness cannot retarget an admitted ref by positional 
   };
   session.snapshot = frameTree;
   // ADR 0014: the authorized frame tree names WHICH node @e1 authorizes.
-  session.refFrameTree = frameTree;
+  activateCompleteRefFrame(session);
   session.androidSnapshotFreshness = {
     action: 'press',
     markedAt: Date.now(),

@@ -13,6 +13,7 @@ import {
   makeStaleRefSession,
   runInteraction,
 } from './interaction-touch-fixtures.ts';
+import { refFrameState } from '../../../ref-frame.ts';
 
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
@@ -71,5 +72,5 @@ test('Maestro selector click crosses the ADR 0014 fused seam and expires the ref
 
   expect(click?.ok).toBe(true);
   expect(mockTapElementSelector).toHaveBeenCalledOnce();
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
 });

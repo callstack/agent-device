@@ -12,7 +12,7 @@ import { makeIosSession } from '../../../../__tests__/test-utils/session-factori
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { ReplayDivergence } from '@agent-device/contracts/divergence';
 import { bindInternalObservationAuthority } from '../../../internal-observation.ts';
-import { expireRefFrame } from '../../../ref-frame.ts';
+import { expireRefFrame, refFrameScope, refFrameState, refFrameTree } from '../../../ref-frame.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from '../../../session-snapshot.ts';
 import { SessionStore } from '../../../session-store.ts';
 import { captureDivergenceObservation } from '../session-replay-divergence.ts';
@@ -134,8 +134,8 @@ test('internal divergence capture updates observation without publishing client 
 
   expect(observation.state).toBe('available');
   expect(input.session.snapshot?.nodes[0]?.label).toBe('Captured again');
-  expect(input.session.refFrameScope).toEqual(new Set(['old']));
-  expect(input.session.refFrameTree).toBe(input.prior);
+  expect(refFrameScope(input.session)).toEqual(new Set(['old']));
+  expect(refFrameTree(input.session)).toBe(input.prior);
 });
 
 test.each([
@@ -158,8 +158,8 @@ test.each([
   const refs =
     result.screen.state === 'available' ? result.screen.refs.map((entry) => entry.ref) : [];
   expect(refs).toHaveLength(expected);
-  expect(input.session.refFrameScope).toEqual(new Set(refs));
-  expect(input.session.refFrameTree).toBe(input.snapshot);
+  expect(refFrameScope(input.session)).toEqual(new Set(refs));
+  expect(refFrameTree(input.session)).toBe(input.snapshot);
 });
 
 test('missing capture evidence fails closed instead of exposing unauthorized refs', () => {
@@ -180,8 +180,8 @@ test('missing capture evidence fails closed instead of exposing unauthorized ref
       reason: 'ref-publication-missing-evidence',
     }),
   );
-  expect(input.session.refFrameScope).toEqual(new Set(['old']));
-  expect(input.session.refFrameTree).toBe(input.prior);
+  expect(refFrameScope(input.session)).toEqual(new Set(['old']));
+  expect(refFrameTree(input.session)).toBe(input.prior);
 });
 
 test('degenerate projected refs fail closed when publication normalizes to empty', () => {
@@ -219,8 +219,8 @@ test('degenerate projected refs fail closed when publication normalizes to empty
     { selector: 'label="Empty ref"', basis: 'label' },
     { selector: 'label="Empty scoped ref"', basis: 'label' },
   ]);
-  expect(input.session.refFrameScope).toEqual(new Set(['old']));
-  expect(input.session.refFrameTree).toBe(input.prior);
+  expect(refFrameScope(input.session)).toEqual(new Set(['old']));
+  expect(refFrameTree(input.session)).toBe(input.prior);
 });
 
 test('an empty outward projection consumes its one-shot capture evidence', () => {
@@ -257,8 +257,8 @@ test('an empty outward projection consumes its one-shot capture evidence', () =>
       reason: 'ref-publication-stale-capture',
     }),
   );
-  expect(input.session.refFrameScope).toEqual(new Set(['old']));
-  expect(input.session.refFrameTree).toBe(input.prior);
+  expect(refFrameScope(input.session)).toEqual(new Set(['old']));
+  expect(refFrameTree(input.session)).toBe(input.prior);
 });
 
 test('successful overflow publishes the refs exposed by the exact artifact projection', () => {
@@ -280,8 +280,8 @@ test('successful overflow publishes the refs exposed by the exact artifact proje
     screen: { refs: Array<{ ref: string }> };
   };
   const artifactRefs = artifact.screen.refs.map((entry) => entry.ref);
-  expect(input.session.refFrameScope).toEqual(new Set(artifactRefs));
-  expect(input.session.refFrameTree).toBe(input.snapshot);
+  expect(refFrameScope(input.session)).toEqual(new Set(artifactRefs));
+  expect(refFrameTree(input.session)).toBe(input.snapshot);
 });
 
 test('failed overflow artifact with no inline refs publishes nothing', () => {
@@ -305,8 +305,8 @@ test('failed overflow artifact with no inline refs publishes nothing', () => {
 
   expect(result.artifactUnavailable).toBe(true);
   expect(result.screen.state).toBe('unavailable');
-  expect(input.session.refFrameScope).toEqual(new Set(['old']));
-  expect(input.session.refFrameTree).toBe(input.prior);
+  expect(refFrameScope(input.session)).toEqual(new Set(['old']));
+  expect(refFrameTree(input.session)).toBe(input.prior);
 });
 
 test('stale capture suppresses outward refs and preserves newer authority', () => {
@@ -326,7 +326,7 @@ test('stale capture suppresses outward refs and preserves newer authority', () =
   });
 
   expect(result.screen.state).toBe('unavailable');
-  expect(input.session.refFrameScope).toEqual(new Set(['old']));
+  expect(refFrameScope(input.session)).toEqual(new Set(['old']));
 });
 
 test('cancellation after capture suppresses outward refs without reactivating an expired frame', () => {
@@ -346,6 +346,6 @@ test('cancellation after capture suppresses outward refs without reactivating an
   });
 
   expect(result.screen.state).toBe('unavailable');
-  expect(input.session.refFrameState).toBe('expired');
-  expect(input.session.refFrameTree).toBe(input.prior);
+  expect(refFrameState(input.session)).toBe('expired');
+  expect(refFrameTree(input.session)).toBe(input.prior);
 });

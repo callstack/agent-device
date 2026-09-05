@@ -8,6 +8,7 @@ import {
   mockInspectDeviceRuntimeFacts,
   mockPushNotificationRuntime,
 } from './session-command-harness.ts';
+import { activateCompleteRefFrame, refFrameState } from '../../ref-frame.ts';
 
 const invoke = async (): Promise<never> => {
   throw new Error('push ref-frame tests must stay on the runtime route');
@@ -36,7 +37,7 @@ test('push admission failure preserves an active ref frame', async () => {
   expect(response).toMatchObject({ ok: false, error: { code: 'UNSUPPORTED_OPERATION' } });
   expect(inspectFacts).toHaveBeenCalledOnce();
   expect(mockBindDeviceRuntime).not.toHaveBeenCalled();
-  expect(session.refFrameState).toBe('active');
+  expect(refFrameState(session)).toBe('active');
   expect(session.snapshotScopeSource).toBe(session.snapshot);
 });
 
@@ -51,13 +52,13 @@ test('push dispatch attempt expires an active ref frame when the bound operation
   expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledOnce();
   expect(mockBindDeviceRuntime).toHaveBeenCalledOnce();
   expect(mockPushNotificationRuntime).toHaveBeenCalledOnce();
-  expect(session.refFrameState).toBe('expired');
+  expect(refFrameState(session)).toBe('expired');
   expect(session.snapshotScopeSource).toBeUndefined();
 });
 
 function activeSession(): SessionState {
   const snapshot = { createdAt: Date.now(), nodes: [] };
-  return {
+  const session: SessionState = {
     name: 'default',
     createdAt: Date.now(),
     actions: [],
@@ -70,8 +71,9 @@ function activeSession(): SessionState {
     },
     snapshot,
     snapshotScopeSource: snapshot,
-    refFrameState: 'active',
   };
+  activateCompleteRefFrame(session);
+  return session;
 }
 
 async function dispatchPush(params: {

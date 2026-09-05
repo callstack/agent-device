@@ -66,6 +66,7 @@ import {
   scheduleIosRunnerIdleStop,
 } from '@agent-device/platform-apple/runner/operations';
 import { runMacOsAlertAction } from '@agent-device/platform-apple/macos';
+import { refFrameState } from '../../ref-frame.ts';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
@@ -195,7 +196,7 @@ test('open --relaunch leaves the old frame expired when the close dispatch fails
     }),
   );
   // A freshly issued frame is active before the relaunch.
-  expect(sessionStore.get(sessionName)?.refFrameState).toBeUndefined();
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('active');
 
   // The relaunch close dispatches and then fails/times out AFTER the app may
   // already have been torn down.
@@ -212,7 +213,7 @@ test('open --relaunch leaves the old frame expired when the close dispatch fails
   // session's frame was expired BEFORE the close dispatch and stays expired — a
   // post-dispatch close failure never restores it (there is no rollback).
   expect(response?.ok ?? false).toBe(false);
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
 });
 
 test('open --relaunch does not let an ambient provider claim suppress a local pre-close', async () => {

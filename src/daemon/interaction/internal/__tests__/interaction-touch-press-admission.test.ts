@@ -1,7 +1,7 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
-import { activateCompleteRefFrame } from '../../../ref-frame.ts';
+import { activateCompleteRefFrame, refFrameState } from '../../../ref-frame.ts';
 import { setSessionSnapshot, STALE_SNAPSHOT_REFS_WARNING } from '../../../session-snapshot.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import {
@@ -179,7 +179,7 @@ test('press selector then press @ref rejects refs that outlived the stored snaps
 
   // ADR 0014: the selector press crossed the side-effect seam and expired the
   // frame, so the ref that outlived it is rejected before dispatch.
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
   const touchCallsBeforeStaleRef = mockTapPoint.mock.calls.length;
   const refPress = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
   expect(refPress?.ok).toBe(false);
@@ -204,12 +204,12 @@ test('a ref press crosses the ADR 0014 side-effect seam and expires the ref fram
   });
 
   // A freshly issued complete frame is active.
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('active');
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('active');
 
   const press = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
   expect(press?.ok).toBe(true);
   // The transition is wired at the leaf seam.
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
 });
 
 test('ADR 0014 evidence #1: a second ref mutation rejects (bare and pinned) until a fresh observation re-authorizes', async () => {
@@ -229,7 +229,7 @@ test('ADR 0014 evidence #1: a second ref mutation rejects (bare and pinned) unti
   // `snapshot -> press @e1`: admitted; crosses the seam and expires the frame.
   const first = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
   expect(first?.ok).toBe(true);
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
 
   // `-> press @e2`: the unobserved second mutation rejects (bare).
   const bare = await runInteraction(sessionStore, sessionName, 'press', ['@e2']);
@@ -276,7 +276,7 @@ test('re-issuing a complete frame lets press @ref succeed again without warning'
   ]);
   expect(selectorPress?.ok).toBe(true);
   // The selector press expired the frame (ADR 0014 seam).
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
 
   // Simulate the snapshot command re-issuing the complete ref namespace: it
   // re-activates a complete frame (through buildNextSnapshotSession; covered in
@@ -342,7 +342,7 @@ test('ADR 0014 evidence #6: a read-only capture does not invalidate a mutation r
     createdAt: Date.now(),
     backend: 'xctest',
   });
-  expect(session.refFrameState).toBe('active');
+  expect(refFrameState(session)).toBe('active');
   sessionStore.set(sessionName, session);
   mockTapPoint.mockResolvedValue({ pressed: true });
 
@@ -350,7 +350,7 @@ test('ADR 0014 evidence #6: a read-only capture does not invalidate a mutation r
   expect(response?.ok).toBe(true);
   expect(mockTapPoint).toHaveBeenCalled();
   // Crossing the seam expired the frame, so a SECOND plain ref is now rejected.
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
   const second = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
   expect(second?.ok).toBe(false);
   if (second && !second.ok) {

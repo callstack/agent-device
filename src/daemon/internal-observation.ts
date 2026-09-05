@@ -1,5 +1,5 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { readSessionRuntimeRevision } from './ref-frame.ts';
+import { readSessionRuntimeRevision, refFrame, type RefFrame } from './ref-frame.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from './session-snapshot.ts';
 import type { SessionState } from './types.ts';
 
@@ -13,13 +13,6 @@ export type InternalObservationEvidence = {
   readonly [INTERNAL_OBSERVATION_EVIDENCE]: true;
 };
 
-type RefFrameLineage = Readonly<{
-  state: SessionState['refFrameState'];
-  scope: SessionState['refFrameScope'];
-  tree: SessionState['refFrameTree'];
-  generation: SessionState['refFrameGeneration'];
-}>;
-
 type InternalObservationLineage = Readonly<{
   sessionName: string;
   session: SessionState;
@@ -27,7 +20,7 @@ type InternalObservationLineage = Readonly<{
   snapshot: SnapshotState;
   snapshotGeneration: number;
   runtimeRevision: number;
-  refFrame: RefFrameLineage;
+  refFrame: RefFrame;
 }>;
 
 const evidenceLineage = new WeakMap<object, InternalObservationLineage>();
@@ -120,7 +113,7 @@ function storeInternalObservation(
     snapshot,
     snapshotGeneration,
     runtimeRevision: readSessionRuntimeRevision(session),
-    refFrame: readRefFrameLineage(session),
+    refFrame: refFrame(session),
   });
   return { evidence, refsGeneration: snapshotGeneration };
 }
@@ -179,25 +172,7 @@ function isCurrentLineage(
     current.snapshot === lineage.snapshot &&
     current.snapshotGeneration === lineage.snapshotGeneration &&
     readSessionRuntimeRevision(current) === lineage.runtimeRevision &&
-    sameRefFrameLineage(readRefFrameLineage(current), lineage.refFrame)
-  );
-}
-
-function readRefFrameLineage(session: SessionState): RefFrameLineage {
-  return {
-    state: session.refFrameState,
-    scope: session.refFrameScope,
-    tree: session.refFrameTree,
-    generation: session.refFrameGeneration,
-  };
-}
-
-function sameRefFrameLineage(left: RefFrameLineage, right: RefFrameLineage): boolean {
-  return (
-    left.state === right.state &&
-    left.scope === right.scope &&
-    left.tree === right.tree &&
-    left.generation === right.generation
+    refFrame(current) === lineage.refFrame
   );
 }
 

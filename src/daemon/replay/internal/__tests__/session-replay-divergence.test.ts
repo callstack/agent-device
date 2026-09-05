@@ -43,6 +43,7 @@ import {
   legacyDispatchCapture,
   resetLegacySnapshotCapture,
 } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
+import { refFrameScope, refFrameState } from '../../../ref-frame.ts';
 
 const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
@@ -871,8 +872,8 @@ test('buildReplayFailureDivergence: the partial ref frame authorizes exactly the
   // screen refs — no more (no over-pin surface), no less (every advertised ref
   // is usable), even though every one of them is a `covered` node here.
   const stored = sessionStore.get(sessionName);
-  expect(stored?.refFrameState).toBe('active');
-  expect(stored?.refFrameScope).toEqual(screenRefBodies);
+  expect(refFrameState(stored!)).toBe('active');
+  expect(refFrameScope(stored!)).toEqual(screenRefBodies);
 });
 
 // #1264 (capture parity, point 1): the divergence capture must go through the

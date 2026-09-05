@@ -17,7 +17,7 @@ import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { activateCompleteRefFrame } from '../ref-frame.ts';
+import { activateCompleteRefFrame, refFrameState } from '../ref-frame.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
 import { readFocusPoint, resolveBoundFocusRuntime } from '../focus-runtime.ts';
@@ -213,7 +213,7 @@ test('request router joins focus admission to execution, recording, and ref inva
     ok: true,
     data: { x: 40, y: 90, message: 'Focused (40, 90)' },
   });
-  expect(session.refFrameState).toBe('expired');
+  expect(refFrameState(session)).toBe('expired');
   expect(session.actions.at(-1)).toMatchObject({
     command: 'focus',
     positionals: ['40', '90'],

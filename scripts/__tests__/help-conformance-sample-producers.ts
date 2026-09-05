@@ -423,7 +423,7 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     producer: 'the real ADR 0014 admission rejection and staleness hint',
     sample: STALE_REF_SAMPLE,
     render: () => {
-      const session = { refFrameGeneration: 7 } as SessionState;
+      const session = { snapshotGeneration: 7 } as SessionState;
       const response = refMutationAdmissionResponse({
         session,
         ref: '@e12',

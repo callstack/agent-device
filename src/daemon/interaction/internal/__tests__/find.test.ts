@@ -30,6 +30,7 @@ import {
   resetFindTouchRuntimeFixture,
 } from './find-touch-runtime-fixture.ts';
 import { invokeFindHandler } from './find-handler-fixture.ts';
+import { refFrameScope, refFrameState } from '../../../ref-frame.ts';
 
 beforeEach(() => {
   resetFindTouchRuntimeFixture();
@@ -92,7 +93,7 @@ test('mutating find focus crosses the ADR 0014 side-effect seam and expires the 
     nodes: [node],
   });
   expect(response.ok).toBe(true);
-  expect(session.refFrameState).toBe('expired');
+  expect(refFrameState(session)).toBe('expired');
 });
 
 test('handleFindCommands click returns deterministic metadata across locator variants', async () => {
@@ -618,8 +619,8 @@ test('handleFindCommands list returns every match without acting', async () => {
   // next command (a plain `@eN` still requires a complete frame by design —
   // the MCP/CLI layers pin from `matches` + `refsGeneration`).
   expect(typeof response.data?.refsGeneration).toBe('number');
-  expect(session.refFrameState).toBe('active');
-  expect([...(session.refFrameScope ?? [])].sort()).toEqual(['e2', 'e3', 'e4']);
+  expect(refFrameState(session)).toBe('active');
+  expect([...(refFrameScope(session) ?? [])].sort()).toEqual(['e2', 'e3', 'e4']);
 });
 
 test('handleFindCommands list on a unique match still lists instead of tapping', async () => {

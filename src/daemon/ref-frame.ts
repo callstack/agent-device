@@ -1,3 +1,4 @@
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { SessionState } from './types.ts';
 
 const runtimeRevisions = new WeakMap<SessionState, number>();
@@ -44,15 +45,64 @@ export type RefFrameAdmission =
   | { admitted: true }
   | { admitted: false; reason: RefFrameRejectReason };
 
+const REF_FRAME = Symbol('ref-frame');
+
 /**
- * The frame epoch exposed to clients as `refsGeneration`. Frozen at issuance
- * (`refFrameGeneration`) so a later read-only capture that advances the
- * observation counter (`snapshotGeneration`) does not shift the epoch a valid
- * pin is compared against. Falls back to `snapshotGeneration` for pre-frame
- * sessions.
+ * The frame as one value. `state`, `scope`, `tree` and `generation` move
+ * together or the frame is incoherent, so they are not four fields a caller can
+ * step out of agreement: `SessionState.refFrame` is REPLACED whole by this
+ * module's transitions and never mutated. The brand key is module-private, so
+ * no module outside this file can construct or edit one — the accessors below
+ * are the whole read surface.
+ */
+export type RefFrame = {
+  readonly [REF_FRAME]: true;
+  readonly state: RefFrameState;
+  readonly scope: RefFrameScope;
+  readonly tree: SnapshotState | undefined;
+  readonly generation: number | undefined;
+};
+
+/**
+ * The frame a session has before anything issues refs: complete authority over
+ * an empty namespace, deferring tree and epoch to the operational observation.
+ * A shared constant, so lineage identity is stable for a session that never
+ * reached a transition.
+ */
+const PRISTINE_FRAME: RefFrame = {
+  [REF_FRAME]: true,
+  state: 'active',
+  scope: 'all',
+  tree: undefined,
+  generation: undefined,
+};
+
+/**
+ * The session's current frame, as one comparable value. Identity changes on
+ * every transition and only on a transition, so a caller holding an earlier
+ * frame can tell whether authority moved with a single `===`.
+ */
+export function refFrame(session: SessionState): RefFrame {
+  return session.refFrame ?? PRISTINE_FRAME;
+}
+
+/**
+ * The frame epoch exposed to clients as `refsGeneration`. Frozen at issuance so
+ * a later read-only capture that advances the observation counter
+ * (`snapshotGeneration`) does not shift the epoch a valid pin is compared
+ * against. Falls back to `snapshotGeneration` for pre-frame sessions.
  */
 export function refFrameEpoch(session: SessionState): number | undefined {
-  return session.refFrameGeneration ?? session.snapshotGeneration;
+  return refFrame(session).generation ?? session.snapshotGeneration;
+}
+
+/**
+ * The tree that minted the frame's refs, retained so a ref resolves to the node
+ * the caller was authorized against rather than to whatever now sits at that
+ * index in a newer observation. Undefined before any issuance.
+ */
+export function refFrameTree(session: SessionState): SnapshotState | undefined {
+  return refFrame(session).tree;
 }
 
 /**
@@ -70,7 +120,7 @@ export function refFrameEpoch(session: SessionState): number | undefined {
  */
 export function expireRefFrame(session: SessionState): void {
   advanceSessionRuntimeRevision(session);
-  session.refFrameState = 'expired';
+  session.refFrame = { ...refFrame(session), state: 'expired' };
   session.snapshotScopeSource = undefined;
 }
 
@@ -102,7 +152,7 @@ export function readSessionRuntimeRevision(session: SessionState): number {
  * {@link activateRefFrame}.
  */
 export function activateCompleteRefFrame(session: SessionState): void {
-  activateRefFrame(session, undefined);
+  activateRefFrame(session, 'all');
 }
 
 /**
@@ -119,29 +169,31 @@ export function activatePartialRefFrame(session: SessionState, scope: ReadonlySe
 }
 
 /**
- * The frame's four fields move together or the frame is incoherent: an `active` state with a
- * stale `refFrameTree` resolves refs against a namespace nobody authorized, and a frame
- * pinned to the wrong `refFrameGeneration` invalidates correct pins. Both issuance forms
- * therefore land here rather than each writing the four fields itself.
+ * Both issuance forms land here because they differ only in scope, and because the frame is
+ * one value: an `active` state paired with a stale tree resolves refs against a namespace
+ * nobody authorized, and a frame pinned to the wrong generation invalidates correct pins.
  *
  * Retains the just-published tree (`session.snapshot`) as the frame's immutable source by
  * SHARED reference — no deep copy (ADR 0014 performance). A later read-only capture advances
  * `session.snapshot` without disturbing this tree, so a ref keeps resolving against the
  * namespace that authorized it.
  */
-function activateRefFrame(session: SessionState, scope: ReadonlySet<string> | undefined): void {
-  session.refFrameState = 'active';
-  session.refFrameScope = scope;
-  session.refFrameTree = session.snapshot;
-  session.refFrameGeneration = session.snapshotGeneration;
+function activateRefFrame(session: SessionState, scope: RefFrameScope): void {
+  session.refFrame = {
+    [REF_FRAME]: true,
+    state: 'active',
+    scope,
+    tree: session.snapshot,
+    generation: session.snapshotGeneration,
+  };
 }
 
 export function refFrameState(session: SessionState): RefFrameState {
-  return session.refFrameState ?? 'active';
+  return refFrame(session).state;
 }
 
 export function refFrameScope(session: SessionState): RefFrameScope {
-  return session.refFrameScope ?? 'all';
+  return refFrame(session).scope;
 }
 
 export type RefMutationFrame = {
