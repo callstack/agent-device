@@ -1,7 +1,6 @@
 # Testing Notes
 
-Repository-specific testing traps you cannot learn from the test runner alone. Executable gate
-ownership lives in `scripts/check-affected/` and `scripts/gate/`.
+Gate ownership lives in `scripts/check-affected/` and `scripts/gate/`.
 
 ## Which gates a change needs
 
@@ -22,8 +21,9 @@ pnpm check:affected --json
 pnpm gate --help
 ```
 
-`check:affected --run` reports coverage obligations without instrumenting; it runs one capped
-`vitest related` command. Use the coverage scripts only to diagnose a red CI result.
+`check:affected --run` reports coverage obligations without instrumenting; when related tests are
+selected, it runs one capped `vitest related` command. Run local coverage to investigate a specific
+coverage question or CI failure.
 
 Two selection traps recur:
 
@@ -32,8 +32,9 @@ Two selection traps recur:
 - A workspace package manifest or TypeScript config can rewire all consumers, so the affected
   selector fails open to the full gate set on purpose.
 
-Docs-only changes with no behavior impact need no runtime tests. Structural guidance gates still
-need a planted violation showing their failure direction.
+Docs-only changes with no runtime behavior impact need no runtime tests or new tests asserting prose.
+Keep required gates; after those and focused checks pass, repeat or broaden only for changes,
+failures, or unresolved risks.
 
 ## Platform and live-device policy
 
@@ -45,7 +46,7 @@ Apple runner changes run `pnpm check:xctest-selection` and build the affected ta
 `#if` guard is the XCTest lane classification — never maintain a second test-name list. Pure runner
 decisions use the macOS host lane; iOS/XCTest semantics need a simulator lane.
 
-Local host-lane XCTest runs hit two snags CI never does:
+Local host-lane XCTest may need signing and automation permission:
 
 - System policy may refuse the unsigned bundle (`library load disallowed by system policy`, shown
   as `Early unexpected exit … crashed with signal kill`). Rebuild signed:
@@ -65,10 +66,9 @@ Read the entry file before running a lane. Do not copy its environment matrix he
 ## Shared test utilities
 
 Before creating fixtures, look in `src/__tests__/test-utils/`. Import named builders from the module
-that defines them (`session-factories.ts`, `device-fixtures.ts`, `store-factory.ts`). There is no
-barrel on purpose: one barrel made every test evaluate every helper's transitive graph. Shared
-`DeviceInfo`, session, snapshot, store, runtime-fact, and mocked-binary values belong in a sibling
-fixture module, not in repeated test literals.
+that defines them (`session-factories.ts`, `device-fixtures.ts`, `store-factory.ts`); avoid importing
+unrelated helpers through a barrel. Shared `DeviceInfo`, session, snapshot, store, runtime-fact,
+and mocked-binary values belong in a sibling fixture module, not in repeated test literals.
 
 Use `mkdtempForTest` or `mkdtempForTestSync`. Global setup redirects `TMPDIR` for the run and
 removes it after every worker exits — skip per-test cleanup. An interrupted run may leave a
@@ -86,9 +86,9 @@ signalled directly.
 
 ## Regression evidence
 
-A regression test must be seen failing without the production change: revert the implementation, run
-the smallest owning test, record the failing count, restore. Apply the same proof to test relocation
-and structural gates — plant a type error or violation and watch the intended gate find and name it.
+Observe a regression test fail without the fix, then pass with it. For new or changed structural
+gates, plant a violation and verify the intended gate names it. Pure test moves retain their tests;
+verify discovery at the new path. If selection rules change, plant a failure to prove selection.
 
 A callback-based canary must observe semantic success, not just lifecycle completion — e.g. React
 Native Gesture Handler's
@@ -131,9 +131,8 @@ pnpm depgraph affected packages/host-kit/src/command.ts
 pnpm depgraph affected src/daemon/ref-frame.ts --json --limit 25
 ```
 
-It reports value-edge dependents, affected gates, reaching public commands, live scenario owners,
-and interaction-guarantee cells; type-only and dynamic edges are classified separately. Feed the
-plan into `pnpm check:affected --run` — do not keep a parallel gate list in prose.
+Use its dependent, command, and guarantee-cell report to scope inspection. `pnpm check:affected --run`
+selects gates independently from the diff; it does not consume the depgraph report.
 
 ## Gate ownership
 
@@ -166,17 +165,18 @@ schemas, `contracts/fixtures/` tables) are unaffected.
 
 ## Speed rules
 
+Changing timeout failures that pass alone may be host contention. Reproduce on `origin/main` under
+the same load before classifying them as regressions.
+
 - Unit tests have no retry layer. Fix or remove flakes instead of hiding them behind retries.
 - Unit tests do not wait production time. Prefer budget-derived cadence, assert the caller passes
   the right timeout to its tool seam, or use an existing clock seam.
-- Vitest parallelizes files, so wall clock is bounded by the slowest file. Splitting a monolith
-  along source topology is a performance win, not just a readability win.
 - The slow-test reporter enforces unit and integration budgets. Existing pins only shrink; a new
   pin needs measured justification.
 - Test files over 1,000 lines may be no longer than at the merge-base with `origin/main`, and no
   new test file may cross that line. Split the family before adding tests; shrinking needs no
   gate edit.
-- Keep isolation enabled and the pool on forks — both were measured and did not help. The useful
-  optimization is importing the module under test, not a platform barrel.
+- Keep isolation enabled and the pool on forks; disabling isolation and changing pools did not
+  improve measured performance. Import the module under test, not a platform barrel.
 - Local Vitest runs use a four-worker cap. Override it when a run needs a different host share:
   `AGENT_DEVICE_VITEST_MAX_WORKERS=<n>` (clamped to host CPUs, ignored in CI).
