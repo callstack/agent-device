@@ -338,7 +338,9 @@ of 27 fields already have exactly one writer**. The sharp case was ADR 0014's re
 `refFrameState`, `refFrameScope`, `refFrameTree`, `refFrameGeneration` must move together or the
 frame is incoherent, yet complete issuance wrote them in `ref-frame.ts` and partial issuance
 wrote the same four in `session-snapshot.ts`, even though `ref-frame.ts` claims in its header to
-be "the single owner of the frame's transitions". Both forms now go through `activateRefFrame`.
+be "the single owner of the frame's transitions". Both forms now go through `activateRefFrame`,
+and the four fields have since been replaced by one `refFrame` value whose type only
+`ref-frame.ts` can construct — so that ownership no longer rests on the R7 table alone.
 
 `recordSession` deliberately moves alone in two paths (recording without arming a publication),
 so the save-script cluster got no invented abstraction. It got ownership: **R7** records every
