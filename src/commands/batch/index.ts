@@ -3,7 +3,6 @@ import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { commonInputFromFlags } from '../cli-grammar/common.ts';
 import type { CliReader } from '../cli-grammar/types.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { commonToClientOptions } from '../common-input-fields.ts';
 import { batchCliOutputFormatters } from './output.ts';
 import { createBatchCommandMetadata, type BatchCommandStep, type BatchInput } from './metadata.ts';
@@ -11,10 +10,6 @@ import { STRUCTURED_BATCH_COMMAND_NAMES } from '../../core/batch-policy.ts';
 import { createBatchDaemonWriter } from './projection.ts';
 
 const batchCommandMetadata = createBatchCommandMetadata();
-
-const batchCommandDefinition = defineExecutableCommand(batchCommandMetadata, (client, input) =>
-  client.batch.run(toBatchOptions(input)),
-);
 
 const batchCliSchema = {
   usageOverride: 'batch [--steps <json> | --steps-file <path>]',
@@ -74,7 +69,7 @@ const batchCommandFacet = defineCommandFacet({
     cliDetail: buildBatchCliDetail(),
   },
   metadata: batchCommandMetadata,
-  definition: batchCommandDefinition,
+  run: (client, input) => client.batch.run(toBatchOptions(input)),
   cliSchema: batchCliSchema,
   cliReader: batchCliReader,
   cliOutputFormatter: batchCliOutputFormatters.batch,
