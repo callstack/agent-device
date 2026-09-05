@@ -315,17 +315,11 @@ test('session-state writes are found by field, and non-daemon or undeclared name
       // a local that is not a declared SessionState field
       ['src/daemon/session-observability/internal/session-audio.ts', 'session.somethingElse = 1;'],
       // reads and comparisons are not writes
-      [
-        'src/daemon/interaction/internal/find.ts',
-        "if (session.refFrame === 'active') return;",
-      ],
+      ['src/daemon/interaction/internal/find.ts', "if (session.refFrame === 'active') return;"],
       // a write into a sub-object is not a write to the field itself
       ['src/daemon/handlers/session-probe.ts', 'session.refFrame.inner = 1;'],
       // a different binding that happens to have a matching property
-      [
-        'src/daemon/session-lifecycle/internal/session-close.ts',
-        "other.refFrame = 'expired';",
-      ],
+      ['src/daemon/session-lifecycle/internal/session-close.ts', "other.refFrame = 'expired';"],
     ]),
     ['refFrame', 'snapshotGeneration'],
   );
@@ -351,9 +345,7 @@ test('every assignment form is a write, including the ones a regex forgets', () 
     'session\n  .refFrame = 1;',
   ];
   for (const form of forms) {
-    const writes = findSessionStateWrites(new Map([['src/daemon/probe.ts', form]]), [
-      'refFrame',
-    ]);
+    const writes = findSessionStateWrites(new Map([['src/daemon/probe.ts', form]]), ['refFrame']);
     assert.deepEqual(
       writes.map(({ field }) => field),
       ['refFrame'],
