@@ -170,25 +170,31 @@ function resolveRunnerSdkName() {
 }
 
 function runAppleToolFingerprintCommand(command, args) {
+  const probe = [command, ...args].join(' ');
+  let output;
   try {
-    return (
-      execFileSync(command, args, {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-        timeout: 5000,
-        maxBuffer: 128 * 1024,
-      }).trim() || 'unknown'
-    );
-  } catch {
-    return 'unknown';
+    output = execFileSync(command, args, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 5000,
+      maxBuffer: 128 * 1024,
+    }).trim();
+  } catch (error) {
+    throw new Error(`Apple toolchain probe failed: ${probe} (${error?.message ?? error})`);
   }
+  if (!output) {
+    throw new Error(`Apple toolchain probe produced no output: ${probe}`);
+  }
+  return output;
 }
 
 function parseXcodeVersionOutput(output) {
-  return {
-    version: output.match(/^Xcode\s+(.+)$/m)?.[1]?.trim() || 'unknown',
-    buildVersion: output.match(/^Build version\s+(.+)$/m)?.[1]?.trim() || 'unknown',
-  };
+  const version = output.match(/^Xcode\s+(.+)$/m)?.[1]?.trim();
+  const buildVersion = output.match(/^Build version\s+(.+)$/m)?.[1]?.trim();
+  if (!version || !buildVersion) {
+    throw new Error('Apple toolchain probe produced unrecognized output: xcodebuild -version');
+  }
+  return { version, buildVersion };
 }
 
 function resolveRunnerToolchainFingerprint() {

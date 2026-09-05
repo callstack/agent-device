@@ -12,7 +12,9 @@ import {
 import {
   RUNNER_CACHE_METADATA_FILE,
   comparableRunnerCacheMetadata,
+  diffComparableRunnerCacheMetadata,
   stableJsonStringify,
+  type RunnerCacheMetadataDifference,
   type RunnerXctestrunCacheArtifacts,
   type RunnerXctestrunCacheMetadata,
   type RunnerXctestrunCacheProductArtifact,
@@ -48,14 +50,18 @@ export type ExistingXctestrunState =
       source: 'manifest' | 'scan';
     }
   | {
-      reason:
-        | 'project_root_mismatch'
-        | 'missing_products'
-        | 'cache_metadata_missing'
-        | 'cache_metadata_mismatch';
+      reason: 'project_root_mismatch' | 'missing_products' | 'cache_metadata_missing';
       xctestrunPath: string;
       productPaths: string[];
       source: 'manifest' | 'scan';
+    }
+  | {
+      reason: 'cache_metadata_mismatch';
+      xctestrunPath: string;
+      productPaths: string[];
+      source: 'manifest' | 'scan';
+      /** Which comparable keys differ, so a rebuild names its cause. */
+      metadataDifferences: RunnerCacheMetadataDifference[];
     };
 
 type RunnerXctestrunArtifactIdentity = {
@@ -210,12 +216,19 @@ function readRunnerCacheMetadata(derived: string): RunnerXctestrunCacheMetadata 
   }
 }
 
+type RunnerCacheMetadataEvaluation =
+  | { ok: true; metadata: RunnerXctestrunCacheMetadata }
+  | { ok: false; reason: 'cache_metadata_missing' }
+  | {
+      ok: false;
+      reason: 'cache_metadata_mismatch';
+      differences: RunnerCacheMetadataDifference[];
+    };
+
 function evaluateRunnerCacheMetadata(
   derived: string,
   expected: RunnerXctestrunCacheMetadata,
-):
-  | { ok: true; metadata: RunnerXctestrunCacheMetadata }
-  | { ok: false; reason: 'cache_metadata_missing' | 'cache_metadata_mismatch' } {
+): RunnerCacheMetadataEvaluation {
   const actual = readRunnerCacheMetadata(derived);
   if (!actual) {
     return { ok: false, reason: 'cache_metadata_missing' };
@@ -224,7 +237,11 @@ function evaluateRunnerCacheMetadata(
     stableJsonStringify(comparableRunnerCacheMetadata(actual)) !==
     stableJsonStringify(comparableRunnerCacheMetadata(expected))
   ) {
-    return { ok: false, reason: 'cache_metadata_mismatch' };
+    return {
+      ok: false,
+      reason: 'cache_metadata_mismatch',
+      differences: diffComparableRunnerCacheMetadata(expected, actual),
+    };
   }
   return { ok: true, metadata: actual };
 }
@@ -408,7 +425,15 @@ export async function evaluateExistingXctestrun(options: {
     return { reason: 'project_root_mismatch', xctestrunPath, productPaths, source };
   }
   if (!cacheMetadata.ok) {
-    return { reason: cacheMetadata.reason, xctestrunPath, productPaths, source };
+    return cacheMetadata.reason === 'cache_metadata_mismatch'
+      ? {
+          reason: cacheMetadata.reason,
+          xctestrunPath,
+          productPaths,
+          source,
+          metadataDifferences: cacheMetadata.differences,
+        }
+      : { reason: cacheMetadata.reason, xctestrunPath, productPaths, source };
   }
   return { reason: 'reuse_ready', xctestrunPath, productPaths, source };
 }

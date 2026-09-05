@@ -172,6 +172,9 @@ async function ensureXctestrunUnderCacheLock(params: {
     emitRunnerXctestrunDecision('rebuild', existing.reason, {
       derived,
       xctestrunPath: existing.xctestrunPath,
+      ...(existing.reason === 'cache_metadata_mismatch'
+        ? { metadataDifferences: existing.metadataDifferences }
+        : {}),
     });
   }
   const reusable = await resolveReusableXctestrunArtifact({
