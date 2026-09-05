@@ -21,7 +21,6 @@ import type {
 } from '@agent-device/contracts/client';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { REPEATED_TOUCH_FLAGS, SELECTOR_SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { postActionObservationCliFlags } from '../post-action-observation-grammar.ts';
 import {
   toClientElementTarget,
@@ -147,57 +146,174 @@ const interactionCliSchemas = {
 type InteractionCommandMetadata = (typeof interactionCommandMetadata)[number];
 type InteractionCommandName = InteractionCommandMetadata['name'];
 
-const clickCommandDefinition = defineExecutableCommand(metadata('click'), (client, input) =>
-  client.interactions.click(toClickOptions(input)),
-);
+const clickCommandFacet = defineCommandFacet({
+  name: 'click',
+  text: {
+    summary: 'Click or tap a UI target',
+  },
+  metadata: metadata('click'),
+  run: (client, input) => client.interactions.click(toClickOptions(input)),
+  cliSchema: interactionCliSchemas.click,
+  cliReader: interactionCliReaders.click,
+  daemonWriter: interactionDaemonWriters.click,
+  cliOutputFormatter: interactionCliOutputFormatters.click,
+});
 
-const pressCommandDefinition = defineExecutableCommand(metadata('press'), (client, input) =>
-  client.interactions.press(toPressOptions(input)),
-);
+const pressCommandFacet = defineCommandFacet({
+  name: 'press',
+  text: {
+    summary: 'Short-press a UI target',
+    cliDetail: 'The hold duration is positional on longpress, not press --hold-ms.',
+  },
+  metadata: metadata('press'),
+  run: (client, input) => client.interactions.press(toPressOptions(input)),
+  cliSchema: interactionCliSchemas.press,
+  cliReader: interactionCliReaders.press,
+  daemonWriter: interactionDaemonWriters.press,
+  cliOutputFormatter: interactionCliOutputFormatters.press,
+});
 
-const fillCommandDefinition = defineExecutableCommand(metadata('fill'), (client, input) =>
-  client.interactions.fill(toFillOptions(input)),
-);
+const fillCommandFacet = defineCommandFacet({
+  name: 'fill',
+  text: {
+    summary: 'Replace text in a UI input',
+    cliDetail:
+      'Every positional after an @ref is the replacement text, so fill @e57 good morning enters "good morning"; quote the text when the shell must preserve exact whitespace. Clear a field with an empty text argument: fill @e57 "" (the argument must be present — fill @e57 alone is a missing argument, not a clear). When visible label text also matches a non-input element, constrain the target with editable=true, for example fill \'label="Email" editable=true\' "qa@example.com".',
+  },
+  metadata: metadata('fill'),
+  run: (client, input) => client.interactions.fill(toFillOptions(input)),
+  cliSchema: interactionCliSchemas.fill,
+  cliReader: interactionCliReaders.fill,
+  daemonWriter: interactionDaemonWriters.fill,
+  cliOutputFormatter: interactionCliOutputFormatters.fill,
+});
 
-const longPressCommandDefinition = defineExecutableCommand(metadata('longpress'), (client, input) =>
-  client.interactions.longPress(toLongPressOptions(input)),
-);
+const longPressCommandFacet = defineCommandFacet({
+  name: 'longpress',
+  text: {
+    summary: 'Hold a UI target to open a context menu',
+    cliDetail: 'Duration is positional, for example longpress @e12 800 or longpress 300 500 800.',
+  },
+  metadata: metadata('longpress'),
+  run: (client, input) => client.interactions.longPress(toLongPressOptions(input)),
+  cliSchema: interactionCliSchemas.longpress,
+  cliReader: interactionCliReaders.longpress,
+  daemonWriter: interactionDaemonWriters.longpress,
+  cliOutputFormatter: interactionCliOutputFormatters.longpress,
+});
 
-const hoverCommandDefinition = defineExecutableCommand(metadata('hover'), (client, input) =>
-  client.interactions.hover(toHoverOptions(input)),
-);
+const hoverCommandFacet = defineCommandFacet({
+  name: 'hover',
+  text: {
+    summary: 'Hover the pointer over a UI target (web only)',
+    cliDetail:
+      'The pointer stays where hover left it: read the revealed UI (--settle or snapshot -i) and act on it before another click or hover moves the pointer away.',
+  },
+  metadata: metadata('hover'),
+  run: (client, input) => client.interactions.hover(toHoverOptions(input)),
+  cliSchema: interactionCliSchemas.hover,
+  cliReader: interactionCliReaders.hover,
+  daemonWriter: interactionDaemonWriters.hover,
+  cliOutputFormatter: interactionCliOutputFormatters.hover,
+});
 
-const swipeCommandDefinition = defineExecutableCommand(metadata('swipe'), (client, input) =>
-  client.interactions.swipe(input as SwipeOptions),
-);
+const swipeCommandFacet = defineCommandFacet({
+  name: 'swipe',
+  text: {
+    summary: 'Fling between coordinates',
+  },
+  metadata: metadata('swipe'),
+  run: (client, input) => client.interactions.swipe(input as SwipeOptions),
+  cliSchema: interactionCliSchemas.swipe,
+  cliReader: interactionCliReaders.swipe,
+  daemonWriter: interactionDaemonWriters.swipe,
+});
 
-const focusCommandDefinition = defineExecutableCommand(metadata('focus'), (client, input) =>
-  client.interactions.focus(input as FocusOptions),
-);
+const focusCommandFacet = defineCommandFacet({
+  name: 'focus',
+  text: {
+    summary: 'Focus input at screen coordinates',
+  },
+  metadata: metadata('focus'),
+  run: (client, input) => client.interactions.focus(input as FocusOptions),
+  cliSchema: interactionCliSchemas.focus,
+  cliReader: interactionCliReaders.focus,
+  daemonWriter: interactionDaemonWriters.focus,
+});
 
-const typeCommandDefinition = defineExecutableCommand(metadata('type'), (client, input) =>
-  client.interactions.type(input as TypeTextOptions),
-);
+const typeCommandFacet = defineCommandFacet({
+  name: 'type',
+  text: {
+    summary: 'Append text to the focused input',
+  },
+  metadata: metadata('type'),
+  run: (client, input) => client.interactions.type(input as TypeTextOptions),
+  cliSchema: interactionCliSchemas.type,
+  cliReader: interactionCliReaders.type,
+  daemonWriter: interactionDaemonWriters.type,
+});
 
-const scrollCommandDefinition = defineExecutableCommand(metadata('scroll'), (client, input) =>
-  client.interactions.scroll(input as ScrollOptions),
-);
+const scrollCommandFacet = defineCommandFacet({
+  name: 'scroll',
+  text: {
+    summary: 'Scroll in a direction or to an edge',
+  },
+  metadata: metadata('scroll'),
+  run: (client, input) => client.interactions.scroll(input as ScrollOptions),
+  cliSchema: interactionCliSchemas.scroll,
+  cliReader: interactionCliReaders.scroll,
+  daemonWriter: interactionDaemonWriters.scroll,
+  cliOutputFormatter: interactionCliOutputFormatters.scroll,
+});
 
-const getCommandDefinition = defineExecutableCommand(metadata('get'), (client, input) =>
-  client.interactions.get(toGetOptions(input)),
-);
+const getCommandFacet = defineCommandFacet({
+  name: 'get',
+  text: {
+    summary: 'Read element text or attributes',
+  },
+  metadata: metadata('get'),
+  run: (client, input) => client.interactions.get(toGetOptions(input)),
+  cliSchema: interactionCliSchemas.get,
+  cliReader: interactionCliReaders.get,
+  daemonWriter: interactionDaemonWriters.get,
+  cliOutputFormatter: interactionCliOutputFormatters.get,
+});
 
-const isCommandDefinition = defineExecutableCommand(metadata('is'), (client, input) =>
-  client.interactions.is(input as IsOptions),
-);
+const isCommandFacet = defineCommandFacet({
+  name: 'is',
+  text: {
+    summary: 'Check a UI predicate on a selector',
+  },
+  metadata: metadata('is'),
+  run: (client, input) => client.interactions.is(input as IsOptions),
+  cliSchema: interactionCliSchemas.is,
+  cliReader: selectorCliReaders.is,
+  daemonWriter: selectorDaemonWriters.is,
+  cliOutputFormatter: interactionCliOutputFormatters.is,
+});
 
-const findCommandDefinition = defineExecutableCommand(metadata('find'), (client, input) =>
-  client.interactions.find(input as FindOptions),
-);
+const findCommandFacet = defineCommandFacet({
+  name: 'find',
+  text: {
+    summary: 'Find an element and act',
+  },
+  metadata: metadata('find'),
+  run: (client, input) => client.interactions.find(input as FindOptions),
+  cliSchema: interactionCliSchemas.find,
+  cliReader: selectorCliReaders.find,
+  daemonWriter: selectorDaemonWriters.find,
+  cliOutputFormatter: interactionCliOutputFormatters.find,
+});
 
-const gestureCommandDefinition = defineExecutableCommand(
-  metadata('gesture'),
-  async (client, input) => {
+const gestureCommandFacet = defineCommandFacet({
+  name: 'gesture',
+  text: {
+    summary: 'Run pan, fling, swipe, pinch, rotate, transform, or drag gestures',
+    cliDetail:
+      'Argument shapes: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
+  },
+  metadata: metadata('gesture'),
+  run: async (client, input) => {
     switch (input.kind) {
       case 'pan':
         return await client.interactions.pan(toPanOptions(input));
@@ -215,176 +331,6 @@ const gestureCommandDefinition = defineExecutableCommand(
         return await client.interactions.drag(toDragOptions(input));
     }
   },
-);
-
-const clickCommandFacet = defineCommandFacet({
-  name: 'click',
-  text: {
-    summary: 'Click or tap a UI target',
-  },
-  metadata: metadata('click'),
-  definition: clickCommandDefinition,
-  cliSchema: interactionCliSchemas.click,
-  cliReader: interactionCliReaders.click,
-  daemonWriter: interactionDaemonWriters.click,
-  cliOutputFormatter: interactionCliOutputFormatters.click,
-});
-
-const pressCommandFacet = defineCommandFacet({
-  name: 'press',
-  text: {
-    summary: 'Short-press a UI target',
-    cliDetail: 'The hold duration is positional on longpress, not press --hold-ms.',
-  },
-  metadata: metadata('press'),
-  definition: pressCommandDefinition,
-  cliSchema: interactionCliSchemas.press,
-  cliReader: interactionCliReaders.press,
-  daemonWriter: interactionDaemonWriters.press,
-  cliOutputFormatter: interactionCliOutputFormatters.press,
-});
-
-const fillCommandFacet = defineCommandFacet({
-  name: 'fill',
-  text: {
-    summary: 'Replace text in a UI input',
-    cliDetail:
-      'Every positional after an @ref is the replacement text, so fill @e57 good morning enters "good morning"; quote the text when the shell must preserve exact whitespace. Clear a field with an empty text argument: fill @e57 "" (the argument must be present — fill @e57 alone is a missing argument, not a clear). When visible label text also matches a non-input element, constrain the target with editable=true, for example fill \'label="Email" editable=true\' "qa@example.com".',
-  },
-  metadata: metadata('fill'),
-  definition: fillCommandDefinition,
-  cliSchema: interactionCliSchemas.fill,
-  cliReader: interactionCliReaders.fill,
-  daemonWriter: interactionDaemonWriters.fill,
-  cliOutputFormatter: interactionCliOutputFormatters.fill,
-});
-
-const longPressCommandFacet = defineCommandFacet({
-  name: 'longpress',
-  text: {
-    summary: 'Hold a UI target to open a context menu',
-    cliDetail: 'Duration is positional, for example longpress @e12 800 or longpress 300 500 800.',
-  },
-  metadata: metadata('longpress'),
-  definition: longPressCommandDefinition,
-  cliSchema: interactionCliSchemas.longpress,
-  cliReader: interactionCliReaders.longpress,
-  daemonWriter: interactionDaemonWriters.longpress,
-  cliOutputFormatter: interactionCliOutputFormatters.longpress,
-});
-
-const hoverCommandFacet = defineCommandFacet({
-  name: 'hover',
-  text: {
-    summary: 'Hover the pointer over a UI target (web only)',
-    cliDetail:
-      'The pointer stays where hover left it: read the revealed UI (--settle or snapshot -i) and act on it before another click or hover moves the pointer away.',
-  },
-  metadata: metadata('hover'),
-  definition: hoverCommandDefinition,
-  cliSchema: interactionCliSchemas.hover,
-  cliReader: interactionCliReaders.hover,
-  daemonWriter: interactionDaemonWriters.hover,
-  cliOutputFormatter: interactionCliOutputFormatters.hover,
-});
-
-const swipeCommandFacet = defineCommandFacet({
-  name: 'swipe',
-  text: {
-    summary: 'Fling between coordinates',
-  },
-  metadata: metadata('swipe'),
-  definition: swipeCommandDefinition,
-  cliSchema: interactionCliSchemas.swipe,
-  cliReader: interactionCliReaders.swipe,
-  daemonWriter: interactionDaemonWriters.swipe,
-});
-
-const focusCommandFacet = defineCommandFacet({
-  name: 'focus',
-  text: {
-    summary: 'Focus input at screen coordinates',
-  },
-  metadata: metadata('focus'),
-  definition: focusCommandDefinition,
-  cliSchema: interactionCliSchemas.focus,
-  cliReader: interactionCliReaders.focus,
-  daemonWriter: interactionDaemonWriters.focus,
-});
-
-const typeCommandFacet = defineCommandFacet({
-  name: 'type',
-  text: {
-    summary: 'Append text to the focused input',
-  },
-  metadata: metadata('type'),
-  definition: typeCommandDefinition,
-  cliSchema: interactionCliSchemas.type,
-  cliReader: interactionCliReaders.type,
-  daemonWriter: interactionDaemonWriters.type,
-});
-
-const scrollCommandFacet = defineCommandFacet({
-  name: 'scroll',
-  text: {
-    summary: 'Scroll in a direction or to an edge',
-  },
-  metadata: metadata('scroll'),
-  definition: scrollCommandDefinition,
-  cliSchema: interactionCliSchemas.scroll,
-  cliReader: interactionCliReaders.scroll,
-  daemonWriter: interactionDaemonWriters.scroll,
-  cliOutputFormatter: interactionCliOutputFormatters.scroll,
-});
-
-const getCommandFacet = defineCommandFacet({
-  name: 'get',
-  text: {
-    summary: 'Read element text or attributes',
-  },
-  metadata: metadata('get'),
-  definition: getCommandDefinition,
-  cliSchema: interactionCliSchemas.get,
-  cliReader: interactionCliReaders.get,
-  daemonWriter: interactionDaemonWriters.get,
-  cliOutputFormatter: interactionCliOutputFormatters.get,
-});
-
-const isCommandFacet = defineCommandFacet({
-  name: 'is',
-  text: {
-    summary: 'Check a UI predicate on a selector',
-  },
-  metadata: metadata('is'),
-  definition: isCommandDefinition,
-  cliSchema: interactionCliSchemas.is,
-  cliReader: selectorCliReaders.is,
-  daemonWriter: selectorDaemonWriters.is,
-  cliOutputFormatter: interactionCliOutputFormatters.is,
-});
-
-const findCommandFacet = defineCommandFacet({
-  name: 'find',
-  text: {
-    summary: 'Find an element and act',
-  },
-  metadata: metadata('find'),
-  definition: findCommandDefinition,
-  cliSchema: interactionCliSchemas.find,
-  cliReader: selectorCliReaders.find,
-  daemonWriter: selectorDaemonWriters.find,
-  cliOutputFormatter: interactionCliOutputFormatters.find,
-});
-
-const gestureCommandFacet = defineCommandFacet({
-  name: 'gesture',
-  text: {
-    summary: 'Run pan, fling, swipe, pinch, rotate, transform, or drag gestures',
-    cliDetail:
-      'Argument shapes: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
-  },
-  metadata: metadata('gesture'),
-  definition: gestureCommandDefinition,
   cliSchema: interactionCliSchemas.gesture,
   cliReader: gestureCliReaders.gesture,
   daemonWriter: gestureDaemonWriters.gesture,
