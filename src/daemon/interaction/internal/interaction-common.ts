@@ -9,7 +9,7 @@ import {
 import type { MultiTargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { inferFillText } from '../../action-utils.ts';
 import { recordedInputPlaceholder } from '@agent-device/ad-script';
-import { parameterizeRecordedFillPayload } from '../../parameterized-recorded-fill.ts';
+import { parameterizeRecordedFillPayload } from '@agent-device/selectors/parameterized-recorded-fill';
 import type { InteractionFinalizationOperations } from './types.ts';
 
 export function finalizeTouchInteraction(params: {
