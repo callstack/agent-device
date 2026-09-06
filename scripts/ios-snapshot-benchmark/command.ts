@@ -51,7 +51,7 @@ export function openFixture(
     ...(fixture.launchUrl ? ['--launch-url', fixture.launchUrl] : []),
     '--foreground',
   ]);
-  if (!fixture.launchUrl || !hasDeepLinkConfirmation(opened.payload)) return opened;
+  if (!fixture.launchUrl || !deepLinkConfirmationShown(context, opened)) return opened;
   const accepted = pressFixtureTarget(context, 'label="Open"');
   if (accepted.ok) return opened;
   return {
@@ -78,7 +78,7 @@ export function firstInteractionAfterOpen(context: CliContext, fixture: ScreenFi
   ]);
   if (!opened.ok) return opened;
   const selector =
-    fixture.launchUrl && hasDeepLinkConfirmation(opened.payload)
+    fixture.launchUrl && deepLinkConfirmationShown(context, opened)
       ? 'label="Open"'
       : `text=${JSON.stringify(fixture.anchorText)}`;
   return pressFixtureTarget(context, selector);
@@ -96,7 +96,15 @@ export async function openFixtureAsync(
     ...(fixture.launchUrl ? ['--launch-url', fixture.launchUrl] : []),
     '--foreground',
   ]);
-  if (!fixture.launchUrl || !hasDeepLinkConfirmation(opened.payload)) return opened;
+  if (
+    !fixture.launchUrl ||
+    !(
+      hasDeepLinkConfirmation(opened.payload) ||
+      hasDeepLinkConfirmation((await snapshotFixtureAsync(context)).payload)
+    )
+  ) {
+    return opened;
+  }
   const accepted = await pressFixtureTargetAsync(context, 'label="Open"');
   if (accepted.ok) return opened;
   return {
@@ -154,10 +162,21 @@ export function snapshotHasAnchor(payload: unknown, anchorText: string): boolean
 
 export function hasDeepLinkConfirmation(payload: unknown): boolean {
   return snapshotNodes(payload).some((record) => {
-    const role = readString(record.role);
+    // Regular snapshots publish the node `type` ('Alert'); older projections used `role`.
+    const role = (readString(record.role) ?? readString(record.type))?.toLowerCase();
     const label = readString(record.label);
     return role === 'alert' && label?.startsWith('Open in ') === true;
   });
+}
+
+/**
+ * Whether iOS is asking to confirm the deep link the open just raised. The open response carries
+ * no tree, so the dialog is read from a snapshot; the caller decides whether that read is setup or
+ * the measured first interaction.
+ */
+function deepLinkConfirmationShown(context: CliContext, opened: CliResult): boolean {
+  if (hasDeepLinkConfirmation(opened.payload)) return true;
+  return hasDeepLinkConfirmation(snapshotFixture(context).payload);
 }
 
 function snapshotNodes(payload: unknown): Record<string, unknown>[] {
