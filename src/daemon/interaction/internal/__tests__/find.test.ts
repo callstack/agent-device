@@ -533,7 +533,6 @@ test('handleFindCommands ambiguous match lists snapshot-line candidates capped a
   expect(response.error.details?.matches).toBe(6);
   const candidates = response.error.details?.candidates;
   expect(Array.isArray(candidates)).toBe(true);
-  expect(candidates).toHaveLength(5);
   expect(candidates).toEqual([
     '@e2 [button] "Follow"',
     '@e3 [button] "Follow"',
