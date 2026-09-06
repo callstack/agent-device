@@ -272,11 +272,7 @@ async function runIosPrivacyCommand(
   appBundleId: string,
 ): Promise<void> {
   const supportedServices = await getSimctlPrivacyServices(device);
-  // reset notifications falls back to `reset all` below (direct reset fails
-  // with "operation not permitted" on runtimes whose help omits the service),
-  // so it passes the probe gate even when the service is unlisted. Grant/deny
-  // for notifications stay loud rejections.
-  if (!supportedServices.has(target) && !(action === 'reset' && target === 'notifications')) {
+  if (!supportedServices.has(target)) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       `iOS simctl privacy does not support service "${target}" on this runtime.`,
@@ -313,9 +309,11 @@ async function runIosPrivacyCommand(
 }
 
 /**
- * Direct `reset notifications` fails with "operation not permitted" on
- * runtimes whose help omits the service, while `reset all` succeeds — so
- * reset goes through the fallback instead of failing loudly like grant/deny.
+ * Direct `reset notifications` can fail with "operation not permitted" even on
+ * runtimes that list the service, while `reset all` succeeds — so reset goes
+ * through the fallback instead of failing loudly like grant/deny. When the
+ * probe omits notifications entirely there is no targeted reset available, and
+ * the gate above fails explicitly rather than clearing unrelated state.
  */
 async function resetIosNotificationsPermission(
   device: DeviceInfo,

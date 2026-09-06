@@ -485,10 +485,10 @@ test('setIosSetting permission reset notifications falls back to reset all when 
   );
 });
 
-test('setIosSetting permission reset notifications falls back to reset all when unlisted in privacy help', async () => {
-  // Runtimes like iOS 26.3 omit notifications from `simctl privacy help`, yet
-  // direct reset fails only with "operation not permitted" while `reset all`
-  // succeeds — so reset bypasses the probe gate into the existing fallback.
+test('setIosSetting permission reset notifications fails explicitly without touching other services', async () => {
+  // Runtimes like iOS 26.3 omit notifications from `simctl privacy help`, where
+  // no targeted reset exists: the probe gate rejects before any privacy call,
+  // so an earlier microphone grant survives the failed reset.
   const device: DeviceInfo = {
     ...IOS_TEST_SIMULATOR,
     simulatorSetPath: '/fake/privacy-help-no-notifications',
@@ -503,19 +503,28 @@ test('setIosSetting permission reset notifications falls back to reset all when 
       if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
       if (args.includes('help')) return HELP_WITHOUT_NOTIFICATIONS;
       const flat = args.join(' ');
-      if (flat.includes('reset notifications com.example.app')) {
-        return { stderr: 'Failed to reset access\nOperation not permitted', exitCode: 1 };
-      }
-      if (flat.includes('reset all com.example.app')) return '';
+      if (flat.includes('grant microphone com.example.app')) return '';
       return unexpectedArgs(args);
     },
     async ({ calls }) => {
-      await setIosSetting(device, 'permission', 'reset', 'com.example.app', {
-        permissionTarget: 'notifications',
+      await setIosSetting(device, 'permission', 'grant', 'com.example.app', {
+        permissionTarget: 'microphone',
       });
+      await assertRejectsAppError(
+        () =>
+          setIosSetting(device, 'permission', 'reset', 'com.example.app', {
+            permissionTarget: 'notifications',
+          }),
+        { code: 'UNSUPPORTED_OPERATION', message: /does not support service "notifications"/i },
+      );
       const flat = calls.map((args) => args.join(' '));
       assert.equal(
         flat.some((line) => line.includes('reset all com.example.app')),
+        false,
+        flat.join('; '),
+      );
+      assert.equal(
+        flat.some((line) => line.includes('grant microphone com.example.app')),
         true,
         flat.join('; '),
       );
