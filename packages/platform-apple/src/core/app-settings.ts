@@ -75,6 +75,18 @@ export async function setIosSetting(
       const result = await clearIosSimulatorAppState(device, appBundleId);
       return { bundleId: result.bundleId, containerPath: result.containerPath, cleared: true };
     }
+    case 'reset-keychain': {
+      if (state.toLowerCase() !== 'clear') {
+        throw new AppError('INVALID_ARGS', 'settings reset-keychain only supports clear.');
+      }
+      await runSimctl(device, ['keychain', device.id, 'reset']);
+      return {
+        scope: 'simulator',
+        cleared: true,
+        message:
+          'Reset the whole iOS simulator keychain. This clears keychain-backed credentials for every installed app, not just the app under test.',
+      };
+    }
     case 'wifi': {
       const enabled = parseSettingState(state);
       const mode = enabled ? 'active' : 'failed';

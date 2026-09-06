@@ -422,6 +422,7 @@ test('settings usage documents canonical faceid states', async () => {
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /location set <lat> <lon>/);
   assert.match(help, /clear-app-state \[app-id\]/);
+  assert.match(help, /reset-keychain clear/);
   assert.match(help, /light\|dark\|toggle/);
   assert.match(help, /match\|nonmatch\|enroll\|unenroll/);
   assert.match(
