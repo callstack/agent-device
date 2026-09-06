@@ -3,7 +3,7 @@ import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
 
 export { readVersion } from '@agent-device/host-kit/version';
 export { readProcessStartTime } from '@agent-device/host-kit/process';
-export { resolveDaemonCodeSignature } from '../code-signature.ts';
+export { resolveDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
 
 export type DaemonLockInfo = {
   pid: number;

@@ -17,7 +17,7 @@ import {
   parameterizeRecordedResultEcho,
   parameterizeTargetEvidenceEcho,
   targetEvidenceCarriesAnyLiteral,
-} from './parameterized-recorded-fill.ts';
+} from '@agent-device/selectors/parameterized-recorded-fill';
 import type { TargetEvidenceMode } from './session-target-evidence.ts';
 
 export type RecordActionEntry = {

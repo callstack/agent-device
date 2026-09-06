@@ -1,14 +1,26 @@
 import { readCommandMessage } from '@agent-device/kernel/success-text';
+import type { CommandProgressState } from './command-progress.ts';
 import type { CliOutput } from './command-contract.ts';
 
-export type CliOutputFormatter = (params: {
+export type CliOutputFormatterParams = {
   input: Record<string, unknown>;
   result: unknown;
-}) => CliOutput | Promise<CliOutput>;
+  /**
+   * Progress already rendered for this run, when the caller renders progress
+   * itself. Absent for a caller that streams progress somewhere the human
+   * reader of this output will not see (MCP, an SDK sink) — and for one that
+   * asked for no progress at all.
+   */
+  progress?: CommandProgressState;
+};
+
+export type CliOutputFormatter = (
+  params: CliOutputFormatterParams,
+) => CliOutput | Promise<CliOutput>;
 
 export function resultOutput<TResult, TOutput extends CliOutput | Promise<CliOutput> = CliOutput>(
   formatter: (result: TResult) => TOutput,
-): (params: { input: Record<string, unknown>; result: unknown }) => TOutput {
+): (params: CliOutputFormatterParams) => TOutput {
   return ({ result }) => formatter(result as TResult);
 }
 

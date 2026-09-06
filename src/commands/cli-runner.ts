@@ -4,12 +4,14 @@ import { readInputFromCli } from './cli-grammar.ts';
 import { runCommand, type CommandName } from './command-surface.ts';
 import type { CliOutput } from './command-contract.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
+import type { CommandProgressState } from './command-progress.ts';
 
 type CliRunOptions = {
   client: AgentDeviceClient;
   command: CommandName;
   positionals: string[];
   flags: CliFlags;
+  commandProgress?: CommandProgressState;
 };
 
 export async function runCliCommand(options: CliRunOptions): Promise<CommandRequestResult> {
@@ -28,6 +30,7 @@ export async function runCliCommandWithOutput(options: CliRunOptions): Promise<{
       name: options.command,
       input,
       result,
+      progress: options.commandProgress,
     }),
   };
 }
