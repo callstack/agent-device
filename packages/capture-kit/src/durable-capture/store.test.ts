@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
+import type { DurableCaptureResourceRecord } from '@agent-device/capture-kit/durable-capture';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createDurableResourceEnvelope } from '../durable-resource-envelope.ts';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
@@ -18,7 +19,8 @@ test('publishes typed resource records atomically with owner-only permissions', 
   );
   store.write(resourcePath, envelope('session'));
 
-  expect(store.read(resourcePath)).toMatchObject({
+  const record: DurableCaptureResourceRecord<'screen-recording'> = store.read(resourcePath);
+  expect(record).toMatchObject({
     status: 'decoded',
     envelope: { resourceKind: 'screen-recording', lifecycle: 'open' },
   });
