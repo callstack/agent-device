@@ -1,3 +1,4 @@
+import { serializeDevice } from '../commands/output/result-serialization.ts';
 import type { CommandName } from '../commands/command-metadata.ts';
 import type { CommandExecutionResult } from '../commands/command-surface.ts';
 
@@ -17,10 +18,9 @@ type NonObjectCommandName = {
 }[NonCollectionCommandName];
 
 const COLLECTION_RESULT_PROJECTORS = {
-  devices: async (devices: CommandExecutionResult<'devices'>) => {
-    const { serializeDevice } = await import('../daemon/result-serialization.ts');
-    return { devices: devices.map(serializeDevice) };
-  },
+  devices: async (devices: CommandExecutionResult<'devices'>) => ({
+    devices: devices.map(serializeDevice),
+  }),
   apps: async (apps: CommandExecutionResult<'apps'>) => ({ apps }),
 } satisfies CollectionResultProjectors & Record<NonObjectCommandName, never>;
 

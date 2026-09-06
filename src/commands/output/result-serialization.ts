@@ -12,6 +12,10 @@ import type {
 import { publicSnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 import { isSerialAddressablePlatform } from '@agent-device/kernel/device';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
+import {
+  resolveDeployResultTarget,
+  resolveInstallFromSourceResultTarget,
+} from '../../core/deploy-result-target.ts';
 
 function serializeSessionDevice(
   device: AgentDeviceSessionDevice,
@@ -86,14 +90,6 @@ export function serializeSnapshotResult(result: CaptureSnapshotResult): Record<s
   };
 }
 
-export function resolveDeployResultTarget(result: {
-  app: string;
-  bundleId?: string;
-  package?: string;
-}): string {
-  return result.bundleId ?? result.package ?? result.app;
-}
-
 export function serializeDeployResult(result: AppDeployResult): Record<string, unknown> {
   return withSuccessText(
     {
@@ -106,15 +102,6 @@ export function serializeDeployResult(result: AppDeployResult): Record<string, u
     },
     `Installed: ${resolveDeployResultTarget(result)}`,
   );
-}
-
-export function resolveInstallFromSourceResultTarget(result: {
-  appName?: string;
-  bundleId?: string;
-  packageName?: string;
-  launchTarget: string;
-}): string {
-  return result.appName ?? result.bundleId ?? result.packageName ?? result.launchTarget;
 }
 
 export function serializeInstallFromSourceResult(
