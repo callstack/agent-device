@@ -49,6 +49,12 @@ type HarnessOptions<Context, BehaviorId extends string> = {
     env: NodeJS.ProcessEnv,
     options?: { timeoutMs?: number },
   ) => Promise<CliJsonResult>;
+  /**
+   * Platform-owned device facts for a failed step (rotation state, system logs), read outside
+   * agent-device so they describe the device even when the CLI path is what failed. Best-effort:
+   * a throw or undefined records nothing.
+   */
+  deviceEvidence?: (context: Context) => Promise<string | undefined>;
   writeCoverageReport: (context: Context) => void;
 };
 
@@ -176,6 +182,7 @@ export function createLiveDeviceHarness<
         `artifacts: ${context.artifactDir}`,
         `screenshot: ${evidence.screenshotPath ?? '(capture failed)'}`,
         `snapshot: ${evidence.snapshotPath ?? '(capture failed)'}`,
+        `device: ${evidence.devicePath ?? '(not collected)'}`,
       ].join('\n');
       fs.writeFileSync(path.join(context.artifactDir, 'failed-step.txt'), message);
       assert.fail(message);
@@ -191,12 +198,22 @@ export function createLiveDeviceHarness<
    */
   async function captureFailedStepEvidence(
     context: Context,
-  ): Promise<{ screenshotPath?: string; snapshotPath?: string }> {
+  ): Promise<{ screenshotPath?: string; snapshotPath?: string; devicePath?: string }> {
     const stem = path.join(context.artifactDir, `failed-step-${context.stepHistory.length}`);
     const screenshotPath = `${stem}.png`;
     const snapshotPath = `${stem}-snapshot.json`;
+    const devicePath = `${stem}-device.txt`;
     const runCli = options.runCli ?? runBuiltCliJson;
-    const evidence: { screenshotPath?: string; snapshotPath?: string } = {};
+    const evidence: { screenshotPath?: string; snapshotPath?: string; devicePath?: string } = {};
+    try {
+      const facts = await options.deviceEvidence?.(context);
+      if (facts !== undefined) {
+        fs.writeFileSync(devicePath, facts);
+        evidence.devicePath = devicePath;
+      }
+    } catch {
+      // evidence only
+    }
     try {
       const screenshot = await runCli(
         options.commonFlags(context, ['screenshot', screenshotPath]),

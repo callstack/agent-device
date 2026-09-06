@@ -1,5 +1,7 @@
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { promisify } from 'node:util';
 
 import {
   createLiveDeviceContext,
@@ -37,9 +39,60 @@ export function createContext(): LiveContext {
   };
 }
 
+const execFileAsync = promisify(execFile);
+
+/**
+ * What the OS says about rotation when a step fails: the two settings `orientation` writes, the
+ * display's current rotation, and every WindowManager rotation decision logcat still holds (with
+ * the reason it gives). Read through adb, not agent-device, so it stands even when the CLI path
+ * is what failed.
+ */
+async function readAndroidRotationEvidence(context: LiveContext): Promise<string> {
+  const probes: readonly [string, string[]][] = [
+    ['accelerometer_rotation', ['shell', 'settings', 'get', 'system', 'accelerometer_rotation']],
+    ['user_rotation', ['shell', 'settings', 'get', 'system', 'user_rotation']],
+    ['display rotation', ['shell', 'dumpsys', 'display']],
+    ['logcat rotation decisions', ['logcat', '-d', '-v', 'time']],
+  ];
+  const sections: string[] = [];
+  for (const [title, args] of probes) {
+    try {
+      const { stdout } = await execFileAsync('adb', ['-s', context.serial, ...args], {
+        maxBuffer: 64 * 1024 * 1024,
+        timeout: 20_000,
+      });
+      sections.push(`## ${title}\n${selectRotationLines(title, stdout)}`);
+    } catch (error) {
+      sections.push(
+        `## ${title}\n(failed: ${error instanceof Error ? error.message : String(error)})`,
+      );
+    }
+  }
+  return `${sections.join('\n\n')}\n`;
+}
+
+function selectRotationLines(title: string, output: string): string {
+  if (title === 'display rotation') {
+    return output
+      .split('\n')
+      .filter((line) => /rotation|orientation/i.test(line))
+      .slice(0, 12)
+      .join('\n');
+  }
+  if (title === 'logcat rotation decisions') {
+    return output
+      .split('\n')
+      .filter((line) => /rotation|orientation/i.test(line) && !/AccessibilityNodeInfo/.test(line))
+      .slice(-60)
+      .join('\n');
+  }
+  return output.trim();
+}
+
 const harness = createLiveDeviceHarness<LiveContext, AndroidEmulatorBehaviorId>({
   behaviorsForScenario: liveBehaviorsForScenario,
   commandsForScenario: liveCommandsForScenario,
+  deviceEvidence: readAndroidRotationEvidence,
   commonFlags: (context, args) => [
     ...args,
     '--platform',
