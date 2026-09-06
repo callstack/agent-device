@@ -120,7 +120,7 @@ async function executeEvalScript(
     );
   }
   const outputEnv = evaluateMaestroEvalScript(command.script, state.context.values);
-  state.context.merge(outputEnv);
+  state.context.replaceOutput(outputEnv);
   state.executed += 1;
   return undefined;
 }
