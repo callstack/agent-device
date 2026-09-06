@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added: `wait` timeout errors carry a per-poll timeline in `error.details` (`captures`,
+  `polls[]` with `startedMs`, `durationMs`, and a typed `outcome`: readable, unreadable, deadline,
+  runner-restart) next to the unchanged `reason`, so a failure says where its budget went without
+  opening the request log. Long waits keep the first five and last twenty-five polls.
 - Fixed: iOS snapshots no longer report `truncated: true` merely because a later backend produced
   them. The runner stamped every recovered capture as truncated — including a complete private-AX
   tree taken while the XCTest channel was penalized as slow — so a strict `is absent` / `wait absent`
