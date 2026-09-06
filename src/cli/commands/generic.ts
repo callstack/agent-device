@@ -17,12 +17,14 @@ export async function runGenericClientBackedCommand({
   client,
   debug,
   replayTestReporterRuntime,
+  commandProgress,
 }: ClientCommandParams & { command: ClientBackedCliCommandName }): Promise<boolean> {
   const { result, cliOutput } = await runCliCommandWithOutput({
     client,
     command: command as CommandName,
     positionals,
     flags,
+    commandProgress,
   });
   // A non-default responseLevel returns a leveled payload (e.g. the snapshot
   // digest { nodeCount, refs }) that the per-command CLI formatters assume away —

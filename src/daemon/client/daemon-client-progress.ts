@@ -1,4 +1,4 @@
-import type { RequestProgressEvent, RequestProgressSink } from '@agent-device/contracts/progress';
+import type { RequestProgressSink } from '@agent-device/contracts/progress';
 // Type-only: importing `node:http` for a value eagerly initializes undici
 // (~9ms in a fresh process), which the default socket transport never needs.
 import type http from 'node:http';
@@ -6,7 +6,6 @@ import type { Socket } from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { consumeTextLines } from '@agent-device/host-kit/transport';
-import { markDoctorProgressRendered } from './doctor-progress.ts';
 import {
   isDaemonProgressEnvelope,
   isDaemonResponseEnvelope,
@@ -18,23 +17,6 @@ type ProgressLineReader = {
 };
 
 type ProgressResponseFormat = 'socket-legacy' | 'ndjson-envelope';
-
-function emitProgressEvent(
-  event: RequestProgressEvent,
-  options: {
-    req: DaemonRequest;
-    onProgress?: RequestProgressSink;
-  },
-): void {
-  if (options.onProgress) {
-    options.onProgress(event);
-    return;
-  }
-  if (event.type === 'command') {
-    if (options.req.command === 'doctor') markDoctorProgressRendered();
-    process.stderr.write(`${event.message}\n`);
-  }
-}
 
 function createInvalidDaemonResponseError(
   req: DaemonRequest,
@@ -75,10 +57,7 @@ function createProgressLineReader(options: {
 
       if (isDaemonProgressEnvelope(message)) {
         try {
-          emitProgressEvent(message.event, {
-            req: options.req,
-            onProgress: options.onProgress,
-          });
+          options.onProgress?.(message.event);
           return false;
         } catch (error) {
           return finishWithError(error);
