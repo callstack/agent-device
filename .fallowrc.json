@@ -92,6 +92,15 @@
       "exports": ["buildAppNotInstalledError"]
     },
     {
+      "comment": "Runner operations reach the daemon only through the memoized loader in src/platform-runtime-apple-application-tools.ts (one dynamic import per specifier, #2314). Fallow cannot connect a member read off that loader's promise to these re-exports; keep the list to the facade members no static import consumes.",
+      "file": "packages/platform-apple/src/runner-operations-facade.ts",
+      "exports": [
+        "detachIosSimulatorRunnerSessionsForShutdown",
+        "hasLiveIosRunnerSession",
+        "stopAllIosRunnerSessions"
+      ]
+    },
+    {
       "comment": "Apple install mechanics are reached through the named install-artifact façade. Fallow cannot connect workspace package exports to these source exports; keep this list limited to the actual facade re-exports.",
       "file": "packages/platform-apple/src/core/install-artifact.ts",
       "exports": ["prepareIosInstallArtifact", "readIosBundleInfo"]

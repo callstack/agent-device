@@ -29,20 +29,22 @@ export function resolvePlannedRuntimeOperations(
 ): readonly PlannedRuntimeOperation[] | undefined {
   const operations = new Set<PlannedRuntimeOperation>();
   for (const step of steps) {
-    const descriptor = descriptorsByName.get(step.command);
-    if (!descriptor) return undefined;
-    const execution = descriptor.platformExecution;
-    if (execution.kind !== 'device-runtime') continue;
-    const uses =
-      'uses' in execution ? (execution.selectUses?.(step) ?? execution.uses) : [execution.use];
-    for (const use of uses) {
-      for (const operation of use.required) {
-        // `defineUse` admits only operation keys, so an unknown name means the vocabulary list
-        // and the operations union drifted; treat the plan as unproven rather than guess.
-        if (!isRuntimeOperationName(operation)) return undefined;
-        operations.add(operation);
-      }
-    }
+    const required = requiredOperationsOf(step);
+    if (required === undefined) return undefined;
+    for (const operation of required) operations.add(operation);
   }
   return Object.freeze([...operations].sort());
+}
+
+/** One step's required operations, or `undefined` when the step cannot be planned honestly. */
+function requiredOperationsOf(step: PlannedStep): readonly PlannedRuntimeOperation[] | undefined {
+  const execution = descriptorsByName.get(step.command)?.platformExecution;
+  if (execution === undefined) return undefined;
+  if (execution.kind !== 'device-runtime') return [];
+  const uses =
+    'uses' in execution ? (execution.selectUses?.(step) ?? execution.uses) : [execution.use];
+  const required = uses.flatMap((use) => use.required);
+  // `defineUse` admits only operation keys, so an unknown name means the vocabulary list and the
+  // operations union drifted; treat the plan as unproven rather than guess.
+  return required.every(isRuntimeOperationName) ? required : undefined;
 }
