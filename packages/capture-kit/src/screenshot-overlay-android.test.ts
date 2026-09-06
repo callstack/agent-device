@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
+import { makeSnapshotState } from './snapshot-state.fixtures.ts';
 import {
   isAndroidUnlabeledClickableSource,
   resolveAndroidOverlaySourceRect,
-} from '../screenshot-overlay/android.ts';
+} from './screenshot-overlay-android.ts';
 
 const SCREEN = { x: 0, y: 0, width: 1080, height: 1920 };
 

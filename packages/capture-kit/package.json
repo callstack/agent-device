@@ -26,13 +26,13 @@
       "types": "./src/ios-snapshot-acquisition.ts",
       "default": "./src/ios-snapshot-acquisition.ts"
     },
-    "./ios-snapshot-planning": {
-      "types": "./src/ios-snapshot-planning.ts",
-      "default": "./src/ios-snapshot-planning.ts"
-    },
     "./ios-snapshot-engine": {
       "types": "./src/ios-snapshot-engine/index.ts",
       "default": "./src/ios-snapshot-engine/index.ts"
+    },
+    "./ios-snapshot-planning": {
+      "types": "./src/ios-snapshot-planning.ts",
+      "default": "./src/ios-snapshot-planning.ts"
     },
     "./mobile-snapshot-semantics": {
       "types": "./src/mobile-snapshot-semantics.ts",
@@ -62,6 +62,10 @@
       "types": "./src/png-worker-client.ts",
       "default": "./src/png-worker-client.ts"
     },
+    "./react-native-overlay": {
+      "types": "./src/react-native-overlay.ts",
+      "default": "./src/react-native-overlay.ts"
+    },
     "./screenshot-density": {
       "types": "./src/screenshot-density.ts",
       "default": "./src/screenshot-density.ts"
@@ -69,6 +73,10 @@
     "./screenshot-diff-pixels": {
       "types": "./src/screenshot-diff-pixels.ts",
       "default": "./src/screenshot-diff-pixels.ts"
+    },
+    "./screenshot-overlay": {
+      "types": "./src/screenshot-overlay.ts",
+      "default": "./src/screenshot-overlay.ts"
     },
     "./snapshot-desktop-projection": {
       "types": "./src/snapshot-desktop-projection.ts",
