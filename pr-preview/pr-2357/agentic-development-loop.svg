@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="800" viewBox="0 0 1500 800" role="img" aria-labelledby="title desc">
+  <title id="title">agent-device in the agentic development loop</title>
+  <desc id="desc">A sketch-style diagram showing humans giving tasks to agents, agents writing and reviewing code, agent-device verifying the app live on mobile devices, evidence flowing into pull requests, and bugs or performance issues feeding back into the fix loop.</desc>
+  <defs>
+    <marker id="arrow-blue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2 2 L10 6 L2 10" fill="none" stroke="#1476bf" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2 2 L10 6 L2 10" fill="none" stroke="#24903a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arrow-black" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2 2 L10 6 L2 10" fill="none" stroke="#222" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      .hand {
+        font-family: "Comic Sans MS", "Segoe Print", "Bradley Hand", cursive;
+        font-weight: 700;
+        letter-spacing: .2px;
+      }
+      .blue { stroke: #1476bf; fill: none; }
+      .blue-fill { stroke: #50b7f5; fill: #fff; }
+      .green { stroke: #24903a; fill: none; }
+      .green-fill { stroke: #24903a; fill: #fff; }
+      .black { stroke: #222; fill: none; }
+      .light-blue-text { fill: #54afe8; }
+      .blue-text { fill: #1476bf; }
+      .green-text { fill: #24903a; }
+      .black-text { fill: #222; }
+    </style>
+  </defs>
+
+  <rect width="1500" height="720" fill="#fff"/>
+
+  <text x="38" y="48" class="hand blue-text" font-size="42">agents</text>
+  <path class="blue" d="M28 84 C40 61 62 62 86 63 L920 63 C945 64 956 73 959 95 L959 637 C956 654 946 659 922 660 L44 660 C23 660 14 648 14 626 L14 98 C15 88 20 82 28 84 Z" stroke-width="3.5" stroke-dasharray="12 12" stroke-linecap="round"/>
+
+  <text x="1015" y="48" class="hand green-text" font-size="42">humans</text>
+  <path class="green" d="M994 84 C1006 63 1025 63 1050 63 L1316 63 C1342 63 1353 74 1354 98 L1354 630 C1352 651 1340 658 1315 658 L1012 658 C993 657 985 647 985 627 L985 102 C986 91 989 84 994 84 Z" stroke-width="3.5" stroke-dasharray="12 12" stroke-linecap="round"/>
+
+  <rect x="392" y="98" width="314" height="150" rx="24" class="blue" stroke-width="4"/>
+  <text x="423" y="154" class="hand blue-text" font-size="34">write code with</text>
+  <text x="462" y="203" class="hand blue-text" font-size="34">/goal /loop</text>
+
+  <rect x="716" y="294" width="241" height="155" rx="21" class="blue" stroke-width="4"/>
+  <text x="742" y="383" class="hand blue-text" font-size="34">review code</text>
+
+  <rect x="362" y="492" width="420" height="155" rx="20" class="blue-fill" stroke-width="4"/>
+  <text x="392" y="547" class="hand light-blue-text" font-size="32">verify app end-to-end</text>
+  <text x="416" y="594" class="hand light-blue-text" font-size="32">live on devices</text>
+  <text x="472" y="633" class="hand light-blue-text" font-size="28">(local/cloud)</text>
+
+  <rect x="31" y="272" width="355" height="198" rx="26" class="blue-fill" stroke-width="4"/>
+  <text x="53" y="342" class="hand light-blue-text" font-size="32">fix bugs, crashes,</text>
+  <text x="53" y="390" class="hand light-blue-text" font-size="32">performance issues</text>
+
+  <rect x="1014" y="96" width="303" height="112" rx="18" class="green-fill" stroke-width="4"/>
+  <text x="1044" y="148" class="hand green-text" font-size="32">task, AC, grill</text>
+  <text x="1100" y="190" class="hand green-text" font-size="32">session</text>
+
+  <rect x="1015" y="298" width="143" height="116" rx="15" class="green-fill" stroke-width="4"/>
+  <text x="1031" y="344" class="hand green-text" font-size="32">human</text>
+  <text x="1036" y="388" class="hand green-text" font-size="32">review</text>
+
+  <rect x="1176" y="298" width="142" height="116" rx="15" class="blue-fill" stroke-width="4"/>
+  <text x="1201" y="343" class="hand light-blue-text" font-size="32">agentic</text>
+  <text x="1220" y="389" class="hand light-blue-text" font-size="32">QA</text>
+
+  <rect x="1026" y="486" width="289" height="153" rx="18" class="blue-fill" stroke-width="4"/>
+  <text x="1068" y="537" class="hand light-blue-text" font-size="31">PR with</text>
+  <text x="1054" y="581" class="hand light-blue-text" font-size="31">screenshots,</text>
+  <text x="1060" y="623" class="hand light-blue-text" font-size="31">videos, traces</text>
+
+  <path d="M210 266 C210 213 236 174 390 174" class="blue" stroke-width="4" marker-end="url(#arrow-blue)" stroke-linecap="round"/>
+  <path d="M708 175 C816 174 830 192 830 292" class="blue" stroke-width="4" marker-end="url(#arrow-blue)" stroke-linecap="round"/>
+  <path d="M835 450 C835 531 800 560 786 560" class="blue" stroke-width="4" marker-end="url(#arrow-blue)" stroke-linecap="round"/>
+  <path d="M363 592 C270 593 213 556 213 476" class="blue" stroke-width="4" marker-end="url(#arrow-blue)" stroke-linecap="round"/>
+  <path d="M210 273 C210 235 210 213 390 174" class="blue" stroke-width="1.5" opacity=".35"/>
+
+  <path d="M714 172 C830 75 882 86 1007 106" class="green" stroke-width="4" marker-end="url(#arrow-green)" stroke-linecap="round"/>
+  <path d="M1016 148 C906 88 797 103 712 169" class="green" stroke-width="3" marker-end="url(#arrow-green)" stroke-linecap="round"/>
+  <path d="M782 589 C873 604 915 574 1024 548" class="blue" stroke-width="4" marker-end="url(#arrow-blue)" stroke-linecap="round"/>
+  <path d="M1086 486 L1086 419" class="black" stroke-width="4" marker-end="url(#arrow-black)" stroke-linecap="round"/>
+  <path d="M1247 486 L1247 419" class="black" stroke-width="4" marker-end="url(#arrow-black)" stroke-linecap="round"/>
+  <path d="M1086 298 L1086 215" class="green" stroke-width="4" marker-end="url(#arrow-green)" stroke-linecap="round"/>
+  <path d="M1247 298 L1247 215" class="black" stroke-width="4" marker-end="url(#arrow-black)" stroke-linecap="round"/>
+  <path d="M1364 151 L1324 151" class="black" stroke-width="4" marker-end="url(#arrow-black)" stroke-linecap="round"/>
+  <text x="1369" y="162" class="hand black-text" font-size="30">input</text>
+  <path d="M1318 372 L1390 372" class="black" stroke-width="4" marker-end="url(#arrow-black)" stroke-linecap="round"/>
+  <text x="1400" y="384" class="hand black-text" font-size="34">ship</text>
+
+  <g transform="translate(20 686)">
+    <rect x="0" y="0" width="28" height="24" rx="4" class="blue" stroke-width="3"/>
+    <text x="45" y="21" class="hand black-text" font-size="20">agent (Claude, Codex, Cursor, ...)</text>
+    <rect x="0" y="36" width="28" height="24" rx="4" class="blue-fill" stroke-width="3"/>
+    <text x="45" y="57" class="hand black-text" font-size="20">agent + agent-device</text>
+    <rect x="0" y="72" width="28" height="24" rx="4" class="green-fill" stroke-width="3"/>
+    <text x="45" y="93" class="hand black-text" font-size="20">human (with agent)</text>
+  </g>
+
+  <text x="828" y="707" class="hand black-text" font-size="34">mostly automated app development</text>
+</svg>
