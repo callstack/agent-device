@@ -149,6 +149,12 @@ jobs:
         run: |
           XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"
           test -n "$XCTESTRUN_PATH"
+          # The preparation flag is process-scoped; isolate this ordering test
+          # from other tests that may already have synthesized input.
+          xcodebuild test-without-building \
+            -xctestrun "$XCTESTRUN_PATH" \
+            -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.simulator-udid }}" \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedInputPreparationDoesNotDeliverContactsAndOrdersMixedRoutes
           xcodebuild test-without-building \
             -xctestrun "$XCTESTRUN_PATH" \
             -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.simulator-udid }}" \

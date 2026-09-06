@@ -143,6 +143,7 @@ jobs:
             -xctestrun "$XCTESTRUN_PATH" \
             -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.simulator-udid }}" \
             -skip-testing:AgentDeviceRunnerUITests/RunnerTests/testCommand \
+            -skip-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedInputPreparationDoesNotDeliverContactsAndOrdersMixedRoutes \
             -resultBundlePath "$RESULT_BUNDLE_PATH"
 
       # Best-effort and never the job's verdict on its own; the step below is what asserts.
