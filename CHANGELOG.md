@@ -6,7 +6,8 @@
   after a readable capture) carry a per-poll timeline in `error.details` (`captures`, `polls[]`
   with `startedMs`, `durationMs`, and a typed `outcome`: readable, unreadable, deadline,
   runner-restart) next to the unchanged `reason`, so a failure says where its budget went without
-  opening the request log. Long waits keep the first five and last twenty-five polls. `wait
+  opening the request log. Long waits keep the first five and last twenty-five polls. The replay
+  landmark-mismatch refusal carries the same poll evidence next to its mismatch details; `wait
   --stable` timeouts and a never-readable strict absence keep their existing diagnostics.
 - Fixed: the iOS Simulator AX snapshot route bounds how long a capture waits for app discovery
   and stops starting a discovery per capture. Discovery (`simctl launchctl list` through xcrun)
