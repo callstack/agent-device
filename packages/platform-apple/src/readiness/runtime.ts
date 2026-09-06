@@ -1,6 +1,7 @@
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { delegateManagedDeviceReadiness } from '@agent-device/provision-kit/managed-device-scope';
 import { getSimulatorState, simctlArgs } from '../simulator-state.ts';
 
 /** Readiness reads exactly these host ports; the lifecycle binding composes the same subset. */
@@ -27,6 +28,7 @@ export async function ensureAppleReady(
   options: AppleReadinessOptions = {},
 ): Promise<DeviceInfo> {
   signal.throwIfAborted();
+  if (await delegateManagedDeviceReadiness(device)) return { ...device, booted: true };
   if (isMacOs(device)) return { ...device, booted: true };
   if (device.kind === 'device') {
     await host.deviceReadiness.applePhysical.ensureConnected(device, signal);

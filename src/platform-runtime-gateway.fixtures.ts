@@ -8,8 +8,8 @@ import {
 import {
   type DeviceBinding,
   type DeviceBindingRequest,
+  type ResourceOwnershipFence,
   type RuntimeFacts,
-  type RuntimeOperationKey,
   type RuntimeOwnerRef,
   type RuntimeProviderMode,
   localRuntimeOwner,
@@ -50,6 +50,23 @@ export const gatewayFixtureScope: PlatformRequestScope = {
   progress: { report: () => {} },
 };
 
+export function managedGatewayScope(
+  device: DeviceInfo,
+  owner: Extract<RuntimeOwnerRef, { kind: 'managed-local' }>,
+  fence: ResourceOwnershipFence,
+): PlatformRequestScope {
+  return {
+    ...gatewayFixtureScope,
+    managedDevice: {
+      device,
+      owner,
+      fence,
+      admit: async (task) => await task(),
+      run: async (task) => await task(),
+    },
+  };
+}
+
 export const LIFECYCLE_FACETS = [
   ['openTarget', ['resolveOpenTarget', 'prepareApplicationOpen', 'openApplication']],
   ['prepareAppleRunner', ['prepareAppleRunner']],
@@ -68,42 +85,7 @@ export function gatewayFixture(registrations: readonly PlatformRuntimeProviderRe
   });
 }
 
-/**
- * Every cell a managed local owner must withhold, listed once so the local family fixture can
- * offer all of them and the managed tests can assert that none survives the wrapper.
- */
-export const MANAGED_WITHHELD_OPERATIONS = [
-  'ensureReady',
-  'bootTarget',
-  'bootTargetHeadless',
-  'shutdownTarget',
-  'deployApp',
-  'deployMaterializedApp',
-  'prepareApplicationOpen',
-  'prepareAppleRunner',
-  'closeApplication',
-  'finalizeApplicationClose',
-  'appLogStart',
-  'appLogReattach',
-  'appLogCleanup',
-  'screenRecordingStart',
-  'screenRecordingReattach',
-  'screenRecordingCleanup',
-  'audioProbeStart',
-  'audioProbeReattach',
-  'audioProbeCleanup',
-  'perfNativeCaptureStart',
-  'perfNativeCaptureReattach',
-  'perfNativeCaptureCleanup',
-  'captureScreenshot',
-  'setSetting',
-  'readClipboard',
-  'writeClipboard',
-  'openApplication',
-] as const satisfies readonly RuntimeOperationKey<PlatformRuntimeOperations>[];
-
-/** The one cell the family owner offers that a managed binding keeps. */
-export const MANAGED_RETAINED_OPERATION = 'tapPoint';
+export const REVIEWED_MANAGED_OPERATION = 'setSetting';
 
 export type LocalFamilyRuntimeFixture = Readonly<{
   module: PlatformRuntimeModule;
@@ -112,10 +94,6 @@ export type LocalFamilyRuntimeFixture = Readonly<{
   calls: { loads: number; disposals: number };
 }>;
 
-/**
- * A local family owner that offers every withheld cell plus one retained cell, and that refuses a
- * foreign exact-owner intent the way the real family runtimes do.
- */
 export function localFamilyRuntimeFixture(options: {
   family: Platform;
   device: DeviceInfo;
@@ -128,7 +106,7 @@ export function localFamilyRuntimeFixture(options: {
   const available = Object.freeze({ available: true } as const);
   const offered: Record<string, unknown> = {};
   const operations: Record<string, unknown> = {};
-  for (const key of [...MANAGED_WITHHELD_OPERATIONS, MANAGED_RETAINED_OPERATION]) {
+  for (const key of Object.keys(base.operations)) {
     offered[key] = available;
     operations[key] = async () => undefined;
   }

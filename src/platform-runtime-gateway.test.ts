@@ -32,7 +32,8 @@ import {
   LIFECYCLE_FACETS,
   limrunTestDependencies,
   localFamilyRuntimeFixture,
-  MANAGED_RETAINED_OPERATION,
+  REVIEWED_MANAGED_OPERATION,
+  managedGatewayScope,
   providerLifecycleOwnerFixture as providerLifecycleOwner,
   providerRuntimeFixture as providerRuntime,
   runtimeOwnerFixture as runtimeOwner,
@@ -631,6 +632,7 @@ describe('managed local owner registration', () => {
     requestGeneration: 1,
     identityIncarnationId: 'incarnation-a',
   });
+  const managedScope = managedGatewayScope(device, managed, fence);
   const exactly = (owner = managed): DeviceBindingIntent => ({
     kind: 'exact-owner',
     owner,
@@ -650,7 +652,7 @@ describe('managed local owner registration', () => {
   test('binds an exact managed owner through the local family owner under an ordinary intent', async () => {
     const { family, runtimeGateway } = managedGateway();
 
-    const binding = await runtimeGateway.bind({ device, intent: exactly(), scope });
+    const binding = await runtimeGateway.bind({ device, intent: exactly(), scope: managedScope });
 
     expect(binding.owner).toEqual(managed);
     expect(family.requests[0]?.intent).toEqual({ kind: 'ordinary' });
@@ -658,7 +660,7 @@ describe('managed local owner registration', () => {
       available: false,
       reason: 'owner-capability-missing',
     });
-    expect(binding.facts.operations[MANAGED_RETAINED_OPERATION]).toEqual({ available: true });
+    expect(binding.facts.operations[REVIEWED_MANAGED_OPERATION]).toEqual({ available: true });
   });
 
   test('leaves ordinary selection on the local family owner while a managed owner is registered', async () => {
@@ -691,7 +693,7 @@ describe('managed local owner registration', () => {
   test('accepts a managed binding whose local facts report a transport-composed device', async () => {
     const { runtimeGateway } = managedGateway('transport-composed');
 
-    const binding = await runtimeGateway.bind({ device, intent: exactly(), scope });
+    const binding = await runtimeGateway.bind({ device, intent: exactly(), scope: managedScope });
 
     expect(binding.owner).toEqual(managed);
     expect(binding.facts.device.providerMode).toBe('transport-composed');
@@ -702,8 +704,8 @@ describe('managed local owner registration', () => {
   test('reuses one managed owner per registered instance and refuses unregistered ones', async () => {
     const { family, runtimeGateway } = managedGateway();
 
-    const first = await runtimeGateway.bind({ device, intent: exactly(), scope });
-    const second = await runtimeGateway.bind({ device, intent: exactly(), scope });
+    const first = await runtimeGateway.bind({ device, intent: exactly(), scope: managedScope });
+    const second = await runtimeGateway.bind({ device, intent: exactly(), scope: managedScope });
 
     expect(second.owner).toEqual(first.owner);
     expect(family.calls.loads).toBe(1);

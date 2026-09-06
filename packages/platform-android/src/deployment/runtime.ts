@@ -4,18 +4,21 @@ import type {
   AppDeploymentRuntimeOperations,
   DeployMaterializedAppInput,
   MaterializeAppSourceInput,
+  MaterializedAppSource,
   PushNotificationInput,
 } from '@agent-device/contracts/app-deployment-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { currentManagedDeviceScope } from '@agent-device/provision-kit/managed-device-scope';
 import { ensureAndroidReady } from '../readiness/runtime.ts';
 import {
   inferAndroidAppName,
   installAndroidArtifact,
   pushAndroidNotification,
   uninstallAndroidPackage,
+  assertManagedAndroidInstallablePath,
 } from './native.ts';
 
 const available = Object.freeze({ available: true } as const);
@@ -66,20 +69,28 @@ async function deployAndroidApp(
     // cache boundary here in the Android deployment owner: clear before boot/resolve/uninstall
     // and after materialization/install, including partial failures.
     return await host.androidDeployment.withInvalidatedAppResolutionCache(device, async () => {
-      if (device.booted !== true) {
-        await ensureAndroidReady(host, device, { headless: false }, signal);
-      }
-      const packageName = await host.androidDeployment.resolveAppPackage(device, input.app);
-      await uninstallAndroidPackage(host, device, packageName, signal);
-      const artifact = await host.androidDeployment.prepareArtifact(
-        { source: { kind: 'path', path: input.appPath } },
-        { resolveIdentity: false, signal },
-      );
+      let artifact: MaterializedAppSource | undefined;
       try {
+        if (currentManagedDeviceScope()) {
+          artifact = await host.androidDeployment.prepareArtifact(
+            { source: { kind: 'path', path: input.appPath } },
+            { resolveIdentity: false, signal },
+          );
+          assertManagedAndroidInstallablePath(artifact.installablePath);
+        }
+        if (device.booted !== true) {
+          await ensureAndroidReady(host, device, { headless: false }, signal);
+        }
+        const packageName = await host.androidDeployment.resolveAppPackage(device, input.app);
+        await uninstallAndroidPackage(host, device, packageName, signal);
+        artifact ??= await host.androidDeployment.prepareArtifact(
+          { source: { kind: 'path', path: input.appPath } },
+          { resolveIdentity: false, signal },
+        );
         await installAndroidArtifact(host, device, artifact.installablePath, undefined, signal);
         return { packageName, launchTarget: packageName };
       } finally {
-        await artifact.cleanup();
+        await artifact?.cleanup();
       }
     });
   }
@@ -87,15 +98,22 @@ async function deployAndroidApp(
   // Existing install semantics wait for a selected Android target before taking the
   // before-install package inventory. Keep that platform rule here, rather than
   // reviving a daemon readiness adapter.
-  if (device.booted !== true) {
-    await ensureAndroidReady(host, device, { headless: false }, signal);
-  }
-
-  const artifact = await host.androidDeployment.prepareArtifact(
-    { source: { kind: 'path', path: input.appPath } },
-    { resolveIdentity: true, signal },
-  );
+  let artifact: MaterializedAppSource | undefined;
   try {
+    if (currentManagedDeviceScope()) {
+      artifact = await host.androidDeployment.prepareArtifact(
+        { source: { kind: 'path', path: input.appPath } },
+        { resolveIdentity: true, signal },
+      );
+      assertManagedAndroidInstallablePath(artifact.installablePath);
+    }
+    if (device.booted !== true) {
+      await ensureAndroidReady(host, device, { headless: false }, signal);
+    }
+    artifact ??= await host.androidDeployment.prepareArtifact(
+      { source: { kind: 'path', path: input.appPath } },
+      { resolveIdentity: true, signal },
+    );
     const packageName = await installAndroidArtifact(
       host,
       device,
@@ -113,7 +131,7 @@ async function deployAndroidApp(
       launchTarget: packageName,
     };
   } finally {
-    await artifact.cleanup();
+    await artifact?.cleanup();
   }
 }
 

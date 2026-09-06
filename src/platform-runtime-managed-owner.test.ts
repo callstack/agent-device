@@ -20,10 +20,10 @@ import { describe, expect, test } from 'vitest';
 import { createManagedLocalRuntimeOwner } from './platform-runtime-managed-owner.ts';
 import {
   gatewayFixtureDevice as device,
-  gatewayFixtureScope as scope,
+  gatewayFixtureScope as ordinaryScope,
+  managedGatewayScope,
   localFamilyRuntimeFixture,
-  MANAGED_RETAINED_OPERATION,
-  MANAGED_WITHHELD_OPERATIONS,
+  REVIEWED_MANAGED_OPERATION,
 } from './platform-runtime-gateway.fixtures.ts';
 
 const managed = managedLocalRuntimeOwner('sim-a');
@@ -32,6 +32,8 @@ const fence = managedBindingFence({
   requestGeneration: 1,
   identityIncarnationId: 'incarnation-a',
 });
+
+const scope = managedGatewayScope(device, managed, fence);
 
 function exactly(
   owner: RuntimeOwnerRef = managed,
@@ -59,22 +61,90 @@ function thrownBy(run: () => unknown): unknown {
 }
 
 describe('managed local runtime owner', () => {
-  test('withholds every lifecycle-bearing and durable capture cell and keeps the rest', async () => {
+  test('dispatches the real operation inside admission before authority can be fenced', async () => {
+    const events: string[] = [];
+    const cancellation = new AbortController();
+    let cancelOnAdmission = false;
+    const family = localFamilyRuntimeFixture({ family: 'apple', device });
+    const local = await family.module.loadRuntime({} as PlatformRuntimeHost);
+    const owner = createManagedLocalRuntimeOwner({
+      owner: managed,
+      loadLocal: async () => ({
+        ...local,
+        bind: async (request) => {
+          const binding = await local.bind(request);
+          return {
+            ...binding,
+            operations: {
+              ...binding.operations,
+              readClipboard: async () => {
+                events.push('native');
+                expect(events.at(-2)).toBe('admitted');
+                return 'clipboard';
+              },
+            },
+          };
+        },
+      }),
+    });
+    const binding = await owner.bind({
+      device,
+      intent: exactly(),
+      scope: {
+        ...scope,
+        signal: cancellation.signal,
+        managedDevice: {
+          ...scope.managedDevice!,
+          admit: async (task) => {
+            events.push('admitted');
+            if (cancelOnAdmission) cancellation.abort(new Error('cancelled during admission'));
+            try {
+              return await task();
+            } finally {
+              events.push('fenced');
+            }
+          },
+        },
+      },
+    });
+    expect(await binding.operations.readClipboard!({})).toBe('clipboard');
+    cancelOnAdmission = true;
+    await expect(binding.operations.readClipboard!({})).rejects.toThrow(
+      'cancelled during admission',
+    );
+    await binding[Symbol.asyncDispose]();
+    expect(events).toEqual(['admitted', 'native', 'fenced', 'admitted', 'fenced']);
+    expect(family.calls.disposals).toBe(1);
+  });
+
+  test('exposes only reviewed operations even when the local family offers every cell', async () => {
     const { owner } = managedOwnerFixture();
 
     const binding = await owner.bind({ device, intent: exactly(), scope });
 
-    // A cell dropped from this list would silently stop being covered by the assertions below.
-    expect(MANAGED_WITHHELD_OPERATIONS).toHaveLength(27);
-    for (const key of MANAGED_WITHHELD_OPERATIONS) {
+    const enabled = [
+      'ensureReady',
+      'deployApp',
+      'materializeAppSource',
+      'deployMaterializedApp',
+      'sendPushNotification',
+      'setSetting',
+      'readClipboard',
+      'writeClipboard',
+    ];
+    expect(Object.keys(binding.operations).sort()).toEqual(enabled.sort());
+    for (const key of Object.keys(binding.facts.operations) as Array<
+      keyof typeof binding.facts.operations
+    >) {
+      if (enabled.includes(key)) continue;
       expect(binding.facts.operations[key]).toMatchObject({
         available: false,
         reason: 'owner-capability-missing',
       });
       expect(binding.operations[key]).toBeUndefined();
     }
-    expect(binding.facts.operations[MANAGED_RETAINED_OPERATION]).toEqual({ available: true });
-    expect(binding.operations[MANAGED_RETAINED_OPERATION]).toBeTypeOf('function');
+    expect(binding.facts.operations[REVIEWED_MANAGED_OPERATION]).toEqual({ available: true });
+    expect(binding.operations[REVIEWED_MANAGED_OPERATION]).toBeTypeOf('function');
   });
 
   // The exclusion covers binding cells; request-runtime binding owns the separate pre-binding
@@ -91,8 +161,7 @@ describe('managed local runtime owner', () => {
     expect(thrownBy(() => narrowDeviceBinding(binding, appStateUse))).toMatchObject(refused);
     expect(thrownBy(() => narrowDeviceBinding(binding, bootTargetUse))).toMatchObject(refused);
     expect(thrownBy(() => narrowDeviceBinding(binding, shutdownTargetUse))).toMatchObject(refused);
-    // `deployAppUse` requires `deployApp` alone, so only the cell itself can refuse `install`.
-    expect(thrownBy(() => narrowDeviceBinding(binding, deployAppUse))).toMatchObject(refused);
+    expect(narrowDeviceBinding(binding, deployAppUse).owner).toEqual(managed);
   });
 
   test('rewrites the owner, delegates under an ordinary intent, and forwards disposal', async () => {
@@ -128,19 +197,22 @@ describe('managed local runtime owner', () => {
     expect(family.requests).toEqual([]);
   });
 
-  test('does not read the fence: what a managed fence proves belongs to the claim gate', async () => {
+  test('compares the opaque fence exactly while its meaning stays with the claim gate', async () => {
     const { owner } = managedOwnerFixture();
 
     const binding = await owner.bind({
       device,
       intent: exactly(managed, { token: 'an-opaque-capture-token', generation: 7 }),
-      scope,
+      scope: managedGatewayScope(device, managed, {
+        token: 'an-opaque-capture-token',
+        generation: 7,
+      }),
     });
 
     expect(binding.owner).toEqual(managed);
   });
 
-  test('never claims a device and projects the same withholding onto inspected facts', async () => {
+  test('never claims a device and leaves unbound inspection entirely unavailable', async () => {
     const { owner } = managedOwnerFixture();
 
     expect(owner.ownsDevice(device)).toBe(false);
@@ -149,7 +221,7 @@ describe('managed local runtime owner', () => {
       available: false,
       reason: 'owner-capability-missing',
     });
-    expect(facts.operations[MANAGED_RETAINED_OPERATION]).toEqual({ available: true });
+    expect(facts.operations[REVIEWED_MANAGED_OPERATION].available).toBe(false);
   });
 
   test('reports the family owner provider mode it was given, unlaundered', async () => {
@@ -158,5 +230,20 @@ describe('managed local runtime owner', () => {
     const binding = await owner.bind({ device, intent: exactly(), scope });
 
     expect(binding.facts.device.providerMode).toBe('transport-composed');
+  });
+
+  test('refuses absent or mismatched managed authority before loading local mechanics', async () => {
+    const { family, owner } = managedOwnerFixture();
+    for (const candidate of [
+      ordinaryScope,
+      managedGatewayScope({ ...device, simulatorSetPath: '/foreign' }, managed, fence),
+      managedGatewayScope(device, managedLocalRuntimeOwner('foreign'), fence),
+      managedGatewayScope(device, managed, { ...fence, generation: 2 }),
+    ]) {
+      await expect(
+        owner.bind({ device, intent: exactly(), scope: candidate }),
+      ).rejects.toBeDefined();
+    }
+    expect(family.calls.loads).toBe(0);
   });
 });

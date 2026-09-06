@@ -8,6 +8,7 @@ export type AndroidReadinessHost = Pick<
 >;
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { delegateManagedDeviceReadiness } from '@agent-device/provision-kit/managed-device-scope';
 
 const BOOT_TIMEOUT_MS = 120_000;
 const POLL_MS = 1_000;
@@ -19,6 +20,7 @@ export async function ensureAndroidReady(
   signal: AbortSignal,
 ): Promise<DeviceInfo> {
   signal.throwIfAborted();
+  if (await delegateManagedDeviceReadiness(device)) return { ...device, booted: true };
   if (device.kind === 'emulator' && (device.booted !== true || !isRunningEmulator(device))) {
     return await ensureEmulatorReady(host, device, input, signal);
   }
