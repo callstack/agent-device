@@ -18,12 +18,12 @@ import type {
   AdReplayVerificationEntry,
 } from '@agent-device/ad-replay';
 import {
-  createReplayDivergenceSanitizer,
   type ReplayDivergence,
   type ReplayDivergenceTargetBindingKind,
   type ReplayDivergenceTargetCandidate,
   type ReplayDivergenceTargetIdentity,
 } from '@agent-device/contracts/divergence';
+import { createReplayDivergenceSanitizer } from '../../../core/replay-divergence.ts';
 import {
   REPLAY_TARGET_GUARD_MISMATCH_REASON,
   WAIT_LANDMARK_MISMATCH_REASON,

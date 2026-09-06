@@ -14,7 +14,7 @@ import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
 import { SessionStore } from '../../../session-store.ts';
 import type { DaemonResponse } from '../../../daemon-request.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { formatReplayDivergenceReport } from '@agent-device/contracts/divergence';
+import { formatReplayDivergenceReport } from '../../../../core/replay-divergence.ts';
 import { maestroScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
