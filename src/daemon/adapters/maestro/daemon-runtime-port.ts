@@ -120,6 +120,10 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       const appId = input.appId ?? context.appId;
       await invokeMutation({ kind: 'stopApp', ...(appId ? { appId } : {}) }, context);
     },
+    clearState: async (input, context) => {
+      const appId = input.appId ?? context.appId;
+      await invokeMutation({ kind: 'clearState', ...(appId ? { appId } : {}) }, context);
+    },
     openLink: async (input, context) => {
       await invokeMutation(
         {

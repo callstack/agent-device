@@ -59,6 +59,7 @@ export function makeOperations(
     resolveGestureViewport: async () => ({ x: 0, y: 0, width: 402, height: 874 }),
     launchApp: noOp,
     stopApp: noOp,
+    clearState: noOp,
     openLink: noOp,
     tapOn: noOp,
     doubleTapOn: noOp,

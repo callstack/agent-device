@@ -20,6 +20,7 @@ export type MaestroPublicOperation =
       launchArgs: string[];
     }
   | { kind: 'stopApp'; appId?: string }
+  | { kind: 'clearState'; appId?: string }
   | { kind: 'openLink'; appId?: string; link: string; prewarmRunner: boolean }
   | { kind: 'typeText'; text: string }
   | {
@@ -45,6 +46,7 @@ export type ProjectedMaestroPublicOperation = Pick<DaemonRequest, 'command' | 'p
 export function projectMaestroPublicOperation(
   operation: MaestroPublicOperation,
 ): ProjectedMaestroPublicOperation {
+  if (operation.kind === 'clearState') return projectClearState(operation);
   if (isAppOperation(operation)) return projectAppOperation(operation);
   if (isCaptureOperation(operation)) return projectCaptureOperation(operation);
   return projectInputOperation(operation);
@@ -96,6 +98,15 @@ function projectStopApp(
   };
 }
 
+function projectClearState(
+  operation: Extract<MaestroPublicOperation, { kind: 'clearState' }>,
+): ProjectedMaestroPublicOperation {
+  return {
+    command: 'settings',
+    positionals: operation.appId ? ['clear-app-state', operation.appId] : ['clear-app-state'],
+  };
+}
+
 function projectOpenLink(
   operation: Extract<MaestroAppOperation, { kind: 'openLink' }>,
 ): ProjectedMaestroPublicOperation {
@@ -108,7 +119,7 @@ function projectOpenLink(
 
 type MaestroInputOperation = Exclude<
   MaestroPublicOperation,
-  MaestroAppOperation | MaestroCaptureOperation
+  MaestroAppOperation | MaestroCaptureOperation | { kind: 'clearState' }
 >;
 
 function projectInputOperation(operation: MaestroInputOperation): ProjectedMaestroPublicOperation {
