@@ -21,6 +21,7 @@ import {
   resolveRunnerPrewarmPolicy,
   settleAppleOpen,
   type MutableOpenTiming,
+  releaseSpeculativeRunner,
 } from './open-policy.ts';
 import type { LaunchObservationPort } from './snapshot-observability.ts';
 import { isApplePlatform, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
@@ -99,6 +100,7 @@ async function openAppleApplication(
   const runner = createRunnerPrewarm(host, binding, input, timing);
   const policy = resolveRunnerPrewarmPolicy(binding.device, input, localIosSimulator);
   if (policy.runnerDemand) timing.runnerDemand = policy.runnerDemand;
+  releaseSpeculativeRunner(host, binding, input, policy);
   const { shouldPrewarmRunner } = policy;
   const retainRunnerForRelaunch = shouldRetainRunnerForRelaunch(
     binding.device,

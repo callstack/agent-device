@@ -77,10 +77,11 @@ export type OpenApplicationPreparationInput = Readonly<{
 /**
  * How much the platform's interaction host (the XCTest runner on iOS) is known to be needed by
  * the plan that contains an open. `none`: every following step is proven observation-only, so this
- * open starts no runner (an already-live runner stays under the existing idle-stop policy).
- * `possible`: the plan is unknown, so a speculative prewarm may run but observation never awaits
- * it. `required`: a following step needs the runner, so readiness is prepared now and awaited by
- * that step.
+ * open starts no runner and releases a speculative one (started by an earlier prewarm, used by no
+ * command); a runner that has served a command is the session's and stays under the idle-stop
+ * policy. `possible`: the plan is unknown, so a speculative prewarm may run but observation never
+ * awaits it. `required`: a following step needs the runner, so readiness is prepared now and
+ * awaited by that step.
  */
 export type OpenApplicationRunnerDemand = 'none' | 'possible' | 'required';
 
@@ -301,6 +302,11 @@ export type AppleApplicationTools = Readonly<{
    * awaiting runner readiness they do not need.
    */
   hasLiveRunnerSession(
+    device: DeviceInfo,
+    execution: Readonly<{ requestId?: string }>,
+  ): Promise<boolean>;
+  /** Stops a runner a prewarm started that no command has used; true when one was stopped. */
+  releaseSpeculativeRunner(
     device: DeviceInfo,
     execution: Readonly<{ requestId?: string }>,
   ): Promise<boolean>;

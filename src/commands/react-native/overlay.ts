@@ -1,1 +1,1 @@
-export * from '../../core/react-native-overlay.ts';
+export * from '@agent-device/capture-kit/react-native-overlay';

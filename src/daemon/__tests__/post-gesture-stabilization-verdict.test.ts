@@ -5,7 +5,7 @@ import {
   classifyBaselineSurfaceEvidence,
   type InteractionSurfaceSignature,
 } from '../interaction-outcome-policy.ts';
-import { decidePostGestureStabilityVerdict as decideWithHooks } from '../post-gesture-stability.ts';
+import { decidePostGestureStabilityVerdict as decideWithHooks } from '@agent-device/capture-kit/post-gesture-stability';
 import {
   applicationRootNode,
   keyboardWindowNodes,

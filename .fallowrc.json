@@ -97,6 +97,7 @@
       "exports": [
         "detachIosSimulatorRunnerSessionsForShutdown",
         "hasLiveIosRunnerSession",
+        "releaseSpeculativeIosRunnerSessionFor",
         "stopAllIosRunnerSessions"
       ]
     },

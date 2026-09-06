@@ -2,10 +2,10 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PNG } from '@agent-device/capture-kit/png';
-import { annotateScreenshotWithRefs, buildScreenshotOverlayRefs } from '../screenshot-overlay.ts';
-import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { PNG } from './png.ts';
+import { annotateScreenshotWithRefs, buildScreenshotOverlayRefs } from './screenshot-overlay.ts';
+import { makeSnapshotState } from './snapshot-state.fixtures.ts';
+import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 function writeSolidPng(filePath: string, width: number, height: number): void {
   const png = new PNG({ width, height });

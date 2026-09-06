@@ -23,6 +23,14 @@
       "types": "./src/audio-probe.fixtures.ts",
       "default": "./src/audio-probe.fixtures.ts"
     },
+    "./code-signature": {
+      "types": "./src/code-signature.ts",
+      "default": "./src/code-signature.ts"
+    },
+    "./code-signature-cache": {
+      "types": "./src/code-signature-cache.ts",
+      "default": "./src/code-signature-cache.ts"
+    },
     "./command": {
       "types": "./src/command.ts",
       "default": "./src/command.ts"

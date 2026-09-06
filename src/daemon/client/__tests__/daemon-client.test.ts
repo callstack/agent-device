@@ -19,7 +19,7 @@ import {
   waitForProcessExit,
 } from '@agent-device/host-kit/process';
 import { sendToDaemon } from '../daemon-client.ts';
-import { computeDaemonCodeSignature } from '../../code-signature.ts';
+import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
 import { downloadRemoteArtifact } from '../../../remote/daemon-artifacts.ts';
 import {
   cleanupFailedDaemonStartupMetadata,

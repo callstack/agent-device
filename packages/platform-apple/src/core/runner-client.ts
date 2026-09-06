@@ -22,6 +22,8 @@ export const notifyIosRunnerAppRelaunched: AppleRunnerClient['notifyIosRunnerApp
   client.notifyIosRunnerAppRelaunched;
 export const hasLiveIosRunnerSession: AppleRunnerClient['hasLiveIosRunnerSession'] =
   client.hasLiveIosRunnerSession;
+export const releaseSpeculativeIosRunnerSessionFor: AppleRunnerClient['releaseSpeculativeIosRunnerSessionFor'] =
+  client.releaseSpeculativeIosRunnerSessionFor;
 export const prewarmAppleRunnerCache: AppleRunnerClient['prewarmAppleRunnerCache'] =
   client.prewarmAppleRunnerCache;
 export const prewarmIosRunnerSession: AppleRunnerClient['prewarmIosRunnerSession'] =

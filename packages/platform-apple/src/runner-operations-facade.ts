@@ -8,6 +8,7 @@ export {
   prewarmAppleRunnerCache,
   prewarmIosRunnerSession,
   readStaleRunnerLease,
+  releaseSpeculativeIosRunnerSessionFor,
   resolveRunnerAppBundleId,
   runAppleRunnerCommand,
   scheduleIosRunnerIdleStop,

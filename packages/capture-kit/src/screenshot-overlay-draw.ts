@@ -1,6 +1,6 @@
 import type { Rect, ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
-import type { PNG } from '@agent-device/capture-kit/png';
-import { clamp } from '../snapshot/screenshot-overlay/rects.ts';
+import type { PNG } from './png.ts';
+import { clamp } from './screenshot-overlay-rects.ts';
 
 /**
  * Rasterizing one overlay ref onto a decoded PNG: border, badge, and the bitmap glyphs the badge

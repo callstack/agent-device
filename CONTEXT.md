@@ -125,7 +125,7 @@ The daemon-side truth for route ownership and request-policy traits.
 Per-command classes steering Apple runner lifecycle and recovery, independent of the public surface.
 
 **Runner demand**:
-What a local-Simulator open prepares of the XCTest runner for the remaining batch steps.
+What a Simulator open prepares, or releases unused, of the XCTest runner for remaining steps.
 
 **Daemon RPC protocol version**:
 The integer that detects breaking compatibility across the remote daemon boundary.

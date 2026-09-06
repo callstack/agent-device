@@ -31,6 +31,11 @@ export type RunnerSession = {
   // healthy (parsed ok, non-runnerFatal) for a given app bundle. Lives only on
   // the session object so it dies with every invalidation/restart (#702).
   lastHealthyMutation?: { atMs: number; appBundleId?: string };
+  /**
+   * Started by a prewarm and not yet used by any command. A proven observation-only plan may
+   * release it; the first real command clears the mark and the session stays under idle-stop.
+   */
+  speculative?: boolean;
   startupTimings?: Record<string, number>;
   startupTimingsReported?: boolean;
   logicalLeaseContext?: RunnerLogicalLeaseContext;

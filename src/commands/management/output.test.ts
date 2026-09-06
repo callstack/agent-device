@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest';
 import { doctorCliOutput, managementCliOutputFormatters, openCliOutput } from './output.ts';
 import { withNoColorAsync } from '../../__tests__/test-utils/color.ts';
 import type { AppOpenResult } from '@agent-device/contracts/client';
-import { markDoctorProgressRendered } from '../../daemon/client/doctor-progress.ts';
 
 describe('openCliOutput', () => {
   test('prints session state directory on a second line', async () => {
@@ -307,11 +306,32 @@ describe('doctorCliOutput', () => {
           },
         ],
       };
-      markDoctorProgressRendered();
-      return await doctorCliOutput(result);
+      return await doctorCliOutput(result, { renderedToStderr: true });
     });
 
     expect(output.text).toBe(['Doctor: pass', 'No blockers found.'].join('\n'));
+  });
+
+  test('keeps the checks when a caller-owned sink consumed the progress events', async () => {
+    // An SDK or MCP caller passing its own `RequestProgressSink` writes nothing to
+    // this process's stderr, so its progress state stays unrendered and the reader
+    // of this output has not seen the checks yet.
+    const output = await withNoColorAsync(async () => {
+      const result = {
+        status: 'pass',
+        summary: 'No blockers found.',
+        checks: [
+          {
+            id: 'device',
+            status: 'pass',
+            summary: 'Selected Pixel (android)',
+          },
+        ],
+      };
+      return await doctorCliOutput(result, { renderedToStderr: false });
+    });
+
+    expect(output.text).toBe(['Doctor: pass', '✓ device: Selected Pixel (android)'].join('\n'));
   });
 });
 

@@ -29,7 +29,7 @@ import {
   retryPendingInteractionOutcome,
   type InteractionRetryTap,
 } from './interaction-outcome-policy.ts';
-import { runPostGestureStabilityLoop } from './post-gesture-stability.ts';
+import { runPostGestureStabilityLoop } from '@agent-device/capture-kit/post-gesture-stability';
 import type { SessionState } from './types.ts';
 
 /**

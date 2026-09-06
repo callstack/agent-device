@@ -294,6 +294,10 @@ function simulatorHost(overrides: {
     overrides.events.push('reset');
   });
   const hasLiveRunnerSession = vi.fn(overrides.hasLiveRunnerSession ?? (async () => false));
+  const releaseSpeculativeRunner = vi.fn(async () => {
+    overrides.events.push('release');
+    return true;
+  });
   const host = {
     ...baseHost,
     clock: { ...baseHost.clock, sleep: async () => {} },
@@ -303,14 +307,22 @@ function simulatorHost(overrides: {
       prewarmRunnerSession,
       notifyRunnerAppRelaunched,
       hasLiveRunnerSession,
+      releaseSpeculativeRunner,
     },
   } as unknown as PlatformRuntimeHost;
-  return { host, prewarmRunnerSession, notifyRunnerAppRelaunched, hasLiveRunnerSession };
+  return {
+    host,
+    prewarmRunnerSession,
+    notifyRunnerAppRelaunched,
+    hasLiveRunnerSession,
+    releaseSpeculativeRunner,
+  };
 }
 
-test('a Simulator open whose plan is observation-only starts no runner and reports demand none', async () => {
+test('a Simulator open whose plan is observation-only starts no runner, releases a speculative one, and reports demand none', async () => {
   const events: string[] = [];
-  const { host, prewarmRunnerSession, notifyRunnerAppRelaunched } = simulatorHost({ events });
+  const { host, prewarmRunnerSession, notifyRunnerAppRelaunched, releaseSpeculativeRunner } =
+    simulatorHost({ events });
   const lifecycle = bindAppleApplicationLifecycle({
     host,
     device: simulator,
@@ -326,7 +338,11 @@ test('a Simulator open whose plan is observation-only starts no runner and repor
   expect(outcome.timing.runnerPrewarmScheduled).toBeUndefined();
   expect(prewarmRunnerSession).not.toHaveBeenCalled();
   expect(notifyRunnerAppRelaunched).not.toHaveBeenCalled();
-  expect(events).toEqual(['open']);
+  // The release goes to the runner owner before the app opens and is never awaited by the open.
+  expect(releaseSpeculativeRunner).toHaveBeenCalledExactlyOnceWith(simulator, {
+    plannedOperations: ['captureSnapshot', 'findText', 'captureScreenshot'],
+  });
+  expect(events).toEqual(['release', 'open']);
 });
 
 test.each([
@@ -337,15 +353,16 @@ test.each([
   async (_name, plan, expectedDemand) => {
     const events: string[] = [];
     let releasePrewarm = () => {};
-    const { host, prewarmRunnerSession, notifyRunnerAppRelaunched } = simulatorHost({
-      events,
-      // A prewarm that never finishes inside the open: if the open awaited runner readiness
-      // this test would time out instead of passing.
-      prewarmRunnerSession: () =>
-        new Promise<void>((resolve) => {
-          releasePrewarm = resolve;
-        }),
-    });
+    const { host, prewarmRunnerSession, notifyRunnerAppRelaunched, releaseSpeculativeRunner } =
+      simulatorHost({
+        events,
+        // A prewarm that never finishes inside the open: if the open awaited runner readiness
+        // this test would time out instead of passing.
+        prewarmRunnerSession: () =>
+          new Promise<void>((resolve) => {
+            releasePrewarm = resolve;
+          }),
+      });
     const lifecycle = bindAppleApplicationLifecycle({
       host,
       device: simulator,
@@ -373,6 +390,8 @@ test.each([
     expect(prewarmRunnerSession).toHaveBeenCalledOnce();
     // The starting runner has no cached target, so nothing is reset and nothing is awaited.
     expect(notifyRunnerAppRelaunched).not.toHaveBeenCalled();
+    // Only a proven observation-only plan releases; a plan that may need the runner keeps it.
+    expect(releaseSpeculativeRunner).not.toHaveBeenCalled();
     expect(events).toEqual(['open']);
   },
 );
@@ -459,7 +478,7 @@ test('a Simulator open lets the launched app become observable instead of sleepi
 
   expect(awaitObservable).toHaveBeenCalledWith(simulator, 'com.example.app', signal);
   expect(outcome.timing.postOpenObservation).toBe('observable');
-  expect(events).toEqual(['open', 'observe']);
+  expect(events).toEqual(['release', 'open', 'observe']);
 });
 
 test('a Simulator whose bridge cannot answer keeps the fixed settle', async () => {
@@ -481,7 +500,7 @@ test('a Simulator whose bridge cannot answer keeps the fixed settle', async () =
   });
 
   expect(outcome.timing.postOpenObservation).toBe('unobservable');
-  expect(events).toEqual(['open', 'sleep']);
+  expect(events).toEqual(['release', 'open', 'sleep']);
 });
 
 test('a tvOS Simulator relaunch keeps the awaited prewarm and asks for no observation', async () => {

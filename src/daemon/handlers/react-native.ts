@@ -7,7 +7,7 @@ import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import {
   analyzeReactNativeOverlay,
   type ReactNativeOverlayDismissTarget,
-} from '../../core/react-native-overlay.ts';
+} from '@agent-device/capture-kit/react-native-overlay';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { stripUndefined } from '@agent-device/kernel/record';
 import { successText } from '@agent-device/kernel/success-text';

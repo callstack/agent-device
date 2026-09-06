@@ -51,6 +51,23 @@ export function resolveRunnerPrewarmPolicy(
 }
 
 /**
+ * A proven observation-only plan keeps no runner it did not ask for: a speculative one (an earlier
+ * prewarm no command has used) is released through the runner owner, in the background so the
+ * observation path never waits for a runner to stop either.
+ */
+export function releaseSpeculativeRunner(
+  host: Pick<PlatformRuntimeHost, 'appleApplications'>,
+  binding: Readonly<{ device: DeviceInfo }>,
+  input: OpenApplicationInput,
+  policy: RunnerPrewarmPolicy,
+): void {
+  if (policy.runnerDemand !== 'none') return;
+  void host.appleApplications
+    .releaseSpeculativeRunner(binding.device, input.execution)
+    .catch(() => {});
+}
+
+/**
  * Lets the opened app become observable before the open returns. A local Simulator asks its AX
  * bridge, bounded by the launch-transition windows the bridge itself defines, so the first
  * observation never pays the launch and never falls back to a runner start for it. Any other
