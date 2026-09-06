@@ -166,8 +166,11 @@ test.skipIf(process.platform === 'win32')(
             booted: true,
           },
         ],
-        host: { args: ['-P', '15037', 'devices'], port: '15037' },
-        hostWithWrongPort: { args: ['-P', '15037', 'devices'], port: '15037' },
+        host: { args: ['-P', '15037', '-s', 'emulator-15037', 'devices'], port: '15037' },
+        hostWithWrongPort: {
+          args: ['-P', '15037', '-s', 'emulator-15037', 'devices'],
+          port: '15037',
+        },
         serial: {
           args: ['-P', '15037', '-s', 'emulator-15037', 'shell', 'id'],
           port: '15037',
