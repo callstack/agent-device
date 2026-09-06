@@ -1,8 +1,5 @@
 import type { RunnerCommand } from './runner-contract.ts';
-import {
-  RUNNER_COMMAND_TRAIT_MANIFEST,
-  type RunnerCommandTraitClass,
-} from './runner-command-manifest.ts';
+import { RUNNER_COMMAND_TRAIT_MANIFEST } from './runner-command-manifest.ts';
 
 export type RunnerCommandTraits = Readonly<{
   readOnly: boolean;
@@ -44,43 +41,34 @@ const PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS: RunnerCommandTraits = {
   readinessPreflightSkipEligibleAfterHealthyMutation: true,
 };
 
-const RUNNER_COMMAND_TRAITS = Object.fromEntries(
-  Object.entries(RUNNER_COMMAND_TRAIT_MANIFEST).map(([command, traitClass]) => [
-    command,
-    traitsForClass(traitClass),
-  ]),
-) as Record<RunnerCommand['command'], RunnerCommandTraits>;
-
-export function readRunnerCommandTraits(command: RunnerCommand['command']): RunnerCommandTraits {
-  return RUNNER_COMMAND_TRAITS[command];
-}
-
-export function isReadOnlyRunnerCommand(command: RunnerCommand['command']): boolean {
+export function isReadOnlyRunnerCommand(command: RunnerCommand): boolean {
   return readRunnerCommandTraits(command).readOnly;
 }
 
-export function isRunnerReadinessProbeCommand(command: RunnerCommand['command']): boolean {
+export function isRunnerReadinessProbeCommand(command: RunnerCommand): boolean {
   return readRunnerCommandTraits(command).readinessProbe;
 }
 
-export function isRunnerReadinessPreflightExempt(command: RunnerCommand['command']): boolean {
+export function isRunnerReadinessPreflightExempt(command: RunnerCommand): boolean {
   return readRunnerCommandTraits(command).readinessPreflightExempt;
 }
 
 export function canSkipRunnerReadinessPreflightAfterHealthyMutation(
-  command: RunnerCommand['command'],
+  command: RunnerCommand,
 ): boolean {
   return readRunnerCommandTraits(command).readinessPreflightSkipEligibleAfterHealthyMutation;
 }
 
-function traitsForClass(traitClass: RunnerCommandTraitClass): RunnerCommandTraits {
-  switch (traitClass) {
+export function readRunnerCommandTraits(command: RunnerCommand): RunnerCommandTraits {
+  switch (RUNNER_COMMAND_TRAIT_MANIFEST[command.command]) {
     case 'default':
       return DEFAULT_TRAITS;
     case 'readinessPreflightExemptMutation':
       return READINESS_PREFLIGHT_EXEMPT_MUTATION_TRAITS;
     case 'readOnly':
       return READ_ONLY_TRAITS;
+    case 'alertAction':
+      return (command.action ?? 'get').toLowerCase() === 'get' ? READ_ONLY_TRAITS : DEFAULT_TRAITS;
     case 'readOnlyReadinessProbe':
       return READ_ONLY_READINESS_PROBE_TRAITS;
     case 'preflightSkippableTouchMutation':

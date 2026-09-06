@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import type { ExecResult } from '../host.ts';
 import type { RunnerSession } from '../runner-session.ts';
+import { appleRunnerTestHost } from '../test-host.ts';
+import { withAppleRunnerProvider } from '../runner-provider.ts';
+import type { RunnerCommand } from '../runner-contract.ts';
 import { startFakeRunnerServer, type FakeRunnerServer } from './fake-runner-server.ts';
 
 /**
@@ -44,6 +47,14 @@ vi.mock('../runner-session.ts', async (importOriginal) => {
 });
 
 const { runAppleRunnerCommand } = await import('../runner-client.ts');
+
+beforeEach(() => {
+  const { retryWithPolicy } = appleRunnerTestHost.defaults();
+  appleRunnerTestHost.update({
+    retryWithPolicy: (task, policy, options) =>
+      retryWithPolicy(task, { ...policy, baseDelayMs: 1, maxDelayMs: 1, jitter: 0 }, options),
+  });
+});
 
 type LostResponseAcceptanceCommand = 'press' | 'fill';
 
@@ -214,3 +225,95 @@ test('an exact-session command never dispatches to a replacement runner', async 
   ).rejects.toThrow('runner session ownership changed');
   assert.deepEqual(server.requests, []);
 });
+
+test.each(
+  (['accept', 'dismiss'] as const).flatMap((action) =>
+    (['accepted', 'started', 'completed'] as const).map((lifecycleState) => ({
+      action,
+      lifecycleState,
+      recovery:
+        lifecycleState === 'completed'
+          ? 'completed_without_retained_response'
+          : 'command_still_in_flight',
+    })),
+  ),
+)(
+  'alert $action with lost response and $lifecycleState status is not replayed',
+  async ({ action, lifecycleState, recovery }) => {
+    server = await startFakeRunnerServer({
+      alert: [{ kind: 'hangUp' }, { kind: 'ok', data: { replayed: true } }],
+      status: [{ kind: 'ok', data: { lifecycleState } }],
+    });
+    seedSession(server.port);
+
+    await expect(
+      runAppleRunnerCommand(IOS_SIMULATOR, { command: 'alert', action }),
+    ).rejects.toMatchObject({ details: { lifecycleState, recovery } });
+
+    const actions = server.requests.filter((request) => request.command === 'alert');
+    const probes = server.requests.filter((request) => request.command === 'status');
+    assert.equal(actions.length, 1);
+    assert.equal(actions[0]?.body.action, action);
+    assert.equal(probes.length, 1);
+    assert.equal(probes[0]?.body.statusCommandId, actions[0]?.body.commandId);
+    assert.equal(invalidateRunnerSessionMock.mock.calls.length, 0);
+  },
+);
+
+test.each([undefined, 'get'] as const)(
+  'alert query action %s remains retryable after a transport failure',
+  async (action) => {
+    server = await startFakeRunnerServer({
+      alert: [{ kind: 'hangUp' }, { kind: 'ok', data: { present: true } }],
+    });
+    seedSession(server.port);
+
+    const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'alert', action });
+
+    assert.deepEqual(result, { present: true });
+    const queries = server.requests.filter((request) => request.command === 'alert');
+    assert.equal(queries.length, 2);
+    assert.equal(queries[0]?.body.commandId, queries[1]?.body.commandId);
+  },
+);
+
+test.each([undefined, 'get', 'accept', 'dismiss'] as const)(
+  'alert action %s selects startup readiness by mutation semantics',
+  async (action) => {
+    server = await startFakeRunnerServer({ alert: [{ kind: 'ok', data: {} }] });
+    seedSession(server.port).ready = false;
+
+    await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'alert', action });
+
+    assert.deepEqual(
+      server.requests.map((request) => request.command),
+      action === 'accept' || action === 'dismiss' ? ['uptime', 'alert'] : ['alert'],
+    );
+  },
+);
+
+test.each([undefined, 'get', 'accept', 'dismiss'] as const)(
+  'alert action %s selects provider retries by mutation semantics',
+  async (action) => {
+    const commands: RunnerCommand[] = [];
+    const failure = new AppError('COMMAND_FAILED', 'response unavailable', { retriable: true });
+    const result = withAppleRunnerProvider(
+      async (_device, command) => {
+        commands.push(command);
+        if (commands.length === 1) throw failure;
+        return { present: true };
+      },
+      { deviceId: IOS_SIMULATOR.id },
+      () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'alert', action }),
+    );
+
+    if (action === 'accept' || action === 'dismiss') {
+      await assert.rejects(result, (error: unknown) => error === failure);
+      assert.equal(commands.length, 1);
+    } else {
+      assert.deepEqual(await result, { present: true });
+      assert.equal(commands.length, 2);
+      assert.equal(commands[0]?.commandId, commands[1]?.commandId);
+    }
+  },
+);

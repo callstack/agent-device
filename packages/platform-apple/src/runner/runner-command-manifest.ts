@@ -4,6 +4,7 @@ export type RunnerCommandTraitClass =
   | 'default'
   | 'readinessPreflightExemptMutation'
   | 'readOnly'
+  | 'alertAction'
   | 'readOnlyReadinessProbe'
   | 'preflightSkippableTouchMutation';
 
@@ -32,7 +33,7 @@ export const RUNNER_COMMAND_TRAIT_MANIFEST = {
   appSwitcher: 'default',
   keyboardDismiss: 'default',
   keyboardReturn: 'default',
-  alert: 'readOnly',
+  alert: 'alertAction',
   sequence: 'preflightSkippableTouchMutation',
   recordStart: 'default',
   recordStop: 'default',

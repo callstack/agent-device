@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test } from 'vitest';
 import type { RunnerCommand } from '../runner-contract.ts';
 import {
@@ -22,7 +23,7 @@ test('runner command traits are derived from the runner command manifest', () =>
   for (const [command, expectedTraits] of Object.entries(EXPECTED_RUNNER_COMMAND_TRAITS) as Array<
     [RunnerCommand['command'], RunnerCommandTraits]
   >) {
-    assert.deepEqual(readRunnerCommandTraits(command), expectedTraits, command);
+    assert.deepEqual(readRunnerCommandTraits({ command }), expectedTraits, command);
   }
 });
 
@@ -38,7 +39,6 @@ test('runner command manifest pins lifecycle-sensitive command groups', () => {
     'tap',
   ]);
   assert.deepEqual(commandsForClass('readOnly'), [
-    'alert',
     'findText',
     'gestureViewport',
     'querySelector',
@@ -46,6 +46,7 @@ test('runner command manifest pins lifecycle-sensitive command groups', () => {
     'screenshot',
     'snapshot',
   ]);
+  assert.deepEqual(commandsForClass('alertAction'), ['alert']);
   assert.deepEqual(commandsForClass('readOnlyReadinessProbe'), ['status', 'uptime']);
   assert.deepEqual(commandsForClass('readinessPreflightExemptMutation'), [
     'activate',
@@ -59,18 +60,35 @@ test('runner command trait helpers read from the shared trait table', () => {
     RunnerCommand['command']
   >) {
     const traits = EXPECTED_RUNNER_COMMAND_TRAITS[command];
-    assert.equal(isReadOnlyRunnerCommand(command), traits.readOnly, command);
-    assert.equal(isRunnerReadinessProbeCommand(command), traits.readinessProbe, command);
+    assert.equal(isReadOnlyRunnerCommand({ command }), traits.readOnly, command);
+    assert.equal(isRunnerReadinessProbeCommand({ command }), traits.readinessProbe, command);
     assert.equal(
-      isRunnerReadinessPreflightExempt(command),
+      isRunnerReadinessPreflightExempt({ command }),
       traits.readinessPreflightExempt,
       command,
     );
     assert.equal(
-      canSkipRunnerReadinessPreflightAfterHealthyMutation(command),
+      canSkipRunnerReadinessPreflightAfterHealthyMutation({ command }),
       traits.readinessPreflightSkipEligibleAfterHealthyMutation,
       command,
     );
+  }
+});
+
+test('alert actions match the native read-only golden table', () => {
+  const cases = JSON.parse(
+    fs.readFileSync(
+      new URL('../../../../../contracts/fixtures/alert-command-traits.json', import.meta.url),
+      'utf8',
+    ),
+  ) as Array<{ name: string; command: RunnerCommand; readOnly: boolean }>;
+  assert.deepEqual(
+    cases.map(({ command }) => command.action),
+    [undefined, 'get', 'accept', 'dismiss'],
+  );
+  for (const { name, command, readOnly } of cases) {
+    assert.deepEqual(readRunnerCommandTraits(command), { ...defaults(), readOnly }, name);
+    assert.equal(isReadOnlyRunnerCommand(command), readOnly, name);
   }
 });
 
@@ -92,6 +110,7 @@ function expectedTraitsForClass(
     case 'readinessPreflightExemptMutation':
       return preflightExemptMutation();
     case 'readOnly':
+    case 'alertAction':
       return readOnly();
     case 'readOnlyReadinessProbe':
       return readOnlyReadinessProbe();

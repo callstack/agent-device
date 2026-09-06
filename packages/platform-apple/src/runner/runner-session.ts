@@ -651,7 +651,7 @@ export async function executeRunnerCommandWithSession(
 ): Promise<Record<string, unknown>> {
   emitRunnerStartupTimings(session, command.command);
   const runnerCommand = withRunnerCommandId(command);
-  const readOnlyCommand = isReadOnlyRunnerCommand(runnerCommand.command);
+  const readOnlyCommand = isReadOnlyRunnerCommand(runnerCommand);
   const deadline = Deadline.fromTimeoutMs(timeoutMs);
   const preflightDecision = resolveRunnerReadinessPreflightDecision(session, runnerCommand);
   if (preflightDecision.action === 'run') {
@@ -694,7 +694,7 @@ export async function executeRunnerCommandWithSession(
     if (runnerFatalReason) {
       session.lastHealthyMutation = undefined;
       await invalidateRunnerSession(session, runnerFatalReason);
-    } else if (canSkipRunnerReadinessPreflightAfterHealthyMutation(runnerCommand.command)) {
+    } else if (canSkipRunnerReadinessPreflightAfterHealthyMutation(runnerCommand)) {
       session.lastHealthyMutation = {
         atMs: Date.now(),
         appBundleId: runnerCommand.appBundleId,
@@ -951,8 +951,8 @@ function resolveRunnerReadinessPreflightDecision(
   session: RunnerSession,
   command: RunnerCommand,
 ): RunnerReadinessPreflightDecision {
-  const readOnlyCommand = isReadOnlyRunnerCommand(command.command);
-  if (isRunnerReadinessPreflightExempt(command.command)) {
+  const readOnlyCommand = isReadOnlyRunnerCommand(command);
+  if (isRunnerReadinessPreflightExempt(command)) {
     return { action: 'skip', reason: 'preflight_exempt_command' };
   }
   if (!session.ready) {
@@ -967,13 +967,13 @@ function resolveRunnerReadinessPreflightDecision(
       reason: 'startup',
     };
   }
-  if (isRunnerReadinessProbeCommand(command.command)) {
+  if (isRunnerReadinessProbeCommand(command)) {
     return {
       action: 'skip',
       reason: 'readiness_probe_command',
     };
   }
-  if (!canSkipRunnerReadinessPreflightAfterHealthyMutation(command.command)) {
+  if (!canSkipRunnerReadinessPreflightAfterHealthyMutation(command)) {
     // CONSERVATIVE: Commands outside the healthy-mutation allowlist still preflight because their
     // terminal runner state is not proven by recency. Revisit when lifecycle status coverage can
     // distinguish every mutating command's safe terminal state.
