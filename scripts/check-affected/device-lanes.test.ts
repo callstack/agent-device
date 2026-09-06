@@ -116,6 +116,23 @@ test('another family owns only its own lanes, so an Android-only change carries 
   assert.deepEqual(lanes('packages/platform-vega/src/index.ts'), []);
 });
 
+test('Maestro replay YAML owns its platform lane without narrowing other fixture data', () => {
+  for (const extension of ['yaml', 'yml']) {
+    assert.deepEqual(
+      lanes(`test/integration/replays/android/fixture/reveal-press-canary.${extension}`),
+      ['replay-android'],
+    );
+    assert.deepEqual(lanes(`test/integration/replays/ios/fixture/reveal.${extension}`), [...IOS]);
+    for (const file of [
+      `test/integration/android-emulator-e2e/capture.${extension}`,
+      'test/integration/replays/android/fixture/capture.json',
+    ]) {
+      assert.equal(isDeviceLaneSurface(file), false, file);
+      assert.equal(selectChecks({ changedFiles: [file] }).failOpen, true, file);
+    }
+  }
+});
+
 test('the fixture app owns the mobile lanes whichever subtree changes', () => {
   assert.deepEqual(lanes('examples/test-app/app/index.tsx'), [
     'replay-ios',
