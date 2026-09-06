@@ -128,17 +128,7 @@ export const NEW_ENTRY_CEILINGS: Readonly<Record<EntryCategory, number>> = Objec
  */
 export const APPROVED_OVER_CEILING: Readonly<
   Record<string, { issue: string; reason: string; owner: string }>
-> = Object.freeze({
-  'packages/capture-kit/src/durable-capture/index.ts': {
-    issue: '#2317',
-    reason:
-      'The entry surface is new; the weight is not. These mechanics moved out of src/daemon ' +
-      'unchanged, and their two heaviest edges are the ones that make them durable at all: the ' +
-      'store publishes through host-kit/file, and adoption validates through the envelope codec. ' +
-      'Only the daemon imports this subpath, and its own closure did not grow.',
-    owner: '@thymikee',
-  },
-});
+> = Object.freeze({});
 
 /** The category is a function of the path, never a hand-written column. */
 export function entryCategoryOf(entryFile: string): EntryCategory {
