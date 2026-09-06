@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.9c8a1550c4.js"></script>
+<script defer src="/agent-device/static/js/index.aa64d09c58.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -380,6 +380,8 @@ cannot carry custom actions: the pair is rejected as <code>INVALID_ARGS</code> b
 <li><code>alert</code> without an action is equivalent to <code>alert get</code>.</li>
 <li><code>accept</code> and <code>dismiss</code> are sent once on every platform. A lost or unconfirmed response is reported as an error and never replayed; run <code>alert get</code> before acting again.</li>
 <li>Use <code>alert get</code> for an immediate cheap check. Use <code>alert wait &lt;short-ms&gt;</code> only when a prompt may appear after async work.</li>
+<li>Within an iOS XCTest execution, <code>accept</code> and <code>dismiss</code> activate the selected button once, then only observe until the alert disappears, its presentation changes, or the deadline expires. A shared button label never triggers a second coordinate tap. A changed presentation can be an updated original alert or a replacement; it does not prove a permission was granted. Verify the application outcome separately.</li>
+<li>An unreadable or ambiguous post-action capture fails with <code>error.details.runnerErrorCode: ALERT_CONFIRMATION_UNAVAILABLE</code>; an expired runner deadline uses <code>ALERT_DEADLINE_EXCEEDED</code> (the outer command watchdog can also report a timeout). Neither proves absence or that no action occurred. Identical-looking alerts remain unconfirmed. Inspect the current alert before deciding whether to act again.</li>
 <li>Android support is snapshot-derived. If <code>alert</code> reports no alert but a sheet is visible, treat it as app-owned UI and use <code>snapshot -i</code> plus <code>press</code> by visible label/ref.</li>
 <li>If an iOS permission sheet is visible in <code>snapshot</code> or <code>screenshot</code> but <code>alert accept</code> reports no alert, fall back to a scoped <code>snapshot -i -s &quot;&lt;visible label&gt;&quot;</code> plus <code>press @ref</code>; not every simulator permission surface is exposed as a native XCTest alert.</li>
 </ul>
