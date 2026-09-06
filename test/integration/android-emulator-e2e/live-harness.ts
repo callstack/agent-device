@@ -41,11 +41,15 @@ export function createContext(): LiveContext {
 
 const execFileAsync = promisify(execFile);
 
+const ROTATION_PROBE_TIMEOUT_MS = 5_000;
+const ROTATION_LOG_LINES = 60;
+const ROTATION_LOG_LINE_LENGTH = 240;
+
 /**
  * What the OS says about rotation when a step fails: the two settings `orientation` writes, the
- * display's current rotation, and every WindowManager rotation decision logcat still holds (with
+ * display's current rotation, and the WindowManager rotation decisions logcat still holds (with
  * the reason it gives). Read through adb, not agent-device, so it stands even when the CLI path
- * is what failed.
+ * is what failed; the shared collector bounds the whole read so it never delays the screenshot.
  */
 async function readAndroidRotationEvidence(context: LiveContext): Promise<string> {
   const probes: readonly [string, string[]][] = [
@@ -59,7 +63,7 @@ async function readAndroidRotationEvidence(context: LiveContext): Promise<string
     try {
       const { stdout } = await execFileAsync('adb', ['-s', context.serial, ...args], {
         maxBuffer: 64 * 1024 * 1024,
-        timeout: 20_000,
+        timeout: ROTATION_PROBE_TIMEOUT_MS,
       });
       sections.push(`## ${title}\n${selectRotationLines(title, stdout)}`);
     } catch (error) {
@@ -78,7 +82,7 @@ function selectRotationLines(title: string, output: string): string {
       .filter((line) =>
         /mCurrentOrientation|mRotation=|installOrientation|\brotation \d/.test(line),
       )
-      .map((line) => line.trim().slice(0, 200))
+      .map((line) => line.trim().slice(0, ROTATION_LOG_LINE_LENGTH))
       .slice(0, 8)
       .join('\n');
   }
@@ -91,7 +95,8 @@ function selectRotationLines(title: string, output: string): string {
             line,
           ) && /rotat|orient/i.test(line),
       )
-      .slice(-60)
+      .slice(-ROTATION_LOG_LINES)
+      .map((line) => line.slice(0, ROTATION_LOG_LINE_LENGTH))
       .join('\n');
   }
   return output.trim();

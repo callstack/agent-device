@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { type CliJsonResult, formatResultDebug, runBuiltCliJson } from '../cli-json.ts';
+import { collectFailedStepEvidence, type FailedStepEvidence } from './failed-step-evidence.ts';
 
 export type StepRecord = {
   accepted: boolean;
@@ -192,47 +193,14 @@ export function createLiveDeviceHarness<
     }
   }
 
-  /**
-   * What the device showed when a step failed: the pixels and the accessibility tree the
-   * next capture would have read. Best-effort, never throws; a failed capture yields undefined.
-   */
-  async function captureFailedStepEvidence(
-    context: Context,
-  ): Promise<{ screenshotPath?: string; snapshotPath?: string; devicePath?: string }> {
-    const stem = path.join(context.artifactDir, `failed-step-${context.stepHistory.length}`);
-    const screenshotPath = `${stem}.png`;
-    const snapshotPath = `${stem}-snapshot.json`;
-    const devicePath = `${stem}-device.txt`;
+  function captureFailedStepEvidence(context: Context): Promise<FailedStepEvidence> {
     const runCli = options.runCli ?? runBuiltCliJson;
-    const evidence: { screenshotPath?: string; snapshotPath?: string; devicePath?: string } = {};
-    try {
-      const facts = await options.deviceEvidence?.(context);
-      if (facts !== undefined) {
-        fs.writeFileSync(devicePath, facts);
-        evidence.devicePath = devicePath;
-      }
-    } catch {
-      // evidence only
-    }
-    try {
-      const screenshot = await runCli(
-        options.commonFlags(context, ['screenshot', screenshotPath]),
-        context.env,
-      );
-      if (screenshot.status === 0) evidence.screenshotPath = screenshotPath;
-    } catch {
-      // evidence only
-    }
-    try {
-      const snapshot = await runCli(options.commonFlags(context, ['snapshot']), context.env);
-      if (snapshot.status === 0 && snapshot.json !== undefined) {
-        fs.writeFileSync(snapshotPath, JSON.stringify(snapshot.json, null, 2));
-        evidence.snapshotPath = snapshotPath;
-      }
-    } catch {
-      // evidence only
-    }
-    return evidence;
+    const deviceEvidence = options.deviceEvidence;
+    return collectFailedStepEvidence({
+      stem: path.join(context.artifactDir, `failed-step-${context.stepHistory.length}`),
+      runCli: (args) => runCli(options.commonFlags(context, args), context.env),
+      ...(deviceEvidence ? { deviceEvidence: () => deviceEvidence(context) } : {}),
+    });
   }
 
   function updateSessionState(context: Context, command: string | undefined, status: number): void {
