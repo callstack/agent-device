@@ -49,13 +49,27 @@ test('sessionStateWritePressure counts written fields and (field, writer) claims
   });
 });
 
-test('measureRatchets reports all three ratchets from one tree', () => {
+test('measureRatchets reports all ratchets from one tree', () => {
   const sources = tree();
   assert.deepEqual(measureRatchets(sources, resolveImportEdges(sources)), {
     typeInversions: { 'commands -> client': 1 },
     largestTypeCycle: ['src/client/client.ts', 'src/commands/loop.ts'],
     sessionState: { writerOwnedFields: 2, ownerFileClaims: 3 },
+    sessionAuthority: { shapeFiles: [], authorityFiles: [] },
   });
+  const withAuthority = tree({
+    'src/daemon/handlers/fixture.ts':
+      "import type { SessionState } from '../types.ts';\n" +
+      "import { SessionStore } from '../session-store.ts';",
+    'src/daemon/session-store.ts': 'export class SessionStore {}',
+  });
+  assert.deepEqual(
+    measureRatchets(withAuthority, resolveImportEdges(withAuthority)).sessionAuthority,
+    {
+      shapeFiles: ['src/daemon/handlers/fixture.ts'],
+      authorityFiles: ['src/daemon/handlers/fixture.ts'],
+    },
+  );
 });
 
 test('memoizedImportParser parses each distinct source text once', () => {
