@@ -25,7 +25,7 @@ import {
   resolveSessionEventLogPath,
   type SessionEventLogInput,
   type SessionEventLogPage,
-} from './session-event-log.ts';
+} from '@agent-device/session-journal/session-event-log';
 
 /**
  * ADR 0012 decision 6, R7 (C5a): a reaped repair session leaves this bounded

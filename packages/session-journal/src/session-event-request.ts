@@ -1,6 +1,6 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isRecord } from '@agent-device/kernel/record';
-import type { DaemonRequest, DaemonResponseData } from './daemon-request.ts';
+import type { DaemonRequest, DaemonResponseData } from '@agent-device/kernel/contracts';
 
 const EVENT_LIST_PREVIEW_LIMIT = 5;
 const EVENT_LIST_SUMMARY_LIMIT = 3;
