@@ -11,6 +11,8 @@ import {
   withDiagnosticTimer,
 } from '@agent-device/host-kit/diagnostics';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { resolveCommandTimeoutPolicy } from '../../core/command-descriptor/registry.ts';
+import { resolveCommandRequestTimeoutMs } from '../../core/command-descriptor/timeout-policy.ts';
 import { prepareRemoteRequestArtifacts } from '../../remote/daemon-artifacts.ts';
 import {
   attachActiveSessionAddressHint,
@@ -24,7 +26,6 @@ import {
   type EnsuredDaemon,
 } from './daemon-client-lifecycle.ts';
 import { sendRequest } from './daemon-client-transport.ts';
-import { resolveDaemonRequestTimeoutMs } from './daemon-client-timeout.ts';
 
 export type DaemonRequest = SharedDaemonRequest;
 export type DaemonResponse = SharedDaemonResponse;
@@ -50,7 +51,10 @@ export async function sendToDaemon(
     requestWithoutAuthFlag,
     options.authToken ?? flagAuthToken,
   );
-  const requestTimeoutMs = resolveDaemonRequestTimeoutMs(requestWithoutAuthFlag);
+  const requestTimeoutMs = resolveCommandRequestTimeoutMs(
+    resolveCommandTimeoutPolicy(requestWithoutAuthFlag.command),
+    requestWithoutAuthFlag,
+  );
   const daemon = await withDiagnosticTimer(
     'daemon_startup',
     async () => await ensureDaemon(settings),

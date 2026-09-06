@@ -6,18 +6,8 @@ import {
   resolveCommandPostActionObservationSupport,
   resolveCommandTimeoutPolicy,
 } from '../registry.ts';
-import { DEFAULT_TIMEOUT_POLICY } from '../timeout-policy.ts';
+import { DEFAULT_TIMEOUT_POLICY, resolveCommandRequestTimeoutMs } from '../timeout-policy.ts';
 import { DEFAULT_STABLE_TIMEOUT_MS } from '../../../commands/interaction/runtime/stable-capture.ts';
-
-// ADR 0008 completeness gate for the descriptor timeout policy (the layer that
-// replaced the two hand-maintained client lists `isExplicitTimeoutCommand` and
-// `DAEMON_PRESERVING_TIMEOUT_COMMANDS`): every public command must carry a
-// declared policy, and the sets of commands that deviate from the shared
-// default are bounded, diffable lists — they may only change in the same PR
-// that updates them here. Behavioral derivation (envelope arithmetic, wait
-// budget parsing, flag overrides) is proven by the pre-existing oracle tests in
-// src/daemon/client/__tests__/daemon-client.test.ts, which survived this migration
-// unchanged.
 
 function settleObservationCommandNames(): string[] {
   return commandDescriptors
@@ -162,4 +152,167 @@ test('commands outside the registry fall back to the explicit default policy', (
   assert.equal(DEFAULT_TIMEOUT_POLICY.onTimeout, 'reset-daemon');
   assert.equal(DEFAULT_TIMEOUT_POLICY.envelopeMs, 90_000);
   assert.equal(DEFAULT_TIMEOUT_POLICY.budget.source, 'none');
+});
+
+test('wait request timeout extends past the user-supplied wait budget', () => {
+  const base = {
+    positionals: [] as string[],
+    flags: {},
+  };
+
+  // Explicit budgets beyond the default envelope extend it (budget + margin).
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('wait'), {
+      ...base,
+      positionals: ['text', 'Ready', '180000'],
+    }),
+    210_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('wait'), {
+      ...base,
+      positionals: ['stable', '500', '120000'],
+    }),
+    150_000,
+  );
+  // Sleep waits block for their full duration and get the same treatment.
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('wait'), {
+      ...base,
+      positionals: ['120000'],
+    }),
+    150_000,
+  );
+  // Small budgets never shrink the envelope below the default.
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('wait'), {
+      ...base,
+      positionals: ['text', 'Ready', '5000'],
+    }),
+    90_000,
+  );
+  // No explicit budget → default envelope.
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('wait'), {
+      ...base,
+      positionals: ['text', 'Ready'],
+    }),
+    90_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('wait'), { ...base }),
+    90_000,
+  );
+});
+
+test('interaction --settle budgets add post-action settle time on top of the normal envelope', () => {
+  const base = {
+    positionals: ['@e2'],
+  };
+
+  // --timeout bounds the SETTLE wait after selector resolution and the action,
+  // so the envelope keeps the normal touch-command overhead and then adds the
+  // settle budget plus the same safety margin used by wait.
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('press'), {
+      ...base,
+      flags: { settle: true, timeoutMs: 120_000 },
+    }),
+    240_000,
+  );
+  // A small settle deadline still needs the normal touch-command envelope plus
+  // room for post-action observation.
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('fill'), {
+      ...base,
+      flags: { settle: true, timeoutMs: 5_000 },
+    }),
+    125_000,
+  );
+  // Longpress keeps the cold Android helper route and its 120-second maximum
+  // hold inside the outer envelope.
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('longpress'), {
+      ...base,
+      positionals: ['300', '500', '120000'],
+      flags: {},
+    }),
+    210_000,
+  );
+  // Bare --settle adds its default budget after the longpress-specific base,
+  // so a maximum hold still leaves room for post-action observation.
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('longpress'), {
+      ...base,
+      flags: { settle: true },
+    }),
+    250_000,
+  );
+  // Bare timeoutMs without --settle remains wire-compatible with older touch
+  // command clients: it is ignored instead of opting into settle semantics.
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('press'), {
+      ...base,
+      flags: { timeoutMs: 120_000 },
+    }),
+    90_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('press'), { ...base, flags: {} }),
+    90_000,
+  );
+});
+
+test('snapshot uses the standard daemon request timeout with an explicit override', () => {
+  const base = {
+    positionals: [],
+    flags: {},
+  };
+
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('snapshot'), { ...base }),
+    90_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('snapshot'), {
+      ...base,
+      flags: { timeoutMs: 120_000 },
+    }),
+    120_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('screenshot'), { ...base }),
+    90_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('install'), { ...base }),
+    180_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('reinstall'), { ...base }),
+    180_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('install_source'), { ...base }),
+    180_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('prepare'), {
+      ...base,
+      positionals: ['ios-runner'],
+    }),
+    240_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('prepare'), {
+      ...base,
+      positionals: ['ios-runner'],
+      flags: { timeoutMs: 240_000 },
+    }),
+    240_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('test'), { ...base }),
+    undefined,
+  );
 });
