@@ -285,29 +285,42 @@ async function runIosPrivacyCommand(
   }
 
   const args = ['privacy', device.id, action, target, appBundleId];
-  const isNotificationsTarget = target === 'notifications';
-  if (!(action === 'reset' && isNotificationsTarget)) {
-    try {
-      await runSimctl(device, args);
-      return;
-    } catch (error) {
-      if (!(isNotificationsTarget && isNotificationsOperationNotPermitted(error))) {
-        throw error;
-      }
-      throw new AppError(
-        'UNSUPPORTED_OPERATION',
-        'iOS simulator does not support setting notifications permission via simctl privacy on this runtime.',
-        {
-          deviceId: device.id,
-          appBundleId,
-          hint: 'Use reset notifications for reprompt behavior, or toggle notifications manually in Settings.',
-        },
-      );
-    }
+  if (action === 'reset' && target === 'notifications') {
+    await resetIosNotificationsPermission(device, appBundleId);
+    return;
   }
-
   try {
     await runSimctl(device, args);
+    return;
+  } catch (error) {
+    if (!(target === 'notifications' && isNotificationsOperationNotPermitted(error))) {
+      throw error;
+    }
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'iOS simulator does not support setting notifications permission via simctl privacy on this runtime.',
+      {
+        deviceId: device.id,
+        appBundleId,
+        hint: 'Use reset notifications for reprompt behavior, or toggle notifications manually in Settings.',
+      },
+    );
+  }
+}
+
+/**
+ * Direct `reset notifications` can fail with "operation not permitted" even on
+ * runtimes that list the service, while `reset all` succeeds — so reset goes
+ * through the fallback instead of failing loudly like grant/deny. When the
+ * probe omits notifications entirely there is no targeted reset available, and
+ * the gate above fails explicitly rather than clearing unrelated state.
+ */
+async function resetIosNotificationsPermission(
+  device: DeviceInfo,
+  appBundleId: string,
+): Promise<void> {
+  try {
+    await runSimctl(device, ['privacy', device.id, 'reset', 'notifications', appBundleId]);
     return;
   } catch (error) {
     if (!isNotificationsOperationNotPermitted(error)) {
@@ -399,6 +412,7 @@ function parseIosPermissionTarget(
       `Permission mode is only supported for photos. Received: ${permissionMode}.`,
     );
   }
+  if (normalized === 'all') return 'all';
   if (normalized === 'camera') return 'camera';
   if (normalized === 'microphone') return 'microphone';
   if (normalized === 'contacts') return 'contacts';
@@ -419,7 +433,7 @@ function parseIosPermissionTarget(
   }
   throw new AppError(
     'INVALID_ARGS',
-    `Unsupported permission target: ${permissionTarget}. Use camera|microphone|photos|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri.`,
+    `Unsupported permission target: ${permissionTarget}. Use all|camera|microphone|photos|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri.`,
   );
 }
 

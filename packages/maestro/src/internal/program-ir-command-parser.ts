@@ -14,6 +14,7 @@ import type {
   MaestroPressKeyCommand,
   MaestroScrollCommand,
   MaestroScrollUntilVisibleCommand,
+  MaestroSetPermissionsCommand,
   MaestroStopAppCommand,
   MaestroTakeScreenshotCommand,
   MaestroWaitForAnimationToEndCommand,
@@ -58,6 +59,8 @@ import {
   readSequenceItems,
   sourceAt,
   type MaestroProgramParseContext,
+  MAESTRO_PERMISSION_VALUES,
+  VARIABLE_PATTERN,
 } from './program-ir-values.ts';
 
 export function parseMaestroCommandList(
@@ -122,6 +125,7 @@ const COMMAND_VALUE_PARSERS: Readonly<Record<string, CommandValueParser>> = {
   back: parseBack,
   waitForAnimationToEnd: parseWaitForAnimationToEnd,
   stopApp: parseStopApp,
+  setPermissions: parseSetPermissions,
   runScript: parseMaestroRunScriptCommand,
   runFlow: (value, node, context) =>
     parseMaestroRunFlowCommand(value, node, context, parseMaestroCommandList),
@@ -165,7 +169,7 @@ function parseLaunchApp(
   assertOnlyKeys(
     entries,
     'launchApp',
-    ['appId', 'stopApp', 'clearState', 'arguments', 'launchArguments'],
+    ['appId', 'stopApp', 'clearState', 'permissions', 'arguments', 'launchArguments'],
     context,
   );
   const appId = readOptionalEntry(entries, 'appId', (entry) =>
@@ -176,6 +180,9 @@ function parseLaunchApp(
   );
   const clearState = readOptionalEntry(entries, 'clearState', (entry) =>
     readOptionalBoolean(entry, 'launchApp.clearState', context),
+  );
+  const permissions = readOptionalEntry(entries, 'permissions', (entry) =>
+    readSetPermissionsMap(entry, context, 'launchApp'),
   );
   const args = readOptionalEntry(entries, 'arguments', (entry) =>
     parseLaunchArguments(entry, 'launchApp.arguments', context),
@@ -189,6 +196,7 @@ function parseLaunchApp(
     appId,
     stopApp,
     clearState,
+    permissions,
     arguments: args,
     launchArguments,
   });
@@ -445,6 +453,74 @@ function parseStopApp(
   const source = sourceAt(commandNode, context);
   if (isNullNode(value)) return { kind: 'stopApp', source };
   return { kind: 'stopApp', source, appId: readRequiredString(value, 'stopApp', context) };
+}
+
+function parseSetPermissions(
+  value: Node | null,
+  commandNode: Node,
+  context: MaestroProgramParseContext,
+): MaestroSetPermissionsCommand {
+  const source = sourceAt(commandNode, context);
+  const entries = readMapEntries(value, 'setPermissions', context);
+  assertOnlyKeys(entries, 'setPermissions', ['appId', 'permissions', 'optional', 'label'], context);
+  if (!hasEntry(entries, 'permissions'))
+    invalidAt('Maestro setPermissions requires permissions.', commandNode, context);
+  const appId = readOptionalEntry(entries, 'appId', (entry) =>
+    readOptionalString(entry, 'setPermissions.appId', context),
+  );
+  const permissions = readSetPermissionsMap(entryValue(entries, 'permissions'), context);
+  const options = readOptionalCommandOption(entries, 'setPermissions', context);
+  const label = readMaestroCommandLabel(entries, 'setPermissions', context);
+  return stripUndefined({
+    kind: 'setPermissions' as const,
+    source,
+    appId,
+    permissions,
+    ...options,
+    label,
+  });
+}
+
+function readSetPermissionsMap(
+  node: Node | null | undefined,
+  context: MaestroProgramParseContext,
+  owner = 'setPermissions',
+): Record<string, string> {
+  const entries = readMapEntries(node, `${owner}.permissions`, context);
+  if (entries.length === 0)
+    invalidAt(`Maestro ${owner}.permissions requires at least one permission.`, node, context);
+  const permissions: Record<string, string> = {};
+  for (const entry of entries) {
+    // No duplicate-key check: the YAML layer already rejects duplicate mapping
+    // keys, and `in`-style checks misfire on prototype names like `constructor`.
+    permissions[entry.key] = readPermissionValue(entry, context, owner);
+  }
+  return permissions;
+}
+
+function readPermissionValue(
+  entry: { key: string; value: Node | null },
+  context: MaestroProgramParseContext,
+  owner = 'setPermissions',
+): string {
+  const name = `${owner}.permissions.${entry.key}`;
+  const value = readScalarValue(entry.value, name, context);
+  if (typeof value !== 'string')
+    invalidAt(`Maestro ${name} expects a string.`, entry.value, context);
+  const normalized = value.toLowerCase();
+  if (MAESTRO_PERMISSION_VALUES.has(normalized)) return normalized;
+  if (VARIABLE_PATTERN.test(value)) return value;
+  if (value.includes('${'))
+    invalidAt(
+      `Maestro ${name} only supports allow|deny|unset (plus always|inuse|never|limited for location/photos) or a bare \${VAR} lookup; JavaScript expressions are not supported.`,
+      entry.value,
+      context,
+    );
+  invalidAt(
+    `Maestro ${name} expects allow|deny|unset (plus always|inuse|never|limited for location/photos) or a bare \${VAR} lookup.`,
+    entry.value,
+    context,
+  );
 }
 
 function parseLaunchArguments(

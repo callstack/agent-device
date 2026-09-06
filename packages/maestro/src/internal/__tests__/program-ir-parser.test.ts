@@ -409,6 +409,110 @@ describe('parseMaestroProgram', () => {
     });
   });
 
+  test('parses setPermissions maps, variables, and optional/label', () => {
+    const program = parseMaestroProgram(`appId: example.app
+---
+- setPermissions:
+    permissions:
+      all: deny
+      notifications: unset
+- setPermissions:
+    appId: child.app
+    permissions:
+      camera: \${CAMERA_STATE}
+      location: always
+    optional: true
+    label: Prepare scan
+`);
+
+    assert.deepEqual(program.commands[0], {
+      kind: 'setPermissions',
+      source: { line: 3 },
+      permissions: { all: 'deny', notifications: 'unset' },
+    });
+    assert.deepEqual(program.commands[1], {
+      kind: 'setPermissions',
+      source: { line: 7 },
+      appId: 'child.app',
+      permissions: { camera: '${CAMERA_STATE}', location: 'always' },
+      optional: true,
+      label: 'Prepare scan',
+    });
+    // Prototype names are not duplicates: the YAML layer already rejects real
+    // duplicate keys, so parsing accepts them and the backend verdict applies.
+    const prototype = parseMaestroProgram(`---
+- setPermissions:
+    permissions:
+      constructor: allow
+`);
+    assert.deepEqual(prototype.commands[0], {
+      kind: 'setPermissions',
+      source: { line: 2 },
+      permissions: { constructor: 'allow' },
+    });
+    assert.throws(
+      () =>
+        parseMaestroProgram(`---
+- setPermissions:
+    appId: example.app
+`),
+      /requires permissions.*line 2/i,
+    );
+    assert.throws(
+      () =>
+        parseMaestroProgram(`---
+- setPermissions:
+    permissions:
+      camera: sometimes
+`),
+      /allow\|deny\|unset.*line 4/i,
+    );
+    assert.throws(
+      () =>
+        parseMaestroProgram(`---
+- setPermissions:
+    permissions:
+      camera: \${ALLOW + 1}
+`),
+      /not supported.*line 4/i,
+    );
+  });
+
+  test('parses launchApp permissions maps', () => {
+    const program = parseMaestroProgram(`appId: example.app
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+      camera: \${CAMERA_STATE}
+`);
+
+    assert.deepEqual(program.commands[0], {
+      kind: 'launchApp',
+      source: { line: 3 },
+      clearState: true,
+      permissions: { all: 'deny', camera: '${CAMERA_STATE}' },
+    });
+    assert.throws(
+      () =>
+        parseMaestroProgram(`---
+- launchApp:
+    permissions: {}
+`),
+      /launchApp\.permissions requires at least one permission.*line 3/i,
+    );
+    assert.throws(
+      () =>
+        parseMaestroProgram(`---
+- launchApp:
+    permissions:
+      camera: sometimes
+`),
+      /allow\|deny\|unset.*line 4/i,
+    );
+  });
+
   test('reports source lines for unsupported and invalid command shapes', () => {
     assert.throws(
       () =>

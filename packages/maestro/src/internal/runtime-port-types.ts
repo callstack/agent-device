@@ -119,10 +119,15 @@ export type MaestroRuntimeOperations = {
     readonly appId?: string;
     readonly stopApp?: boolean;
     readonly clearState?: boolean;
+    readonly permissions?: Readonly<Record<string, string>>;
     readonly arguments?: MaestroLaunchArguments;
     readonly launchArguments?: MaestroLaunchArguments;
   }>;
   readonly stopApp: MaestroRuntimeOperation<{ readonly appId?: string }>;
+  readonly setPermissions: MaestroRuntimeOperation<{
+    readonly appId?: string;
+    readonly permissions: Readonly<Record<string, string>>;
+  }>;
   readonly openLink: MaestroRuntimeOperation<{ readonly link: string }>;
 
   readonly tapOn: MaestroRuntimeOperation<{

@@ -9,8 +9,13 @@ import {
   type MaestroRuntimePort,
 } from '@agent-device/maestro';
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
+import { AppError } from '@agent-device/kernel/errors';
 import { stripUndefined } from '@agent-device/kernel/record';
 import { executeRunScriptFile } from './run-script-execution.ts';
+import {
+  mapMaestroSetPermissions,
+  type MaestroPermissionMutation,
+} from './set-permissions-mapping.ts';
 import { waitForMaestroAnimationToEnd } from './wait-for-animation-to-end.ts';
 import {
   observeTypedMaestroCondition,
@@ -37,6 +42,10 @@ import {
 } from './daemon-runtime-tap.ts';
 
 export type { CreateDaemonMaestroRuntimeOperationsOptions } from './daemon-runtime-port-support.ts';
+
+function describePermissionMutation(mutation: MaestroPermissionMutation): string {
+  return `${mutation.state} ${mutation.permission}${mutation.mode ? ` ${mutation.mode}` : ''}`;
+}
 
 function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOperationsOptions): {
   operations: MaestroRuntimeOperations;
@@ -77,6 +86,43 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     context: MaestroRuntimeOperationContext,
     stability: 'none' | 'deferred' = 'none',
   ) => await withMutation(() => invoke(operation), context, stability);
+  // launchApp.permissions applies after state clearing but before launch, so
+  // startup code observes the requested state, and the map is validated before
+  // any mutation — a rejected map launches nothing. The split mirrors open
+  // --clearAppState (clear-app-state, then open without it); one nuance does
+  // not carry over: that flag also folds a runtime launch URL into the open on
+  // iOS, which Maestro flows never set, so the split is equivalent here.
+  const applyPermissionMutations = async (
+    appId: string | undefined,
+    mutations: ReadonlyArray<MaestroPermissionMutation>,
+    context: MaestroRuntimeOperationContext,
+  ): Promise<void> => {
+    const applied: string[] = [];
+    for (const mutation of mutations) {
+      try {
+        await invokeMutation(
+          {
+            kind: 'settingsPermission',
+            ...(appId ? { appId } : {}),
+            state: mutation.state,
+            permission: mutation.permission,
+            ...(mutation.mode ? { mode: mutation.mode } : {}),
+          },
+          context,
+        );
+      } catch (error) {
+        if (error instanceof AppError) {
+          throw new AppError(error.code, error.message, {
+            ...error.details,
+            appliedPermissionMutations: applied,
+            failedPermissionMutation: describePermissionMutation(mutation),
+          });
+        }
+        throw error;
+      }
+      applied.push(describePermissionMutation(mutation));
+    }
+  };
   const typeTextAndSettle = async (
     text: string,
     context: MaestroRuntimeOperationContext,
@@ -116,12 +162,19 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       ];
       const clearState = input.clearState === true;
       const relaunch = !clearState && input.stopApp !== false;
+      if (input.permissions) {
+        const mutations = mapMaestroSetPermissions(input.permissions, platform);
+        if (clearState) {
+          await invokeMutation({ kind: 'clearAppState', ...(appId ? { appId } : {}) }, context);
+        }
+        await applyPermissionMutations(appId, mutations, context);
+      }
       await invokeMutation(
         {
           kind: 'launchApp',
           ...(appId ? { appId } : {}),
           relaunch,
-          clearState,
+          clearState: clearState && !input.permissions,
           launchArgs,
         },
         context,
@@ -131,6 +184,13 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     stopApp: async (input, context) => {
       const appId = input.appId ?? context.appId;
       await invokeMutation({ kind: 'stopApp', ...(appId ? { appId } : {}) }, context);
+    },
+    setPermissions: async (input, context) => {
+      await applyPermissionMutations(
+        input.appId ?? context.appId,
+        mapMaestroSetPermissions(input.permissions, platform),
+        context,
+      );
     },
     openLink: async (input, context) => {
       await invokeMutation(
