@@ -292,7 +292,7 @@ describe('platform-execution coherence across CLI route delegation', () => {
 
   test('wiring the transport into a client transport factory stays allowed', () => {
     const wiring = `
-      import { sendToDaemon } from '../daemon/client/daemon-client.ts';
+      import { sendToDaemon } from '../daemon-client/daemon-client.ts';
       type CliDeps = { sendToDaemon: typeof sendToDaemon };
       function build(deps: CliDeps) {
         return createCliDaemonTransport({ transport: deps.sendToDaemon });

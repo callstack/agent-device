@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PNG } from '@agent-device/capture-kit/png';
-import type { DaemonResponse } from '../daemon/client/daemon-client.ts';
+import type { DaemonResponse } from '../daemon-client/daemon-client.ts';
 import {
   runCliCapture as captureCli,
   type CapturedCliRun,

@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import type { Socket } from 'node:net';
 import { test } from 'vitest';
 import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
-import { readDaemonSocketProgressResponse } from '../daemon/client/daemon-client-progress.ts';
+import { readDaemonSocketProgressResponse } from '../daemon-client/daemon-client-progress.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
 type MockSocket = EventEmitter & {
