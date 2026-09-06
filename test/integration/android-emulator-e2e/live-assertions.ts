@@ -22,6 +22,37 @@ export const { assertElementText, assertWaitSelector, assertWaitText, capturePng
     PUBLIC_COMMANDS.wait,
   );
 
+export async function scrollToVisibleSelector(
+  context: LiveContext,
+  selector: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const result = await runStep(
+      context,
+      `check ${selector} visibility (${attempt + 1})`,
+      ['is', 'visible', selector],
+      { allowFailure: true },
+    );
+    if (result.status === 0) {
+      assert.equal(result.json?.data?.pass, true, JSON.stringify(result.json));
+      return;
+    }
+    const reason = result.json?.error?.details?.reason;
+    assert.ok(
+      reason === 'selector_not_found' || reason === 'predicate_failed',
+      `could not observe ${selector}: ${JSON.stringify(result.json)}`,
+    );
+    if (attempt < 5) {
+      await runStep(context, `scroll toward ${selector} (${attempt + 1})`, [
+        'scroll',
+        'down',
+        '0.25',
+      ]);
+    }
+  }
+  assert.fail(`${selector} did not become visible after five scrolls`);
+}
+
 export function assertDiffLine(
   result: CliJsonResult,
   kind: SnapshotDiffLine['kind'],
