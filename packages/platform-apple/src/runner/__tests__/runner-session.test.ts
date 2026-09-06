@@ -666,10 +666,8 @@ test('runner session starts xcodebuild through provider seams and reuses an aliv
     mockRunXcrun.mock.calls.some((call) => call[0]?.includes('uninstall')),
     false,
   );
-  assert.deepEqual(getRunnerSessionSnapshot(device.id), {
-    sessionId: session.sessionId,
-    alive: true,
-  });
+  const expected = { sessionId: session.sessionId, alive: true, ready: false };
+  assert.deepEqual(getRunnerSessionSnapshot(device.id), expected);
 });
 
 test('runner session emits XCTest startup progress only after a runner rebuild', async () => {

@@ -14,6 +14,22 @@ import type { DaemonRequest } from '../../../daemon-request.ts';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
+// Opening a Simulator schedules a best-effort runner prewarm that outlives the request; a real one
+// would spawn xcodebuild after this file finished and land in whichever file the worker runs next.
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
+  return {
+    ...actual,
+    prewarmAppleRunnerCache: vi.fn(),
+    prewarmIosRunnerSession: vi.fn(),
+    notifyIosRunnerAppRelaunched: vi.fn(async () => {}),
+    hasLiveIosRunnerSession: vi.fn(() => false),
+    scheduleIosRunnerIdleStop: vi.fn(),
+    stopIosRunnerSession: vi.fn(async () => {}),
+  };
+});
+
 test('session_list includes device_udid and ios_simulator_device_set for iOS sessions', async () => {
   const sessionStore = makeSessionStore();
   sessionStore.set(

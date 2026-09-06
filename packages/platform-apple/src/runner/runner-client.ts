@@ -2,8 +2,10 @@ import { retryWithPolicy, emitDiagnostic } from './host.ts';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   ensureRunnerSession,
+  getRunnerSessionSnapshot,
   stopIosRunnerSession,
   validateRunnerDevice,
+  releaseSpeculativeIosRunnerSession,
 } from './runner-session.ts';
 import {
   assertRunnerRequestActive,
@@ -176,16 +178,46 @@ function resolveAppleRunnerRuntime(
   });
 }
 
+/**
+ * Whether asking this device's runner now would be answered without a startup wait. A session
+ * that is registered but has not answered yet is still starting, so it does not count: sending it
+ * a command would queue behind its connection retries, and a failed reset would even invalidate it.
+ * Observation paths use this to stay runner-free until the runner is ready.
+ */
+export function hasLiveIosRunnerSession(
+  device: DeviceInfo,
+  options: { requestId?: string } = {},
+): boolean {
+  if (!isIosFamily(device)) return false;
+  return resolveAppleRunnerRuntime(device, options).hasLiveSession(device);
+}
+
+/** Releases the runner a prewarm started for `device` if no command has used it; false otherwise. */
+export async function releaseSpeculativeIosRunnerSessionFor(
+  device: DeviceInfo,
+  options: { requestId?: string } = {},
+): Promise<boolean> {
+  if (!isIosFamily(device)) return false;
+  const release = resolveAppleRunnerRuntime(device, options).releaseSpeculativeSession;
+  return release ? await release(device) : false;
+}
+
 const LOCAL_APPLE_RUNNER_RUNTIME = createLocalAppleRunnerProvider(executeRunnerCommand, {
   prepare: prepareLocalIosRunner,
+  hasLiveSession: (device) => {
+    const session = getRunnerSessionSnapshot(device.id);
+    return session !== null && session.alive && session.ready;
+  },
+  releaseSpeculativeSession: async (device) => await releaseSpeculativeIosRunnerSession(device.id),
   prewarm: async (device, options) => {
     const { healthCheck, ...runnerOptions } = options;
     if (healthCheck === false) {
-      await ensureRunnerSession(device, runnerOptions);
+      await ensureRunnerSession(device, { ...runnerOptions, speculative: true });
       return;
     }
     await prepareLocalIosRunner(device, {
       ...runnerOptions,
+      speculative: true,
       healthTimeoutMs: RUNNER_COMMAND_TIMEOUT_MS,
     });
   },

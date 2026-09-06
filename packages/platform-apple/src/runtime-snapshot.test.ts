@@ -1,8 +1,9 @@
 import { expect, test, vi } from 'vitest';
 import type { ElementSelectorKey } from '@agent-device/contracts/interactor-types';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
-import { bindAppleFindSelectorRuntime } from './runtime-snapshot.ts';
+import { bindAppleFindSelectorRuntime, bindAppleFindTextRuntime } from './runtime-snapshot.ts';
 
 const ios = {
   platform: 'apple',
@@ -22,7 +23,8 @@ test('findSelector resolves the owner interactor once with request execution and
     ) => ({ found: true }),
   );
   const resolve = vi.fn(async () => ({ findSelector }) as never);
-  const host = { ...platformRuntimeHostFixture(), localInteractors: { resolve } };
+  // A live runner keeps answering natively; only an absent one defers to the canonical tree.
+  const host = hostWithRunner(true, resolve);
   const request = new AbortController();
   const poll = new AbortController();
   const operation = bindAppleFindSelectorRuntime(host, { device: ios, signal: request.signal });
@@ -77,3 +79,73 @@ test.each([
     expect(resolve).not.toHaveBeenCalled();
   },
 );
+
+function hostWithRunner(
+  alive: boolean,
+  resolve: PlatformRuntimeHost['localInteractors']['resolve'],
+): PlatformRuntimeHost {
+  const base = platformRuntimeHostFixture();
+  return {
+    ...base,
+    localInteractors: { resolve },
+    appleApplications: { ...base.appleApplications, hasLiveRunnerSession: async () => alive },
+  };
+}
+
+test.each([
+  [
+    'findText',
+    (host: ReturnType<typeof hostWithRunner>, device: DeviceInfo) =>
+      bindAppleFindTextRuntime(host, { device, signal: new AbortController().signal }).findText({
+        text: 'Settings',
+        options: { appBundleId: 'com.example.app', surface: 'app' },
+      }),
+  ],
+  [
+    'findSelector',
+    (host: ReturnType<typeof hostWithRunner>, device: DeviceInfo) =>
+      bindAppleFindSelectorRuntime(host, {
+        device,
+        signal: new AbortController().signal,
+      }).findSelector({
+        selector: { key: 'label', value: 'Settings' },
+        options: { appBundleId: 'com.example.app', surface: 'app' },
+      }),
+  ],
+] as const)(
+  '%s on a Simulator without a live runner reports not-proven instead of starting the runner',
+  async (_name, run) => {
+    const resolve = vi.fn(async () => ({}) as never);
+    await expect(run(hostWithRunner(false, resolve), ios)).resolves.toEqual({ found: false });
+    expect(resolve).not.toHaveBeenCalled();
+  },
+);
+
+test('findText on a Simulator with a live runner still asks the runner', async () => {
+  const findText = vi.fn(async () => ({ found: true }));
+  const resolve = vi.fn(async () => ({ findText }) as never);
+  const operation = bindAppleFindTextRuntime(hostWithRunner(true, resolve), {
+    device: ios,
+    signal: new AbortController().signal,
+  });
+
+  await expect(
+    operation.findText({ text: 'Settings', options: { appBundleId: 'com.example.app' } }),
+  ).resolves.toEqual({ found: true });
+  expect(resolve).toHaveBeenCalledOnce();
+});
+
+test('findText on a physical iOS device resolves the runner regardless of session liveness', async () => {
+  const findText = vi.fn(async () => ({ found: true }));
+  const resolve = vi.fn(async () => ({ findText }) as never);
+  const device = { ...ios, kind: 'device' } as const satisfies DeviceInfo;
+  const operation = bindAppleFindTextRuntime(hostWithRunner(false, resolve), {
+    device,
+    signal: new AbortController().signal,
+  });
+
+  await expect(
+    operation.findText({ text: 'Settings', options: { appBundleId: 'com.example.app' } }),
+  ).resolves.toEqual({ found: true });
+  expect(resolve).toHaveBeenCalledOnce();
+});

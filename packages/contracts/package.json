@@ -328,6 +328,10 @@
       "types": "./src/platform-runtime-unavailable.ts",
       "default": "./src/platform-runtime-unavailable.ts"
     },
+    "./runtime-operation-names": {
+      "types": "./src/runtime-operation-names.ts",
+      "default": "./src/runtime-operation-names.ts"
+    },
     "./progress": {
       "types": "./src/facades/progress.ts",
       "default": "./src/facades/progress.ts"

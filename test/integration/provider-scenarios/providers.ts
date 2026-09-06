@@ -29,6 +29,8 @@ export function createAppleRunnerProviderFromTranscript(
         deviceId: device.id,
         platform: device.platform,
       }) as Record<string, unknown>,
+    // A scripted runner has no startup: the transcript answers every command directly.
+    hasLiveSession: () => true,
   };
 }
 

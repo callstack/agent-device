@@ -17,7 +17,7 @@ The app build must succeed on the host. If signing, Xcode, XCTest, simulator, ru
 
 ## Local state matrix
 
-Replace `SIMULATOR_UDID` with the dedicated simulator UDID. The default screen set is quiet, list, nested-scroll, alert, system-surface, and xctest-stress. Cold cells require at least 10 samples; warm and relaunch cells require at least 20.
+Replace `SIMULATOR_UDID` with the dedicated simulator UDID. The default screen set is quiet, list, nested-scroll, alert, system-surface, and xctest-stress. Cold and first-interaction cells require at least 10 samples; warm and relaunch cells require at least 20.
 
 ```sh
 pnpm bench:ios-snapshot -- \
@@ -35,6 +35,9 @@ The cells mean:
 - `cold`: simulator booted, daemon stopped, and app terminated before each sample.
 - `warm`: app, daemon, runner, and target are prepared once; each sample is a fresh CLI snapshot.
 - `relaunch`: the same prepared tooling is retained while each sample launches a new app process.
+- `first-interaction`: daemon stopped and app terminated before each sample, like `cold`; the
+  sample then opens the app (untimed) and times the first runner-dependent press that follows,
+  so an open that defers runner readiness shows its cost here rather than in `cold`.
 
 Every sample keeps daemon duration and fresh-process wall time separately, the first-tree status, response bytes, target generation, and typed failure details. Each raw result also records the typed host model, model identifier, CPU, and core count needed to compare performance baselines. The raw JSON is validated against `raw-result.schema.v1.json`; the adjacent Markdown is a human-readable summary.
 

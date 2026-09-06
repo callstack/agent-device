@@ -29,6 +29,7 @@ const SCREEN_FIXTURES: readonly ScreenFixture[] = [
     app: FIXTURE_APP_ID,
     launchUrl: `${FIXTURE_SCHEME}/catalog`,
     anchorText: 'Catalog',
+    interactionTarget: 'id="catalog-search"',
   },
   {
     id: 'nested-scroll',
@@ -51,6 +52,7 @@ const SCREEN_FIXTURES: readonly ScreenFixture[] = [
     label: 'iOS Settings system surface',
     app: IOS_SETTINGS_APP_ID,
     anchorText: 'Settings',
+    interactionTarget: 'text="General"',
   },
   {
     id: 'xctest-stress',
@@ -84,7 +86,7 @@ export function parseLocalStates(value: string | undefined): LocalState[] {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean) as LocalState[];
-  const valid = new Set<LocalState>(['cold-cold', 'cold', 'warm', 'relaunch']);
+  const valid = new Set<LocalState>(['cold-cold', 'cold', 'warm', 'relaunch', 'first-interaction']);
   const unknown = states.filter((state) => !valid.has(state));
   if (unknown.length > 0) throw new Error(`Unknown --state value: ${unknown.join(', ')}`);
   if (states.length === 0) throw new Error('--state requires at least one cell.');

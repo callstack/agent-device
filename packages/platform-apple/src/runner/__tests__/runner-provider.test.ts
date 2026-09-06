@@ -48,6 +48,7 @@ test('scoped Apple runner provider requires matching request id when scoped by r
 
 function runnerProvider(source: string, calls: string[]): AppleRunnerProvider {
   return {
+    hasLiveSession: () => true,
     runCommand: async () => {
       calls.push(source);
       return { source };

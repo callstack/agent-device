@@ -34,7 +34,23 @@ export type BatchRequest = Omit<DaemonRequest, 'flags'> & {
   flags?: BatchFlags | Record<string, unknown>;
 };
 
-export type BatchInvoke = (req: BatchRequest) => Promise<DaemonResponse>;
+/**
+ * What the batch runner knows about a step's place in its plan. The daemon uses the remaining
+ * commands to derive platform readiness policy; it never reaches the wire.
+ */
+export type BatchStepContext = Readonly<{
+  stepNumber: number;
+  totalSteps: number;
+  /** The steps still ahead, in the shape their handlers will read. */
+  remainingSteps: readonly Readonly<{
+    command: string;
+    positionals: readonly string[];
+    flags: Readonly<Record<string, unknown>>;
+    input?: Readonly<Record<string, unknown>>;
+  }>[];
+}>;
+
+export type BatchInvoke = (req: BatchRequest, context: BatchStepContext) => Promise<DaemonResponse>;
 
 export type NormalizedBatchStep = {
   command: string;
@@ -88,14 +104,16 @@ export async function runBatch(
     const startedAt = Date.now();
     const partialResults: BatchStepResult[] = [];
     for (const [index, step] of steps.entries()) {
-      const stepResponse = await runBatchStep(
-        req,
-        sessionName,
-        step,
-        invoke,
-        index + 1,
-        index === steps.length - 1,
-      );
+      const stepResponse = await runBatchStep(req, sessionName, step, invoke, {
+        stepNumber: index + 1,
+        totalSteps: steps.length,
+        remainingSteps: steps.slice(index + 1).map((remaining) => ({
+          command: remaining.command,
+          positionals: remaining.positionals,
+          flags: remaining.flags,
+          ...(remaining.input === undefined ? {} : { input: remaining.input }),
+        })),
+      });
       if (!stepResponse.ok) {
         return {
           ok: false,
@@ -249,8 +267,7 @@ async function runBatchStep(
   sessionName: string,
   step: NormalizedBatchStep,
   invoke: BatchInvoke,
-  stepNumber: number,
-  isFinalStep: boolean,
+  context: BatchStepContext,
 ): Promise<
   | { ok: true; step: number; result: BatchStepResult }
   | {
@@ -259,21 +276,26 @@ async function runBatchStep(
       error: DaemonError;
     }
 > {
+  const { stepNumber, totalSteps } = context;
+  const isFinalStep = stepNumber === totalSteps;
   const stepStartedAt = Date.now();
   const stepFlags = buildBatchStepFlags(req.flags, step.flags);
   if (stepFlags.session === undefined) {
     stepFlags.session = sessionName;
   }
-  const response = await invoke({
-    token: req.token,
-    session: sessionName,
-    command: step.command,
-    positionals: step.positionals,
-    input: step.input,
-    flags: stepFlags,
-    runtime: step.runtime === undefined ? req.runtime : step.runtime,
-    meta: batchStepMeta(req.meta, isFinalStep),
-  });
+  const response = await invoke(
+    {
+      token: req.token,
+      session: sessionName,
+      command: step.command,
+      positionals: step.positionals,
+      input: step.input,
+      flags: stepFlags,
+      runtime: step.runtime === undefined ? req.runtime : step.runtime,
+      meta: batchStepMeta(req.meta, isFinalStep),
+    },
+    context,
+  );
   const durationMs = Date.now() - stepStartedAt;
   if (!response.ok) {
     return { ok: false, step: stepNumber, error: response.error };

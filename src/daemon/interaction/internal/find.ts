@@ -24,7 +24,10 @@ import { executeBoundTypeText } from '../../type-text-runtime.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../../selector-runtime.ts';
 import { admitAndBindSnapshotCapture } from '../../snapshot-runtime-binding.ts';
 import type { FocusPointInput } from '@agent-device/contracts/focus-runtime';
-import { resolveSelectorCaptureRuntimePlan } from '@agent-device/contracts/platform-runtime-operations';
+import {
+  findRuntimeIntent,
+  resolveSelectorCaptureRuntimePlan,
+} from '@agent-device/contracts/platform-runtime-operations';
 import type { TypeTextRuntimeOperations } from '@agent-device/contracts/type-text-runtime';
 import type { FindRouteInput } from './types.ts';
 import { createFindTargetCapture, sparseFindSnapshotResponse } from './find-target-capture.ts';
@@ -107,7 +110,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
     session,
     plan: resolveSelectorCaptureRuntimePlan({
       hasActiveApp: session.appBundleId !== undefined,
-      intent: action === 'focus' ? 'find-focus' : action === 'type' ? 'find-type' : 'capture-only',
+      intent: findRuntimeIntent(action),
     }),
     inspectFacts: params.inspectFacts,
     bindDevice: params.bindDevice,

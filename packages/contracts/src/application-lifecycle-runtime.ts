@@ -1,8 +1,9 @@
+import type { RuntimeOperationName } from './runtime-operation-names.ts';
+import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
 import type { SessionSurface } from './session-surface.ts';
-import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { ProviderPortReverseOptions } from './provider-device-runtime.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
 
@@ -39,6 +40,13 @@ export type ApplicationLifecycleExecution = Readonly<{
   iosXctestDerivedDataPath?: string;
   iosXctestEnvDir?: string;
   runnerLeaseContext?: RunnerLogicalLeaseContext;
+  /**
+   * The runtime operations the steps still ahead of this request inside the same plan (today: the
+   * remaining steps of a `batch`) must execute, derived by the daemon from the command descriptors'
+   * declared runtime uses. Never a public flag and never on the wire. Absent when the future of the
+   * session is unknown (a standalone command).
+   */
+  plannedOperations?: readonly RuntimeOperationName[];
 }>;
 
 /** Semantic target resolution used before an application open. */
@@ -66,6 +74,17 @@ export type OpenApplicationPreparationInput = Readonly<{
   execution: ApplicationLifecycleExecution;
 }>;
 
+/**
+ * How much the platform's interaction host (the XCTest runner on iOS) is known to be needed by
+ * the plan that contains an open. `none`: every following step is proven observation-only, so this
+ * open starts no runner and releases a speculative one (started by an earlier prewarm, used by no
+ * command); a runner that has served a command is the session's and stays under the idle-stop
+ * policy. `possible`: the plan is unknown, so a speculative prewarm may run but observation never
+ * awaits it. `required`: a following step needs the runner, so readiness is prepared now and
+ * awaited by that step.
+ */
+export type OpenApplicationRunnerDemand = 'none' | 'possible' | 'required';
+
 /** The normalized public application launch, independent of daemon request shape. */
 export type OpenApplicationInput = Readonly<{
   target?: string;
@@ -92,6 +111,8 @@ export type OpenApplicationInput = Readonly<{
 export type OpenApplicationTiming = Readonly<{
   relaunchCloseDurationMs?: number;
   runtimeHintsDurationMs?: number;
+  /** The runner demand the platform resolved for this open, when the platform decides one. */
+  runnerDemand?: OpenApplicationRunnerDemand;
   runnerPrewarmKind?: 'session' | 'xctestrun';
   runnerPrewarmScheduled?: boolean;
   runnerPrewarmWaited?: boolean;
@@ -99,6 +120,8 @@ export type OpenApplicationTiming = Readonly<{
   openDispatchDurationMs?: number;
   launchUrlDurationMs?: number;
   postOpenSettleDurationMs?: number;
+  /** What a Simulator open learned about the launched app before returning (see the Apple owner). */
+  postOpenObservation?: 'observable' | 'unobservable' | 'not-eligible';
 }>;
 
 export type OpenApplicationOutcome = Readonly<{
@@ -273,6 +296,20 @@ export type AppleApplicationTools = Readonly<{
     signal: AbortSignal,
   ): Promise<void>;
   stopRunnerSession(deviceId: string): Promise<void>;
+  /**
+   * Whether asking this device's runner now would be answered without a startup wait. A starting
+   * session is not live; a runner with no startup cost is. Observation paths use it to avoid
+   * awaiting runner readiness they do not need.
+   */
+  hasLiveRunnerSession(
+    device: DeviceInfo,
+    execution: Readonly<{ requestId?: string }>,
+  ): Promise<boolean>;
+  /** Stops a runner a prewarm started that no command has used; true when one was stopped. */
+  releaseSpeculativeRunner(
+    device: DeviceInfo,
+    execution: Readonly<{ requestId?: string }>,
+  ): Promise<boolean>;
   scheduleRunnerIdleStop(deviceId: string): void;
   prepareRunner(
     device: DeviceInfo,

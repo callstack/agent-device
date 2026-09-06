@@ -110,24 +110,25 @@ A device-scoped pause on agent mutations during human operation.
 ### Commands and routing
 
 **Command surface**:
-The catalog of public command identity, interface exposure, adapter policy, and metadata across
-entrypoints.
+The catalog of public command identity, exposure, adapter policy, and metadata across entrypoints.
 
 **Runtime use**:
-A command's platform-neutral declaration of required operations and optional preferred fast paths.
+A command's platform-neutral declaration of required operations and preferred fast paths.
 
 **Inventory use**:
-An inventory command's platform-neutral declaration for composing device sources without binding one.
+An inventory command's platform-neutral declaration for composing device sources unbound.
 
 **Daemon command registry**:
 The daemon-side truth for route ownership and request-policy traits.
 
 **Runner command traits**:
-Per-command classifications controlling Apple runner lifecycle and recovery behavior
-independently of the public command surface.
+Per-command classes steering Apple runner lifecycle and recovery, independent of the public surface.
+
+**Runner demand**:
+What a Simulator open prepares, or releases unused, of the XCTest runner for remaining steps.
 
 **Daemon RPC protocol version**:
-The integer used to detect breaking compatibility across the remote daemon boundary.
+The integer that detects breaking compatibility across the remote daemon boundary.
 
 **Version-skew invariant**:
 Local client and daemon versions must match; only remote daemons, separately versioned helpers,

@@ -19,6 +19,8 @@ export type AppleRunnerCommandOptions = AppleRunnerRequestOptions & {
 export type AppleRunnerLifecycleOptions = AppleRunnerCommandOptions & {
   buildTimeoutMs?: number;
   forceRunnerXctestrunRebuild?: boolean;
+  /** The session is started ahead of any command that needs it (a prewarm). */
+  speculative?: boolean;
 };
 
 export type AppleRunnerPrewarmOptions = AppleRunnerLifecycleOptions & {
@@ -74,6 +76,16 @@ export type AppleRunnerProvider = {
    * Starts runner setup opportunistically. This must remain best-effort.
    */
   prewarm?: AppleRunnerPrewarmExecutor;
+  /**
+   * Whether a command sent now is answered without waiting for a runner startup. Every provider
+   * states it: registered is not ready, and a provider with no startup cost says so explicitly.
+   */
+  hasLiveSession: (device: DeviceInfo) => boolean;
+  /**
+   * Stops a session this provider started speculatively (a prewarm no command has used yet).
+   * A provider that never starts speculative work has nothing to release and omits this.
+   */
+  releaseSpeculativeSession?: (device: DeviceInfo) => Promise<boolean>;
 };
 
 export type AppleRunnerProviderScopeOptions = {
@@ -91,7 +103,10 @@ const appleRunnerProviderScope = new AsyncLocalStorage<AppleRunnerProviderScope>
 
 export function createLocalAppleRunnerProvider(
   runCommand: AppleRunnerCommandExecutor,
-  lifecycle: Pick<AppleRunnerProvider, 'prepare' | 'prewarm'> = {},
+  lifecycle: Pick<
+    AppleRunnerProvider,
+    'prepare' | 'prewarm' | 'hasLiveSession' | 'releaseSpeculativeSession'
+  >,
 ): AppleRunnerProvider {
   return { runCommand, ...lifecycle };
 }
@@ -139,7 +154,8 @@ function normalizeAppleRunnerProvider(
   provider: AppleRunnerProvider | AppleRunnerCommandExecutor,
 ): AppleRunnerProvider {
   if (typeof provider === 'function') {
-    return { runCommand: provider };
+    // A bare executor has no session to start: every command it accepts is answered directly.
+    return { runCommand: provider, hasLiveSession: () => true };
   }
   return provider;
 }

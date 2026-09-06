@@ -51,6 +51,7 @@ test('runner-backed iOS recordings still invalidate on runner restarts', async (
   mockGetRunnerSessionSnapshot.mockResolvedValue({
     alive: true,
     sessionId: 'runner-after',
+    ready: true,
   });
 
   await refreshRecordingHealth(session);

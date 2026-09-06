@@ -259,6 +259,7 @@ async function startRunnerSessionWithLease(
     logicalLeaseContext,
     simulatorSetRedirect: simulatorSetRedirect ?? undefined,
     lease,
+    speculative: options.speculative === true,
   };
   if (signal?.aborted) {
     await disposeRunnerSession(session, {
@@ -421,12 +422,14 @@ function isBenignSimulatorRunnerUninstallResult(result: ExecResult): boolean {
 
 export function getRunnerSessionSnapshot(
   deviceId: string,
-): { sessionId: string; alive: boolean } | null {
+): { sessionId: string; alive: boolean; ready: boolean } | null {
   const session = runnerSessions.get(deviceId);
   if (!session) return null;
   return {
     sessionId: session.sessionId,
     alive: isRunnerProcessAlive(session.child.pid),
+    // A registered session whose runner has not answered yet is still starting.
+    ready: session.ready,
   };
 }
 
@@ -518,6 +521,30 @@ function resolveRunnerIdleStopMs(env: NodeJS.ProcessEnv = process.env): number {
     if (Number.isFinite(parsed) && parsed >= 0) return Math.floor(parsed);
   }
   return RUNNER_RETAINED_IDLE_STOP_DEFAULT_MS;
+}
+
+/** The first command that is not a readiness probe makes the session the caller's, not a guess. */
+export function markRunnerSessionServed(session: RunnerSession, command: RunnerCommand): void {
+  if (session.speculative && !isRunnerReadinessProbeCommand(command)) {
+    session.speculative = false;
+  }
+}
+
+/**
+ * Stops the runner a prewarm started when no command has used it yet, so a proven
+ * observation-only plan retains nothing it did not ask for. A runner that served a command is
+ * the session's working runner and stays under the idle-stop policy.
+ */
+export async function releaseSpeculativeIosRunnerSession(deviceId: string): Promise<boolean> {
+  const session = runnerSessions.get(deviceId);
+  if (!session?.speculative) return false;
+  emitDiagnostic({
+    level: 'debug',
+    phase: 'ios_runner_speculative_released',
+    data: { deviceId, sessionId: session.sessionId, ready: session.ready },
+  });
+  await stopIosRunnerSession(deviceId);
+  return true;
 }
 
 export async function stopIosRunnerSession(deviceId: string): Promise<void> {

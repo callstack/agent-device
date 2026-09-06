@@ -118,3 +118,40 @@ test('default batch (no responseLevel) passes meta through unchanged — byte-id
   await runBatch(batchRequest(['snapshot', 'find', 'get']), 'session', recordingInvoke(seen));
   assert.deepEqual(seen, [undefined, undefined, undefined]);
 });
+
+test('each step is invoked with its place in the plan and the steps still ahead of it', async () => {
+  const seen: Array<{ command: string; remaining: unknown; step: number; total: number }> = [];
+  const request = batchRequest(['open', 'snapshot', 'click']);
+  (request.flags as { batchSteps: DaemonBatchStep[] }).batchSteps[1]!.input = {
+    interactiveOnly: true,
+  };
+  const response = await runBatch(request, 'session', async (req, context) => {
+    seen.push({
+      command: req.command,
+      remaining: context.remainingSteps,
+      step: context.stepNumber,
+      total: context.totalSteps,
+    });
+    return { ok: true, data: {} };
+  });
+
+  assert.equal(response.ok, true);
+  assert.deepEqual(seen, [
+    {
+      command: 'open',
+      remaining: [
+        { command: 'snapshot', positionals: [], flags: {}, input: { interactiveOnly: true } },
+        { command: 'click', positionals: [], flags: {} },
+      ],
+      step: 1,
+      total: 3,
+    },
+    {
+      command: 'snapshot',
+      remaining: [{ command: 'click', positionals: [], flags: {} }],
+      step: 2,
+      total: 3,
+    },
+    { command: 'click', remaining: [], step: 3, total: 3 },
+  ]);
+});

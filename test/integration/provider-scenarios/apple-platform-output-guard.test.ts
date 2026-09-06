@@ -235,6 +235,7 @@ function richNodes() {
 
 function permissiveRunner(): AppleRunnerProvider {
   return {
+    hasLiveSession: () => true,
     runCommand: async (_device, command) => {
       switch (command.command) {
         case 'uptime':

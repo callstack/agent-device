@@ -16,6 +16,7 @@ import type {
 test('Provider-backed integration prepare uses the Apple runner lifecycle provider', async () => {
   const lifecycleCalls: string[] = [];
   const appleRunnerProvider: AppleRunnerProvider = {
+    hasLiveSession: () => true,
     runCommand: async () => {
       throw new Error('prepare should not be reduced to a raw runner command');
     },
