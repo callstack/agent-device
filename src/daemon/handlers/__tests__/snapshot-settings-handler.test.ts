@@ -158,6 +158,27 @@ test('settings reset-keychain dispatches without an app id or active app session
   });
 });
 
+test('settings reset-keychain rejects an extra app argument instead of dropping it', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-reset-keychain-extra-arg';
+  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
+
+  const response = await handleSnapshotCommands({
+    req: snapshotRequest(sessionName, 'settings', {
+      positionals: ['reset-keychain', 'clear', 'com.example.app'],
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(false);
+  if (response?.ok === false) {
+    expect(response.error.code).toBe('INVALID_ARGS');
+  }
+  expect(fixtureSettingsMutations).toHaveLength(0);
+});
+
 test('settings usage hint documents canonical faceid states', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSnapshotCommands({

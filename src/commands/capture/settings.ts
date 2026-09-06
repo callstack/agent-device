@@ -107,7 +107,7 @@ function readSettingsOptionsFromPositionals(
     const app = state === 'clear' ? positionals[2] : state;
     return { ...base, setting, state: 'clear', app };
   }
-  if (setting === 'reset-keychain' && state === 'clear') {
+  if (setting === 'reset-keychain' && state === 'clear' && positionals.length === 2) {
     return { ...base, setting, state };
   }
   throw new AppError('INVALID_ARGS', 'Invalid settings arguments.');

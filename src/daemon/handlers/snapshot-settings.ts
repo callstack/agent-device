@@ -64,7 +64,10 @@ export function parseSettingsArgs(
     !setting ||
     !state ||
     (setting === 'permission' && !permissionTarget) ||
-    (setting === 'location' && state === 'set' && (!req.positionals?.[2] || !req.positionals?.[3]))
+    (setting === 'location' &&
+      state === 'set' &&
+      (!req.positionals?.[2] || !req.positionals?.[3])) ||
+    (setting === 'reset-keychain' && req.positionals?.[2] !== undefined)
   ) {
     return errorResponse('INVALID_ARGS', SETTINGS_INVALID_ARGS_MESSAGE);
   }
