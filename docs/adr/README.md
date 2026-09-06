@@ -23,6 +23,7 @@
 | [0019 Request-Bound Platform Runtime](0019-request-bound-platform-runtime.md) | platform-package boundaries/composition, device discovery, runtime facts/facets, request binding, provider ownership, platform-shaped session resources, durable reattachment, daemon-handler migration |
 | [0020 Composable Recorded Fragments (Proposed)](0020-composable-recorded-fragments.md) | lifecycle-free recorded fragment capture/composition, entry guards, fragment-local addresses/digests, staleness, and native `.ad`/Maestro composition |
 | [0021 Host — Simlock-Backed Managed Device Allocation and the Host Supervisor](0021-host-simlock-managed-device-allocation.md) | local-first Simlock-managed execution, Host identity/admin boundaries, shape allocation, durable managed-device lease mapping, lifecycle ownership, and supervised maintenance |
+| [0022 Daemon — Platform Runtime Coupling Audit and Ownership Ratchets](0022-daemon-platform-runtime-coupling.md) | daemon imports of root `platform-runtime-*` modules, the R74 edge classification inventory, R75 session-authority ratchet, entry-to-platform hop routes and roles |
 
 ADRs record *why*; the registries and gates they describe are the living source of truth — when
 prose and a registry disagree, the registry wins and the ADR needs a follow-up.
