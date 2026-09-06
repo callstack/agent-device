@@ -41,7 +41,7 @@ import path from 'node:path';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import { handleSessionCommands } from '../../../daemon/handlers/__tests__/session-command-harness.ts';
 import { SessionStore } from '../../../daemon/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../daemon/types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../daemon/daemon-request.ts';
 import { withRequestProgressSink } from '@agent-device/host-kit/request';
 import {
   getReplayTestReporterExitCode,

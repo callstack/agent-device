@@ -5,7 +5,8 @@ import {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonRequest, SessionRuntimeHints, SessionState } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionRuntimeHints, SessionState } from './session-state.ts';
 import { SessionStore } from './session-store.ts';
 import { trimRuntimeValue } from '../core/runtime-transport-hints.ts';
 import { isAndroidEmulator, isIosSimulator } from './device-targets.ts';

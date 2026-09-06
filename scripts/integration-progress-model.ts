@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { PUBLIC_COMMANDS } from '../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { listCommandMetadata } from '../src/commands/command-metadata.ts';
 import { getFlagDefinitions } from '../src/commands/cli-grammar/flag-registry.ts';
 import { walkFiles } from './lib/walk-files.ts';

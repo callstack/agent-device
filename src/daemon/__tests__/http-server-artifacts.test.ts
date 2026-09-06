@@ -8,7 +8,7 @@ import {
   listDownloadableArtifacts,
   trackDownloadableArtifact,
 } from '../artifact-tracking.ts';
-import type { DaemonResponse } from '../types.ts';
+import type { DaemonResponse } from '../daemon-request.ts';
 import { runCmdSync, withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import {
   closeLoopbackServer,

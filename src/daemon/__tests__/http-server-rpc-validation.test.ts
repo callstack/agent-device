@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createDaemonHttpServer } from '../server/http-server.ts';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { cleanupUploadedArtifact, trackUploadedArtifact } from '../artifact-tracking.ts';
 import { resolveInstallSource } from '../install-source-resolution.ts';
 import {

@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
-import type { DaemonRequest } from '../../../types.ts';
+import type { DaemonRequest } from '../../../daemon-request.ts';
 import { attachRemoteReplayTestArtifacts } from '../test-command.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 

@@ -4,7 +4,7 @@ import type {
   JsonObject,
 } from '@agent-device/contracts/client';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   commonInputFromFlags,
   direct,

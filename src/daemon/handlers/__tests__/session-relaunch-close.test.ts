@@ -7,7 +7,7 @@ import { createTestDeviceInventoryGateways } from '../../../__tests__/test-utils
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { makeSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { getResolveTargetDeviceMock } from '../../__tests__/request-router-dispatch-mocks.ts';
-import type { DaemonRequest } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 
 vi.mock('node:timers/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:timers/promises')>();

@@ -3,7 +3,7 @@ import type {
   MaestroDispatchSelector,
   MaestroSinglePointerGestureInput,
 } from '@agent-device/maestro';
-import type { DaemonRequest } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import type { Point, Rect } from '@agent-device/kernel/snapshot';
 
 export type MaestroClickOptions = Pick<

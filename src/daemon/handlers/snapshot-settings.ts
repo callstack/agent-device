@@ -10,7 +10,8 @@ import { settingsRuntimeUse } from '@agent-device/contracts/platform-runtime-ope
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import { contextFromFlags } from '../context.ts';
 import { SessionStore } from '../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { recordIfSession } from '../snapshot-session.ts';
 import { errorResponse, type DaemonFailureResponse } from '../response.ts';
 import { expireRefFrame } from '../ref-frame.ts';
@@ -64,7 +65,10 @@ export function parseSettingsArgs(
     !setting ||
     !state ||
     (setting === 'permission' && !permissionTarget) ||
-    (setting === 'location' && state === 'set' && (!req.positionals?.[2] || !req.positionals?.[3]))
+    (setting === 'location' &&
+      state === 'set' &&
+      (!req.positionals?.[2] || !req.positionals?.[3])) ||
+    (setting === 'reset-keychain' && req.positionals?.[2] !== undefined)
   ) {
     return errorResponse('INVALID_ARGS', SETTINGS_INVALID_ARGS_MESSAGE);
   }

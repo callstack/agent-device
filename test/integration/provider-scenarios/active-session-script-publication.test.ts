@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { INTERNAL_COMMANDS } from '../../../src/command-catalog.ts';
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { test } from 'vitest';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { androidSettingsXml, createAndroidSettingsWorld } from './android-world.ts';

@@ -20,6 +20,7 @@ module.exports = {
     buildCacheProvider: { plugin: 'expo-build-disk-cache' },
     plugins: [
       'expo-router',
+      'expo-secure-store',
       [
         'expo-audio',
         {

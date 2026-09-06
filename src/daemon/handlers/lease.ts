@@ -3,12 +3,12 @@ import type {
   LeaseLifecycleContext,
   LeaseLifecycleProvider,
 } from '@agent-device/contracts/device';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type {
   AgentArtifactsResult,
   CloudArtifactProvider,
 } from '@agent-device/contracts/observability';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import type { ReleaseLeaseRequest } from '../lease-registry-scope.ts';
 import type { SessionStore } from '../session-store.ts';
@@ -23,7 +23,7 @@ import {
   leaseScopeToReleaseRequest,
 } from '../../core/lease-scope.ts';
 import { AppError, createRequestCanceledError, errorMessage } from '@agent-device/kernel/errors';
-import { LEASE_ALLOCATION_BUDGET_MS } from '../../core/command-descriptor/timeout-policy.ts';
+import { LEASE_ALLOCATION_BUDGET_MS } from '@agent-device/command-registry/timeout-policy';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { listDownloadableArtifacts } from '../artifact-tracking.ts';
 import { providerSessionIdFromData } from '../provider-session-ownership.ts';

@@ -1,6 +1,6 @@
 import { isIosFamily } from '@agent-device/kernel/device';
 import { inspectAppleRunnerSession } from '../platform-runtime-apple-resources.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 
 export async function refreshRecordingHealth(session: SessionState): Promise<void> {
   if (!recordingRequiresRunnerHealth(session)) {

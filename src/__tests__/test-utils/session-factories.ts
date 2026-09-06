@@ -1,4 +1,4 @@
-import type { SessionState } from '../../daemon/types.ts';
+import type { SessionState } from '../../daemon/session-state.ts';
 import type {
   SessionScriptPublicationState,
   SessionScriptRepairStatus,

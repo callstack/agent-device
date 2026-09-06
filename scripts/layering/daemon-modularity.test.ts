@@ -27,7 +27,7 @@ function importEdge(file: string, target: string): ResolvedImportEdge {
 
 function baselineDaemonTypesEdges(): ResolvedImportEdge[] {
   return DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters.map((file) =>
-    importEdge(file, 'src/daemon/types.ts'),
+    importEdge(file, 'src/daemon/daemon-request.ts'),
   );
 }
 
@@ -105,11 +105,14 @@ test('R10 banks an R7 shrink with no edit anywhere', () => {
   );
 });
 
-test('external daemon/types.ts importer membership changes require the baseline to change', () => {
+test('external daemon request/session-state importer membership changes require the baseline to change', () => {
   const edges = resolveImportEdges(
     new Map([
-      ['src/client/new-importer.ts', "import type { DaemonRequest } from '../daemon/types.ts';"],
-      ['src/daemon/types.ts', 'export type DaemonRequest = { command: string };'],
+      [
+        'src/client/new-importer.ts',
+        "import type { SessionState } from '../daemon/session-state.ts';",
+      ],
+      ['src/daemon/session-state.ts', 'export type SessionState = { name: string };'],
     ]),
   );
 

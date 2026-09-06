@@ -23,7 +23,8 @@ import { createScreenRecordingRecoveryControl } from '../screen-recording-resour
 import { resolveSessionScope } from '../session-routing.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { recordSessionAction } from '../session-action-recorder.ts';
 import {
   missingAppSessionResponse,

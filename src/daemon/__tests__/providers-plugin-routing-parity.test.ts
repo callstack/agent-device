@@ -33,7 +33,7 @@ import {
   type PlatformProviderResolvers,
 } from '../../platform-runtime.ts';
 import { resolvePlatformProviderRequestContext } from '../request-platform-provider-context.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 
 // Phase 3 step b.3 (issue #974) parity gate for the request-scope provider
 // facet. The per-platform GATE that each descriptor in the root-owned provider composition

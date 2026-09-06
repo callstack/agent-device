@@ -18,19 +18,20 @@ import type {
   AdReplayVerificationEntry,
 } from '@agent-device/ad-replay';
 import {
-  createReplayDivergenceSanitizer,
   type ReplayDivergence,
   type ReplayDivergenceTargetBindingKind,
   type ReplayDivergenceTargetCandidate,
   type ReplayDivergenceTargetIdentity,
 } from '@agent-device/contracts/divergence';
+import { createReplayDivergenceSanitizer } from '../../../core/replay-divergence.ts';
 import {
   REPLAY_TARGET_GUARD_MISMATCH_REASON,
   WAIT_LANDMARK_MISMATCH_REASON,
 } from '@agent-device/contracts/replay';
-import { resolveTargetIdentityVerification } from '../../../core/command-descriptor/registry.ts';
-import { parseWaitPositionals } from '../../../core/wait-positionals.ts';
-import type { DaemonResponse, SessionState } from '../../types.ts';
+import { resolveTargetIdentityVerification } from '@agent-device/command-registry/registry';
+import { parseWaitPositionals } from '@agent-device/command-registry/wait-positionals';
+import type { DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import type { ReplayResumeStamper } from '../../session-replay-coordinator.ts';
 import type { InternalObservationEvidence } from '../../internal-observation.ts';
 import { boundedLocalIdentity } from '../../session-target-evidence.ts';

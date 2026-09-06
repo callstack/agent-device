@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resolveInstallSource } from '../install-source-resolution.ts';
 import { trackUploadedArtifact } from '../artifact-tracking.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function makeRequest(meta?: DaemonRequest['meta']): DaemonRequest {

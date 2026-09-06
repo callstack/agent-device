@@ -25,8 +25,8 @@ import type {
   DaemonInvokeFn,
   DaemonRequest,
   DaemonResponse,
-  SessionState,
-} from '../../../src/daemon/types.ts';
+} from '../../../src/daemon/daemon-request.ts';
+import type { SessionState } from '../../../src/daemon/session-state.ts';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.ts';

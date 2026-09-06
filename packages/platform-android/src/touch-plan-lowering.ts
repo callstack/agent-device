@@ -1,11 +1,14 @@
-import { interpolateGesturePoint, sampleGestureOffsets } from './gesture-plan.ts';
+import {
+  interpolateGesturePoint,
+  sampleGestureOffsets,
+} from '@agent-device/contracts/gesture-plan';
 import type {
   GesturePlan,
   MultiTouchGesturePlan,
   PointerTrajectory,
   PointerTrajectorySample,
   SinglePointerGesturePlan,
-} from './gesture-plan-types.ts';
+} from '@agent-device/contracts/gesture-plan-types';
 import type { Rect } from '@agent-device/kernel/snapshot';
 
 export type AndroidLongPressTouchPlan = {

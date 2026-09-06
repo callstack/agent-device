@@ -30,7 +30,7 @@ import type {
   PlatformProviderRequestContext,
 } from '@agent-device/contracts/platform-providers';
 import { resolvePlatformProviderRequestContext } from '../request-platform-provider-context.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 
 const OTHER_IOS_SIMULATOR: DeviceInfo = {
   platform: 'apple',

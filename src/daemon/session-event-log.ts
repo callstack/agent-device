@@ -1,12 +1,12 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PUBLIC_COMMANDS } from '../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { AppError } from '@agent-device/kernel/errors';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
 import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
 import { isRecord } from '@agent-device/kernel/record';
-import type { DaemonRequest, DaemonResponse } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import { buildActionDetails, buildActionSummary } from './session-event-action.ts';
 import { buildRequestSuccessEventPresentation } from './session-event-request.ts';
 import { scanEventLogLines } from './session-event-log-lines.ts';

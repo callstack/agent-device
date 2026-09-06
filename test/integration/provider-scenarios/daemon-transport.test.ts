@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
 import { test } from 'vitest';
-import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/daemon-request.ts';
 import {
   createSocketServer,
   listenHttpServer,

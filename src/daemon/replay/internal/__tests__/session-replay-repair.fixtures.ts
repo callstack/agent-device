@@ -7,7 +7,7 @@ import { isSessionRecording } from '../../../session-script-publication-capabili
  * session.actions." This factory keeps the per-test mock declarative (a config
  * object, no inline branching) so each test body stays linear.
  */
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../../types.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import { SessionStore } from '../../../session-store.ts';
 import { isInteractiveObservation } from '../../../session-action-recorder.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';

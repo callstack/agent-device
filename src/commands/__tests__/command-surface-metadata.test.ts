@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { listCliCommandNames } from '../../command-catalog.ts';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import {
   listCommandResponseDataTransforms,
   listMcpExposedCommandNames,
-} from '../../core/command-descriptor/registry.ts';
+} from '@agent-device/command-registry/registry';
 import { getSchemaOnlyCliCommandSchema } from '../../cli-schema/command-overrides.ts';
 import {
   listCommandMetadata,

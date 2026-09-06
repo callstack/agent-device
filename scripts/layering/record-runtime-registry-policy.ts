@@ -1,4 +1,4 @@
-// Catches: src/core/command-descriptor/registry.ts's record command descriptor missing the
+// Catches: packages/command-registry/src/registry.ts's record command descriptor missing the
 //   runtime-descriptor join assertion — a wiring gap where record's registry entry silently
 //   stops being checked against the request-bound runtime it must join, invisible to a type
 //   check because the assertion's absence is not a type error, just a missing call.
@@ -16,7 +16,7 @@ import { memberName, type ProductionSource, visitAst } from './layering-ast.ts';
 export function recordRuntimeRegistryJoinViolations(
   sources: readonly ProductionSource[],
 ): string[] {
-  const file = sources.find(({ path }) => path === 'src/core/command-descriptor/registry.ts');
+  const file = sources.find(({ path }) => path === 'packages/command-registry/src/registry.ts');
   if (!file) return [missingRecordRuntimeRegistryJoin()];
   const parsed = parseSync(file.path, file.source);
   const assertionName = importedRecordRuntimeAssertionName(parsed.program);
@@ -35,7 +35,7 @@ export function recordRuntimeRegistryJoinViolations(
 }
 
 function missingRecordRuntimeRegistryJoin(): string {
-  return 'src/core/command-descriptor/registry.ts: missing record runtime descriptor join assertion';
+  return 'packages/command-registry/src/registry.ts: missing record runtime descriptor join assertion';
 }
 
 function importedRecordRuntimeAssertionName(node: unknown): string | undefined {

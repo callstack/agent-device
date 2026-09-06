@@ -12,7 +12,7 @@ vi.mock('../../../../request/device-inventory-context.ts', async (importOriginal
 import { handleSessionInventoryCommands } from '../inventory.ts';
 import { listDeviceInventory } from '../../../../request/device-inventory-context.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {

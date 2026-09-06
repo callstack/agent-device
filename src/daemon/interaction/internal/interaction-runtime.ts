@@ -27,7 +27,8 @@ import { markDeferredInteractionOutcome } from '../../deferred-interaction-outco
 import { isSessionRecording } from '../../session-script-publication-capability.ts';
 import { recordTouchVisualizationEvent } from '../../recording-gestures.ts';
 import type { SessionStore } from '../../session-store.ts';
-import type { DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import type { BoundTouchExecutor } from '../../touch-runtime.ts';
 import type { BoundGestureExecutor } from '../../gesture-runtime.ts';
 

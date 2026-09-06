@@ -11,7 +11,7 @@ import {
   type SnapshotNode,
 } from '@agent-device/kernel/snapshot';
 import fc from 'fast-check';
-import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 
 /**
  * Shared fast-check generators for the pure parse/print and geometry kernels
@@ -466,7 +466,8 @@ function replayScriptLineArbs(): fc.Arbitrary<string>[] {
     const plan: ReplayLinePlan | undefined = REPLAY_SCRIPT_LINE_PLANS[command];
     if (plan === undefined) {
       throw new Error(
-        `replay command "${command}" from src/command-catalog.ts is unclassified: ` +
+        `replay command "${command}" from @agent-device/command-registry/catalog is ` +
+          'unclassified: ' +
           'add a line template or a waiver to REPLAY_SCRIPT_LINE_PLANS in ' +
           'src/__tests__/test-utils/property-arbitraries.ts',
       );

@@ -26,7 +26,7 @@
 //     merge-base (R9). R4 keeps the value graph acyclic, so these cycles are free at
 //     runtime but bound what can be read in isolation.
 //   - Across the DAEMON MODULARITY MIGRATION: R7 ownership pressure and external
-//     daemon/types.ts importers only shrink, R9 zone membership cannot grow or absorb
+//     daemon request/session-state importers only shrink, R9 zone membership cannot grow or absorb
 //     engine files, and planned logical modules start with zero forbidden/internal imports (R10).
 //   - Over the WORKSPACE PACKAGES: no root back-imports, no relative tunnelling past
 //     an exports map, and every workspace specifier declared + exports-named (R11).
@@ -50,6 +50,7 @@ import { pathToFileURL } from 'node:url';
 import {
   fieldClassificationDrift,
   findSessionStateWrites,
+  sessionStateDeclarationFile,
   sessionStateFields,
   sessionStateFieldCount,
   SESSION_STATE_FIELD_OWNERS,
@@ -233,19 +234,19 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation
 }
 
 function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): LayeringViolation[] {
-  const types = sources.get('src/daemon/types.ts');
-  if (!types) {
+  const declarationFile = sessionStateDeclarationFile(sources);
+  if (!declarationFile) {
     return [
       {
         rule: 'R7 session-state-ownership',
-        file: 'src/daemon/types.ts',
+        file: 'src/daemon/session-state.ts',
         line: 1,
-        message: 'daemon/types.ts is missing, so SessionState ownership cannot be checked.',
+        message: 'no daemon module declares SessionState, so its ownership cannot be checked.',
       },
     ];
   }
 
-  const fields = sessionStateFields(types);
+  const fields = sessionStateFields(sources.get(declarationFile)!);
   const writes = findSessionStateWrites(sources, fields);
   const violations: LayeringViolation[] = [];
   const seenOwners = new Map<string, Set<string>>();

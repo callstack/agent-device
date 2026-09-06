@@ -12,7 +12,7 @@ import {
   parseFindArgs,
   type FindAction,
 } from '@agent-device/selectors';
-import { resolveWaitBudgetMs } from '../wait-positionals.ts';
+import { resolveWaitBudgetMs } from './wait-positionals.ts';
 import {
   DEFAULT_TIMEOUT_POLICY,
   INSTALL_REQUEST_TIMEOUT_MS,

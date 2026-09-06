@@ -25,7 +25,8 @@ import { resolveDaemonSessionTeardownTimeoutMs } from '../session-teardown-budge
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
 import { runtimeHintValues } from '../session-runtime.ts';
 import { closeDaemonServers } from './server-shutdown.ts';
-import type { DaemonInvokeFn, SessionState } from '../types.ts';
+import type { DaemonInvokeFn } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
 import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
 import {

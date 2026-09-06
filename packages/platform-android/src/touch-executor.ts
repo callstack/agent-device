@@ -3,7 +3,7 @@ import type { Rect } from '@agent-device/kernel/snapshot';
 import { resolveAndroidTouchProvider } from './adb-executor.ts';
 import { executeAndroidTouchHelperPlan, readAndroidTouchHelperViewport } from './touch-helper.ts';
 import { validateAndroidGestureViewport } from './gesture-viewport.ts';
-import { lowerAndroidTouchPlan, type AndroidTouchPlan } from './touch-plan.ts';
+import { lowerAndroidTouchPlan, type AndroidTouchPlan } from './touch-plan-lowering.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
 export async function executeAndroidTouchPlan(

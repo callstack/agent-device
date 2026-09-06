@@ -18,10 +18,16 @@ type AstNode = Record<string, unknown>;
 export const SESSION_RESOURCE_OWNERSHIP_RULE = 'R68 session-resource-ownership';
 
 const RESOURCE_OWNERS: Readonly<Record<string, ReadonlySet<string>>> = {
-  appLog: new Set(['src/daemon/app-log-session-resource.ts', 'src/daemon/types.ts']),
-  appLogFailure: new Set(['src/daemon/app-log-session-resource.ts', 'src/daemon/types.ts']),
-  audioProbe: new Set(['src/daemon/audio-probe-session-resource.ts', 'src/daemon/types.ts']),
-  perfCapture: new Set(['src/daemon/perf-capture-session-resource.ts', 'src/daemon/types.ts']),
+  appLog: new Set(['src/daemon/app-log-session-resource.ts', 'src/daemon/session-state.ts']),
+  appLogFailure: new Set(['src/daemon/app-log-session-resource.ts', 'src/daemon/session-state.ts']),
+  audioProbe: new Set([
+    'src/daemon/audio-probe-session-resource.ts',
+    'src/daemon/session-state.ts',
+  ]),
+  perfCapture: new Set([
+    'src/daemon/perf-capture-session-resource.ts',
+    'src/daemon/session-state.ts',
+  ]),
 };
 
 /** Durable session-resource records have one whole-record construction owner per domain. */

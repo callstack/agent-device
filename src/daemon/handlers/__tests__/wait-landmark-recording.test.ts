@@ -14,7 +14,7 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { dispatchWaitViaRuntime } from '../../wait-runtime.ts';
-import type { DaemonRequest } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';

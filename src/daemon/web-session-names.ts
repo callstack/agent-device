@@ -1,5 +1,5 @@
 import type { SessionStore } from './session-store.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 
 export function isWebSession(session: SessionState): boolean {
   return session.device.platform === 'web';

@@ -4,7 +4,7 @@ import type {
   Lease,
 } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
-import { INTERNAL_COMMANDS } from '../command-catalog.ts';
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isRecord } from '@agent-device/kernel/record';
 import type { AgentDeviceClient } from './client-types.ts';
 import { readOptionalString, readRequiredString } from './client-normalizers.ts';

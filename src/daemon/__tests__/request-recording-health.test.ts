@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 
 vi.mock('@agent-device/platform-apple/runner/operations', () => ({

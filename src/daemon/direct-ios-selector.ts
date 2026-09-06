@@ -2,7 +2,7 @@ import { isIosFamily } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 import { readSimpleSelectorTarget } from '@agent-device/selectors';
 import { asAppError } from '@agent-device/kernel/errors';
 import type { ElementSelectorTapOptions } from '@agent-device/contracts/interactor-types';

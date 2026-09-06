@@ -2,7 +2,8 @@ import {
   ensureAndroidBlockingSystemDialogReady,
   type AndroidBlockingDialogReadinessResult,
 } from '../../android-system-dialog.ts';
-import type { DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { readRefMutationFrame } from '../../ref-frame.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';

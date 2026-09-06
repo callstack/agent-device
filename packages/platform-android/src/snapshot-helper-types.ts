@@ -43,7 +43,7 @@ export type { AndroidAdbExecutor } from './adb-executor.ts';
 export type {
   AndroidSnapshotHelperArtifact,
   AndroidSnapshotHelperManifest,
-} from '@agent-device/contracts/android-helper-artifacts';
+} from './helper-artifacts.ts';
 
 export type AndroidSnapshotHelperInstallPolicy = 'missing-or-outdated' | 'always' | 'never';
 

@@ -14,9 +14,16 @@ import {
 } from 'react-native';
 import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio';
 import { requireOptionalNativeModule } from 'expo-modules-core';
+import * as SecureStore from 'expo-secure-store';
 
 import { ActionButton, ScreenTitle, SectionCard } from '../components';
 import { useAppColors, type AppColors } from '../theme';
+
+// A fixed key/value pair standing in for a real login token: this screen only
+// needs to prove keychain-backed state survives `clear-app-state` but not
+// `reset-keychain`, not to model an actual auth flow.
+const KEYCHAIN_AUTH_KEY = 'automation-keychain-auth-token';
+const KEYCHAIN_AUTH_VALUE = 'demo-auth-token';
 
 type PushBroadcastLabModule = {
   lastPushBroadcast(): string;
@@ -45,6 +52,7 @@ export function AutomationLabScreen(props: {
   const [microphonePermission, setMicrophonePermission] = useState('checking');
   const [lastPushBroadcast, setLastPushBroadcast] = useState('none');
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [keychainAuthStatus, setKeychainAuthStatus] = useState('checking');
   const permissionReadGeneration = useRef(0);
   const windowMode = dimensions.width > dimensions.height ? 'landscape' : 'portrait';
 
@@ -123,6 +131,26 @@ export function AutomationLabScreen(props: {
 
   function refreshPushBroadcast() {
     setLastPushBroadcast(pushBroadcastLab?.lastPushBroadcast() ?? 'unavailable');
+  }
+
+  useEffect(() => {
+    let mounted = true;
+    void SecureStore.getItemAsync(KEYCHAIN_AUTH_KEY)
+      .then((value) => {
+        if (mounted)
+          setKeychainAuthStatus(value === KEYCHAIN_AUTH_VALUE ? 'signed-in' : 'signed-out');
+      })
+      .catch(() => {
+        if (mounted) setKeychainAuthStatus('error');
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  async function signInWithKeychain() {
+    await SecureStore.setItemAsync(KEYCHAIN_AUTH_KEY, KEYCHAIN_AUTH_VALUE);
+    setKeychainAuthStatus('signed-in');
   }
 
   return (
@@ -232,6 +260,19 @@ export function AutomationLabScreen(props: {
           label="Microphone permission"
           testID="automation-microphone-permission"
           value={microphonePermission}
+        />
+      </SectionCard>
+
+      <SectionCard title="Keychain-backed auth">
+        <ActionButton
+          label="Sign in (write keychain)"
+          onPress={() => void signInWithKeychain()}
+          testID="automation-keychain-signin"
+        />
+        <StateRow
+          label="Auth status"
+          testID="automation-keychain-status"
+          value={keychainAuthStatus}
         />
       </SectionCard>
 

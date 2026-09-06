@@ -10,7 +10,7 @@ import {
   normalizePublicSwipeMotion,
   swipePayloadFromPositionals,
 } from '@agent-device/contracts/gesture-normalization';
-import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { isValidSelectorExpression } from '@agent-device/selectors';
 import { IOS_SIMULATOR_BEHAVIOR_COVERAGE } from './ios-simulator-e2e/behavior-coverage.ts';

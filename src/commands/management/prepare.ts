@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { enumField, integerField, requiredField } from '../command-input.ts';
 import {

@@ -8,7 +8,7 @@ import {
   makeRepairCompleteSession,
 } from '../../../../__tests__/test-utils/session-factories.ts';
 import { SessionStore } from '../../../session-store.ts';
-import type { DaemonRequest } from '../../../types.ts';
+import type { DaemonRequest } from '../../../daemon-request.ts';
 import {
   buildRetriableRepairCloseFailureResponse,
   commitRepairScriptBeforeClose,

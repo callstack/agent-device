@@ -18,7 +18,7 @@ import {
   type ScrollDirection,
   assertScrollGestureInput,
 } from '@agent-device/contracts/scroll-gesture';
-import { assertAppleMultiTouchSupported } from '@agent-device/contracts/apple-multitouch-support';
+import { assertAppleMultiTouchSupported } from './multitouch-support.ts';
 import { isIosFamily, isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { runAppleRunnerCommand, runApplePressSeries } from './core/runner-client.ts';

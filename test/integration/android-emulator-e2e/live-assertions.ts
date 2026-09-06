@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotDiffLine } from '@agent-device/contracts/capture';
 import {

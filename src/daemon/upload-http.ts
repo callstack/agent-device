@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import type { DaemonRequest } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
 import { trackUploadedArtifact } from './artifact-tracking.ts';
 import {
   type BeginResumableUploadOptions,

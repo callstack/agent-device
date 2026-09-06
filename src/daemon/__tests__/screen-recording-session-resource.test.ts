@@ -10,7 +10,7 @@ import {
   finishLiveScreenRecording,
 } from '../screen-recording-session-resource.ts';
 import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 
 test('screen recording persists durable truth before adopting only handle and envelope', async () => {
   const sessionStore = makeSessionStore('screen-recording-session-resource-');

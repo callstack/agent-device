@@ -1,0 +1,66 @@
+{
+  "name": "@agent-device/command-registry",
+  "version": "0.0.0",
+  "private": true,
+  "sideEffects": false,
+  "type": "module",
+  "description": "The command descriptor registry: the single declaration of every command's surface, runtime-use, batch, timeout, and platform-execution traits, plus the catalogs and projections derived from it.",
+  "dependencies": {
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/selectors": "workspace:*"
+  },
+  "exports": {
+    "./registry": {
+      "types": "./src/registry.ts",
+      "default": "./src/registry.ts"
+    },
+    "./planned-operations": {
+      "types": "./src/planned-operations.ts",
+      "default": "./src/planned-operations.ts"
+    },
+    "./catalog": {
+      "types": "./src/catalog.ts",
+      "default": "./src/catalog.ts"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "default": "./src/types.ts"
+    },
+    "./timeout-policy": {
+      "types": "./src/timeout-policy.ts",
+      "default": "./src/timeout-policy.ts"
+    },
+    "./command-result": {
+      "types": "./src/command-result.ts",
+      "default": "./src/command-result.ts"
+    },
+    "./daemon-command-descriptor": {
+      "types": "./src/daemon-command-descriptor.ts",
+      "default": "./src/daemon-command-descriptor.ts"
+    },
+    "./derive": {
+      "types": "./src/derive.ts",
+      "default": "./src/derive.ts"
+    },
+    "./owner-files": {
+      "types": "./src/owner-files.ts",
+      "default": "./src/owner-files.ts"
+    },
+    "./platform-execution-entry": {
+      "types": "./src/platform-execution-entry.ts",
+      "default": "./src/platform-execution-entry.ts"
+    },
+    "./post-action-observation": {
+      "types": "./src/post-action-observation.ts",
+      "default": "./src/post-action-observation.ts"
+    },
+    "./parse-timeout": {
+      "types": "./src/parse-timeout.ts",
+      "default": "./src/parse-timeout.ts"
+    },
+    "./wait-positionals": {
+      "types": "./src/wait-positionals.ts",
+      "default": "./src/wait-positionals.ts"
+    }
+  }
+}

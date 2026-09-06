@@ -12,6 +12,9 @@
     "@agent-device/provision-kit": "workspace:*",
     "@agent-device/xml": "workspace:*"
   },
+  "devDependencies": {
+    "fast-check": "^4.9.0"
+  },
   "exports": {
     ".": {
       "types": "./src/index.ts",

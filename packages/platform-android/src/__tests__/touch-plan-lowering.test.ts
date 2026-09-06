@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { expectTypeOf, test } from 'vitest';
 import { buildDragGesturePlan, buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import type { SinglePointerGesturePlan } from '@agent-device/contracts/gesture-plan-types';
-import { lowerAndroidTouchPlan, type AndroidLoweredTouchPlan } from '../touch-plan.ts';
+import { lowerAndroidTouchPlan, type AndroidLoweredTouchPlan } from '../touch-plan-lowering.ts';
 import { longPressPlan } from './touch-helper.fixtures.ts';
 
 const viewport = { x: 0, y: 0, width: 400, height: 800 };

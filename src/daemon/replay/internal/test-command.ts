@@ -6,7 +6,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { ReplaySuiteResult, ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../../replay-script-source.ts';
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
-import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../../daemon-request.ts';
 import { expandSessionPath } from '../../session-paths.ts';
 import type { ReplayTestCommand } from './command-types.ts';
 import {

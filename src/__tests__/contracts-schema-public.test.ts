@@ -23,7 +23,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import type { CommandResult } from '../core/command-descriptor/command-result.ts';
+import type { CommandResult } from '@agent-device/command-registry/command-result';
 import {
   centerOfRect,
   defaultHintForCode,

@@ -207,6 +207,98 @@ test('runtime wait fails closed at the deadline when only impostors matched the 
   assert.equal(observed.label, 'Screen X');
   const ancestry = error.details?.observedAncestry as Array<{ role: string; label?: string }>;
   assert.equal(ancestry[0]?.label, 'List Screen');
+  assertReadablePollEvidence(error);
+});
+
+/** The refusal carries the same poll evidence a plain timeout would. */
+function assertReadablePollEvidence(error: AppError): void {
+  const details = error.details ?? {};
+  const polls = details.polls as Array<{ outcome: string }>;
+  assert.ok(polls.length >= 1);
+  assert.ok(polls.every((poll) => poll.outcome === 'readable'));
+  assert.equal(details.captures, polls.length);
+  assert.equal(details.readableCaptures, polls.length);
+  assert.equal(typeof details.waitedMs, 'number');
+}
+
+/**
+ * An impostor capture, then a capture that outlives the deadline: the refusal still names the
+ * landmark mismatch, and its poll timeline shows the deadline cutting the last capture short,
+ * with the runner-restart evidence that capture carried.
+ */
+async function landmarkRefusalAfter(
+  finalCapture: () => Promise<ReturnType<typeof landmarkScreen>>,
+): Promise<AppError> {
+  const recorded = recordedLandmarkFor(landmarkScreen('Detail Screen'));
+  let call = 0;
+  const impostor = landmarkScreen('List Screen');
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async () => {
+        call += 1;
+        if (call === 1) return { snapshot: impostor };
+        return { snapshot: await finalCapture() };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot: impostor }]),
+    policy: localCommandPolicy(),
+    clock: createFakeClock(100),
+  });
+  const error = await device.selectors
+    .wait({
+      session: 'default',
+      target: {
+        kind: 'selector',
+        selector: 'label="Screen X"',
+        timeoutMs: 400,
+        recordedLandmark: recorded,
+      },
+    })
+    .then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+  assert.ok(error instanceof AppError);
+  assert.equal(error.details?.reason, WAIT_LANDMARK_MISMATCH_REASON);
+  return error;
+}
+
+test('landmark refusal after a deadline-cancelled capture keeps the poll timeline', async () => {
+  const error = await landmarkRefusalAfter(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    return landmarkScreen('List Screen');
+  });
+
+  const polls = error.details?.polls as Array<{ outcome: string }>;
+  assert.deepEqual(
+    polls.map((poll) => poll.outcome),
+    ['readable', 'deadline'],
+  );
+  assert.equal(error.details?.readableCaptures, 1);
+  assert.equal(error.details?.captures, 2);
+});
+
+test('landmark refusal after a runner restart keeps the restart outcome', async () => {
+  const error = await landmarkRefusalAfter(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    throw new AppError('COMMAND_FAILED', 'runner restarted', {
+      runnerRestarted: true,
+      runnerRestartReason: 'runner_readiness_preflight_failed_before_command_send',
+    });
+  });
+
+  const polls = error.details?.polls as Array<{ outcome: string }>;
+  assert.deepEqual(
+    polls.map((poll) => poll.outcome),
+    ['readable', 'runner-restart'],
+  );
+  assert.equal(error.details?.runnerRestarted, true);
+  assert.equal(
+    error.details?.runnerRestartReason,
+    'runner_readiness_preflight_failed_before_command_send',
+  );
 });
 
 test('runtime wait with a recorded landmark keeps the plain timeout when the selector never matched', async () => {

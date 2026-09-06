@@ -20,11 +20,11 @@
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonRequest } from '../../../../src/daemon/types.ts';
+import type { DaemonRequest } from '../../../../src/daemon/daemon-request.ts';
 import type { SessionStore } from '../../../../src/daemon/session-store.ts';
 import { resolveRequestExecutionLockKeys } from '../../../../src/daemon/request-binding.ts';
 import { shouldLockSessionExecution } from '../../../../src/daemon/daemon-command-registry.ts';
-import { PUBLIC_COMMANDS } from '../../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../../src/__tests__/test-utils/device-inventory-gateways.ts';
 
 import type { LockKey } from './deterministic-scheduler.ts';

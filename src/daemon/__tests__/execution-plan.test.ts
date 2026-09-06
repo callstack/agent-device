@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { resolvePlannedOperations } from '../execution-plan.ts';
 import { runBatchCommands } from '../handlers/session-batch.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 
 test('an open that ends its batch has an unknown future', () => {
   assert.equal(resolvePlannedOperations(undefined), undefined);

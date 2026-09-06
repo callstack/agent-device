@@ -6,7 +6,7 @@ import path from 'node:path';
 import { createDaemonHttpServer } from '../server/http-server.ts';
 import { resolveSessionRequestLogPath } from '../session-store.ts';
 import { safeSessionName } from '../session-paths.ts';
-import type { DaemonResponse } from '../types.ts';
+import type { DaemonResponse } from '../daemon-request.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,

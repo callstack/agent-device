@@ -8,7 +8,7 @@ import {
 import { makeTestScreenRecordingResource } from '../../../../__tests__/test-utils/screen-recording-live-handle.ts';
 import { activateCompleteRefFrame } from '../../../ref-frame.ts';
 import type { SessionStore } from '../../../session-store.ts';
-import type { SessionState } from '../../../types.ts';
+import type { SessionState } from '../../../session-state.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { buildSnapshotState } from '../../../../core/snapshot-state.ts';

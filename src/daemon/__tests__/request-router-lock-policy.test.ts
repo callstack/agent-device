@@ -21,7 +21,7 @@ import {
   systemRuntimeSpies,
 } from './test-device-runtime-gateway.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';

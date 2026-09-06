@@ -19,7 +19,7 @@ import {
   isRequestCanceled,
 } from '@agent-device/host-kit/request';
 
-import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/daemon-request.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,

@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from '../../../src/daemon/session-observability/__tests__/session-audio.coverage.ts';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from '../../../src/__tests__/install-source.coverage.ts';
 import { ANDROID_LIFECYCLE_CONTRACT_EVIDENCE } from '../provider-scenarios/android-lifecycle.coverage.ts';

@@ -13,7 +13,7 @@ import { createDurableCaptureResource } from './durable-capture-resource.ts';
 import type { AudioProbeAdmissionLedger } from './audio-probe-admission-ledger.ts';
 import { audioProbeResourceStore } from './audio-probe-resource-store.ts';
 import type { SessionStore } from './session-store.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 
 export const audioProbeDurableResource = createDurableCaptureResource<
   'audio-probe',

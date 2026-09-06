@@ -8,7 +8,7 @@ vi.mock('../handlers/session.ts', () => ({
   handleSessionCommands: handleSessionCommandsMock,
 }));
 
-import { INTERNAL_COMMANDS } from '../../command-catalog.ts';
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { runRequestHandlerChain } from '../request-handler-chain.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
@@ -21,7 +21,7 @@ import {
 import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
 import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 import type { AndroidAdbExecutor } from '@agent-device/platform-android/mechanics';
 
 function makeRequest(command: string, sessionName: string): DaemonRequest {

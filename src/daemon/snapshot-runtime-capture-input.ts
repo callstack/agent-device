@@ -4,7 +4,8 @@ import type {
   SnapshotRuntimeExecution,
 } from '@agent-device/contracts/snapshot-runtime';
 import { contextFromFlags, type DaemonCommandContext } from './context.ts';
-import type { DaemonRequest, SessionState } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 /**
  * The one place a daemon request becomes neutral capture intent. `snapshot` and `diff` build

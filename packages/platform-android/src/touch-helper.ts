@@ -15,7 +15,7 @@ import {
   readInstrumentationResultNumber,
 } from './instrumentation-helper.ts';
 import { validateAndroidGestureViewport } from './gesture-viewport.ts';
-import type { AndroidLoweredTouchPlan } from './touch-plan.ts';
+import type { AndroidLoweredTouchPlan } from './touch-plan-lowering.ts';
 import { resolveAndroidHelperArtifact } from './helper-package-install.ts';
 import { parseAndroidSnapshotHelperManifest } from './snapshot-helper-artifact.ts';
 import { ensureAndroidSnapshotHelper } from './snapshot-helper-install.ts';

@@ -4,7 +4,7 @@ import { handleFindCommands } from '../interaction/index.ts';
 import { getRuntimeBindings } from './interaction-get-runtime-fixture.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
 import { dispatchWaitViaRuntime } from '../wait-runtime.ts';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../core/android-system-surface-disclosure.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';

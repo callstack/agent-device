@@ -120,7 +120,7 @@ roots, exports, and named live-state symbols in `scripts/layering/architecture-o
 
 - `vocabulary` — the target is a declared contract facade root.
 - `capability` — the target is a declared capability root and the import names a declared export.
-- `live-state-shape` — the edge names the exact `SessionState` type from `src/daemon/types.ts`.
+- `live-state-shape` — the edge names the exact `SessionState` type from `src/daemon/session-state.ts`.
 - `live-state-authority` — the edge names the exact `SessionStore` class from
   `src/daemon/session-store.ts`.
 - `executable-policy` — the source is under a declared executable-policy root.

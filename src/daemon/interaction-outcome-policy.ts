@@ -5,7 +5,7 @@ import { collectKeyboardChromeRefs } from '../core/snapshot-chrome.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import { contextFromFlags, type DaemonCommandContext } from './context.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 
 const OUTCOME_RETRY_WINDOW_MS = 30_000;
 const OUTCOME_RETRY_ATTEMPTS = 2;

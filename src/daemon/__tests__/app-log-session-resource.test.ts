@@ -12,7 +12,7 @@ import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { adoptStartedSessionAppLog } from '../app-log-session-resource.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
 import { appLogResourceStore } from '../app-log-resource-store.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 
 test('start persists open recovery truth before adopting the live handle', async () => {
   const context = makeContext();

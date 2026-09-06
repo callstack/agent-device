@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import type { DaemonResponse } from '../../../types.ts';
+import type { DaemonResponse } from '../../../daemon-request.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import {

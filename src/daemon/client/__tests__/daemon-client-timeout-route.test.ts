@@ -40,7 +40,7 @@ vi.mock('@agent-device/host-kit/command', async () => {
 
 import { AppError } from '@agent-device/kernel/errors';
 import { sendRequest } from '../daemon-client-transport.ts';
-import type { DaemonRequest } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import type { DaemonInfo } from '../daemon-client-metadata.ts';
 import type { DaemonPaths } from '../../config.ts';
 

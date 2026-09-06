@@ -197,4 +197,25 @@ test('settings grammar owns positional parsing for CLI commands', () => {
   assert.equal(clearAppState.setting, 'clear-app-state');
   assert.equal(clearAppState.state, 'clear');
   assert.equal(clearAppState.app, 'com.example.app');
+
+  const resetKeychain = readInputFromCli('settings', ['reset-keychain', 'clear'], {
+    ...BASE_FLAGS,
+    platform: 'ios',
+  });
+  assert.equal(resetKeychain.setting, 'reset-keychain');
+  assert.equal(resetKeychain.state, 'clear');
+});
+
+test('settings reset-keychain rejects an extra app argument instead of dropping it', () => {
+  assert.throws(
+    () =>
+      readInputFromCli('settings', ['reset-keychain', 'clear', 'com.example.app'], {
+        ...BASE_FLAGS,
+        platform: 'ios',
+      }),
+    (err: any) => {
+      assert.equal(err.code, 'INVALID_ARGS');
+      return true;
+    },
+  );
 });

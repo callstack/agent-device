@@ -2,7 +2,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { parseHumanControlHoldInput } from '../human-control-contract.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 
 export async function handleHumanControlCommand(params: {
   req: DaemonRequest;

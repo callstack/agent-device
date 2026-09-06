@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { resolveCommandResponseDataTransform } from '../command-descriptor/registry.ts';
+import { resolveCommandResponseDataTransform } from '@agent-device/command-registry/registry';
 import { transformInteractionResponseData } from '../interaction-response-data-transform.ts';
 
 describe('interaction response data transform', () => {

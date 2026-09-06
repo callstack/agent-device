@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceClient } from '../../client/client-types.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
-import { resolveCommandRecordsSessionAction } from '../../core/command-descriptor/registry.ts';
+import { resolveCommandRecordsSessionAction } from '@agent-device/command-registry/registry';
 import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { validateAgainstSchema } from './output-schema-validator.ts';

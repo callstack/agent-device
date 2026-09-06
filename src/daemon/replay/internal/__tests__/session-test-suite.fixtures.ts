@@ -2,7 +2,7 @@ import { expect } from 'vitest';
 import path from 'node:path';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import { SessionStore } from '../../../session-store.ts';
-import type { DaemonResponse, DaemonResponseData } from '../../../types.ts';
+import type { DaemonResponse, DaemonResponseData } from '../../../daemon-request.ts';
 
 export function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-session-test-suite-');

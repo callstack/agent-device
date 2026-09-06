@@ -13,7 +13,7 @@ import { normalizeError, AppError } from '@agent-device/kernel/errors';
 import { createDaemonHttpServer } from '../daemon/server/http-server.ts';
 import { resolveSessionRequestLogPath } from '../daemon/session-store.ts';
 import { safeSessionName } from '../daemon/session-paths.ts';
-import type { DaemonRequest, DaemonResponse } from '../daemon/types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
 import { runCliCapture, type CapturedCliRun } from './cli-capture.ts';
 import {
   closeLoopbackServer,

@@ -6,7 +6,7 @@ import type {
 import { getRequestSignal, emitRequestProgress } from '@agent-device/host-kit/request';
 
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type { DaemonRequest } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
 
 const processLifetimeSignal = new AbortController().signal;
 

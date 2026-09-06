@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {

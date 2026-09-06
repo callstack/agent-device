@@ -3,7 +3,8 @@ import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
 import { hasDeviceSelectionInput, hasExplicitDeviceSelector } from './device-selector-intent.ts';
 import { buildOpenTargetDeviceResolutionOptions } from './open-device-selection.ts';
 import { resolveProviderDeviceResolutionIntent } from './daemon-command-registry.ts';
-import type { DaemonRequest, SessionState } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 /**
  * Resolves the daemon-owned part of the request-provider seam.

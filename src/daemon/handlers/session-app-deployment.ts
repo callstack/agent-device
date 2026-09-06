@@ -10,7 +10,8 @@ import { cleanupUploadedArtifact, prepareUploadedArtifact } from '../artifact-tr
 import { expireRefFrame } from '../ref-frame.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { SessionStore } from '../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { resolvePayloadInput } from '../../core/payload-input.ts';
 import { resolveDeployResultTarget } from '../../core/deploy-result-target.ts';
 import { withSuccessText } from '@agent-device/kernel/success-text';

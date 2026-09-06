@@ -3,7 +3,8 @@ import type { BoundSelectorCapture } from '../../selector-capture-binding.ts';
 import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel/snapshot';
 import { createSelectorCaptureRuntime } from '../../selector-capture-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { errorResponse } from '../../response.ts';
 
 /** The tree a mutating find resolves its target against, plus what the capture disclosed. */

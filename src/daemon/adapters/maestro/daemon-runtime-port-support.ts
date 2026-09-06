@@ -12,7 +12,7 @@ import type {
   DaemonRequest,
   DaemonResponse,
   DaemonResponseData,
-} from '../../types.ts';
+} from '../../daemon-request.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { DaemonMaestroRuntimeDependencies } from './daemon-runtime-port-observation.ts';

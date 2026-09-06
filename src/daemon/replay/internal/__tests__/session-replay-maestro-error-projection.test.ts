@@ -8,7 +8,7 @@ import { createReplaySession } from '../../../handlers/session-replay-command.ts
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import type { DaemonRequest } from '../../../types.ts';
+import type { DaemonRequest } from '../../../daemon-request.ts';
 
 // A replay error raised before any step runs carries no `failure`, so the route
 // projects the normalized error directly instead of through the divergence

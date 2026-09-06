@@ -1,4 +1,4 @@
-import type { DaemonResponse } from '../types.ts';
+import type { DaemonResponse } from '../daemon-request.ts';
 import { handleReleaseMaterializedPathsCommand } from './session-app-source-deployment.ts';
 import { handleRuntimeCommand } from './session-runtime-command.ts';
 import { handleKeyboardCommand, handleAppEventCommand } from './session-selector-dispatch.ts';
@@ -27,7 +27,7 @@ import type {
   SessionOpenCommandInput,
 } from '../session-lifecycle/index.ts';
 import type { SessionObservabilityCommandInput } from '../session-observability/index.ts';
-import type { DescriptorSessionRouteCommandName } from '../../core/command-descriptor/registry.ts';
+import type { DescriptorSessionRouteCommandName } from '@agent-device/command-registry/registry';
 import { LeaseRegistry } from '../lease-registry.ts';
 
 const handleSessionInventoryCommandGroup: SessionCommandHandler = (

@@ -43,11 +43,11 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
     'Local detail bag behind AppError; the wire form is DaemonError.details, typed as Record<string, unknown> and listed.',
   'src/daemon/client/daemon-client-metadata.ts#DaemonInfo':
     'Client-side record of where a daemon is listening (pid, ports, state dir). Never serialized into a request or response.',
-  'src/daemon/types.ts#DaemonRequest':
-    'Re-export alias of the listed kernel DaemonRequest; the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
-  'src/daemon/types.ts#DaemonResponse':
+  'src/daemon/daemon-request.ts#DaemonRequest':
+    'Server-side narrowing of the listed kernel DaemonRequest; the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
+  'src/daemon/daemon-request.ts#DaemonResponse':
     'Re-export alias of the listed kernel DaemonResponse; the shape is fixed by packages/kernel/src/contracts.ts#DaemonResponse.',
-  'src/daemon/types.ts#DaemonArtifact':
+  'src/daemon/daemon-request.ts#DaemonArtifact':
     'Re-export alias of the listed kernel DaemonArtifact; the shape is fixed by packages/kernel/src/contracts.ts#DaemonArtifact.',
   'src/remote/upload-stream.ts#UploadStreamProgressOptions':
     'Byte-progress callback options for local upload rendering. The bytes counted are digested through the request/response declarations; these options never cross the wire.',

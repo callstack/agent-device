@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { SessionStore } from '../../../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
+import type { SessionState } from '../../../session-state.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 

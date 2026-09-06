@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { runExplainCommandCli } from '../../../scripts/explain-command.ts';
-import { commandDescriptors } from '../../core/command-descriptor/registry.ts';
-import { ownerFilesForCommand } from '../../core/command-descriptor/owner-files.ts';
+import { commandDescriptors } from '@agent-device/command-registry/registry';
+import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
 import { getDaemonRouteOwnerFiles } from '../../daemon/route-owner-files.ts';
 import {
   explainCommand as explainCommandFromMetadata,
@@ -92,7 +92,7 @@ describe('explainCommand', () => {
         catalog: { group: 'local-cli' },
         cli: { usage: 'web setup | web doctor' },
         files: expect.arrayContaining([
-          'src/core/command-descriptor/registry.ts',
+          'packages/command-registry/src/registry.ts',
           'src/cli-schema/command-overrides.ts',
           'src/cli/commands/web.ts',
         ]),

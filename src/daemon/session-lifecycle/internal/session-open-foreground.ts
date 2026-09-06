@@ -1,7 +1,7 @@
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { dispatchSnapshotViaRuntime } from '../../snapshot-runtime.ts';
 import type { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

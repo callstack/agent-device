@@ -8,7 +8,7 @@ import { sendToDaemon } from '../../../src/daemon/client/daemon-client.ts';
 import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
 import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
 import { resolveSessionRequestLogPath } from '../../../src/daemon/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/daemon-request.ts';
 import { createDaemonProxyServer } from '../../../src/remote/daemon-proxy.ts';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import {

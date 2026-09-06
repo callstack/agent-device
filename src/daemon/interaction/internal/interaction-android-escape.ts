@@ -1,7 +1,7 @@
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import { AppError } from '@agent-device/kernel/errors';
 import { detectAndroidEscapeSurface } from '../../android-foreground-surface.ts';
-import type { SessionState } from '../../types.ts';
+import type { SessionState } from '../../session-state.ts';
 
 /**
  * Post-press escape guard. Throws when the tap left the app for a genuine

@@ -5,7 +5,7 @@ import {
   createSnapshotPresentationNode,
   foldSnapshotRect,
   serializeRegularSnapshotPresentationNode,
-} from './snapshot-presentation.ts';
+} from '../snapshot-presentation-node.ts';
 
 const rawNode: RawSnapshotNode = {
   index: 7,
