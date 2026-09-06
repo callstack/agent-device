@@ -1,4 +1,4 @@
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { SessionStore } from '../session-store.ts';
 import { errorResponse } from '../response.ts';
 import { handleAlertCommand } from './snapshot-alert.ts';
@@ -8,7 +8,7 @@ import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import { dispatchWaitViaRuntime } from '../wait-runtime.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from '../snapshot-session.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
+import type { PlatformResourceCleanup } from '../platform-resource-cleanup.ts';
 
 type SnapshotCommandParams = {
   req: DaemonRequest;

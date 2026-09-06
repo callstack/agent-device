@@ -3,8 +3,8 @@ import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import {
   createSnapshotPresentationNode,
   serializeRegularSnapshotPresentationNode,
-} from '@agent-device/contracts/snapshot-presentation';
-import type { SnapshotPresentationNode } from '@agent-device/contracts/snapshot-presentation';
+} from './snapshot-presentation-node.ts';
+import type { SnapshotPresentationNode } from './snapshot-presentation-node.ts';
 
 export type AndroidSnapshotPresentationNode = SnapshotPresentationNode & {
   clipsDescendants?: boolean;

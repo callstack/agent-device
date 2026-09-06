@@ -11,7 +11,7 @@ import {
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import {
   deliverySnapshot,
   makeSession,

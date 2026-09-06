@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import type { DaemonResponse } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
 
 export function collectReplayActionArtifactPaths(response: DaemonResponse): string[] {
   const candidates = response.ok

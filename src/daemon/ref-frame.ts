@@ -1,5 +1,13 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import type { SessionState } from './types.ts';
+import {
+  expiredRefFrame,
+  issuedRefFrame,
+  PRISTINE_REF_FRAME,
+  type RefFrame,
+  type RefFrameScope,
+  type RefFrameState,
+} from './ref-frame-slot.ts';
+import type { SessionState } from './session-state.ts';
 
 const runtimeRevisions = new WeakMap<SessionState, number>();
 
@@ -9,8 +17,9 @@ const runtimeRevisions = new WeakMap<SessionState, number>();
  *
  * A session owns at most one **ref frame**: the namespace whose refs a caller
  * may use to target a mutation. This module is the single owner of the frame's
- * transitions and of the admission decision. The frame epoch reuses the existing
- * `snapshotGeneration`/`refsGeneration` counter and the `@e12~s42` pin grammar
+ * transitions and of the admission decision; the frame value itself is declared in
+ * `ref-frame-slot.ts`, below this module and the session record. The frame epoch reuses
+ * the existing `snapshotGeneration`/`refsGeneration` counter and the `@e12~s42` pin grammar
  * for wire compatibility.
  *
  * The frame is expired at the device side-effect seam, carries a non-`all`
@@ -20,16 +29,6 @@ const runtimeRevisions = new WeakMap<SessionState, number>();
  * warns; an active one does not) rather than a coarse client-stale marker, which
  * migration step 8 removed.
  */
-
-/**
- * Issuance scope of the current frame: `all` for a complete namespace (a full
- * interactive snapshot), or the bounded set of ref bodies a partial publication
- * (`find`, settled diff, replay divergence) actually returned.
- */
-export type RefFrameScope = 'all' | ReadonlySet<string>;
-
-/** Lifecycle state of the current frame. */
-export type RefFrameState = 'active' | 'expired';
 
 /**
  * Typed admission-failure reasons, evaluated in this order so the caller can
@@ -45,69 +44,13 @@ export type RefFrameAdmission =
   | { admitted: true }
   | { admitted: false; reason: RefFrameRejectReason };
 
-type RefFrameFields = Readonly<{
-  state: RefFrameState;
-  scope: RefFrameScope;
-  tree: SnapshotState | undefined;
-  generation: number | undefined;
-}>;
-
-/**
- * One value, replaced whole by this module's transitions. The class is not exported, so nothing
- * outside this file can construct, edit, or derive a frame.
- */
-class SessionRefFrame {
-  readonly #fields: RefFrameFields;
-
-  constructor(fields: RefFrameFields) {
-    this.#fields = fields;
-  }
-
-  get state(): RefFrameState {
-    return this.#fields.state;
-  }
-
-  get scope(): RefFrameScope {
-    return this.#fields.scope;
-  }
-
-  get tree(): SnapshotState | undefined {
-    return this.#fields.tree;
-  }
-
-  get generation(): number | undefined {
-    return this.#fields.generation;
-  }
-
-  /** Idempotent by identity: an expired frame is returned as is, so repeated expiry compares `===`. */
-  static expire(frame: SessionRefFrame): SessionRefFrame {
-    if (frame.#fields.state === 'expired') return frame;
-    return new SessionRefFrame({ ...frame.#fields, state: 'expired' });
-  }
-}
-
-export type RefFrame = SessionRefFrame;
-
-/**
- * The frame a session has before anything issues refs: complete authority over
- * an empty namespace, deferring tree and epoch to the operational observation.
- * A shared constant, so lineage identity is stable for a session that never
- * reached a transition.
- */
-const PRISTINE_FRAME = new SessionRefFrame({
-  state: 'active',
-  scope: 'all',
-  tree: undefined,
-  generation: undefined,
-});
-
 /**
  * The session's current frame, as one comparable value. Identity changes on
  * every transition and only on a transition, so a caller holding an earlier
  * frame can tell whether authority moved with a single `===`.
  */
 export function refFrame(session: SessionState): RefFrame {
-  return session.refFrame ?? PRISTINE_FRAME;
+  return session.refFrame ?? PRISTINE_REF_FRAME;
 }
 
 /**
@@ -146,7 +89,7 @@ export function refFrameTree(session: SessionState): SnapshotState | undefined {
  */
 export function expireRefFrame(session: SessionState): void {
   advanceSessionRuntimeRevision(session);
-  session.refFrame = SessionRefFrame.expire(refFrame(session));
+  session.refFrame = expiredRefFrame(refFrame(session));
   session.snapshotScopeSource = undefined;
 }
 
@@ -205,8 +148,7 @@ export function activatePartialRefFrame(session: SessionState, scope: ReadonlySe
  * namespace that authorized it.
  */
 function activateRefFrame(session: SessionState, scope: RefFrameScope): void {
-  session.refFrame = new SessionRefFrame({
-    state: 'active',
+  session.refFrame = issuedRefFrame({
     scope,
     tree: session.snapshot,
     generation: session.snapshotGeneration,

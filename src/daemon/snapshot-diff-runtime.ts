@@ -1,6 +1,6 @@
 import { dispatchSnapshotRuntimeCommand } from './snapshot-command-runtime.ts';
 import type { SnapshotRuntimeRouteParams } from './snapshot-runtime-binding.ts';
-import type { DaemonResponse } from './types.ts';
+import type { DaemonResponse } from './daemon-request.ts';
 
 /** Canonical `diff snapshot` route over one facts-first, request-bound capture runtime. */
 export async function dispatchSnapshotDiffViaRuntime(

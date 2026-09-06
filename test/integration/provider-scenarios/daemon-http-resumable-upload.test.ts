@@ -8,7 +8,7 @@ import {
   prepareUploadedArtifact,
 } from '../../../src/daemon/artifact-tracking.ts';
 import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
-import type { DaemonResponse } from '../../../src/daemon/types.ts';
+import type { DaemonResponse } from '../../../src/daemon/daemon-request.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,

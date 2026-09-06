@@ -188,7 +188,10 @@ jobs:
         run: |
           set -euo pipefail
           pnpm --dir examples/test-app exec expo prebuild --platform android --no-install
-          echo "org.gradle.jvmargs=-Xmx4g" >> examples/test-app/android/gradle.properties
+          # expo prebuild's generated gradle.properties has no trailing newline, so a bare
+          # `echo >>` corrupts its last line (e.g. `expo.inlineModules.watchedDirectories=[]org.gradle.jvmargs=...`),
+          # which fails Gradle's JSON.parse of that property at configure time. Lead with a newline.
+          printf '\n%s\n' 'org.gradle.jvmargs=-Xmx4g' >> examples/test-app/android/gradle.properties
           (
             cd examples/test-app/android
             ./gradlew :app:assembleRelease

@@ -75,7 +75,8 @@ import {
   scriptTargetForce,
 } from '../../../session-script-publication-state.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
-import type { DaemonRequest, SessionState } from '../../../types.ts';
+import type { DaemonRequest } from '../../../daemon-request.ts';
+import type { SessionState } from '../../../session-state.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
@@ -536,9 +537,8 @@ test('BLOCKER 2b/2c: a close whose commit FAILS (no-clobber) keeps the session f
   expect(fs.readFileSync(path.join(root, 'flow.healed.ad'), 'utf8')).toBe(before);
   // The rolled-back finalize `close` did not linger, so a retry does not
   // accumulate a duplicate `close` in the healed slice.
-  expect(sessionStore.get(sessionName)!.actions.filter((a) => a.command === 'close')).toHaveLength(
-    0,
-  );
+  const closeActions = sessionStore.get(sessionName)!.actions.filter((a) => a.command === 'close');
+  expect(closeActions).toHaveLength(0);
 
   // Retry with an explicit path commits cleanly — exactly ONE terminal close.
   const retryPath = path.join(root, 'flow.promoted.ad');

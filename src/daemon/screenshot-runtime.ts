@@ -37,7 +37,8 @@ import {
 } from './screenshot-runtime-binding.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import { SessionStore } from './session-store.ts';
-import type { DaemonRequest, SessionState } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 /**
  * The `screenshot` leaf of the generic route. Argument policy is answered before any device work,

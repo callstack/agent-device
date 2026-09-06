@@ -52,7 +52,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { PNG } from '@agent-device/capture-kit/png';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../../types.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import { SessionStore } from '../../../session-store.ts';
 import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';

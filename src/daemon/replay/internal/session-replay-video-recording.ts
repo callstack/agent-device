@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { DaemonOpenLifecycle, DaemonRequest, DaemonResponse } from '../../types.ts';
+import type { DaemonOpenLifecycle, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 

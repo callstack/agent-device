@@ -43,7 +43,7 @@ import type {
   ResolutionDisclosure,
   ResolvedInteractionTarget,
 } from '@agent-device/contracts/interaction';
-import { INTERACTION_ERROR_REASONS } from '@agent-device/contracts/interaction-error';
+import { INTERACTION_ERROR_REASONS } from '../../../core/interaction-error.ts';
 import type {
   BackendActionResult,
   BackendCommandContext,

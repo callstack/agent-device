@@ -1,8 +1,8 @@
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
-import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
+import type { PlatformResourceCleanup } from '../platform-resource-cleanup.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import type { AudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
 import type { DeviceClaimReconciler } from '../device-claims.ts';

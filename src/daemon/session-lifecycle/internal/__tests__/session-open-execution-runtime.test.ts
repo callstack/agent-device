@@ -1,7 +1,7 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
-import type { DaemonRequest } from '../../../types.ts';
+import type { DaemonRequest } from '../../../daemon-request.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
 const mockResolveTargetDevice = vi.hoisted(() => vi.fn());

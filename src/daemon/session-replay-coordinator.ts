@@ -1,11 +1,12 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import path from 'node:path';
 import {
-  readReplayDivergenceResume,
   type ReplayDivergenceResume,
   type ReplayRepairHint,
 } from '@agent-device/contracts/divergence';
-import type { DaemonResponse, SessionRuntimeHints, SessionState } from './types.ts';
+import { readReplayDivergenceResume } from '../core/replay-divergence.ts';
+import type { DaemonResponse } from './daemon-request.ts';
+import type { SessionRuntimeHints, SessionState } from './session-state.ts';
 import {
   armRepairStep,
   isUncommittedRepairSession,

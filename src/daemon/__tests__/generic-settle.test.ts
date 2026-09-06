@@ -6,7 +6,8 @@ import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { activateCompleteRefFrame, refFrameState } from '../ref-frame.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
 import type { SessionStore } from '../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { buildSnapshotState } from '../../core/snapshot-state.ts';
 
 // #1638 `--settle` on the GENERIC daemon route (scroll/back): the settled diff,

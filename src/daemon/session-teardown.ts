@@ -1,7 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { cleanupRetainedMaterializedPathsForSession } from './materialized-path-registry.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 import type { SessionStore } from './session-store.ts';
 import { forceCleanupSessionAppLog } from './app-log-session-resource.ts';
 import { appLogResourceStore } from './app-log-resource-store.ts';
@@ -9,7 +9,7 @@ import { finishLiveScreenRecording } from './screen-recording-session-resource.t
 import { finishLiveAudioProbe } from './audio-probe-session-resource.ts';
 import { finishLivePerfCapture } from './perf-capture-session-resource.ts';
 import { openWebSessionNames } from './web-session-names.ts';
-import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
+import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 
 export async function stopSessionAppLog(params: {
   session: SessionState;

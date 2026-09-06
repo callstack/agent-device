@@ -9,7 +9,7 @@ import { acquireDeviceClaim } from '../device-claims.ts';
 import { resolveDeviceClaimPath } from '../device-claim-paths.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 
 const setup = isolatedDeviceClaimStores('agent-device-shutdown-claim-ledger-');
 

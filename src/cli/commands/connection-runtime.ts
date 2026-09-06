@@ -32,7 +32,7 @@ import type { LeaseBackend, SessionRuntimeHints } from '@agent-device/kernel/con
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient, Lease } from '../../agent-device-client.ts';
 import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
-import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { readMetroPrepareKind } from '../../commands/metro/prepare-kind.ts';
 import { connectionProviderCapabilities } from '../connection/provider-policy.ts';
 import { readCloudDeviceFeatureProfileFields } from '../connection/profile-fields.ts';

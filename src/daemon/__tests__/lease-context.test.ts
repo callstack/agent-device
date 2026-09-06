@@ -7,7 +7,7 @@ import {
   type SessionLease,
 } from '../lease-context.ts';
 import { buildLeaseDiagnosticsContext } from '../../core/lease-scope.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 
 test('buildSessionLeaseFromRequest captures complete request lease scope', () => {
   const lease = buildSessionLeaseFromRequest({

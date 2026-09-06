@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import type { MaestroSourceReader } from '@agent-device/maestro';
 import { resolveUserPath } from '@agent-device/host-kit/file';
-import type { DaemonRequest } from '../../daemon/types.ts';
+import type { DaemonRequest } from '../../daemon/daemon-request.ts';
 import { loadReplayScriptSourceBundle } from '../../commands/replay/script-source-bundle.ts';
 import { discoverReplaySourcePaths } from '../../commands/replay/source-discovery.ts';
 

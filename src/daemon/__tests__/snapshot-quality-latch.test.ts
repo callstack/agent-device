@@ -14,7 +14,7 @@ import {
 import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';
 import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import { SessionStore } from '../session-store.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 

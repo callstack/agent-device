@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { applyRequestLockPolicy } from '../request-lock-policy.ts';
-import type { SessionRef, SessionState } from '../types.ts';
+import type { SessionRef, SessionState } from '../session-state.ts';
 
 const IOS_SESSION: SessionState = {
   name: 'qa-ios',

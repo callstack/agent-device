@@ -1,7 +1,7 @@
 import { AppError, normalizeError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import net from 'node:net';
 import type { Server as HttpServer } from 'node:http';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import {
   clearRequestAbortRegistration,
   isRequestCanceled,

@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { parseArgs } from '../args.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { listCliCommandNames } from '../../../command-catalog.ts';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { getCliCommandSchema } from '../../../cli-schema/command-schema.ts';
 
 test('parseArgs rejects test retries above the supported ceiling', () => {

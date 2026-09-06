@@ -15,7 +15,7 @@ import type { ReplayTestCommand } from '../command-types.ts';
 import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '../session-replay-test-policy.ts';
 import { replayCommandFamily } from '../../../../commands/replay/index.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import type { DaemonInvokeFn, DaemonRequest } from '../../../types.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon-request.ts';
 
 // --- ADR 0012 decision 4 / migration step 5: `--from` is replay-only ---
 

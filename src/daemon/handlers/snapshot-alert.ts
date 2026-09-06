@@ -12,10 +12,11 @@ import {
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { contextFromFlags } from '../context.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { SessionStore } from '../session-store.ts';
 import { recordIfSession } from '../snapshot-session.ts';
-import { parseTimeout } from '../../core/parse-timeout.ts';
+import { parseTimeout } from '@agent-device/command-registry/parse-timeout';
 import { resolveRefFrameEffect } from '../daemon-command-registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import type { DaemonFailureResponse } from '../response.ts';

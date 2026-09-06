@@ -18,7 +18,7 @@ import {
 } from '@agent-device/ad-script';
 import { createDaemonMaestroRuntimePort } from '../../adapters/maestro/daemon-runtime-port.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../types.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { assertSessionSelectorMatches } from '../../session-selector.ts';
 import { errorResponse } from '../../response.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';

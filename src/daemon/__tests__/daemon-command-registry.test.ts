@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   canOverrideLockPolicySelector,
   canRunReplayScopedAction,
@@ -17,7 +17,7 @@ import {
   resolveProviderDeviceResolutionIntent,
   usesSessionlessDefaultProviderDevice,
 } from '../daemon-command-registry.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 
 test('daemon command registry owns specialized handler routes', () => {
   assert.equal(getDaemonCommandRoute(INTERNAL_COMMANDS.humanControl), 'humanControl');

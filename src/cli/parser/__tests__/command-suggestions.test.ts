@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { isKnownCliCommandName } from '../../../command-catalog.ts';
+import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 import { keyboardCliReader } from '../../../commands/system/index.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseArgs } from '../args.ts';

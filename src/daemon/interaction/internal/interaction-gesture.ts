@@ -28,7 +28,8 @@ import { isActiveProviderDevice } from '../../../provider-device-runtime.ts';
 import { sleep } from '@agent-device/host-kit/retry';
 import { ensureAndroidBlockingSystemDialogReady } from '../../android-system-dialog.ts';
 import { readRefMutationFrame } from '../../ref-frame.ts';
-import type { DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { assertRefMutationAdmitted } from './interaction-ref-policy.ts';
 import {
   createInteractionRuntimeForRoute,

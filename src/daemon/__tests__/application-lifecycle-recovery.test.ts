@@ -12,7 +12,7 @@ import type { PlatformRequestScope } from '@agent-device/contracts/platform-runt
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
 
 const localMechanics = vi.hoisted(() => ({

@@ -14,7 +14,8 @@ import { contextFromFlags, type BoundContextFromFlags } from './context.ts';
 import { readTextForNode } from './selector-text-runtime.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import { SessionStore } from './session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 import {
@@ -24,7 +25,7 @@ import {
 } from './selector-capture-binding.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
-import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
+import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { snapshotOptionsToFlags } from '../backend-snapshot-options.ts';
 import { checkIsArgs } from '@agent-device/selectors';

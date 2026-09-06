@@ -7,7 +7,7 @@ import type {
   OrientationCommandOptions,
   TvRemoteCommandOptions,
 } from '../../client/client-types.ts';
-import type { CommandResult } from '../../core/command-descriptor/command-result.ts';
+import type { CommandResult } from '@agent-device/command-registry/command-result';
 import { readInputFromCli } from '../cli-grammar/registry.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import {

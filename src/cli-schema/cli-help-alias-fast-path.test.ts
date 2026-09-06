@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { buildCommandUsageText, resolveHelpTargetUsageText } from './cli-help.ts';
 import { cliAliasesForCommand } from '../commands/cli-command-aliases.ts';
-import { listCliCommandNames } from '../command-catalog.ts';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 
 const ALIASES = listCliCommandNames().flatMap((command) =>
   cliAliasesForCommand(command).map((entry) => [entry.alias, command] as const),

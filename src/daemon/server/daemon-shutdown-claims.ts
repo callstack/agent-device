@@ -2,7 +2,7 @@ import { publicPlatformString } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { clearDeviceClaim, type DeviceClaimClearOutcome } from '../device-claims.ts';
 import type { DeviceClaimRecord } from '../daemon-shutdown-report.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 
 export type DaemonShutdownClaims = {
   released: DeviceClaimRecord[];

@@ -26,17 +26,19 @@ import {
 import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
 import type { ReplayReportAction } from './session-replay-report-action.ts';
 import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';
-import type { SessionState } from '../../types.ts';
+import type { SessionState } from '../../session-state.ts';
 import {
-  REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
-  createReplayDivergenceSanitizer,
   type ReplayDivergence,
   type ReplayDivergenceScreen,
   type ReplayDivergenceScreenRef,
   type ReplayDivergenceSuggestion,
   type ReplayDivergenceSuggestionBasis,
-  type ReplayVarScrubEntry,
 } from '@agent-device/contracts/divergence';
+import {
+  REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
+  createReplayDivergenceSanitizer,
+  type ReplayVarScrubEntry,
+} from '../../../core/replay-divergence.ts';
 
 export type DivergenceFieldSanitizer = (value: string, limit?: number) => string;
 

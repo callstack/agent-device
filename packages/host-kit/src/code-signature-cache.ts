@@ -33,10 +33,12 @@ type CacheDocument = {
 
 /**
  * The daemon code signature for a SOURCE checkout, where the import graph is
- * ~800 separate modules rather than a bundle. The client fingerprints that
- * graph on every CLI invocation (`isReusableDaemonInfo`), and rediscovering
- * its edges means reading all ~800 files: ~30ms of a ~245ms invocation, for a
- * graph that is identical on every invocation but the first one after an edit.
+ * ~1,500 separate modules rather than a bundle — the daemon's own tree plus
+ * every workspace package it reaches by specifier. The client fingerprints
+ * that graph on every CLI invocation (`isReusableDaemonInfo`), and
+ * rediscovering its edges means reading all of them: tens of milliseconds of a
+ * ~245ms invocation, for a graph that is identical on every invocation but the
+ * first one after an edit.
  *
  * So the walk is cached and revalidated by `statSync` alone, which is exactly
  * as strong as the walk it replaces because a document records the walk's

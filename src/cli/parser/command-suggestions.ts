@@ -1,5 +1,5 @@
 import { RETIRED_SCREENSHOT_MAX_SIZE } from '@agent-device/contracts/capture';
-import { listCliCommandNames } from '../../command-catalog.ts';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 
 /**
  * Curated guess -> canonical command mapping for unknown CLI command names.

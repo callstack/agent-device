@@ -8,7 +8,7 @@ import type {
   ProviderDeviceRuntime,
 } from '@agent-device/contracts/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import type { DaemonRequest } from '../../../src/daemon/types.ts';
+import type { DaemonRequest } from '../../../src/daemon/daemon-request.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { applePlugin } from '@agent-device/platform-apple';
 import type {

@@ -20,7 +20,7 @@ import { LeaseRegistry } from '../../../../src/daemon/lease-registry.ts';
 import { SessionStore } from '../../../../src/daemon/session-store.ts';
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../../src/__tests__/test-utils/device-inventory-gateways.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonRequest } from '../../../../src/daemon/types.ts';
+import type { DaemonRequest } from '../../../../src/daemon/daemon-request.ts';
 
 import { DEVICE_POOL } from './bindings.ts';
 

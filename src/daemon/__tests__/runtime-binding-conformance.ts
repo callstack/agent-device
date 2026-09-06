@@ -7,7 +7,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { commandRuntimeUseRequirements } from '../../core/command-descriptor/registry.ts';
+import { commandRuntimeUseRequirements } from '@agent-device/command-registry/registry';
 import { createUnavailableRuntimeFactsForTest } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';

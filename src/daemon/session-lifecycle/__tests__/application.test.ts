@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { DaemonRequest, DaemonResponse } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 
 vi.mock('../../../request/device-inventory-context.ts', async (importOriginal) => {

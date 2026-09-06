@@ -1,7 +1,7 @@
 import {
   commandRuntimeUseRequirements,
   listRuntimeFactCommands,
-} from '../../../core/command-descriptor/registry.ts';
+} from '@agent-device/command-registry/registry';
 import { listDeviceInventory } from '../../../request/device-inventory-context.ts';
 import { assertResolvedAppsFilter } from '@agent-device/contracts/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
@@ -25,7 +25,8 @@ import {
 } from '../../device-claim-inspection.ts';
 import { canonicalLocalDeviceKey } from '../../device-claim-paths.ts';
 import { deviceClaimIdentity } from '../../device-claims.ts';
-import type { DaemonRequest, DaemonResponse, SessionRef } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { SessionRef } from '../../session-state.ts';
 import { resolveSessionRunnerLogPath, SessionStore } from '../../session-store.ts';
 import {
   requireSessionOrExplicitSelector,

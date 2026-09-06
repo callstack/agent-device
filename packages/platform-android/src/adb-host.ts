@@ -1,8 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type {
-  AndroidHelperInstallDecision,
-  AndroidImeHelperArtifact,
-} from '@agent-device/contracts/android-helper-artifacts';
+import type { AndroidHelperInstallDecision, AndroidImeHelperArtifact } from './helper-artifacts.ts';
 import type {
   AndroidAdbExecutor,
   AndroidAdbExecutorOptions,

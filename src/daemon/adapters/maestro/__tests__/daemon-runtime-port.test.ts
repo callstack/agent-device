@@ -3,7 +3,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { noMaestroIncludeSources } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { executeMaestroFlow, inspectMaestroFlow } from '@agent-device/maestro';
-import type { DaemonInvokeFn, DaemonRequest } from '../../../types.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon-request.ts';
 import { PNG } from '@agent-device/capture-kit/png';
 import {
   emitDiagnostic,

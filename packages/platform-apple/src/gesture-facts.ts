@@ -1,4 +1,4 @@
-import { APPLE_MULTI_TOUCH_UNSUPPORTED_HINTS } from '@agent-device/contracts/apple-multitouch-support';
+import { APPLE_MULTI_TOUCH_UNSUPPORTED_HINTS } from './multitouch-support.ts';
 import {
   PHYSICAL_IOS_MULTI_TOUCH_UNSUPPORTED_HINT,
   TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,

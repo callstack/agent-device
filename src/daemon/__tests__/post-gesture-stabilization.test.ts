@@ -11,7 +11,7 @@ import {
   capturePostGestureStabilizedResult,
   markDeferredInteractionOutcome,
 } from '../deferred-interaction-outcome.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import {
   chromeWithListSnapshot,
   deliverySnapshot,

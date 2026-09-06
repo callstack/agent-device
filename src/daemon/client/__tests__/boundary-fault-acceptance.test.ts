@@ -6,7 +6,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { assertRejectsAppError } from '../../../__tests__/test-utils/app-error.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import type { DaemonPaths } from '../../config.ts';
-import type { DaemonRequest } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import { sendRequest } from '../daemon-client-transport.ts';
 
 type ProcessDeathCommand = 'press' | 'fill' | 'snapshot' | 'screenshot' | 'open' | 'close';

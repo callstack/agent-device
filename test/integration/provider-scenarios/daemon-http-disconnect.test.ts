@@ -3,7 +3,7 @@ import http from 'node:http';
 import { test } from 'vitest';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/daemon-request.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,

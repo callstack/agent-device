@@ -1,6 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import type { ReplayCoordinator } from '../../session-replay-coordinator.ts';
 import type { ReplayCommand, ReplaySessionStore } from './command-types.ts';
 import { errorResponse } from '../../response.ts';

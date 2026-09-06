@@ -34,7 +34,8 @@ import {
   NO_SCRIPT_PUBLICATION,
   scriptTargetPath,
 } from '../../../session-script-publication-state.ts';
-import type { DaemonRequest, SessionState } from '../../../types.ts';
+import type { DaemonRequest } from '../../../daemon-request.ts';
+import type { SessionState } from '../../../session-state.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,

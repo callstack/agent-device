@@ -18,7 +18,7 @@ type AstNode = Record<string, unknown>;
 
 export const RUNTIME_EXECUTION_INTEGRITY_RULE = 'R66 runtime-execution-integrity';
 
-const COMMAND_DESCRIPTOR_MODULE = 'src/core/command-descriptor/registry.ts';
+const COMMAND_DESCRIPTOR_MODULE = 'packages/command-registry/src/registry.ts';
 const RUNTIME_ADMISSION_MODULE = 'src/daemon/runtime-admission.ts';
 const RUNTIME_PROOF_TYPES = new Set(['AdmittedRuntimePlan', 'BoundDeviceRuntime']);
 

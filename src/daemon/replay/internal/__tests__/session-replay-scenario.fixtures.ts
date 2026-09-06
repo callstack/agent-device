@@ -2,7 +2,7 @@ import path from 'node:path';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import { makeIosAppSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { SessionStore } from '../../../session-store.ts';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../../types.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
 import {
   baseReplayRequest,

@@ -11,8 +11,8 @@ import {
   REPLAY_DIVERGENCE_LEVEL_BYTE_LIMITS,
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   truncateUtf8Field,
-  type ReplayDivergence,
 } from './replay-divergence.ts';
+import type { ReplayDivergence } from '@agent-device/contracts/divergence';
 
 function buildDivergence(overrides: Partial<ReplayDivergence> = {}): ReplayDivergence {
   return {

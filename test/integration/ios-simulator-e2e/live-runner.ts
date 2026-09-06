@@ -4,7 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { sendToDaemon } from '../../../src/daemon/client/daemon-client.ts';
 import { assertPngFile } from '../provider-scenarios/assertions.ts';
 import {

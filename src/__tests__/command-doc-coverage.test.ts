@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
-import { PUBLIC_COMMANDS, isKnownCliCommandName } from '../command-catalog.ts';
+import { PUBLIC_COMMANDS, isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 import { cliCommandAlias } from '../commands/cli-command-aliases.ts';
 import { getCliCommandSchema } from '../cli-schema/command-schema.ts';
 import { buildCommandUsage } from '../cli-schema/usage.ts';

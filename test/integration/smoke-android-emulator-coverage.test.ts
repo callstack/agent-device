@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { ANDROID_EMULATOR_BEHAVIOR_COVERAGE } from './android-emulator-e2e/behavior-coverage.ts';
 import { ANDROID_PERMISSION_PROMPT_COMMAND } from './android-emulator-e2e/live-lifecycle-scenario.ts';
 import {

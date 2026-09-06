@@ -8,7 +8,7 @@ import {
   markPendingInteractionOutcome,
   stripInternalInteractionFlags,
 } from '../interaction-outcome-policy.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 
 test('classifyInteractionSurfaceChange treats identical surfaces as unchanged', () => {

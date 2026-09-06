@@ -1,9 +1,9 @@
 import type { DaemonResponse, sendToDaemon } from '../daemon/client/daemon-client.ts';
-import { INTERNAL_COMMANDS } from '../command-catalog.ts';
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import type {
   DescriptorCliCommandName,
   DescriptorDaemonRouteCommandName,
-} from '../core/command-descriptor/registry.ts';
+} from '@agent-device/command-registry/registry';
 
 type CliDaemonTransport = typeof sendToDaemon;
 type CliDaemonRequest = Parameters<CliDaemonTransport>[0];

@@ -16,7 +16,7 @@ import { resolveStructuredBatchCommandName } from '../core/batch-policy.ts';
 import {
   resolveCommandRecordsSessionAction,
   resolveCommandTimeoutPolicy,
-} from '../core/command-descriptor/registry.ts';
+} from '@agent-device/command-registry/registry';
 import { MCP_COMMAND_OUTPUT_SCHEMAS } from './mcp-output-schemas.ts';
 import { COMMON_INPUT_AUDIENCE } from '../commands/common-input-fields.ts';
 import {

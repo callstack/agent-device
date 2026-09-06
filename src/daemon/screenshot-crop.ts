@@ -19,7 +19,7 @@ import type { DaemonCommandContext } from './context.ts';
 import { captureSnapshotData } from './snapshot-capture.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
 import type { BoundScreenshotRuntime } from './screenshot-runtime-binding.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 
 export type ScreenshotCropOutcome = Readonly<{ partialIntersection: boolean }>;
 

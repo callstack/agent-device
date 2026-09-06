@@ -102,8 +102,6 @@ export function discoverFacadeEntryFiles(repoRoot: string): string[] {
 export const HUB_ENTRY_FILES: readonly string[] = [
   'src/cli.ts',
   'src/platform-runtime.ts',
-  'src/core/command-descriptor/registry.ts',
-  'src/core/command-descriptor/platform-execution-entry.ts',
   'src/core/interactors/register-builtins.ts',
   'src/daemon/session-teardown.ts',
 ];
@@ -128,7 +126,16 @@ export const NEW_ENTRY_CEILINGS: Readonly<Record<EntryCategory, number>> = Objec
  */
 export const APPROVED_OVER_CEILING: Readonly<
   Record<string, { issue: string; reason: string; owner: string }>
-> = Object.freeze({});
+> = Object.freeze({
+  'packages/command-registry/src/planned-operations.ts': {
+    issue: '#2198',
+    reason:
+      'Flattens the required runtime operations of the remaining batch steps from the registry, ' +
+      'so its closure is the registry entry itself plus the operation-name vocabulary; a lighter ' +
+      'closure would mean a second copy of the descriptors.',
+    owner: 'thymikee',
+  },
+});
 
 /** The category is a function of the path, never a hand-written column. */
 export function entryCategoryOf(entryFile: string): EntryCategory {

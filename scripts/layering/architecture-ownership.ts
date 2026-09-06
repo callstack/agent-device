@@ -221,7 +221,7 @@ export const ARCHITECTURE_OWNERSHIP = {
     {
       name: 'session-state-shape',
       kind: 'live-state-shape',
-      root: 'src/daemon/types.ts',
+      root: 'src/daemon/session-state.ts',
       exports: ['SessionState'],
     },
     {

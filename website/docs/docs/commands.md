@@ -419,6 +419,7 @@ agent-device alert dismiss
 - Because `wait @ref` is text-based after resolution, duplicate labels can match a different element than the original ref target.
 - `wait` shares the selector/snapshot resolution flow used by `click`, `fill`, `get`, and `is`.
 - Wait failures carry a structured `error.details.reason` in `--json` output: `wait_target_absent` proves a positive wait never found a match; `wait_target_present` means strict `wait absent` reached its deadline with valid captures that still contained matches; `predicate_failed` means strict `wait absent` could not prove absence because no valid capture arrived, with the final observation/diagnostic preserved; `wait_capture_stalled` means no readable capture arrived and is retriable; `wait_deadline_exceeded` means a later capture consumed the remaining budget after an earlier readable capture; `wait_landmark_identity_mismatch` is a replay destination-guard refusal; and `wait_stable_timeout` means the UI did not settle. Use `readableCaptures`, `waitedMs`, `matches`, and `firstMatch` instead of parsing error text. `firstMatch` carries identity/text evidence only; absence failures do not claim visibility or rect evidence.
+- Polling wait timeouts (`wait <selector>`, `wait text`, `wait @ref`, and `wait absent` once a readable capture has been seen) also carry `captures` (every poll attempted), `readableCaptures`, and `polls`, one entry per poll with `startedMs` on the wait's own clock, `durationMs`, and `outcome` (`readable`, `unreadable`, `deadline`, or `runner-restart`), so a timeout says where its budget went; long waits keep the first five and last twenty-five polls. A replayed selector wait refused for a recorded landmark mismatch (`wait_landmark_identity_mismatch`) carries the same poll evidence next to its mismatch details. `wait --stable` timeouts and a never-readable strict absence keep their own diagnostics. `logPath` links the full request log.
 - `alert` inspects or handles system alerts on iOS simulator, macOS desktop, and Android native/runtime permission dialogs.
 - `alert` without an action is equivalent to `alert get`.
 - `accept` and `dismiss` are sent once on every platform. A lost or unconfirmed response is reported as an error and never replayed; run `alert get` before acting again.
@@ -696,6 +697,7 @@ agent-device settings fingerprint match
 agent-device settings fingerprint nonmatch
 agent-device settings clear-app-state
 agent-device settings clear-app-state com.example.app
+agent-device settings reset-keychain clear
 agent-device settings permission grant camera
 agent-device settings permission deny microphone
 agent-device settings permission grant photos limited
@@ -710,7 +712,8 @@ agent-device settings permission reset screen-recording --platform macos
 - Android `settings animations off|on` toggles the global `window_animation_scale`, `transition_animation_scale`, and `animator_duration_scale` values. Use it as an opt-in stabilizer for automation runs with heavy system or app animations, then restore with `settings animations on` when needed.
 - `settings appearance` maps to macOS appearance, iOS simulator appearance, and Android night mode.
 - `settings location set <lat> <lon>` sets precise coordinates on iOS simulators and Android emulators.
-- `settings clear-app-state [app-id]` clears the active session app data, or the provided app id. Android uses `pm clear`, which removes SharedPreferences, databases, files, and cache. iOS simulator removes the app data container contents. iOS physical devices and macOS are unsupported.
+- `settings clear-app-state [app-id]` clears the active session app data, or the provided app id. Android uses `pm clear`, which removes SharedPreferences, databases, files, and cache. iOS simulator removes the app data container contents. iOS physical devices and macOS are unsupported. It does not touch the keychain, so keychain-backed credentials (e.g. Firebase auth) survive it.
+- `settings reset-keychain clear` resets the iOS simulator's keychain (`xcrun simctl keychain <device> reset`), removing keychain-backed credentials such as Firebase auth tokens that `clear-app-state` leaves behind. simctl has no per-app keychain reset, so this clears the keychain for every app installed on that simulator, not only the app under test — treat it as a whole-simulator, opt-in operation and pair it with `clear-app-state` for a full fresh-install reset. iOS physical devices, Android, and macOS are unsupported.
 - Face ID and Touch ID controls are iOS simulator-only.
 - Android `settings airplane on|off` is applied by the connectivity service (`cmd connectivity airplane-mode`, Android 11+), which drives the radios rather than only writing the `airplane_mode_on` setting. The response reports the `airplaneMode` that service holds after the change, and Android builds without that command fail without changing device state. Connectivity takes a moment to settle after the switch, so poll the app under test rather than asserting offline behavior immediately.
 - Fingerprint simulation is supported on Android targets where `cmd fingerprint` or `adb emu finger` is available.

@@ -1,7 +1,8 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { readSessionRuntimeRevision, refFrame, type RefFrame } from './ref-frame.ts';
+import { readSessionRuntimeRevision, refFrame } from './ref-frame.ts';
+import type { RefFrame } from './ref-frame-slot.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from './session-snapshot.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 
 declare const INTERNAL_OBSERVATION_EVIDENCE: unique symbol;
 

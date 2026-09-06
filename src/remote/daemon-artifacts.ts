@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonArtifact, DaemonRequest, DaemonResponse } from '../daemon/types.ts';
+import type { DaemonArtifact, DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
 import {
   appendRecordingExtensionWhenMissing,
   recordingExtensionForPlatform,

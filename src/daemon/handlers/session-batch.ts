@@ -1,5 +1,5 @@
 import { runBatch } from '../../core/batch.ts';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 
 export async function runBatchCommands(
   req: DaemonRequest,

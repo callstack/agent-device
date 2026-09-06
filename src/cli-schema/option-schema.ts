@@ -1,5 +1,5 @@
 import { buildPrimaryEnvVarName, parseSourceValue } from '@agent-device/kernel/source-value';
-import { listCliCommandNames } from '../command-catalog.ts';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import {
   getCliCommandSchema,
   getFlagDefinitions,

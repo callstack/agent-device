@@ -1,7 +1,8 @@
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { LeaseLifecycleProvider, TargetShutdownResult } from '@agent-device/contracts/device';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
 import { resolveCommandDevice } from '../../session-device-resolution.ts';
@@ -36,7 +37,7 @@ import {
   type RuntimeHintClearOperation,
 } from './session-close-runtime-admission.ts';
 import { closeCleanupError, runSessionCloseTeardown } from './session-close-lifecycle-teardown.ts';
-import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
+import type { PlatformResourceCleanup } from '../../platform-resource-cleanup.ts';
 
 export type SessionCloseCommandInput = Readonly<{
   req: DaemonRequest;

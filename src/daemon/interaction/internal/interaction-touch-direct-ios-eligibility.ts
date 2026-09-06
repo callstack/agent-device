@@ -3,13 +3,13 @@ import type { InteractionTarget } from '@agent-device/contracts/interaction';
 import {
   commandSupportsSettleObservation,
   commandSupportsVerifyEvidence,
-} from '../../../core/command-descriptor/registry.ts';
+} from '@agent-device/command-registry/registry';
 import {
   readSimpleIosSelectorTarget,
   type DirectIosSelectorTarget,
 } from '../../direct-ios-selector.ts';
 import { isSessionRecording } from '../../session-script-publication-capability.ts';
-import type { SessionState } from '../../types.ts';
+import type { SessionState } from '../../session-state.ts';
 
 /**
  * Whether a Maestro-compatible click needs the direct iOS selector route.

@@ -13,7 +13,7 @@ import { createDurableCaptureResource } from './durable-capture-resource.ts';
 import type { PerfCaptureAdmissionLedger } from './perf-capture-admission-ledger.ts';
 import { perfCaptureResourceStore } from './perf-capture-resource-store.ts';
 import type { SessionStore } from './session-store.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 
 export const perfCaptureDurableResource = createDurableCaptureResource<
   'perf-capture',

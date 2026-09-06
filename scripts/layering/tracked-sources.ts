@@ -20,7 +20,7 @@
 import { execFileSync } from 'node:child_process';
 
 // `src/**/*.ts` only matches NESTED files, so root-level `src/*.ts` (src/cli.ts,
-// src/command-catalog.ts) needs its own pathspec or it silently drops out of every scan.
+// src/backend.ts) needs its own pathspec or it silently drops out of every scan.
 // Workspace package sources are production files too (#1490 W0).
 const TRACKED_SOURCE_PATHSPECS = [
   'src/*.ts',

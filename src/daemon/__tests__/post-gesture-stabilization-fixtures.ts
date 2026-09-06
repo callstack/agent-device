@@ -1,6 +1,6 @@
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 
 /**
  * Shared fixtures for the deferred-interaction-outcome test cluster:

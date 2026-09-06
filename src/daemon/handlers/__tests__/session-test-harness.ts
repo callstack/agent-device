@@ -91,7 +91,8 @@ vi.mock('../../materialized-path-registry.ts', async (importOriginal) => {
 import * as path from 'node:path';
 import { cleanupRetainedMaterializedPathsForSession } from '../../materialized-path-registry.ts';
 import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { resolveTargetDevice } from '../../../core/dispatch-resolve.ts';
 import { ensureDeviceReady } from '../../device-ready.ts';
 import {

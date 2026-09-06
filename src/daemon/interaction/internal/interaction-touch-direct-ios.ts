@@ -6,7 +6,8 @@ import {
   type DirectIosSelectorTarget,
 } from '../../direct-ios-selector.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
-import type { DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { finalizeTouchInteraction } from './interaction-runtime.ts';
 import type { CaptureSnapshotForSession, InteractionRouteInput } from './types.ts';
 import { corroborateIosTapFailure } from './interaction-ios-tap-outcome.ts';

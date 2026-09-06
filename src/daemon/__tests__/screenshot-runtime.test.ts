@@ -9,7 +9,8 @@ import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
 import { resolveScreenshotGenericExecution } from '../screenshot-runtime.ts';
 import { screenshotRuntimeFixture } from './screenshot-runtime-fixture.ts';
-import type { DaemonRequest, SessionState } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 
 const unavailableCapture = Object.freeze({
   available: false,

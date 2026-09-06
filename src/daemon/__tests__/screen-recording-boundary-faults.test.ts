@@ -22,7 +22,7 @@ import { createDurableCaptureAdmissionLedger } from '../durable-capture-admissio
 import { createDurableCaptureResource } from '../durable-capture-resource.ts';
 import type { DurableCaptureResourceStore } from '@agent-device/capture-kit/durable-capture';
 import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 
 type ScreenRecordingStore = DurableCaptureResourceStore<'screen-recording'>;
 

@@ -55,7 +55,7 @@ import { createTestDeviceInventoryGateways } from '../../../../__tests__/test-ut
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { makeSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { LeaseRegistry } from '../../../lease-registry.ts';
-import type { DaemonRequest } from '../../../types.ts';
+import type { DaemonRequest } from '../../../daemon-request.ts';
 import {
   prepareIosRunner,
   prewarmAppleRunnerCache,

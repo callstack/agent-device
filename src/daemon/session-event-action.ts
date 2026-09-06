@@ -4,8 +4,8 @@ import { SWIPE_PATTERNS } from '@agent-device/contracts/scroll-gesture';
 import { RECORDING_SCOPE_VALUES } from '@agent-device/contracts/recording';
 import { SESSION_SURFACES, type SessionAction } from '@agent-device/contracts/session';
 import { DEVICE_TARGETS, PLATFORM_SELECTORS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
-import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../command-catalog.ts';
-import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
+import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import {
   buildInstallActionSummary,
   buildStructuredActionDetails,

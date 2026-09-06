@@ -1,5 +1,7 @@
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { promisify } from 'node:util';
 
 import {
   createLiveDeviceContext,
@@ -37,9 +39,73 @@ export function createContext(): LiveContext {
   };
 }
 
+const execFileAsync = promisify(execFile);
+
+const ROTATION_PROBE_TIMEOUT_MS = 5_000;
+const ROTATION_LOG_LINES = 60;
+const ROTATION_LOG_LINE_LENGTH = 240;
+
+/**
+ * What the OS says about rotation when a step fails: the two settings `orientation` writes, the
+ * display's current rotation, and the WindowManager rotation decisions logcat still holds (with
+ * the reason it gives). Read through adb, not agent-device, so it stands even when the CLI path
+ * is what failed; the shared collector bounds the whole read so it never delays the screenshot.
+ */
+async function readAndroidRotationEvidence(context: LiveContext): Promise<string> {
+  const probes: readonly [string, string[]][] = [
+    ['accelerometer_rotation', ['shell', 'settings', 'get', 'system', 'accelerometer_rotation']],
+    ['user_rotation', ['shell', 'settings', 'get', 'system', 'user_rotation']],
+    ['display rotation', ['shell', 'dumpsys', 'display']],
+    ['logcat rotation decisions', ['logcat', '-d', '-v', 'time']],
+  ];
+  const sections: string[] = [];
+  for (const [title, args] of probes) {
+    try {
+      const { stdout } = await execFileAsync('adb', ['-s', context.serial, ...args], {
+        maxBuffer: 64 * 1024 * 1024,
+        timeout: ROTATION_PROBE_TIMEOUT_MS,
+      });
+      sections.push(`## ${title}\n${selectRotationLines(title, stdout)}`);
+    } catch (error) {
+      sections.push(
+        `## ${title}\n(failed: ${error instanceof Error ? error.message : String(error)})`,
+      );
+    }
+  }
+  return `${sections.join('\n\n')}\n`;
+}
+
+function selectRotationLines(title: string, output: string): string {
+  if (title === 'display rotation') {
+    return output
+      .split('\n')
+      .filter((line) =>
+        /mCurrentOrientation|mRotation=|installOrientation|\brotation \d/.test(line),
+      )
+      .map((line) => line.trim().slice(0, ROTATION_LOG_LINE_LENGTH))
+      .slice(0, 8)
+      .join('\n');
+  }
+  if (title === 'logcat rotation decisions') {
+    return output
+      .split('\n')
+      .filter(
+        (line) =>
+          /(WindowManager|DisplayRotation|WindowOrientationListener|RotationResolver|DisplayContent|SensorService)/.test(
+            line,
+          ) && /rotat|orient/i.test(line),
+      )
+      .slice(-ROTATION_LOG_LINES)
+      .map((line) => line.slice(0, ROTATION_LOG_LINE_LENGTH))
+      .join('\n');
+  }
+  return output.trim();
+}
+
 const harness = createLiveDeviceHarness<LiveContext, AndroidEmulatorBehaviorId>({
   behaviorsForScenario: liveBehaviorsForScenario,
   commandsForScenario: liveCommandsForScenario,
+  deviceEvidence: readAndroidRotationEvidence,
   commonFlags: (context, args) => [
     ...args,
     '--platform',

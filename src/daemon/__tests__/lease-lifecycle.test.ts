@@ -9,7 +9,7 @@ import {
   releaseSessionLease,
   resolveSessionLeaseForRequest,
 } from '../lease-lifecycle.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 
 test('admitRequestLeaseForLockedScope heartbeats and stores admitted lease on the request', () => {
   let now = 1_000;

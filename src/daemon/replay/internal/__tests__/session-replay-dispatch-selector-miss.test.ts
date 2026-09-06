@@ -34,7 +34,7 @@ import path from 'node:path';
 import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
 import { SessionStore } from '../../../session-store.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonRequest } from '../../../types.ts';
+import type { DaemonRequest } from '../../../daemon-request.ts';
 import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import {

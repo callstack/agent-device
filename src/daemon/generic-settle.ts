@@ -1,7 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SettleObservation, SettleParams } from '@agent-device/contracts/interaction';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
+import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import {
   captureSnapshotForSession,
   createInteractionRuntime,
@@ -11,7 +11,8 @@ import {
 import type { BoundContextFromFlags } from './context.ts';
 import { issueSettleRefs } from './session-snapshot.ts';
 import type { SessionStore } from './session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 /**
  * `--settle` on the generic daemon route (#1638): `scroll` and `back` change

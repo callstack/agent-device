@@ -2,7 +2,7 @@ import type { ReplayCommandResult } from '@agent-device/contracts/replay';
 import type { MaestroExecutionOutcome } from '@agent-device/maestro';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture';
-import type { DaemonResponse } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
 import { buildTypedMaestroFailureResponse } from './session-replay-maestro-failure.ts';
 import type { ReplayCommand, ReplaySessionStore } from './command-types.ts';
 

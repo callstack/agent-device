@@ -3,8 +3,8 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { readReplayDivergenceResume } from '@agent-device/contracts/divergence';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import { readReplayDivergenceResume } from '../../core/replay-divergence.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import {
   runCmdDetachedMonitored,
   type ExecDetachedExit,
@@ -24,7 +24,7 @@ import {
   type DaemonTransportPreference,
 } from '../config.ts';
 import { resolveDaemonLaunchSpec, resolveLocalDaemonCodeSignature } from './daemon-launch-spec.ts';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 
 import {
   cleanupFailedDaemonStartupMetadata,

@@ -23,7 +23,8 @@ import {
   type ScreenshotRuntimeFixture,
   type ScreenshotRuntimeFixtureOptions,
 } from './screenshot-runtime-fixture.ts';
-import type { DaemonRequest, SessionState } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { PNG } from '@agent-device/capture-kit/png';

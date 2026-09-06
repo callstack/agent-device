@@ -3,7 +3,7 @@ import {
   resolveBoundTouchRuntime,
   type BoundTouchRuntime,
 } from '../touch-runtime.ts';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   analyzeReactNativeOverlay,
   type ReactNativeOverlayDismissTarget,
@@ -14,7 +14,8 @@ import { successText } from '@agent-device/kernel/success-text';
 
 import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
-import type { DaemonResponse, SessionState } from '../types.ts';
+import type { DaemonResponse } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { errorResponse, noActiveSessionError } from '../response.ts';
 import {
   captureSnapshotForSession,

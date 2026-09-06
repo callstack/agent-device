@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import { finalizeDaemonResponse } from '../request-finalization.ts';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
 
 test('finalizeDaemonResponse preserves handler error hints from details', () => {

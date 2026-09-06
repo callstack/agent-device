@@ -3,7 +3,7 @@ import path from 'node:path';
 import { handleReactNativeCommands } from '../react-native.ts';
 import { captureSnapshot } from '../../snapshot-capture.ts';
 import { SessionStore } from '../../session-store.ts';
-import type { SessionState } from '../../types.ts';
+import type { SessionState } from '../../session-state.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import {
   getRuntimeBindings,

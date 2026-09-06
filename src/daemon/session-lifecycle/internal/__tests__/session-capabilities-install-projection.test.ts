@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
-import { PUBLIC_COMMANDS } from '../../../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import type {

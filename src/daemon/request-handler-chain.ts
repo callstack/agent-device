@@ -1,14 +1,14 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonCommandRoute } from '../core/command-descriptor/daemon-command-descriptor.ts';
+import type { DaemonCommandRoute } from '@agent-device/command-registry/daemon-command-descriptor';
 import { getDaemonCommandRoute } from './daemon-command-registry.ts';
 import * as genericRequestHandlerModule from './request-generic-dispatch.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { LeaseRegistry } from './lease-registry.ts';
 import type { SessionStore } from './session-store.ts';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import type {
   BindDeviceRuntime,
   BindExactDeviceRuntime,
@@ -23,7 +23,7 @@ import type { ScreenRecordingAdmissionLedger } from './screen-recording-admissio
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { RequestPlatformProviderScope } from '@agent-device/contracts/platform-providers';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
-import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
+import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 
 type RequestHandlerChainParams = {
   req: DaemonRequest;

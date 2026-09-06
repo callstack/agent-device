@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 import { SessionStore } from '../../../session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { runReplayTestCommand } from '../../index.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';

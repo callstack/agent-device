@@ -1,7 +1,7 @@
 import type { HumanControlHold, HumanControlHoldScope } from '@agent-device/contracts/client';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { AllocateLeaseRequest } from '../lease-registry-scope.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
 export const HUMAN_CONTROL_SCOPE: HumanControlHoldScope = {

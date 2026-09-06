@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
-import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   LINUX_COVERAGE_GAP_ISSUE,
   LINUX_COMMAND_EVIDENCE,

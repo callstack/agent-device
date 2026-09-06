@@ -2,7 +2,7 @@ import {
   resolvePlannedRuntimeOperations,
   type PlannedRuntimeOperation,
   type PlannedStep,
-} from '../core/command-descriptor/planned-operations.ts';
+} from '@agent-device/command-registry/planned-operations';
 
 /**
  * The part of a multi-step plan (a `batch`) that is still ahead of the request being executed.

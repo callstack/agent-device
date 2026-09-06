@@ -3,7 +3,7 @@ import type {
   DeviceBindingIntent,
   RuntimeOwnerRef,
 } from '@agent-device/contracts/platform-runtime';
-import type { DeviceClaimPolicy } from '../core/command-descriptor/types.ts';
+import type { DeviceClaimPolicy } from '@agent-device/command-registry/types';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   inspectAllocatorHeldDeviceClaim,

@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import { buildDeviceInUseBySessionError } from '../../../session-recovery-hints.ts';
-import type { SessionRef } from '../../../types.ts';
+import type { SessionRef } from '../../../session-state.ts';
 import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
 
 // DEVICE_IN_USE named `SessionState.name`, and for an implicitly cwd-scoped session that is

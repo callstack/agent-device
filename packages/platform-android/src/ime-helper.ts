@@ -8,7 +8,7 @@ import {
   type AndroidHelperInstallDecision,
   type AndroidImeHelperArtifact,
   type AndroidImeHelperManifest,
-} from '@agent-device/contracts/android-helper-artifacts';
+} from './helper-artifacts.ts';
 import { androidAdbResultError } from './adb-failure.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from './adb-transport.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';

@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import {
   markSessionPartialRefsIssued,
   resolveRefStalenessWarning,

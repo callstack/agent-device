@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { parseWaitPositionals as parseWaitArgs } from '../../../core/wait-positionals.ts';
-import { parseTimeout } from '../../../core/parse-timeout.ts';
+import { parseWaitPositionals as parseWaitArgs } from '@agent-device/command-registry/wait-positionals';
+import { parseTimeout } from '@agent-device/command-registry/parse-timeout';
 
 // --- parseTimeout ---
 
@@ -110,7 +110,7 @@ test('parseWaitArgs parses selector expression with timeout', () => {
 // #1800: this used to fall back to a literal-text wait for "foo=bar" — a caller typo (or a
 // straight-up unrecognized selector key) that can only ever time out, never match. It is now a
 // typed rejection instead. Full coverage of the rejection shapes lives in
-// src/core/wait-positionals.test.ts, which mirrors this module's source topology.
+// src/__tests__/wait-positionals.test.ts, beside the parser's other root-owned coverage.
 test('parseWaitArgs rejects an unrecognized selector-like key=value token instead of reading it as text', () => {
   const result = parseWaitArgs(['foo=bar', '5000']);
   assert.ok(result);

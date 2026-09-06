@@ -2,8 +2,8 @@ import { waitObservesDevice } from '@agent-device/contracts/wait-runtime-plan';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { AppError } from '@agent-device/kernel/errors';
 import { checkWaitText } from '@agent-device/selectors';
-import { parseWaitPositionals } from '../core/wait-positionals.ts';
-import type { WaitParsed } from '../core/wait-positionals.ts';
+import { parseWaitPositionals } from '@agent-device/command-registry/wait-positionals';
+import type { WaitParsed } from '@agent-device/command-registry/wait-positionals';
 import { absenceCaptureOptionError } from '../core/absence-observation-errors.ts';
 import { absenceCaptureOptionRefusal } from '../core/absence-observation.ts';
 import { parseVersionedRefPositional } from './ref-positionals.ts';
@@ -22,7 +22,8 @@ import {
   toDaemonResponse,
 } from './selector-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 import { dispatchConditionalWaitSelector } from './wait-conditional-selector.ts';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';
 import { withSystemSurfaceDisclosure } from './system-surface-disclosure.ts';

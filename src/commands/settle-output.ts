@@ -1,4 +1,4 @@
-import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
+import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import type { CliOutput } from './command-contract.ts';
 import { pinnedRefText, type CliOutputFormatter } from './output-common.ts';
 

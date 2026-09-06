@@ -3,7 +3,7 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   closeLoopbackServer,
@@ -12,7 +12,7 @@ import {
 } from '../../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import type { DaemonPaths } from '../../config.ts';
-import type { DaemonRequest } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import { sendRequest } from '../daemon-client-transport.ts';
 
 const { mockRunCmdSync } = vi.hoisted(() => ({ mockRunCmdSync: vi.fn() }));

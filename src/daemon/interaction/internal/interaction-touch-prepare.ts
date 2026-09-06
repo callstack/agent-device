@@ -1,4 +1,4 @@
-import type { SessionState } from '../../types.ts';
+import type { SessionState } from '../../session-state.ts';
 import {
   createBoundTouchExecutor,
   resolveBoundTouchRuntime,

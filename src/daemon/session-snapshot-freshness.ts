@@ -11,7 +11,7 @@ import {
   type SnapshotFreshnessMode,
   type SnapshotFreshnessWindow,
 } from '../snapshot/snapshot-freshness/index.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 
 /**
  * Session binding for the neutral snapshot-freshness facet (#1983).

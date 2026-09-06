@@ -4,8 +4,8 @@ import {
   helpTopicIds,
   resolveHelpTargetUsageText,
 } from '../cli-schema/cli-help.ts';
-import { listCliCommandNames } from '../command-catalog.ts';
-import { listMcpExposedCommandNames } from '../core/command-descriptor/registry.ts';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
+import { listMcpExposedCommandNames } from '@agent-device/command-registry/registry';
 import type { ToolResult } from './command-tools.ts';
 
 /**
