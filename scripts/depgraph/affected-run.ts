@@ -18,7 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   INTERACTION_DISPATCH_PATHS,
   type InteractionPathId,

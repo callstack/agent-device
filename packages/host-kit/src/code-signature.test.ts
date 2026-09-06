@@ -111,3 +111,26 @@ test('the daemon source graph stamps the walker that produced it', () => {
 
   assert.ok(labelsOf(entryPath, repoRoot).includes('packages/host-kit/src/code-signature.ts'));
 });
+
+/**
+ * The same claim for the command descriptors (#2336). The daemon reaches the
+ * registry, the catalog derived from it, and the rest of that package only by
+ * workspace specifier, so a walk that stopped at the package boundary would
+ * report an unchanged signature after a descriptor edit and the client would
+ * keep reusing a daemon running the superseded policy. The manifest is stamped
+ * beside them because its `exports` map is what chose those files.
+ */
+test('the daemon source graph stamps the command descriptor registry package', () => {
+  const repoRoot = path.resolve(import.meta.dirname, '..', '..', '..');
+  const entryPath = path.join(repoRoot, 'src', 'daemon.ts');
+  if (!fs.existsSync(entryPath)) return;
+
+  const labels = labelsOf(entryPath, repoRoot);
+  for (const owned of [
+    'packages/command-registry/src/registry.ts',
+    'packages/command-registry/src/catalog.ts',
+    'packages/command-registry/package.json',
+  ]) {
+    assert.ok(labels.includes(owned), `${owned} is missing from the daemon code graph`);
+  }
+});

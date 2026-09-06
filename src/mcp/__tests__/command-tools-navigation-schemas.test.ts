@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { commandSupportsSettleObservation } from '../../core/command-descriptor/registry.ts';
+import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
 
 // The closed dispatch shape each navigation command's runtime returns

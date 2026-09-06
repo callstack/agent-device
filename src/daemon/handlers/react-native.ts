@@ -3,7 +3,7 @@ import {
   resolveBoundTouchRuntime,
   type BoundTouchRuntime,
 } from '../touch-runtime.ts';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   analyzeReactNativeOverlay,
   type ReactNativeOverlayDismissTarget,

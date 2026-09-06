@@ -1,6 +1,6 @@
 import type { JsonSchema } from '../commands/command-contract.ts';
-import type { CommandResultMap } from '../core/command-descriptor/command-result.ts';
-import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
+import type { CommandResultMap } from '@agent-device/command-registry/command-result';
+import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import { booleanSchema, looseObjectSchema, stringSchema } from '../commands/command-input.ts';
 import { BACK_MODES } from '@agent-device/contracts/back-mode';
 import { DEVICE_ROTATIONS } from '@agent-device/contracts/device';
@@ -11,7 +11,7 @@ import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
 /**
  * Registry of per-command MCP `outputSchema`s, keyed by the daemon command
  * NAME. It is type-tied to the typed-result spine `CommandResultMap`
- * (src/core/command-descriptor/command-result.ts) via
+ * (@agent-device/command-registry/command-result) via
  * `satisfies Record<keyof CommandResultMap, JsonSchema>`, so the one-for-one
  * invariant is compiler-enforced: a new `CommandResultMap` entry without a schema
  * here is a missing-key error, and a typo'd/extra key is an excess-property error.

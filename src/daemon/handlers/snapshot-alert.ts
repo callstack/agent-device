@@ -16,7 +16,7 @@ import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
 import { SessionStore } from '../session-store.ts';
 import { recordIfSession } from '../snapshot-session.ts';
-import { parseTimeout } from '../../core/parse-timeout.ts';
+import { parseTimeout } from '@agent-device/command-registry/parse-timeout';
 import { resolveRefFrameEffect } from '../daemon-command-registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import type { DaemonFailureResponse } from '../response.ts';

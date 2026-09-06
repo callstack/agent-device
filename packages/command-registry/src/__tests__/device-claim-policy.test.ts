@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '../catalog.ts';
 import { commandDescriptors, resolveCommandDeviceClaimPolicy } from '../registry.ts';
 import type { DeviceClaimPolicy } from '../types.ts';
 

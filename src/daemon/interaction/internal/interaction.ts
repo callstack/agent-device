@@ -8,7 +8,7 @@ import { refSnapshotFlagGuardResponse } from '../../ref-snapshot-flag-policy.ts'
 import { dispatchGetViaRuntime, dispatchIsViaRuntime } from '../../selector-runtime.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
 import { errorResponse, noActiveSessionError } from '../../response.ts';
-import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { normalizeError } from '@agent-device/kernel/errors';
 import {
   ensureAndroidBlockingSystemDialogReady,

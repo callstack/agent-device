@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { SettingsUpdateOptions } from '@agent-device/contracts/client';
 import { SETTINGS_USAGE_OVERRIDE } from '@agent-device/contracts/settings';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';

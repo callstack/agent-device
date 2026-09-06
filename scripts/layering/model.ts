@@ -38,6 +38,7 @@ export type BackEdgeMap = Record<string, string[]>;
 const TARGET_DAG_RANK = new Map([
   ['ad-replay', 1],
   ['ad-script', 1],
+  ['command-registry', 1],
   ['contracts', 1],
   ['maestro', 1],
   ['recording', 1],

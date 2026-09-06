@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isRecord } from '@agent-device/kernel/record';
 import type { DaemonRequest, DaemonResponseData } from './daemon-request.ts';
 

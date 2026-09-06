@@ -21,5 +21,5 @@
   // prior build, workspace link, or publish step. Running an example for real
   // still resolves `agent-device` as a self-referencing package (needs
   // `pnpm build`), matching how a real consumer would import it.
-  "include": [".", "../../src/global.d.ts"]
+  "include": [".", "../../packages/command-registry/src/global.d.ts"]
 }

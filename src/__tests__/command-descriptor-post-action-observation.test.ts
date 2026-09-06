@@ -2,24 +2,24 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionAction } from '@agent-device/contracts/session';
-import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
-import type { AgentDeviceClient } from '../../../agent-device-client.ts';
-import { findCommandMetadata, type CommandName } from '../../../commands/command-metadata.ts';
-import { readInputFromCli } from '../../../commands/cli-grammar/registry.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import type { AgentDeviceClient } from '../agent-device-client.ts';
+import { findCommandMetadata, type CommandName } from '../commands/command-metadata.ts';
+import { readInputFromCli } from '../commands/cli-grammar/registry.ts';
 import {
   listCommandFamilyCliOutputFormatters,
   listCommandFamilyDefinitions,
-} from '../../../commands/family/registry.ts';
-import type { SettleCapableClientOptionCommands } from '../../../commands/post-action-observation-client-options.ts';
-import { getCliCommandSchema } from '../../../cli-schema/command-schema.ts';
-import { buildActionDetails } from '../../../daemon/session-event-action.ts';
-import { COMMAND_OUTPUT_SCHEMAS } from '../../../mcp/command-output-schemas.ts';
+} from '../commands/family/registry.ts';
+import type { SettleCapableClientOptionCommands } from '../commands/post-action-observation-client-options.ts';
+import { getCliCommandSchema } from '../cli-schema/command-schema.ts';
+import { buildActionDetails } from '../daemon/session-event-action.ts';
+import { COMMAND_OUTPUT_SCHEMAS } from '../mcp/command-output-schemas.ts';
 import {
   commandDescriptors,
   commandSupportsSettleObservation,
   commandSupportsVerifyEvidence,
   resolveCommandPostActionObservationSupport,
-} from '../registry.ts';
+} from '@agent-device/command-registry/registry';
 
 /**
  * The descriptor gate for the `--settle` / `--verify` surfaces (#1652). Every

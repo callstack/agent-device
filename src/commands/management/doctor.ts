@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import * as commandInput from '../command-input.ts';
 import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';

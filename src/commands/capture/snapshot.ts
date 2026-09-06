@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { SNAPSHOT_BACKEND_CAPABILITIES } from '@agent-device/capture-kit/snapshot-quality-backend-capabilities';
 import { SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { booleanField, integerField, stringField } from '../command-input.ts';

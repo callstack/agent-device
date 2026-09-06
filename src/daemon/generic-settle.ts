@@ -1,7 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SettleObservation, SettleParams } from '@agent-device/contracts/interaction';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
+import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import {
   captureSnapshotForSession,
   createInteractionRuntime,

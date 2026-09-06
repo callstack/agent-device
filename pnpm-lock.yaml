@@ -26,6 +26,9 @@ importers:
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:packages/capture-kit
+      '@agent-device/command-registry':
+        specifier: workspace:*
+        version: link:packages/command-registry
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:packages/contracts
@@ -219,6 +222,15 @@ importers:
       pngjs:
         specifier: ^7.0.0
         version: 7.0.0
+
+  packages/command-registry:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/selectors':
+        specifier: workspace:*
+        version: link:../selectors
 
   packages/contracts:
     dependencies:

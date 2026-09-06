@@ -3,7 +3,7 @@
 import type { DispatchedCommand } from '@agent-device/contracts/command';
 import type { RefFrameEffect } from '@agent-device/contracts/replay';
 import { isReadOnlyFindAction, parseFindArgs } from '@agent-device/selectors';
-import { resolveWaitBudgetMs } from '../wait-positionals.ts';
+import { resolveWaitBudgetMs } from './wait-positionals.ts';
 import {
   DEFAULT_TIMEOUT_POLICY,
   INSTALL_REQUEST_TIMEOUT_MS,

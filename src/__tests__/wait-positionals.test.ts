@@ -9,8 +9,11 @@ import assert from 'node:assert/strict';
 import fc from 'fast-check';
 import { test } from 'vitest';
 import { isValidSelectorExpression, SELECTOR_KEY_NAMES } from '@agent-device/selectors';
-import { PROPERTY_RUNS } from '../__tests__/test-utils/property-arbitraries.ts';
-import { parseWaitPositionals, resolveWaitBudgetMs } from './wait-positionals.ts';
+import { PROPERTY_RUNS } from './test-utils/property-arbitraries.ts';
+import {
+  parseWaitPositionals,
+  resolveWaitBudgetMs,
+} from '@agent-device/command-registry/wait-positionals';
 
 function assertInvalid(args: string[], messageFragment: string) {
   const result = parseWaitPositionals(args);

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { ANDROID_EMULATOR_COVERAGE_CLASSIFICATION_SUMMARY } from './android-emulator-e2e/coverage-manifest.ts';
 import type { LiveContext } from './android-emulator-e2e/live-harness.ts';
 import { writeCoverageReport } from './android-emulator-e2e/live-coverage-report.ts';

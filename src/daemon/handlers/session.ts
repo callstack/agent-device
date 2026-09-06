@@ -27,7 +27,7 @@ import type {
   SessionOpenCommandInput,
 } from '../session-lifecycle/index.ts';
 import type { SessionObservabilityCommandInput } from '../session-observability/index.ts';
-import type { DescriptorSessionRouteCommandName } from '../../core/command-descriptor/registry.ts';
+import type { DescriptorSessionRouteCommandName } from '@agent-device/command-registry/registry';
 import { LeaseRegistry } from '../lease-registry.ts';
 
 const handleSessionInventoryCommandGroup: SessionCommandHandler = (

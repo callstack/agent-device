@@ -24,7 +24,7 @@ import {
   type DaemonTransportPreference,
 } from '../config.ts';
 import { resolveDaemonLaunchSpec, resolveLocalDaemonCodeSignature } from './daemon-launch-spec.ts';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 
 import {
   cleanupFailedDaemonStartupMetadata,

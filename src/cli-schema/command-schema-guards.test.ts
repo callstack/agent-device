@@ -9,11 +9,11 @@ import {
   isKnownCliCommandName,
   listCliCommandNames,
   SPECIAL_CLI_COMMANDS,
-} from '../command-catalog.ts';
+} from '@agent-device/command-registry/catalog';
 import {
   commandDescriptors,
   listRuntimeFactCommands,
-} from '../core/command-descriptor/registry.ts';
+} from '@agent-device/command-registry/registry';
 import { getCliCommandSchema } from './command-schema.ts';
 
 test('every public runtime-fact command has a parser schema entry', () => {

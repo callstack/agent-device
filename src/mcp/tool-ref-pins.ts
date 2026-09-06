@@ -6,7 +6,7 @@ import type { CommandExecutionResult } from '../commands/command-surface.ts';
 import {
   commandDescriptors,
   commandSupportsSettleObservation,
-} from '../core/command-descriptor/registry.ts';
+} from '@agent-device/command-registry/registry';
 import { asOptionalRecord } from '@agent-device/kernel/record';
 
 export type ToolRefPinStore = {

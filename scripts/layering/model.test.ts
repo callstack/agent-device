@@ -278,7 +278,7 @@ test('every production zone is deliberately classified as ranked or unranked', (
 
 test('listSourceFiles includes root-level src/*.ts production files', () => {
   const files = new Set(listSourceFiles());
-  for (const rootFile of ['src/cli.ts', 'src/command-catalog.ts', 'src/backend.ts']) {
+  for (const rootFile of ['src/cli.ts', 'src/runtime.ts', 'src/backend.ts']) {
     assert.ok(files.has(rootFile), `expected ${rootFile} in analyzed source files`);
   }
   assert.ok(![...files].some((file) => file.endsWith('.test.ts')));

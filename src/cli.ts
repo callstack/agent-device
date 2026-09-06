@@ -50,7 +50,7 @@ import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
 import type { FlagKey } from './commands/cli-grammar/flag-types.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
-import { INTERNAL_COMMANDS, isKnownCliCommandName } from './command-catalog.ts';
+import { INTERNAL_COMMANDS, isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 import { sendInjectedDaemonRequest } from './cli/injected-daemon-dispatch.ts';
 
 type CliDeps = {

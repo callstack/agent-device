@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { assertJsonContains } from './live-assertions.ts';
 import { type LiveContext, runStep, verifyCommand } from './live-harness.ts';
 

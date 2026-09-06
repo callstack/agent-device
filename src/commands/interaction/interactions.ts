@@ -10,7 +10,7 @@ import {
   swipePayloadFromPositionals,
 } from '@agent-device/contracts/gesture-normalization';
 import { AppError } from '@agent-device/kernel/errors';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   readFillTargetFromPositionals,
   readInteractionTargetFromPositionals,

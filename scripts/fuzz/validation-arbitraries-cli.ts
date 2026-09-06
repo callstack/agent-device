@@ -8,7 +8,7 @@
 // parser against it, which is what makes a silent acceptance (the #1433 class) reportable at all.
 
 import fc from 'fast-check';
-import { isKnownCliCommandName, listCliCommandNames } from '../../src/command-catalog.ts';
+import { isKnownCliCommandName, listCliCommandNames } from '@agent-device/command-registry/catalog';
 import {
   getCliCommandSchema,
   getFlagDefinitions,

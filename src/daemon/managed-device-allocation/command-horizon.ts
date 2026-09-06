@@ -1,7 +1,7 @@
 import { Deadline } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveCommandTimeoutPolicy } from '../../core/command-descriptor/registry.ts';
-import { resolveCommandRequestTimeoutMs } from '../../core/command-descriptor/timeout-policy.ts';
+import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
+import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/timeout-policy';
 import {
   DAEMON_SESSION_TEARDOWN_TIMEOUT_MS,
   SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS,

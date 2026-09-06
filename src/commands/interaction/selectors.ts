@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { FindOptions, IsOptions } from '@agent-device/contracts/client';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';

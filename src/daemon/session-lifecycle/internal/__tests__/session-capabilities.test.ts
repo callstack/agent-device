@@ -1,7 +1,7 @@
 import { test, expect, vi } from 'vitest';
 import path from 'node:path';
 import os from 'node:os';
-import { PUBLIC_COMMANDS } from '../../../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   LINUX_DEVICE,
   WEB_DESKTOP_DEVICE,

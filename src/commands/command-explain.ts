@@ -1,10 +1,10 @@
-import { listCliCommandNames } from '../command-catalog.ts';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { cliAliasesForCommand, normalizeCliCommandAlias } from './cli-command-aliases.ts';
 import { buildCommandUsage } from '../cli-schema/usage.ts';
 import type { DaemonCommandRoute } from '../daemon/daemon-command-registry.ts';
-import { commandDescriptors, type Command } from '../core/command-descriptor/registry.ts';
-import { ownerFilesForCommand } from '../core/command-descriptor/owner-files.ts';
-import type { CommandTimeoutPolicy } from '../core/command-descriptor/types.ts';
+import { commandDescriptors, type Command } from '@agent-device/command-registry/registry';
+import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
+import type { CommandTimeoutPolicy } from '@agent-device/command-registry/types';
 import {
   getCliCommandSchema,
   getFlagDefinitions,
@@ -305,7 +305,7 @@ function commandFiles(
   fileExists: FileExists | undefined,
   daemonRouteOwnerFiles: Readonly<Record<DaemonCommandRoute, string>>,
 ): string[] {
-  const derived = ['src/core/command-descriptor/registry.ts'];
+  const derived = ['packages/command-registry/src/registry.ts'];
   const opportunistic: string[] = [];
   if (family) {
     derived.push(`src/commands/${family}/index.ts`);

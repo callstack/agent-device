@@ -9,7 +9,7 @@ import {
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { contextFromFlags, type DaemonCommandContext } from '../context.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { SessionStore } from '../session-store.ts';

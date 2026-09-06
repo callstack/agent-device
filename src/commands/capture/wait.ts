@@ -1,8 +1,8 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { WaitCommandOptions } from '@agent-device/contracts/client';
-import { parseWaitPositionals } from '../../core/wait-positionals.ts';
-import type { WaitParsed } from '../../core/wait-positionals.ts';
+import { parseWaitPositionals } from '@agent-device/command-registry/wait-positionals';
+import type { WaitParsed } from '@agent-device/command-registry/wait-positionals';
 import { SELECTOR_SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isValidSelectorExpression } from '@agent-device/selectors';

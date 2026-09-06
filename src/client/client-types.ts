@@ -146,7 +146,7 @@ import type {
   DebugSymbolsOptions,
   DebugSymbolsResult,
 } from '@agent-device/contracts/observability';
-import type { CommandResult } from '../core/command-descriptor/command-result.ts';
+import type { CommandResult } from '@agent-device/command-registry/command-result';
 
 export type { DiffSnapshotCommandResult } from '@agent-device/contracts/capture';
 export type { PrepareCommandResult, PushCommandResult } from '@agent-device/contracts/command';

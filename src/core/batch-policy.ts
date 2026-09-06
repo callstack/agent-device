@@ -1,5 +1,5 @@
-import { deriveStructuredBatchCommandNames } from './command-descriptor/derive.ts';
-import { commandDescriptors } from './command-descriptor/registry.ts';
+import { deriveStructuredBatchCommandNames } from '@agent-device/command-registry/derive';
+import { commandDescriptors } from '@agent-device/command-registry/registry';
 import { AppError } from '@agent-device/kernel/errors';
 
 /**

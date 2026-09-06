@@ -3,7 +3,7 @@ import type { InteractionTarget } from '@agent-device/contracts/interaction';
 import {
   commandSupportsSettleObservation,
   commandSupportsVerifyEvidence,
-} from '../../../core/command-descriptor/registry.ts';
+} from '@agent-device/command-registry/registry';
 import {
   readSimpleIosSelectorTarget,
   type DirectIosSelectorTarget,

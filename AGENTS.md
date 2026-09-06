@@ -45,12 +45,12 @@ normal app-driving startup follows the skill's routing card.
 Read the declaration rather than maintaining a prose copy:
 
 - commands and their surface, runtime-use, batch, and timeout traits:
-  `src/core/command-descriptor/registry.ts`
+  `packages/command-registry/src/registry.ts`
 - daemon route ownership and request-policy traits: `src/daemon/daemon-command-registry.ts`
 - interaction paths and guarantees: `packages/contracts/src/interaction-guarantees.ts`
-- canonical command names: `src/command-catalog.ts`
+- canonical command names: `packages/command-registry/src/catalog.ts`
 - device runtime-use declarations and fact admission:
-  `src/core/command-descriptor/registry.ts`, `src/daemon/runtime-admission.ts`, and
+  `packages/command-registry/src/registry.ts`, `src/daemon/runtime-admission.ts`, and
   `src/platform-runtime-gateway.ts`
 - common command input fields, and which surface may write an input key (model, operator, retired):
   `src/commands/common-input-fields.ts` and `src/commands/input-audience.ts`

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { cliAliasesForCommand } from '../../src/commands/cli-command-aliases.ts';
-import { listCliCommandNames } from '../../src/command-catalog.ts';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 
 function runCli(args: string[]): { status: number; stdout: string; stderr: string } {
   const result = runCmdSync(

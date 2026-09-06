@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { ViewportCommandOptions } from '@agent-device/contracts/client';
 import { readViewportDimensions } from '@agent-device/contracts/capture';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';

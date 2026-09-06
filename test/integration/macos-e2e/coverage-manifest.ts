@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { buildCoverageClassificationSummary } from '../support/coverage-classification.ts';
 import {
   MACOS_LIVE_SCENARIOS,

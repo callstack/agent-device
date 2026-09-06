@@ -53,9 +53,10 @@ export function resolveDaemonLaunchSpec(): DaemonLaunchSpec {
 /**
  * The signature a running daemon must report to be reusable. A dist entry is
  * a bundle of ~120 chunks and walks in ~5ms, so it keeps the direct walk; a
- * source checkout's ~800-module graph costs ~30ms and goes through the
- * stat-validated cache (`code-signature-cache.ts`), which returns the
- * identical signature in ~1.5ms.
+ * source checkout's graph — ~1,500 modules once the workspace packages the
+ * daemon imports by specifier are counted — costs tens of milliseconds and
+ * goes through the stat-validated cache (`code-signature-cache.ts`), which
+ * returns the identical signature from `statSync` alone.
  *
  * The cache loads on demand, which is why this is async: an installed client
  * runs the dist arm on every invocation and never reaches it, so a static

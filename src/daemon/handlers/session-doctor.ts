@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isIosFamily, publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitRequestProgress } from '@agent-device/host-kit/request';

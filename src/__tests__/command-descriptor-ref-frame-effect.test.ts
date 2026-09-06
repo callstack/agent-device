@@ -1,12 +1,12 @@
 import type { RefFrameEffect } from '@agent-device/contracts/replay';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   DAEMON_COMMAND_DESCRIPTORS,
   resolveRefFrameEffect,
-} from '../../../daemon/daemon-command-registry.ts';
-import type { DaemonRequest } from '../../../daemon/daemon-request.ts';
+} from '../daemon/daemon-command-registry.ts';
+import type { DaemonRequest } from '../daemon/daemon-request.ts';
 
 // ADR 0014 migration step 2: the ref-frame-effect classification is an
 // honesty/completeness guard. Every command that reaches a session-owning daemon

@@ -1,4 +1,4 @@
-import { listCliCommandNames } from '../command-catalog.ts';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import {
   formatMaestroCompatibilityReference,
   MAESTRO_COMPATIBILITY_ADR_URL,
