@@ -242,7 +242,7 @@ function handleCompletedRunnerStatus(
       lifecycleState: 'completed',
     };
   }
-  if (isReadOnlyRunnerCommand(command.command)) {
+  if (isReadOnlyRunnerCommand(command)) {
     return {
       type: 'skipInvalidation',
       error: transportError,
@@ -311,7 +311,7 @@ function runnerStatusInFlightError(
   transportError: AppError,
   options: AppleRunnerCommandOptions,
 ): AppError {
-  if (isReadOnlyRunnerCommand(command.command)) {
+  if (isReadOnlyRunnerCommand(command)) {
     return transportError;
   }
   const readinessPreflight = readReadinessPreflightRecoveryDetails(transportError);

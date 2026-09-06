@@ -39,7 +39,7 @@ export async function runAppleRunnerCommand(
   assertRunnerRequestActive(options.requestId);
   const runnerCommand = withRunnerCommandId(command);
   const provider = resolveAppleRunnerRuntime(device, options);
-  if (isReadOnlyRunnerCommand(runnerCommand.command)) {
+  if (isReadOnlyRunnerCommand(runnerCommand)) {
     return retryWithPolicy(
       () => {
         assertRunnerRequestActive(options.requestId);

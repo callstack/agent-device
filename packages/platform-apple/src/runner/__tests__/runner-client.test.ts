@@ -375,14 +375,14 @@ test('withRunnerCommandId preserves existing command ids', () => {
 test('scroll is a mutating, command-id-tracked runner command', () => {
   // Runner command traits classify fused scroll as mutating, routing it through single-send
   // (no transport retry), command-id tracking, and status recovery.
-  assert.equal(isReadOnlyRunnerCommand('scroll'), false);
+  assert.equal(isReadOnlyRunnerCommand({ command: 'scroll' }), false);
 
   const command = withRunnerCommandId({ command: 'scroll', direction: 'down', pixels: 120 });
   assert.match(command.commandId ?? '', /^runner-/);
 });
 
 test('desktopScroll is a mutating, command-id-tracked runner command', () => {
-  assert.equal(isReadOnlyRunnerCommand('desktopScroll'), false);
+  assert.equal(isReadOnlyRunnerCommand({ command: 'desktopScroll' }), false);
 
   const command = withRunnerCommandId({
     command: 'desktopScroll',
