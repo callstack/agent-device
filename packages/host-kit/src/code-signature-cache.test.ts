@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { computeDaemonCodeSignature } from './code-signature.ts';
 import { resolveCachedDaemonCodeSignature } from './code-signature-cache.ts';
+import { writeWorkspaceFixture } from './code-signature.fixtures.ts';
 import { mkdtempForTestSync } from './internal/tmp-dir.fixtures.ts';
 
 afterEach(() => {
@@ -319,6 +320,32 @@ test('resolveCachedDaemonCodeSignature reports an unreadable entry as unknown', 
       resolveCachedDaemonCodeSignature(path.join(root, 'src', 'daemon.ts'), root),
       'unknown',
     );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * The cached arm has to see a package-owned edit for the same reason the walk
+ * does: a source checkout runs most of its own implementation from workspace
+ * packages, and a client that replays a stale document reuses a daemon running
+ * superseded code (#2340).
+ */
+test('resolveCachedDaemonCodeSignature re-walks when a package-owned module changes', () => {
+  const { root, entryPath, ownedPath } = writeWorkspaceFixture(
+    'agent-device-signature-cache-workspace-',
+  );
+  const cacheHome = path.join(root, 'cache-home');
+  fs.mkdirSync(cacheHome, { recursive: true });
+  vi.spyOn(os, 'tmpdir').mockReturnValue(cacheHome);
+  try {
+    const initial = resolveCachedDaemonCodeSignature(entryPath, root);
+
+    fs.writeFileSync(ownedPath, 'export const owned = 20000;\n', 'utf8');
+    const changed = resolveCachedDaemonCodeSignature(entryPath, root);
+
+    assert.notEqual(changed, initial);
+    assert.equal(changed, computeDaemonCodeSignature(entryPath, root));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
