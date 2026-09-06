@@ -106,7 +106,9 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ...from(
         CLIENT_TRANSPORT,
         'RemoteDaemonHealth',
+        'RemoteDaemonHealthLink',
         'readHealthPayload',
+        'readHealthLink',
         'readDaemonHttpHealth',
         'readRemoteDaemonHealth',
       ),

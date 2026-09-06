@@ -61,10 +61,12 @@
     "src/daemon/client/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:83b0312fe88bc3b3497de799e23d8d14455f665b7cf880f4617cd62b181351cd",
     "src/daemon/client/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:296f9d376ce67c8cb20209bdf1c59c2423ffcfa35b5565a99e70271263149048",
     "src/daemon/client/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
-    "src/daemon/client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:38fe712390d247de59a74b9dc209fdf407ff5f9b1e32b698ae71ebc57569b66d",
+    "src/daemon/client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:e1d2251a5bc1607539ec4fbe73c4a9b2dd5fa2859293c442565eb457db47f42f",
+    "src/daemon/client/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:e145d58c1b8c209cdc95ed9e3540b5ffbb9c2ac2eedce3bb1b34ecd7b7bd9dd0",
     "src/daemon/client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:5e75af39e96045ce7faba986c900744cee76cdaa1e0df360ea38f3c020520711",
-    "src/daemon/client/daemon-client-transport.ts#readHealthPayload": "sha256:5b15e14319b16aebf32d07336986a7f1f2a6b13cec1823ca9aa7c9f01bf1b0b6",
-    "src/daemon/client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:b22111f693ecb65705195a66bce617e58441483ebfd67cf264d6900ba1dcb401",
+    "src/daemon/client/daemon-client-transport.ts#readHealthLink": "sha256:7f020e3f8bf11f6286d4c466d83606a9819a3a6d4f7db70b427fa8835ce0c5be",
+    "src/daemon/client/daemon-client-transport.ts#readHealthPayload": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
+    "src/daemon/client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:d833b61b242d0f594d69282b2de2362066c1bcfee2f0c687bd2394d585550c22",
     "src/daemon/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "src/daemon/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
     "src/daemon/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:7f96d17b7c605230fb3cc21ceaa5b2e515d7445653ff95b2b0f6f15fa6214d4e",
@@ -178,7 +180,7 @@
     {
       "declaration": "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload",
       "digest": "sha256:709899c02b2a5f6ec2a995350ac7b5791d67db12a631b109af5074427291edda",
-      "rationale": "#2318 moves the daemon HTTP wire contract into @agent-device/contracts and hands buildDaemonHealthPayload the version its caller advertises instead of reading the package version itself. The added parameter is caller-local \u2014 each side passes its own readVersion() \u2014 and the /health payload a released peer sends or parses is byte-identical."
+      "rationale": "#2318 moves the daemon HTTP wire contract into @agent-device/contracts and hands buildDaemonHealthPayload the version its caller advertises instead of reading the package version itself. The added parameter is caller-local — each side passes its own readVersion() — and the /health payload a released peer sends or parses is byte-identical."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonArtifactKnownType",
@@ -188,7 +190,7 @@
     {
       "declaration": "src/remote/daemon-artifacts.ts#DownloadRemoteArtifactParams",
       "digest": "sha256:3ec63be2dbdb542e30b19d1500bc16874607823afb7ae392e92b0b535865859e",
-      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state \u2014 never serialized, never sent to the daemon \u2014 that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before."
+      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state — never serialized, never sent to the daemon — that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before."
     },
     {
       "declaration": "src/remote/daemon-artifacts.ts#downloadRemoteArtifact",
@@ -254,6 +256,21 @@
       "declaration": "src/daemon/client/daemon-client-rpc.ts#appErrorFromDaemonError",
       "digest": "sha256:ac4761006c71d93ccba9f8e37cbd4cf48283dbb22737c163dc9c1a878e154eea",
       "rationale": "#1862 client-side only: this rehydrates the new optional structured `cause` when present. Released daemons that omit it follow the unchanged path, and no request field or existing response field is narrowed."
+    },
+    {
+      "declaration": "src/daemon/client/daemon-client-transport.ts#RemoteDaemonHealth",
+      "digest": "sha256:e1d2251a5bc1607539ec4fbe73c4a9b2dd5fa2859293c442565eb457db47f42f",
+      "rationale": "#2198 slice B teaches the client to read the `upstream` link a proxy's /health already nests. The field is optional and additive: a daemon or proxy that does not send it parses exactly as before, and no request shape changes. RemoteDaemonHealth gains the optional `upstream` link; every released field stays."
+    },
+    {
+      "declaration": "src/daemon/client/daemon-client-transport.ts#readHealthPayload",
+      "digest": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
+      "rationale": "#2198 slice B teaches the client to read the `upstream` link a proxy's /health already nests. The field is optional and additive: a daemon or proxy that does not send it parses exactly as before, and no request shape changes. readHealthPayload reads the same top-level fields through readHealthLink and additionally the nested `upstream` object when present; a payload without it yields the previous shape."
+    },
+    {
+      "declaration": "src/daemon/client/daemon-client-transport.ts#readRemoteDaemonHealth",
+      "digest": "sha256:d833b61b242d0f594d69282b2de2362066c1bcfee2f0c687bd2394d585550c22",
+      "rationale": "#2198 slice B: the ADR 0006 refusal now covers every link a command RPC crosses, so a proxy whose daemon speaks another protocol version fails at health, before the RPC, exactly like a skewed proxy. The comparison against DAEMON_RPC_PROTOCOL_VERSION is unchanged and strictly wider; a compatible chain passes as before."
     }
   ]
 }

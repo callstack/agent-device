@@ -146,7 +146,7 @@ const MUTATIONS: readonly WireMutation[] = [
   {
     breakClass: 'health consumer: the client stops reading the advertised protocol version',
     file: 'src/daemon/client/daemon-client-transport.ts',
-    name: 'readHealthPayload',
+    name: 'readHealthLink',
     from: "typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined",
     to: 'undefined',
   },
@@ -154,7 +154,7 @@ const MUTATIONS: readonly WireMutation[] = [
     breakClass: 'health consumer: the mismatch refusal ADR 0006 built is weakened',
     file: 'src/daemon/client/daemon-client-transport.ts',
     name: 'readRemoteDaemonHealth',
-    from: 'health.rpcProtocolVersion !== DAEMON_RPC_PROTOCOL_VERSION',
+    from: 'link.rpcProtocolVersion !== DAEMON_RPC_PROTOCOL_VERSION',
     to: 'false',
   },
   {

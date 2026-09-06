@@ -21,7 +21,12 @@ import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform
 import { trackDownloadableArtifact } from '../../../src/daemon/artifact-tracking.ts';
 import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
 import { SessionStore } from '../../../src/daemon/session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../../src/daemon/types.ts';
+import type {
+  DaemonInvokeFn,
+  DaemonRequest,
+  DaemonResponse,
+  SessionState,
+} from '../../../src/daemon/types.ts';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.ts';
@@ -64,6 +69,9 @@ export type ProviderScenarioHarness = {
     },
   ) => Promise<ProviderScenarioRpcResult>;
   client: () => AgentDeviceClient;
+  /** The scenario daemon's request boundary, for mounting it behind a real HTTP server. */
+  handleRequest: DaemonInvokeFn;
+  token: string;
   session: (name?: string) => SessionState | undefined;
   sessionDir: (name?: string) => string;
   setSession: (name: string, session: SessionState) => void;
@@ -208,6 +216,8 @@ export async function createProviderScenarioHarness(
         `direct-${command}-${Date.now()}`,
       ),
     client: () => createAgentDeviceClient({}, { transport }),
+    handleRequest,
+    token: PROVIDER_SCENARIO_TOKEN,
     session: (name = 'default') => sessionStore.get(name),
     sessionDir: (name = 'default') => sessionStore.resolveSessionDir(name),
     setSession: (name, session) => sessionStore.set(name, session),
