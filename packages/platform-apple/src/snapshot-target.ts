@@ -6,15 +6,13 @@ import { readSnapshotTargetProcessStartTime } from './snapshot-process.ts';
 /** Identity re-check of a cached target: one local `ps`, never CoreSimulator IPC. */
 const TARGET_IDENTITY_TIMEOUT_MS = 3_000;
 /**
- * Discovery spawns `simctl launchctl list` through xcrun, which takes ~1s on an idle Mac and
- * several seconds on a loaded CI host. One capture waits this long for it and then takes the
- * XCTest fallback while discovery keeps running; the next capture joins the same discovery
- * instead of starting another, so a slow host pays the probe once per app generation, never
- * once per capture. Sized for the healthy case so the first capture after `open` still reaches
- * the bridge on a responsive host.
+ * How long one capture waits for an in-flight discovery before taking the XCTest fallback.
+ * Discovery spawns `simctl launchctl list` through xcrun: ~1s on an idle Mac, several seconds
+ * on a loaded CI host. The wait is per capture, so captures that keep arriving while the probe
+ * runs each spend up to this long; the probe itself is shared and outlives them.
  */
 const TARGET_DISCOVERY_WAIT_MS = 1_500;
-/** The budget of the discovery itself, detached from the capture that started it. */
+/** Overall deadline of one discovery (both simctl probes and the `ps` identity read). */
 const TARGET_DISCOVERY_TIMEOUT_MS = 15_000;
 
 export type SimulatorSnapshotTarget = Readonly<{
@@ -51,8 +49,9 @@ export function createSimulatorSnapshotTargetResolver(): SimulatorSnapshotTarget
     targets.delete(key);
     let discovery = discoveries.get(key);
     if (!discovery) {
-      // Detached from the caller's signal: a capture that gives up on the probe, or is
-      // cancelled, must not take the probe down with it.
+      // One discovery per target at a time, detached from the caller's signal: a capture that
+      // gives up on it, or is cancelled, must not take it down. A discovery that fails is
+      // forgotten, so the next capture starts a new one.
       discovery = resolveSimulatorSnapshotTarget(device, appBundleId, runtimeByDevice)
         .then((target) => {
           targets.set(key, target);
@@ -95,12 +94,13 @@ async function resolveSimulatorSnapshotTarget(
   appBundleId: string,
   runtimeByDevice: Map<string, Promise<string>>,
 ): Promise<SimulatorSnapshotTarget> {
+  const deadline = Date.now() + TARGET_DISCOVERY_TIMEOUT_MS;
   const [jobs, runtime] = await Promise.all([
     runSimctl(device, ['spawn', device.id, 'launchctl', 'list'], {
       allowFailure: true,
-      timeoutMs: TARGET_DISCOVERY_TIMEOUT_MS,
+      timeoutMs: remainingMs(deadline),
     }),
-    readSimulatorRuntime(device, runtimeByDevice),
+    readSimulatorRuntime(device, runtimeByDevice, deadline),
   ]);
   if (jobs.exitCode !== 0) {
     throw targetError('simulator-target-probe-failed', device, appBundleId);
@@ -110,7 +110,7 @@ async function resolveSimulatorSnapshotTarget(
     throw targetError('simulator-target-unavailable', device, appBundleId);
   }
   const processStartTime = await readSnapshotTargetProcessStartTime(job.pid, {
-    timeoutMs: TARGET_IDENTITY_TIMEOUT_MS,
+    timeoutMs: Math.min(TARGET_IDENTITY_TIMEOUT_MS, remainingMs(deadline)),
   });
   if (!processStartTime) {
     throw targetError('simulator-target-identity-unavailable', device, appBundleId);
@@ -128,12 +128,13 @@ async function resolveSimulatorSnapshotTarget(
 async function readSimulatorRuntime(
   device: DeviceInfo,
   runtimeByDevice: Map<string, Promise<string>>,
+  deadline: number,
 ): Promise<string> {
   const existing = runtimeByDevice.get(device.id);
   if (existing) return await existing;
   const pending = runSimctl(device, ['list', 'devices', '-j'], {
     allowFailure: true,
-    timeoutMs: TARGET_DISCOVERY_TIMEOUT_MS,
+    timeoutMs: remainingMs(deadline),
   }).then((result) => {
     if (result.exitCode !== 0) throw targetError('simulator-runtime-probe-failed', device, '');
     const payload = JSON.parse(result.stdout) as {
@@ -165,6 +166,10 @@ function readApplicationJob(
     if (Number.isSafeInteger(pid) && pid > 0) return { pid, label };
   }
   return undefined;
+}
+
+function remainingMs(deadline: number): number {
+  return Math.max(1, deadline - Date.now());
 }
 
 function targetError(reason: string, device: DeviceInfo, appBundleId: string): AppError {

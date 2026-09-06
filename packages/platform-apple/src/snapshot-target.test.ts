@@ -17,7 +17,7 @@ const signal = () => new AbortController().signal;
 
 function targetFixture() {
   const state = { pid: 42, launch: 'launch-a', start: 'start-a' as string | null };
-  const run = vi.fn(async (args: string[]) => ({
+  const run = vi.fn(async (args: string[], _options?: { timeoutMs?: number }) => ({
     stdout:
       args[0] === 'spawn'
         ? `90\t0\tUIKitApplication:com.example.app.beta[wrong][rb-legacy]\n${state.pid}\t0\tUIKitApplication:${app}[${state.launch}][rb-legacy]`
@@ -27,11 +27,13 @@ function targetFixture() {
     stderr: '',
     exitCode: 0,
   }));
-  const runCommand = vi.fn(async () => ({
-    stdout: state.start ?? '',
-    stderr: '',
-    exitCode: state.start ? 0 : 1,
-  }));
+  const runCommand = vi.fn(
+    async (_tool: string, _args: string[], _options?: { timeoutMs?: number }) => ({
+      stdout: state.start ?? '',
+      stderr: '',
+      exitCode: state.start ? 0 : 1,
+    }),
+  );
   const provider = createLocalAppleToolProvider({ simctl: { run }, runCommand });
   const resolve = createSimulatorSnapshotTargetResolver();
   return {
@@ -201,4 +203,29 @@ test('a cancelled caller leaves discovery running for the next capture', async (
     expect(await fixture.resolve(ios, app, signal())).toMatchObject({ pid: 42 });
     expect(fixture.discoveryCount()).toBe(1);
   });
+});
+
+test('one discovery shares a single deadline across its simctl probes and the identity read', async () => {
+  const fixture = targetFixture();
+  const release = deferredSpawn(fixture);
+  vi.useFakeTimers();
+  try {
+    await withAppleToolProvider(fixture.provider, async () => {
+      const pending = fixture.resolve(ios, app, signal());
+      pending.catch(() => undefined);
+      // The spawn ran 13s of the 15s discovery deadline before answering.
+      await vi.advanceTimersByTimeAsync(13_000);
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      await expect(fixture.resolve(ios, app, signal())).resolves.toMatchObject({ pid: 42 });
+
+      const spawnOptions = fixture.run.mock.calls.find(([args]) => args[0] === 'spawn')?.[1];
+      expect(spawnOptions?.timeoutMs).toBe(15_000);
+      const identityOptions = fixture.runCommand.mock.calls[0]?.[2];
+      expect(identityOptions?.timeoutMs).toBeGreaterThan(0);
+      expect(identityOptions?.timeoutMs).toBeLessThanOrEqual(2_000);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
 });
