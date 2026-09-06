@@ -404,8 +404,11 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/png-rgb-difference',
     '@agent-device/capture-kit/png-size',
     '@agent-device/capture-kit/png-worker-client',
+    '@agent-device/capture-kit/post-gesture-stability',
+    '@agent-device/capture-kit/react-native-overlay',
     '@agent-device/capture-kit/screenshot-density',
     '@agent-device/capture-kit/screenshot-diff-pixels',
+    '@agent-device/capture-kit/screenshot-overlay',
     '@agent-device/capture-kit/snapshot-desktop-projection',
     '@agent-device/capture-kit/snapshot-occlusion',
     '@agent-device/capture-kit/snapshot-quality-backend-capabilities',
@@ -452,6 +455,8 @@ test('the real tree parses, declares, and passes R11', () => {
   );
   assert.deepEqual([...hostKitPackage.exportTargets.keys()].sort(), [
     '@agent-device/host-kit/archive',
+    '@agent-device/host-kit/code-signature',
+    '@agent-device/host-kit/code-signature-cache',
     '@agent-device/host-kit/command',
     '@agent-device/host-kit/diagnostics',
     '@agent-device/host-kit/file',
@@ -583,17 +588,20 @@ test('the real tree parses, declares, and passes R11', () => {
   );
   const selectorsPackage = packages.find((pkg) => pkg.name === '@agent-device/selectors');
   assert.ok(selectorsPackage, 'selectors package must exist');
-  // Three subpaths, and each split is the point: `.` is the string-only façade
+  // Four subpaths, and each split is the point: `.` is the string-only façade
   // every in-repo consumer uses, `./ast` is the published parser surface that
   // `agent-device/selectors` has shipped since before the engine moved into
-  // this package, and `./engine` is the resolve/list surface reserved for the
+  // this package, `./engine` is the resolve/list surface reserved for the
   // selector-pipeline owner (R19, #1656) — a route reaching it skips the
-  // structural stages its policy row declares. A fourth subpath, or the AST
-  // leaking into `.`, fails here.
+  // structural stages its policy row declares — and
+  // `./parameterized-recorded-fill` is the recorded-fill parameterization the
+  // daemon used to own (#2340). A fifth subpath, or the AST leaking into `.`,
+  // fails here.
   assert.deepEqual([...selectorsPackage.exportTargets.keys()].sort(), [
     '@agent-device/selectors',
     '@agent-device/selectors/ast',
     '@agent-device/selectors/engine',
+    '@agent-device/selectors/parameterized-recorded-fill',
   ]);
   assert.deepEqual([...selectorsPackage.workspaceDependencies].sort(), [
     '@agent-device/ad-script',
