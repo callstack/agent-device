@@ -98,12 +98,16 @@ async function bootSimulator(
       throw new AppError('COMMAND_FAILED', 'Simulator is still booting', { deviceId: device.id });
     }
   } catch (error) {
-    if (started && (signal.aborted || (deadlineAtMs !== undefined && Date.now() >= deadlineAtMs))) {
+    if (started && wasBootCanceled(signal, deadlineAtMs)) {
       await shutdownCanceledSimulator(host, device);
     }
     signal.throwIfAborted();
     throw error;
   }
+}
+
+function wasBootCanceled(signal: AbortSignal, deadlineAtMs: number | undefined): boolean {
+  return signal.aborted || (deadlineAtMs !== undefined && Date.now() >= deadlineAtMs);
 }
 
 async function waitForSimulatorBoot(

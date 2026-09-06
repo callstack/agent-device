@@ -103,8 +103,7 @@ async function openAppleApplication(
     input,
     localIosSimulator,
   );
-  const requireRunnerReady =
-    input.prewarmRunnerBeforeOpen || input.execution.startupDeadlineAtMs !== undefined;
+  const requireRunnerReady = requiresRunnerReadiness(input);
   if (localIosSimulator && shouldPrewarmRunner && !requireRunnerReady) runner.schedule();
   try {
     await closeAppleApplicationForRelaunch(
@@ -136,6 +135,10 @@ async function openAppleApplication(
     }
     throw error;
   }
+}
+
+function requiresRunnerReadiness(input: OpenApplicationInput): boolean {
+  return input.prewarmRunnerBeforeOpen || input.execution.startupDeadlineAtMs !== undefined;
 }
 
 async function closeAppleApplicationForRelaunch(
