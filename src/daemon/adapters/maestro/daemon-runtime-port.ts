@@ -11,6 +11,7 @@ import {
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
 import { stripUndefined } from '@agent-device/kernel/record';
 import { executeRunScriptFile } from './run-script-execution.ts';
+import { mapMaestroSetPermissions } from './set-permissions-mapping.ts';
 import { waitForMaestroAnimationToEnd } from './wait-for-animation-to-end.ts';
 import {
   observeTypedMaestroCondition,
@@ -77,6 +78,27 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     context: MaestroRuntimeOperationContext,
     stability: 'none' | 'deferred' = 'none',
   ) => await withMutation(() => invoke(operation), context, stability);
+  // launchApp.permissions applies after the (possibly state-clearing) launch,
+  // so grants land on the fresh install rather than being wiped by it.
+  const applyPermissions = async (
+    appId: string | undefined,
+    permissions: Readonly<Record<string, string>>,
+    context: MaestroRuntimeOperationContext,
+  ): Promise<void> => {
+    const mutations = mapMaestroSetPermissions(permissions, platform);
+    for (const mutation of mutations) {
+      await invokeMutation(
+        {
+          kind: 'settingsPermission',
+          ...(appId ? { appId } : {}),
+          state: mutation.state,
+          permission: mutation.permission,
+          ...(mutation.mode ? { mode: mutation.mode } : {}),
+        },
+        context,
+      );
+    }
+  };
   const typeTextAndSettle = async (
     text: string,
     context: MaestroRuntimeOperationContext,
@@ -127,10 +149,14 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         context,
         'deferred',
       );
+      if (input.permissions) await applyPermissions(appId, input.permissions, context);
     },
     stopApp: async (input, context) => {
       const appId = input.appId ?? context.appId;
       await invokeMutation({ kind: 'stopApp', ...(appId ? { appId } : {}) }, context);
+    },
+    setPermissions: async (input, context) => {
+      await applyPermissions(input.appId ?? context.appId, input.permissions, context);
     },
     openLink: async (input, context) => {
       await invokeMutation(

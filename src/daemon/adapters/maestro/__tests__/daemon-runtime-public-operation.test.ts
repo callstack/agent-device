@@ -175,6 +175,31 @@ describe('Maestro public operation projection', () => {
         flags: { noRecord: true },
       },
     },
+    {
+      operation: {
+        kind: 'settingsPermission',
+        appId: 'com.example',
+        state: 'grant',
+        permission: 'camera',
+      },
+      expected: {
+        command: 'settings',
+        positionals: ['permission', 'grant', 'camera'],
+        internal: { settingsAppBundleId: 'com.example' },
+      },
+    },
+    {
+      operation: {
+        kind: 'settingsPermission',
+        state: 'grant',
+        permission: 'photos',
+        mode: 'limited',
+      },
+      expected: {
+        command: 'settings',
+        positionals: ['permission', 'grant', 'photos', 'limited'],
+      },
+    },
   ])('projects $operation.kind', ({ operation, expected }) => {
     expect(projectMaestroPublicOperation(operation)).toEqual(expected);
   });

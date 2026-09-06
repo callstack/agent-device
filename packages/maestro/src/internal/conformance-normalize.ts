@@ -37,7 +37,13 @@ export type CanonicalGesture =
   | { mode: 'element'; from: CanonicalSelector; direction?: string; duration?: number | string };
 
 export type CanonicalCommand =
-  | { kind: 'launchApp'; appId?: string; clearState?: boolean; stopApp?: boolean }
+  | {
+      kind: 'launchApp';
+      appId?: string;
+      clearState?: boolean;
+      stopApp?: boolean;
+      permissions?: Record<string, string>;
+    }
   // Upstream models `doubleTapOn` as a tap with repeat.repeat == 2, so the repeat
   // COUNT is the canonical field on both sides rather than a `double` variant on
   // one — that keeps our distinct tapOn/doubleTapOn kinds comparable to upstream
@@ -77,6 +83,7 @@ export type CanonicalCommand =
   | { kind: 'takeScreenshot' }
   | { kind: 'waitForAnimationToEnd'; timeout?: number | string }
   | { kind: 'stopApp' }
+  | { kind: 'setPermissions'; appId?: string; permissions?: Record<string, string> }
   | { kind: 'repeat'; times: string | number }
   | { kind: 'retry'; maxRetries?: string | number }
   | { kind: 'runFlow'; label?: string; source: 'file' | 'commands' }
@@ -98,7 +105,19 @@ export function canonicalizeUpstreamFlow(commands: UpstreamCommand[]): Canonical
     .map(canonicalizeUpstreamCommand);
 }
 
+/** Upstream commands that canonicalize to a bare kind with no fields. */
+const BARE_UPSTREAM_CANONICAL: Record<string, CanonicalCommand> = {
+  ScrollCommand: { kind: 'scroll' },
+  BackPressCommand: { kind: 'back' },
+  HideKeyboardCommand: { kind: 'hideKeyboard' },
+  TakeScreenshotCommand: { kind: 'takeScreenshot' },
+  StopAppCommand: { kind: 'stopApp' },
+  RunScriptCommand: { kind: 'runScript' },
+};
+
 function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand {
+  const bare = BARE_UPSTREAM_CANONICAL[command.type];
+  if (bare) return bare;
   const f = command.fields;
   switch (command.type) {
     case 'LaunchAppCommand':
@@ -107,6 +126,7 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
         appId: str(f.appId),
         clearState: bool(f.clearState),
         stopApp: bool(f.stopApp),
+        permissions: permissionsRecord(f.permissions),
       });
     case 'TapOnElementCommand': {
       const repeat = asRecord(f.repeat);
@@ -164,8 +184,6 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
     }
     case 'SwipeCommand':
       return dropUndefined({ kind: 'swipe', label: str(f.label), gesture: upstreamGesture(f) });
-    case 'ScrollCommand':
-      return { kind: 'scroll' };
     case 'ScrollUntilVisibleCommand':
       return dropUndefined({
         kind: 'scrollUntilVisible',
@@ -185,19 +203,17 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
       return dropUndefined({ kind: 'openLink', link: str(f.link) });
     case 'PressKeyCommand':
       return { kind: 'pressKey', key: lower(str(f.code)) ?? '' };
-    case 'BackPressCommand':
-      return { kind: 'back' };
-    case 'HideKeyboardCommand':
-      return { kind: 'hideKeyboard' };
-    case 'TakeScreenshotCommand':
-      return { kind: 'takeScreenshot' };
     case 'WaitForAnimationToEndCommand':
       return dropUndefined({
         kind: 'waitForAnimationToEnd',
         timeout: numLike(f.timeout) ?? str(f.timeout),
       });
-    case 'StopAppCommand':
-      return { kind: 'stopApp' };
+    case 'SetPermissionsCommand':
+      return dropUndefined({
+        kind: 'setPermissions',
+        appId: str(f.appId),
+        permissions: permissionsRecord(f.permissions),
+      });
     case 'RepeatCommand':
       return { kind: 'repeat', times: numLike(f.times) ?? str(f.times) ?? '' };
     case 'RetryCommand':
@@ -211,8 +227,6 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
         label: str(f.label),
         source: f.sourceDescription != null ? 'file' : 'commands',
       });
-    case 'RunScriptCommand':
-      return { kind: 'runScript' };
     default:
       return { kind: 'unsupported', command: unsupportedName(command.type) };
   }
@@ -286,6 +300,18 @@ function lower(value: string | undefined): string | undefined {
   return value?.toLowerCase();
 }
 
+function permissionsRecord(value: unknown): Record<string, string> | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const permissions: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(record)) {
+    const coerced = str(entry)?.toLowerCase();
+    if (coerced === undefined) return undefined;
+    permissions[key] = coerced;
+  }
+  return permissions;
+}
+
 // ---------------------------------------------------------------------------
 // agent-device engine IR → canonical
 // ---------------------------------------------------------------------------
@@ -302,18 +328,32 @@ export function canonicalizeAgentCommands(
   return program.commands.map((command) => canonicalizeAgentCommand(command, program.config));
 }
 
-function canonicalizeAgentCommand(
-  command: MaestroCommand,
-  config: MaestroProgram['config'],
-): CanonicalCommand {
+/** Agent commands that canonicalize to a bare kind with no fields. */
+const BARE_AGENT_CANONICAL = {
+  scroll: { kind: 'scroll' },
+  back: { kind: 'back' },
+  hideKeyboard: { kind: 'hideKeyboard' },
+  takeScreenshot: { kind: 'takeScreenshot' },
+  stopApp: { kind: 'stopApp' },
+  runScript: { kind: 'runScript' },
+} satisfies Record<string, CanonicalCommand>;
+
+type BareAgentCommand = Extract<MaestroCommand, { kind: keyof typeof BARE_AGENT_CANONICAL }>;
+
+function isBareAgentCommand(command: MaestroCommand): command is BareAgentCommand {
+  return command.kind in BARE_AGENT_CANONICAL;
+}
+
+type AgentTapCommand = Extract<MaestroCommand, { kind: 'tapOn' | 'doubleTapOn' | 'longPressOn' }>;
+
+function isAgentTapCommand(command: MaestroCommand): command is AgentTapCommand {
+  return (
+    command.kind === 'tapOn' || command.kind === 'doubleTapOn' || command.kind === 'longPressOn'
+  );
+}
+
+function canonicalizeAgentTapCommand(command: AgentTapCommand): CanonicalCommand {
   switch (command.kind) {
-    case 'launchApp':
-      return dropUndefined({
-        kind: 'launchApp',
-        appId: command.appId ?? config.appId,
-        clearState: command.clearState,
-        stopApp: command.stopApp,
-      });
     case 'tapOn': {
       const repeat = numLike(command.repeat) ?? 1;
       const repeatIsNumber = typeof repeat === 'number';
@@ -343,6 +383,25 @@ function canonicalizeAgentCommand(
         label: command.label,
         target: canonicalizeAgentTarget(command.target),
       });
+  }
+}
+
+type AgentAssertCommand = Extract<
+  MaestroCommand,
+  { kind: 'assertVisible' | 'assertNotVisible' | 'assertTrue' | 'extendedWaitUntil' }
+>;
+
+function isAgentAssertCommand(command: MaestroCommand): command is AgentAssertCommand {
+  return (
+    command.kind === 'assertVisible' ||
+    command.kind === 'assertNotVisible' ||
+    command.kind === 'assertTrue' ||
+    command.kind === 'extendedWaitUntil'
+  );
+}
+
+function canonicalizeAgentAssertCommand(command: AgentAssertCommand): CanonicalCommand {
+  switch (command.kind) {
     case 'assertVisible':
       return dropUndefined({
         kind: 'assert',
@@ -376,6 +435,25 @@ function canonicalizeAgentCommand(
         label: command.label,
         selector: canonicalizeAgentSelector(command.notVisible ?? command.visible),
       });
+  }
+}
+
+function canonicalizeAgentCommand(
+  command: MaestroCommand,
+  config: MaestroProgram['config'],
+): CanonicalCommand {
+  if (isBareAgentCommand(command)) return BARE_AGENT_CANONICAL[command.kind];
+  if (isAgentTapCommand(command)) return canonicalizeAgentTapCommand(command);
+  if (isAgentAssertCommand(command)) return canonicalizeAgentAssertCommand(command);
+  switch (command.kind) {
+    case 'launchApp':
+      return dropUndefined({
+        kind: 'launchApp',
+        appId: command.appId ?? config.appId,
+        clearState: command.clearState,
+        stopApp: command.stopApp,
+        permissions: command.permissions,
+      });
     case 'swipe':
       return { kind: 'swipe', label: command.label, gesture: agentGesture(command.gesture) };
     case 'inputText':
@@ -384,8 +462,6 @@ function canonicalizeAgentCommand(
       return dropUndefined({ kind: 'eraseText', count: numLike(command.charactersToErase) });
     case 'openLink':
       return dropUndefined({ kind: 'openLink', link: command.link });
-    case 'scroll':
-      return { kind: 'scroll' };
     case 'scrollUntilVisible':
       // Upstream materializes the DOWN default onto the command at parse time;
       // our engine defers it to execution (runtime-port-commands.ts). Materialize
@@ -400,16 +476,14 @@ function canonicalizeAgentCommand(
       });
     case 'pressKey':
       return { kind: 'pressKey', key: command.key.toLowerCase() };
-    case 'back':
-      return { kind: 'back' };
-    case 'hideKeyboard':
-      return { kind: 'hideKeyboard' };
-    case 'takeScreenshot':
-      return { kind: 'takeScreenshot' };
     case 'waitForAnimationToEnd':
       return dropUndefined({ kind: 'waitForAnimationToEnd', timeout: numLike(command.timeout) });
-    case 'stopApp':
-      return { kind: 'stopApp' };
+    case 'setPermissions':
+      return dropUndefined({
+        kind: 'setPermissions',
+        appId: command.appId ?? config.appId,
+        permissions: command.permissions,
+      });
     case 'repeat':
       return { kind: 'repeat', times: numLike(command.times) ?? str(command.times) ?? '' };
     case 'retry':
@@ -423,8 +497,6 @@ function canonicalizeAgentCommand(
         label: command.label,
         source: command.include.kind === 'file' ? 'file' : 'commands',
       });
-    case 'runScript':
-      return { kind: 'runScript' };
     default: {
       const exhaustive: never = command;
       throw new Error(`Unhandled agent command: ${JSON.stringify(exhaustive)}`);

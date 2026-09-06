@@ -172,7 +172,8 @@ export async function handleSettingsCommand(
     return errorResponse('INVALID_ARGS', getUnsupportedMacOsSettingMessage(setting));
   }
 
-  const appBundleId = parsed.appBundleId ?? session?.appBundleId;
+  const appBundleId =
+    parsed.appBundleId ?? req.internal?.settingsAppBundleId ?? session?.appBundleId;
   if (setting === 'clear-app-state' && !appBundleId) {
     return errorResponse(
       'INVALID_ARGS',

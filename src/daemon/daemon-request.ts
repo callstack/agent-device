@@ -111,6 +111,13 @@ type DaemonRequestInternal = {
    * spoof authored provenance. Same channel as `replayTargetGuard` above.
    */
   replayPlanStep?: boolean;
+  /**
+   * Maestro `setPermissions` app targeting. The `settings permission`
+   * positionals carry no app slot, so the Maestro adapter threads an explicit
+   * appId here; the settings handler prefers it over the session app.
+   * Daemon-only like the other keys above — never accepted off the wire.
+   */
+  settingsAppBundleId?: string;
 };
 
 /**

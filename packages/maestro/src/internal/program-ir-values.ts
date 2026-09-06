@@ -199,7 +199,7 @@ export function readOptionalBoolean(
   return value;
 }
 
-const VARIABLE_PATTERN = /^\$\{[A-Za-z_][A-Za-z0-9_.]*\}$/;
+export const VARIABLE_PATTERN = /^\$\{[A-Za-z_][A-Za-z0-9_.]*\}$/;
 const NUMERIC_STRING_PATTERN = /^-?\d+(\.\d+)?$/;
 const INTEGER_STRING_PATTERN = /^-?\d+$/;
 
