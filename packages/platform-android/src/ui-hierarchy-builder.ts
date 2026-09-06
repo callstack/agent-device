@@ -7,7 +7,7 @@ import { isScrollableType, normalizeSnapshotScope } from '@agent-device/contract
 import {
   foldSnapshotRect,
   serializeRegularSnapshotPresentationNode,
-} from '@agent-device/contracts/snapshot-presentation';
+} from './snapshot-presentation-node.ts';
 import type { RawSnapshotNode, Rect, SnapshotOptions } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect, pickLargestRect } from '@agent-device/kernel/rect';
 import {

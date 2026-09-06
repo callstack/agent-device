@@ -21,7 +21,7 @@ import {
 import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import { getAndroidSnapshotHelperSessionDeviceKey } from '../snapshot-helper-retirement.ts';
-import { lowerAndroidTouchPlan } from '../touch-plan.ts';
+import { lowerAndroidTouchPlan } from '../touch-plan-lowering.ts';
 import { executeAndroidTouchHelperPlan, readAndroidTouchHelperViewport } from '../touch-helper.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from './test-utils/android-snapshot-helper.ts';
 import {

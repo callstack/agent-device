@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { AndroidImeHelperArtifact } from '@agent-device/contracts/android-helper-artifacts';
+import type { AndroidImeHelperArtifact } from './helper-artifacts.ts';
 import { bindAndroidAdbHostStub, type AndroidAdbHostStub } from './adb-host.fixtures.ts';
 import { withAndroidAdbProvider } from './adb-provider-scope.ts';
 import { activateAndroidTestIme } from './ime-activation.ts';

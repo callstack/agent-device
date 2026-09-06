@@ -3,8 +3,8 @@ import type { Rect } from '@agent-device/kernel/snapshot';
 import type {
   AndroidImeHelperArtifact,
   AndroidSnapshotHelperArtifact,
-} from '@agent-device/contracts/android-helper-artifacts';
-import type { AndroidProviderTouchPlan } from '@agent-device/contracts/android-touch-plan';
+} from './helper-artifacts.ts';
+import type { AndroidProviderTouchPlan } from './touch-plan-lowering.ts';
 
 // The adb transport vocabulary: the executor/provider shapes every module of the cluster (and
 // the SDK, through the root shim) speaks, plus the one pure lowering from semantic install

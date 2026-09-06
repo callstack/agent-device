@@ -4,9 +4,9 @@ import {
   type AppleOS,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import { APPLE_OS_DISPLAY_NAMES } from './apple-os-display-names.ts';
+import { APPLE_OS_DISPLAY_NAMES } from '@agent-device/contracts/gesture-admission';
 import { AppError } from '@agent-device/kernel/errors';
-import type { GesturePlan } from './gesture-plan-types.ts';
+import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 
 export const APPLE_MULTI_TOUCH_UNSUPPORTED_HINTS: Partial<Record<AppleOS, string>> = {
   visionos: 'visionOS uses spatial input and does not support two-finger touch synthesis.',

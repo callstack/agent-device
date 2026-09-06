@@ -317,6 +317,10 @@ importers:
       '@agent-device/xml':
         specifier: workspace:*
         version: link:../xml
+    devDependencies:
+      fast-check:
+        specifier: ^4.9.0
+        version: 4.9.0
 
   packages/platform-apple:
     dependencies:
