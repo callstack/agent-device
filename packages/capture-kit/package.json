@@ -62,6 +62,10 @@
       "types": "./src/png-worker-client.ts",
       "default": "./src/png-worker-client.ts"
     },
+    "./post-gesture-stability": {
+      "types": "./src/post-gesture-stability.ts",
+      "default": "./src/post-gesture-stability.ts"
+    },
     "./react-native-overlay": {
       "types": "./src/react-native-overlay.ts",
       "default": "./src/react-native-overlay.ts"
