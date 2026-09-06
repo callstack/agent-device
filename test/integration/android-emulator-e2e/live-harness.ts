@@ -42,6 +42,8 @@ export function createContext(): LiveContext {
 const execFileAsync = promisify(execFile);
 
 const ROTATION_PROBE_TIMEOUT_MS = 5_000;
+/** Lines read back from logcat; the rotation decisions of the last few minutes fit comfortably. */
+const ROTATION_LOG_TAIL = 4_000;
 const ROTATION_LOG_LINES = 60;
 const ROTATION_LOG_LINE_LENGTH = 240;
 
@@ -56,7 +58,9 @@ async function readAndroidRotationEvidence(context: LiveContext): Promise<string
     ['accelerometer_rotation', ['shell', 'settings', 'get', 'system', 'accelerometer_rotation']],
     ['user_rotation', ['shell', 'settings', 'get', 'system', 'user_rotation']],
     ['display rotation', ['shell', 'dumpsys', 'display']],
-    ['logcat rotation decisions', ['logcat', '-d', '-v', 'time']],
+    // The tail, not the whole buffer: the emulator keeps 2MB and a loaded one takes seconds to
+    // dump it, which is what the group bound is for, not this read.
+    ['logcat rotation decisions', ['logcat', '-d', '-v', 'time', '-t', String(ROTATION_LOG_TAIL)]],
   ];
   const sections: string[] = [];
   for (const [title, args] of probes) {
