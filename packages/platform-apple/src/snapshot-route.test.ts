@@ -1,8 +1,10 @@
 import { expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { areIosSnapshotComparisonIdentitiesEqual } from '@agent-device/capture-kit/ios-snapshot-planning';
+import { createLocalAppleToolProvider, withAppleToolProvider } from './core/tool-provider.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
+import { createSimulatorSnapshotTargetResolver } from './snapshot-target.ts';
 import type { SimulatorSnapshotSource, SnapshotSourceOutcome } from './snapshot-source-facade.ts';
 
 const ios = {
@@ -200,6 +202,68 @@ test('cancelled acquisition does not start a fallback after the request aborts',
     'request ended',
   );
   expect(fallback).not.toHaveBeenCalled();
+});
+
+test('a slow app discovery yields to the XCTest fallback within its wait slice, then serves the bridge', async () => {
+  // The production resolver over a simctl whose `launchctl list` answers only when released,
+  // the shape of a loaded CI host: the first capture must not sit on that probe.
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const run = vi.fn(async (args: string[]) => {
+    if (args[0] === 'spawn') await released;
+    return {
+      stdout:
+        args[0] === 'spawn'
+          ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
+          : JSON.stringify({
+              devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
+            }),
+      stderr: '',
+      exitCode: 0,
+    };
+  });
+  const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
+  const fallback = vi.fn(async () => runnerResult());
+  const source = sourceReturning(bridgeAcquisition());
+  const presentIosAcquisition = vi.fn(async () => ({
+    backend: 'xctest' as const,
+    producer: 'simulator-ax-bridge' as const,
+    nodes: [{ index: 0, type: 'Application' }],
+  }));
+  const route = createAppleSnapshotRoute(
+    {
+      ...platformRuntimeHostFixture(),
+      snapshot: { captureSurface: vi.fn(), presentIosAcquisition },
+    },
+    { source, resolveTarget: createSimulatorSnapshotTargetResolver() },
+  );
+  vi.useFakeTimers();
+  try {
+    await withAppleToolProvider(
+      createLocalAppleToolProvider({ simctl: { run }, runCommand }),
+      async () => {
+        const first = route.capture(ios, input, signal(), fallback);
+        await vi.advanceTimersByTimeAsync(1_500);
+        const result = await first;
+        expect(fallback).toHaveBeenCalledOnce();
+        expect(result.warnings).toEqual([
+          'Simulator AX snapshot unavailable (target-resolution-failed); used XCTest for an unverified app generation.',
+        ]);
+        expect(source.acquire).not.toHaveBeenCalled();
+
+        release();
+        await vi.advanceTimersByTimeAsync(0);
+        const second = await route.capture(ios, input, signal(), fallback);
+        expect(second.producer).toBe('simulator-ax-bridge');
+        expect(fallback).toHaveBeenCalledOnce();
+        expect(run.mock.calls.filter(([args]) => args[0] === 'spawn')).toHaveLength(1);
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 function bridgeAcquisition(): Extract<SnapshotSourceOutcome, { stage: 'acquired' }> {

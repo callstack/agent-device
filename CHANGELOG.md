@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fixed: the iOS Simulator AX snapshot route bounds how long a capture waits for app discovery
+  and stops starting a discovery per capture. Discovery (`simctl launchctl list` through xcrun)
+  takes seconds on a loaded host; a capture now waits at most 1.5s for the one in-flight
+  discovery, takes the XCTest fallback, and the discovery keeps running under its own 15s
+  deadline for the captures that follow. Previously each capture ran its own probe with a 3s
+  timeout on its critical path, so a `wait` issued right after `open` could spend its budget on
+  probe timeouts and report `wait_capture_stalled` with the app already on screen.
 - Fixed: iOS snapshots no longer report `truncated: true` merely because a later backend produced
   them. The runner stamped every recovered capture as truncated — including a complete private-AX
   tree taken while the XCTest channel was penalized as slow — so a strict `is absent` / `wait absent`
