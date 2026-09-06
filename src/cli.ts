@@ -16,6 +16,11 @@ import fs from 'node:fs';
 import type { BatchStep } from '@agent-device/contracts/client';
 import type { ReplayTestReporterRuntime } from './cli/replay-test/reporting.ts';
 import {
+  createCommandProgressState,
+  createStderrCommandProgressSink,
+  type CommandProgressState,
+} from './commands/command-progress.ts';
+import {
   createAgentDeviceClient,
   type AgentDeviceClientConfig,
   type AgentDeviceDaemonTransport,
@@ -170,15 +175,17 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
         }
         logTailStopper = maybeStartDaemonLogTail(ctx);
         const replayTestReporterRuntime = await createReplayReporterForTest(ctx);
+        const commandProgress = createCommandProgressState();
         const client = createAgentDeviceClient(buildClientConfig(ctx), {
           transport: createCliDaemonTransport({
             command,
             flags: ctx.effectiveFlags,
             replayTestReporterRuntime,
+            commandProgress,
             transport: deps.sendToDaemon,
           }),
         });
-        await dispatchCliCommand(ctx, client, replayTestReporterRuntime);
+        await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
       } catch (error) {
         await handleRunCliFailure(error, ctx, logTailStopper);
       } finally {
@@ -502,6 +509,7 @@ async function dispatchCliCommand(
   ctx: CliRunContext,
   client: ReturnType<typeof createAgentDeviceClient>,
   replayTestReporterRuntime: ReplayTestReporterRuntime | undefined,
+  commandProgress: CommandProgressState,
 ): Promise<void> {
   const { command, positionals, effectiveFlags } = ctx;
   if (command === 'batch') {
@@ -528,6 +536,7 @@ async function dispatchCliCommand(
         client,
         debug: ctx.debugOutputEnabled,
         replayTestReporterRuntime,
+        commandProgress,
       })
     ) {
       return;
@@ -545,6 +554,7 @@ async function dispatchCliCommand(
       client,
       debug: ctx.debugOutputEnabled,
       replayTestReporterRuntime,
+      commandProgress,
     })
   ) {
     return;
@@ -795,19 +805,28 @@ function hasExplicitMetroRuntimeOverrides(explicitFlagKeys: Set<FlagKey>): boole
   return false;
 }
 
+/**
+ * The human CLI renders streamed progress itself: `test` hands its events to the
+ * replay-test reporter, every other command streams `command` lines to stderr
+ * through `commandProgress`, whose state the output formatters then read (a
+ * doctor summary does not repeat checks progress already printed). `--json` opts
+ * out of progress entirely, so it installs no sink.
+ */
 function createCliDaemonTransport(options: {
   command: string;
   flags: CliFlags;
   replayTestReporterRuntime?: ReplayTestReporterRuntime;
+  commandProgress: CommandProgressState;
   transport: CliDaemonTransport;
 }): AgentDeviceDaemonTransport {
   const { command, flags, replayTestReporterRuntime, transport } = options;
   if (flags.json) return createClientDaemonTransport(transport);
+  const onProgress =
+    command === 'test' && replayTestReporterRuntime
+      ? replayTestReporterRuntime.onProgress
+      : createStderrCommandProgressSink(options.commandProgress);
   return async (req, context) => {
-    const transportOptions =
-      command === 'test' && replayTestReporterRuntime
-        ? { ...context, onProgress: replayTestReporterRuntime.onProgress }
-        : context;
+    const transportOptions = { ...context, onProgress };
     return await sendClientRequestToCliTransport(
       transport,
       {

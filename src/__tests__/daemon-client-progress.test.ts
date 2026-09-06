@@ -162,7 +162,7 @@ test('readDaemonSocketProgressResponse forwards split progress lines before resp
   }
 });
 
-test('readDaemonSocketProgressResponse renders generic command progress', async () => {
+test('readDaemonSocketProgressResponse hands generic command progress to the sink, rendering none itself', async () => {
   const socket = createMockSocket();
   const req: DaemonRequest = {
     session: 'default',
@@ -181,7 +181,8 @@ test('readDaemonSocketProgressResponse renders generic command progress', async 
       return true;
     }) as typeof process.stderr.write;
 
-    const responsePromise = readSocketProgressResponse(socket, req);
+    const events: RequestProgressEvent[] = [];
+    const responsePromise = readSocketProgressResponse(socket, req, (event) => events.push(event));
     socket.emit(
       'data',
       `${JSON.stringify({
@@ -202,7 +203,12 @@ test('readDaemonSocketProgressResponse renders generic command progress', async 
     );
 
     assert.deepEqual(await responsePromise, { ok: true, data: { via: 'command-progress' } });
-    assert.equal(stderr, 'Building Apple runner...\n');
+    // Rendering belongs to the sink the caller installs (the CLI's is
+    // `createStderrCommandProgressSink`); the transport writes nothing itself.
+    assert.equal(stderr, '');
+    assert.deepEqual(events, [
+      { type: 'command', status: 'progress', message: 'Building Apple runner...' },
+    ]);
   } finally {
     process.stderr.write = originalStderrWrite;
   }
@@ -253,7 +259,7 @@ test('readDaemonSocketProgressResponse forwards replay progress events to the si
   }
 });
 
-test('readDaemonSocketProgressResponse does not render replay progress without a sink', async () => {
+test('readDaemonSocketProgressResponse renders nothing without a sink', async () => {
   const socket = createMockSocket();
   const req: DaemonRequest = {
     session: 'default',
@@ -302,12 +308,20 @@ test('readDaemonSocketProgressResponse does not render replay progress without a
         durationMs: 17_800,
       },
     });
+    const command = JSON.stringify({
+      type: 'progress',
+      event: {
+        type: 'command',
+        status: 'progress',
+        message: 'Building Apple runner...',
+      },
+    });
     const responseLine = JSON.stringify({
       type: 'response',
       response: { ok: true, data: { via: 'socket-progress' } },
     });
 
-    socket.emit('data', `${progress}\n${pass}\n${responseLine}\n`);
+    socket.emit('data', `${progress}\n${pass}\n${command}\n${responseLine}\n`);
 
     assert.deepEqual(await responsePromise, { ok: true, data: { via: 'socket-progress' } });
     assert.equal(stderr, '');
