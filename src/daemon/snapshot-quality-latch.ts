@@ -1,6 +1,7 @@
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { recoveredSnapshotQualityWarning } from '../snapshot/snapshot-presentation/quality-warnings.ts';
-import type { DaemonResponseData, SessionState } from './types.ts';
+import type { DaemonResponseData } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 type RecoveredWarningLatch = NonNullable<SessionState['recoveredSnapshotWarningLatch']>;
 

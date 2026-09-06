@@ -9,7 +9,8 @@ import {
   shouldPropagateDeviceInventoryProbeError,
 } from '../../request/device-inventory-context.ts';
 import { readVersion } from '@agent-device/host-kit/version';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { SessionStore } from '../session-store.ts';
 import { appendAppChecks, type DoctorAppInventory } from './session-doctor-app.ts';
 import {

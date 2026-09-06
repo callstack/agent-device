@@ -10,7 +10,8 @@ import type {
 } from '@agent-device/contracts/snapshot-runtime';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import { admitAndBindSnapshotCapture } from './snapshot-runtime-binding.ts';
-import type { DaemonResponse, SessionState } from './types.ts';
+import type { DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 /** The selector commands that resolve their targets from the shared request-bound capture seam. */
 export type SelectorCaptureCommand = 'find' | 'get' | 'is' | 'wait';

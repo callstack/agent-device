@@ -17,7 +17,7 @@ const SESSION_TYPES = [
 
 function tree(extra: Record<string, string> = {}) {
   return new Map<string, string>([
-    ['src/daemon/types.ts', SESSION_TYPES],
+    ['src/daemon/session-state.ts', SESSION_TYPES],
     ['src/daemon/session-snapshot.ts', 'session.snapshot = "a"; nextSession.snapshot = "b";'],
     ['src/daemon/ref-frame.ts', 'session.snapshot = undefined;'],
     ['src/daemon/handlers/trace-runtime.ts', 'session.trace ??= "t";'],

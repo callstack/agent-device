@@ -29,7 +29,8 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../request-runtime-binding.ts';
 import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { recordSessionAction } from '../../session-action-recorder.ts';
 import { errorResponse } from '../../response.ts';
 import {

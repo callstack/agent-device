@@ -3,7 +3,8 @@ import type { SettleObservation } from '@agent-device/contracts/interaction';
 import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonCommandContext } from './context.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 import {
   ensureAndroidBlockingSystemDialogReady,
   recoverAndroidBlockingSystemDialog,

@@ -12,7 +12,7 @@ import {
 } from '../../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import type { DaemonPaths } from '../../config.ts';
-import type { DaemonRequest } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import { sendRequest } from '../daemon-client-transport.ts';
 
 const { mockRunCmdSync } = vi.hoisted(() => ({ mockRunCmdSync: vi.fn() }));

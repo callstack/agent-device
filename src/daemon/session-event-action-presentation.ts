@@ -14,7 +14,7 @@ import {
   readSessionEventNumber,
   readSessionEventString,
 } from './session-event-request.ts';
-import type { DaemonRequest } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
 
 const SCROLL_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;
 const SCROLL_EDGES = ['top', 'bottom'] as const;

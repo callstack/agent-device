@@ -21,7 +21,7 @@ import {
 import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
 import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 import type { AndroidAdbExecutor } from '@agent-device/platform-android/mechanics';
 
 function makeRequest(command: string, sessionName: string): DaemonRequest {

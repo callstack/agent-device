@@ -11,7 +11,8 @@ import {
 } from '../../../__tests__/test-utils/session-factories.ts';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, SessionState } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { handleSessionScriptPublication } from '../session-script-publication.ts';
 import {
   NO_SCRIPT_PUBLICATION,

@@ -166,13 +166,30 @@ export function fieldClassificationDrift(fields: readonly string[]): FieldClassi
   return drift.sort((left, right) => left.field.localeCompare(right.field));
 }
 
+const SESSION_STATE_DECLARATION = /export type SessionState = \{([\s\S]*?)\n\};/;
+
+/**
+ * The daemon module that declares `SessionState`, found by the declaration rather than by a
+ * recorded path. `sessionStateWritePressure` below measures the merge-base tree with the same
+ * function, and that tree's declaration may still sit where this tree no longer has it — a
+ * path constant would silently measure such a tree as zero pressure and bank the headroom.
+ */
+export function sessionStateDeclarationFile(
+  sources: ReadonlyMap<string, string>,
+): string | undefined {
+  for (const [file, source] of sources) {
+    if (file.startsWith('src/daemon/') && SESSION_STATE_DECLARATION.test(source)) return file;
+  }
+  return undefined;
+}
+
 /**
  * Field names declared by `SessionState` itself, so the scan cannot be fooled by a daemon
  * module with an unrelated local named `session` (a provider session, a runner session).
  */
 export function sessionStateFields(typesSource: string): string[] {
-  const declaration = /export type SessionState = \{([\s\S]*?)\n\};/.exec(typesSource);
-  if (!declaration) throw new Error('SessionState declaration not found in daemon/types.ts');
+  const declaration = SESSION_STATE_DECLARATION.exec(typesSource);
+  if (!declaration) throw new Error('SessionState declaration not found');
   return [...declaration[1]!.matchAll(/^ {2}([a-zA-Z][A-Za-z0-9]*)\??:/gm)].map(
     (match) => match[1]!,
   );
@@ -294,11 +311,12 @@ export type SessionStateWritePressure = Readonly<{
 export function sessionStateWritePressure(
   sources: ReadonlyMap<string, string>,
 ): SessionStateWritePressure {
-  const types = sources.get('src/daemon/types.ts');
-  if (!types) return { writerOwnedFields: 0, ownerFileClaims: 0 };
-  const writes = findSessionStateWrites(sources, sessionStateFields(types)).filter(
-    (write) => write.field !== '[computed]',
-  );
+  const declarationFile = sessionStateDeclarationFile(sources);
+  if (!declarationFile) return { writerOwnedFields: 0, ownerFileClaims: 0 };
+  const writes = findSessionStateWrites(
+    sources,
+    sessionStateFields(sources.get(declarationFile)!),
+  ).filter((write) => write.field !== '[computed]');
   return {
     writerOwnedFields: new Set(writes.map((write) => write.field)).size,
     ownerFileClaims: new Set(writes.map((write) => `${write.field}\0${write.file}`)).size,

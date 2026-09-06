@@ -22,7 +22,7 @@ import {
   unavailableBindExactDevice,
   unavailableInspectFacts,
 } from './test-device-runtime-gateway.ts';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';

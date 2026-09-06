@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { readReplayDivergenceResume } from '@agent-device/contracts/divergence';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import {
   runCmdDetachedMonitored,
   type ExecDetachedExit,

@@ -11,7 +11,7 @@ import {
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { withClientReplayScriptSources } from '../../../__tests__/test-utils/replay-script-source.ts';
-import type { DaemonRequest, DaemonResponse } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { SessionStore } from '../../session-store.ts';
 import { createReplaySession } from '../../handlers/session-replay-command.ts';
 import { runReplayCommand, runReplayTestCommand } from '../index.ts';

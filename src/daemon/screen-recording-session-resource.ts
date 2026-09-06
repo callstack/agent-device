@@ -15,7 +15,7 @@ import { createDurableCaptureResource } from './durable-capture-resource.ts';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
 import { screenRecordingResourceStore } from './screen-recording-resource-store.ts';
 import type { SessionStore } from './session-store.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 
 export const screenRecordingDurableResource = createDurableCaptureResource<
   'screen-recording',

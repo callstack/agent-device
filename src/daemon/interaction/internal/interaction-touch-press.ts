@@ -5,7 +5,7 @@ import type {
 } from '@agent-device/contracts/interaction';
 import type { resolveClickButton } from '@agent-device/contracts/click-button';
 import type { ReplayTargetGuardDenotation } from '@agent-device/contracts/replay';
-import type { DaemonResponse } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
 import { assertAndroidPressStayedInApp } from './interaction-android-escape.ts';
 import { createInteractionRuntimeForRoute } from './interaction-runtime.ts';
 import { readSettleRequest } from './interaction-flags.ts';
@@ -161,7 +161,7 @@ async function runTargetedTouchInteraction(params: {
   flags: CommandFlags | undefined;
   durationMs?: number;
   expectedResolvedTarget?: ReplayTargetGuardDenotation;
-  /** #1654: a mutating `find`'s already-resolved node; see daemon/types.ts. */
+  /** #1654: a mutating `find`'s already-resolved node; see daemon/daemon-request.ts. */
   preresolvedTarget?: PreresolvedInteractionTarget;
 }): Promise<TargetedTouchResult> {
   const { runtime, command, target, sessionName, requestId, flags, expectedResolvedTarget } =

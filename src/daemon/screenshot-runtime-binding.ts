@@ -22,7 +22,7 @@ import {
   type AdmittedRuntimePlan,
 } from './session-runtime-admission.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
-import type { DaemonResponse } from './types.ts';
+import type { DaemonResponse } from './daemon-request.ts';
 
 export type ScreenshotRuntimeBindings = Readonly<{
   inspectFacts?: InspectDeviceRuntimeFacts;

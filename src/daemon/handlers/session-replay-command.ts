@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonRequest, SessionState } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';

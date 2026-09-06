@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import type { DaemonRequest } from '../../../src/daemon/types.ts';
+import type { DaemonRequest } from '../../../src/daemon/daemon-request.ts';
 import type { ProviderScenarioHarness, ProviderScenarioRpcResult } from './harness.ts';
 
 export type ProviderScenarioState = {

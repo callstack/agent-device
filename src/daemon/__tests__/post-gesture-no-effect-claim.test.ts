@@ -18,7 +18,7 @@ import {
   markDeferredInteractionOutcome,
 } from '../deferred-interaction-outcome.ts';
 import { formatGestureNoEffectWarning } from '../gesture-no-effect.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import {
   chromeWithListSnapshot,
   makeSession,

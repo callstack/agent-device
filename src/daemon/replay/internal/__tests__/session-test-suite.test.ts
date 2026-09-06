@@ -21,7 +21,7 @@ import {
   handleSessionCommands,
   mockInspectDeviceRuntimeFacts,
 } from '../../../handlers/__tests__/session-command-harness.ts';
-import type { DaemonRequest } from '../../../types.ts';
+import type { DaemonRequest } from '../../../daemon-request.ts';
 import { expectOkData, makeSessionStore } from './session-test-suite.fixtures.ts';
 import {
   withRequestProgressSink,

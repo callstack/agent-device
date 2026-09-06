@@ -16,7 +16,8 @@ import {
 } from './lease-context.ts';
 import { leaseScopeToHeartbeatRequest } from '../core/lease-scope.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
-import type { DaemonRequest, SessionState } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
   const isolation = resolveSessionIsolationMode(

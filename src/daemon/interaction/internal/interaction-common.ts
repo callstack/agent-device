@@ -1,6 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import type { DaemonResponse } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
 import { stripInternalInteractionFlags } from '../../interaction-outcome-policy.ts';
 import {
   computeTargetEvidence,

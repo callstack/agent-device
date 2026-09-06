@@ -8,7 +8,7 @@ import type { DaemonCommandContext } from './context.ts';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { LeaseRegistry } from './lease-registry.ts';
 import type { SessionStore } from './session-store.ts';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import type {
   BindDeviceRuntime,
   BindExactDeviceRuntime,

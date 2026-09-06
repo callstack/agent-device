@@ -23,7 +23,7 @@ import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
 import { SessionStore } from '../../../session-store.ts';
 import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import type { DaemonRequest } from '../../../types.ts';
+import type { DaemonRequest } from '../../../daemon-request.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import {
   baseReplayRequest as baseReq,

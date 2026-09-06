@@ -10,7 +10,8 @@ import { asAppError, normalizeError } from '@agent-device/kernel/errors';
 import { readResolvedInteractionTarget } from '../../../core/interaction-outcome.ts';
 import { markSessionPartialRefsIssued } from '../../session-snapshot.ts';
 import { isSessionRecording } from '../../session-script-publication-capability.ts';
-import type { DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { publishInteractionAmbiguityCandidates } from './interaction-ambiguity-publication.ts';
 import {
   createInteractionRuntimeForRoute,

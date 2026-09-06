@@ -1,4 +1,4 @@
-import type { DaemonResponse } from '../types.ts';
+import type { DaemonResponse } from '../daemon-request.ts';
 import { handleReleaseMaterializedPathsCommand } from './session-app-source-deployment.ts';
 import { handleRuntimeCommand } from './session-runtime-command.ts';
 import { handleKeyboardCommand, handleAppEventCommand } from './session-selector-dispatch.ts';

@@ -25,7 +25,8 @@ import {
 } from '../../device-claim-inspection.ts';
 import { canonicalLocalDeviceKey } from '../../device-claim-paths.ts';
 import { deviceClaimIdentity } from '../../device-claims.ts';
-import type { DaemonRequest, DaemonResponse, SessionRef } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { SessionRef } from '../../session-state.ts';
 import { resolveSessionRunnerLogPath, SessionStore } from '../../session-store.ts';
 import {
   requireSessionOrExplicitSelector,

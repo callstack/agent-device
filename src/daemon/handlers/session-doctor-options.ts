@@ -1,7 +1,8 @@
 import { detectProjectRuntimeKind } from '../../core/project-runtime.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import type { SessionStore } from '../session-store.ts';
-import type { DaemonRequest, SessionState } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import type { DoctorOptions } from './session-doctor-types.ts';
 import type { DoctorCheck, DoctorKind } from '@agent-device/contracts/observability';
 

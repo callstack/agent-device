@@ -6,7 +6,7 @@ import {
 } from '../../../__tests__/test-utils/session-factories.ts';
 import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
 import type { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 
 export function writeReplayFile(root: string, lines: string[]): string {
   const filePath = path.join(root, 'flow.ad');

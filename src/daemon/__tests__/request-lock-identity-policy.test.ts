@@ -2,7 +2,8 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import { applyRequestLockPolicy } from '../request-lock-policy.ts';
-import type { DaemonRequest, SessionRef, SessionState } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
+import type { SessionRef, SessionState } from '../session-state.ts';
 
 /**
  * One table for the device-identity half of the session lock. A device identity selector

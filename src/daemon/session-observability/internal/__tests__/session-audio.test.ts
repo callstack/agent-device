@@ -31,7 +31,7 @@ import {
 import { createAudioProbeAdmissionLedger } from '../../../audio-probe-admission-ledger.ts';
 import { audioProbeDurableResource } from '../../../audio-probe-session-resource.ts';
 import type { SessionStore } from '../../../session-store.ts';
-import type { DaemonResponse } from '../../../types.ts';
+import type { DaemonResponse } from '../../../daemon-request.ts';
 import { handleSessionObservabilityCommands } from '../../index.ts';
 import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from '../../__tests__/session-audio.coverage.ts';
 

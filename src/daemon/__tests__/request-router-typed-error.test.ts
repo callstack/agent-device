@@ -19,7 +19,8 @@ import {
   lifecycleDeviceRuntimeGateway,
   systemRuntimeSpies,
 } from './test-device-runtime-gateway.ts';
-import type { DaemonRequest, SessionState } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import {

@@ -2,7 +2,8 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../../session-script-publication-state.ts';
 import {
   effectiveWriteForce,

@@ -5,7 +5,8 @@ import {
   type ReplayDivergenceResume,
   type ReplayRepairHint,
 } from '@agent-device/contracts/divergence';
-import type { DaemonResponse, SessionRuntimeHints, SessionState } from './types.ts';
+import type { DaemonResponse } from './daemon-request.ts';
+import type { SessionRuntimeHints, SessionState } from './session-state.ts';
 import {
   armRepairStep,
   isUncommittedRepairSession,

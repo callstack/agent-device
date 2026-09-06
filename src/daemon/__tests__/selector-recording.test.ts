@@ -12,7 +12,7 @@ import path from 'node:path';
 import { recordIfSession } from '../selector-recording.ts';
 import { SessionStore } from '../session-store.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function makeStore(): SessionStore {

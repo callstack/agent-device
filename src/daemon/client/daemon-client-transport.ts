@@ -2,7 +2,7 @@ import type { RequestProgressSink } from '@agent-device/contracts/progress';
 import net from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
 import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DaemonPaths, DaemonTransportPreference } from '../config.ts';
 import {

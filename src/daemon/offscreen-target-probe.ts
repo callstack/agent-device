@@ -2,7 +2,7 @@ import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isConfirmedOnScreenProbe } from '@agent-device/capture-kit/mobile-snapshot-semantics';
 import { deriveDirectIosNodeSelector, queryDirectIosSelector } from './direct-ios-selector.ts';
 import type { AppleRunnerRequestOptions } from './apple-runner-options.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 
 export async function confirmIosOffscreenTargetVisible(params: {
   session: SessionState;

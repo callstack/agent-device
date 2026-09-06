@@ -1,157 +1,34 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { GestureExecutionProfile } from '@agent-device/contracts/gesture-plan-types';
-import type { PreresolvedInteractionTarget } from '@agent-device/contracts/interaction';
-import type { SessionAction, SessionSurface } from '@agent-device/contracts/session';
-import type {
-  LeaseBackend,
-  DaemonArtifact as PublicDaemonArtifact,
-  DaemonInstallSource as PublicDaemonInstallSource,
-  DaemonRequestMeta as PublicDaemonRequestMeta,
-  DaemonResponse as PublicDaemonResponse,
-  DaemonResponseData as PublicDaemonResponseData,
-  SessionRuntimeHints as PublicSessionRuntimeHints,
-  DaemonRequest as WireRequest,
-} from '@agent-device/kernel/contracts';
-import type { DeviceInfo, PlatformSelector } from '@agent-device/kernel/device';
-import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
-import type { SnapshotFreshnessWindow } from '../snapshot/snapshot-freshness/index.ts';
-// Type-only import; erased at runtime. ref-frame.ts imports SessionState from
-// here, so this back-edge must stay type-only to avoid a runtime cycle.
 import type { SnapshotDiagnosticsState } from '@agent-device/contracts/capture';
-import type { DeviceLease } from '@agent-device/contracts/device';
 import type { AppLogFailure, AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
 import type { AudioProbeLiveHandle } from '@agent-device/contracts/audio-probe-runtime';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type {
   PerfNativeCaptureLiveHandle,
   PerfProfileHandoff,
 } from '@agent-device/contracts/perf-runtime';
-import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
-import type { SessionScriptPublicationState } from './session-script-publication-state.ts';
+import type { SessionAction, SessionSurface } from '@agent-device/contracts/session';
 import type {
-  ReplayTargetGuardDenotation,
-  TargetAnnotationV1,
-} from '@agent-device/contracts/replay';
-import type { RefFrame } from './ref-frame.ts';
-export type DaemonInstallSource = PublicDaemonInstallSource;
-export type SessionRuntimeHints = PublicSessionRuntimeHints;
-export type DaemonArtifact = PublicDaemonArtifact;
-export type DaemonResponseData = PublicDaemonResponseData;
-
-type DaemonRequestMeta = Omit<PublicDaemonRequestMeta, 'installSource' | 'lockPlatform'> & {
-  installSource?: DaemonInstallSource;
-  lockPlatform?: PlatformSelector;
-  leaseBackend?: LeaseBackend;
-  leaseProvider?: string;
-};
-
-export type DaemonOpenLifecycle = {
-  beforeDispatch?: (session: SessionState) => Promise<DaemonResponse | undefined>;
-};
-
-type DaemonRequestInternal = {
-  publicNetworkOnly?: true;
-  openLifecycle?: DaemonOpenLifecycle;
-  /**
-   * Request-owned capability used when a fresh replay discovers its device
-   * only inside the first open. The router retains that device's execution
-   * lock before dispatch and releases it after the outer replay finalizes.
-   */
-  retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
-  admittedLease?: DeviceLease;
-  /**
-   * Daemon-composed hierarchy capture used as operational evidence only.
-   * It must not issue or replace client ref authority.
-   */
-  observationOnly?: true;
-  /**
-   * Implicit caller scope resolved before a nested dispatch replaces the
-   * public session name with its effective scoped key.
-   */
-  resolvedSessionScope?: SessionState['sessionScope'];
-  /** Terminate the targeted app without ending the owning daemon session. */
-  closeAppOnly?: boolean;
-  /** Provider-owned viewport already resolved while normalizing a nested gesture command. */
-  gestureViewport?: Rect;
-  /** Maestro-compat execution profile for timed coordinate swipes projected to `gesture pan`. */
-  gestureExecutionProfile?: GestureExecutionProfile;
-  /**
-   * ADR 0012 step 4 post-resolution guard: the verified target member's
-   * normalized local identity AND structural denotation (document order +
-   * sibling ordinal), set ONLY by the replay step loop when dispatching an
-   * annotated action whose pre-action verification passed. Interaction
-   * handlers thread it into command options as `expectedResolvedTarget`;
-   * dispatch's own resolution refuses (pre-action) when its winner differs in
-   * local identity OR structural position — the latter distinguishes a
-   * different same-identity duplicate.
-   */
-  replayTargetGuard?: ReplayTargetGuardDenotation;
-  /** Dual-endpoint counterpart of replayTargetGuard for target-authored drag. */
-  replayTargetGuards?: {
-    source: ReplayTargetGuardDenotation;
-    destination: ReplayTargetGuardDenotation;
-  };
-  /**
-   * ADR 0012 / #1349 deferred (post-resolution) identity verification: the
-   * recorded `target-v1` landmark of an annotated selector `wait`, set ONLY
-   * by the replay step loop. The wait dispatch threads it into the polling
-   * loop as `recordedLandmark`; success then requires a selector match
-   * carrying this identity, and a timeout with rejected candidates surfaces
-   * the `WAIT_LANDMARK_MISMATCH_REASON` refusal the step loop converts into
-   * an identity-mismatch divergence. Never used by the generic pre-dispatch
-   * verification path — a wait's landmark may legitimately be absent when
-   * the step starts.
-   */
-  replayLandmarkGuard?: TargetAnnotationV1;
-  /**
-   * ADR 0014 / #1654: the complete ref/node/tree target a mutating `find`
-   * resolved against its fresh capture. Its presence both marks the ref as
-   * find-owned (so admission/staleness policy is skipped) and supplies the node
-   * adopted by the interaction leaf. One payload keeps those decisions from
-   * becoming independently representable. The leaf still crosses the
-   * side-effect seam and expires the frame.
-   */
-  findResolvedTarget?: PreresolvedInteractionTarget;
-  /**
-   * #1271 stage 2 (ADR 0012 decision 6 amendment): PROVENANCE — set by the
-   * replay runtime (`invokeResolvedReplayAction`,
-   * `session-replay-action-runtime.ts`) on every action it dispatches from a
-   * replay plan, annotated or not. It marks the action as AUTHORED (it came
-   * from the `.ad` under repair) rather than typed out-of-band by the agent
-   * mid-repair.
-   *
-   * The repair-segment exclusion keys off its ABSENCE: an authored
-   * `get`/`is`/`find`/`snapshot` step must survive into its own healed script
-   * (silently dropping it would make the heal quietly stop asserting what the
-   * original flow asserted), while an interactive diagnostic read used only to
-   * LOCATE the repair target must not. Command class alone cannot tell those
-   * apart — they are the same command — so provenance is the discriminator and
-   * `--record` is only for deliberately inserting an interactive read.
-   *
-   * Trustworthy because `internal` is daemon-only: `toDaemonRequest`
-   * (`server/http-server.ts`) never copies it off the wire, so no client can
-   * spoof authored provenance. Same channel as `replayTargetGuard` above.
-   */
-  replayPlanStep?: boolean;
-};
+  LeaseBackend,
+  SessionRuntimeHints as PublicSessionRuntimeHints,
+} from '@agent-device/kernel/contracts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotFreshnessWindow } from '../snapshot/snapshot-freshness/index.ts';
+import type { RefFrame } from './ref-frame-slot.ts';
+import type { SessionScriptPublicationState } from './session-script-publication-state.ts';
 
 /**
- * The server-side request: the wire shape plus what only the daemon may see. `token` and `session`
- * are required by the time a request is dispatched, `flags` is narrowed to the `CommandFlags`
- * vocabulary the wire cannot enforce, and `internal` carries `SessionState` callbacks and the
- * admitted lease — which is why this type stays in the daemon. Zones below it that only need to
- * classify a command take `contracts/dispatched-command.ts` instead.
+ * The daemon's live session record and the shapes only it holds. Mutable state owned by the
+ * session store and written through the modules R7 names in `scripts/layering/session-state.ts`;
+ * `ref-frame.ts` owns the `refFrame` slot whose value is declared in `ref-frame-slot.ts`.
+ *
+ * Nothing here belongs on the wire. The request half of a dispatch lives in `daemon-request.ts`,
+ * and its public-only shape in `daemon-request-wire.ts`.
  */
-export type DaemonRequest = Omit<WireRequest, 'token' | 'session' | 'flags' | 'meta'> & {
-  token: string;
-  session: string;
-  flags?: CommandFlags;
-  meta?: DaemonRequestMeta;
-  internal?: DaemonRequestInternal;
-};
 
-export type DaemonResponse = PublicDaemonResponse;
-export type DaemonInvokeFn = (req: DaemonRequest) => Promise<DaemonResponse>;
+export type SessionRuntimeHints = PublicSessionRuntimeHints;
 
 /**
  * One node's contribution to an interaction-surface signature. Two comparisons
@@ -400,6 +277,3 @@ export type SessionState = {
   };
   appLogFailure?: AppLogFailure;
 };
-
-// The recorded-action SHAPE lives in contracts/ so replay/ and compat/ can read a script
-// without depending on the server; re-exported here for the daemon's own consumers.

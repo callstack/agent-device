@@ -11,7 +11,7 @@ import {
   canRunReplayScopedAction,
   type DaemonCommandDescriptor,
 } from '../../../daemon/daemon-command-registry.ts';
-import type { DaemonRequest } from '../../../daemon/types.ts';
+import type { DaemonRequest } from '../../../daemon/daemon-request.ts';
 import { deriveDaemonCommandDescriptors, deriveStructuredBatchCommandNames } from '../derive.ts';
 import {
   commandDescriptors,

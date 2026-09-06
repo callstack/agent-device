@@ -8,7 +8,8 @@ import {
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { resolveRefStalenessWarning } from '../../session-snapshot.ts';
 import { readRefMutationFrame } from '../../ref-frame.ts';
-import type { DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
 import { settleFlagGuardResponse } from './interaction-flags.ts';
 import type {

@@ -1,6 +1,6 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { systemSurfaceDisclosure } from '../core/android-system-surface-disclosure.ts';
-import type { DaemonResponse } from './types.ts';
+import type { DaemonResponse } from './daemon-request.ts';
 
 /**
  * Append the occluding-system-surface disclosure to a selector-route response whose consumed

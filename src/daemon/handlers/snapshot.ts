@@ -1,4 +1,4 @@
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { SessionStore } from '../session-store.ts';
 import { errorResponse } from '../response.ts';
 import { handleAlertCommand } from './snapshot-alert.ts';

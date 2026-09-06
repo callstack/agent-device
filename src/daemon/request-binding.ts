@@ -4,7 +4,8 @@ import { applyRequestLockPolicy } from './request-lock-policy.ts';
 import { buildOpenTargetDeviceResolutionOptions } from './open-device-selection.ts';
 import { buildReplayTargetDeviceResolution } from './replay-device-selection.ts';
 import type { SessionStore } from './session-store.ts';
-import type { DaemonRequest, SessionRef } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionRef } from './session-state.ts';
 
 export type RequestExecutionLockKey = `session:${string}` | `device:${string}`;
 

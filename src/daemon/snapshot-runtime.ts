@@ -3,7 +3,8 @@ import { copySnapshotClickabilityEvidence } from '@agent-device/contracts/captur
 import { dispatchSnapshotRuntimeCommand } from './snapshot-command-runtime.ts';
 import { captureSparseFallbackScreenshot } from './sparse-fallback-screenshot.ts';
 import type { SnapshotRuntimeRouteParams } from './snapshot-runtime-binding.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 export async function dispatchSnapshotViaRuntime(
   params: SnapshotRuntimeRouteParams,

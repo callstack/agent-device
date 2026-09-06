@@ -9,7 +9,8 @@ import {
 } from '../session-script-publication-capability.ts';
 import { isRepairArmedSession } from '../session-replay-transaction.ts';
 import { SessionStore } from '../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 
 export function handleSessionScriptPublication(params: {
   req: DaemonRequest;

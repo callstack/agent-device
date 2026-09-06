@@ -15,7 +15,7 @@ import {
   flushDaemonStartupDiagnostics,
   teardownDaemonSessionForShutdown,
 } from '../server/daemon-runtime.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import { unavailableDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
 
 test('daemon startup awaits app-log recovery after acquiring the lock and before opening servers', () => {

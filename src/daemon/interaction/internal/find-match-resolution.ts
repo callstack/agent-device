@@ -8,7 +8,8 @@ import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-poli
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { isRootInteractionContainer } from '../../../core/interaction-targeting.ts';
 import { preferOnscreenMatches } from './find-match-ranking.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { errorResponse } from '../../response.ts';
 import { buildAmbiguousMatchError } from '../../selector-match-errors.ts';
 

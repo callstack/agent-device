@@ -1,4 +1,4 @@
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 import { isWebSession } from './web-session-names.ts';
 
 export const DAEMON_SESSION_TEARDOWN_TIMEOUT_MS = 5_000;

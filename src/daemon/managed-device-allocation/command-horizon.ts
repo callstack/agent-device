@@ -6,7 +6,7 @@ import {
   DAEMON_SESSION_TEARDOWN_TIMEOUT_MS,
   SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS,
 } from '../session-teardown-budget.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 import type { ManagedCommandHorizon } from './lease-admission.ts';
 
 const MANAGED_COMMAND_TEARDOWN_TIMEOUT_MS =

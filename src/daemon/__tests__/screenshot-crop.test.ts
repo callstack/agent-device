@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import { buildScreenshotCropWarnings, cropScreenshotToSelector } from '../screenshot-crop.ts';
 import { writeSolidPng } from './screenshot-runtime-fixture.ts';
 

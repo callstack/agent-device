@@ -16,7 +16,7 @@ import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts
 import { createScreenRecordingAdmissionLedger } from '../../screen-recording-admission-ledger.ts';
 import { screenRecordingResourceStore } from '../../screen-recording-resource-store.ts';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../../request-runtime-binding.ts';
-import type { SessionState } from '../../types.ts';
+import type { SessionState } from '../../session-state.ts';
 import { handleRecordCommand } from '../record-runtime.ts';
 
 type RuntimeOptions = {

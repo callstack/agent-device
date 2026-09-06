@@ -19,7 +19,8 @@ import {
 import type { DeviceReadyOptions } from './device-ready.ts';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 import { SessionStore } from './session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 import {
   admitRuntimePlan,
   requireRuntimeBinding,

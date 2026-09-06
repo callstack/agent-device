@@ -30,7 +30,7 @@ import {
   type InteractionRetryTap,
 } from './interaction-outcome-policy.ts';
 import { runPostGestureStabilityLoop } from '@agent-device/capture-kit/post-gesture-stability';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 
 /**
  * The deferred interaction outcome: the daemon's answer to "did that mutation

@@ -11,7 +11,7 @@ import {
   resolveCommandDeviceClaimPolicy,
 } from '../core/command-descriptor/registry.ts';
 import type { RefFrameEffect } from '@agent-device/contracts/replay';
-import type { DaemonRequest } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
 
 export type { DaemonCommandDescriptor, DaemonCommandRoute, SessionCommandKind };
 

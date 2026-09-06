@@ -4,7 +4,7 @@ import type { RequestProgressSink } from '@agent-device/contracts/progress';
 import type http from 'node:http';
 import type { Socket } from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { consumeTextLines } from '@agent-device/host-kit/transport';
 import {
   isDaemonProgressEnvelope,

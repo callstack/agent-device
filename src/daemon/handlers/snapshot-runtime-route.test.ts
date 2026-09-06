@@ -14,7 +14,7 @@ vi.mock('../snapshot-runtime.ts', () => ({
 }));
 
 import { SessionStore } from '../session-store.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 import { handleSnapshotCommands } from './snapshot.ts';
 
 beforeEach(() => {

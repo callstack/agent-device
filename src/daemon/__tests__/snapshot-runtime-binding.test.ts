@@ -9,7 +9,7 @@ import {
   admitAndBindSnapshotCapture,
   resolveBoundSnapshotCaptureRuntime,
 } from '../snapshot-runtime-binding.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 

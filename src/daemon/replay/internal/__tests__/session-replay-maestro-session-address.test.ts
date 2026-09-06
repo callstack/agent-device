@@ -8,7 +8,7 @@ import { createReplaySession } from '../../../handlers/session-replay-command.ts
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import type { DaemonRequest } from '../../../types.ts';
+import type { DaemonRequest } from '../../../daemon-request.ts';
 
 // The Maestro replay route resolves the store key upstream and then validates the session's
 // selectors, so its conflict recovery must name that key too — an implicitly cwd-scoped session

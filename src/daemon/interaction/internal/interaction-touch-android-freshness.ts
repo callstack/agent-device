@@ -1,6 +1,6 @@
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { getActiveAndroidSnapshotFreshness } from '../../session-snapshot-freshness.ts';
-import type { SessionState } from '../../types.ts';
+import type { SessionState } from '../../session-state.ts';
 import type { CaptureSnapshotForSession, InteractionRouteInput } from './types.ts';
 
 /**

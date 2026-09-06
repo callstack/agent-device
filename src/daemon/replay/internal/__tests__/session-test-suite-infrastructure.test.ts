@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import type { DaemonResponse } from '../../../types.ts';
+import type { DaemonResponse } from '../../../daemon-request.ts';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
 import { expectOkData, makeSessionStore } from './session-test-suite.fixtures.ts';
 

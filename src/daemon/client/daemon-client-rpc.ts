@@ -6,7 +6,7 @@ import {
 } from '@agent-device/kernel/errors';
 import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { materializeRemoteArtifacts } from '../../remote/daemon-artifacts.ts';
 import { localizeRemoteDaemonError } from '../../remote/remote-request-diagnostics.ts';
 import type { DaemonInfo } from './daemon-client-metadata.ts';

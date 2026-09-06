@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { MaestroRuntimeCommand } from '@agent-device/maestro';
-import type { DaemonRequest } from '../../../types.ts';
+import type { DaemonRequest } from '../../../daemon-request.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
 import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';

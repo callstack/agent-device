@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { PNG } from '@agent-device/capture-kit/png';
-import type { DaemonInvokeFn, DaemonRequest } from '../../../types.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon-request.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
 

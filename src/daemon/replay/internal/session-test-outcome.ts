@@ -1,5 +1,5 @@
 import { readSnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
-import type { DaemonResponse } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
 import { isReplayInfrastructureFailure } from './session-test-infrastructure.ts';
 import type { ReplayTestAttemptFailed, ReplayTestAttemptOutcome } from '@agent-device/replay-test';
 

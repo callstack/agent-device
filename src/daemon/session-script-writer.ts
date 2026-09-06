@@ -18,7 +18,7 @@ import {
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from './session-paths.ts';
 import { publishFileSync } from '@agent-device/host-kit/file';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 import {
   NO_SCRIPT_PUBLICATION,
   commitRepair,

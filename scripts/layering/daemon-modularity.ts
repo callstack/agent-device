@@ -21,6 +21,15 @@ export const DAEMON_MODULARITY_BASELINE = {
   ],
 } as const;
 
+// The modules that own the daemon's dispatch vocabulary since #2338 split `daemon/types.ts`:
+// the request shape, its wire-only half, and the live session record. All three are ratcheted
+// together, so moving a symbol between them cannot reopen the boundary to a new outside zone.
+const DAEMON_TYPE_MODULES: readonly string[] = [
+  'src/daemon/daemon-request.ts',
+  'src/daemon/daemon-request-wire.ts',
+  'src/daemon/session-state.ts',
+];
+
 const ENGINE_FILE_PREFIXES = [
   'packages/ad-replay/src/',
   'packages/maestro/src/',
@@ -31,7 +40,7 @@ const ENGINE_FILE_PREFIXES = [
 /**
  * Catches: the daemon modularity migration regressing quietly — a SessionState field losing
  *   its owner, a logical module gaining a forbidden or internal import, or an external
- *   daemon/types.ts importer count creeping up — any of which erodes the wave-by-wave
+ *   external daemon request/session-state importer count creeping up — any of which erodes the wave-by-wave
  *   extraction #1478/#1478-P5 already paid for, and nothing enforces the wave order itself.
  * Evidence: 2316fd32c5 (#1487) pinned the migration contracts this ratchet grew from;
  *   6984a1e095 (#1852) fixed the R10 zone-listing message when the type-cycle ceiling trips.
@@ -39,7 +48,7 @@ const ENGINE_FILE_PREFIXES = [
  *   below, not attributed separately).
  * Kill criterion: none enforced today; retire only by maintainer decision that the daemon
  *   modularity measurements (SessionState field-owner counts, logical-module import policies and
- *   facades, the external daemon/types.ts importer list, per-zone cycle membership) no longer
+ *   facades, the external daemon request/session-state importer list, per-zone cycle membership) no longer
  *   matter. Every one is a count or an import edge the compiler accepts either way.
  */
 export function checkDaemonModularityRatchets(
@@ -204,7 +213,7 @@ function checkDaemonTypesImporters(edges: readonly ResolvedImportEdge[]): Layeri
   const allowed = new Set<string>(DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters);
   const importers = new Map<string, ResolvedImportEdge>();
   for (const edge of edges) {
-    if (edge.target !== 'src/daemon/types.ts' || edge.file.startsWith('src/daemon/')) continue;
+    if (!DAEMON_TYPE_MODULES.includes(edge.target) || edge.file.startsWith('src/daemon/')) continue;
     importers.set(edge.file, edge);
   }
   const violations = [...importers]
@@ -214,7 +223,8 @@ function checkDaemonTypesImporters(edges: readonly ResolvedImportEdge[]): Layeri
       file,
       line: edge.line,
       message:
-        `external production imports of daemon/types.ts may only shrink from the recorded ${allowed.size}. ` +
+        `external production imports of the daemon request/session-state modules may only shrink ` +
+        `from the recorded ${allowed.size}. ` +
         'Use an existing neutral contract; do not move DaemonRequest into contracts to satisfy this gate.',
     }));
   for (const file of allowed) {
@@ -223,7 +233,7 @@ function checkDaemonTypesImporters(edges: readonly ResolvedImportEdge[]): Layeri
       rule: 'R10 daemon-modularity',
       file: 'scripts/layering/daemon-modularity.ts',
       line: 1,
-      message: `${file} no longer imports daemon/types.ts — delete it from externalDaemonTypesImporters in the same change so the dependency cannot return.`,
+      message: `${file} no longer imports a daemon request/session-state module — delete it from externalDaemonTypesImporters in the same change so the dependency cannot return.`,
     });
   }
   return violations;
@@ -309,7 +319,7 @@ export function daemonModularitySummary(reference: LayeringRatchets): string {
   return (
     `R10 holds R7 at the merge-base's ${session.writerOwnedFields} writer-owned fields / ` +
     `${session.ownerFileClaims} owner claims, R9 at its ${reference.largestTypeCycle.length} files per zone, ` +
-    `${DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters.length} external daemon/types.ts importers, ` +
+    `${DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters.length} external daemon request/session-state importers, ` +
     'and zero forbidden logical-module imports'
   );
 }

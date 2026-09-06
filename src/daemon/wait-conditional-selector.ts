@@ -6,7 +6,8 @@ import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 import { recordIfSession, stripSelectorChain } from './selector-recording.ts';
 import { isSessionRecording } from './session-script-publication-capability.ts';
 import type { SessionStore } from './session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 /**
  * Tries the admitted owner's one-sided native observation for an immediate simple-selector wait.

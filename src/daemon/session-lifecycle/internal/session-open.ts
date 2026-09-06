@@ -7,7 +7,8 @@ import {
   resolveOpenApplicationRuntimePlan,
 } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import { refreshSessionDeviceIfNeeded } from '../../session-device-resolution.ts';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';

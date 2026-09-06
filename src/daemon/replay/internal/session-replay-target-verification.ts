@@ -30,7 +30,8 @@ import {
 } from '@agent-device/contracts/replay';
 import { resolveTargetIdentityVerification } from '../../../core/command-descriptor/registry.ts';
 import { parseWaitPositionals } from '../../../core/wait-positionals.ts';
-import type { DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import type { ReplayResumeStamper } from '../../session-replay-coordinator.ts';
 import type { InternalObservationEvidence } from '../../internal-observation.ts';
 import { boundedLocalIdentity } from '../../session-target-evidence.ts';

@@ -2,7 +2,7 @@ import { leaseScopeToReleaseRequest } from '../../core/lease-scope.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { ExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 
 export async function finalizeDaemonSessionLease(params: {
   session: SessionState;

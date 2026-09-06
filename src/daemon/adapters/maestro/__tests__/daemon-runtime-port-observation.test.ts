@@ -5,7 +5,7 @@ import {
   inspectMaestroFlow,
   type MaestroObservation,
 } from '@agent-device/maestro';
-import type { DaemonRequest } from '../../../types.ts';
+import type { DaemonRequest } from '../../../daemon-request.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import {
   MAESTRO_OBSERVATION_POLL_MS,

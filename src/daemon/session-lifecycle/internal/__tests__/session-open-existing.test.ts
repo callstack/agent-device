@@ -14,7 +14,7 @@ import {
   assertInvalidArgsMessage,
   withMockedPlatform,
 } from '../../../handlers/__tests__/session-test-harness.ts';
-import type { SessionState } from '../../../types.ts';
+import type { SessionState } from '../../../session-state.ts';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
 
 test('open web URL on iOS device session without active app falls back to Safari', async () => {

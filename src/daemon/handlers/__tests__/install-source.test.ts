@@ -29,7 +29,8 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../request-runtime-binding.ts';
 import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, SessionState } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { handleInstallFromSourceDeploymentCommand } from '../session-app-source-deployment.ts';
 
 type SourceRuntimeOptions = Readonly<{

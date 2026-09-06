@@ -1,6 +1,7 @@
 import type { CloseApplicationFinalizationResult } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
-import type { DaemonRequest, SessionState } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import { cleanupRetainedMaterializedPathsForSession } from '../../materialized-path-registry.ts';
 import {

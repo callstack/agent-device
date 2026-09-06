@@ -3,7 +3,7 @@ import { legacyDispatchCapture } from '../../../__tests__/legacy-snapshot-captur
 import { test, expect, vi, beforeEach } from 'vitest';
 import { createInteractionRuntime, handleInteractionCommands } from '../../index.ts';
 import type { SessionStore } from '../../../session-store.ts';
-import type { SessionState } from '../../../types.ts';
+import type { SessionState } from '../../../session-state.ts';
 import type { SnapshotBackend } from '@agent-device/kernel/snapshot';
 import { buildSnapshotState } from '../../../../core/snapshot-state.ts';
 import { setSessionSnapshot } from '../../../session-snapshot.ts';
