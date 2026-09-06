@@ -105,4 +105,4 @@ export function readInstrumentationResultBoolean(value: string | undefined): boo
 export {
   readAndroidHelperManifestInteger,
   readAndroidHelperManifestLiteral,
-} from '@agent-device/contracts/android-helper-artifacts';
+} from './helper-artifacts.ts';

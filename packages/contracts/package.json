@@ -7,9 +7,6 @@
   "dependencies": {
     "@agent-device/kernel": "workspace:*"
   },
-  "devDependencies": {
-    "fast-check": "^4.9.0"
-  },
   "exports": {
     "./alert-contract": {
       "types": "./src/alert-contract.ts",
@@ -22,10 +19,6 @@
     "./android-clipboard-support": {
       "types": "./src/android-clipboard-support.ts",
       "default": "./src/android-clipboard-support.ts"
-    },
-    "./android-helper-artifacts": {
-      "types": "./src/android-helper-artifacts.ts",
-      "default": "./src/android-helper-artifacts.ts"
     },
     "./android-input-ownership": {
       "types": "./src/android-input-ownership.ts",
@@ -42,10 +35,6 @@
     "./android-system-chrome": {
       "types": "./src/android-system-chrome.ts",
       "default": "./src/android-system-chrome.ts"
-    },
-    "./android-touch-plan": {
-      "types": "./src/android-touch-plan.ts",
-      "default": "./src/android-touch-plan.ts"
     },
     "./app-deployment-runtime": {
       "types": "./src/app-deployment-runtime.ts",
@@ -74,10 +63,6 @@
     "./app-switcher-runtime": {
       "types": "./src/app-switcher-runtime.ts",
       "default": "./src/app-switcher-runtime.ts"
-    },
-    "./apple-multitouch-support": {
-      "types": "./src/apple-multitouch-support.ts",
-      "default": "./src/apple-multitouch-support.ts"
     },
     "./apple-runner-request": {
       "types": "./src/apple-runner-request.ts",
@@ -167,10 +152,6 @@
       "types": "./src/daemon-http.ts",
       "default": "./src/daemon-http.ts"
     },
-    "./daemon-owner-cleanup": {
-      "types": "./src/daemon-owner-cleanup.ts",
-      "default": "./src/daemon-owner-cleanup.ts"
-    },
     "./device": {
       "types": "./src/facades/device.ts",
       "default": "./src/facades/device.ts"
@@ -238,10 +219,6 @@
     "./interaction": {
       "types": "./src/interaction.ts",
       "default": "./src/interaction.ts"
-    },
-    "./interaction-error": {
-      "types": "./src/interaction-error.ts",
-      "default": "./src/interaction-error.ts"
     },
     "./is-predicate": {
       "types": "./src/is-predicate.ts",
@@ -323,10 +300,6 @@
       "types": "./src/perf-runtime-operation-builder.ts",
       "default": "./src/perf-runtime-operation-builder.ts"
     },
-    "./perf-runtime-plan": {
-      "types": "./src/perf-runtime-plan.ts",
-      "default": "./src/perf-runtime-plan.ts"
-    },
     "./platform-module": {
       "types": "./src/platform-module.ts",
       "default": "./src/platform-module.ts"
@@ -338,10 +311,6 @@
     "./platform-providers": {
       "types": "./src/platform-providers.ts",
       "default": "./src/platform-providers.ts"
-    },
-    "./platform-resource-cleanup": {
-      "types": "./src/platform-resource-cleanup.ts",
-      "default": "./src/platform-resource-cleanup.ts"
     },
     "./platform-runtime": {
       "types": "./src/platform-runtime.ts",
@@ -435,10 +404,6 @@
       "types": "./src/facades/snapshot.ts",
       "default": "./src/facades/snapshot.ts"
     },
-    "./snapshot-presentation": {
-      "types": "./src/snapshot-presentation.ts",
-      "default": "./src/snapshot-presentation.ts"
-    },
     "./snapshot-runtime": {
       "types": "./src/snapshot-runtime.ts",
       "default": "./src/snapshot-runtime.ts"
@@ -446,10 +411,6 @@
     "./snapshot-scope": {
       "types": "./src/snapshot-scope.ts",
       "default": "./src/snapshot-scope.ts"
-    },
-    "./snapshot-timeout-evidence": {
-      "types": "./src/snapshot-timeout-evidence.ts",
-      "default": "./src/snapshot-timeout-evidence.ts"
     },
     "./startup-recovery-fence": {
       "types": "./src/startup-recovery-fence.ts",

@@ -37,7 +37,7 @@ import {
   type RuntimeHintClearOperation,
 } from './session-close-runtime-admission.ts';
 import { closeCleanupError, runSessionCloseTeardown } from './session-close-lifecycle-teardown.ts';
-import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
+import type { PlatformResourceCleanup } from '../../platform-resource-cleanup.ts';
 
 export type SessionCloseCommandInput = Readonly<{
   req: DaemonRequest;

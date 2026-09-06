@@ -6,7 +6,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import { executeAndroidTouchPlan } from '../touch-executor.ts';
-import { lowerAndroidTouchPlan } from '../touch-plan.ts';
+import { lowerAndroidTouchPlan } from '../touch-plan-lowering.ts';
 import {
   ANDROID_TOUCH_PLAN_PROTOCOL,
   executeAndroidTouchHelperPlan,

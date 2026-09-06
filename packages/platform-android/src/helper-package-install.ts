@@ -12,7 +12,7 @@ import { requireAndroidAdbHost } from './adb-host.ts';
 import type {
   AndroidHelperInstallDecision,
   InstalledAndroidHelperState,
-} from '@agent-device/contracts/android-helper-artifacts';
+} from './helper-artifacts.ts';
 
 // Shared install/version-check/checksum lifecycle for the three Android helper APKs.
 

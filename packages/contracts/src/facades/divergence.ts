@@ -1,18 +1,3 @@
-export {
-  REPLAY_DIVERGENCE_DEFAULT_REF_LIMIT,
-  REPLAY_DIVERGENCE_DIGEST_REF_LIMIT,
-  REPLAY_DIVERGENCE_LEVEL_BYTE_LIMITS,
-  REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
-  applyReplayDivergenceLevelCaps,
-  boundReplayDivergence,
-  createReplayDivergenceSanitizer,
-  formatReplayDivergenceReport,
-  measureReplayDivergenceBytes,
-  readReplayDivergenceResume,
-  sanitizeReplayDivergenceField,
-  scrubReplayVarValues,
-  truncateUtf8Field,
-} from '../replay-divergence.ts';
 export type {
   ReplayDivergence,
   ReplayDivergenceCause,
@@ -30,5 +15,4 @@ export type {
   ReplayDivergenceTargetCandidate,
   ReplayDivergenceTargetIdentity,
   ReplayRepairHint,
-  ReplayVarScrubEntry,
 } from '../replay-divergence.ts';

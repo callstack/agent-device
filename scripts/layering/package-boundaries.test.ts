@@ -778,27 +778,11 @@ test('Node resolution enforces the exports map at runtime', () => {
     contractsSnapshotResolved.endsWith('packages/contracts/src/facades/snapshot.ts'),
     contractsSnapshotResolved,
   );
-  const contractsSnapshotPresentationResolved = import.meta
-    .resolve('@agent-device/contracts/snapshot-presentation');
-  assert.ok(
-    contractsSnapshotPresentationResolved.endsWith(
-      'packages/contracts/src/snapshot-presentation.ts',
-    ),
-    contractsSnapshotPresentationResolved,
-  );
   const contractsReactNativeOverlayResolved = import.meta
     .resolve('@agent-device/contracts/react-native-overlay');
   assert.ok(
     contractsReactNativeOverlayResolved.endsWith('packages/contracts/src/react-native-overlay.ts'),
     contractsReactNativeOverlayResolved,
-  );
-  const contractsSnapshotTimeoutEvidenceResolved = import.meta
-    .resolve('@agent-device/contracts/snapshot-timeout-evidence');
-  assert.ok(
-    contractsSnapshotTimeoutEvidenceResolved.endsWith(
-      'packages/contracts/src/snapshot-timeout-evidence.ts',
-    ),
-    contractsSnapshotTimeoutEvidenceResolved,
   );
   const providerWebDriverResolved = import.meta.resolve('@agent-device/provider-webdriver');
   assert.ok(

@@ -12,7 +12,7 @@ import {
   snapshotTimeoutEvidenceWithOverlayRefs,
   snapshotTimeoutEvidenceWithoutOverlaySource,
   type SnapshotTimeoutEvidence,
-} from '@agent-device/contracts/snapshot-timeout-evidence';
+} from './snapshot-timeout-evidence.ts';
 import { isAndroidSnapshotTimeoutError } from '../snapshot/snapshot-timeout-policy.ts';
 import { contextFromFlags } from './context.ts';
 import { annotateScreenshotWithRefs } from '@agent-device/capture-kit/screenshot-overlay';
@@ -28,8 +28,8 @@ import {
  * The two things that are not daemon assembly moved out: whether a failure is the
  * accessibility-timeout shape is a policy
  * (`src/snapshot/snapshot-timeout-policy.ts`), and the published evidence shape is
- * vocabulary (`@agent-device/contracts/snapshot-timeout-evidence`, which has its own subpath so
- * it stays out of the shared capture facade's eager closure). What remains here is the ordering that
+ * vocabulary (`src/daemon/snapshot-timeout-evidence.ts`, whose only consumer is this
+ * module). What remains here is the ordering that
  * genuinely needs the daemon: resolving a bound screenshot runtime, writing the artifact,
  * annotating it from the stored observation, and emitting the diagnostics.
  */

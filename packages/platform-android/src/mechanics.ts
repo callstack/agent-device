@@ -296,10 +296,7 @@ export type {
   AndroidSnapshotHelperMetadata,
   AndroidSnapshotHelperTransport,
 } from './snapshot-helper-types.ts';
-export type {
-  AndroidImeHelperArtifact,
-  AndroidImeHelperManifest,
-} from '@agent-device/contracts/android-helper-artifacts';
+export type { AndroidImeHelperArtifact, AndroidImeHelperManifest } from './helper-artifacts.ts';
 export type { AndroidAdbEnvironment, AndroidAdbFileHost, AndroidAdbHost } from './adb-host.ts';
 export { ensureAndroidSdkPathConfigured } from './sdk.ts';
 export { fillAndroid, typeAndroid } from './text-input.ts';
@@ -316,7 +313,7 @@ export {
   type AndroidLongPressTouchPlan,
   type AndroidLoweredTouchPlan,
   type AndroidTouchPlan,
-} from './touch-plan.ts';
+} from './touch-plan-lowering.ts';
 export {
   androidUiNodes,
   buildUiHierarchySnapshot,

@@ -1,11 +1,27 @@
 import {
   isApplePlatform,
   resolveDeviceAppleOs,
+  type AppleOS,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import { APPLE_OS_DISPLAY_NAMES } from './apple-os-display-names.ts';
 import type { GestureCommandInput } from './gesture-plan-types.ts';
 import type { GestureRuntimeTier } from './gesture-tier.ts';
+
+/**
+ * How each Apple OS names itself in agent-facing prose.
+ *
+ * Owned here because every subject that needs the wording is a gesture refusal: the refusal
+ * subject below and the Apple adapter's own check (`packages/platform-apple/src/
+ * multitouch-support.ts`). One table keeps both refusals spelling an OS the same way.
+ */
+export const APPLE_OS_DISPLAY_NAMES: Record<AppleOS, string> = {
+  ios: 'iOS',
+  ipados: 'iPadOS',
+  tvos: 'tvOS',
+  watchos: 'watchOS',
+  visionos: 'visionOS',
+  macos: 'macOS',
+};
 
 /** The hint an owner states when it cannot preserve a target-authored drag's timing. */
 export const TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT =

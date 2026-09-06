@@ -2,12 +2,12 @@ import type { MaestroFailedAction } from '@agent-device/maestro';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
+import { type ReplayDivergence } from '@agent-device/contracts/divergence';
 import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   createReplayDivergenceSanitizer,
-  type ReplayDivergence,
   type ReplayVarScrubEntry,
-} from '@agent-device/contracts/divergence';
+} from '../../../core/replay-divergence.ts';
 import { formatScriptArg } from '@agent-device/ad-script';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';

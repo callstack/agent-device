@@ -3,7 +3,7 @@ import type {
   PerfNativeCaptureLiveHandle,
   PerfNativeCaptureRecoveryInput,
 } from '@agent-device/contracts/perf-runtime';
-import { perfNativeCaptureRecoveryUse } from '@agent-device/contracts/perf-runtime-plan';
+import { perfNativeCaptureRecoveryUse } from './perf-runtime-plan.ts';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import {
   type BoundDeviceRuntime,
