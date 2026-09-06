@@ -176,8 +176,14 @@ reuses the command's request envelope and reserves the canonical teardown budget
 finalization. Unbounded commands require a bounded child request before managed execution.
 An `admitted` result reports only allocator-confirmed authority; `teardown-required` leaves that
 binding permanently fenced. Budget reservation is not proof of cleanup or runner quiescence.
-The neutral service enables no managed runtime or readiness path. Integration follows the reviewed
-managed-operation projection and must use canonical teardown before returning the allocation.
+Request runtime binding accepts a matching lease service and command horizon from its coordinator.
+Exact managed binding admits the allocator-held claim and confirms that horizon before native bind
+probes; readiness activates only after the binding is adopted and its requested operations are
+admitted. The managed runtime owner dispatches each reviewed operation inside lease admission.
+Request disposal cancels pending admissions and revokes readiness before cleanup begins, while
+shared renewal and late-binding cleanup retain their existing owners. Unconfigured managed requests
+remain refused. This seam does not provide a publication/recovery coordinator, which must use
+canonical teardown before returning the allocation.
 
 Release is durable and retryable. Host does not publish a replacement grant while Simlock may still
 mutate the device. After either daemon restarts, the journal is reconciled through Simlock lookup: a

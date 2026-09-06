@@ -96,7 +96,7 @@ export async function managedAutomationApk(root: string): Promise<string> {
   return apkPath;
 }
 
-function managedAutomationHost() {
+export function managedAutomationHost() {
   const sessionsDir = mkdtempForTestSync('managed-automation-');
   const unused = async (): Promise<never> => {
     throw new Error('Unexpected native lifecycle or durable resource operation');

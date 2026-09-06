@@ -1,6 +1,7 @@
 import type {
   LeaseRequestStatus,
   ManagedLease,
+  ManagedLeasePlatform,
 } from '@agent-device/contracts/managed-device-allocation';
 import { Deadline } from '@agent-device/host-kit/retry';
 import { createManagedLeaseReachability } from '../../../managed-device-reachability.ts';
@@ -35,12 +36,16 @@ export function setupAdmission(
     grant?: LeaseRequestStatus;
     script?: NonNullable<Parameters<typeof createScriptedManagedDeviceAllocator>[0]>['script'];
     safetyWindowMs?: number;
+    platform?: ManagedLeasePlatform;
   } = {},
 ) {
   const grant = options.grant ?? granted({ lease: renewedLease({ ttlDeadline: NOW + 5_000 }) });
   if (!grant.lease) throw new Error('Fixture needs a lease');
   const allocator = createScriptedManagedDeviceAllocator({ script: options.script });
-  const reachability = createManagedLeaseReachability({ platform: 'ios', lease: grant.lease });
+  const reachability = createManagedLeaseReachability({
+    platform: options.platform ?? 'ios',
+    lease: grant.lease,
+  });
   const admission = createManagedLeaseAdmission({
     allocator,
     grant,
