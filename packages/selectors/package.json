@@ -4,7 +4,7 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
-  "description": "Shared selector matching, argument, and replay semantics for agent-device. `.` is string-only; `./ast` is the published parser surface behind `agent-device/selectors`; `./engine` is the resolve/list surface reserved for the selector-pipeline owner (R19).",
+  "description": "Shared selector matching, argument, and replay semantics for agent-device. `.` is string-only; `./ast` is the published parser surface behind `agent-device/selectors`; `./engine` is the resolve/list surface reserved for the selector-pipeline owner (R19); `./parameterized-recorded-fill` parameterizes recorded fill payloads against their selectors.",
   "dependencies": {
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/contracts": "workspace:*",
@@ -22,6 +22,10 @@
     "./engine": {
       "types": "./src/engine.ts",
       "default": "./src/engine.ts"
+    },
+    "./parameterized-recorded-fill": {
+      "types": "./src/parameterized-recorded-fill.ts",
+      "default": "./src/parameterized-recorded-fill.ts"
     }
   },
   "devDependencies": {

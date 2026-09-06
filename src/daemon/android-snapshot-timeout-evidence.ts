@@ -14,7 +14,7 @@ import {
 } from '@agent-device/contracts/snapshot-timeout-evidence';
 import { isAndroidSnapshotTimeoutError } from '../snapshot/snapshot-timeout-policy.ts';
 import { contextFromFlags } from './context.ts';
-import { annotateScreenshotWithRefs } from './screenshot-overlay.ts';
+import { annotateScreenshotWithRefs } from '@agent-device/capture-kit/screenshot-overlay';
 import { screenshotExecutionFromContext } from './screenshot-runtime.ts';
 import {
   resolveBoundScreenshotRuntime,

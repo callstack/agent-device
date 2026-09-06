@@ -6,12 +6,12 @@ import {
   type SnapshotNode,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { decodePngAsync, encodePngAsync } from '@agent-device/capture-kit/png-worker-client';
+import { decodePngAsync, encodePngAsync } from './png-worker-client.ts';
 import {
   projectSnapshotRectToScreenshot,
   resolveSnapshotBounds,
-} from '@agent-device/capture-kit/snapshot-rect-projection';
-import { analyzeReactNativeOverlay } from '../core/react-native-overlay.ts';
+} from './snapshot-rect-projection.ts';
+import { analyzeReactNativeOverlay } from './react-native-overlay.ts';
 import {
   findNearestAncestor,
   isMeaningfulSignal,
@@ -21,14 +21,9 @@ import {
 import {
   isAndroidUnlabeledClickableSource,
   resolveAndroidOverlaySourceRect,
-} from '../snapshot/screenshot-overlay/android.ts';
+} from './screenshot-overlay-android.ts';
 import { drawOverlayRef } from './screenshot-overlay-draw.ts';
-import {
-  clamp,
-  hasPositiveRect,
-  rectArea,
-  rectContains,
-} from '../snapshot/screenshot-overlay/rects.ts';
+import { clamp, hasPositiveRect, rectArea, rectContains } from './screenshot-overlay-rects.ts';
 
 const MAX_OVERLAY_REFS = 24;
 const ACTIONABLE_ROLE_TYPES = [

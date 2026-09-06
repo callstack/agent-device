@@ -1,5 +1,5 @@
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import { selectorContainsValue } from '@agent-device/selectors';
+import { selectorContainsValue } from './index.ts';
 
 const STRUCTURAL_ROOT_OUTPUT_KEYS = new Set([
   'action',

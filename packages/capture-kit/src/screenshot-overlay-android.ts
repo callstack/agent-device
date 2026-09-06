@@ -1,6 +1,6 @@
 import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { isViewportRootNode, normalizeType } from '@agent-device/contracts/snapshot';
-import { hasPositiveRect, rectArea, rectContains, unionRects } from './rects.ts';
+import { hasPositiveRect, rectArea, rectContains, unionRects } from './screenshot-overlay-rects.ts';
 
 /**
  * Android overlay policy (#1983): which Android nodes earn an overlay ref, and what rectangle

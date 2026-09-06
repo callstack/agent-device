@@ -29,7 +29,7 @@ import type {
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
 import { assertScreenshotCropPolicy } from './screenshot-crop-target.ts';
 import { buildScreenshotCropWarnings, cropScreenshotToSelector } from './screenshot-crop.ts';
-import { annotateScreenshotWithRefs } from './screenshot-overlay.ts';
+import { annotateScreenshotWithRefs } from '@agent-device/capture-kit/screenshot-overlay';
 import {
   resolveBoundScreenshotRuntime,
   type BoundScreenshotRuntime,

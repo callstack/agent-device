@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { publishFileSync } from '@agent-device/host-kit/file';
+import { publishFileSync } from './file.ts';
 import {
   buildDaemonCodeFileLabel,
   formatDaemonCodeSignature,

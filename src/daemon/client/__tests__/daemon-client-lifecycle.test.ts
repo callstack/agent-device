@@ -21,7 +21,7 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
 import { resolveDaemonPaths, type DaemonPaths } from '../../config.ts';
 import { sendToDaemon, type DaemonRequest, type DaemonResponse } from '../daemon-client.ts';
 import { attachActiveSessionAddressHint } from '../daemon-client-lifecycle.ts';
-import { computeDaemonCodeSignature } from '../../code-signature.ts';
+import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
 import { sendRequest } from '../daemon-client-transport.ts';
 import {
   closeLoopbackServer,

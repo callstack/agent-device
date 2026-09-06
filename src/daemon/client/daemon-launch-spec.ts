@@ -4,7 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { findProjectRoot } from '@agent-device/host-kit/version';
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
-import { computeDaemonCodeSignature } from '../code-signature.ts';
+import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
 
 export type DaemonLaunchSpec = {
   root: string;
@@ -71,6 +71,7 @@ export async function resolveLocalDaemonCodeSignature(): Promise<string> {
   if (!launchSpec.useSrc) {
     return computeDaemonCodeSignature(launchSpec.distPath, launchSpec.root);
   }
-  const { resolveCachedDaemonCodeSignature } = await import('../code-signature-cache.ts');
+  const { resolveCachedDaemonCodeSignature } =
+    await import('@agent-device/host-kit/code-signature-cache');
   return resolveCachedDaemonCodeSignature(launchSpec.srcPath, launchSpec.root);
 }
