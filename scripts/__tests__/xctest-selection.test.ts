@@ -84,13 +84,20 @@ describe('the real tree', () => {
   test('the whole-bundle lanes skip the runner server entry point, which is not a test', () => {
     // The whole reason -skip-testing: exists in this repo. `testCommand` opens an
     // NWListener and waits 24 hours; an unfiltered run would hang the lane to its timeout.
-    const skipped = loadReport(repoRoot).flagged.filter((entry) => entry.flag === 'skip-testing');
+    const report = loadReport(repoRoot);
+    const skipped = report.flagged.filter((entry) => entry.flag === 'skip-testing');
     for (const entry of LANES.filter((entry) => entry.selection === 'whole')) {
       expect(
         skipped.filter((flag) => flag.workflow === entry.workflow).map((flag) => flag.identifier),
       ).toContain(ENTRY_POINT);
     }
-    for (const entry of skipped) expect(entry.identifier).toBe(ENTRY_POINT);
+    for (const entry of skipped) {
+      if (entry.identifier === ENTRY_POINT) continue;
+      // A real test may be excluded from the shared process only if another invocation
+      // on the same lane still reaches it. Removing the isolated run must fail this.
+      const current = LANES.find((lane) => lane.workflow === entry.workflow)!;
+      expect(report.reach[current.id].has(entry.identifier)).toBe(true);
+    }
   });
 
   test('the simulator-only tests are exactly the ones the macOS build compiles out', () => {
@@ -293,6 +300,40 @@ describe('a planted guard', () => {
   test('the PR list naming the entry point is reported too', () => {
     const report = buildReport(TARGET, source(ENTRY_SOURCE), laneWorkflows([ENTRY_POINT]));
     expect(report.entryPointReachedBy).toEqual(['pr']);
+  });
+});
+
+describe('isolated invocations', () => {
+  const isolated = `${TARGET}/RunnerTests/testIsolated`;
+  const swift = source(`${ENTRY_SOURCE}extension RunnerTests {\n  func testIsolated() {}\n}\n`);
+  const shared = `xcodebuild test-without-building -skip-testing:${ENTRY_POINT} -skip-testing:${isolated}`;
+
+  test('a separate selected invocation restores a test skipped by the shared process', () => {
+    const report = buildReport(TARGET, swift, [
+      ...laneWorkflows().filter((entry) => entry.workflow !== NIGHTLY_WORKFLOW_FILE),
+      {
+        workflow: NIGHTLY_WORKFLOW_FILE,
+        text: `xcodebuild test-without-building -only-testing:${isolated}\n${shared}`,
+      },
+    ]);
+    expect([...report.reach.nightly]).toEqual([isolated]);
+    expect(report.entryPointReachedBy).toEqual([]);
+  });
+
+  test('removing the isolated invocation leaves that test unreachable on nightly', () => {
+    const report = buildReport(TARGET, swift, [
+      ...laneWorkflows().filter((entry) => entry.workflow !== NIGHTLY_WORKFLOW_FILE),
+      { workflow: NIGHTLY_WORKFLOW_FILE, text: shared },
+    ]);
+    expect(report.reach.nightly.has(isolated)).toBe(false);
+  });
+
+  test('a skip still wins over an only flag in the same invocation', () => {
+    const report = buildReport(TARGET, swift, [
+      ...laneWorkflows().filter((entry) => entry.workflow !== NIGHTLY_WORKFLOW_FILE),
+      { workflow: NIGHTLY_WORKFLOW_FILE, text: `${shared} -only-testing:${isolated}` },
+    ]);
+    expect(report.reach.nightly.has(isolated)).toBe(false);
   });
 });
 

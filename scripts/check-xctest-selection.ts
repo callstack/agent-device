@@ -188,19 +188,26 @@ function identifiers(
   );
 }
 
-/** What one lane reaches: its platform's compiled set, narrowed by its flags. */
+/** Union the invocations: a skip in one process must not erase an isolated run. */
 function laneReach(
   entry: Lane,
   declaredTests: readonly DeclaredTest[],
-  flagged: readonly FlaggedTest[],
+  workflowText: string,
 ): Set<string> {
-  const only = identifiers(flagged, entry.workflow, 'only-testing');
-  const skipped = identifiers(flagged, entry.workflow, 'skip-testing');
+  const parts = workflowText.split(/^\s*(?:run:\s*)?xcodebuild\s+test(?:-without-building)?\b/m);
+  const invocations = parts.length > 1 ? parts.slice(1) : parts;
+  const compiled = declaredTests
+    .filter((test) => test.platforms.includes(entry.platform))
+    .map((test) => test.identifier);
   return new Set(
-    declaredTests
-      .filter((test) => test.platforms.includes(entry.platform))
-      .map((test) => test.identifier)
-      .filter((id) => (entry.selection === 'whole' || only.has(id)) && !skipped.has(id)),
+    invocations.flatMap((text) => {
+      const flagged = parseFlaggedTests(entry.workflow, text);
+      const only = identifiers(flagged, entry.workflow, 'only-testing');
+      const skipped = identifiers(flagged, entry.workflow, 'skip-testing');
+      // An explicit list narrows even a whole-bundle lane's isolated invocation.
+      const whole = entry.selection === 'whole' && only.size === 0;
+      return compiled.filter((id) => (whole || only.has(id)) && !skipped.has(id));
+    }),
   );
 }
 
@@ -220,7 +227,14 @@ export function buildReport(
   // and cannot speak for anything else a workflow might select.
   const owned = flagged.filter((entry) => entry.identifier.startsWith(`${target}/`));
   const reach = Object.fromEntries(
-    LANES.map((entry) => [entry.id, laneReach(entry, declaredTests, flagged)]),
+    LANES.map((entry) => [
+      entry.id,
+      laneReach(
+        entry,
+        declaredTests,
+        workflows.find((workflow) => workflow.workflow === entry.workflow)?.text ?? '',
+      ),
+    ]),
   ) as Record<LaneId, ReadonlySet<string>>;
   const entryPoint = `${target}/${ENTRY_POINT_METHOD}`;
   const reachedAnywhere = new Set(LANES.flatMap((entry) => [...reach[entry.id]]));
