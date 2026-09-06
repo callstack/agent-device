@@ -123,6 +123,7 @@ export type MaestroRuntimeOperations = {
     readonly launchArguments?: MaestroLaunchArguments;
   }>;
   readonly stopApp: MaestroRuntimeOperation<{ readonly appId?: string }>;
+  readonly clearState: MaestroRuntimeOperation<{ readonly appId?: string }>;
   readonly openLink: MaestroRuntimeOperation<{ readonly link: string }>;
 
   readonly tapOn: MaestroRuntimeOperation<{

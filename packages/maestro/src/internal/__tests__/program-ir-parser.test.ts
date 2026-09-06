@@ -475,6 +475,27 @@ describe('parseMaestroProgram', () => {
     );
   });
 
+  test('parses standalone clearState with an explicit or config app id', () => {
+    const program = parseMaestroProgram(
+      `appId: example.app
+---
+- clearState: example.app
+- clearState
+`,
+      { sourcePath: '/flows/clear.yaml' },
+    );
+
+    assert.deepEqual(program.commands[0], {
+      kind: 'clearState',
+      source: { path: '/flows/clear.yaml', line: 3 },
+      appId: 'example.app',
+    });
+    assert.deepEqual(program.commands[1], {
+      kind: 'clearState',
+      source: { path: '/flows/clear.yaml', line: 4 },
+    });
+  });
+
   test('preserves source paths for unsupported and malformed flows', () => {
     const sourcePath = '/flows/includes/child.yaml';
     assert.throws(

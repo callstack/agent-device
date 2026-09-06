@@ -137,7 +137,12 @@ export const LAYER2_REFERENCE_ONLY = new Set<string>([
 
 // Supported commands that no corpus flow exercises and are therefore verified by
 // other means (or explicitly deferred). Listed so coverage stays honest.
-export const UNVERIFIED_COMMANDS = new Set<string>([]);
+export const UNVERIFIED_COMMANDS = new Set<string>([
+  // Standalone clearState has no upstream corpus flow; unit tests cover parse,
+  // canonical projection, runtime dispatch, and daemon projection instead.
+  // Add an authored/clear-state.yaml flow at the next fixture regeneration.
+  'clearState',
+]);
 
 // Behavioral deviations that are decisions, not parser-level mismatches. These
 // are not tied to a single corpus flow; they are recorded so the support matrix
