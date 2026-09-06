@@ -119,10 +119,12 @@ export async function waitForSelector<Runtime extends SelectorWaitRuntime>(
     await polling.sleepUntilNextPoll();
   }
   if (deadline !== 'capture-stalled' && landmarkMismatch) {
+    // The refusal keeps the poll evidence a plain timeout would carry, including a runner
+    // restart on the final poll: the mismatch is the verdict, not the whole story of the wait.
     throw new AppError(
       'COMMAND_FAILED',
       `wait matched selector ${selectorExpression} but no candidate carried the recorded landmark identity`,
-      { reason: WAIT_LANDMARK_MISMATCH_REASON, ...landmarkMismatch },
+      { reason: WAIT_LANDMARK_MISMATCH_REASON, ...polling.failureEvidence(), ...landmarkMismatch },
     );
   }
   throw waitTimeoutError(`wait timed out for selector: ${selectorExpression}`, polling, deadline);
