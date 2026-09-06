@@ -55,13 +55,13 @@ import {
   resolveSessionName,
 } from './client/client-normalizers.ts';
 import type { AgentDeviceClient, MetroPrepareResult } from './client/client-types.ts';
-import { INTERNAL_COMMANDS } from './command-catalog.ts';
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { buildRequestFlags } from './commands/command-flags.ts';
 import {
   prepareDaemonCommandRequest,
   type DaemonCommandName,
 } from './commands/command-projection.ts';
-import type { CommandResult } from './core/command-descriptor/command-result.ts';
+import type { CommandResult } from '@agent-device/command-registry/command-result';
 import { sendToDaemon } from './daemon/client/daemon-client.ts';
 import { resolveDaemonPaths } from './daemon/config.ts';
 import { prepareMetroRuntime, reloadMetro } from './metro/client-metro.ts';

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { resolveCommandTimeoutPolicy } from '../../core/command-descriptor/registry.ts';
+import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import { listCommandTools } from '../command-tools.ts';
 
 // AS-011: the enforced client request envelopes (timeout-policy, ADR 0008)

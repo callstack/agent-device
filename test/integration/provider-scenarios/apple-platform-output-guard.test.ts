@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import type { AppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import type { AppleSimulatorScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR, PROVIDER_SCENARIO_MACOS } from './fixtures.ts';
 import {
   createProviderIosSimulatorRecordingProcess,

@@ -1,4 +1,4 @@
-import type { CliCommandName } from '../command-catalog.ts';
+import type { CliCommandName } from '@agent-device/command-registry/catalog';
 import { listCommandMetadata } from '../commands/command-metadata.ts';
 import type { CommandSchema } from './types.ts';
 import { getCliCommandOverride, getSchemaOnlyCliCommandSchema } from './command-overrides.ts';

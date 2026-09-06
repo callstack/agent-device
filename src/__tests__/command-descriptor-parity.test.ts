@@ -1,18 +1,21 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { STRUCTURED_BATCH_COMMAND_NAMES } from '../../batch-policy.ts';
+import { STRUCTURED_BATCH_COMMAND_NAMES } from '../core/batch-policy.ts';
 import {
   INTERNAL_COMMANDS,
   listCliCommandNames,
   PUBLIC_COMMANDS,
-} from '../../../command-catalog.ts';
+} from '@agent-device/command-registry/catalog';
 import {
   DAEMON_COMMAND_DESCRIPTORS,
   canRunReplayScopedAction,
   type DaemonCommandDescriptor,
-} from '../../../daemon/daemon-command-registry.ts';
-import type { DaemonRequest } from '../../../daemon/daemon-request.ts';
-import { deriveDaemonCommandDescriptors, deriveStructuredBatchCommandNames } from '../derive.ts';
+} from '../daemon/daemon-command-registry.ts';
+import type { DaemonRequest } from '../daemon/daemon-request.ts';
+import {
+  deriveDaemonCommandDescriptors,
+  deriveStructuredBatchCommandNames,
+} from '@agent-device/command-registry/derive';
 import {
   commandDescriptors,
   listDescriptorCatalogCommandNames,
@@ -22,7 +25,7 @@ import {
   resolveCommandRecordingEffect,
   resolveTargetIdentityVerification,
   RAW_COMMAND_DESCRIPTORS,
-} from '../registry.ts';
+} from '@agent-device/command-registry/registry';
 
 // Function-valued traits cannot be deep-equaled across re-authored closures, so
 // (mirroring daemon-command-registry.test.ts) they are compared by presence and

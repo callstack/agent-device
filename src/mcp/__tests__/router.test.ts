@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers/promises';
 import { test } from 'vitest';
-import { listCliCommandNames } from '../../command-catalog.ts';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { helpTopicIds } from '../../cli-schema/cli-help.ts';
-import { listMcpExposedCommandNames } from '../../core/command-descriptor/registry.ts';
+import { listMcpExposedCommandNames } from '@agent-device/command-registry/registry';
 import { handleMcpMessage } from '../router.ts';
 import {
   HELP_TOOL_NAME,

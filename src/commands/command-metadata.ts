@@ -1,4 +1,4 @@
-import { listMcpExposedCommandNames } from '../core/command-descriptor/registry.ts';
+import { listMcpExposedCommandNames } from '@agent-device/command-registry/registry';
 import type { CommandMetadata } from './command-contract.ts';
 import { listCommandFamilyMetadata, type CommandFamilyCommandName } from './family/registry.ts';
 

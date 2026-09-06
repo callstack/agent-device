@@ -1,7 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonCommandRoute } from '../core/command-descriptor/daemon-command-descriptor.ts';
+import type { DaemonCommandRoute } from '@agent-device/command-registry/daemon-command-descriptor';
 import { getDaemonCommandRoute } from './daemon-command-registry.ts';
 import * as genericRequestHandlerModule from './request-generic-dispatch.ts';
 import type { DaemonCommandContext } from './context.ts';

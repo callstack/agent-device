@@ -23,7 +23,7 @@ import { createRequestExecutionScope } from '../request-execution-scope.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { SessionStore } from '../session-store.ts';
 import { unavailableDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
-import type { DeviceClaimPolicy } from '../../core/command-descriptor/types.ts';
+import type { DeviceClaimPolicy } from '@agent-device/command-registry/types';
 
 const setup = isolatedDeviceClaimStores('agent-device-claim-admission-');
 const localAndroid = localRuntimeOwner('android');

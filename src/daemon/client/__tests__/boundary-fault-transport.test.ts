@@ -3,7 +3,7 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   closeLoopbackServer,

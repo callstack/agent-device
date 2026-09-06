@@ -6,8 +6,8 @@ import { describe, expect, test } from 'vitest';
 import {
   CLI_INJECTED_DAEMON_DISPATCHES,
   type CliInjectedRoute,
-} from '../../../cli/injected-daemon-dispatch.ts';
-import { commandDescriptors } from '../registry.ts';
+} from '../cli/injected-daemon-dispatch.ts';
+import { commandDescriptors } from '@agent-device/command-registry/registry';
 
 /**
  * ADR 0019 §6 coherence gate for delegated platform execution.
@@ -23,8 +23,8 @@ import { commandDescriptors } from '../registry.ts';
  * second way to dispatch.
  */
 
-const CLI_ROOT = fileURLToPath(new URL('../../../cli.ts', import.meta.url));
-const CLI_DIR = fileURLToPath(new URL('../../../cli/', import.meta.url));
+const CLI_ROOT = fileURLToPath(new URL('../cli.ts', import.meta.url));
+const CLI_DIR = fileURLToPath(new URL('../cli', import.meta.url));
 const SEAM_MODULE = path.join(CLI_DIR, 'injected-daemon-dispatch.ts');
 const TRANSPORT = 'sendToDaemon';
 

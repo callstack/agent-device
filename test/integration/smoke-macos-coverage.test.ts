@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
-import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   MACOS_COVERAGE_GAP_ISSUE,
   MACOS_LIVE_SCENARIOS,

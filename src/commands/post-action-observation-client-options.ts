@@ -8,7 +8,7 @@ import type {
   ScrollOptions,
   SettleCommandOptions,
 } from '@agent-device/contracts/client';
-import type { PostActionObservationCommandName } from '../core/command-descriptor/post-action-observation.ts';
+import type { PostActionObservationCommandName } from '@agent-device/command-registry/post-action-observation';
 
 /**
  * Compile-time completeness for the contracts half of the `--settle` surface

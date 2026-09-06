@@ -1,34 +1,34 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import { shutdownTargetUse } from '@agent-device/contracts/platform-runtime-operations';
-import { commandDescriptors } from '../registry.ts';
+import { commandDescriptors } from '@agent-device/command-registry/registry';
 
 const sessionStateSource = readFileSync(
-  new URL('../../../daemon/handlers/session-state.ts', import.meta.url),
+  new URL('../daemon/handlers/session-state.ts', import.meta.url),
   'utf8',
 );
 const sessionCloseSource = readFileSync(
-  new URL('../../../daemon/session-lifecycle/internal/session-close.ts', import.meta.url),
+  new URL('../daemon/session-lifecycle/internal/session-close.ts', import.meta.url),
   'utf8',
 );
 const appleLifecycleSource = readFileSync(
-  new URL('../../../../packages/platform-apple/src/lifecycle.ts', import.meta.url),
+  new URL('../../packages/platform-apple/src/lifecycle.ts', import.meta.url),
   'utf8',
 );
 const androidLifecycleSource = readFileSync(
-  new URL('../../../../packages/platform-android/src/lifecycle.ts', import.meta.url),
+  new URL('../../packages/platform-android/src/lifecycle.ts', import.meta.url),
   'utf8',
 );
 const sharedHostSource = readFileSync(
-  new URL('../../../platform-runtime-device-shutdown-host.ts', import.meta.url),
+  new URL('../platform-runtime-device-shutdown-host.ts', import.meta.url),
   'utf8',
 );
 const appleShutdownSource = readFileSync(
-  new URL('../../../../packages/platform-apple/src/shutdown/runtime.ts', import.meta.url),
+  new URL('../../packages/platform-apple/src/shutdown/runtime.ts', import.meta.url),
   'utf8',
 );
 const androidShutdownSource = readFileSync(
-  new URL('../../../../packages/platform-android/src/shutdown/runtime.ts', import.meta.url),
+  new URL('../../packages/platform-android/src/shutdown/runtime.ts', import.meta.url),
   'utf8',
 );
 

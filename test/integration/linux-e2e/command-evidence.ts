@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 
 /** Commands exercised by the separate Linux/Xvfb command-evidence lane. */
 export const LINUX_COMMAND_EVIDENCE_COMMANDS = [

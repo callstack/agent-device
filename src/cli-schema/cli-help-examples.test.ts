@@ -4,7 +4,7 @@ import type { BatchStep } from '@agent-device/contracts/client';
 import { parseArgs } from '../cli/parser/args.ts';
 import { readCliBatchStepsJson } from '../cli/batch-steps.ts';
 import { buildCommandUsageText, buildUsageText, helpTopicIds } from './cli-help.ts';
-import { listCliCommandNames } from '../command-catalog.ts';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
 import { findCommandMetadata, isCommandName } from '../commands/command-metadata.ts';
 import { readVersion } from '@agent-device/host-kit/version';

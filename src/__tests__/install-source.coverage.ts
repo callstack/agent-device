@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS as C } from '../command-catalog.ts';
+import { PUBLIC_COMMANDS as C } from '@agent-device/command-registry/catalog';
 
 export const ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE = {
   commands: [C.installFromSource],

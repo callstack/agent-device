@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
-import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   WEB_COVERAGE_GAP_ISSUE,
   WEB_PLATFORM_COVERAGE,

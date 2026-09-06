@@ -3,13 +3,13 @@ import {
   type DaemonCommandRoute,
   type SessionlessLeaseAdmissionExemption,
   type SessionCommandKind,
-} from '../core/command-descriptor/daemon-command-descriptor.ts';
-import { deriveDaemonCommandDescriptors } from '../core/command-descriptor/derive.ts';
+} from '@agent-device/command-registry/daemon-command-descriptor';
+import { deriveDaemonCommandDescriptors } from '@agent-device/command-registry/derive';
 import {
   commandDescriptors,
   resolveCommandRecordingEffect,
   resolveCommandDeviceClaimPolicy,
-} from '../core/command-descriptor/registry.ts';
+} from '@agent-device/command-registry/registry';
 import type { RefFrameEffect } from '@agent-device/contracts/replay';
 import type { DaemonRequest } from './daemon-request.ts';
 
@@ -23,7 +23,7 @@ export type DaemonProviderDeviceResolutionIntent =
 
 // Built from the additive command-descriptor registry (ADR-0008, Phase 1 step 2).
 // The hand-authored literal that previously lived here was proven byte-equal to
-// this derived value by `src/core/command-descriptor/__tests__/parity.test.ts` (#906)
+// this derived value by `src/__tests__/command-descriptor-parity.test.ts` (#906)
 // and has been deleted; the daemon now derives its routes/traits from the single
 // source.
 export const DAEMON_COMMAND_DESCRIPTORS: readonly DaemonCommandDescriptor[] =

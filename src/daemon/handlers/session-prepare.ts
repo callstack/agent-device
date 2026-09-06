@@ -1,7 +1,7 @@
 import { prepareAppleRunnerRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { PREPARE_REQUEST_TIMEOUT_MS } from '../../core/command-descriptor/timeout-policy.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { PREPARE_REQUEST_TIMEOUT_MS } from '@agent-device/command-registry/timeout-policy';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { resolveRunnerLogicalLeaseContext } from '../lease-context.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';

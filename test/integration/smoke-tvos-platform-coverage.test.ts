@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { TVOS_SIMULATOR } from '../../src/__tests__/test-utils/device-fixtures.ts';
-import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { createPlatformRuntimeGateway } from '../../src/platform-runtime.ts';
 import { gestureRefusalMessage } from '@agent-device/contracts/gesture-admission';
 import {

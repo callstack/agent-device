@@ -87,10 +87,10 @@ function writeSnippetProgram(snippets: string[]): string {
         noUnusedParameters: false,
         paths: resolveExamplesSdkPaths(),
       },
-      // src/global.d.ts declares build-time ambient globals (e.g. __OWNER_FILES__)
-      // that src/ files reference; examples/sdk/tsconfig.json includes it for the
-      // same reason.
-      include: ['*.ts', path.join(repoRoot, 'src/global.d.ts')],
+      // packages/command-registry/src/global.d.ts declares build-time ambient globals
+      // (e.g. __OWNER_FILES__) that the descriptor registry references;
+      // examples/sdk/tsconfig.json includes it for the same reason.
+      include: ['*.ts', path.join(repoRoot, 'packages/command-registry/src/global.d.ts')],
     }),
   );
   snippets.forEach((code, index) => {

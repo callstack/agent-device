@@ -1,13 +1,16 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   commandDescriptors,
   resolveCommandPostActionObservationSupport,
   resolveCommandTimeoutPolicy,
-} from '../registry.ts';
-import { DEFAULT_TIMEOUT_POLICY, resolveCommandRequestTimeoutMs } from '../timeout-policy.ts';
-import { DEFAULT_STABLE_TIMEOUT_MS } from '../../../commands/interaction/runtime/stable-capture.ts';
+} from '@agent-device/command-registry/registry';
+import {
+  DEFAULT_TIMEOUT_POLICY,
+  resolveCommandRequestTimeoutMs,
+} from '@agent-device/command-registry/timeout-policy';
+import { DEFAULT_STABLE_TIMEOUT_MS } from '../commands/interaction/runtime/stable-capture.ts';
 
 function settleObservationCommandNames(): string[] {
   return commandDescriptors

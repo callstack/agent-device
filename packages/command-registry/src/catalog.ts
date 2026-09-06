@@ -3,8 +3,8 @@ import {
   type DescriptorCatalogRecord,
   type DescriptorCliCommandName,
   type DescriptorCommandNameForCatalogGroup,
-} from './core/command-descriptor/registry.ts';
-import type { CommandCatalogGroup } from './core/command-descriptor/types.ts';
+} from './registry.ts';
+import type { CommandCatalogGroup } from './types.ts';
 
 export const PUBLIC_COMMANDS = deriveCommandCatalog('public');
 export const INTERNAL_COMMANDS = deriveCommandCatalog('internal');

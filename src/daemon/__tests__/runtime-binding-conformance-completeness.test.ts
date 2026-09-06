@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import {
   commandDescriptors,
   commandRuntimeUseRequirements,
-} from '../../core/command-descriptor/registry.ts';
+} from '@agent-device/command-registry/registry';
 import {
   conformedRuntimeBindings,
   refusedRuntimeOperation,

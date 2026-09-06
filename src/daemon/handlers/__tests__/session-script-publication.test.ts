@@ -2,7 +2,7 @@ import { isSessionRecording } from '../../session-script-publication-capability.
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test } from 'vitest';
-import { INTERNAL_COMMANDS } from '../../../command-catalog.ts';
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   makeIosSession,
   makeAuthoringSession,

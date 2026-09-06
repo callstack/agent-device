@@ -11,7 +11,7 @@ import {
   type FlagKey,
 } from '../../cli-schema/command-schema.ts';
 import { isFlagSupportedForCommand } from '../../cli-schema/option-schema.ts';
-import { isKnownCliCommandName } from '../../command-catalog.ts';
+import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 import {
   cliCommandAlias,
   normalizeCliCommandAlias,

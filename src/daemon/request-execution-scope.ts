@@ -59,7 +59,7 @@ import {
 } from './request-runtime-binding.ts';
 import { createDeviceClaimAdmission, type DeviceClaimAdmission } from './device-claim-admission.ts';
 import { createOwnerScopedDeviceClaimReconciler } from './device-claim-owner-recovery.ts';
-import { resolveCommandDeviceClaimPolicy } from '../core/command-descriptor/registry.ts';
+import { resolveCommandDeviceClaimPolicy } from '@agent-device/command-registry/registry';
 import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps

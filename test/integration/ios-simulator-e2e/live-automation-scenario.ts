@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { DEFAULT_ALERT_TIMEOUT_MS } from '@agent-device/contracts/alert-contract';
 
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   assertElementText,
   assertElementTextAfterScrolling,

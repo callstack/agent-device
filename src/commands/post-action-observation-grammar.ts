@@ -1,9 +1,9 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import type { PostActionObservationSupportFor } from '../core/command-descriptor/post-action-observation.ts';
+import type { PostActionObservationSupportFor } from '@agent-device/command-registry/post-action-observation';
 import {
   commandSupportsSettleObservation,
   commandSupportsVerifyEvidence,
-} from '../core/command-descriptor/registry.ts';
+} from '@agent-device/command-registry/registry';
 import { settleInputFromFlags } from './cli-grammar/common.ts';
 import { SETTLE_FLAGS } from './cli-grammar/flag-groups.ts';
 import type { FlagKey } from './cli-grammar/flag-types.ts';

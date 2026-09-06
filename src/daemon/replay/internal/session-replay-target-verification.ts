@@ -28,8 +28,8 @@ import {
   REPLAY_TARGET_GUARD_MISMATCH_REASON,
   WAIT_LANDMARK_MISMATCH_REASON,
 } from '@agent-device/contracts/replay';
-import { resolveTargetIdentityVerification } from '../../../core/command-descriptor/registry.ts';
-import { parseWaitPositionals } from '../../../core/wait-positionals.ts';
+import { resolveTargetIdentityVerification } from '@agent-device/command-registry/registry';
+import { parseWaitPositionals } from '@agent-device/command-registry/wait-positionals';
 import type { DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
 import type { ReplayResumeStamper } from '../../session-replay-coordinator.ts';

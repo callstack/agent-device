@@ -4,14 +4,14 @@ import { AppError, type NormalizedError } from '@agent-device/kernel/errors';
 import { createAgentDeviceClient } from '../agent-device-client.ts';
 import type { AgentDeviceClient } from '../client/client-types.ts';
 import type { JsonSchema } from '../commands/command-contract.ts';
-import { resolveCommandFrameworkTier } from '../core/command-descriptor/registry.ts';
+import { resolveCommandFrameworkTier } from '@agent-device/command-registry/registry';
 import { createCommandToolExecutor, listCommandTools } from '../mcp/command-tools.ts';
 import { MCP_TOOL_CONFIG_KEYS } from '../mcp/tool-control-fields.ts';
 import { formatToolErrorText } from '../mcp/tool-error.ts';
 
 /**
  * `'core'` — the curated perceive/act loop (see the `frameworkTier` pinning
- * test in `src/core/command-descriptor/__tests__/parity.test.ts`). `'all'`
+ * test in `src/__tests__/command-descriptor-parity.test.ts`). `'all'`
  * exposes every MCP-exposed command, same set the MCP server surfaces.
  */
 export type AgentDeviceToolSet = 'core' | 'all';

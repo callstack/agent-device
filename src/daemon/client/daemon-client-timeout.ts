@@ -3,8 +3,8 @@ import { runCmdSync } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { resolveCommandTimeoutPolicy } from '../../core/command-descriptor/registry.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import type { DaemonPaths } from '../config.ts';
 import type { PlatformSelector } from '@agent-device/kernel/device';
 import {

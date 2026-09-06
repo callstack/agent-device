@@ -8,7 +8,7 @@ vi.mock('../handlers/session.ts', () => ({
   handleSessionCommands: handleSessionCommandsMock,
 }));
 
-import { INTERNAL_COMMANDS } from '../../command-catalog.ts';
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { runRequestHandlerChain } from '../request-handler-chain.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
