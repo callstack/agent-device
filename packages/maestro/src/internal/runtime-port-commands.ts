@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { pointInsideRect, stripUndefined } from './shared.ts';
+import { MAESTRO_PERMISSION_VALUES } from './program-ir-values.ts';
 import {
   maestroScrollDurationFromSpeed,
   MAESTRO_COMPATIBILITY_PRESETS,
@@ -177,21 +178,11 @@ function launchAppInput(command: MaestroCommandOf<'launchApp'>, request: Maestro
   });
 }
 
-const RESOLVED_PERMISSION_VALUES = new Set([
-  'allow',
-  'deny',
-  'unset',
-  'always',
-  'inuse',
-  'never',
-  'limited',
-]);
-
 function resolveSetPermissions(permissions: Readonly<Record<string, string>>) {
   const resolved: Record<string, string> = {};
   for (const [name, value] of Object.entries(permissions)) {
     const normalized = value.toLowerCase();
-    if (!RESOLVED_PERMISSION_VALUES.has(normalized)) {
+    if (!MAESTRO_PERMISSION_VALUES.has(normalized)) {
       throw new AppError(
         'INVALID_ARGS',
         `Maestro setPermissions.permissions.${name} expects allow|deny|unset (plus always|inuse|never|limited for location/photos); received "${value}".`,

@@ -172,6 +172,8 @@ export async function handleSettingsCommand(
     return errorResponse('INVALID_ARGS', getUnsupportedMacOsSettingMessage(setting));
   }
 
+  // Explicit positional wins; the Maestro adapter's daemon-internal
+  // settingsAppBundleId overrides the session app for cross-app targeting.
   const appBundleId =
     parsed.appBundleId ?? req.internal?.settingsAppBundleId ?? session?.appBundleId;
   if (setting === 'clear-app-state' && !appBundleId) {

@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { MAESTRO_PERMISSION_VALUES } from '@agent-device/maestro';
 
 export type MaestroPermissionMutation = {
   readonly state: 'grant' | 'deny' | 'reset';
@@ -7,18 +8,28 @@ export type MaestroPermissionMutation = {
 };
 
 /**
- * Canonical Maestro names each `settings permission` backend can serve. Names
- * outside these lists (bluetooth/phone/sms/storage/location/calendar on
- * Android; speech/usertracking/homekit on iOS; health everywhere; custom
- * Android IDs) fail loudly below instead of being silently skipped —
- * extending the platform backends is a separate, device-verified change.
- *
- * Explicit entries keep the full servable set so the backend stays the owner
- * of the verdict: a name the runtime cannot serve (e.g. iOS camera on runtimes
- * whose `simctl privacy help` lists no camera service) fails loudly there.
+ * Canonical Maestro names each `settings permission` backend serves
+ * individually. `all` is not listed: it travels as one `settings permission`
+ * call and each backend resolves it (iOS `simctl privacy … all`, Android's
+ * declared-permission intersection). Names outside these lists (iOS
+ * speech/usertracking/homekit/health; Android custom ids) fail loudly below
+ * instead of being silently skipped.
  */
 const EXPANDABLE_PERMISSIONS = {
-  android: ['camera', 'contacts', 'microphone', 'notifications', 'photos'],
+  android: [
+    'bluetooth',
+    'calendar',
+    'camera',
+    'contacts',
+    'location',
+    'media-library',
+    'microphone',
+    'notifications',
+    'phone',
+    'photos',
+    'sms',
+    'storage',
+  ],
   ios: [
     'calendar',
     'camera',
@@ -34,25 +45,11 @@ const EXPANDABLE_PERMISSIONS = {
   ],
 } as const;
 
-/**
- * Names excluded from `all` expansion. `all` must succeed on the runtimes we
- * ship, so it covers only the probe-supported subset: this host's
- * `simctl privacy help` (the same source `getSimctlPrivacyServices` parses in
- * the iOS backend) lists neither camera nor notifications, and the iOS backend
- * rejects grant/deny for notifications with UNSUPPORTED_OPERATION — keeping
- * either in `all` would stop the sequential mutations partway through.
- * Explicit entries for those names still reach the backend above.
- */
-const ALL_EXCLUDED_PERMISSIONS: Readonly<Record<'ios' | 'android', readonly string[]>> = {
-  android: [],
-  ios: ['camera', 'notifications'],
-};
-
 /** Per-platform hint for names the backends cannot serve yet. */
 const UNSUPPORTED_HINTS = {
   android:
-    'Supported: camera, contacts, microphone, notifications, photos (via all or individually). Other names need platform-backend support first.',
-  ios: 'Supported: calendar, camera, contacts, location, media-library, microphone, motion, notifications, photos, reminders, siri (via all or individually). Granular iOS values: location always|inuse|never, photos limited.',
+    'Supported: all, bluetooth, calendar, camera, contacts, location, media-library, microphone, notifications, phone, photos, sms, storage. Android custom permission ids are attempted through all, not individually.',
+  ios: 'Supported: all, calendar, camera, contacts, location, media-library, microphone, motion, notifications, photos, reminders, siri. Granular iOS values: location always|inuse|never, photos limited.',
 } as const;
 
 /** Non-canonical spellings accepted alongside the lists above. */
@@ -87,9 +84,9 @@ const GRANULAR_HINTS: Record<string, string> = {
 
 /**
  * Expand a Maestro `setPermissions` map into ordered `settings permission`
- * mutations. `all` expands to the platform's servable subset first so specific
- * entries always override it regardless of authored order. Values arrive
- * lowercased from the Maestro runtime layer; anything else is refused.
+ * mutations. `all` travels as one backend call first so specific entries
+ * always override it regardless of authored order. Values arrive lowercased
+ * from the Maestro runtime layer; anything else is refused.
  * The expansion is fully validated here, so callers must map before issuing
  * any mutation — a rejected map changes nothing.
  */
@@ -101,32 +98,39 @@ export function mapMaestroSetPermissions(
   if (entries.length === 0) {
     throw new AppError('INVALID_ARGS', 'Maestro setPermissions requires at least one permission.');
   }
-  const expandable = new Set<string>(EXPANDABLE_PERMISSIONS[platform]);
-  const excluded = new Set<string>(ALL_EXCLUDED_PERMISSIONS[platform]);
-  const allExpansion = EXPANDABLE_PERMISSIONS[platform].filter((name) => !excluded.has(name));
+  const mutations: MaestroPermissionMutation[] = [];
   const specific = new Map<string, string>();
-  let allValue: string | undefined;
   for (const [name, value] of entries) {
     if (name.toLowerCase() === 'all') {
-      allValue = value;
+      mutations.push(mapMaestroAll(value));
     } else {
       specific.set(canonicalName(name), value);
     }
   }
-  const merged: Array<[string, string]> =
-    allValue === undefined
-      ? [...specific]
-      : [...allExpansion.map((name): [string, string] => [name, allValue]), ...specific];
-  return merged.map(([name, value]) => mapMaestroPermission(name, value, platform, expandable));
+  for (const [name, value] of specific) {
+    mutations.push(mapMaestroPermission(name, value, platform));
+  }
+  return mutations;
+}
+
+/** `all` accepts only the plain values; granular ones name no single backend state. */
+function mapMaestroAll(value: string): MaestroPermissionMutation {
+  const state = PLAIN_VALUE_STATES[value as keyof typeof PLAIN_VALUE_STATES];
+  if (!MAESTRO_PERMISSION_VALUES.has(value) || !state) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Permission 'all' can be set to 'allow', 'deny' or 'unset', not '${value}'.`,
+    );
+  }
+  return { state, permission: 'all' };
 }
 
 function mapMaestroPermission(
   name: string,
   value: string,
   platform: 'ios' | 'android',
-  expandable: ReadonlySet<string>,
 ): MaestroPermissionMutation {
-  if (!expandable.has(name)) {
+  if (!new Set<string>(EXPANDABLE_PERMISSIONS[platform]).has(name)) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       `Maestro permission "${name}" is not supported on ${platform} yet.`,

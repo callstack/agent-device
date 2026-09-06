@@ -59,6 +59,7 @@ import {
   readSequenceItems,
   sourceAt,
   type MaestroProgramParseContext,
+  MAESTRO_PERMISSION_VALUES,
   VARIABLE_PATTERN,
 } from './program-ir-values.ts';
 
@@ -183,12 +184,6 @@ function parseLaunchApp(
   const permissions = readOptionalEntry(entries, 'permissions', (entry) =>
     readSetPermissionsMap(entry, context, 'launchApp'),
   );
-  if (permissions && Object.keys(permissions).length === 0)
-    invalidAt(
-      'Maestro launchApp.permissions requires at least one permission.',
-      commandNode,
-      context,
-    );
   const args = readOptionalEntry(entries, 'arguments', (entry) =>
     parseLaunchArguments(entry, 'launchApp.arguments', context),
   );
@@ -460,16 +455,6 @@ function parseStopApp(
   return { kind: 'stopApp', source, appId: readRequiredString(value, 'stopApp', context) };
 }
 
-const MAESTRO_PERMISSION_VALUES = new Set([
-  'allow',
-  'deny',
-  'unset',
-  'always',
-  'inuse',
-  'never',
-  'limited',
-]);
-
 function parseSetPermissions(
   value: Node | null,
   commandNode: Node,
@@ -484,8 +469,6 @@ function parseSetPermissions(
     readOptionalString(entry, 'setPermissions.appId', context),
   );
   const permissions = readSetPermissionsMap(entryValue(entries, 'permissions'), context);
-  if (Object.keys(permissions).length === 0)
-    invalidAt('Maestro setPermissions requires at least one permission.', commandNode, context);
   const options = readOptionalCommandOption(entries, 'setPermissions', context);
   const label = readMaestroCommandLabel(entries, 'setPermissions', context);
   return stripUndefined({
@@ -504,14 +487,12 @@ function readSetPermissionsMap(
   owner = 'setPermissions',
 ): Record<string, string> {
   const entries = readMapEntries(node, `${owner}.permissions`, context);
+  if (entries.length === 0)
+    invalidAt(`Maestro ${owner}.permissions requires at least one permission.`, node, context);
   const permissions: Record<string, string> = {};
   for (const entry of entries) {
-    if (entry.key in permissions)
-      invalidAt(
-        `Maestro ${owner}.permissions contains duplicate permission "${entry.key}".`,
-        entry.keyNode,
-        context,
-      );
+    // No duplicate-key check: the YAML layer already rejects duplicate mapping
+    // keys, and `in`-style checks misfire on prototype names like `constructor`.
     permissions[entry.key] = readPermissionValue(entry, context, owner);
   }
   return permissions;

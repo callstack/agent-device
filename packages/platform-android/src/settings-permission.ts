@@ -4,9 +4,11 @@ import { parsePermissionAction, parsePermissionTarget } from '@agent-device/cont
 import type { SettingOptions } from '@agent-device/contracts/settings';
 import { runAndroidAdb } from './adb.ts';
 import {
+  parseAndroidPackagePermissions,
   readAndroidCurrentUserId,
   readAndroidRuntimePermissionGrants,
   type AndroidPriorGrantState,
+  type AndroidRuntimePermissionGrants,
 } from './permission-grant-state.ts';
 
 /**
@@ -34,6 +36,43 @@ export function androidRevokedPermissionWarning(
 }
 
 type AndroidPermissionTarget = ReturnType<typeof parseAndroidPermissionTarget>;
+
+/**
+ * Canonical Maestro/Android names to the `pm` permission ids they fan out to.
+ * Mirrors upstream Maestro's `translatePermissionName`; every id is applied
+ * with the same `pm grant|revoke` mechanism, so the table needs no per-entry
+ * device verification — only the mechanism does, and it is covered on both
+ * paths below. `photos` (SDK-dependent probing) and `notifications` (appops)
+ * keep their dedicated kinds; `all` resolves against the package instead.
+ */
+const ANDROID_PERMISSION_TABLE: Readonly<Record<string, readonly string[]>> = {
+  bluetooth: ['android.permission.BLUETOOTH_CONNECT', 'android.permission.BLUETOOTH_SCAN'],
+  calendar: ['android.permission.WRITE_CALENDAR', 'android.permission.READ_CALENDAR'],
+  camera: ['android.permission.CAMERA'],
+  contacts: ['android.permission.READ_CONTACTS', 'android.permission.WRITE_CONTACTS'],
+  location: [
+    'android.permission.ACCESS_FINE_LOCATION',
+    'android.permission.ACCESS_COARSE_LOCATION',
+  ],
+  'media-library': [
+    'android.permission.WRITE_EXTERNAL_STORAGE',
+    'android.permission.READ_EXTERNAL_STORAGE',
+    'android.permission.READ_MEDIA_AUDIO',
+    'android.permission.READ_MEDIA_IMAGES',
+    'android.permission.READ_MEDIA_VIDEO',
+  ],
+  microphone: ['android.permission.RECORD_AUDIO'],
+  phone: ['android.permission.CALL_PHONE', 'android.permission.ANSWER_PHONE_CALLS'],
+  sms: [
+    'android.permission.READ_SMS',
+    'android.permission.RECEIVE_SMS',
+    'android.permission.SEND_SMS',
+  ],
+  storage: [
+    'android.permission.WRITE_EXTERNAL_STORAGE',
+    'android.permission.READ_EXTERNAL_STORAGE',
+  ],
+};
 
 /**
  * `--user <id>` for every permission mutation, resolved once so the state read and the mutation
@@ -74,6 +113,9 @@ export async function setAndroidPermission(
   const target = parseAndroidPermissionTarget(options?.permissionTarget, options?.permissionMode);
   const userId = await requireAndroidPermissionUser(device);
   const userArgs: AndroidUserArgs = ['--user', String(userId)];
+  if (target.kind === 'all') {
+    return await setAllAndroidPermissions(device, appPackage, action, userId, userArgs);
+  }
   if (action === 'grant') {
     await grantAndroidPermission(device, appPackage, target, userArgs);
     return;
@@ -81,14 +123,222 @@ export async function setAndroidPermission(
   // Read before the revoke — afterwards every permission reads as not granted — but resolved
   // after it, because `photos` only learns which permission it revoked by probing the device.
   const grants = await readAndroidRuntimePermissionGrants(device, appPackage, userId);
-  const permission = await revokeAndroidPermission(device, appPackage, action, target, userArgs);
-  const priorGrantState: AndroidPriorGrantState = grants?.get(permission) ?? 'unknown';
-  const warning = androidRevokedPermissionWarning(appPackage, permission, priorGrantState);
+  const revoked = await revokeAndroidPermission(device, appPackage, action, target, userArgs);
+  const states = revoked.map((permission) => grants?.get(permission) ?? 'unknown');
+  const priorGrantState: AndroidPriorGrantState = states.includes('granted')
+    ? 'granted'
+    : states.includes('unknown')
+      ? 'unknown'
+      : 'not_granted';
+  const warnings = revoked.flatMap((permission, index) => {
+    const warning = androidRevokedPermissionWarning(appPackage, permission, states[index]!);
+    return warning ? [warning] : [];
+  });
   return {
-    permission,
+    permission: revoked.join(','),
     priorGrantState,
-    ...(warning ? { warnings: [warning] } : {}),
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
+}
+
+/**
+ * `all`: every permission the package declares, resolved from one `dumpsys
+ * package` read before anything is mutated. Declared-but-not-changeable ids
+ * (install permissions like INTERNET, special ids like MANAGE_EXTERNAL_STORAGE,
+ * custom ids the runtime rejects) are skipped with a reason instead of
+ * stopping the sequence — while an explicit target for the same id still
+ * fails loudly. Anything the dump does not list is never attempted, which is
+ * what keeps `pm` from throwing "has not requested permission" partway.
+ */
+async function setAllAndroidPermissions(
+  device: DeviceInfo,
+  appPackage: string,
+  action: 'grant' | 'deny' | 'reset',
+  userId: number,
+  userArgs: AndroidUserArgs,
+): Promise<Record<string, unknown>> {
+  const dump = await runAndroidAdb(device, ['shell', 'dumpsys', 'package', appPackage], {
+    allowFailure: true,
+  });
+  if (dump.exitCode !== 0) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Could not read declared permissions for ${appPackage}, so no permission was changed.`,
+      { appPackage, stdout: dump.stdout, stderr: dump.stderr, exitCode: dump.exitCode },
+    );
+  }
+  const { requested, grants: revokedGrants } = parseAndroidPackagePermissions(dump.stdout, userId);
+  if (requested === undefined) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Could not find declared permissions for ${appPackage}, so no permission was changed.`,
+      { appPackage },
+    );
+  }
+  const grants = action === 'grant' ? undefined : revokedGrants;
+  const applied: string[] = [];
+  const warnings: string[] = [];
+  for (const unit of allPermissionUnits(requested)) {
+    await applyAllPermissionUnit(
+      { device, appPackage, action, userArgs, grants, applied, warnings },
+      unit,
+    );
+  }
+  return {
+    permission: 'all',
+    applied,
+    ...(warnings.length > 0 ? { warnings } : {}),
+  };
+}
+
+type AllUnitContext = {
+  device: DeviceInfo;
+  appPackage: string;
+  action: 'grant' | 'deny' | 'reset';
+  userArgs: AndroidUserArgs;
+  grants: AndroidRuntimePermissionGrants | undefined;
+  applied: string[];
+  warnings: string[];
+};
+
+/** One declared-permission unit: strict appops for notifications, best-effort pm otherwise. */
+async function applyAllPermissionUnit(ctx: AllUnitContext, unit: AllPermissionUnit): Promise<void> {
+  if (unit.kind === 'notification') return await applyAllNotificationsUnit(ctx);
+  if (unit.kind === 'photos') return await applyAllPhotosUnit(ctx);
+  return await applyAllPmUnit(ctx, unit.value);
+}
+
+async function applyAllNotificationsUnit(ctx: AllUnitContext): Promise<void> {
+  const { device, appPackage, action, userArgs, grants, applied, warnings } = ctx;
+  await setAndroidNotificationPermission(
+    device,
+    appPackage,
+    action,
+    { appOps: 'POST_NOTIFICATION', permission: 'android.permission.POST_NOTIFICATIONS' },
+    userArgs,
+  );
+  applied.push('android.permission.POST_NOTIFICATIONS');
+  warnIfRevoked(warnings, grants, appPackage, 'android.permission.POST_NOTIFICATIONS');
+}
+
+async function applyAllPhotosUnit(ctx: AllUnitContext): Promise<void> {
+  const { device, appPackage, action, userArgs, warnings } = ctx;
+  const resolved = await tryPhotosUnit(
+    device,
+    appPackage,
+    action === 'grant' ? 'grant' : 'revoke',
+    userArgs,
+  );
+  if (resolved === undefined) {
+    warnings.push(
+      `Skipped Android photos permission for ${appPackage}: device refused both media candidates.`,
+    );
+    return;
+  }
+  await finishAllUnit(ctx, resolved);
+}
+
+async function applyAllPmUnit(ctx: AllUnitContext, permission: string): Promise<void> {
+  const { device, appPackage, action, userArgs, warnings } = ctx;
+  const attempt = await tryPmUnit(
+    device,
+    action === 'grant' ? 'grant' : 'revoke',
+    userArgs,
+    appPackage,
+    permission,
+  );
+  if (!attempt.ok) {
+    warnings.push(`Skipped ${permission} for ${appPackage}: ${attempt.reason}`);
+    return;
+  }
+  await finishAllUnit(ctx, permission);
+}
+
+/** Record a landed mutation: reset its flags when asked, then warn if it may have killed the app. */
+async function finishAllUnit(ctx: AllUnitContext, permission: string): Promise<void> {
+  const { device, appPackage, action, userArgs, grants, applied, warnings } = ctx;
+  applied.push(permission);
+  if (action === 'reset')
+    await clearAndroidPermissionFlags(device, appPackage, permission, userArgs);
+  if (action !== 'grant') warnIfRevoked(warnings, grants, appPackage, permission);
+}
+
+type AllPermissionUnit =
+  | { kind: 'photos' }
+  | { kind: 'notification' }
+  | { kind: 'pm'; value: string };
+
+/** Collapse declared ids into mutation units: one photos probe, one appops path, direct pm otherwise. */
+function allPermissionUnits(requested: readonly string[]): AllPermissionUnit[] {
+  const units: AllPermissionUnit[] = [];
+  let photosQueued = false;
+  for (const id of requested) {
+    if (id === 'android.permission.POST_NOTIFICATIONS') units.push({ kind: 'notification' });
+    else if (
+      id === 'android.permission.READ_MEDIA_IMAGES' ||
+      id === 'android.permission.READ_EXTERNAL_STORAGE'
+    ) {
+      if (!photosQueued) {
+        photosQueued = true;
+        units.push({ kind: 'photos' });
+      }
+    } else units.push({ kind: 'pm', value: id });
+  }
+  return units;
+}
+
+function warnIfRevoked(
+  warnings: string[],
+  grants: AndroidRuntimePermissionGrants | undefined,
+  appPackage: string,
+  permission: string,
+): void {
+  const warning = androidRevokedPermissionWarning(
+    appPackage,
+    permission,
+    grants?.get(permission) ?? 'unknown',
+  );
+  if (warning) warnings.push(warning);
+}
+
+async function tryPmUnit(
+  device: DeviceInfo,
+  pmAction: 'grant' | 'revoke',
+  userArgs: AndroidUserArgs,
+  appPackage: string,
+  permission: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const result = await runAndroidAdb(
+    device,
+    ['shell', 'pm', pmAction, ...userArgs, appPackage, permission],
+    { allowFailure: true },
+  );
+  if (result.exitCode === 0) return { ok: true };
+  return { ok: false, reason: firstStderrLine(result.stderr) };
+}
+
+async function tryPhotosUnit(
+  device: DeviceInfo,
+  appPackage: string,
+  pmAction: 'grant' | 'revoke',
+  userArgs: AndroidUserArgs,
+): Promise<string | undefined> {
+  try {
+    return await setAndroidPhotoPermission(device, appPackage, pmAction, userArgs);
+  } catch {
+    return undefined;
+  }
+}
+
+function firstStderrLine(stderr: string): string {
+  const lines = stderr
+    .split('\n')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  const first = lines[0] ?? 'unknown device error';
+  // adb wraps the cause onto the next line ("Exception occurred ...:\njava.lang...").
+  const reason = first.endsWith(':') && lines[1] ? `${first} ${lines[1]}` : first;
+  return reason.slice(0, 200);
 }
 
 async function grantAndroidPermission(
@@ -99,62 +349,82 @@ async function grantAndroidPermission(
 ): Promise<void> {
   if (target.kind === 'notifications') {
     await setAndroidNotificationPermission(device, appPackage, 'grant', target, userArgs);
-  } else if (target.type === 'photos') {
+  } else if (target.kind === 'photos') {
     await setAndroidPhotoPermission(device, appPackage, 'grant', userArgs);
+  } else if (target.kind === 'pm') {
+    for (const value of target.values) {
+      await runAndroidAdb(device, ['shell', 'pm', 'grant', ...userArgs, appPackage, value]);
+    }
+  } else if (target.kind === 'all') {
+    throw new Error('Unhandled Android permission target: all is resolved by the caller.');
   } else {
-    await runAndroidAdb(device, ['shell', 'pm', 'grant', ...userArgs, appPackage, target.value]);
+    const exhaustive: never = target;
+    throw new Error(`Unhandled Android permission target: ${JSON.stringify(exhaustive)}`);
   }
 }
 
-/** Revokes (and for `reset`, clears the flags of) the target; returns the permission revoked. */
+/** Revokes (and for `reset`, clears the flags of) the target; returns the permissions revoked. */
 async function revokeAndroidPermission(
   device: DeviceInfo,
   appPackage: string,
   action: 'deny' | 'reset',
   target: AndroidPermissionTarget,
   userArgs: AndroidUserArgs,
-): Promise<string> {
+): Promise<string[]> {
   if (target.kind === 'notifications') {
     await setAndroidNotificationPermission(device, appPackage, action, target, userArgs);
-    return target.permission;
+    return [target.permission];
   }
-  let permission: string;
-  if (target.type === 'photos') {
-    permission = await setAndroidPhotoPermission(device, appPackage, 'revoke', userArgs);
-  } else {
-    permission = target.value;
-    await runAndroidAdb(device, ['shell', 'pm', 'revoke', ...userArgs, appPackage, permission]);
+  if (target.kind === 'photos') {
+    const resolved = await setAndroidPhotoPermission(device, appPackage, 'revoke', userArgs);
+    if (action === 'reset') {
+      await clearAndroidPermissionFlags(device, appPackage, resolved, userArgs);
+    }
+    return [resolved];
   }
-  if (action === 'reset') {
-    await clearAndroidPermissionFlags(device, appPackage, permission, userArgs);
+  if (target.kind === 'pm') {
+    for (const value of target.values) {
+      await runAndroidAdb(device, ['shell', 'pm', 'revoke', ...userArgs, appPackage, value]);
+    }
+    if (action === 'reset') {
+      for (const value of target.values) {
+        await clearAndroidPermissionFlags(device, appPackage, value, userArgs);
+      }
+    }
+    return [...target.values];
   }
-  return permission;
+  if (target.kind === 'all') {
+    throw new Error('Unhandled Android permission target: all is resolved by the caller.');
+  }
+  const exhaustive: never = target;
+  throw new Error(`Unhandled Android permission target: ${JSON.stringify(exhaustive)}`);
 }
 
 function parseAndroidPermissionTarget(
   permissionTarget: string | undefined,
   permissionMode: string | undefined,
 ):
-  | { kind: 'pm'; value: string; type: 'camera' | 'microphone' | 'photos' | 'contacts' }
-  | { kind: 'notifications'; appOps: string; permission: string } {
+  | { kind: 'pm'; values: readonly string[] }
+  | { kind: 'photos' }
+  | { kind: 'notifications'; appOps: string; permission: string }
+  | { kind: 'all' } {
   const normalized = parsePermissionTarget(permissionTarget);
+  if (normalized === 'all') {
+    if (permissionMode?.trim()) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `Permission mode is only supported for photos. Received: ${permissionMode}.`,
+      );
+    }
+    return { kind: 'all' };
+  }
   if (permissionMode?.trim()) {
     throw new AppError(
       'INVALID_ARGS',
       `Permission mode is only supported for photos. Received: ${permissionMode}.`,
     );
   }
-  if (normalized === 'camera')
-    return { kind: 'pm', value: 'android.permission.CAMERA', type: 'camera' };
-  if (normalized === 'microphone') {
-    return { kind: 'pm', value: 'android.permission.RECORD_AUDIO', type: 'microphone' };
-  }
-  if (normalized === 'photos') {
-    return { kind: 'pm', value: 'android.permission.READ_MEDIA_IMAGES', type: 'photos' };
-  }
-  if (normalized === 'contacts') {
-    return { kind: 'pm', value: 'android.permission.READ_CONTACTS', type: 'contacts' };
-  }
+  if (normalized === 'photos') return { kind: 'photos' };
   if (normalized === 'notifications') {
     return {
       kind: 'notifications',
@@ -162,9 +432,12 @@ function parseAndroidPermissionTarget(
       permission: 'android.permission.POST_NOTIFICATIONS',
     };
   }
+  const values = ANDROID_PERMISSION_TABLE[normalized];
+  if (values) return { kind: 'pm', values };
   throw new AppError(
     'INVALID_ARGS',
-    `Unsupported permission target on Android: ${permissionTarget}. Use camera|microphone|photos|contacts|notifications.`,
+    `Unsupported permission target on Android: ${permissionTarget}. Use all|bluetooth|calendar|camera|contacts|location|media-library|microphone|notifications|phone|photos|sms|storage.`,
+    { hint: 'Android custom permission ids are attempted through all, not individually.' },
   );
 }
 

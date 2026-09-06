@@ -414,6 +414,7 @@ function parseIosPermissionTarget(
       `Permission mode is only supported for photos. Received: ${permissionMode}.`,
     );
   }
+  if (normalized === 'all') return 'all';
   if (normalized === 'camera') return 'camera';
   if (normalized === 'microphone') return 'microphone';
   if (normalized === 'contacts') return 'contacts';
@@ -434,7 +435,7 @@ function parseIosPermissionTarget(
   }
   throw new AppError(
     'INVALID_ARGS',
-    `Unsupported permission target: ${permissionTarget}. Use camera|microphone|photos|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri.`,
+    `Unsupported permission target: ${permissionTarget}. Use all|camera|microphone|photos|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri.`,
   );
 }
 

@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { expect, test } from 'vitest';
 import type { DaemonRequest } from '../../../daemon-request.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
@@ -15,7 +16,7 @@ function makePort(requests: DaemonRequest[], platform: 'ios' | 'android') {
   });
 }
 
-test('setPermissions fans out to one settings call per permission', async () => {
+test('setPermissions sends all as one backend call with specifics after it', async () => {
   const requests: DaemonRequest[] = [];
   const port = makePort(requests, 'android');
 
@@ -31,25 +32,67 @@ test('setPermissions fans out to one settings call per permission', async () => 
     invalidateObservation() {},
   });
 
-  expect(requests.map(({ command }) => command)).toEqual([
-    'settings',
-    'settings',
-    'settings',
-    'settings',
-    'settings',
-    'settings',
-  ]);
+  expect(requests.map(({ command }) => command)).toEqual(['settings', 'settings']);
   expect(requests.map(({ positionals }) => positionals)).toEqual([
-    ['permission', 'deny', 'camera'],
-    ['permission', 'deny', 'contacts'],
-    ['permission', 'deny', 'microphone'],
-    ['permission', 'deny', 'notifications'],
-    ['permission', 'deny', 'photos'],
+    ['permission', 'deny', 'all'],
     ['permission', 'reset', 'notifications'],
   ]);
   expect(
     requests.every(({ internal }) => internal?.settingsAppBundleId === 'com.example.app'),
   ).toBe(true);
+});
+
+test('a mid-sequence backend rejection names what already landed', async () => {
+  const requests: DaemonRequest[] = [];
+  let calls = 0;
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      calls += 1;
+      if (calls === 2) {
+        return {
+          ok: false,
+          error: { code: 'UNSUPPORTED_OPERATION', message: 'No such service on this runtime.' },
+        };
+      }
+      return { ok: true, data: {} };
+    },
+    dependencies: makeDependencies(),
+    platform: 'android',
+  });
+
+  const failure = await port
+    .execute({
+      command: {
+        kind: 'setPermissions',
+        source: { line: 3 },
+        permissions: { all: 'deny', notifications: 'unset' },
+      },
+      appId: 'com.example.app',
+      generation: 0,
+      env: {},
+      invalidateObservation() {},
+    })
+    .then(
+      () => {
+        throw new Error('expected setPermissions to fail');
+      },
+      (error: unknown) => error,
+    );
+  expect(requests.map(({ positionals }) => positionals)).toEqual([
+    ['permission', 'deny', 'all'],
+    ['permission', 'reset', 'notifications'],
+  ]);
+  assert.match(String((failure as Error).message), /No such service on this runtime/);
+  assert.deepEqual(
+    (failure as { details?: Record<string, unknown> }).details?.appliedPermissionMutations,
+    ['deny all'],
+  );
+  assert.equal(
+    (failure as { details?: Record<string, unknown> }).details?.failedPermissionMutation,
+    'reset notifications',
+  );
 });
 
 test('launchApp applies permissions after clearing but before launch', async () => {
@@ -111,14 +154,14 @@ test('launchApp with rejected permissions launches nothing', async () => {
         source: { line: 3 },
         appId: 'com.example.app',
         clearState: true,
-        permissions: { bluetooth: 'allow' },
+        permissions: { health: 'allow' },
       },
       appId: 'com.example.app',
       generation: 0,
       env: {},
       invalidateObservation() {},
     }),
-  ).rejects.toThrow(/bluetooth.*not supported on android/i);
+  ).rejects.toThrow(/health.*not supported on android/i);
   expect(requests).toEqual([]);
 });
 

@@ -16,46 +16,22 @@ describe('mapMaestroSetPermissions', () => {
     ]);
   });
 
-  test('expands all to the platform servable set with specifics overriding', () => {
+  test('all travels as one backend call with specifics overriding after it', () => {
     assert.deepEqual(mapMaestroSetPermissions({ all: 'deny', notifications: 'unset' }, 'android'), [
-      { state: 'deny', permission: 'camera' },
-      { state: 'deny', permission: 'contacts' },
-      { state: 'deny', permission: 'microphone' },
-      { state: 'deny', permission: 'notifications' },
-      { state: 'deny', permission: 'photos' },
+      { state: 'deny', permission: 'all' },
       { state: 'reset', permission: 'notifications' },
     ]);
-    const ios = mapMaestroSetPermissions({ all: 'allow' }, 'ios');
-    assert.deepEqual(
-      ios.map((mutation) => mutation.permission),
-      [
-        'calendar',
-        'contacts',
-        'location',
-        'media-library',
-        'microphone',
-        'motion',
-        'photos',
-        'reminders',
-        'siri',
-      ],
-    );
-    assert.ok(ios.every((mutation) => mutation.state === 'grant'));
-  });
-
-  test('ios all skips the probe-unsupported camera and notifications', () => {
-    // This host's `simctl privacy help` (the source the iOS backend probe
-    // parses) lists neither service, so `all` excludes them rather than
-    // stopping the sequential mutations partway through. Explicit entries
-    // still reach the backend for its loud verdict.
-    const permissions = mapMaestroSetPermissions({ all: 'deny' }, 'ios').map(
-      (mutation) => mutation.permission,
-    );
-    assert.ok(!permissions.includes('camera'));
-    assert.ok(!permissions.includes('notifications'));
-    assert.deepEqual(mapMaestroSetPermissions({ camera: 'allow' }, 'ios'), [
-      { state: 'grant', permission: 'camera' },
+    assert.deepEqual(mapMaestroSetPermissions({ all: 'allow' }, 'ios'), [
+      { state: 'grant', permission: 'all' },
     ]);
+    assert.throws(
+      () => mapMaestroSetPermissions({ all: 'never' }, 'ios'),
+      /'allow', 'deny' or 'unset'/i,
+    );
+    assert.throws(
+      () => mapMaestroSetPermissions({ all: 'limited' }, 'ios'),
+      /'allow', 'deny' or 'unset'/i,
+    );
   });
 
   test('maps iOS granular values and the medialibrary alias', () => {
@@ -80,10 +56,22 @@ describe('mapMaestroSetPermissions', () => {
     ]);
   });
 
+  test('maps the extended Android names to backend targets', () => {
+    assert.deepEqual(mapMaestroSetPermissions({ bluetooth: 'allow' }, 'android'), [
+      { state: 'grant', permission: 'bluetooth' },
+    ]);
+    assert.deepEqual(mapMaestroSetPermissions({ location: 'deny' }, 'android'), [
+      { state: 'deny', permission: 'location' },
+    ]);
+    assert.deepEqual(mapMaestroSetPermissions({ sms: 'unset' }, 'android'), [
+      { state: 'reset', permission: 'sms' },
+    ]);
+  });
+
   test('rejects unservable names, empty maps, and nonsense value combos', () => {
     assert.throws(
-      () => mapMaestroSetPermissions({ bluetooth: 'allow' }, 'android'),
-      /bluetooth.*not supported on android/i,
+      () => mapMaestroSetPermissions({ health: 'allow' }, 'android'),
+      /health.*not supported on android/i,
     );
     assert.throws(
       () => mapMaestroSetPermissions({ speech: 'allow' }, 'ios'),

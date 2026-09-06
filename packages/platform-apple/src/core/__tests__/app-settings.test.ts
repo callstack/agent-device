@@ -320,6 +320,26 @@ test('setIosSetting permission grant calendar uses simctl privacy calendar targe
   );
 });
 
+test('setIosSetting permission grant all passes all through as one simctl call', async () => {
+  await withFakeAppleTool(
+    (args) => {
+      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
+      if (args.join(' ') === 'simctl privacy sim-1 grant all com.example.app') return '';
+      return unexpectedArgs(args);
+    },
+    async ({ calls }) => {
+      await setIosSetting(IOS_TEST_SIMULATOR, 'permission', 'grant', 'com.example.app', {
+        permissionTarget: 'all',
+      });
+      const flat = calls.map((args) => args.join(' '));
+      assert.deepEqual(
+        flat.filter((line) => line.includes('privacy sim-1')),
+        ['simctl privacy sim-1 grant all com.example.app'],
+      );
+    },
+  );
+});
+
 test('setIosSetting clear-app-state wipes iOS simulator app data container', async () => {
   const containerPath = await mkdtempForTest('agent-device-ios-clear-app-state-container-');
   await fs.mkdir(path.join(containerPath, 'Documents'), { recursive: true });

@@ -302,7 +302,7 @@ test.each([
   ],
   [
     'an iOS-only target',
-    { permissionTarget: 'calendar' },
+    { permissionTarget: 'location-always' },
     /Unsupported permission target on Android/i,
   ],
 ] as const)('setAndroidSetting permission rejects %s', async (_label, options, message) => {
@@ -319,5 +319,138 @@ test('setAndroidSetting permission requires an app in session', async () => {
         permissionTarget: 'camera',
       }),
     { code: 'INVALID_ARGS', message: /requires an active app in session/ },
+  );
+});
+
+// Explicit multi-id names fan out to one pm call per id, in table order.
+test('setAndroidSetting permission grant contacts grants both contact ids', async () => {
+  await withFakeAdb(
+    fakeAdb((flat) => (flat === CURRENT_USER ? '0' : undefined)),
+    async ({ calls, device }) => {
+      await setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+        permissionTarget: 'contacts',
+      });
+      const flat = calls.map((args) => args.join(' '));
+      assert.ok(
+        flat.includes('shell pm grant --user 0 com.example.app android.permission.READ_CONTACTS'),
+        flat.join('; '),
+      );
+      assert.ok(
+        flat.includes('shell pm grant --user 0 com.example.app android.permission.WRITE_CONTACTS'),
+        flat.join('; '),
+      );
+    },
+  );
+});
+
+/** A dump shaped like the lab app's: install, custom, and runtime permissions side by side. */
+function dumpsysWithRequested(): string {
+  return [
+    'Packages:',
+    '  Package [com.example.app] (abc):',
+    '    requested permissions:',
+    '      android.permission.INTERNET',
+    '      android.permission.RECORD_AUDIO',
+    '      com.example.app.CUSTOM_PERMISSION',
+    '    install permissions:',
+    '      android.permission.INTERNET: granted=true',
+    '    User 0: ceDataInode=0 installed=true',
+    '      runtime permissions:',
+    '        android.permission.RECORD_AUDIO: granted=true, flags=[ USER_SET]',
+    'Queries:',
+  ].join('\n');
+}
+
+// `all` intersects the declared set before issuing anything: INTERNET is declared
+// but not changeable, so it is skipped with a reason while RECORD_AUDIO lands.
+test('setAndroidSetting permission grant all applies the declared changeable ids', async () => {
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return dumpsysWithRequested();
+      if (flat === 'shell pm grant --user 0 com.example.app android.permission.INTERNET') {
+        return {
+          stderr:
+            "Exception occurred while executing 'grant':\njava.lang.SecurityException: INTERNET is not a changeable permission type",
+          exitCode: 1,
+        };
+      }
+      if (flat === 'shell pm grant --user 0 com.example.app com.example.app.CUSTOM_PERMISSION') {
+        return {
+          stderr:
+            'SecurityException: Package com.example.app has not requested permission com.example.app.CUSTOM_PERMISSION',
+          exitCode: 1,
+        };
+      }
+      return undefined;
+    }),
+    async ({ calls, device }) => {
+      const result = await setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+        permissionTarget: 'all',
+      });
+      const flat = calls.map((args) => args.join(' '));
+      assert.ok(
+        flat.includes('shell pm grant --user 0 com.example.app android.permission.RECORD_AUDIO'),
+        flat.join('; '),
+      );
+      assert.deepEqual(result, {
+        permission: 'all',
+        applied: ['android.permission.RECORD_AUDIO'],
+        warnings: [
+          "Skipped android.permission.INTERNET for com.example.app: Exception occurred while executing 'grant': java.lang.SecurityException: INTERNET is not a changeable permission type",
+          'Skipped com.example.app.CUSTOM_PERMISSION for com.example.app: SecurityException: Package com.example.app has not requested permission com.example.app.CUSTOM_PERMISSION',
+        ],
+      });
+    },
+  );
+});
+
+// Revoke under `all` warns per held permission, like the single path.
+test('setAndroidSetting permission revoke all warns for the held runtime id', async () => {
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return dumpsysWithRequested();
+      return undefined;
+    }),
+    async ({ device }) => {
+      const result = (await setAndroidSetting(device, 'permission', 'deny', 'com.example.app', {
+        permissionTarget: 'all',
+      })) as Record<string, unknown>;
+      assert.deepEqual(result.permission, 'all');
+      assert.ok(
+        (result.applied as string[]).includes('android.permission.RECORD_AUDIO'),
+        JSON.stringify(result),
+      );
+      const warnings = (result.warnings as string[]).join('\n');
+      assert.match(warnings, /RECORD_AUDIO was granted before this revoke/);
+    },
+  );
+});
+
+// Validation happens before mutation: an unreadable dump issues no pm call.
+test.each([
+  ['dumpsys fails', { stderr: 'error', exitCode: 1 }],
+  ['no requested section', dumpsys([{ id: 0, runtime: [[MICROPHONE, false]] }])],
+] as const)('setAndroidSetting permission all refuses when %s', async (_label, reply) => {
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return reply as string;
+      return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
+    }),
+    async ({ calls, device }) => {
+      await assertRejectsAppError(
+        () =>
+          setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+            permissionTarget: 'all',
+          }),
+        { code: 'COMMAND_FAILED', message: /declared permissions|requested permissions/i },
+      );
+      assert.ok(
+        calls.every((args) => !args.includes('pm')),
+        calls.map((args) => args.join(' ')).join('; '),
+      );
+    },
   );
 });

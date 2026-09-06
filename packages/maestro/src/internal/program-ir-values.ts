@@ -200,6 +200,22 @@ export function readOptionalBoolean(
 }
 
 export const VARIABLE_PATTERN = /^\$\{[A-Za-z_][A-Za-z0-9_.]*\}$/;
+
+/**
+ * The `setPermissions`/`launchApp.permissions` value vocabulary, shared by the
+ * parser, the runtime port, and the daemon adapter: the plain states plus the
+ * iOS granular `location`/`photos` values. Per-permission validity (which
+ * granular value belongs where) is enforced by the execution layers.
+ */
+export const MAESTRO_PERMISSION_VALUES: ReadonlySet<string> = new Set([
+  'allow',
+  'deny',
+  'unset',
+  'always',
+  'inuse',
+  'never',
+  'limited',
+]);
 const NUMERIC_STRING_PATTERN = /^-?\d+(\.\d+)?$/;
 const INTEGER_STRING_PATTERN = /^-?\d+$/;
 

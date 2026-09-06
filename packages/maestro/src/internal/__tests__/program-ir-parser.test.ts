@@ -438,6 +438,18 @@ describe('parseMaestroProgram', () => {
       optional: true,
       label: 'Prepare scan',
     });
+    // Prototype names are not duplicates: the YAML layer already rejects real
+    // duplicate keys, so parsing accepts them and the backend verdict applies.
+    const prototype = parseMaestroProgram(`---
+- setPermissions:
+    permissions:
+      constructor: allow
+`);
+    assert.deepEqual(prototype.commands[0], {
+      kind: 'setPermissions',
+      source: { line: 2 },
+      permissions: { constructor: 'allow' },
+    });
     assert.throws(
       () =>
         parseMaestroProgram(`---
@@ -488,7 +500,7 @@ describe('parseMaestroProgram', () => {
 - launchApp:
     permissions: {}
 `),
-      /launchApp\.permissions requires at least one permission.*line 2/i,
+      /launchApp\.permissions requires at least one permission.*line 3/i,
     );
     assert.throws(
       () =>

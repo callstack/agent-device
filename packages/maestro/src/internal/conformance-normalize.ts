@@ -344,12 +344,12 @@ function isBareAgentCommand(command: MaestroCommand): command is BareAgentComman
   return command.kind in BARE_AGENT_CANONICAL;
 }
 
-type AgentTapCommand = Extract<MaestroCommand, { kind: 'tapOn' | 'doubleTapOn' | 'longPressOn' }>;
+type AgentTapCommand = Extract<MaestroCommand, { kind: (typeof AGENT_TAP_KINDS)[number] }>;
+
+const AGENT_TAP_KINDS = ['tapOn', 'doubleTapOn', 'longPressOn'] as const;
 
 function isAgentTapCommand(command: MaestroCommand): command is AgentTapCommand {
-  return (
-    command.kind === 'tapOn' || command.kind === 'doubleTapOn' || command.kind === 'longPressOn'
-  );
+  return (AGENT_TAP_KINDS as readonly string[]).includes(command.kind);
 }
 
 function canonicalizeAgentTapCommand(command: AgentTapCommand): CanonicalCommand {
@@ -386,18 +386,17 @@ function canonicalizeAgentTapCommand(command: AgentTapCommand): CanonicalCommand
   }
 }
 
-type AgentAssertCommand = Extract<
-  MaestroCommand,
-  { kind: 'assertVisible' | 'assertNotVisible' | 'assertTrue' | 'extendedWaitUntil' }
->;
+type AgentAssertCommand = Extract<MaestroCommand, { kind: (typeof AGENT_ASSERT_KINDS)[number] }>;
+
+const AGENT_ASSERT_KINDS = [
+  'assertVisible',
+  'assertNotVisible',
+  'assertTrue',
+  'extendedWaitUntil',
+] as const;
 
 function isAgentAssertCommand(command: MaestroCommand): command is AgentAssertCommand {
-  return (
-    command.kind === 'assertVisible' ||
-    command.kind === 'assertNotVisible' ||
-    command.kind === 'assertTrue' ||
-    command.kind === 'extendedWaitUntil'
-  );
+  return (AGENT_ASSERT_KINDS as readonly string[]).includes(command.kind);
 }
 
 function canonicalizeAgentAssertCommand(command: AgentAssertCommand): CanonicalCommand {
