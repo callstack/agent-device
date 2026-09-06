@@ -75,14 +75,22 @@ function selectRotationLines(title: string, output: string): string {
   if (title === 'display rotation') {
     return output
       .split('\n')
-      .filter((line) => /rotation|orientation/i.test(line))
-      .slice(0, 12)
+      .filter((line) =>
+        /mCurrentOrientation|mRotation=|installOrientation|\brotation \d/.test(line),
+      )
+      .map((line) => line.trim().slice(0, 200))
+      .slice(0, 8)
       .join('\n');
   }
   if (title === 'logcat rotation decisions') {
     return output
       .split('\n')
-      .filter((line) => /rotation|orientation/i.test(line) && !/AccessibilityNodeInfo/.test(line))
+      .filter(
+        (line) =>
+          /(WindowManager|DisplayRotation|WindowOrientationListener|RotationResolver|DisplayContent|SensorService)/.test(
+            line,
+          ) && /rotat|orient/i.test(line),
+      )
       .slice(-60)
       .join('\n');
   }
