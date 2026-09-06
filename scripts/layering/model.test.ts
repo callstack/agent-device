@@ -414,7 +414,7 @@ test('every SessionState field is classified exactly once', () => {
   // R7 by being invisible to the scan, and the rule would silently stop covering part of the
   // type it claims to cover.
   const fields = sessionStateFields(
-    readFileSync(path.resolve(import.meta.dirname, '../../src/daemon/types.ts'), 'utf8'),
+    readFileSync(path.resolve(import.meta.dirname, '../../src/daemon/session-state.ts'), 'utf8'),
   );
   assert.deepEqual(fieldClassificationDrift(fields), []);
   assert.equal(
@@ -425,7 +425,7 @@ test('every SessionState field is classified exactly once', () => {
 
 test('classification drift is reported in all three directions', () => {
   const declared = sessionStateFields(
-    readFileSync(path.resolve(import.meta.dirname, '../../src/daemon/types.ts'), 'utf8'),
+    readFileSync(path.resolve(import.meta.dirname, '../../src/daemon/session-state.ts'), 'utf8'),
   );
 
   // Unclassified: a field added to SessionState and to neither table. This is the case the
