@@ -3,7 +3,7 @@ import {
   deriveIosCaptureHint,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SimulatorSnapshotSource } from './snapshot-source-facade.ts';
 import type { SimulatorSnapshotTargetResolver } from './snapshot-target.ts';
 
@@ -41,6 +41,11 @@ const LAUNCH_TRANSITION_WINDOW_MS: ReadonlyMap<string, number> = new Map([
   ['foreground-owner-changed', 1_000],
 ]);
 
+/** Only iOS Simulators carry the host AX bridge; other Apple simulators observe through XCTest. */
+export function hasSimulatorBridge(device: DeviceInfo): boolean {
+  return device.platform === 'apple' && device.appleOs === 'ios' && device.kind === 'simulator';
+}
+
 export function createLaunchObservationProbe(
   deps: Readonly<{
     source: SimulatorSnapshotSource;
@@ -51,7 +56,7 @@ export function createLaunchObservationProbe(
   const hint = deriveIosCaptureHint(createIosSnapshotRequest({ depth: 1, interactiveOnly: true }));
   return Object.freeze({
     awaitObservable: async (device, appBundleId, signal) => {
-      if (!isIosFamily(device) || device.kind !== 'simulator') return 'not-eligible';
+      if (!hasSimulatorBridge(device)) return 'not-eligible';
       let deadline: number | undefined;
       for (;;) {
         const target = await deps.resolveTarget(device, appBundleId, signal).catch(() => undefined);

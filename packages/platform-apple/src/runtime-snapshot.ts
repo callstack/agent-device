@@ -13,7 +13,8 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import { hasSimulatorBridge } from './snapshot-observability.ts';
 import type { AppleSnapshotRoute } from './snapshot-route.ts';
 
 /** Apple-owned selection between app snapshots and explicit macOS surface snapshots. */
@@ -142,15 +143,15 @@ async function admitAppleNativeFind(
 }
 
 /**
- * Whether the runner can answer a native find without a startup wait. Off a local Simulator the
- * runner is the only reader, so it always answers; on one, only a ready session does (see the
- * find-runtime doc above).
+ * Whether the runner can answer a native find without a startup wait. Without the Simulator
+ * bridge the runner is the only reader, so it always answers; with it, only a ready session does
+ * (see the find-runtime doc above).
  */
 async function runnerCanAnswerNow(
   host: Pick<PlatformRuntimeHost, 'appleApplications'>,
   device: DeviceInfo,
   execution: Readonly<{ requestId?: string }> | undefined,
 ): Promise<boolean> {
-  if (!isIosFamily(device) || device.kind !== 'simulator') return true;
+  if (!hasSimulatorBridge(device)) return true;
   return await host.appleApplications.hasLiveRunnerSession(device, execution ?? {});
 }

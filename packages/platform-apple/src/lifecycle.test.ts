@@ -483,3 +483,29 @@ test('a Simulator whose bridge cannot answer keeps the fixed settle', async () =
   expect(outcome.timing.postOpenObservation).toBe('unobservable');
   expect(events).toEqual(['open', 'sleep']);
 });
+
+test('a tvOS Simulator relaunch keeps the awaited prewarm and asks for no observation', async () => {
+  const events: string[] = [];
+  const { host, prewarmRunnerSession, notifyRunnerAppRelaunched } = simulatorHost({ events });
+  const awaitObservable = vi.fn(async () => 'observable' as const);
+  const tvos = { ...simulator, appleOs: 'tvos', target: 'tv' } as const satisfies DeviceInfo;
+  const lifecycle = bindAppleApplicationLifecycle({
+    host,
+    device: tvos,
+    signal: new AbortController().signal,
+    observation: { awaitObservable },
+  });
+
+  const outcome = await lifecycle.openApplication({
+    ...openInput(),
+    relaunch: true,
+    execution: { plannedOperations: ['captureSnapshot'] },
+  });
+
+  expect(outcome.timing.runnerDemand).toBeUndefined();
+  expect(outcome.timing.runnerPrewarmWaited).toBe(true);
+  expect(outcome.timing.postOpenObservation).toBeUndefined();
+  expect(awaitObservable).not.toHaveBeenCalled();
+  expect(prewarmRunnerSession).toHaveBeenCalledOnce();
+  expect(notifyRunnerAppRelaunched).not.toHaveBeenCalled();
+});

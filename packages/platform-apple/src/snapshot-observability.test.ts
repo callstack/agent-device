@@ -138,11 +138,14 @@ test('a failure outside the launch transition ends the wait at once', async () =
   expect(sleep).not.toHaveBeenCalled();
 });
 
-test('a device without a bridge is not eligible', async () => {
+test.each([
+  ['a physical iOS device', { ...simulator, kind: 'device' as const }],
+  ['a tvOS Simulator', { ...simulator, appleOs: 'tvos' as const, target: 'tv' as const }],
+])('%s has no bridge and is not eligible', async (_name, device) => {
   const { observe, acquire } = probe([acquired()], { now: () => 0, sleep: async () => {} });
-  await expect(
-    observe.awaitObservable({ ...simulator, kind: 'device' }, 'com.example.app', signal()),
-  ).resolves.toBe('not-eligible');
+  await expect(observe.awaitObservable(device, 'com.example.app', signal())).resolves.toBe(
+    'not-eligible',
+  );
   expect(acquire).not.toHaveBeenCalled();
 });
 

@@ -6,7 +6,7 @@ import type {
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { resolveAppleSimulatorRunnerDemand } from './runner-demand.ts';
-import type { LaunchObservationPort } from './snapshot-observability.ts';
+import { hasSimulatorBridge, type LaunchObservationPort } from './snapshot-observability.ts';
 
 const POST_OPEN_SETTLE_MS = 300;
 
@@ -31,7 +31,10 @@ export function resolveRunnerPrewarmPolicy(
   input: OpenApplicationInput,
   localIosSimulator: boolean,
 ): RunnerPrewarmPolicy {
-  const runnerDemand = localIosSimulator
+  // Only a Simulator with the host AX bridge has a runner-free observation path, so only it
+  // consults the plan and skips the relaunch wait; every other Apple target keeps its lifecycle.
+  const bridge = localIosSimulator && hasSimulatorBridge(device);
+  const runnerDemand = bridge
     ? resolveAppleSimulatorRunnerDemand(input.execution.plannedOperations)
     : undefined;
   const shouldPrewarmRunner =
@@ -43,7 +46,7 @@ export function resolveRunnerPrewarmPolicy(
   return {
     ...(runnerDemand ? { runnerDemand } : {}),
     shouldPrewarmRunner,
-    awaitPrewarmAfterOpen: input.relaunch && !localIosSimulator,
+    awaitPrewarmAfterOpen: input.relaunch && !bridge,
   };
 }
 
@@ -62,7 +65,7 @@ export async function settleAppleOpen(
   timing: MutableOpenTiming,
 ): Promise<void> {
   const startedAtMs = Date.now();
-  if (localIosSimulator && observation && input.appBundleId) {
+  if (localIosSimulator && hasSimulatorBridge(binding.device) && observation && input.appBundleId) {
     timing.postOpenObservation = await observation.awaitObservable(
       binding.device,
       input.appBundleId,
