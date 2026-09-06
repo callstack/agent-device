@@ -72,7 +72,7 @@ const MUTATIONS: readonly WireMutation[] = [
   },
   {
     breakClass: 'response parsing: the client narrows what a daemon may return',
-    file: 'src/daemon/client/daemon-client-rpc.ts',
+    file: 'src/daemon-client/daemon-client-rpc.ts',
     name: 'parseDaemonHttpResponseBody',
     from: 'error?: { message?: string; data?: Record<string, unknown> }',
     to: 'error?: { message: string }',
@@ -145,21 +145,21 @@ const MUTATIONS: readonly WireMutation[] = [
   // why claiming "both sides" required these to be listed and proved.
   {
     breakClass: 'health consumer: the client stops reading the advertised protocol version',
-    file: 'src/daemon/client/daemon-client-transport.ts',
+    file: 'src/daemon-client/daemon-client-transport.ts',
     name: 'readHealthPayload',
     from: "typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined",
     to: 'undefined',
   },
   {
     breakClass: 'health consumer: the mismatch refusal ADR 0006 built is weakened',
-    file: 'src/daemon/client/daemon-client-transport.ts',
+    file: 'src/daemon-client/daemon-client-transport.ts',
     name: 'readRemoteDaemonHealth',
     from: 'health.rpcProtocolVersion !== DAEMON_RPC_PROTOCOL_VERSION',
     to: 'false',
   },
   {
     breakClass: 'health consumer: the parsed health shape drops a released field',
-    file: 'src/daemon/client/daemon-client-transport.ts',
+    file: 'src/daemon-client/daemon-client-transport.ts',
     name: 'RemoteDaemonHealth',
     from: 'rpcProtocolVersion?: number;',
     to: '',

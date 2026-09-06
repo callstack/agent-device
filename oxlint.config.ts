@@ -122,7 +122,7 @@ export default defineConfig({
     },
     {
       files: [
-        'src/daemon/client/daemon-client-rpc.ts',
+        'src/daemon-client/daemon-client-rpc.ts',
         'src/daemon/downloadable-artifact-http.ts',
         'src/remote/remote-request-diagnostics.ts',
         'src/remote/upload-stream.ts',
