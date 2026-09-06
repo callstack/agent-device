@@ -48,13 +48,6 @@ final class RunnerTests: XCTestCase {
   var currentApp: XCUIApplication?
   var currentBundleId: String?
   var currentAppProcessIdentifier: Int?
-  // Set once, the first time this runner process synthesizes a touch gesture. The private
-  // XCTest event pipeline attaches its HID digitizer lazily on that first synthesis, and on a
-  // cold simulator that attach can lag seconds behind the call that triggered it. Because the
-  // attach is a runner-process/host-level connection rather than app state, it survives target
-  // relaunches, so warming it once per process is enough. Deliberately not cleared by
-  // invalidateCachedTarget.
-  var didWarmSynthesizedInput = false
   // iOS does not reliably expose hasKeyboardFocus for a bare type request, especially when
   // hardware-keyboard input hides the software keyboard. A successful tap on a concrete text
   // input is a scoped witness for the immediately-following bare type; lifecycle and non-text
