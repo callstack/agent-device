@@ -102,8 +102,6 @@ export function discoverFacadeEntryFiles(repoRoot: string): string[] {
 export const HUB_ENTRY_FILES: readonly string[] = [
   'src/cli.ts',
   'src/platform-runtime.ts',
-  'src/core/command-descriptor/registry.ts',
-  'src/core/command-descriptor/platform-execution-entry.ts',
   'src/core/interactors/register-builtins.ts',
   'src/daemon/session-teardown.ts',
 ];

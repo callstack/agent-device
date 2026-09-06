@@ -246,7 +246,7 @@
     },
     {
       "comment": "Type-level `AssertTrue<...>` registry-totality guards. Exported only so `noUnusedLocals` keeps them alive; a consumer would defeat the point.",
-      "file": "{src/core/command-descriptor/registry.ts,src/core/interactors/register-builtins.ts,src/core/platform-descriptor/registry.ts,src/daemon/request-platform-providers.ts}",
+      "file": "{packages/command-registry/src/registry.ts,src/core/interactors/register-builtins.ts,src/core/platform-descriptor/registry.ts,src/daemon/request-platform-providers.ts}",
       "exports": [
         "CommandOwnerFileClaimsAreComplete",
         "BuiltinPluginsCoverAllPlatforms",
