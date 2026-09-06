@@ -2,9 +2,9 @@ name: XCTest Nightly
 
 # The full iOS runner XCTest suite (#1781 A7). The PR lane (ios.yml) names a hand-written
 # subset of the target's methods in an `-only-testing:` list; everything outside that list ran
-# nowhere at all. This lane drops the filter and runs the test plan whole, skipping only
-# `testCommand` — which is the runner's server entry point rather than a test (see the step
-# below).
+# nowhere at all. This lane runs the test plan whole, except `testCommand` (the runner's
+# server entry point). The process-scoped input-preparation regression runs in isolation;
+# its result is merged with the remaining suite before checking the executed count.
 #
 # No count is quoted here on purpose. `pnpm check:xctest-selection` prints the live split
 # (declared / PR-selected / skipped / nightly-only) and is the only place those numbers are
@@ -117,8 +117,21 @@ jobs:
           runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
           preferred-device-name: iPhone 17 Pro
 
-      # Same command as ios.yml's targeted step minus every `-only-testing:` flag, so the
-      # xctestrun's own test plan decides what runs — with one exception.
+      # The preparation regression needs a fresh process before any other synthesized
+      # input. Run it separately, then merge both bundles for the source-derived count.
+      - name: Run isolated synthesized-input preparation regression
+        run: |
+          set -euo pipefail
+          XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"
+          test -n "$XCTESTRUN_PATH"
+          mkdir -p "$(dirname "$RESULT_BUNDLE_PATH")"
+          xcodebuild test-without-building \
+            -xctestrun "$XCTESTRUN_PATH" \
+            -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.simulator-udid }}" \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedInputPreparationDoesNotDeliverContactsAndOrdersMixedRoutes \
+            -resultBundlePath "${RESULT_BUNDLE_PATH%.xcresult}-isolated.xcresult"
+
+      # The remaining suite follows the xctestrun plan, excluding the isolated test.
       #
       # `RunnerTests/testCommand` is not a test. It is the runner's server entry point: it
       # opens an NWListener and blocks in `XCTWaiter.wait(timeout: 24 * 60 * 60)` until a
@@ -143,7 +156,16 @@ jobs:
             -xctestrun "$XCTESTRUN_PATH" \
             -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.simulator-udid }}" \
             -skip-testing:AgentDeviceRunnerUITests/RunnerTests/testCommand \
-            -resultBundlePath "$RESULT_BUNDLE_PATH"
+            -skip-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedInputPreparationDoesNotDeliverContactsAndOrdersMixedRoutes \
+            -resultBundlePath "${RESULT_BUNDLE_PATH%.xcresult}-remaining.xcresult"
+
+      - name: Merge isolated and remaining XCTest results
+        if: always()
+        run: |
+          set -euo pipefail
+          xcrun xcresulttool merge --output-path "$RESULT_BUNDLE_PATH" \
+            "${RESULT_BUNDLE_PATH%.xcresult}-isolated.xcresult" \
+            "${RESULT_BUNDLE_PATH%.xcresult}-remaining.xcresult"
 
       # Best-effort and never the job's verdict on its own; the step below is what asserts.
       # `--compact` first because a red night's summary is the large one, and the job summary

@@ -2,6 +2,7 @@
 #import "RunnerXCTestEventBridge.h"
 
 #import <CoreGraphics/CoreGraphics.h>
+#import <TargetConditionals.h>
 #import <objc/message.h>
 
 static NSString *const RunnerGestureSynthesisSurface = @"event";
@@ -309,6 +310,21 @@ static NSString * _Nullable RunnerResolveGestureEventBridge(
   return nil;
 }
 
+static id RunnerAllocateGestureRecord(
+  const RunnerGestureEventBridge *bridge,
+  NSString *name,
+  NSInteger orientation,
+  NSInteger processID
+) {
+  id record = ((RunnerMsgSendInitRecord)objc_msgSend)(
+    [bridge->core.recordClass alloc], bridge->initRecordSelector, name, orientation
+  );
+  if (record != nil) {
+    ((RunnerMsgSendSetInteger)objc_msgSend)(record, bridge->core.setTargetProcessIDSelector, processID);
+  }
+  return record;
+}
+
 static NSString * _Nullable RunnerCreateEventRecord(
   id application,
   NSString *recordName,
@@ -326,22 +342,39 @@ static NSString * _Nullable RunnerCreateEventRecord(
     return @"private XCTest event synthesis unavailable: could not resolve target process ID";
   }
 
-  id eventRecord = ((RunnerMsgSendInitRecord)objc_msgSend)(
-    [bridge->core.recordClass alloc],
-    bridge->initRecordSelector,
-    recordName,
-    interfaceOrientation
-  );
-  if (eventRecord == nil) {
-    return @"private XCTest event synthesis failed: could not create event record";
+#if TARGET_OS_IOS
+  // Prepare at the shared record boundary, before any route constructs timed
+  // pointer paths. An empty record carries no contact (including no status-bar
+  // tap), and reuses the caller's resolved orientation/PID without AX or images.
+  static BOOL didPrepare = NO;
+  @synchronized ([RunnerSynthesizedGesture class]) {
+    if (!didPrepare) {
+      NSTimeInterval startedAt = NSProcessInfo.processInfo.systemUptime;
+      NSString *preparationError = nil;
+      @try {
+        id preparation = RunnerAllocateGestureRecord(
+          bridge, @"agent-device-input-preparation", interfaceOrientation, targetProcessID
+        );
+        preparationError = preparation == nil
+          ? @"could not create preparation record"
+          : RunnerSynthesizeEventRecord(bridge, preparation);
+        didPrepare = preparationError == nil;
+      } @catch (NSException *exception) {
+        preparationError = RunnerFormatXCTestException(exception, @"input preparation failed");
+      }
+      NSLog(
+        @"AGENT_DEVICE_RUNNER_SYNTHESIZED_INPUT_WARMUP outcome=%@ elapsedMs=%.0f detail=%@",
+        didPrepare ? @"performed" : @"unsupported",
+        (NSProcessInfo.processInfo.systemUptime - startedAt) * 1000,
+        preparationError ?: @""
+      );
+    }
   }
-  ((RunnerMsgSendSetInteger)objc_msgSend)(
-    eventRecord,
-    bridge->core.setTargetProcessIDSelector,
-    targetProcessID
-  );
-  *record = eventRecord;
-  return nil;
+#endif
+  // Failed preparation is best-effort and remains eligible on the next request.
+  // The requested record is always fresh and retains its original timing.
+  *record = RunnerAllocateGestureRecord(bridge, recordName, interfaceOrientation, targetProcessID);
+  return *record == nil ? @"private XCTest event synthesis failed: could not create event record" : nil;
 }
 
 static NSString * _Nullable RunnerSynthesizeEventRecord(
