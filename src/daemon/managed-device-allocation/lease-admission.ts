@@ -16,7 +16,7 @@ import {
   isRequestGeneration,
   isValidLease,
   isVerbatimId,
-} from './record-validation.ts';
+} from '@agent-device/managed-allocation/record';
 
 export type ManagedCommandHorizon = Readonly<{ deadline: Deadline; teardownTimeoutMs: number }>;
 type FenceReason = 'released' | 'replaced' | 'superseded' | 'fenced' | 'authority-unconfirmed';

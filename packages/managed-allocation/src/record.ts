@@ -4,6 +4,15 @@ export { ALLOCATION_OPERATION_SCHEMA_VERSION };
 export { newAllocationOperation } from './record-factory.ts';
 export { decodeAllocationOperationRecord } from './record-codec.ts';
 export { bindingFenceFor } from './record-fence.ts';
+// The daemon's managed lease admission (src/daemon/managed-device-allocation/lease-admission.ts)
+// validates a grant against the same record rules the package applies internally, so these leave
+// through the record surface rather than being restated at the call site.
+export {
+  freezeLease,
+  isRequestGeneration,
+  isValidLease,
+  isVerbatimId,
+} from './record-validation.ts';
 export type {
   AllocationAllocatorOutcome,
   AllocationOperationPhase,

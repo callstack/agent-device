@@ -56,9 +56,6 @@
     // @agent-device/provider-limrun owns the source import, while the published
     // root build externalizes @limrun/api and retains runtime imports in packed chunks.
     "@limrun/api",
-    // @agent-device/managed-allocation has no root consumer yet: the managed runtime binding
-    // (ADR 0021 §3) is its first, and it lands after the package's move out of src/daemon.
-    "@agent-device/managed-allocation",
     // Oxlint resolves the shared config's JS plugins dynamically from their package names.
     "@nkzw/eslint-plugin",
     "eslint-plugin-no-only-tests",
