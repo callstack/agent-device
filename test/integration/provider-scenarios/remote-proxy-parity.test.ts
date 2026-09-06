@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
+import { DEFAULT_PROXY_LEASE_TTL_MS } from '../../../src/core/lease-scope.ts';
 import { sendToDaemon } from '../../../src/daemon/client/daemon-client.ts';
+import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
 import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
 import { resolveSessionRequestLogPath } from '../../../src/daemon/session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/types.ts';
@@ -91,7 +93,9 @@ function scriptedTree() {
   };
 }
 
-async function createParityWorld(): Promise<ParityWorld> {
+type ParityWorldOptions = { leaseRegistry?: LeaseRegistry };
+
+async function createParityWorld(options: ParityWorldOptions = {}): Promise<ParityWorld> {
   const runnerTranscript = createProviderTranscript([
     {
       command: 'ios.runner.snapshot',
@@ -107,6 +111,7 @@ async function createParityWorld(): Promise<ParityWorld> {
     ]),
   });
   const daemon = await createProviderScenarioHarness({
+    ...(options.leaseRegistry ? { leaseRegistry: options.leaseRegistry } : {}),
     platformRuntime: true,
     appleRunnerProvider: () =>
       createAppleRunnerProviderFromTranscript(runnerTranscript, 'ios.runner'),
@@ -224,8 +229,9 @@ async function runLeg(leg: ScenarioLeg, legName: string): Promise<DaemonResponse
 
 async function withProxiedWorld<T>(
   run: (context: { world: ParityWorld; proxied: ScenarioLeg }) => Promise<T>,
+  options: ParityWorldOptions = {},
 ): Promise<T> {
-  const world = await createParityWorld();
+  const world = await createParityWorld(options);
   const upstream = await createDaemonHttpServer({
     token: world.daemon.token,
     handleRequest: world.daemon.handleRequest,
@@ -393,6 +399,96 @@ test(
       });
       assert.equal(close.ok, true, JSON.stringify(close));
     });
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+const LEASE_SCOPE = {
+  tenantId: 'team-a',
+  runId: 'run-a',
+  clientId: 'client-a',
+  deviceKey: SIM.id,
+  leaseBackend: 'ios-simulator',
+} as const;
+
+test(
+  'Provider-backed integration proxy lease expiry tears the session down and a reacquired lease starts with no comparison state',
+  async (t) => {
+    if (await skipWhenLoopbackUnavailable(t, 'daemon proxy parity coverage')) return;
+
+    let now = 1_000_000;
+    const leaseRegistry = new LeaseRegistry({ now: () => now });
+    await withProxiedWorld(
+      async ({ world, proxied }) => {
+        const session = 'leased';
+        const flags = { platform: 'ios', udid: SIM.id } as const;
+        const allocate = async (): Promise<string> => {
+          const response = await proxied({
+            session,
+            command: 'lease_allocate',
+            positionals: [],
+            flags: {},
+            meta: LEASE_SCOPE,
+          });
+          assert.equal(response.ok, true, JSON.stringify(response));
+          const leaseId = (response.ok ? response.data : {})?.lease as { leaseId?: string };
+          assert.equal(typeof leaseId?.leaseId, 'string');
+          return leaseId.leaseId!;
+        };
+        const run = async (
+          command: string,
+          positionals: string[],
+          leaseId: string,
+          stepFlags: DaemonRequest['flags'] = flags,
+        ) =>
+          await proxied({
+            session,
+            command,
+            positionals,
+            flags: stepFlags,
+            meta: { ...LEASE_SCOPE, leaseId },
+          });
+
+        const firstLease = await allocate();
+        assert.equal((await run('open', [APP], firstLease)).ok, true);
+        assert.equal(
+          (await run('snapshot', [], firstLease, { snapshotInteractiveOnly: true })).ok,
+          true,
+        );
+        assert.equal(
+          baselineInitialized(
+            await run('diff', ['snapshot'], firstLease, { snapshotInteractiveOnly: true }),
+          ),
+          false,
+          'the leased session holds comparison state before it expires',
+        );
+
+        // The lease lapses without a heartbeat; the next request through the proxy finds it expired.
+        now += DEFAULT_PROXY_LEASE_TTL_MS + 1;
+        const expired = await run('diff', ['snapshot'], firstLease, {
+          snapshotInteractiveOnly: true,
+        });
+        assert.equal(expired.ok, false);
+        if (expired.ok) return;
+        assert.equal(expired.error.code, 'UNAUTHORIZED');
+        assert.equal(expired.error.details?.reason, 'LEASE_NOT_FOUND');
+        assert.equal(typeof expired.error.hint, 'string');
+        assert.equal(world.daemon.session(session), undefined, 'expiry tears the session down');
+
+        const secondLease = await allocate();
+        assert.notEqual(secondLease, firstLease);
+        assert.equal((await run('open', [APP], secondLease)).ok, true);
+        assert.equal(
+          baselineInitialized(
+            await run('diff', ['snapshot'], secondLease, { snapshotInteractiveOnly: true }),
+          ),
+          true,
+          'a reacquired lease must not compare against the expired session tree',
+        );
+        assert.equal((await run('close', [], secondLease, {})).ok, true);
+      },
+      { leaseRegistry },
+    );
   },
   PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
 );
