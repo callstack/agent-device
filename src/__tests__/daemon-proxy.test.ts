@@ -8,8 +8,8 @@ import { executeRunScriptHttpRequest } from '../daemon/adapters/maestro/run-scri
 import {
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
-} from '../daemon/http-contract.ts';
-import { DAEMON_RPC_PROTOCOL_VERSION } from '../daemon/http-health.ts';
+  DAEMON_RPC_PROTOCOL_VERSION,
+} from '@agent-device/contracts/daemon-http';
 import {
   closeLoopbackServer,
   listenOnLoopback,

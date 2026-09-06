@@ -88,5 +88,5 @@ process.stdout.write(
   `Daemon RPC wire surface checked against ${baseline.tag} ` +
     `(protocol ${result.bumped ? 'bumped' : 'unchanged'}): ${WIRE_DECLARATIONS.length} ` +
     `declarations, ${result.changed.length} changed, ${result.removed.length} removed, ` +
-    `${result.added.length} added.\n`,
+    `${result.added.length} added, ${result.moved.length} moved.\n`,
 );

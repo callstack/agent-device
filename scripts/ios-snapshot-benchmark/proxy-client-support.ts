@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { buildDaemonHttpBaseUrl } from '../../src/daemon/http-contract.ts';
+import { buildDaemonHttpBaseUrl } from '@agent-device/contracts/daemon-http';
 import {
   BenchmarkCellAdmissionError,
   BenchmarkContentionError,

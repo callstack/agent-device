@@ -37,6 +37,7 @@
   "@agent-device/contracts/clipboard-runtime",
   "@agent-device/contracts/command",
   "@agent-device/contracts/command-platform-execution",
+  "@agent-device/contracts/daemon-http",
   "@agent-device/contracts/daemon-owner-cleanup",
   "@agent-device/contracts/device",
   "@agent-device/contracts/device-readiness-runtime",

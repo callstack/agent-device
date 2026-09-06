@@ -1,11 +1,13 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
+  buildDaemonHealthPayload,
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpBaseUrl,
   buildDaemonHttpTenantHeaders,
   buildDaemonHttpUrl,
-} from '../http-contract.ts';
+  DAEMON_RPC_PROTOCOL_VERSION,
+} from './daemon-http.ts';
 
 test('buildDaemonHttpBaseUrl appends the public agent-device base path', () => {
   assert.equal(
@@ -42,4 +44,23 @@ test('buildDaemonHttpTenantHeaders omits blank tenant identities', () => {
     'x-agent-device-tenant': 'tenant-a',
   });
   assert.deepEqual(buildDaemonHttpTenantHeaders(''), {});
+});
+
+test('buildDaemonHealthPayload takes the version from its caller and keeps the payload shape', () => {
+  assert.deepEqual(buildDaemonHealthPayload('agent-device-daemon', '0.20.9'), {
+    ok: true,
+    service: 'agent-device-daemon',
+    version: '0.20.9',
+    rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
+  });
+  assert.deepEqual(
+    buildDaemonHealthPayload('agent-device-proxy', '0.20.9', { upstream: { ok: true } }),
+    {
+      ok: true,
+      service: 'agent-device-proxy',
+      version: '0.20.9',
+      rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
+      upstream: { ok: true },
+    },
+  );
 });

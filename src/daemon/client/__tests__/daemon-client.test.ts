@@ -26,7 +26,7 @@ import {
   resolveDaemonStartupHint,
 } from '../daemon-client-metadata.ts';
 import { canConnectSocket } from '../daemon-client-transport.ts';
-import { DAEMON_RPC_PROTOCOL_VERSION } from '../../http-health.ts';
+import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 import {
   resolveRequestTimeoutHint,
   shouldResetDaemonAfterRequestTimeout,

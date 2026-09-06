@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { AppError } from '@agent-device/kernel/errors';
-import { buildDaemonHttpAuthHeaders } from '../daemon/http-contract.ts';
+import { buildDaemonHttpAuthHeaders } from '@agent-device/contracts/daemon-http';
 import { prepareUploadArtifact, type PreparedUploadArtifact } from './upload-client-artifact.ts';
 import { isRetryableUploadStreamError, streamFileToHttpRequest } from './upload-stream.ts';
 import type { UploadProgressSink } from './upload-progress.ts';

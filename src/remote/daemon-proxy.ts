@@ -5,14 +5,15 @@ import { randomUUID } from 'node:crypto';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { readNodeHttpRequestBody, timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import {
+  buildDaemonHealthPayload,
   DAEMON_HTTP_BASE_PATH,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpUrl,
-} from '../daemon/http-contract.ts';
-import { buildDaemonHealthPayload } from '../daemon/http-health.ts';
+} from '@agent-device/contracts/daemon-http';
+import { readVersion } from '@agent-device/host-kit/version';
 import {
   carriesUnbackedHostPathInstallSource,
   sendHostPathInstallSourceRefused,
@@ -97,7 +98,9 @@ async function sendProxyHealth(res: ServerResponse, options: Required<DaemonProx
   const upstream = await readUpstreamHealth(options);
   res.statusCode = 200;
   res.setHeader('content-type', 'application/json');
-  res.end(JSON.stringify(buildDaemonHealthPayload('agent-device-proxy', { upstream })));
+  res.end(
+    JSON.stringify(buildDaemonHealthPayload('agent-device-proxy', readVersion(), { upstream })),
+  );
 }
 
 async function readUpstreamHealth(options: Required<DaemonProxyOptions>): Promise<unknown> {

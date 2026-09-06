@@ -15,7 +15,7 @@ import { limrunTestDependencies } from '../../platform-runtime-gateway.fixtures.
 import {
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
-} from '../http-contract.ts';
+} from '@agent-device/contracts/daemon-http';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createDaemonHttpServer } from '../server/http-server.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
