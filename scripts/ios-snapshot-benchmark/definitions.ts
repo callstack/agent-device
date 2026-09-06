@@ -29,6 +29,7 @@ const SCREEN_FIXTURES: readonly ScreenFixture[] = [
     app: FIXTURE_APP_ID,
     launchUrl: `${FIXTURE_SCHEME}/catalog`,
     anchorText: 'Catalog',
+    interactionTarget: 'id="catalog-search"',
   },
   {
     id: 'nested-scroll',
@@ -51,6 +52,7 @@ const SCREEN_FIXTURES: readonly ScreenFixture[] = [
     label: 'iOS Settings system surface',
     app: IOS_SETTINGS_APP_ID,
     anchorText: 'Settings',
+    interactionTarget: 'text="General"',
   },
   {
     id: 'xctest-stress',

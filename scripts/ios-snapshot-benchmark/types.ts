@@ -39,6 +39,11 @@ export type ScreenFixture = {
   anchorText: string;
   postSetupAnchorText?: string;
   setupAction?: 'open-alert';
+  /**
+   * What the first-interaction cell presses when the anchor text names more than one
+   * actionable element (a native tab and the screen title share it); the anchor otherwise.
+   */
+  interactionTarget?: string;
 };
 
 export type Failure = {

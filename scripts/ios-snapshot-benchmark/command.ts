@@ -80,7 +80,7 @@ export function firstInteractionAfterOpen(context: CliContext, fixture: ScreenFi
   const selector =
     fixture.launchUrl && deepLinkConfirmationShown(context, opened)
       ? 'label="Open"'
-      : `text=${JSON.stringify(fixture.anchorText)}`;
+      : (fixture.interactionTarget ?? `text=${JSON.stringify(fixture.anchorText)}`);
   return pressFixtureTarget(context, selector);
 }
 
