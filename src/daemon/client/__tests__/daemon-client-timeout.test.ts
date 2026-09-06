@@ -8,6 +8,7 @@ test.each(['open', 'prepare'])(
       resolveDaemonRequestTimeoutMs({
         command,
         session: 'cold-start',
+        positionals: [],
         flags: { timeoutMs: 2_147_453_648 },
       }),
     ).toThrow(/timeoutMs/);
@@ -15,6 +16,7 @@ test.each(['open', 'prepare'])(
       resolveDaemonRequestTimeoutMs({
         command,
         session: 'cold-start',
+        positionals: [],
         flags: { timeoutMs: 2_147_453_647 },
       }),
     ).toBe(2_147_483_647);
