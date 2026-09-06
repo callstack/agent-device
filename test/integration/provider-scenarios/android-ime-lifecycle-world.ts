@@ -8,6 +8,8 @@ export type AndroidProviderShellState = {
   searchText: string;
   clipboardText: string;
   secureSettings: Map<string, string>;
+  /** The last `settings put system user_rotation`; the scripted display reports it back. */
+  userRotation: string;
 };
 
 const IME_INPUT_TEXT_ACTION = 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64';
@@ -51,6 +53,7 @@ export function createAndroidProviderShellState(): AndroidProviderShellState {
     searchText: '',
     clipboardText: 'hello',
     secureSettings: new Map([['default_input_method', 'com.android.inputmethod.latin/.LatinIME']]),
+    userRotation: '0',
   };
 }
 

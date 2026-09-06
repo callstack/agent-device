@@ -10,7 +10,10 @@ import { ANDROID_EMULATOR } from './device-fixtures.ts';
 import { bindAndroidAdbTestHost } from './android-host-test-setup.ts';
 
 export type FakeAdbResponse = string | Partial<AndroidAdbExecutorResult> | Error;
-export type FakeAdbScript = (args: string[]) => FakeAdbResponse | undefined;
+export type FakeAdbScript = (
+  args: string[],
+  options?: AndroidAdbExecutorOptions,
+) => FakeAdbResponse | undefined;
 
 export type FakeAdbProviderExtras = AndroidAdbProvider extends infer P
   ? P extends AndroidAdbProvider
@@ -34,7 +37,7 @@ export async function withFakeAdb<T>(
     execOptions?: AndroidAdbExecutorOptions,
   ): Promise<AndroidAdbExecutorResult> => {
     calls.push([...args]);
-    const response = script(args);
+    const response = script(args, execOptions);
     if (response instanceof Error) throw response;
     const result: AndroidAdbExecutorResult =
       typeof response === 'string'

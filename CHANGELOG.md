@@ -9,6 +9,13 @@
   opening the request log. Long waits keep the first five and last twenty-five polls. The replay
   landmark-mismatch refusal carries the same poll evidence next to its mismatch details; `wait
   --stable` timeouts and a never-readable strict absence keep their existing diagnostics.
+- Fixed: Android `orientation` now returns once the display reports the requested rotation
+  (polling `dumpsys display`, up to 15s) instead of right after writing the settings. On a loaded
+  emulator the rotation takes seconds, during which accessibility reads hang, so the next command
+  paid for the transition; a `wait` issued right after `orientation` could spend its whole budget
+  there. A display that never reaches the requested rotation now fails the command with the
+  observed rotation instead of reporting success; a display that reports no rotation is left to
+  the setting as before.
 - Fixed: the iOS Simulator AX snapshot route bounds how long a capture waits for app discovery
   and stops starting a discovery per capture. Discovery (`simctl launchctl list` through xcrun)
   takes seconds on a loaded host; a capture now waits at most 1.5s for the one in-flight
