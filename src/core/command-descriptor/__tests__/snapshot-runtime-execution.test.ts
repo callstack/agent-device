@@ -1,7 +1,6 @@
+import { commandDescriptors, selectSnapshotStepUses } from '../registry.ts';
 import { snapshotRuntimePlanUses } from '@agent-device/contracts/platform-runtime-operations';
-import { selectSnapshotStepUses } from '../step-use-selectors.ts';
 import { expect, test } from 'vitest';
-import { commandDescriptors } from '../registry.ts';
 
 test('snapshot descriptor declares its complete planned capture uses with no legacy projection', () => {
   const snapshot = commandDescriptors.find(({ name }) => name === 'snapshot');

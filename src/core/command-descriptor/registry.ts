@@ -1,8 +1,17 @@
 // The typed-flags request from contracts/, not the daemon's server-side refinement: these
 // descriptors read `command`, `positionals` and `flags` and never touch `internal`.
 import type { DispatchedCommand } from '@agent-device/contracts/command';
+import type {
+  RuntimeUseStep,
+  RuntimeUseStepSelector,
+} from '@agent-device/contracts/command-platform-execution';
 import type { RefFrameEffect } from '@agent-device/contracts/replay';
-import { isReadOnlyFindAction, parseFindArgs } from '@agent-device/selectors';
+import {
+  checkFindArgs,
+  isReadOnlyFindAction,
+  parseFindArgs,
+  type FindAction,
+} from '@agent-device/selectors';
 import { resolveWaitBudgetMs } from '../wait-positionals.ts';
 import {
   DEFAULT_TIMEOUT_POLICY,
@@ -39,6 +48,7 @@ import {
   clipboardRuntimePlanUses,
   deviceBootRuntimeUses,
   fillRuntimeUses,
+  findRuntimeIntent,
   findRuntimePlanUses,
   focusRuntimeUse,
   gestureRuntimePlanUses,
@@ -50,6 +60,8 @@ import {
   orientationRuntimeUse,
   perfRuntimePlanUses,
   pressRuntimeUses,
+  resolveSelectorCaptureRuntimePlan,
+  resolveSnapshotRuntimePlan,
   screenshotRuntimePlanUses,
   scrollRuntimePlanUses,
   selectorCaptureRuntimePlanUses,
@@ -64,7 +76,6 @@ import {
   viewportRuntimeUse,
   waitSelectorCaptureRuntimePlanUses,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { selectFindStepUses, selectSnapshotStepUses } from './step-use-selectors.ts';
 import { assertRecordRuntimeExecution } from '@agent-device/contracts/record-runtime-execution';
 import { screenRecordingRuntimePlanUses } from '@agent-device/contracts/screen-recording-runtime-plan';
 import { readDeclaredPlatformExecution } from './platform-execution-entry.ts';
@@ -430,6 +441,44 @@ const DEPLOY_APP_COMMAND_DESCRIPTOR = {
   timeoutPolicy: INSTALL_TIMEOUT_POLICY,
   batchable: true,
 } as const;
+
+/**
+ * Plan-time selectors for the commands whose declared alternatives differ in what they execute.
+ * Each reads the daemon step exactly as its handler will (`flags` and `positionals`; a structured
+ * `input` only when a caller kept one) and resolves the same plan the handler resolves, for both
+ * sides of the active-app split the plan cannot know yet.
+ */
+export const selectSnapshotStepUses: RuntimeUseStepSelector = (step) => {
+  const customActions =
+    step.flags?.['snapshotCustomActions'] === true || step.input?.['customActions'] === true;
+  return [true, false].map(
+    (hasActiveApp) => resolveSnapshotRuntimePlan({ customActions, hasActiveApp }).use,
+  );
+};
+
+/**
+ * `find` parses its action from positionals and defaults a missing one to click, so a step the
+ * handler would not parse as a read-only, focus, or type action keeps every declared alternative
+ * (fail closed), including a step whose positionals are not there to parse.
+ */
+export const selectFindStepUses: RuntimeUseStepSelector = (step) => {
+  const action = findStepAction(step);
+  if (action === undefined || !plansOwnLeg(action)) return findRuntimePlanUses;
+  const intent = findRuntimeIntent(action);
+  return [true, false].map(
+    (hasActiveApp) => resolveSelectorCaptureRuntimePlan({ hasActiveApp, intent }).use,
+  );
+};
+
+function plansOwnLeg(action: FindAction['kind']): boolean {
+  return isReadOnlyFindAction(action) || action === 'focus' || action === 'type';
+}
+
+function findStepAction(step: RuntimeUseStep): FindAction['kind'] | undefined {
+  if (step.positionals === undefined) return undefined;
+  const checked = checkFindArgs(step.positionals, step.flags);
+  return checked.ok ? checked.parsed.action : undefined;
+}
 
 export const RAW_COMMAND_DESCRIPTORS = [
   {
