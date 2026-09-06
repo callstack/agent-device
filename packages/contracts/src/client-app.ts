@@ -66,6 +66,8 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     launchConsole?: string;
     launchArgs?: string[];
     relaunch?: boolean;
+    /** Startup budget in milliseconds, including device boot and Apple runner readiness. */
+    timeoutMs?: number;
     /**
      * Include the initial interactive snapshot in a fresh open response. With
      * no app argument, iOS can discover the sole running app on the sole booted

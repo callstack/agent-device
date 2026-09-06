@@ -78,11 +78,16 @@ function resolveFlagBudgetTimeoutMs(
   flags: RequestFlags,
 ): number | undefined {
   if (policy.budget.source !== 'flag') return undefined;
+  if (policy.budget.envelope === 'budget-plus-margin') {
+    const budgetMs =
+      typeof flags?.timeoutMs === 'number' ? flags.timeoutMs : policy.budget.defaultBudgetMs;
+    return typeof budgetMs === 'number' ? widenToUserBudget(policy, budgetMs) : policy.envelopeMs;
+  }
   // 'widen' budgets (interaction --settle, #1101) bound an internal wait the
   // request must outlive after selector resolution/action overhead. They are
   // settle-gated for touch-command back-compat: a bare timeoutMs without
   // --settle was historically ignored. Plain 'bound' budgets (replay,
-  // prepare, snapshot) replace the envelope verbatim.
+  // snapshot) replace the envelope verbatim.
   if (policy.budget.envelope === 'widen') {
     return resolveWideningFlagBudget(policy, policy.budget, flags);
   }

@@ -50,6 +50,7 @@ export type DaemonOpenLifecycle = {
 };
 
 type DaemonRequestInternal = {
+  startupDeadlineAtMs?: number;
   publicNetworkOnly?: true;
   openLifecycle?: DaemonOpenLifecycle;
   /**

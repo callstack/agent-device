@@ -1,4 +1,5 @@
 import { resolveTargetDeviceSelection } from '../../../core/dispatch-resolve.ts';
+import { withOpenStartupDeadline } from './session-open-deadline.ts';
 import {
   openApplicationRuntimeUse,
   openApplicationWithRuntimeHintApplyAndClearUse,
@@ -307,6 +308,13 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Daemo
 export async function handleSessionOpenCommands(
   params: SessionOpenCommandInput,
 ): Promise<DaemonResponse> {
+  return await withOpenStartupDeadline(
+    params.req,
+    async (req) => await openWithInitialSnapshot({ ...params, req }),
+  );
+}
+
+async function openWithInitialSnapshot(params: SessionOpenCommandInput): Promise<DaemonResponse> {
   const openResponse = await handleOpenCommand(params);
   if (!openResponse.ok || params.req.flags?.foreground !== true) return openResponse;
   return await composeOpenWithInitialSnapshot({

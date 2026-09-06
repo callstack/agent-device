@@ -71,7 +71,7 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 1,
     usageLabel: '--timeout <ms>',
     usageDescription:
-      'Prepare/Replay/Snapshot/Test: maximum wall-clock time for the command or attempt. With --settle: the settle-wait deadline (default 10s)',
+      'Open/Prepare: startup budget including boot and Apple runner readiness, plus client cleanup grace. Replay/Snapshot/Test: maximum wall-clock time for the command or attempt. With --settle: the settle-wait deadline (default 10s)',
   },
   {
     key: 'retries',

@@ -25,6 +25,24 @@ export function createAppleApplicationTools(): AppleApplicationTools {
       propagateError,
       options?: AppleRunnerSessionPrewarmOptions,
     ) => {
+      if (execution.startupDeadlineAtMs !== undefined) {
+        const { Deadline } = await import('@agent-device/host-kit/retry');
+        const { prepareIosRunner } = await import('@agent-device/platform-apple/runner/operations');
+        const timeoutMs = execution.startupDeadlineAtMs - Date.now();
+        if (timeoutMs <= 0) {
+          throw new AppError('COMMAND_FAILED', 'Application startup deadline exceeded', {
+            reason: 'startup_timeout',
+          });
+        }
+        await prepareIosRunner(device, {
+          ...appleRunnerOptions(execution, signal),
+          buildTimeoutMs: timeoutMs,
+          startupTimeoutMs: timeoutMs,
+          healthTimeoutMs: timeoutMs,
+          prepareDeadline: Deadline.fromTimeoutMs(timeoutMs),
+        });
+        return;
+      }
       const { prewarmIosRunnerSession } =
         await import('@agent-device/platform-apple/runner/operations');
       await prewarmIosRunnerSession(device, {

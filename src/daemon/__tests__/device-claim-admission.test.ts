@@ -8,8 +8,8 @@ import {
   providerRuntimeOwner,
   type DeviceBindingIntent,
 } from '@agent-device/contracts/platform-runtime';
-import { asAppError } from '@agent-device/kernel/errors';
-import { ANDROID_EMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
@@ -411,3 +411,51 @@ test('the request scope claims only for commands whose descriptor declares trans
   expect(await claimsWhileBound('snapshot', stateDir)).toEqual([]);
   expect(inspectDeviceClaims({})).toEqual([]);
 });
+
+test.for([true, false])(
+  'prepare cleanup failure retains its transient claim only with the typed reason: %s',
+  async (typedFailure, { expect }) => {
+    const { root, stateDir } = setup();
+    const failure = new AppError(
+      'COMMAND_FAILED',
+      'Canceled simulator boot cleanup failed',
+      typedFailure ? { reason: 'ios_boot_cleanup_failed', deviceId: IOS_SIMULATOR.id } : undefined,
+    );
+    const scope = await createRequestExecutionScope({
+      req: {
+        token: 't',
+        session: 'default',
+        command: 'prepare',
+        positionals: ['ios-runner'],
+        flags: {},
+      },
+      sessionStore: new SessionStore(path.join(stateDir, 'sessions')),
+      leaseRegistry: new LeaseRegistry(),
+      deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+      platformRequestScope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    await expect(
+      scope.runAdmitted(async () => {
+        await scope.bindDevice(IOS_SIMULATOR, { required: [], preferred: [] });
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+    await scope[Symbol.asyncDispose]();
+    const claims = inspectDeviceClaims({});
+    expect(claims).toHaveLength(typedFailure ? 1 : 0);
+    if (!typedFailure) return;
+    expect(claims[0]?.claim?.abandonedAtMs).toEqual(expect.any(Number));
+    const competitor = await acquireDeviceClaim({
+      device: IOS_SIMULATOR,
+      session: 'competitor',
+      workspace: '/worktrees/competitor',
+      stateDir: path.join(root, 'competitor'),
+      reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+    });
+    expect(competitor.status).toBe('conflict');
+  },
+);

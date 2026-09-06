@@ -38,6 +38,30 @@ function createOpenClient(params: { stateDir: string; session: string; sessionRe
 }
 
 describe('open command metro session hints', () => {
+  test('open accepts and projects an explicit startup timeout without settle', async () => {
+    const parsed = parseArgs(['open', 'Settings', '--timeout', '600000'], {
+      strictFlags: true,
+    });
+    const stateDir = tempStateDir();
+    try {
+      const { client, calls } = createOpenClient({ stateDir, session: 'cold-start' });
+      await openCommandFacet.definition.invoke(
+        client,
+        openCommandFacet.cliReader(parsed.positionals, parsed.flags),
+      );
+      expect(calls[0]?.flags?.timeoutMs).toBe(600_000);
+      expect(calls[0]?.flags?.settle).toBeUndefined();
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test.each([0, -1, 1.5])('open rejects invalid structured startup timeout %s', (timeoutMs) => {
+    expect(() => openCommandFacet.metadata.readInput({ app: 'Settings', timeoutMs })).toThrow(
+      /timeoutMs/,
+    );
+  });
+
   test('CLI parser accepts --metro-host/--metro-port/--bundle-url/--launch-url on open', () => {
     const parsed = parseArgs(
       [

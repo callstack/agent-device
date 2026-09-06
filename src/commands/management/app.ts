@@ -49,6 +49,10 @@ const openCommandMetadata = defineFieldCommandMetadata(
       'Launch arguments forwarded verbatim to the platform launch command.',
     ),
     relaunch: booleanField('Force relaunch.'),
+    timeoutMs: integerField(
+      'Startup budget in milliseconds, including device boot and Apple runner readiness. Omit to keep the default startup behavior.',
+      { min: 1 },
+    ),
     foreground: booleanField(
       'Include an initial interactive snapshot in a fresh open response. With no app argument, discover the sole running app on the sole booted iOS simulator; ambiguous environments fail closed.',
     ),
@@ -121,6 +125,7 @@ const openCliSchema = {
     'noRecord',
     'relaunch',
     'foreground',
+    'timeoutMs',
     'surface',
     ...METRO_RELOAD_FLAGS,
     'launchUrl',
@@ -147,6 +152,7 @@ const openCliReader: CliReader = (positionals, flags) => ({
   launchArgs: flags.launchArgs,
   relaunch: flags.relaunch,
   foreground: flags.foreground,
+  timeoutMs: flags.timeoutMs,
   saveScript: flags.saveScript,
   force: flags.force,
   deviceHub: flags.deviceHub,

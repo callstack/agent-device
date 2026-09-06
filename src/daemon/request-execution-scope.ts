@@ -241,9 +241,11 @@ export async function createRequestExecutionScope(params: {
           providerAppCatalog: params.providerAppCatalog,
         });
         scope.req = scopedReq;
-        return isHumanControlMutation(scopedReq)
-          ? await leaseRegistry.runDeviceMutation(scopedReq.internal?.admittedLease, task)
-          : await task();
+        const execute = async () =>
+          isHumanControlMutation(scopedReq)
+            ? await leaseRegistry.runDeviceMutation(scopedReq.internal?.admittedLease, task)
+            : await task();
+        return claimAdmission ? await claimAdmission.run(execute) : await execute();
       },
       runLocked: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);

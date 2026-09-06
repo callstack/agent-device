@@ -5,6 +5,7 @@ import type {
 } from '@agent-device/contracts/platform-runtime';
 import type { DeviceClaimPolicy } from '../core/command-descriptor/types.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   inspectAllocatorHeldDeviceClaim,
   requireAllocatorHeldDeviceClaim,
@@ -13,6 +14,7 @@ import { decideAllocatorHeldAdmission, deviceClaimConflictError } from './device
 import { deviceClaimRuleForOwner } from './device-claim-rule.ts';
 import {
   acquireTransientDeviceClaim,
+  abandonDeviceClaim,
   clearDeviceClaim,
   type DeviceClaimReconciler,
   type DeviceClaimSessionOwnership,
@@ -42,6 +44,8 @@ export type DeviceClaimAdmission = AsyncDisposable &
      * `COMMAND_FAILED` when a managed local owner has no allocator-held claim.
      */
     admit(device: DeviceInfo, owner: RuntimeOwnerRef, intent: DeviceBindingIntent): Promise<void>;
+    /** Keeps acquired claims fenced when the task cannot confirm startup cleanup. */
+    run<T>(task: () => Promise<T>): Promise<T>;
   }>;
 
 export function createDeviceClaimAdmission(params: {
@@ -54,6 +58,7 @@ export function createDeviceClaimAdmission(params: {
   // The caller admits once per device binding, so this only has to remember what
   // it took in order to give it back.
   const acquired: DeviceClaimSessionOwnership[] = [];
+  let cleanupUnconfirmed = false;
 
   /**
    * `none` is the one policy that touches no device state at all. Every other policy reaches the
@@ -82,6 +87,16 @@ export function createDeviceClaimAdmission(params: {
   }
 
   return {
+    run: async (task) => {
+      try {
+        return await task();
+      } catch (error) {
+        if (error instanceof AppError && error.details?.reason === 'ios_boot_cleanup_failed') {
+          cleanupUnconfirmed = true;
+        }
+        throw error;
+      }
+    },
     admit: async (device, owner, intent) => {
       switch (deviceClaimRuleForOwner(owner)) {
         case 'none':
@@ -102,7 +117,8 @@ export function createDeviceClaimAdmission(params: {
     [Symbol.asyncDispose]: async () => {
       for (const ownership of acquired.splice(0)) {
         try {
-          await clearDeviceClaim(ownership);
+          if (cleanupUnconfirmed) await abandonDeviceClaim(ownership);
+          else await clearDeviceClaim(ownership);
         } catch (error) {
           emitDiagnostic({
             level: 'error',

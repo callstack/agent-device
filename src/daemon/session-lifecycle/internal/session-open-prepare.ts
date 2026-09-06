@@ -165,6 +165,7 @@ export async function prepareOpenCommandDetails(params: {
     prewarmRunnerOnColdBoot:
       surface === 'app' && Boolean(openTarget) && !isDeepLinkTarget(openTarget ?? ''),
     execution: {
+      startupDeadlineAtMs: req.internal?.startupDeadlineAtMs,
       requestId: req.meta?.requestId,
       logPath,
       traceLogPath: existingSession?.trace?.outPath,
