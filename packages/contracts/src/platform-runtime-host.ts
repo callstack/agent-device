@@ -1,6 +1,7 @@
 import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
 import type { JsonObject, JsonValue } from './json.ts';
 import type { AndroidClipboardShellSupport } from './android-clipboard-support.ts';
+import type { ResourceOwnershipFence, RuntimeOwnerRef } from './platform-runtime.ts';
 
 export type HostCommandRequest = Readonly<{
   executable: string;
@@ -194,14 +195,11 @@ export type PlatformRequestScope = Readonly<{
   signal: AbortSignal;
   diagnostics: PlatformDiagnosticSink;
   progress: PlatformProgressSink;
-}>;
-
-export type ResolvedNativeAsset = Readonly<{
-  path: string;
-  version?: string;
-}>;
-
-/** Asset names stay package-owned literal unions rather than a shared universal catalog. */
-export type NativeAssetResolver<AssetName extends string> = Readonly<{
-  resolve(name: AssetName, signal?: AbortSignal): Promise<ResolvedNativeAsset>;
+  managedDevice?: Readonly<{
+    device: DeviceInfo;
+    owner: Extract<RuntimeOwnerRef, { kind: 'managed-local' }>;
+    fence: ResourceOwnershipFence;
+    admit<T>(task: () => Promise<T>): Promise<T>;
+    run<T>(task: () => Promise<T>): Promise<T>;
+  }>;
 }>;
