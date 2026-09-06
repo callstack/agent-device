@@ -8,12 +8,24 @@ import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
+/**
+ * One memoized loader per lazily imported module, and the only way the ports below reach one.
+ * See the same loaders in `platform-runtime-apple-application-tools.ts` for why a port never
+ * opens its own `import(...)` (#2314).
+ */
+let openTargetModule: Promise<typeof import('./platform-runtime-open-target.ts')> | undefined;
+const loadOpenTarget = () => (openTargetModule ??= import('./platform-runtime-open-target.ts'));
+
+let runtimeHintsModule: Promise<typeof import('./platform-runtime-runtime-hints.ts')> | undefined;
+const loadRuntimeHints = () =>
+  (runtimeHintsModule ??= import('./platform-runtime-runtime-hints.ts'));
+
 /** Lazy Android tools; the Android package owns lifecycle sequencing and durable IME policy. */
 export function createAndroidApplicationTools(): AndroidApplicationTools {
   return Object.freeze({
     resolveOpenTarget: async (device, input) => await resolveAndroidOpenTarget(device, input),
     inferOpenedAppBundleId: async (device, target, currentAppBundleId) => {
-      const { inferAndroidPackageAfterOpen } = await import('./platform-runtime-open-target.ts');
+      const { inferAndroidPackageAfterOpen } = await loadOpenTarget();
       return await inferAndroidPackageAfterOpen(device, target, currentAppBundleId);
     },
     resetFramePerfStats: async (device, appBundleId) => {
@@ -21,11 +33,11 @@ export function createAndroidApplicationTools(): AndroidApplicationTools {
       await resetAndroidFramePerfStats(device, appBundleId);
     },
     applyRuntimeHints: async (device, input) => {
-      const { applyRuntimeHintValues } = await import('./platform-runtime-runtime-hints.ts');
+      const { applyRuntimeHintValues } = await loadRuntimeHints();
       await applyRuntimeHintValues({ device, ...input });
     },
     clearRuntimeHints: async (device, input) => {
-      const { clearRuntimeHintValues } = await import('./platform-runtime-runtime-hints.ts');
+      const { clearRuntimeHintValues } = await loadRuntimeHints();
       await clearRuntimeHintValues({ device, ...input });
     },
     activateTestIme: async (device, input) => {
@@ -85,7 +97,7 @@ async function resolveAndroidOpenTarget(
   input: OpenTargetResolutionInput,
 ): Promise<OpenTargetResolution> {
   const { resolveAndroidPackageForOpen, resolveSessionAppBundleIdForTarget } =
-    await import('./platform-runtime-open-target.ts');
+    await loadOpenTarget();
   return {
     appBundleId: await resolveSessionAppBundleIdForTarget(
       device,
