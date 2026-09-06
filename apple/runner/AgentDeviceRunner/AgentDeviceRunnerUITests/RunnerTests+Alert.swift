@@ -55,50 +55,34 @@ extension RunnerTests {
       guard let button = chooseAlertButton(alert.buttons, action: action) else {
         return Response(ok: false, error: ErrorPayload(message: "alert \(action) button not found"))
       }
-      let previousTitle = preferredAlertTitle(alert.root, buttons: alert.buttons)
-      let actionButtonLabel = button.label.trimmingCharacters(in: .whitespacesAndNewlines)
-      let actionButtonFrame = button.frame
+      guard Date() < deadline else {
+        return alertVerificationResponse(.timedOut, action: action, activated: false)
+      }
+      guard let original = captureAlertPresentation(alert.root) else {
+        return alertVerificationResponse(.unconfirmed, action: action, activated: false)
+      }
+      let observesApplicationRoot = alert.root.elementType == .application
+      guard Date() < deadline else {
+        return alertVerificationResponse(.timedOut, action: action, activated: false)
+      }
       let outcome = activateElement(app: alert.ownerApp, element: button, action: "alert \(action)")
       if let response = unsupportedResponse(for: outcome) {
         return response
       }
-      sleepFor(0.2)
-      if alertStillVisible(
-        in: alert.ownerApp,
-        source: alert.source,
-        previousTitle: previousTitle,
-        actionButtonLabel: actionButtonLabel,
-        deadline: deadline
-      ) {
-        if !actionButtonFrame.isNull && !actionButtonFrame.isEmpty {
-          let coordinateOutcome = tapAt(
-            app: alert.ownerApp,
-            x: actionButtonFrame.midX,
-            y: actionButtonFrame.midY
-          )
-          if let response = unsupportedResponse(for: coordinateOutcome) {
-            return response
-          }
-          sleepFor(0.2)
-        }
-      }
-      if alertStillVisible(
-        in: alert.ownerApp,
-        source: alert.source,
-        previousTitle: previousTitle,
-        actionButtonLabel: actionButtonLabel,
-        deadline: deadline
-      ) {
-        return Response(
-          ok: false,
-          error: ErrorPayload(
-            code: "INTERACTION_FAILED",
-            message: "alert \(action) did not dismiss the visible alert",
-            hint: "The alert button was found but the system still reports the alert after tapping it."
+      while true {
+        sleepFor(min(0.2, max(0, deadline.timeIntervalSinceNow)))
+        let verification = RunnerAlertVerification.verify(
+          original: original,
+          observation: observeAlert(
+            in: alert.ownerApp,
+            source: alert.source,
+            observesApplicationRoot: observesApplicationRoot,
+            deadline: deadline
           )
         )
+        if verification == .stillVisible { continue }
+        return alertVerificationResponse(verification, action: action, activated: true)
       }
-      return Response(ok: true, data: DataPayload(message: action == "accept" ? "accepted" : "dismissed"))
     }
 
     return Response(
@@ -133,57 +117,6 @@ extension RunnerTests {
       return nil
     }
     return RunnerAlert(root: root, ownerApp: ownerApp, buttons: buttons, source: source)
-  }
-
-  private func alertStillVisible(
-    in ownerApp: XCUIApplication,
-    source: RunnerAlertSource,
-    previousTitle: String,
-    actionButtonLabel: String,
-    deadline: Date
-  ) -> Bool {
-    guard Date() < deadline,
-          let current = resolveAlert(source: source, app: ownerApp, deadline: deadline)
-    else {
-      return false
-    }
-    let currentTitle = preferredAlertTitle(current.root, buttons: current.buttons)
-    if previousTitle == currentTitle {
-      return true
-    }
-    return current.buttons.contains { button in
-      button.label.trimmingCharacters(in: .whitespacesAndNewlines) == actionButtonLabel
-    }
-  }
-
-  private func resolveAlert(
-    source: RunnerAlertSource,
-    app: XCUIApplication,
-    deadline: Date
-  ) -> RunnerAlert? {
-    switch source {
-    case .blockingSystemModal:
-#if os(macOS)
-      return nil
-#else
-      guard case .resolved(let modal) = resolveBlockingSystemModal(deadline: deadline) else {
-        return nil
-      }
-      return runnerAlert(modal)
-#endif
-    case .appAlert:
-      guard let alert = firstExistingElement(
-        in: safeElementsQuery { app.alerts.allElementsBoundByIndex }
-      ) else {
-        return nil
-      }
-      return runnerAlert(root: alert, ownerApp: app, source: .appAlert)
-    case .dismissPopup:
-      guard let popup = firstDismissPopupWindow(in: app) else {
-        return nil
-      }
-      return runnerAlert(root: popup, ownerApp: app, source: .dismissPopup)
-    }
   }
 
   private func firstExistingElement(in elements: [XCUIElement]) -> XCUIElement? {

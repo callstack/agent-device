@@ -58,9 +58,61 @@ int main(int argc, const char *argv[]) {
 #import <UIKit/UIKit.h>
 
 @interface AgentDeviceRunnerViewController : UIViewController
+@property(nonatomic, strong) UILabel *alertActionStatus;
+@property(nonatomic, assign) NSUInteger firstAlertActions;
+@property(nonatomic, assign) NSUInteger replacementAlertActions;
+@property(nonatomic, assign) BOOL alertFixtureStarted;
 @end
 
 @implementation AgentDeviceRunnerViewController
+
+#if TARGET_OS_IOS
+- (void)updateAlertActionStatus {
+  self.alertActionStatus.text = [NSString stringWithFormat:@"First actions: %lu; replacement actions: %lu",
+                                                         (unsigned long)self.firstAlertActions,
+                                                         (unsigned long)self.replacementAlertActions];
+}
+
+- (void)presentAlertFixtureReplacement:(BOOL)replacement {
+  NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+  BOOL sameTitle = [arguments containsObject:@"--agent-device-alert-same-title"];
+  BOOL sameBody = [arguments containsObject:@"--agent-device-alert-same-body"];
+  NSString *title = replacement && !sameTitle ? @"Next confirmation" : @"First confirmation";
+  NSString *body = replacement && !sameBody ? @"Second request" : @"First request";
+  UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+                                                               message:body
+                                                        preferredStyle:UIAlertControllerStyleAlert];
+  __weak UIAlertController *weakAlert = alert;
+  for (NSString *buttonTitle in @[@"Cancel", @"OK"]) {
+    UIAlertActionStyle style = [buttonTitle isEqualToString:@"Cancel"]
+        ? UIAlertActionStyleCancel : UIAlertActionStyleDefault;
+    [alert addAction:[UIAlertAction actionWithTitle:buttonTitle style:style handler:^(UIAlertAction *action) {
+      (void)action;
+      if (replacement) {
+        self.replacementAlertActions += 1;
+      } else {
+        self.firstAlertActions += 1;
+      }
+      [self updateAlertActionStatus];
+      if (!replacement) {
+        [weakAlert dismissViewControllerAnimated:NO completion:^{
+          [self presentAlertFixtureReplacement:YES];
+        }];
+      }
+    }]];
+  }
+  [self presentViewController:alert animated:NO completion:nil];
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+  [super viewDidAppear:animated];
+  if (!self.alertFixtureStarted &&
+      [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-replacement-regression"]) {
+    self.alertFixtureStarted = YES;
+    [self presentAlertFixtureReplacement:NO];
+  }
+}
+#endif
 
 - (void)agentDeviceTextEntryDidChange:(UITextField *)textField {
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-disappear-after-input"] &&
@@ -88,6 +140,12 @@ int main(int argc, const char *argv[]) {
 
   // Keep the fixture behind a launch argument so normal runner snapshots remain unchanged.
 #if TARGET_OS_IOS
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-replacement-regression"]) {
+    self.alertActionStatus = label;
+    label.accessibilityIdentifier = @"agent-device-alert-actions";
+    [self updateAlertActionStatus];
+  }
+
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-regression"]) {
     UITextField *textField = [[UITextField alloc] init];
     textField.accessibilityIdentifier = @"agent-device-hardware-keyboard-input";
