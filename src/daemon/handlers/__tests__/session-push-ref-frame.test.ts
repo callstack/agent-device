@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import type { InspectDeviceRuntimeFacts } from '../../request-runtime-binding.ts';
-import type { DaemonRequest, SessionState } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import {
   handleSessionCommands,

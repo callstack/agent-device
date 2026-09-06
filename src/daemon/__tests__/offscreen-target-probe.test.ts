@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),

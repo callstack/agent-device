@@ -6,7 +6,8 @@ import {
   resolveBoundScreenshotRuntime,
   type ScreenshotRuntimeBindings,
 } from './screenshot-runtime-binding.ts';
-import type { DaemonRequest, SessionState } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 export type SparseFallbackScreenshot = {
   path: string;

@@ -10,7 +10,8 @@ import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../s
 import { captureSnapshot } from '../../snapshot-capture.ts';
 import { SessionStore } from '../../session-store.ts';
 import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtime.ts';
-import type { DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { buildInteractionSurfaceSignature } from '../../interaction-outcome-policy.ts';

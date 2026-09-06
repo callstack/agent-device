@@ -9,7 +9,7 @@ import {
   stripAtPrefix,
   type DecodedFillTarget,
 } from '../../../core/interaction-positionals.ts';
-import type { DaemonResponse } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
 import { parseCoordinateTarget } from './interaction-targeting.ts';
 import { errorResponse } from '../../response.ts';
 import { parseVersionedRefPositional } from '../../ref-positionals.ts';

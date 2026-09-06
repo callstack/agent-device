@@ -1,4 +1,4 @@
-import type { DaemonRequest } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { FindReadResult } from '@agent-device/contracts/interaction';
 import { stripAndroidSystemChromeProvenanceFromNode } from '@agent-device/contracts/android-system-chrome';

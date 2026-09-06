@@ -6,7 +6,7 @@ import type {
 } from '@agent-device/contracts/snapshot-runtime';
 import { createSelectorRuntimeForDevice } from './selector-runtime-backend.ts';
 import { SessionStore } from './session-store.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 import { mkdtempForTestSync } from '../__tests__/test-utils/tmp-dir.ts';
 import { makeSnapshotState } from '../__tests__/test-utils/snapshot-builders.ts';
 

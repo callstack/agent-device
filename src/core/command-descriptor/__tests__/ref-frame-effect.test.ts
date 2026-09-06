@@ -6,7 +6,7 @@ import {
   DAEMON_COMMAND_DESCRIPTORS,
   resolveRefFrameEffect,
 } from '../../../daemon/daemon-command-registry.ts';
-import type { DaemonRequest } from '../../../daemon/types.ts';
+import type { DaemonRequest } from '../../../daemon/daemon-request.ts';
 
 // ADR 0014 migration step 2: the ref-frame-effect classification is an
 // honesty/completeness guard. Every command that reaches a session-owning daemon

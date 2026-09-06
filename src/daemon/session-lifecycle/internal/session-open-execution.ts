@@ -10,7 +10,8 @@ import {
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonRequest, DaemonResponse, SessionScope, SessionState } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { SessionScope, SessionState } from '../../session-state.ts';
 import {
   abortAuthoringOnSecondOpen,
   armAuthoringOnOpen,

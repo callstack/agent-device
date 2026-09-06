@@ -5,7 +5,7 @@ import {
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
 } from '@agent-device/host-kit/diagnostics';
-import type { DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
+import type { DaemonRequest, DaemonResponse, DaemonResponseData } from './daemon-request.ts';
 import type { DaemonArtifact, DaemonArtifactType } from '@agent-device/kernel/contracts';
 
 export function finalizeDaemonResponse(

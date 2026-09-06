@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { DaemonRequest, DaemonResponse } from '../../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import { makeSession, makeSessionStore } from '../../../handlers/__tests__/session-test-harness.ts';
 import { handleSessionInventoryCommands } from '../inventory.ts';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';

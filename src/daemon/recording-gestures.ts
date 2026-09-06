@@ -1,6 +1,6 @@
 import { isIosFamily } from '@agent-device/kernel/device';
 import type { RecordingGestureEvent } from '@agent-device/contracts/screen-recording-runtime';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import {
   resolveGestureDurationMs,

@@ -9,7 +9,7 @@ import {
   SAVE_SCRIPT_FLAG_OWNER_COMMANDS,
   unsupportedSaveScriptFlagResponse,
 } from '../request-save-script-policy.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 
 function request(command: string, flags: DaemonRequest['flags']): DaemonRequest {
   return { token: 'token', session: 'default', command, positionals: [], flags };

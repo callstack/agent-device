@@ -6,7 +6,8 @@ import {
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
-import type { DaemonRequest, SessionState } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 import { SessionStore } from './session-store.ts';
 import { captureSnapshot } from './snapshot-capture.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';

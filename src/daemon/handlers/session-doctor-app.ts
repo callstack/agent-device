@@ -1,6 +1,6 @@
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { InstalledAppInfo } from '@agent-device/contracts/app-inventory-runtime';

@@ -21,7 +21,8 @@ import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform
 import { trackDownloadableArtifact } from '../../../src/daemon/artifact-tracking.ts';
 import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
 import { SessionStore } from '../../../src/daemon/session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../../src/daemon/types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/daemon-request.ts';
+import type { SessionState } from '../../../src/daemon/session-state.ts';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.ts';

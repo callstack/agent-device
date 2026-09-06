@@ -9,10 +9,10 @@ import {
   refFrameEpoch,
   refFrameScope,
   refFrameState,
-  type RefFrame,
   type RefFrameAdmission,
 } from '../ref-frame.ts';
-import type { SessionState } from '../types.ts';
+import type { RefFrame } from '../ref-frame-slot.ts';
+import type { SessionState } from '../session-state.ts';
 
 function session(overrides: Partial<SessionState> = {}): SessionState {
   return {
@@ -148,7 +148,7 @@ test('expireRefFrame clears scoped-snapshot lineage at the seam (ADR 0014)', () 
   assert.equal(s.snapshotScopeSource, undefined);
 });
 
-test('a frame cannot be constructed, edited, or derived outside ref-frame.ts', () => {
+test('a frame cannot be constructed, edited, or derived outside ref-frame-slot.ts', () => {
   const frame = refFrame(session());
   const rejectedByTsc = [
     // @ts-expect-error the class value is not exported, so no literal is a frame

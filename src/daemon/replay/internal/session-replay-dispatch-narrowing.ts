@@ -1,4 +1,4 @@
-import type { DaemonRequest, DaemonResponse } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import type {
   AdReplayDispatchGuard,
   AdReplayDispatchOutcome,

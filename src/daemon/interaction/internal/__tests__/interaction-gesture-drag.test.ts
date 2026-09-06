@@ -11,8 +11,9 @@ import { handleInteractionCommands } from '../../index.ts';
 import { gestureRuntimeBindingsFixture } from './gesture-runtime-bindings.fixtures.ts';
 
 const contextFromFlags = () => ({});
-const captureSnapshotForSession = async (session: import('../../../types.ts').SessionState) =>
-  session.snapshot!;
+const captureSnapshotForSession = async (
+  session: import('../../../session-state.ts').SessionState,
+) => session.snapshot!;
 let gestures = gestureRuntimeBindingsFixture();
 
 beforeEach(() => {

@@ -22,7 +22,8 @@ import {
   toDaemonResponse,
 } from './selector-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 import { dispatchConditionalWaitSelector } from './wait-conditional-selector.ts';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';
 import { withSystemSurfaceDisclosure } from './system-surface-disclosure.ts';

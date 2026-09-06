@@ -5,7 +5,7 @@ import {
   publicPlatformString,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import type { SessionRuntimeHints, SessionScope, SessionState } from '../../types.ts';
+import type { SessionRuntimeHints, SessionScope, SessionState } from '../../session-state.ts';
 import { successText } from '@agent-device/kernel/success-text';
 import type { StartupPerfSample } from './session-startup-metrics.ts';
 import type { DeviceSelectionResult } from '../../../core/device-selection-resolver.ts';

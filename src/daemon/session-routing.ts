@@ -3,7 +3,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonRequest, SessionScope, SessionState } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionScope, SessionState } from './session-state.ts';
 import { SessionStore } from './session-store.ts';
 
 const DEFAULT_SESSION_NAME = 'default';

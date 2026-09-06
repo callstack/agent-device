@@ -1,6 +1,6 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import type { SessionState } from '../../types.ts';
+import type { SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../snapshot.ts';
 import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';

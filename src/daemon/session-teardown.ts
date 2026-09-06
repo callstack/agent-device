@@ -1,7 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { cleanupRetainedMaterializedPathsForSession } from './materialized-path-registry.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 import type { SessionStore } from './session-store.ts';
 import { forceCleanupSessionAppLog } from './app-log-session-resource.ts';
 import { appLogResourceStore } from './app-log-resource-store.ts';

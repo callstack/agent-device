@@ -13,7 +13,8 @@ import {
   assertRequestLeaseAdmissionPreflight,
 } from './request-admission.ts';
 import type { SessionStore } from './session-store.ts';
-import type { DaemonRequest, SessionState } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 import { providerSessionIdFromData } from './provider-session-ownership.ts';
 
 export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>;

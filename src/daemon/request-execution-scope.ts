@@ -42,7 +42,8 @@ import {
   resolveSessionRunnerLogPath,
   type SessionStore,
 } from './session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 import { teardownSessionResources } from './session-teardown.ts';
 import { finalizeBoundSessionApplicationLifecycle } from './application-lifecycle-recovery.ts';
 import { runtimeHintValues } from './session-runtime.ts';

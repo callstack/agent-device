@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { DaemonRequest } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
 
 export function buildReplayBuiltinVars(params: {

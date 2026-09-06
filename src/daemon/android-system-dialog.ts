@@ -9,7 +9,7 @@ import { centerOfRect, type SnapshotNode } from '@agent-device/kernel/snapshot';
 
 import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
 import { expireRefFrame } from './ref-frame.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 
 const ANDROID_BLOCKING_MODAL_PATTERN = /\bis(?:n(?:'|&apos;|&#39;)?t| not)\s+responding\b/i;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { assertRequestLeaseAdmission } from '../request-admission.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 import type { ProviderAppCatalog } from '@agent-device/contracts/device';
 
 const limrunAppCatalog: ProviderAppCatalog = {

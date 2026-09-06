@@ -4,7 +4,7 @@ import {
 } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonResponse } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

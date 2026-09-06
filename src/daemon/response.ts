@@ -1,4 +1,4 @@
-import type { DaemonResponse } from './types.ts';
+import type { DaemonResponse } from './daemon-request.ts';
 
 export type DaemonFailureResponse = Extract<DaemonResponse, { ok: false }>;
 

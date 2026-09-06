@@ -2,7 +2,7 @@ import type { SessionAction } from '@agent-device/contracts/session';
 import { expect, test } from 'vitest';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { recordActionEntry } from '../../../session-action-recorder.ts';
-import type { DaemonRequest } from '../../../types.ts';
+import type { DaemonRequest } from '../../../daemon-request.ts';
 import { invokeReplayAction } from '../session-replay-action-runtime.ts';
 import { resolveReplayAction } from '@agent-device/ad-script';
 

@@ -1,6 +1,6 @@
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type { ScreenshotOverlayRef, SnapshotNode } from '@agent-device/kernel/snapshot';
-import type { DaemonResponseData } from './types.ts';
+import type { DaemonResponseData } from './daemon-request.ts';
 
 /**
  * Phase 4 leveled response views. A view maps a command's `default` result data

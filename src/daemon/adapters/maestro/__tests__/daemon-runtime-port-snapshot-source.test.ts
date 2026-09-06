@@ -3,7 +3,7 @@ import {
   attachSnapshotClickabilityEvidence,
   readSnapshotClickabilityEvidence,
 } from '@agent-device/contracts/capture';
-import type { DaemonRequest } from '../../../types.ts';
+import type { DaemonRequest } from '../../../daemon-request.ts';
 import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
 import { createDaemonMaestroSnapshotSource } from '../daemon-runtime-port-snapshot-source.ts';
 import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';

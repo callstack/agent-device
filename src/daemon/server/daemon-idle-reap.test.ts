@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { SessionStore } from '../session-store.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import {
   createDaemonIdleReap,
   hasActiveRecording,

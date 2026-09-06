@@ -29,13 +29,8 @@ import {
   resolveBoundSnapshotCaptureRuntime,
   type SnapshotRuntimeRouteParams,
 } from './snapshot-runtime-binding.ts';
-import type {
-  DaemonRequest,
-  DaemonResponse,
-  DaemonResponseData,
-  SessionScope,
-  SessionState,
-} from './types.ts';
+import type { DaemonRequest, DaemonResponse, DaemonResponseData } from './daemon-request.ts';
+import type { SessionScope, SessionState } from './session-state.ts';
 
 export type SnapshotRuntimeRecord =
   | { kind: 'snapshot'; nodes: number; truncated: boolean | undefined }

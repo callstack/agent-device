@@ -2,7 +2,8 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { handleFindCommands } from '../find.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
+import type { SessionState } from '../../../session-state.ts';
 import { buildSnapshotSignatures } from '../../../../snapshot/snapshot-freshness/index.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import {

@@ -26,7 +26,7 @@ import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { handleSnapshotCommands } from '../handlers/snapshot.ts';
 import { resolveBoundSelectorCapture } from '../selector-capture-binding.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 
 const webDevice = {
   id: 'web',

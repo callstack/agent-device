@@ -6,7 +6,7 @@ import { INTERNAL_COMMANDS } from '../../command-catalog.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { runRequestHandlerChain } from '../request-handler-chain.ts';
 import { getDaemonRouteOwnerFiles } from '../route-owner-files.ts';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { LINUX_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeIosSession, makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';

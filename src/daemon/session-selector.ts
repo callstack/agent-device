@@ -1,6 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
-import type { SessionRef, SessionState } from './types.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
 import {
   isIosFamily,
   isSerialAddressablePlatform,

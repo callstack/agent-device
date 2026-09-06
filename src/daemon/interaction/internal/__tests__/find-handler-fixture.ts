@@ -1,5 +1,5 @@
 import type { SessionStore } from '../../../session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import { handleFindCommands } from '../find.ts';
 import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 

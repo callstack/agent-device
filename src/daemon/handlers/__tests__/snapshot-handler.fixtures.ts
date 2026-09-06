@@ -10,7 +10,8 @@ import type {
 } from '../../request-runtime-binding.ts';
 import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';
 import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, SessionState } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 
 export function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-snapshot-handler-');

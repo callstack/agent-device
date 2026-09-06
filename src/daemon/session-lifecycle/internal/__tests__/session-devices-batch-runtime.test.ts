@@ -18,7 +18,7 @@ import { handleReleaseMaterializedPathsCommand } from '../../../handlers/session
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { makeSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import { withTestDeviceInventory } from '../../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';

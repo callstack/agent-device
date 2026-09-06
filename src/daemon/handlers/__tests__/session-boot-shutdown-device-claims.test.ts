@@ -19,7 +19,7 @@ import { acquireDeviceClaim } from '../../device-claims.ts';
 import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
 import { createRequestExecutionScope } from '../../request-execution-scope.ts';
 import { handleSessionStateCommands } from '../session-state.ts';
-import type { DaemonRequest, DaemonResponse } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 
 // #1799: `boot`/`shutdown` route through a daemon that need not own the target
 // device. Two daemons on one host each keep their own state directory, so the

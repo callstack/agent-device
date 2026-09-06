@@ -10,7 +10,8 @@ import {
 } from '@agent-device/contracts/divergence';
 import { formatScriptArg } from '@agent-device/ad-script';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import type { ReplaySessionObservationStore, ReplaySessionStore } from './command-types.ts';
 import type { ReplayReportAction } from './session-replay-report-action.ts';
 import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';

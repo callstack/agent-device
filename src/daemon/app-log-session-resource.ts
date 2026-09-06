@@ -12,7 +12,7 @@ import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
 import { appLogResourceStore } from './app-log-resource-store.ts';
 import type { SessionStore } from './session-store.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 
 export type AppLogSessionSnapshot = Readonly<{
   active: boolean;

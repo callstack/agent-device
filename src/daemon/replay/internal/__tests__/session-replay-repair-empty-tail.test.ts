@@ -44,7 +44,7 @@ import {
 } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { repairSessionBoundary } from '../../../session-replay-transaction.ts';
-import type { SessionState } from '../../../types.ts';
+import type { SessionState } from '../../../session-state.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,

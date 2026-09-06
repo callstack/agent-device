@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { SessionStore } from '../session-store.ts';
 import { resolveEffectiveSessionName, resolveSessionScope } from '../session-routing.ts';
-import type { DaemonRequest, SessionState } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function makeSession(name: string): SessionState {

@@ -6,7 +6,7 @@ import {
   type SnapshotTimingSample,
 } from '@agent-device/contracts/capture';
 import type { ReplayResumeStamper } from '../../session-replay-coordinator.ts';
-import type { DaemonRequest, DaemonResponse } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { buildReplayFailureDivergence } from './session-replay-divergence.ts';
 import {
   buildReplayDivergenceFailureResponse,

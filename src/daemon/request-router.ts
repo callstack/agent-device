@@ -17,7 +17,12 @@ import type {
   RequestPlatformProviderScope,
   RequestPlatformProviders,
 } from '@agent-device/contracts/platform-providers';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
+import type {
+  DaemonInvokeFn,
+  DaemonRequest,
+  DaemonResponse,
+  DaemonResponseData,
+} from './daemon-request.ts';
 import { RESPONSE_VIEWS } from './response-views.ts';
 import { SessionStore } from './session-store.ts';
 import { errorResponse, noActiveSessionError } from './response.ts';

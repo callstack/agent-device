@@ -2,7 +2,8 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 import { SessionStore } from '../../../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
+import type { SessionState } from '../../../session-state.ts';
 import {
   activateCompleteRefFrame,
   readSessionRuntimeRevision,

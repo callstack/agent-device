@@ -7,7 +7,7 @@ import {
 } from '@agent-device/contracts/capture';
 import { getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
 import { resolveRunnerLogicalLeaseContext } from './lease-context.ts';
-import type { DaemonRequest } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
 
 export type DaemonCommandContext = DispatchContext & ScreenshotRuntimeFlags;
 

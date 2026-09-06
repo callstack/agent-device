@@ -8,7 +8,7 @@ import type {
   AgentArtifactsResult,
   CloudArtifactProvider,
 } from '@agent-device/contracts/observability';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import type { ReleaseLeaseRequest } from '../lease-registry-scope.ts';
 import type { SessionStore } from '../session-store.ts';

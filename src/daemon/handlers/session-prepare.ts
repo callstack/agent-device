@@ -4,7 +4,7 @@ import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { PREPARE_REQUEST_TIMEOUT_MS } from '../../core/command-descriptor/timeout-policy.ts';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { resolveRunnerLogicalLeaseContext } from '../lease-context.ts';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { SessionStore } from '../session-store.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { admitRuntimeUse } from '../runtime-admission.ts';

@@ -15,7 +15,7 @@ import {
   type DeviceClaimClassification,
   type InspectedDeviceClaim,
 } from './device-claim-inspection.ts';
-import type { DaemonResponse } from './types.ts';
+import type { DaemonResponse } from './daemon-request.ts';
 import { errorResponse } from './response.ts';
 
 export type DeviceClaimConflictReason =

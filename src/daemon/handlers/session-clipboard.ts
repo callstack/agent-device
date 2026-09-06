@@ -11,7 +11,7 @@ import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/devi
 import { AppError } from '@agent-device/kernel/errors';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { contextFromFlags, type DaemonCommandContext } from '../context.ts';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from '../runtime-admission.ts';

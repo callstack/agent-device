@@ -21,7 +21,7 @@ import type { SnapshotFreshnessMode } from '../snapshot/snapshot-freshness/index
 import { contextFromFlags } from './context.ts';
 import { resolveDeferredInteractionOutcome } from './deferred-interaction-outcome.ts';
 import { createInteractionRetryTap } from './interaction-retry-tap.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';
 

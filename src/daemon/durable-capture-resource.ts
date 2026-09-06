@@ -19,7 +19,7 @@ import type { DurableCaptureAdmissionLedger } from './durable-capture-admission-
 import { createNextDurableCaptureFence } from './durable-capture-start-preflight.ts';
 import { safeSessionName } from './session-paths.ts';
 import type { SessionStore } from './session-store.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 import type { DurableSessionResourceKind } from './durable-session-resource-kinds.ts';
 
 type AdoptStartedSessionCaptureParams<K extends string, H extends AsyncDisposable> = Omit<

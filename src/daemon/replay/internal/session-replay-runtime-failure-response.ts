@@ -3,7 +3,7 @@ import { scrubReplayVarValues, type ReplayVarScrubEntry } from '@agent-device/co
 import { formatDivergenceActionLabel } from '@agent-device/ad-script';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
 import { buildDisplayPositionals } from '../../session-event-action.ts';
-import type { DaemonResponse } from '../../types.ts';
+import type { DaemonResponse } from '../../daemon-request.ts';
 
 export type ReplayFailureCause = Extract<DaemonResponse, { ok: false }>['error'];
 

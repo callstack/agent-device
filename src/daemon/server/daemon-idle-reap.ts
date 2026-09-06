@@ -1,6 +1,6 @@
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../session-store.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import { isUncommittedRepairSession } from '../session-replay-transaction.ts';
 
 // Bounds the daemon's own lifetime when nothing is using it. Each

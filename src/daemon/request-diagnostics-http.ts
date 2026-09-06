@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import { AppError, normalizeError, type DiagnosticsRecordRef } from '@agent-device/kernel/errors';
-import type { DaemonRequest } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
 import { isSafeSessionSegment } from './session-paths.ts';
 import { decodeUriSegment } from './http-request-target.ts';
 import { isTenantOwnedSessionName } from './session-tenant-scope.ts';

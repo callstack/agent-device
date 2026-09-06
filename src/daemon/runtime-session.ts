@@ -1,7 +1,7 @@
 import type { CommandSessionRecord, CommandSessionStore } from '../runtime-contract.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { refFrameTree } from './ref-frame.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 
 export type RuntimeSessionRecordOptions = {
   includeSnapshot?: boolean;

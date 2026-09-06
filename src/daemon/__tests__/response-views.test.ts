@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import { RESPONSE_VIEWS } from '../response-views.ts';
-import type { DaemonResponseData } from '../types.ts';
+import type { DaemonResponseData } from '../daemon-request.ts';
 
 const snapshotView = RESPONSE_VIEWS.snapshot;
 const screenshotView = RESPONSE_VIEWS.screenshot;

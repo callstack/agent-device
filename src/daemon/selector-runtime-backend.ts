@@ -14,7 +14,8 @@ import { contextFromFlags, type BoundContextFromFlags } from './context.ts';
 import { readTextForNode } from './selector-text-runtime.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import { SessionStore } from './session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 import {

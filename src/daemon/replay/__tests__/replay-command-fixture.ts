@@ -1,5 +1,5 @@
 import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../types.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import type { SessionStore } from '../../session-store.ts';
 import { createReplaySession } from '../../handlers/session-replay-command.ts';
 import { runReplayCommand } from '../index.ts';

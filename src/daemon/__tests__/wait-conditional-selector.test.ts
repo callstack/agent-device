@@ -23,7 +23,8 @@ import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { handleSnapshotCommands } from '../handlers/snapshot.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import type { DaemonRequest, SessionState } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 
 const available = Object.freeze({ available: true } as const);
 const unavailable = Object.freeze({
