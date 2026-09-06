@@ -126,7 +126,12 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
     'fixture automation-window value changed to landscape and back to portrait',
   );
 
-  await runStep(context, 'reveal input canaries', ['scroll', 'down', '0.7']);
+  await runStep(context, 'restore automation top before revealing input canaries', [
+    'scroll',
+    'top',
+  ]);
+  await revealAutomationControl(context, 'automation-press');
+  await assertElementText(context, 'id="automation-press"', 'Press canary');
   await runStep(context, 'press semantic canary', ['press', 'id="automation-press"']);
   await assertWaitText(context, 'Last input: press');
   verifyCommand(context, C.press, 'semantic press updates durable fixture input state');
@@ -139,6 +144,7 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
   await assertWaitText(context, 'Long presses: 1');
   verifyCommand(context, C.longPress, '800ms hold increments durable fixture long-press counter');
 
+  await revealAutomationControl(context, 'automation-open-alert');
   await runStep(context, 'open Android native alert', ['click', 'id="automation-open-alert"']);
   await assertWaitText(context, 'Automation confirmation');
   const alertSnapshot = await runStep(context, 'capture native alert through persistent helper', [
@@ -175,7 +181,7 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
   verifyCommand(context, C.alert, 'alert wait/get/dismiss/accept produce fixture-visible results');
 
   await assertHomeAndRecentsRestoration(context);
-  await runStep(context, 'reveal Android alert canary for diff baseline', ['scroll', 'down', '1']);
+  await revealAutomationControl(context, 'automation-open-alert');
   await runStep(context, 'establish automation diff baseline', ['snapshot', '-i']);
   await runStep(context, 'return from automation route with Back', ['back']);
   const diff = await runStep(context, 'observe automation-to-settings diff', [
@@ -193,6 +199,18 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
     'safe-back-navigation',
     'Back returned from the automation route to the fixture Settings tab without opening system navigation',
   );
+}
+
+async function revealAutomationControl(context: LiveContext, identifier: string): Promise<void> {
+  await runStep(context, `reveal ${identifier}`, [
+    'replay',
+    path.resolve('test/integration/replays/android/fixture/reveal-automation-control.yaml'),
+    '--maestro',
+    '--env',
+    `APP_ID=${context.appId}`,
+    '--env',
+    `CONTROL_ID=${identifier}`,
+  ]);
 }
 
 async function assertOrientationFixtureState(

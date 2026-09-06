@@ -1,0 +1,7 @@
+appId: ${APP_ID}
+---
+- scrollUntilVisible:
+    element:
+      id: ${CONTROL_ID}
+    direction: DOWN
+    timeout: 10000
