@@ -7,7 +7,7 @@ import {
   throwDaemonError,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
-import { resolveRemoteRequestDiagnosticsPath } from './daemon/session-store.ts';
+import { resolveRemoteRequestDiagnosticsPath } from './daemon/session-artifact-paths.ts';
 import { exitAfterFlush } from './cli/process-exit.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import { pathToFileURL } from 'node:url';

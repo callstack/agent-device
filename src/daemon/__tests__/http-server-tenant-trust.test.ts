@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createDaemonHttpServer } from '../server/http-server.ts';
-import { resolveSessionRequestLogPath } from '../session-store.ts';
+import { resolveSessionRequestLogPath } from '../session-artifact-paths.ts';
 import { safeSessionName } from '../session-paths.ts';
 import { DAEMON_HTTP_TENANT_HEADER } from '@agent-device/contracts/daemon-http';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
