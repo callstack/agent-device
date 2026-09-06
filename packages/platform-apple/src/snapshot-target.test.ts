@@ -137,3 +137,68 @@ test('an aborted request cannot reuse a cached target', async () => {
     expect(fixture.runCommand).toHaveBeenCalledTimes(1);
   });
 });
+
+function deferredSpawn(fixture: ReturnType<typeof targetFixture>) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const respond = fixture.run.getMockImplementation()!;
+  fixture.run.mockImplementation(async (args: string[]) =>
+    args[0] === 'spawn' ? await released.then(() => respond(args)) : await respond(args),
+  );
+  return release;
+}
+
+test('a slow discovery yields to the fallback after its wait budget and finishes in the background', async () => {
+  const fixture = targetFixture();
+  const release = deferredSpawn(fixture);
+  vi.useFakeTimers();
+  try {
+    await withAppleToolProvider(fixture.provider, async () => {
+      const pending = fixture.resolve(ios, app, signal());
+      const rejected = expect(pending).rejects.toMatchObject({
+        details: { reason: 'simulator-target-discovery-pending' },
+      });
+      await vi.advanceTimersByTimeAsync(1_500);
+      await rejected;
+      expect(fixture.discoveryCount()).toBe(1);
+
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      // The finished discovery serves the next capture without a second simctl spawn.
+      expect(await fixture.resolve(ios, app, signal())).toMatchObject({ pid: 42 });
+      expect(fixture.discoveryCount()).toBe(1);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('captures that arrive during discovery join it instead of spawning their own', async () => {
+  const fixture = targetFixture();
+  const release = deferredSpawn(fixture);
+  await withAppleToolProvider(fixture.provider, async () => {
+    const first = fixture.resolve(ios, app, signal());
+    const second = fixture.resolve(ios, app, signal());
+    release();
+    const targets = await Promise.all([first, second]);
+    expect(targets[1]).toBe(targets[0]);
+    expect(fixture.discoveryCount()).toBe(1);
+  });
+});
+
+test('a cancelled caller leaves discovery running for the next capture', async () => {
+  const fixture = targetFixture();
+  const release = deferredSpawn(fixture);
+  await withAppleToolProvider(fixture.provider, async () => {
+    const controller = new AbortController();
+    const cancelled = fixture.resolve(ios, app, controller.signal);
+    controller.abort(new Error('request-ended'));
+    await expect(cancelled).rejects.toThrow('request-ended');
+
+    release();
+    expect(await fixture.resolve(ios, app, signal())).toMatchObject({ pid: 42 });
+    expect(fixture.discoveryCount()).toBe(1);
+  });
+});
