@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { computeDaemonCodeSignature } from '../code-signature.ts';
-import { resolveCachedDaemonCodeSignature } from '../code-signature-cache.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { computeDaemonCodeSignature } from './code-signature.ts';
+import { resolveCachedDaemonCodeSignature } from './code-signature-cache.ts';
+import { mkdtempForTestSync } from './internal/tmp-dir.fixtures.ts';
 
 afterEach(() => {
   vi.restoreAllMocks();

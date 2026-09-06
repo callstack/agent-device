@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { computeDaemonCodeSignature } from '../../code-signature.ts';
+import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
 import { resolveDaemonLaunchSpec, resolveLocalDaemonCodeSignature } from '../daemon-launch-spec.ts';
 import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 
