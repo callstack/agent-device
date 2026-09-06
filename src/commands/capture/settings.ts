@@ -54,7 +54,7 @@ export const settingsCommandFacet = defineCommandFacet({
   text: {
     summary: 'Change OS settings and app permissions',
     cliDetail:
-      'macOS supports only settings appearance <light|dark|toggle> and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>; wifi|airplane|location|animations remain unsupported on macOS. Mobile permission actions use the active session app. On Android, deny|reset of a permission the app currently holds kills a running app; the response reports priorGrantState (granted|not_granted|unknown) and warns for granted and unknown, with open <app> --relaunch to restore it. Permission changes require a resolvable foreground user and fail without mutating if adb cannot report one. Android settings airplane on|off is applied by the connectivity service (Android 11+) and reports the airplaneMode that service holds; older builds fail without changing device state.',
+      'macOS supports only settings appearance <light|dark|toggle> and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>; wifi|airplane|location|animations remain unsupported on macOS. Mobile permission actions use the active session app. On Android, deny|reset of a permission the app currently holds kills a running app; the response reports priorGrantState (granted|not_granted|unknown) and warns for granted and unknown, with open <app> --relaunch to restore it. Permission changes require a resolvable foreground user and fail without mutating if adb cannot report one. Android settings airplane on|off is applied by the connectivity service (Android 11+) and reports the airplaneMode that service holds; older builds fail without changing device state. settings reset-keychain clear is iOS-simulator-only and resets the whole simulator keychain, not just the selected app: simctl exposes no per-app keychain reset, so every app on that simulator loses its keychain-backed credentials (e.g. Firebase auth). clear-app-state does not touch the keychain, so a full fresh-install reset needs both; relaunch the app afterward to observe the signed-out state.',
   },
   metadata: settingsCommandMetadata,
   run: (client, input) => client.settings.update(input as SettingsUpdateOptions),
@@ -106,6 +106,9 @@ function readSettingsOptionsFromPositionals(
   if (setting === 'clear-app-state') {
     const app = state === 'clear' ? positionals[2] : state;
     return { ...base, setting, state: 'clear', app };
+  }
+  if (setting === 'reset-keychain' && state === 'clear') {
+    return { ...base, setting, state };
   }
   throw new AppError('INVALID_ARGS', 'Invalid settings arguments.');
 }

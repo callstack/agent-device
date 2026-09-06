@@ -27,6 +27,10 @@ export type SettingsUpdateOptions =
       app?: string;
     })
   | (DeviceCommandBaseOptions & {
+      setting: 'reset-keychain';
+      state: 'clear';
+    })
+  | (DeviceCommandBaseOptions & {
       setting: 'wifi' | 'airplane' | 'location';
       state: 'on' | 'off';
     })
