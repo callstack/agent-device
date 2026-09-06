@@ -272,7 +272,11 @@ async function runIosPrivacyCommand(
   appBundleId: string,
 ): Promise<void> {
   const supportedServices = await getSimctlPrivacyServices(device);
-  if (!supportedServices.has(target)) {
+  // reset notifications falls back to `reset all` below (direct reset fails
+  // with "operation not permitted" on runtimes whose help omits the service),
+  // so it passes the probe gate even when the service is unlisted. Grant/deny
+  // for notifications stay loud rejections.
+  if (!supportedServices.has(target) && !(action === 'reset' && target === 'notifications')) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       `iOS simctl privacy does not support service "${target}" on this runtime.`,
@@ -285,29 +289,40 @@ async function runIosPrivacyCommand(
   }
 
   const args = ['privacy', device.id, action, target, appBundleId];
-  const isNotificationsTarget = target === 'notifications';
-  if (!(action === 'reset' && isNotificationsTarget)) {
-    try {
-      await runSimctl(device, args);
-      return;
-    } catch (error) {
-      if (!(isNotificationsTarget && isNotificationsOperationNotPermitted(error))) {
-        throw error;
-      }
-      throw new AppError(
-        'UNSUPPORTED_OPERATION',
-        'iOS simulator does not support setting notifications permission via simctl privacy on this runtime.',
-        {
-          deviceId: device.id,
-          appBundleId,
-          hint: 'Use reset notifications for reprompt behavior, or toggle notifications manually in Settings.',
-        },
-      );
-    }
+  if (action === 'reset' && target === 'notifications') {
+    await resetIosNotificationsPermission(device, appBundleId);
+    return;
   }
-
   try {
     await runSimctl(device, args);
+    return;
+  } catch (error) {
+    if (!(target === 'notifications' && isNotificationsOperationNotPermitted(error))) {
+      throw error;
+    }
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'iOS simulator does not support setting notifications permission via simctl privacy on this runtime.',
+      {
+        deviceId: device.id,
+        appBundleId,
+        hint: 'Use reset notifications for reprompt behavior, or toggle notifications manually in Settings.',
+      },
+    );
+  }
+}
+
+/**
+ * Direct `reset notifications` fails with "operation not permitted" on
+ * runtimes whose help omits the service, while `reset all` succeeds — so
+ * reset goes through the fallback instead of failing loudly like grant/deny.
+ */
+async function resetIosNotificationsPermission(
+  device: DeviceInfo,
+  appBundleId: string,
+): Promise<void> {
+  try {
+    await runSimctl(device, ['privacy', device.id, 'reset', 'notifications', appBundleId]);
     return;
   } catch (error) {
     if (!isNotificationsOperationNotPermitted(error)) {
