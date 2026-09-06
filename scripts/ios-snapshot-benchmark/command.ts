@@ -62,6 +62,28 @@ export function openFixture(
   };
 }
 
+/**
+ * The first runner-dependent command after an open, timed on its own: the open itself is untimed
+ * setup (the `cold` and `relaunch` cells measure it). When the launch URL raises the deep-link
+ * confirmation, that dialog's `Open` press is the first interaction; otherwise the screen anchor
+ * is pressed. Either way the sample records whatever runner readiness the open deferred.
+ */
+export function firstInteractionAfterOpen(context: CliContext, fixture: ScreenFixture): CliResult {
+  const opened = runCli(context, [
+    'open',
+    fixture.app,
+    '--relaunch',
+    ...(fixture.launchUrl ? ['--launch-url', fixture.launchUrl] : []),
+    '--foreground',
+  ]);
+  if (!opened.ok) return opened;
+  const selector =
+    fixture.launchUrl && hasDeepLinkConfirmation(opened.payload)
+      ? 'label="Open"'
+      : `text=${JSON.stringify(fixture.anchorText)}`;
+  return pressFixtureTarget(context, selector);
+}
+
 export async function openFixtureAsync(
   context: CliContext,
   fixture: ScreenFixture,

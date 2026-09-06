@@ -8,7 +8,7 @@ export const WARM_SAMPLE_MINIMUM = 20;
 export const COLD_SAMPLE_MINIMUM = 10;
 export const PROXY_RTT_VALUES = [0, 20, 80] as const;
 
-export type LocalState = 'cold-cold' | 'cold' | 'warm' | 'relaunch';
+export type LocalState = 'cold-cold' | 'cold' | 'warm' | 'relaunch' | 'first-interaction';
 export type Transport = 'local' | 'proxy';
 export type Execution = 'fresh-process-cli' | 'persistent-client';
 export type ScreenId =
@@ -52,7 +52,7 @@ export type RawSample = {
   index: number;
   startedAt: string;
   finishedAt: string;
-  operation: 'open-foreground' | 'snapshot' | 'relaunch-foreground';
+  operation: 'open-foreground' | 'snapshot' | 'relaunch-foreground' | 'first-interaction';
   wallClockMs: number;
   daemonDurationMs?: number;
   responseBytes?: number;
