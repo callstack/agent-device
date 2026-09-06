@@ -229,3 +229,37 @@ test('one discovery shares a single deadline across its simctl probes and the id
     vi.useRealTimers();
   }
 });
+
+test('a failed runtime probe does not release the slot while the launch-job probe still runs', async () => {
+  const fixture = targetFixture();
+  const release = deferredSpawn(fixture);
+  const respond = fixture.run.getMockImplementation()!;
+  fixture.run.mockImplementation(async (args: string[], options) =>
+    args[0] === 'list'
+      ? { stdout: '', stderr: 'simctl list failed', exitCode: 1 }
+      : await respond(args, options),
+  );
+  vi.useFakeTimers();
+  try {
+    await withAppleToolProvider(fixture.provider, async () => {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const pending = fixture.resolve(ios, app, signal());
+        const rejected = expect(pending).rejects.toMatchObject({
+          details: { reason: 'simulator-target-discovery-pending' },
+        });
+        await vi.advanceTimersByTimeAsync(1_500);
+        await rejected;
+      }
+      expect(fixture.discoveryCount()).toBe(1);
+
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      // The settled discovery reports the runtime failure and frees the slot for a fresh probe.
+      await expect(fixture.resolve(ios, app, signal())).rejects.toMatchObject({
+        details: { reason: 'simulator-runtime-probe-failed' },
+      });
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});

@@ -95,13 +95,20 @@ async function resolveSimulatorSnapshotTarget(
   runtimeByDevice: Map<string, Promise<string>>,
 ): Promise<SimulatorSnapshotTarget> {
   const deadline = Date.now() + TARGET_DISCOVERY_TIMEOUT_MS;
-  const [jobs, runtime] = await Promise.all([
+  // Both probes settle before this discovery does: a discovery that gave up on the first
+  // failure would release its single-flight slot while the other probe still runs, and every
+  // capture after it would start a probe of its own.
+  const [jobsProbe, runtimeProbe] = await Promise.allSettled([
     runSimctl(device, ['spawn', device.id, 'launchctl', 'list'], {
       allowFailure: true,
       timeoutMs: remainingMs(deadline),
     }),
     readSimulatorRuntime(device, runtimeByDevice, deadline),
   ]);
+  if (jobsProbe.status === 'rejected') throw jobsProbe.reason;
+  if (runtimeProbe.status === 'rejected') throw runtimeProbe.reason;
+  const jobs = jobsProbe.value;
+  const runtime = runtimeProbe.value;
   if (jobs.exitCode !== 0) {
     throw targetError('simulator-target-probe-failed', device, appBundleId);
   }
