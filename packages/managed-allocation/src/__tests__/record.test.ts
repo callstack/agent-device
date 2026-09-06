@@ -3,11 +3,15 @@ import { test } from 'vitest';
 import type { LeaseRequestStatus } from '@agent-device/contracts/managed-device-allocation';
 import { managedBindingFence } from '@agent-device/contracts/platform-runtime';
 import { AppError } from '@agent-device/kernel/errors';
-import { ALLOCATION_OPERATION_SCHEMA_VERSION, bindingFenceFor } from '../record.ts';
-import { newAllocationOperation } from '../record-factory.ts';
+import {
+  ALLOCATION_OPERATION_SCHEMA_VERSION,
+  bindingFenceFor,
+  decodeAllocationOperationRecord,
+  newAllocationOperation,
+  type AllocationOperationRecord,
+  type AllocationTransition,
+} from '../record.ts';
 import { applyAllocationTransition } from '../transitions.ts';
-import type { AllocationOperationRecord, AllocationTransition } from '../record.ts';
-import { decodeAllocationOperationRecord } from '../record-codec.ts';
 import {
   ALLOCATION_GRANTED_STATUS,
   ALLOCATION_LEASE,

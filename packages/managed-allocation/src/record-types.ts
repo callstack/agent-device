@@ -5,13 +5,8 @@ import type {
   ManagedLease,
   ManagedShapeRequest,
 } from '@agent-device/contracts/managed-device-allocation';
-import {
-  managedBindingFence,
-  type ResourceOwnershipFence,
-} from '@agent-device/contracts/platform-runtime';
-import { ALLOCATION_OPERATION_SCHEMA_VERSION } from './schema.ts';
-
-export { ALLOCATION_OPERATION_SCHEMA_VERSION };
+import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
+import type { ALLOCATION_OPERATION_SCHEMA_VERSION } from './schema.ts';
 
 export type AllocationOperationRef = Readonly<{
   requesterId: string;
@@ -95,12 +90,3 @@ export type AllocationTransitionResult =
   | Readonly<{ status: 'applied'; record: AllocationOperationRecord }>
   | Readonly<{ status: 'already-applied'; record: AllocationOperationRecord }>
   | Readonly<{ status: 'already-terminal'; record: AllocationOperationRecord }>;
-
-export function bindingFenceFor(record: AllocationOperationRecord): ResourceOwnershipFence | null {
-  if (record.phase.status !== 'granted' || record.identityIncarnationId === undefined) return null;
-  return managedBindingFence({
-    requesterId: record.requesterId,
-    requestGeneration: record.requestGeneration,
-    identityIncarnationId: record.identityIncarnationId,
-  });
-}

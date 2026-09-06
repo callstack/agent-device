@@ -4,9 +4,8 @@ import path from 'node:path';
 import { test, vi } from 'vitest';
 import { acquireProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
-import { newAllocationOperation } from '../record-factory.ts';
-import type { AllocationOperationRecord } from '../record.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { newAllocationOperation, type AllocationOperationRecord } from '../record.ts';
 import { createAllocationOperationStore, type AllocationOperationStore } from '../store.ts';
 import { ALLOCATION_LEASE, ALLOCATION_REQUEST } from './fixtures.ts';
 

@@ -1,9 +1,9 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { freezeJsonObject } from '@agent-device/capture-kit';
+import { freezeJsonObject } from '@agent-device/capture-kit/durable-json';
 import { allocationOperationFence } from './fence.ts';
 import { ALLOCATION_OPERATION_SCHEMA_VERSION } from './schema.ts';
 import { isAllocationRequest } from './record-validation.ts';
-import type { AllocationOperationRecord, NewAllocationOperationInput } from './record.ts';
+import type { AllocationOperationRecord, NewAllocationOperationInput } from './record-types.ts';
 
 export function newAllocationOperation(
   fields: NewAllocationOperationInput,

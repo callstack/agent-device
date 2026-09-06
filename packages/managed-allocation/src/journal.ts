@@ -20,6 +20,19 @@ import type { AllocationOperationRead, AllocationOperationStore } from './store.
 import { abandoned, blocked, unreadableResult } from './journal-results.ts';
 
 export type { AllocationBindingHooks, AllocationJournalResult } from './journal-types.ts';
+// The remaining journal-types names are this package's public journal surface: the managed
+// runtime binding (ADR 0021 §3) consumes them, and it lands after this move, so fallow sees no
+// importer yet. Suppressed per name rather than baselined so the reason travels with the code.
+// fallow-ignore-next-line unused-type
+export type { AllocationJournalActionRunner } from './journal-types.ts';
+// fallow-ignore-next-line unused-type
+export type { AllocationJournalBlockReason } from './journal-types.ts';
+// fallow-ignore-next-line unused-type
+export type { AllocationJournalReason } from './journal-types.ts';
+// fallow-ignore-next-line unused-type
+export type { JournalContext } from './journal-types.ts';
+// fallow-ignore-next-line unused-type
+export type { PersistedTransition } from './journal-types.ts';
 
 export type AllocationOperationJournal = Readonly<{
   allocate(input: LeaseRequestInput): Promise<AllocationJournalResult>;

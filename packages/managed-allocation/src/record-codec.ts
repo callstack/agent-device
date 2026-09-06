@@ -1,6 +1,6 @@
 import type { ManagedShapeRequest } from '@agent-device/contracts/managed-device-allocation';
 import type { JsonObject } from '@agent-device/contracts/client';
-import type { AllocationOperationPhase, AllocationOperationRecord } from './record.ts';
+import type { AllocationOperationPhase, AllocationOperationRecord } from './record-types.ts';
 import { allocationOperationFence } from './fence.ts';
 import { ALLOCATION_OPERATION_SCHEMA_VERSION } from './schema.ts';
 import {

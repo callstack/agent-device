@@ -1,5 +1,5 @@
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
-import type { AllocationOperationRef } from './record.ts';
+import type { AllocationOperationRef } from './record-types.ts';
 import { isFenceGeneration, isVerbatimId } from './record-validation.ts';
 
 export function allocationOperationFence(

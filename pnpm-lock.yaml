@@ -38,6 +38,9 @@ importers:
       '@agent-device/maestro':
         specifier: workspace:*
         version: link:packages/maestro
+      '@agent-device/managed-allocation':
+        specifier: workspace:*
+        version: link:packages/managed-allocation
       '@agent-device/platform-android':
         specifier: workspace:*
         version: link:packages/platform-android
@@ -266,6 +269,21 @@ importers:
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
+
+  packages/managed-allocation:
+    dependencies:
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
 
   packages/platform-android:
     dependencies:
