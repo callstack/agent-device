@@ -557,7 +557,7 @@
       "file": "authored/repeat.yaml",
       "origin": {
         "kind": "authored",
-        "note": "Coverage: repeat.times (upstream 053 also uses the unsupported evalScript command)."
+        "note": "Coverage: repeat.times with ${output.list.length} (upstream 053 exercises the same evalScript-to-repeat shape)."
       }
     },
     {

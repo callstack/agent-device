@@ -2,15 +2,15 @@ export const MAESTRO_COMPAT_SUPPORTED_CAPABILITIES = [
   'Flows: launchApp; runFlow file/inline with platform, visibility, and limited boolean conditions; onFlowStart/onFlowComplete; repeat.times and retry.',
   'Interactions: tapOn, doubleTapOn, longPressOn, inputText on the focused element, eraseText, openLink, hideKeyboard, basic pressKey, and back; selector targets poll until available and support recursive index, childOf, above, below, leftOf, rightOf, containsChild, containsDescendants, points, and optional; outer command labels are metadata, not target selectors.',
   'Assertions and navigation: assertVisible, assertNotVisible, assertTrue (literal values and ${VAR} lookups only; "", "false", "0", "null", and "undefined" are falsy, everything else is truthy), extendedWaitUntil, scroll, scrollUntilVisible, absolute/percentage/target swipe, takeScreenshot, waitForAnimationToEnd, and stopApp.',
-  'Scripts: ordered runScript file/env scripts with http.post, json, and output variables.',
+  'Scripts: ordered runScript file/env scripts with http.post, json, and output variables; evalScript inline expressions run flow-scoped JavaScript and write output.* leaves for later steps.',
 ] as const;
 
 export const MAESTRO_COMPAT_LIMITATIONS = [
   'Runtime: iOS and Android only; launchApp.clearState supports Android and iOS simulators, launch arguments are Apple-only, and standalone device utility/state commands are unsupported.',
-  'Expressions: when.true supports boolean literals and maestro.platform comparisons; assertTrue supports literal values and ${VAR} lookups only; repeat.while, evalScript, and broader JavaScript expressions are unsupported.',
+  'Expressions: evalScript is the only command whose payload is evaluated as JavaScript (flow env and prior output leaves are string-typed); with that exception, fields stay literal or ${VAR} lookup-only — assertTrue supports literals and bare lookups, repeat.while is unsupported, and other expression-shaped payloads fail loud.',
   'Environment: flow env is the default, AD_VAR_* overrides it, and CLI -e KEY=VALUE wins over both.',
   'Failure diagnostics: resolved targets and runFlow paths are rendered, while inputText payloads remain hidden; do not place secrets in diagnostic identifiers.',
-  'Trust: runScript executes trusted scripts, may make http.post network requests, and is not a security sandbox; output keys cannot contain a dot.',
+  'Trust: runScript and evalScript execute flow scripts in-process via node:vm, which is not a security sandbox; runScript may make http.post network requests and its output keys cannot contain a dot. evalScript is refused outright for a flow accepted over the daemon’s remote HTTP surface, since that context can escape to the host.',
   'Errors and tracking: unsupported commands and fields fail with source context when available; open a focused issue only when implementation work is planned.',
 ] as const;
 

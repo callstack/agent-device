@@ -38,10 +38,10 @@ export function evaluateMaestroReplayResume(
         reason: `step ${index + 1} is opaque runtime control flow (${step.command.kind}) and cannot be skipped safely.`,
       };
     }
-    if (step.command.kind === 'runScript') {
+    if (step.command.kind === 'runScript' || step.command.kind === 'evalScript') {
       return {
         allowed: false,
-        reason: `step ${index + 1} (runScript) can produce outputEnv values and cannot be skipped safely.`,
+        reason: `step ${index + 1} (${step.command.kind}) can produce outputEnv values and cannot be skipped safely.`,
       };
     }
   }

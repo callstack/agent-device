@@ -44,6 +44,16 @@ export function createMaestroExecutionContext(
       persistentValues = { ...persistentValues, ...output };
       cachedValues = undefined;
     },
+    replaceOutput(output: Record<string, string>): void {
+      const next: Record<string, string> = {};
+      for (const [key, value] of Object.entries(persistentValues)) {
+        if (key === 'output' || key.startsWith('output.')) continue;
+        next[key] = value;
+      }
+      Object.assign(next, output);
+      persistentValues = next;
+      cachedValues = undefined;
+    },
     recordObservation(next: MaestroObservation): void {
       if (next.generation !== generation) {
         throw new AppError(
