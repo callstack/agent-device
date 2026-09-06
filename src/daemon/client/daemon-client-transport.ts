@@ -36,7 +36,14 @@ export type RemoteDaemonHealth = {
   service?: string;
   version?: string;
   rpcProtocolVersion?: number;
+  /** The daemon behind a proxy, as the proxy's health reported it. */
+  upstream?: RemoteDaemonHealthLink;
 };
+
+type RemoteDaemonHealthLink = Pick<
+  RemoteDaemonHealth,
+  'service' | 'version' | 'rpcProtocolVersion'
+>;
 
 export async function canConnect(
   info: DaemonInfo,
@@ -86,17 +93,21 @@ function canConnectHttp(info: DaemonInfo): Promise<boolean> {
 export async function readRemoteDaemonHealth(info: DaemonInfo): Promise<RemoteDaemonHealth> {
   const health = await readDaemonHttpHealth(info);
   if (!info.baseUrl || !health.reachable) return health;
-  if (
-    typeof health.rpcProtocolVersion === 'number' &&
-    health.rpcProtocolVersion !== DAEMON_RPC_PROTOCOL_VERSION
-  ) {
+  // Every link a command RPC crosses has to speak the client's protocol: a proxy that reports a
+  // skewed daemon behind it fails here, before the RPC, exactly like a skewed proxy does.
+  const incompatible = [health, health.upstream].find(
+    (link) =>
+      typeof link?.rpcProtocolVersion === 'number' &&
+      link.rpcProtocolVersion !== DAEMON_RPC_PROTOCOL_VERSION,
+  );
+  if (incompatible) {
     throw new AppError('COMMAND_FAILED', 'Remote daemon RPC protocol is incompatible', {
       daemonBaseUrl: info.baseUrl,
       clientVersion: readVersion(),
-      remoteVersion: health.version,
-      remoteService: health.service,
+      remoteVersion: incompatible.version,
+      remoteService: incompatible.service,
       supportedRpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
-      remoteRpcProtocolVersion: health.rpcProtocolVersion,
+      remoteRpcProtocolVersion: incompatible.rpcProtocolVersion,
       hint: 'Upgrade agent-device on the client or remote host so both support the same daemon RPC protocol.',
     });
   }
@@ -156,20 +167,27 @@ async function readDaemonHttpHealth(info: DaemonInfo): Promise<RemoteDaemonHealt
 
 function readHealthPayload(body: string): Omit<RemoteDaemonHealth, 'reachable' | 'statusCode'> {
   try {
-    const parsed = JSON.parse(body) as {
-      service?: unknown;
-      version?: unknown;
-      rpcProtocolVersion?: unknown;
-    };
+    const parsed = JSON.parse(body) as { upstream?: unknown };
+    const upstream =
+      parsed.upstream && typeof parsed.upstream === 'object'
+        ? readHealthLink(parsed.upstream as Record<string, unknown>)
+        : undefined;
     return {
-      service: typeof parsed.service === 'string' ? parsed.service : undefined,
-      version: typeof parsed.version === 'string' ? parsed.version : undefined,
-      rpcProtocolVersion:
-        typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined,
+      ...readHealthLink(parsed as Record<string, unknown>),
+      ...(upstream ? { upstream } : {}),
     };
   } catch {
     return {};
   }
+}
+
+function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink {
+  return {
+    service: typeof parsed.service === 'string' ? parsed.service : undefined,
+    version: typeof parsed.version === 'string' ? parsed.version : undefined,
+    rpcProtocolVersion:
+      typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined,
+  };
 }
 
 export async function sendRequest(
