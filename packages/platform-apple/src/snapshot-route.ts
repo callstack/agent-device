@@ -22,6 +22,7 @@ import {
   createSimulatorSnapshotSource,
   type SimulatorSnapshotSource,
   type SnapshotSourceFailure,
+  type SnapshotSourceOutcome,
 } from './snapshot-source-facade.ts';
 import {
   createSimulatorSnapshotTargetResolver,
@@ -98,24 +99,11 @@ export function createAppleSnapshotRoute(
       }
 
       const request = requestFor(input);
-      const acquire = async () =>
-        await source.acquire({ target, hint: deriveIosCaptureHint(request), signal });
-      let outcome = await acquire();
-      if (outcome.stage === 'failed') {
-        const graceMs = launchGraceFor(outcome.failure, target, host.clock.now());
-        const deadline = host.clock.now() + graceMs;
-        while (
-          outcome.stage === 'failed' &&
-          LAUNCH_GRACE_BY_CODE.has(outcome.failure.code) &&
-          host.clock.now() < deadline
-        ) {
-          emitRouteDiagnostic('launch-grace-retry', device, target.generation, undefined, {
-            code: outcome.failure.code,
-          });
-          await host.clock.sleep(LAUNCH_GRACE_POLL_MS, signal);
-          outcome = await acquire();
-        }
-      }
+      const outcome = await acquireWithinLaunchGrace(source, host.clock, device, target, {
+        target,
+        hint: deriveIosCaptureHint(request),
+        signal,
+      });
       if (outcome.stage === 'failed') {
         if (outcome.failure.kind === 'cancelled') {
           signal.throwIfAborted();
@@ -265,6 +253,31 @@ async function resolveFailureFallbackIdentity(
       residue: [unknownGenerationResidue()],
     };
   }
+}
+
+/** One acquisition, re-read while the launch grace for its typed failure still holds. */
+async function acquireWithinLaunchGrace(
+  source: SimulatorSnapshotSource,
+  clock: PlatformRuntimeHost['clock'],
+  device: DeviceInfo,
+  target: SimulatorSnapshotTarget,
+  request: Parameters<SimulatorSnapshotSource['acquire']>[0],
+): Promise<SnapshotSourceOutcome> {
+  let outcome = await source.acquire(request);
+  if (outcome.stage !== 'failed') return outcome;
+  const deadline = clock.now() + launchGraceFor(outcome.failure, target, clock.now());
+  while (
+    outcome.stage === 'failed' &&
+    LAUNCH_GRACE_BY_CODE.has(outcome.failure.code) &&
+    clock.now() < deadline
+  ) {
+    emitRouteDiagnostic('launch-grace-retry', device, target.generation, undefined, {
+      code: outcome.failure.code,
+    });
+    await clock.sleep(LAUNCH_GRACE_POLL_MS, request.signal);
+    outcome = await source.acquire(request);
+  }
+  return outcome;
 }
 
 function launchGraceFor(
