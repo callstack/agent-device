@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.58d177bb0e.js"></script>
+<script defer src="/agent-device/static/js/index.9c8a1550c4.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -378,6 +378,7 @@ cannot carry custom actions: the pair is rejected as <code>INVALID_ARGS</code> b
 <li>Wait failures carry a structured <code>error.details.reason</code> in <code>--json</code> output: <code>wait_target_absent</code> proves a positive wait never found a match; <code>wait_target_present</code> means strict <code>wait absent</code> reached its deadline with valid captures that still contained matches; <code>predicate_failed</code> means strict <code>wait absent</code> could not prove absence because no valid capture arrived, with the final observation/diagnostic preserved; <code>wait_capture_stalled</code> means no readable capture arrived and is retriable; <code>wait_deadline_exceeded</code> means a later capture consumed the remaining budget after an earlier readable capture; <code>wait_landmark_identity_mismatch</code> is a replay destination-guard refusal; and <code>wait_stable_timeout</code> means the UI did not settle. Use <code>readableCaptures</code>, <code>waitedMs</code>, <code>matches</code>, and <code>firstMatch</code> instead of parsing error text. <code>firstMatch</code> carries identity/text evidence only; absence failures do not claim visibility or rect evidence.</li>
 <li><code>alert</code> inspects or handles system alerts on iOS simulator, macOS desktop, and Android native/runtime permission dialogs.</li>
 <li><code>alert</code> without an action is equivalent to <code>alert get</code>.</li>
+<li><code>accept</code> and <code>dismiss</code> are sent once on every platform. A lost or unconfirmed response is reported as an error and never replayed; run <code>alert get</code> before acting again.</li>
 <li>Use <code>alert get</code> for an immediate cheap check. Use <code>alert wait &lt;short-ms&gt;</code> only when a prompt may appear after async work.</li>
 <li>Android support is snapshot-derived. If <code>alert</code> reports no alert but a sheet is visible, treat it as app-owned UI and use <code>snapshot -i</code> plus <code>press</code> by visible label/ref.</li>
 <li>If an iOS permission sheet is visible in <code>snapshot</code> or <code>screenshot</code> but <code>alert accept</code> reports no alert, fall back to a scoped <code>snapshot -i -s &quot;&lt;visible label&gt;&quot;</code> plus <code>press @ref</code>; not every simulator permission surface is exposed as a native XCTest alert.</li>
