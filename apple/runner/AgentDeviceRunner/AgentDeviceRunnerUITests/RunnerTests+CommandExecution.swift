@@ -2266,6 +2266,10 @@ extension RunnerTests {
           error: ErrorPayload(code: "INVALID_ARGS", message: validationError)
         )
       }
+      // Attach the synthesized-input HID digitizer once per process before the first timed gesture,
+      // so this gesture's touch-down is not delayed by the one-time attach latency (see
+      // RunnerTests+SynthesizedInputWarmup).
+      ensureSynthesizedInputWarmed(app: activeApp)
       switch plannedGestureExecution(for: plan) {
       case .fastSwipe:
         // Validation above guarantees a non-empty, single-pointer path for this execution kind.
