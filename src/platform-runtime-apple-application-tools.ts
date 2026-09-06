@@ -80,6 +80,12 @@ export function createAppleApplicationTools(): AppleApplicationTools {
       const { hasLiveIosRunnerSession } = await loadRunnerOperations();
       return hasLiveIosRunnerSession(device, { requestId: execution.requestId });
     },
+    releaseSpeculativeRunner: async (device, execution) => {
+      const { releaseSpeculativeIosRunnerSessionFor } = await loadRunnerOperations();
+      return await releaseSpeculativeIosRunnerSessionFor(device, {
+        requestId: execution.requestId,
+      });
+    },
     scheduleRunnerIdleStop: (deviceId) => {
       void loadRunnerOperations().then(({ scheduleIosRunnerIdleStop }) =>
         scheduleIosRunnerIdleStop(deviceId),

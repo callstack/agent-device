@@ -5,6 +5,7 @@ import {
   getRunnerSessionSnapshot,
   stopIosRunnerSession,
   validateRunnerDevice,
+  releaseSpeculativeIosRunnerSession,
 } from './runner-session.ts';
 import {
   assertRunnerRequestActive,
@@ -191,20 +192,32 @@ export function hasLiveIosRunnerSession(
   return resolveAppleRunnerRuntime(device, options).hasLiveSession(device);
 }
 
+/** Releases the runner a prewarm started for `device` if no command has used it; false otherwise. */
+export async function releaseSpeculativeIosRunnerSessionFor(
+  device: DeviceInfo,
+  options: { requestId?: string } = {},
+): Promise<boolean> {
+  if (!isIosFamily(device)) return false;
+  const release = resolveAppleRunnerRuntime(device, options).releaseSpeculativeSession;
+  return release ? await release(device) : false;
+}
+
 const LOCAL_APPLE_RUNNER_RUNTIME = createLocalAppleRunnerProvider(executeRunnerCommand, {
   prepare: prepareLocalIosRunner,
   hasLiveSession: (device) => {
     const session = getRunnerSessionSnapshot(device.id);
     return session !== null && session.alive && session.ready;
   },
+  releaseSpeculativeSession: async (device) => await releaseSpeculativeIosRunnerSession(device.id),
   prewarm: async (device, options) => {
     const { healthCheck, ...runnerOptions } = options;
     if (healthCheck === false) {
-      await ensureRunnerSession(device, runnerOptions);
+      await ensureRunnerSession(device, { ...runnerOptions, speculative: true });
       return;
     }
     await prepareLocalIosRunner(device, {
       ...runnerOptions,
+      speculative: true,
       healthTimeoutMs: RUNNER_COMMAND_TIMEOUT_MS,
     });
   },

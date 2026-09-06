@@ -1,6 +1,7 @@
 import { bindAppleRunnerHost, type AppleRunnerHost } from './host.ts';
 import {
   hasLiveIosRunnerSession,
+  releaseSpeculativeIosRunnerSessionFor,
   notifyIosRunnerAppRelaunched,
   prepareIosRunner,
   prewarmAppleRunnerCache,
@@ -35,6 +36,7 @@ export type AppleRunnerClient = {
   runAppleRunnerCommand: typeof runAppleRunnerCommand;
   notifyIosRunnerAppRelaunched: typeof notifyIosRunnerAppRelaunched;
   hasLiveIosRunnerSession: typeof hasLiveIosRunnerSession;
+  releaseSpeculativeIosRunnerSessionFor: typeof releaseSpeculativeIosRunnerSessionFor;
   prewarmAppleRunnerCache: typeof prewarmAppleRunnerCache;
   prewarmIosRunnerSession: typeof prewarmIosRunnerSession;
   prepareIosRunner: typeof prepareIosRunner;
@@ -65,6 +67,7 @@ export function createAppleRunnerClient(host: AppleRunnerHost): AppleRunnerClien
     runAppleRunnerCommand,
     notifyIosRunnerAppRelaunched,
     hasLiveIosRunnerSession,
+    releaseSpeculativeIosRunnerSessionFor,
     prewarmAppleRunnerCache,
     prewarmIosRunnerSession,
     prepareIosRunner,
