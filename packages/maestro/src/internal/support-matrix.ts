@@ -10,7 +10,7 @@ export const MAESTRO_COMPAT_LIMITATIONS = [
   'Expressions: evalScript is the only command whose payload is evaluated as JavaScript (flow env and prior output leaves are string-typed); with that exception, fields stay literal or ${VAR} lookup-only — assertTrue supports literals and bare lookups, repeat.while is unsupported, and other expression-shaped payloads fail loud.',
   'Environment: flow env is the default, AD_VAR_* overrides it, and CLI -e KEY=VALUE wins over both.',
   'Failure diagnostics: resolved targets and runFlow paths are rendered, while inputText payloads remain hidden; do not place secrets in diagnostic identifiers.',
-  'Trust: runScript and evalScript execute trusted flow scripts in-process and are not a security sandbox; runScript may make http.post network requests and its output keys cannot contain a dot.',
+  'Trust: runScript and evalScript execute flow scripts in-process via node:vm, which is not a security sandbox; runScript may make http.post network requests and its output keys cannot contain a dot. evalScript is refused outright for a flow accepted over the daemon’s remote HTTP surface, since that context can escape to the host.',
   'Errors and tracking: unsupported commands and fields fail with source context when available; open a focused issue only when implementation work is planned.',
 ] as const;
 

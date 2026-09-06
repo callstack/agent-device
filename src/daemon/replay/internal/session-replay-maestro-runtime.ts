@@ -127,6 +127,9 @@ async function executeTypedMaestroReplay(
     signal: context.signal,
     from: req.flags?.replayFrom,
     planDigest: req.flags?.replayPlanDigest,
+    // evalScript runs via node:vm, which is not a security sandbox; only trust it
+    // for flows that did not arrive over the daemon's remote HTTP surface.
+    trustedScripts: req.internal?.publicNetworkOnly !== true,
     // #1802: `runFlow` includes resolve out of the caller's bundle, so a local
     // and a remote run compile the same flow closure.
     readSource: (includePath) => readReplayScriptSourceFile(bundle, includePath),

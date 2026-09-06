@@ -17,10 +17,14 @@ export function evaluateMaestroEvalScript(
   const output = seedMaestroOutput(values);
   const expression = unwrapMaestroEvalScriptExpression(script);
   try {
-    vm.runInNewContext(expression, { ...values, output }, {
-      filename: 'evalScript',
-      timeout: MAESTRO_EVAL_SCRIPT_TIMEOUT_MS,
-    });
+    vm.runInNewContext(
+      expression,
+      { ...values, output },
+      {
+        filename: 'evalScript',
+        timeout: MAESTRO_EVAL_SCRIPT_TIMEOUT_MS,
+      },
+    );
   } catch (error) {
     // A vm context throws its own realm's errors, which are not host `Error`
     // instances; read the message directly rather than through normalizeError.
@@ -51,11 +55,7 @@ function seedMaestroOutput(values: Readonly<Record<string, string>>): Record<str
   return output;
 }
 
-function writeNestedOutput(
-  root: Record<string, unknown>,
-  path: string,
-  value: string,
-): void {
+function writeNestedOutput(root: Record<string, unknown>, path: string, value: string): void {
   const segments = path.split('.').filter(isSafeOutputSegment);
   if (segments.length === 0) return;
   let node = root;
@@ -66,7 +66,7 @@ function writeNestedOutput(
     }
     node = node[segment] as Record<string, unknown>;
   }
-  node[segments[segments.length - 1]!] = value;
+  node[segments.at(-1)!] = value;
 }
 
 function flattenMaestroOutput(output: Record<string, unknown>): Record<string, string> {
@@ -94,11 +94,12 @@ function writeOutputLeaves(
     ? [...value.keys(), 'length']
     : Object.keys(value).filter(isSafeOutputSegment);
   for (const segment of children) {
+    const key = String(segment);
     const child =
-      Array.isArray(value) && segment === 'length'
+      Array.isArray(value) && key === 'length'
         ? value.length
-        : (value as Record<string, unknown>)[segment];
-    writeOutputLeaves(child, [...segments, segment], flat, visited);
+        : (value as Record<string, unknown>)[key];
+    writeOutputLeaves(child, [...segments, key], flat, visited);
   }
 }
 

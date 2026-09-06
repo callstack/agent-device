@@ -642,20 +642,44 @@ describe('executeMaestroProgram', () => {
 
     await executeMaestroProgram(program, port);
 
-    expect(port.execute.mock.calls.filter(([request]) => request.command.kind === 'tapOn')).toHaveLength(
-      3,
-    );
+    expect(
+      vi.mocked(port.execute).mock.calls.filter(([request]) => request.command.kind === 'tapOn'),
+    ).toHaveLength(3);
   });
 
   test('evalScript reports a failing expression with step source', async () => {
-    const program = parseMaestroProgram(
-      ['---', '- evalScript: ${exploded.leaf()}'].join('\n'),
-      { sourcePath: '/flows/eval.yaml' },
-    );
+    const program = parseMaestroProgram(['---', '- evalScript: ${exploded.leaf()}'].join('\n'), {
+      sourcePath: '/flows/eval.yaml',
+    });
 
-    await expect(executeMaestroProgram(program, makePort())).rejects.toThrow(
-      /evalScript failed/i,
-    );
+    await expect(executeMaestroProgram(program, makePort())).rejects.toThrow(/evalScript failed/i);
+  });
+
+  test('evalScript refuses to run when trustedScripts is false', async () => {
+    const program = parseMaestroProgram(['---', '- evalScript: ${output.sum = 1 + 2}'].join('\n'), {
+      sourcePath: '/flows/eval.yaml',
+    });
+
+    await expect(
+      executeMaestroProgram(program, makePort(), { trustedScripts: false }),
+    ).rejects.toThrow(/not permitted for flows received over the remote daemon surface/);
+  });
+
+  test.each([
+    '${output.pwned = this.constructor.constructor("return process.versions.node")()}',
+    '${output.pwned = this.constructor.constructor("return process.env")()}',
+    '${output.pwned = this.constructor.constructor("return process")().getBuiltinModule("fs").readFileSync("/etc/passwd", "utf8")}',
+    '${output.pwned = this.constructor.constructor("return process")().getBuiltinModule("child_process").execSync("id").toString()}',
+    '${output.pwned = fetch("http://169.254.169.254/latest/meta-data/").toString()}',
+    '${while (true) {}}',
+  ])('remote evalScript %s is refused before vm evaluation', async (script) => {
+    const program = parseMaestroProgram(['---', `- evalScript: ${script}`].join('\n'), {
+      sourcePath: '/flows/eval.yaml',
+    });
+
+    await expect(
+      executeMaestroProgram(program, makePort(), { trustedScripts: false }),
+    ).rejects.toThrow(/not permitted for flows received over the remote daemon surface/);
   });
 
   test('rejects recursive file includes before loading the child', async () => {

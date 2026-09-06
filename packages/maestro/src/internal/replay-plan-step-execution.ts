@@ -112,6 +112,13 @@ async function executeEvalScript(
   command: Extract<MaestroRuntimeCommand, { kind: 'evalScript' }>,
   state: MaestroReplayPlanExecutionState,
 ): Promise<undefined> {
+  if (state.options.trustedScripts === false) {
+    throw new AppError(
+      'UNAUTHORIZED',
+      'Maestro evalScript is not permitted for flows received over the remote daemon surface: ' +
+        'node:vm is not a security sandbox, so an untrusted expression can escape to the host.',
+    );
+  }
   const outputEnv = evaluateMaestroEvalScript(command.script, state.context.values);
   state.context.merge(outputEnv);
   state.executed += 1;

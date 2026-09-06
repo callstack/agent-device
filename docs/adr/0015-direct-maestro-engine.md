@@ -199,6 +199,12 @@ two-pointer plans, executor selection, and app-observable effects must remain un
   folds back into the flat string-key model, so `${output.uppercaseName}` and
   `${output.list.length}` resolve. `assertTrue` (#1295) is scoped to that same lookup-only subset —
   literal values and bare `${VAR}` lookups evaluated with a pinned string-truthiness table.
+  `node:vm` is explicitly not a security sandbox — a bound context's prototype chain still
+  resolves to host `Object`/`Function`, so an untrusted expression can escape it. `runScript`
+  already carried this trust assumption for daemon-local flows; `evalScript` inherits the same
+  assumption but is reachable from a flow accepted over the daemon's remote HTTP surface, so
+  `MaestroEngineOptions.trustedScripts` gates it — set from `publicNetworkOnly` at the HTTP
+  boundary (`restrictRemoteHttpRequest`) — and `evalScript` is refused outright when false.
 - Shipping two production engines or a runtime fallback between them is rejected because it doubles
   semantic and performance ownership.
 - Source provenance and runtime values stay typed through execution.

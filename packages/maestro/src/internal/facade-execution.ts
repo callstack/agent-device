@@ -89,6 +89,8 @@ export type MaestroExecutionOptions = {
   readonly planDigest?: string;
   readonly signal?: AbortSignal;
   readonly observer?: MaestroExecutionObserver;
+  /** Forwarded to `MaestroEngineOptions.trustedScripts` — see its doc there. */
+  readonly trustedScripts?: boolean;
   /**
    * #1802: how a `runFlow` include's text is obtained. Required — the engine
    * owns no filesystem, so a run against a remote daemon reads the caller's
@@ -151,6 +153,7 @@ export async function executeMaestroFlow(
       loadProgram: loader,
       signal: options.signal,
       startIndex,
+      trustedScripts: options.trustedScripts,
       observer: createObserver(plan, options.observer, (event) => {
         failed = event;
       }),

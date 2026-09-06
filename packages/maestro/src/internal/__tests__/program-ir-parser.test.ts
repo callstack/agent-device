@@ -410,9 +410,7 @@ describe('parseMaestroProgram', () => {
   });
 
   test('parses evalScript as a scalar script string', () => {
-    const program = parseMaestroProgram(
-      ['---', '- evalScript: ${output.sum = 1 + 2}'].join('\n'),
-    );
+    const program = parseMaestroProgram(['---', '- evalScript: ${output.sum = 1 + 2}'].join('\n'));
     assert.deepEqual(program.commands[0], {
       kind: 'evalScript',
       source: { line: 2 },
