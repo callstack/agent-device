@@ -128,7 +128,13 @@ const RUNTIME_SURFACE: ReadonlyArray<{ root: string; owns: (file: string) => boo
     owns: (file) => /^packages\/[^/]+\/src\//.test(file) && isProductionTs(file),
   },
   // Integration tests, their support modules, and the replay scripts the lanes execute.
-  { root: 'test/integration/', owns: (file) => file.endsWith('.ts') || file.endsWith('.ad') },
+  {
+    root: 'test/integration/',
+    owns: (file) =>
+      file.endsWith('.ts') ||
+      file.endsWith('.ad') ||
+      (file.startsWith('test/integration/replays/') && /\.ya?ml$/.test(file)),
+  },
   // The Expo fixture app the iOS/Android smoke drives (same extension class as own:test-app).
   { root: 'examples/test-app/', owns: (file) => /\.(?:[cm]?[jt]sx?|json)$/.test(file) },
   // Native runner and helper sources — build inputs of the lanes that boot them.
