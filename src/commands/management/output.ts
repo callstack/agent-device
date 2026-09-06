@@ -26,13 +26,13 @@ import {
 } from '../output-common.ts';
 
 async function devicesCliOutput(result: AgentDeviceDevice[]): Promise<CliOutput> {
-  const { serializeDevice } = await import('../../daemon/result-serialization.ts');
+  const { serializeDevice } = await import('../output/result-serialization.ts');
   const data = { devices: result.map(serializeDevice) };
   return { data, text: result.map(formatDeviceLine).join('\n') };
 }
 
 async function capabilitiesCliOutput(result: AgentDeviceCapabilitiesResult): Promise<CliOutput> {
-  const { serializeDevice } = await import('../../daemon/result-serialization.ts');
+  const { serializeDevice } = await import('../output/result-serialization.ts');
   const data = {
     device: serializeDevice(result.device),
     availableCommands: result.availableCommands,
@@ -78,13 +78,13 @@ async function sessionCliOutput(
   if ('stateDir' in result) {
     return { data: result, text: result.stateDir };
   }
-  const { serializeSessionListEntry } = await import('../../daemon/result-serialization.ts');
+  const { serializeSessionListEntry } = await import('../output/result-serialization.ts');
   const data = { sessions: result.sessions.map(serializeSessionListEntry) };
   return { data, text: JSON.stringify(data, null, 2) };
 }
 
 export async function openCliOutput(result: AppOpenResult): Promise<CliOutput> {
-  const { serializeOpenResult } = await import('../../daemon/result-serialization.ts');
+  const { serializeOpenResult } = await import('../output/result-serialization.ts');
   const data = serializeOpenResult(result);
   const lines = [readCommandMessage(data)].filter((line): line is string => Boolean(line));
   if (typeof data.sessionStateDir === 'string') {
@@ -120,7 +120,7 @@ async function buildOpenInitialSnapshotOutput(
 }
 
 async function closeCliOutput(result: AppCloseResult | SessionCloseResult): Promise<CliOutput> {
-  const { serializeCloseResult } = await import('../../daemon/result-serialization.ts');
+  const { serializeCloseResult } = await import('../output/result-serialization.ts');
   return messageCliOutput(serializeCloseResult(result));
 }
 
@@ -152,12 +152,12 @@ function isDaemonArtifactsResult(result: AgentArtifactsResult): result is Daemon
 }
 
 async function deployCliOutput(result: AppDeployResult): Promise<CliOutput> {
-  const { serializeDeployResult } = await import('../../daemon/result-serialization.ts');
+  const { serializeDeployResult } = await import('../output/result-serialization.ts');
   return messageCliOutput(serializeDeployResult(result));
 }
 
 async function installFromSourceCliOutput(result: AppInstallFromSourceResult): Promise<CliOutput> {
-  const { serializeInstallFromSourceResult } = await import('../../daemon/result-serialization.ts');
+  const { serializeInstallFromSourceResult } = await import('../output/result-serialization.ts');
   return messageCliOutput(serializeInstallFromSourceResult(result));
 }
 

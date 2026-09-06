@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { serializeSnapshotResult } from '../result-serialization.ts';
+import { serializeSnapshotResult } from './result-serialization.ts';
 
 test('serializeSnapshotResult includes Android backend metadata', () => {
   const data = serializeSnapshotResult({

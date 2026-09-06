@@ -11,7 +11,7 @@ export async function snapshotCliOutput(params: {
   scope?: string;
   depth?: number;
 }): Promise<CliOutput> {
-  const { serializeSnapshotResult } = await import('../../daemon/result-serialization.ts');
+  const { serializeSnapshotResult } = await import('../output/result-serialization.ts');
   // --raw is the full-fidelity escape hatch (e.g. rect fallback lookups): keep
   // it byte-for-byte, undeduped. Every other presentation (default text and
   // --json) collapses labels/identifiers that repeat an ancestor's value.
