@@ -1,4 +1,7 @@
-import { snapshotRuntimePlanUses } from '@agent-device/contracts/platform-runtime-operations';
+import {
+  selectSnapshotStepUses,
+  snapshotRuntimePlanUses,
+} from '@agent-device/contracts/platform-runtime-operations';
 import { expect, test } from 'vitest';
 import { commandDescriptors } from '../registry.ts';
 
@@ -7,9 +10,11 @@ test('snapshot descriptor declares its complete planned capture uses with no leg
 
   expect(snapshot).not.toHaveProperty('capability');
   expect(snapshot).not.toHaveProperty('dispatch');
+  // Plan-time consumers select the alternative from the step input the way the handler does.
   expect(snapshot?.platformExecution).toEqual({
     kind: 'device-runtime',
     uses: snapshotRuntimePlanUses,
+    selectUses: selectSnapshotStepUses,
   });
   expect(snapshotRuntimePlanUses.map(({ required }) => required)).toEqual([
     ['captureSnapshot'],
@@ -27,5 +32,6 @@ test('diff descriptor reuses the complete snapshot plan uses with no legacy proj
   expect(diff?.platformExecution).toEqual({
     kind: 'device-runtime',
     uses: snapshotRuntimePlanUses,
+    selectUses: selectSnapshotStepUses,
   });
 });
