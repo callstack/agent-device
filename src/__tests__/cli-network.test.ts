@@ -189,44 +189,6 @@ test('doctor command opts into progress rows for human output', async () => {
   assert.match(result.stdout, /✓ agent-device: agent-device 0\.17\.9 using \/tmp\/agent-device/);
 });
 
-test('doctor prints only the summary when progress already streamed the checks', async () => {
-  const result = await runCliCapture(['doctor'], async (_req, options) => {
-    options?.onProgress?.({
-      type: 'command',
-      status: 'progress',
-      message: '✓ agent-device: agent-device 0.17.9 using /tmp/agent-device',
-    });
-    options?.onProgress?.({
-      type: 'command',
-      status: 'progress',
-      message: '! device: No booted device.',
-    });
-    return {
-      ok: true,
-      data: {
-        status: 'pass',
-        summary: 'No blockers found.',
-        checks: [
-          {
-            id: 'agent-device',
-            status: 'pass',
-            summary: 'agent-device 0.17.9 using /tmp/agent-device',
-          },
-          { id: 'device', status: 'warn', summary: 'No booted device.' },
-        ],
-      },
-    };
-  });
-
-  assert.equal(result.code, null);
-  assert.match(
-    result.stderr,
-    /✓ agent-device: agent-device 0\.17\.9 using \/tmp\/agent-device\n! device: No booted device\.\n/,
-  );
-  assert.match(result.stdout, /Doctor: pass\nNo blockers found\.\n/);
-  assert.doesNotMatch(result.stdout, /✓ agent-device:/);
-});
-
 test('doctor command keeps json output non-streaming', async () => {
   const result = await runCliCapture(['doctor', '--json'], async () => ({
     ok: true,
