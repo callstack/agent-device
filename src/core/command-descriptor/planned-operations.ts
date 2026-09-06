@@ -1,6 +1,8 @@
 import type { RuntimeUseStep } from '@agent-device/contracts/command-platform-execution';
-import type { RuntimeOperationKey } from '@agent-device/contracts/platform-runtime';
-import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import {
+  isRuntimeOperationName,
+  type RuntimeOperationName,
+} from '@agent-device/contracts/runtime-operation-names';
 import { commandDescriptors } from './registry.ts';
 import type { CommandDescriptor } from './types.ts';
 
@@ -11,7 +13,7 @@ const descriptorsByName = new Map<string, CommandDescriptor>(
 /** One step of a plan as the batch runner holds it: the command plus what its handler will read. */
 export type PlannedStep = RuntimeUseStep & Readonly<{ command: string }>;
 
-export type PlannedRuntimeOperation = RuntimeOperationKey<PlatformRuntimeOperations>;
+export type PlannedRuntimeOperation = RuntimeOperationName;
 
 /**
  * The runtime operations a sequence of steps must execute, read from each command's declared
@@ -34,8 +36,10 @@ export function resolvePlannedRuntimeOperations(
     const uses =
       'uses' in execution ? (execution.selectUses?.(step) ?? execution.uses) : [execution.use];
     for (const use of uses) {
-      // Every declared use is built with `defineUse`, which admits only operation keys.
-      for (const operation of use.required as readonly PlannedRuntimeOperation[]) {
+      for (const operation of use.required) {
+        // `defineUse` admits only operation keys, so an unknown name means the vocabulary list
+        // and the operations union drifted; treat the plan as unproven rather than guess.
+        if (!isRuntimeOperationName(operation)) return undefined;
         operations.add(operation);
       }
     }

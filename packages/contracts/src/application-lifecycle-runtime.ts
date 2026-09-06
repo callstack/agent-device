@@ -1,5 +1,5 @@
-import type { RuntimeOperationFact, RuntimeOperationKey } from './platform-runtime.ts';
-import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
+import type { RuntimeOperationName } from './runtime-operation-names.ts';
+import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
@@ -46,7 +46,7 @@ export type ApplicationLifecycleExecution = Readonly<{
    * declared runtime uses. Never a public flag and never on the wire. Absent when the future of the
    * session is unknown (a standalone command).
    */
-  plannedOperations?: readonly RuntimeOperationKey<PlatformRuntimeOperations>[];
+  plannedOperations?: readonly RuntimeOperationName[];
 }>;
 
 /** Semantic target resolution used before an application open. */

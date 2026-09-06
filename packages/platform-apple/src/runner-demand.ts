@@ -1,6 +1,5 @@
 import type { OpenApplicationRunnerDemand } from '@agent-device/contracts/application-lifecycle-runtime';
-import type { RuntimeOperationKey } from '@agent-device/contracts/platform-runtime';
-import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import type { RuntimeOperationName } from '@agent-device/contracts/runtime-operation-names';
 
 /**
  * Which host the Apple runtime executes each declared runtime operation through on a local iOS
@@ -9,12 +8,12 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
  *
  * Bridge-eligible snapshots keep their typed XCTest fallback, but a fallback is a recovery, not a
  * plan requirement, so they classify as `simulator`. The record is complete over the runtime
- * operation union by construction: a new operation refuses to compile until it is classified.
+ * operation vocabulary by construction: a new operation refuses to compile until it is classified.
  */
 type AppleSimulatorOperationHost = 'runner' | 'simulator';
 
 const APPLE_SIMULATOR_OPERATION_HOSTS: Readonly<
-  Record<RuntimeOperationKey<PlatformRuntimeOperations>, AppleSimulatorOperationHost>
+  Record<RuntimeOperationName, AppleSimulatorOperationHost>
 > = Object.freeze({
   // Application lifecycle: simctl launch/terminate and host readiness.
   resolveOpenTarget: 'simulator',
@@ -107,7 +106,7 @@ const APPLE_SIMULATOR_OPERATION_HOSTS: Readonly<
  * any runner-served operation makes readiness worth preparing now.
  */
 export function resolveAppleSimulatorRunnerDemand(
-  operations: readonly RuntimeOperationKey<PlatformRuntimeOperations>[] | undefined,
+  operations: readonly RuntimeOperationName[] | undefined,
 ): OpenApplicationRunnerDemand {
   if (operations === undefined) return 'possible';
   return operations.some((operation) => APPLE_SIMULATOR_OPERATION_HOSTS[operation] === 'runner')
