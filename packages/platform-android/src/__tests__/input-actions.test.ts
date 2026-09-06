@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   backAndroid,
@@ -175,15 +175,98 @@ test('pressAndroidEnter presses the ENTER keyevent', async () => {
   );
 });
 
-test('setAndroidOrientation locks auto-rotate and sets user rotation', async () => {
-  await withFakeAdb(
-    () => undefined,
-    async ({ calls, device }) => {
-      await setAndroidOrientation(device, 'landscape-left');
-      assert.deepEqual(calls, [
-        ['shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0'],
-        ['shell', 'settings', 'put', 'system', 'user_rotation', '1'],
-      ]);
-    },
-  );
+// The orientation settle polls at its own interval; the clock is the assertion, not the wait.
+vi.mock('@agent-device/host-kit/retry', () => ({ sleep: async () => {} }));
+
+const ORIENTATION_CALLS = [
+  ['shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0'],
+  ['shell', 'settings', 'put', 'system', 'user_rotation', '1'],
+];
+const DISPLAY_READ = ['shell', 'dumpsys', 'display'];
+
+function displayReporting(rotations: string[]): (args: string[]) => string | undefined {
+  let reads = 0;
+  return (args) => {
+    if (args[1] !== 'dumpsys') return undefined;
+    const rotation = rotations[Math.min(reads, rotations.length - 1)];
+    reads += 1;
+    return rotation === undefined ? '' : `  mCurrentOrientation=${rotation}\n`;
+  };
+}
+
+test('setAndroidOrientation locks auto-rotate, sets user rotation, and returns once the display rotated', async () => {
+  await withFakeAdb(displayReporting(['0', '0', '1']), async ({ calls, device }) => {
+    await setAndroidOrientation(device, 'landscape-left');
+    assert.deepEqual(calls, [...ORIENTATION_CALLS, DISPLAY_READ, DISPLAY_READ, DISPLAY_READ]);
+  });
+});
+
+test('setAndroidOrientation fails when the display never reports the requested rotation', async () => {
+  vi.useFakeTimers({ now: 0, toFake: ['Date'] });
+  const probeBudgets: number[] = [];
+  try {
+    await withFakeAdb(
+      (args, options) => {
+        // Every display read costs wall clock; the display stays where it was.
+        if (args[1] === 'dumpsys') {
+          probeBudgets.push(options?.timeoutMs ?? -1);
+          vi.setSystemTime(Date.now() + 4_000);
+        }
+        return displayReporting(['0'])(args);
+      },
+      async ({ calls, device }) => {
+        await assert.rejects(setAndroidOrientation(device, 'landscape-left'), (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /orientation landscape-left did not take effect/);
+          const details = (error as { details?: Record<string, unknown> }).details ?? {};
+          assert.equal(details.requestedRotation, 1);
+          assert.equal(details.observedRotation, 0);
+          return true;
+        });
+        assert.ok(calls.filter((call) => call[1] === 'dumpsys').length >= 4);
+        // Each probe may use only what is left of the 15s settle budget.
+        assert.equal(probeBudgets[0], 15_000);
+        for (let index = 1; index < probeBudgets.length; index += 1) {
+          assert.ok(probeBudgets[index]! > 0 && probeBudgets[index]! < probeBudgets[index - 1]!);
+        }
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a display probe that hangs for the whole budget ends the settle as a failure', async () => {
+  vi.useFakeTimers({ now: 0, toFake: ['Date'] });
+  try {
+    await withFakeAdb(
+      (args, options) => {
+        if (args[1] !== 'dumpsys') return undefined;
+        // The probe blocks until its own timeout, which is the whole remaining budget.
+        vi.setSystemTime(Date.now() + (options?.timeoutMs ?? 0));
+        return new Error(`adb shell dumpsys display timed out after ${options?.timeoutMs}ms`);
+      },
+      async ({ calls, device }) => {
+        await assert.rejects(
+          setAndroidOrientation(device, 'landscape-left'),
+          /orientation landscape-left could not confirm the display rotation: adb shell dumpsys display timed out after 15000ms/,
+        );
+        assert.equal(calls.filter((call) => call[1] === 'dumpsys').length, 1);
+        assert.equal(Date.now(), 15_000);
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('setAndroidOrientation leaves a display that reports no rotation to the setting', async () => {
+  await withFakeAdb(displayReporting([]), async ({ calls, device }) => {
+    await setAndroidOrientation(device, 'portrait');
+    assert.deepEqual(calls, [
+      ['shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0'],
+      ['shell', 'settings', 'put', 'system', 'user_rotation', '0'],
+      DISPLAY_READ,
+    ]);
+  });
 });

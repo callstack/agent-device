@@ -13,6 +13,7 @@ import {
 import { type TvRemoteButton, toAndroidTvRemoteKeyevent } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { sleep } from '@agent-device/host-kit/retry';
 import { runAndroidAdb } from './adb.ts';
 import { executeAndroidTouchPlan, readAndroidGestureViewport } from './touch-executor.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
@@ -64,6 +65,66 @@ export async function setAndroidOrientation(
     'user_rotation',
     userRotation,
   ]);
+  await settleAndroidOrientation(device, orientation, userRotation);
+}
+
+const ORIENTATION_SETTLE_TIMEOUT_MS = 15_000;
+const ORIENTATION_SETTLE_POLL_MS = 500;
+
+/**
+ * The display rotates some time after the setting lands; on a loaded emulator that takes
+ * seconds, during which accessibility reads hang. Returning once the display reports the
+ * requested rotation keeps the next command from paying for the transition. A display that never
+ * gets there is a fact the caller must see (a foreground app pinning its orientation, a device
+ * ignoring `user_rotation`); one that reports no rotation at all cannot be checked and is left to
+ * the setting.
+ */
+async function settleAndroidOrientation(
+  device: DeviceInfo,
+  orientation: DeviceRotation,
+  userRotation: string,
+): Promise<void> {
+  const deadline = Date.now() + ORIENTATION_SETTLE_TIMEOUT_MS;
+  let observed = await readAndroidDisplayRotation(device, orientation, deadline);
+  while (observed !== undefined && observed !== userRotation && Date.now() < deadline) {
+    await sleep(Math.min(ORIENTATION_SETTLE_POLL_MS, remainingMs(deadline)));
+    observed = await readAndroidDisplayRotation(device, orientation, deadline);
+  }
+  if (observed === undefined || observed === userRotation) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `orientation ${orientation} did not take effect: the display still reports rotation ${observed} after ${ORIENTATION_SETTLE_TIMEOUT_MS}ms`,
+    {
+      requestedRotation: Number(userRotation),
+      observedRotation: Number(observed),
+      hint: 'The foreground app may pin its orientation, or the device may ignore user_rotation. Check `adb shell dumpsys display | grep mCurrentOrientation` and the app manifest.',
+    },
+  );
+}
+
+/** One display read, bounded by what is left of the settle budget so a stuck probe ends the settle. */
+async function readAndroidDisplayRotation(
+  device: DeviceInfo,
+  orientation: DeviceRotation,
+  deadline: number,
+): Promise<string | undefined> {
+  try {
+    const result = await runAndroidAdb(device, ['shell', 'dumpsys', 'display'], {
+      allowFailure: true,
+      timeoutMs: remainingMs(deadline),
+    });
+    return /mCurrentOrientation=(\d)/.exec(result.stdout)?.[1];
+  } catch (error) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `orientation ${orientation} could not confirm the display rotation: ${error instanceof Error ? error.message : String(error)}`,
+      { hint: 'The device did not answer `dumpsys display` within the orientation budget.' },
+    );
+  }
+}
+
+function remainingMs(deadline: number): number {
+  return Math.max(1, deadline - Date.now());
 }
 
 export async function appSwitcherAndroid(device: DeviceInfo): Promise<void> {
