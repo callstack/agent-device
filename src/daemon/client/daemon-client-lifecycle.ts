@@ -14,7 +14,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 import { readVersion } from '@agent-device/host-kit/version';
 
-import { findUnrecoveredRepairCommitFailure } from '../session-store.ts';
+import { findUnrecoveredRepairCommitFailure } from '../session-repair-tombstone.ts';
 import {
   resolveDaemonPaths,
   resolveDaemonServerMode,

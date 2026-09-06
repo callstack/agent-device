@@ -5,6 +5,11 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionRef, SessionRuntimeHints, SessionState } from './session-state.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
 import { expandSessionPath, isSafeSessionSegment, safeSessionName } from './session-paths.ts';
+import {
+  readRepairTombstoneFile,
+  resolveRepairTombstonePath,
+  type RepairSessionTombstone,
+} from './session-repair-tombstone.ts';
 import { NO_SCRIPT_PUBLICATION, isRepairCommittable } from './session-script-publication-state.ts';
 import { effectiveWriteForce } from './session-script-publication-capability.ts';
 import {
@@ -26,29 +31,6 @@ import {
   type SessionEventLogInput,
   type SessionEventLogPage,
 } from './session-event-log.ts';
-
-/**
- * ADR 0012 decision 6, R7 (C5a): a reaped repair session leaves this bounded
- * marker so the next command on the same key gets `REPAIR_SESSION_EXPIRED` +
- * re-run guidance, never a bare `SESSION_NOT_FOUND`. Bounded by `expiresAt`
- * so an old tombstone never shadows an unrelated future session name.
- */
-export type RepairSessionTombstone = {
-  owner: string;
-  reapedAt: number;
-  expiresAt: number;
-  sourcePath?: string;
-  /**
-   * ADR 0012 decision 6 (BLOCKER 2): set iff this tombstone marks a COMPLETE
-   * transaction whose commit FAILED at teardown (no-clobber refusal, bare
-   * `@ref`, or a filesystem write error) — as opposed to a transaction that
-   * was merely reaped before it ever finished. Preserves the real failure
-   * instead of losing it behind a generic "reaped before it was finalized"
-   * expiry, so `repairExpiredIfTombstoned` can surface a distinct
-   * `REPAIR_COMMIT_FAILED` with the actual cause.
-   */
-  commitFailure?: { code: string; message: string };
-};
 
 const REPAIR_TOMBSTONE_TTL_MS = 60 * 60_000;
 
@@ -280,7 +262,7 @@ export class SessionStore {
 
   /** Returns a non-expired repair tombstone for `sessionName`, or `undefined`. */
   readRepairTombstone(sessionName: string): RepairSessionTombstone | undefined {
-    return readTombstoneFile(this.repairTombstonePath(sessionName));
+    return readRepairTombstoneFile(this.repairTombstonePath(sessionName));
   }
 
   /** ADR 0012 R7 (C5a): a fresh `replay --save-script` on this key clears the tombstone. */
@@ -291,7 +273,7 @@ export class SessionStore {
   }
 
   private repairTombstonePath(sessionName: string): string {
-    return path.join(this.resolveSessionDir(sessionName), 'repair-tombstone.json');
+    return resolveRepairTombstonePath(this.resolveSessionDir(sessionName));
   }
 
   defaultTracePath(session: SessionState): string {
@@ -356,63 +338,6 @@ export class SessionStore {
     }
     return session.name;
   }
-}
-
-/** Parses/validates a tombstone file at `tombstonePath`; `undefined` if missing, malformed, or expired. */
-function readTombstoneFile(tombstonePath: string): RepairSessionTombstone | undefined {
-  let raw: string;
-  try {
-    raw = fs.readFileSync(tombstonePath, 'utf8');
-  } catch {
-    return undefined;
-  }
-  let parsed: RepairSessionTombstone;
-  try {
-    parsed = JSON.parse(raw) as RepairSessionTombstone;
-  } catch {
-    return undefined;
-  }
-  if (typeof parsed?.expiresAt !== 'number' || parsed.expiresAt <= Date.now()) return undefined;
-  return parsed;
-}
-
-/**
- * ADR 0012 decision 6 (BLOCKER 2, third follow-up): scans every session
- * subdirectory under `sessionsDir` for a non-expired repair tombstone that
- * records an UNRECOVERED commit failure (`commitFailure` set) — used by the
- * CLIENT side of the daemon boundary (`cleanupDaemonAfterRequest` in
- * `daemon-client-lifecycle.ts`), which has no live `SessionStore`/session name
- * to key off of, only the filesystem path an owned ephemeral daemon was given.
- * An owned ephemeral state dir services exactly one repair transaction at a
- * time, so the first match found is returned.
- */
-export function findUnrecoveredRepairCommitFailure(sessionsDir: string):
-  | {
-      sessionName: string;
-      tombstone: RepairSessionTombstone & {
-        commitFailure: NonNullable<RepairSessionTombstone['commitFailure']>;
-      };
-    }
-  | undefined {
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(sessionsDir, { withFileTypes: true });
-  } catch {
-    return undefined;
-  }
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const tombstone = readTombstoneFile(
-      path.join(sessionsDir, entry.name, 'repair-tombstone.json'),
-    );
-    if (tombstone?.commitFailure) {
-      return {
-        sessionName: entry.name,
-        tombstone: { ...tombstone, commitFailure: tombstone.commitFailure },
-      };
-    }
-  }
-  return undefined;
 }
 
 /** Path to session-scoped platform subprocess output, such as Apple runner xcodebuild logs. */
