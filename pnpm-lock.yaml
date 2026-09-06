@@ -77,6 +77,9 @@ importers:
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:packages/selectors
+      '@agent-device/session-journal':
+        specifier: workspace:*
+        version: link:packages/session-journal
       '@agent-device/xml':
         specifier: workspace:*
         version: link:packages/xml
@@ -479,6 +482,21 @@ importers:
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
+
+  packages/session-journal:
+    dependencies:
+      '@agent-device/command-registry':
+        specifier: workspace:*
+        version: link:../command-registry
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
 
   packages/xml: {}
 

@@ -46,6 +46,7 @@ const TARGET_DAG_RANK = new Map([
   ['request', 1],
   ['screenshot-diff', 1],
   ['selectors', 1],
+  ['session-journal', 1],
   ['snapshot', 1],
   ['core', 2],
   ['cli-schema', 3],

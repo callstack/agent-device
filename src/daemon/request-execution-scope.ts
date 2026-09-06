@@ -35,7 +35,7 @@ import {
   buildRequestFinishedEvent,
   buildRequestStartedEvent,
   shouldRecordEventForRequest,
-} from './session-event-log.ts';
+} from '@agent-device/session-journal/session-event-log';
 import type { LeaseRegistry } from './lease-registry.ts';
 import {
   resolveSessionRequestLog,

@@ -21,7 +21,7 @@ import {
   shouldGuardAndroidBlockingDialog,
 } from './daemon-command-registry.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
-import { buildActionEventResult } from './session-event-action-presentation.ts';
+import { buildActionEventResult } from '@agent-device/session-journal/session-event-action-presentation';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 
 export type GenericPlatformExecutionParams = {
