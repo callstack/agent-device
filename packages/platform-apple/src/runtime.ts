@@ -110,7 +110,7 @@ const appStateUnavailable = Object.freeze({
 const headlessUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
-  hint: 'Headless boot is supported only for local Android emulators.',
+  hint: 'Headless boot is supported only for local Android emulators and Apple simulators.',
 } as const);
 const elementTextLeafUnavailable = Object.freeze({
   available: false,
@@ -266,6 +266,15 @@ function appleFocusFact(device: DeviceInfo): RuntimeOperationFact {
   return device.kind === 'simulator' || device.kind === 'device' ? available : focusKindUnavailable;
 }
 
+/** Headless boot rides the boot cell wherever the target has a GUI window to
+ * suppress: simulators only (macOS has no window; watchOS cannot boot at all). */
+function appleBootHeadlessFact(
+  device: DeviceInfo,
+  boot: RuntimeOperationFact,
+): RuntimeOperationFact {
+  return device.kind === 'simulator' && boot.available ? boot : headlessUnavailable;
+}
+
 export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createAppleAppLogRuntime(host);
   const inspectFacts = async (device: DeviceInfo) => {
@@ -285,6 +294,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         : leafRecordingFacts;
     const readiness = device.appleOs === 'watchos' ? unavailable : available;
     const boot = isMacOs(device) || device.appleOs === 'watchos' ? unavailable : available;
+    const bootHeadless = appleBootHeadlessFact(device, boot);
     const apps = appInventoryFacts(device);
     return Object.freeze({
       device: logs.device,
@@ -328,7 +338,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ...perfRuntimeOperationFacts(applePerfFacts(device)),
         ensureReady: readiness,
         bootTarget: boot,
-        bootTargetHeadless: headlessUnavailable,
+        bootTargetHeadless: bootHeadless,
         listApps: apps,
         ...appleApplicationLifecycleFacts(device),
         shutdownTarget: shutdownFact(device),
@@ -461,6 +471,16 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           bootTarget: async () =>
             await ensureAppleReady(host, request.device, request.scope.signal),
         })),
+        ...(facts.operations.bootTargetHeadless.available
+          ? {
+              bootTargetHeadless: async () =>
+                // Daemon input is serial/allowlist-only; headless is a caller-side
+                // mode of this cell, not request data (parity with Android).
+                await ensureAppleReady(host, request.device, request.scope.signal, {
+                  headless: true,
+                }),
+            }
+          : {}),
         ...whenAdmitted(facts.operations.listApps, () => ({
           listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
             await host.appInventory.apple.listApps(

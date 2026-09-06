@@ -122,7 +122,9 @@ export const readinessDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntime
 
 function readinessFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> {
   const normalAvailable = supportsReadiness(device);
-  const headlessAvailable = device.platform === 'android' && device.kind === 'emulator';
+  const headlessAvailable =
+    (device.platform === 'android' && device.kind === 'emulator') ||
+    (device.platform === 'apple' && device.kind === 'simulator');
   const shutdownAvailable = isShutdownDevice(device);
   const deployment = deploymentAvailability(device);
   const base = createUnavailableRuntimeFactsForTest(device, localRuntimeOwner(device.platform));

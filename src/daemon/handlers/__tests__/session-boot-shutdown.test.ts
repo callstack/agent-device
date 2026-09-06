@@ -286,7 +286,7 @@ test('boot --headless requires avd selector when device cannot be resolved', asy
   }
 });
 
-test('boot --headless rejects non-Android selectors', async () => {
+test('boot --headless admits an Apple simulator selector', async () => {
   const sessionStore = makeSessionStore();
   mockResolveTargetDevice.mockResolvedValue({
     platform: 'apple',
@@ -312,12 +312,10 @@ test('boot --headless rejects non-Android selectors', async () => {
   });
 
   expect(response).toBeTruthy();
-  expect(response?.ok).toBe(false);
-  expect(mockBindDeviceRuntime).not.toHaveBeenCalled();
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('INVALID_ARGS');
-    expect(response.error.message).toMatch(/headless is supported only for Android emulators/i);
-  }
+  expect(response?.ok).toBe(true);
+  expect(mockBindDeviceRuntime).toHaveBeenCalledOnce();
+  expect(mockEnsureReadyHeadlessRuntime).toHaveBeenCalledOnce();
+  expect(mockEnsureReadyRuntime).not.toHaveBeenCalled();
 });
 
 test('boot keeps --target validation before facts inspection', async () => {

@@ -1310,9 +1310,7 @@ test('runAppleRunnerCommand does NOT resend a mutating command on a generic retr
     new AppError('COMMAND_FAILED', 'fetch failed'),
   );
 
-  await assert.rejects(
-    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 1, y: 2 }),
-  );
+  await assert.rejects(runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 1, y: 2 }));
   // Only ONE tap dispatch. (A status probe may follow as recovery — that is
   // not a resend; every tap-shaped call must be the original alone.)
   const tapDispatches = mockExecuteRunnerCommandWithSession.mock.calls.filter(

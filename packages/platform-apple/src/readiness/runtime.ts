@@ -18,6 +18,11 @@ export type AppleReadinessOptions = Readonly<{
    * runner cache in parallel with the boot, which is the whole reason the hook exists.
    */
   onColdBootStart?: () => void;
+  /**
+   * Cold-boot without focusing the Simulator GUI app. The default keeps the
+   * human-facing behavior; automation callers (daemon `boot --headless`) opt in.
+   */
+  headless?: boolean;
 }>;
 
 export async function ensureAppleReady(
@@ -40,7 +45,7 @@ export async function ensureAppleReady(
     options.onColdBootStart?.();
     host.deviceReadiness.appleAutomation.keepHot(device);
     await bootSimulator(host, device, signal);
-    await showSimulator(host, signal);
+    if (!options.headless) await showSimulator(host, signal);
   }
   host.deviceReadiness.appleAutomation.keepHot(device);
   // Publish the fresh observation so the boot checks later in this flow skip their own listing.

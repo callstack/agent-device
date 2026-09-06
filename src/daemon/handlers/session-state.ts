@@ -42,7 +42,7 @@ function bootUnavailableResponse(headless: boolean): UnavailableRuntimeResponse 
     errorResponse(
       headless ? 'INVALID_ARGS' : 'UNSUPPORTED_OPERATION',
       headless
-        ? 'boot --headless is supported only for Android emulators.'
+        ? 'boot --headless is supported only for Android emulators and Apple simulators.'
         : 'boot is not supported on this device',
       undefined,
       unavailable.hint ? { hint: unavailable.hint } : undefined,

@@ -19,7 +19,7 @@ import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/p
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
 
-test('boot rejects --headless outside Android directly', async () => {
+test('boot rejects --headless when the runtime withholds the headless cell', async () => {
   const device = {
     platform: 'apple' as const,
     appleOs: 'ios' as const,

@@ -255,7 +255,10 @@ function matchesRunnerErrorRule(error: AppError, match: RunnerErrorMatch): boole
 
 function matchesRunnerErrorCode(error: AppError, runnerErrorCode: string | undefined): boolean {
   if (!runnerErrorCode) return true;
-  return (error.details as { runnerErrorCode?: unknown } | undefined)?.runnerErrorCode === runnerErrorCode;
+  return (
+    (error.details as { runnerErrorCode?: unknown } | undefined)?.runnerErrorCode ===
+    runnerErrorCode
+  );
 }
 
 function matchesRunnerErrorDetails(error: AppError, details: RunnerErrorMatch['details']): boolean {
