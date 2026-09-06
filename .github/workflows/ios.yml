@@ -169,6 +169,10 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCachedTargetInvalidationClearsProcessBoundState \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertResolutionCannotBypassRequestedDeadline \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertAcceptTreatsOpenAsAffirmative \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertAcceptDoesNotActivateAReplacementWithASharedButton \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertDismissDoesNotActivateAReplacementWithTheSameTitle \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertCannotProveAnIdenticalReplacementAndDoesNotActivateIt \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertDeadlineBeforeActivationLeavesTheOriginalUntouched \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSystemModalProbeSliceSharesAndClampsToPlanDeadline \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDispatchRecoverySkipsBookkeepingWhileXCTestChannelOccupied \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain \

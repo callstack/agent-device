@@ -18,7 +18,7 @@ import { AppError } from '@agent-device/kernel/errors';
 const ALERT_COMMAND_NAME = 'alert';
 
 const alertCommandDescription =
-  'Inspect, wait for, accept, or dismiss a platform alert. Use get before acting when the alert content matters; accept and dismiss change the active alert state.';
+  'Inspect, wait for, accept, or dismiss a platform alert. Use get before acting when the alert content matters; accept and dismiss change the active alert state. Each iOS XCTest execution activates once, then only observes. Inspect again after an unconfirmed action; never assume a timeout means nothing happened.';
 
 const alertCommandMetadata = defineFieldCommandMetadata(
   ALERT_COMMAND_NAME,
