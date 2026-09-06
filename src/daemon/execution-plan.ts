@@ -1,6 +1,6 @@
-import type { OpenApplicationPlan } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   resolvePlannedRuntimeOperations,
+  type PlannedRuntimeOperation,
   type PlannedStep,
 } from '../core/command-descriptor/planned-operations.ts';
 
@@ -13,14 +13,13 @@ import {
 export type ExecutionPlan = Readonly<{ remainingSteps: readonly PlannedStep[] }>;
 
 /**
- * The declared runtime operations of the steps still ahead of an `open`, or `undefined` when the
+ * The runtime operations the steps still ahead of an `open` must execute, or `undefined` when the
  * future is unknown. A plan with no remaining step is unknown too: an `open` that ends its batch
  * is a prelude to standalone commands the daemon cannot see yet.
  */
-export function resolveOpenApplicationPlan(
+export function resolvePlannedOperations(
   plan: ExecutionPlan | undefined,
-): OpenApplicationPlan | undefined {
+): readonly PlannedRuntimeOperation[] | undefined {
   if (plan === undefined || plan.remainingSteps.length === 0) return undefined;
-  const operations = resolvePlannedRuntimeOperations(plan.remainingSteps);
-  return operations === undefined ? undefined : { operations };
+  return resolvePlannedRuntimeOperations(plan.remainingSteps);
 }

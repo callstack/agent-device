@@ -1,7 +1,4 @@
-import type {
-  OpenApplicationPlan,
-  OpenApplicationRunnerDemand,
-} from '@agent-device/contracts/application-lifecycle-runtime';
+import type { OpenApplicationRunnerDemand } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { RuntimeOperationKey } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 
@@ -106,18 +103,14 @@ const APPLE_SIMULATOR_OPERATION_HOSTS: Readonly<
 
 /**
  * The runner demand of one local-Simulator open. An unknown plan keeps today's speculative
- * prewarm; a plan whose operations are all simulator-served proves no runner is needed; any
- * runner-served operation makes readiness worth preparing now.
+ * prewarm; a plan whose required operations are all simulator-served proves no runner is needed;
+ * any runner-served operation makes readiness worth preparing now.
  */
 export function resolveAppleSimulatorRunnerDemand(
-  plan: OpenApplicationPlan | undefined,
+  operations: readonly RuntimeOperationKey<PlatformRuntimeOperations>[] | undefined,
 ): OpenApplicationRunnerDemand {
-  if (plan === undefined) return 'possible';
-  const operations = plan.operations as readonly string[];
-  const hosts = APPLE_SIMULATOR_OPERATION_HOSTS as Readonly<
-    Record<string, AppleSimulatorOperationHost | undefined>
-  >;
-  // An operation this table does not know is not proven simulator-served.
-  if (operations.some((operation) => hosts[operation] !== 'simulator')) return 'required';
-  return 'none';
+  if (operations === undefined) return 'possible';
+  return operations.some((operation) => APPLE_SIMULATOR_OPERATION_HOSTS[operation] === 'runner')
+    ? 'required'
+    : 'none';
 }

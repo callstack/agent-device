@@ -104,7 +104,7 @@ function resolveRunnerPrewarmPolicy(
   localIosSimulator: boolean,
 ): RunnerPrewarmPolicy {
   const runnerDemand = localIosSimulator
-    ? resolveAppleSimulatorRunnerDemand(input.plan)
+    ? resolveAppleSimulatorRunnerDemand(input.execution.plannedOperations)
     : undefined;
   const shouldPrewarmRunner =
     isIosFamily(device) &&

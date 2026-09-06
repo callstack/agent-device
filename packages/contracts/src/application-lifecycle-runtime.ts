@@ -1,3 +1,5 @@
+import type { RuntimeOperationKey } from './platform-runtime.ts';
+import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
@@ -39,6 +41,13 @@ export type ApplicationLifecycleExecution = Readonly<{
   iosXctestDerivedDataPath?: string;
   iosXctestEnvDir?: string;
   runnerLeaseContext?: RunnerLogicalLeaseContext;
+  /**
+   * The runtime operations the steps still ahead of this request inside the same plan (today: the
+   * remaining steps of a `batch`) must execute, derived by the daemon from the command descriptors'
+   * declared runtime uses. Never a public flag and never on the wire. Absent when the future of the
+   * session is unknown (a standalone command).
+   */
+  plannedOperations?: readonly RuntimeOperationKey<PlatformRuntimeOperations>[];
 }>;
 
 /** Semantic target resolution used before an application open. */
@@ -67,19 +76,12 @@ export type OpenApplicationPreparationInput = Readonly<{
 }>;
 
 /**
- * The declared runtime operations of the steps known to follow this open inside the same plan
- * (today: the remaining steps of a `batch`). The daemon derives it from the command descriptors'
- * declared runtime uses; it is never a public flag and never crosses the wire. Absent when the
- * future of the session is unknown (a standalone `open`).
- */
-export type OpenApplicationPlan = Readonly<{ operations: readonly string[] }>;
-
-/**
  * How much the platform's interaction host (the XCTest runner on iOS) is known to be needed by
- * the plan that contains an open. `none`: every following step is proven observation-only, so no
- * runner is started or retained. `possible`: the plan is unknown, so a speculative prewarm may run
- * but observation never awaits it. `required`: a following step needs the runner, so readiness is
- * prepared now and awaited by that step.
+ * the plan that contains an open. `none`: every following step is proven observation-only, so this
+ * open starts no runner (an already-live runner stays under the existing idle-stop policy).
+ * `possible`: the plan is unknown, so a speculative prewarm may run but observation never awaits
+ * it. `required`: a following step needs the runner, so readiness is prepared now and awaited by
+ * that step.
  */
 export type OpenApplicationRunnerDemand = 'none' | 'possible' | 'required';
 
@@ -94,7 +96,6 @@ export type OpenApplicationInput = Readonly<{
   hasExistingSession: boolean;
   relaunch: boolean;
   prewarmRunnerBeforeOpen: boolean;
-  plan?: OpenApplicationPlan;
   enableTestIme: boolean;
   stateDir: string;
   runtimeHints: RuntimeHintValues;

@@ -41,8 +41,11 @@ export type BatchRequest = Omit<DaemonRequest, 'flags'> & {
 export type BatchStepContext = Readonly<{
   stepNumber: number;
   totalSteps: number;
+  /** The steps still ahead, in the shape their handlers will read. */
   remainingSteps: readonly Readonly<{
     command: string;
+    positionals: readonly string[];
+    flags: Readonly<Record<string, unknown>>;
     input?: Readonly<Record<string, unknown>>;
   }>[];
 }>;
@@ -106,6 +109,8 @@ export async function runBatch(
         totalSteps: steps.length,
         remainingSteps: steps.slice(index + 1).map((remaining) => ({
           command: remaining.command,
+          positionals: remaining.positionals,
+          flags: remaining.flags,
           ...(remaining.input === undefined ? {} : { input: remaining.input }),
         })),
       });

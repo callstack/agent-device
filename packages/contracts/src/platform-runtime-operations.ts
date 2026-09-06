@@ -54,7 +54,6 @@ import {
   type DeviceRuntimeOwner,
   type RuntimeOwnerRef,
   type RuntimePlatformModule,
-  type RuntimeUseDeclaration,
 } from './platform-runtime.ts';
 import { runtimeUse } from './platform-runtime-use.ts';
 import type { AndroidToolHost } from './platform-runtime-host.ts';
@@ -486,6 +485,18 @@ const selectorUsesByIntent = Object.freeze({
 export type SelectorCaptureRuntimeIntent = keyof typeof selectorUsesByIntent;
 
 /**
+ * The one action-selected plan `find` binds (ADR 0019 §9): the target capture always, plus the
+ * focus leg for `find focus` and the focus+type legs for `find type`. Every other action resolves
+ * its target from the capture and delegates or reads; the handler and plan-time consumers share
+ * this map so they cannot drift.
+ */
+export function findRuntimeIntent(
+  action: string,
+): Extract<SelectorCaptureRuntimeIntent, 'capture-only' | 'find-focus' | 'find-type'> {
+  return action === 'focus' ? 'find-focus' : action === 'type' ? 'find-type' : 'capture-only';
+}
+
+/**
  * Same two `kind`s the snapshot plan uses for this split — deliberately, so capture-only,
  * element-text, and wait-observation callers share one admit-then-bind path.
  */
@@ -596,35 +607,6 @@ export function resolveSnapshotRuntimePlan(input: {
         operation: 'captureSnapshotWithCustomActions',
         use: captureSnapshotWithCustomActionsWithoutActiveAppUse,
       });
-}
-
-/**
- * The snapshot uses a structured `snapshot`/`diff` step reaches, read the way the handler reads its
- * plan: custom actions select the XCTest-only alternative, and the active-app split stays open.
- */
-export function selectSnapshotStepUses(
-  input: Readonly<Record<string, unknown>> | undefined,
-): readonly RuntimeUseDeclaration[] {
-  const customActions = input?.['customActions'] === true;
-  return [true, false].map(
-    (hasActiveApp) => resolveSnapshotRuntimePlan({ customActions, hasActiveApp }).use,
-  );
-}
-
-/**
- * The selector uses a structured `find` step reaches, mirroring the handler's action-selected
- * plan: `focus` and `type` bind their combined leg, a text read binds the element-text capture,
- * and an action with a delegated leg keeps every declared alternative.
- */
-export function selectFindStepUses(
-  input: Readonly<Record<string, unknown>> | undefined,
-): readonly RuntimeUseDeclaration[] {
-  const action = input?.['action'];
-  if (action === undefined || action === 'wait') return selectorUsesByIntent['capture-only'];
-  if (action === 'getText' || action === 'getAttrs') return selectorUsesByIntent['element-text'];
-  if (action === 'focus') return selectorUsesByIntent['find-focus'];
-  if (action === 'type') return selectorUsesByIntent['find-type'];
-  return findRuntimePlanUses;
 }
 
 const captureScreenshotUse = defineUse({ required: ['captureScreenshot'] });

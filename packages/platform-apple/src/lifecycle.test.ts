@@ -319,7 +319,7 @@ test('a Simulator open whose plan is observation-only starts no runner and repor
 
   const outcome = await lifecycle.openApplication({
     ...openInput(),
-    plan: { operations: ['captureSnapshot', 'findText', 'captureScreenshot'] },
+    execution: { plannedOperations: ['captureSnapshot', 'findText', 'captureScreenshot'] },
   });
 
   expect(outcome.timing.runnerDemand).toBe('none');
@@ -331,7 +331,7 @@ test('a Simulator open whose plan is observation-only starts no runner and repor
 
 test.each([
   ['an unknown plan', undefined, 'possible'],
-  ['a plan that needs the runner', { operations: ['captureSnapshot', 'tapPoint'] }, 'required'],
+  ['a plan that needs the runner', ['captureSnapshot', 'tapPoint'], 'required'],
 ] as const)(
   'a Simulator relaunch with %s schedules the runner prewarm without awaiting it',
   async (_name, plan, expectedDemand) => {
@@ -352,7 +352,11 @@ test.each([
       signal: new AbortController().signal,
     });
 
-    const opened = lifecycle.openApplication({ ...openInput(), relaunch: true, plan });
+    const opened = lifecycle.openApplication({
+      ...openInput(),
+      relaunch: true,
+      execution: { plannedOperations: plan },
+    });
     const outcome = await Promise.race([
       opened,
       new Promise<'awaited-runner-readiness'>((resolve) =>
@@ -422,7 +426,7 @@ test('a physical iOS relaunch still awaits the runner prewarm and ignores the pl
 
   const outcome = await lifecycle.openApplication({
     ...openInput(),
-    plan: { operations: ['captureSnapshot'] },
+    execution: { plannedOperations: ['captureSnapshot'] },
   });
 
   expect(outcome.timing.runnerDemand).toBeUndefined();

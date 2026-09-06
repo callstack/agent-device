@@ -1,7 +1,5 @@
-import {
-  selectSnapshotStepUses,
-  snapshotRuntimePlanUses,
-} from '@agent-device/contracts/platform-runtime-operations';
+import { snapshotRuntimePlanUses } from '@agent-device/contracts/platform-runtime-operations';
+import { selectSnapshotStepUses } from '../step-use-selectors.ts';
 import { expect, test } from 'vitest';
 import { commandDescriptors } from '../registry.ts';
 

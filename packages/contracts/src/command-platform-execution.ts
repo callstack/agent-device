@@ -2,14 +2,20 @@ import type { InventoryUse } from './platform-module.ts';
 import type { RuntimeUseDeclaration } from './platform-runtime.ts';
 import { runtimeUseIdentity } from './platform-runtime-use.ts';
 
+/** A step as the daemon batch runner holds it: the same shape its handler will read. */
+export type RuntimeUseStep = Readonly<{
+  positionals?: readonly string[];
+  flags?: Readonly<Record<string, unknown>>;
+  input?: Readonly<Record<string, unknown>>;
+}>;
+
 /**
- * Plan-time selection of the runtime uses one structured step input can reach, for a command whose
- * declared alternatives differ in what they execute. Session-dependent splits (active app) stay
- * open, so a selector returns every alternative the input still admits.
+ * Plan-time selection of the runtime uses one step can reach, for a command whose declared
+ * alternatives differ in what they execute. A selector reads the step the way the handler does
+ * and fails closed to every alternative when it cannot tell. Session-dependent splits (active
+ * app) stay open, so a selector returns every alternative the step still admits.
  */
-export type RuntimeUseStepSelector = (
-  input: Readonly<Record<string, unknown>> | undefined,
-) => readonly RuntimeUseDeclaration[];
+export type RuntimeUseStepSelector = (step: RuntimeUseStep) => readonly RuntimeUseDeclaration[];
 
 export type CommandPlatformExecution =
   | Readonly<{ kind: 'none' }>
@@ -53,15 +59,9 @@ export function assertCommandPlatformExecution(
   }
   if (
     declaration['kind'] === 'device-runtime' &&
-    sameKeys(keys, ['kind', 'uses']) &&
-    hasRuntimeUseDeclarations(declaration['uses'])
-  ) {
-    return;
-  }
-  if (
-    declaration['kind'] === 'device-runtime' &&
-    sameKeys(keys, ['kind', 'selectUses', 'uses']) &&
-    typeof declaration['selectUses'] === 'function' &&
+    (sameKeys(keys, ['kind', 'uses']) ||
+      (sameKeys(keys, ['kind', 'selectUses', 'uses']) &&
+        typeof declaration['selectUses'] === 'function')) &&
     hasRuntimeUseDeclarations(declaration['uses'])
   ) {
     return;

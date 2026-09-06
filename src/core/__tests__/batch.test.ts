@@ -139,11 +139,19 @@ test('each step is invoked with its place in the plan and the steps still ahead 
   assert.deepEqual(seen, [
     {
       command: 'open',
-      remaining: [{ command: 'snapshot', input: { interactiveOnly: true } }, { command: 'click' }],
+      remaining: [
+        { command: 'snapshot', positionals: [], flags: {}, input: { interactiveOnly: true } },
+        { command: 'click', positionals: [], flags: {} },
+      ],
       step: 1,
       total: 3,
     },
-    { command: 'snapshot', remaining: [{ command: 'click' }], step: 2, total: 3 },
+    {
+      command: 'snapshot',
+      remaining: [{ command: 'click', positionals: [], flags: {} }],
+      step: 2,
+      total: 3,
+    },
     { command: 'click', remaining: [], step: 3, total: 3 },
   ]);
 });

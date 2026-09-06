@@ -1,8 +1,6 @@
 import { expect, test } from 'vitest';
-import {
-  findRuntimePlanUses,
-  selectFindStepUses,
-} from '@agent-device/contracts/platform-runtime-operations';
+import { findRuntimePlanUses } from '@agent-device/contracts/platform-runtime-operations';
+import { selectFindStepUses } from '../step-use-selectors.ts';
 import { commandDescriptors } from '../registry.ts';
 
 test('find descriptor declares its complete runtime uses with no legacy projection', () => {

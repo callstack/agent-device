@@ -1,3 +1,4 @@
+import { resolvePlannedOperations } from './execution-plan.ts';
 import type { ApplicationLifecycleExecution } from '@agent-device/contracts/application-lifecycle-runtime';
 import { resolveRunnerLogicalLeaseContext } from './lease-context.ts';
 import type { DaemonRequest } from './types.ts';
@@ -21,5 +22,6 @@ export function applicationLifecycleExecutionFromRequest(
     iosXctestDerivedDataPath: req.flags?.iosXctestDerivedDataPath,
     iosXctestEnvDir: req.flags?.iosXctestEnvDir,
     runnerLeaseContext: resolveRunnerLogicalLeaseContext(req),
+    plannedOperations: resolvePlannedOperations(req.internal?.executionPlan),
   };
 }

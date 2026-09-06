@@ -45,7 +45,6 @@ import {
 } from '../../session-routing.ts';
 import { resolveSessionLeaseForRequest } from '../../lease-lifecycle.ts';
 import { applicationLifecycleExecutionFromRequest } from '../../application-lifecycle-execution.ts';
-import { resolveOpenApplicationPlan } from '../../execution-plan.ts';
 import {
   abandonDeviceClaim,
   acquireDeviceClaim,
@@ -198,7 +197,6 @@ export async function completeOpenCommand(params: {
     hasExistingSession: existingSession !== undefined,
     relaunch: shouldRelaunch,
     prewarmRunnerBeforeOpen: req.flags?.maestro?.prewarmRunnerBeforeOpen === true,
-    plan: resolveOpenApplicationPlan(req.internal?.executionPlan),
     enableTestIme: shouldActivateAndroidTestIme(device, req),
     stateDir: sessionStore.resolveDaemonStateDir(),
     runtimeHints: runtimeHintValues(runtimeHints),

@@ -7,17 +7,15 @@ test('an unknown plan keeps the speculative prewarm', () => {
 
 test('a plan served entirely by simctl and the AX bridge needs no runner', () => {
   expect(
-    resolveAppleSimulatorRunnerDemand({
-      operations: [
-        'captureSnapshot',
-        'captureSnapshotWithoutActiveApp',
-        'captureScreenshot',
-        'findText',
-        'findSelector',
-        'closeApplication',
-        'finalizeApplicationClose',
-      ],
-    }),
+    resolveAppleSimulatorRunnerDemand([
+      'captureSnapshot',
+      'captureSnapshotWithoutActiveApp',
+      'captureScreenshot',
+      'findText',
+      'findSelector',
+      'closeApplication',
+      'finalizeApplicationClose',
+    ]),
   ).toBe('none');
 });
 
@@ -27,14 +25,10 @@ test.each([
   ['custom actions', 'captureSnapshotWithCustomActions'],
   ['an alert', 'readAlert'],
   ['runner preparation', 'prepareAppleRunner'],
-])('a plan containing %s requires the runner', (_name, operation) => {
-  expect(resolveAppleSimulatorRunnerDemand({ operations: ['captureSnapshot', operation] })).toBe(
-    'required',
-  );
+] as const)('a plan containing %s requires the runner', (_name, operation) => {
+  expect(resolveAppleSimulatorRunnerDemand(['captureSnapshot', operation])).toBe('required');
 });
 
-test('an operation the table does not know is never proven runner-free', () => {
-  expect(resolveAppleSimulatorRunnerDemand({ operations: ['notARuntimeOperation'] })).toBe(
-    'required',
-  );
+test('an empty plan is proven observation-only', () => {
+  expect(resolveAppleSimulatorRunnerDemand([])).toBe('none');
 });

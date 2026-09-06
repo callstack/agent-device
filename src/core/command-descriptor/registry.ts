@@ -52,8 +52,6 @@ import {
   pressRuntimeUses,
   screenshotRuntimePlanUses,
   scrollRuntimePlanUses,
-  selectFindStepUses,
-  selectSnapshotStepUses,
   selectorCaptureRuntimePlanUses,
   selectorTextCaptureRuntimePlanUses,
   settingsRuntimeUse,
@@ -66,6 +64,7 @@ import {
   viewportRuntimeUse,
   waitSelectorCaptureRuntimePlanUses,
 } from '@agent-device/contracts/platform-runtime-operations';
+import { selectFindStepUses, selectSnapshotStepUses } from './step-use-selectors.ts';
 import { assertRecordRuntimeExecution } from '@agent-device/contracts/record-runtime-execution';
 import { screenRecordingRuntimePlanUses } from '@agent-device/contracts/screen-recording-runtime-plan';
 import { readDeclaredPlatformExecution } from './platform-execution-entry.ts';
