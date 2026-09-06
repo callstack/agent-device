@@ -151,10 +151,12 @@ test('explicit recovery retains ownership-fence failures without attempting clea
   });
 });
 
-test('a confirmed failed-adoption cleanup leaves the device admissible', async () => {
+test('a confirmed failed-adoption cleanup lifts an earlier block on the device', async () => {
   const context = makeDurableCaptureContext();
   const start = makeDurableCaptureStartResult(context);
   const cancellation = new AppError('CANCELED', 'request canceled');
+  context.admissionLedger.blockUndurableCleanup(context.device, 'an earlier unconfirmed cleanup');
+  expect(() => context.admissionLedger.assertStartAllowed(context.device)).toThrow(/process-local/);
 
   await expect(
     testCaptureResource.adoptStarted({
