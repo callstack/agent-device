@@ -30,8 +30,6 @@ async function shutdownAppleTarget(
   device: DeviceInfo,
   signal: AbortSignal,
 ): Promise<TargetShutdownResult> {
-  if (device.booted === false) return stoppedTargetSuccess();
-
   signal.throwIfAborted();
   try {
     const result = await appleTools.run(
@@ -89,8 +87,4 @@ function toShutdownResult(result: {
     stdout: result.stdout,
     stderr: result.stderr,
   };
-}
-
-function stoppedTargetSuccess(): TargetShutdownResult {
-  return { success: true, exitCode: 0, stdout: '', stderr: '' };
 }
