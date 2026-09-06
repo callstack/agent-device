@@ -300,6 +300,27 @@ test('get attrs digest compacts the node under a ref target', () => {
   expect(digest).toEqual({ ref: 'e7', node: COMPACT_NODE });
 });
 
+test('attrs digest keeps explicit false/zero/empty field facts; unavailable ones stay absent (#2288)', () => {
+  const fieldFacts = {
+    value: '',
+    editable: false,
+    password: false,
+    hintShowing: false,
+    selectionStart: 0,
+    selectionEnd: 0,
+  };
+  const digest = getView!({ ref: 'e7', node: { ...MATCHED_NODE, ...fieldFacts } }, 'digest');
+  expect(digest.node).toEqual({ ...COMPACT_NODE, ...fieldFacts });
+  // MATCHED_NODE carries none of the field facts: the digest must not invent them.
+  const unavailable = getView!({ ref: 'e7', node: MATCHED_NODE }, 'digest').node as Record<
+    string,
+    unknown
+  >;
+  for (const field of Object.keys(fieldFacts)) {
+    if (field !== 'value') expect(field in unavailable).toBe(false);
+  }
+});
+
 test('find/get default and full return today’s shape unchanged (same reference)', () => {
   const data: DaemonResponseData = { ref: '@e7', text: 'Sign in', node: MATCHED_NODE };
   expect(findView!(data, 'default')).toBe(data);

@@ -14,6 +14,11 @@ export type AndroidUiHierarchy = {
   enabled?: boolean;
   visibleToUser?: boolean;
   focused?: boolean;
+  editable?: boolean;
+  password?: boolean;
+  hintShowing?: boolean;
+  selectionStart?: number;
+  selectionEnd?: number;
   // Two independent facts, never collapsed, and never undefined: the helper omits false attributes
   // while stock UiAutomator writes them out, so reading an absent attribute as a value gave two
   // encodings of one control opposite answers.
