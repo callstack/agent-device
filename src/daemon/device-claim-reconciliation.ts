@@ -9,7 +9,7 @@ import { appLogDurableResource } from './app-log-session-resource.ts';
 import { recoverAppLogResourceAfterDaemonLock } from './app-log-resource-recovery.ts';
 import type { DeviceClaim } from './device-claim-record.ts';
 import type { DeviceClaimReconciler } from './device-claims.ts';
-import type { DurableCaptureRecoveryOutcome } from './durable-capture-resource-recovery.ts';
+import type { DurableCaptureRecoveryOutcome } from '@agent-device/capture-kit/durable-capture';
 import type { DurableSessionResourceKind } from './durable-session-resource-kinds.ts';
 import { safeSessionName } from './session-paths.ts';
 import { screenRecordingDurableResource } from './screen-recording-session-resource.ts';

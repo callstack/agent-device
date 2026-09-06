@@ -11,7 +11,7 @@ import { createDurableCaptureResource } from '../durable-capture-resource.ts';
 import {
   createDurableCaptureResourceStore,
   type DurableCaptureResourceStore,
-} from '../durable-capture-resource-store.ts';
+} from '@agent-device/capture-kit/durable-capture';
 import type { SessionState } from '../types.ts';
 
 export const testCaptureStore = createDurableCaptureResourceStore({

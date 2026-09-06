@@ -5,21 +5,19 @@ import {
   type RuntimeOwnerRef,
   runtimeOwnerKey,
 } from '@agent-device/contracts/platform-runtime';
-import {
-  createDurableResourceEnvelope,
-  decodeDurableResourceEnvelope,
-} from '@agent-device/capture-kit';
 import { deviceIdentity, sameDeviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import {
+  createDurableResourceEnvelope,
+  decodeDurableResourceEnvelope,
+} from '../durable-resource-envelope.ts';
 import type {
   AdoptStartedDurableCaptureParams,
+  DurableCaptureRecordDefinition,
   DurableCaptureResourceDefinition,
-} from './durable-capture-resource.ts';
-import {
-  capitalizeDurableCaptureLabel,
-  durableCaptureDiagnosticPrefix,
-} from './durable-capture-resource-labels.ts';
+} from './definition.ts';
+import { capitalizeDurableCaptureLabel, durableCaptureDiagnosticPrefix } from './labels.ts';
 
 type AdoptionState<H extends AsyncDisposable> =
   | { kind: 'pending' }
@@ -30,9 +28,10 @@ export async function adoptStartedDurableCapture<
   K extends string,
   H extends LiveResourceHandle<C>,
   C,
+  S,
 >(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
-  params: AdoptStartedDurableCaptureParams<K, H>,
+  definition: DurableCaptureResourceDefinition<K, H, C, S>,
+  params: AdoptStartedDurableCaptureParams<K, H, S>,
   resourcePath: string,
 ): Promise<void> {
   let state: AdoptionState<H> = { kind: 'pending' };
@@ -53,9 +52,9 @@ export async function adoptStartedDurableCapture<
   }
 }
 
-async function recoverFailedAdoption<K extends string, H extends LiveResourceHandle<C>, C>(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
-  params: AdoptStartedDurableCaptureParams<K, H>,
+async function recoverFailedAdoption<K extends string, H extends LiveResourceHandle<C>, C, S>(
+  definition: DurableCaptureResourceDefinition<K, H, C, S>,
+  params: AdoptStartedDurableCaptureParams<K, H, S>,
   resourcePath: string,
   state: AdoptionState<H>,
   primaryError: unknown,
@@ -69,23 +68,25 @@ async function recoverFailedAdoption<K extends string, H extends LiveResourceHan
     resourcePath,
     initialCleanupError,
   );
-  if ((!persisted && transition.cleanupError === undefined) || transition.confirmed) {
-    params.admissionLedger.clearUndurableCleanup(params.device);
-  } else {
-    params.admissionLedger.blockUndurableCleanup(
-      params.device,
-      transition.cleanupError instanceof Error
-        ? transition.cleanupError.message
-        : 'The durable cleanup transition could not be confirmed',
-    );
-  }
+  params.reportUndurableCleanup(
+    params.device,
+    (!persisted && transition.cleanupError === undefined) || transition.confirmed
+      ? { confirmed: true }
+      : {
+          confirmed: false,
+          reason:
+            transition.cleanupError instanceof Error
+              ? transition.cleanupError.message
+              : 'The durable cleanup transition could not be confirmed',
+        },
+  );
   if (transition.cleanupError !== undefined)
     emitCleanupDiagnostic(definition, params, primaryError, transition.cleanupError);
 }
 
-function confirmFailedAdoptionTransition<K extends string, H extends LiveResourceHandle<C>, C>(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
-  params: Pick<AdoptStartedDurableCaptureParams<K, H>, 'sessionName' | 'fence'>,
+function confirmFailedAdoptionTransition<K extends string, H extends LiveResourceHandle<C>, C, S>(
+  definition: DurableCaptureRecordDefinition<K, C>,
+  params: Pick<AdoptStartedDurableCaptureParams<K, H, S>, 'sessionName' | 'fence'>,
   resourcePath: string,
   cleanupError: unknown | undefined,
 ): { confirmed: boolean; cleanupError: unknown | undefined } {
@@ -108,8 +109,8 @@ function confirmFailedAdoptionTransition<K extends string, H extends LiveResourc
   }
 }
 
-async function disposeFailedAdoption<K extends string, H extends AsyncDisposable>(
-  params: AdoptStartedDurableCaptureParams<K, H>,
+async function disposeFailedAdoption<K extends string, H extends AsyncDisposable, S>(
+  params: AdoptStartedDurableCaptureParams<K, H, S>,
   state: AdoptionState<H>,
 ): Promise<unknown | undefined> {
   try {
@@ -121,9 +122,9 @@ async function disposeFailedAdoption<K extends string, H extends AsyncDisposable
   }
 }
 
-function persistRecoveryTombstone<K extends string, H extends LiveResourceHandle<C>, C>(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
-  params: AdoptStartedDurableCaptureParams<K, H>,
+function persistRecoveryTombstone<K extends string, H extends LiveResourceHandle<C>, C, S>(
+  definition: DurableCaptureRecordDefinition<K, C>,
+  params: AdoptStartedDurableCaptureParams<K, H, S>,
   resourcePath: string,
 ): boolean {
   try {
@@ -159,10 +160,10 @@ function persistRecoveryTombstone<K extends string, H extends LiveResourceHandle
   }
 }
 
-function createExpectedEnvelope<K extends string, H extends LiveResourceHandle<C>, C>(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
+function createExpectedEnvelope<K extends string, H extends LiveResourceHandle<C>, C, S>(
+  definition: DurableCaptureRecordDefinition<K, C>,
   params: Pick<
-    AdoptStartedDurableCaptureParams<K, H>,
+    AdoptStartedDurableCaptureParams<K, H, S>,
     'sessionName' | 'device' | 'owner' | 'fence'
   >,
   descriptor: DurableResourceEnvelope<K>['descriptor'],
@@ -179,10 +180,10 @@ function createExpectedEnvelope<K extends string, H extends LiveResourceHandle<C
   });
 }
 
-function validateStartedEnvelope<K extends string, H extends LiveResourceHandle<C>, C>(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
+function validateStartedEnvelope<K extends string, H extends LiveResourceHandle<C>, C, S>(
+  definition: DurableCaptureRecordDefinition<K, C>,
   params: Pick<
-    AdoptStartedDurableCaptureParams<K, H>,
+    AdoptStartedDurableCaptureParams<K, H, S>,
     'sessionName' | 'device' | 'owner' | 'fence' | 'envelope'
   >,
 ): DurableResourceEnvelope<K> {
@@ -224,8 +225,8 @@ function matchesAuthority(
   );
 }
 
-function confirmFailedAdoption<K extends string, H extends LiveResourceHandle<C>, C>(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
+function confirmFailedAdoption<K extends string, C>(
+  definition: DurableCaptureRecordDefinition<K, C>,
   resourcePath: string,
   expected: ResourceOwnershipFence,
   cleanupError: unknown | undefined,
@@ -249,9 +250,9 @@ function confirmFailedAdoption<K extends string, H extends LiveResourceHandle<C>
   return true;
 }
 
-function emitCleanupDiagnostic<K extends string, H extends LiveResourceHandle<C>, C>(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
-  params: Pick<AdoptStartedDurableCaptureParams<K, H>, 'sessionName'>,
+function emitCleanupDiagnostic<K extends string, H extends AsyncDisposable, C, S>(
+  definition: DurableCaptureRecordDefinition<K, C>,
+  params: Pick<AdoptStartedDurableCaptureParams<K, H, S>, 'sessionName'>,
   primaryError: unknown,
   cleanupError: unknown,
 ): void {

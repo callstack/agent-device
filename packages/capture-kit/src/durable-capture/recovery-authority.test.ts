@@ -1,12 +1,12 @@
 import { expect, test, vi } from 'vitest';
-import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { createDurableResourceEnvelope } from '../durable-resource-envelope.ts';
 import type { AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
+import { createAppLogLiveHandle } from '../app-log-live-handle.ts';
 import {
   acquireDurableCaptureRecoveryAuthorityBeforeDeadline,
   DurableCaptureRecoveryDeadlineError,
-} from '../durable-capture-recovery-authority.ts';
+} from './recovery-authority.ts';
 
 const envelope = createDurableResourceEnvelope({
   resourceKind: 'app-log',
@@ -78,7 +78,7 @@ test('deadline abort disposes authority that becomes active after the caller has
 
     resolveReattach({
       status: 'active',
-      handle: createTestAppLogLiveHandle({
+      handle: createAppLogLiveHandle({
         inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
         finish: async () => ({
           status: 'completed',
@@ -149,7 +149,7 @@ test.each(['active', 'missing'] as const)(
         lateStatus === 'active'
           ? {
               status: 'active',
-              handle: createTestAppLogLiveHandle({
+              handle: createAppLogLiveHandle({
                 inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
                 finish: async () => ({
                   status: 'completed',
@@ -219,7 +219,7 @@ test('late handle cleanup failure does not skip control disposal when diagnostic
     });
     resolveReattach({
       status: 'active',
-      handle: createTestAppLogLiveHandle({
+      handle: createAppLogLiveHandle({
         inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
         finish: async () => ({
           status: 'completed',
@@ -295,7 +295,7 @@ test('aborted recovery does not skip control disposal when late handle diagnosti
     expect(observedSignal?.reason).toBe(cancellation);
     resolveReattach({
       status: 'active',
-      handle: createTestAppLogLiveHandle({
+      handle: createAppLogLiveHandle({
         inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
         finish: async () => ({
           status: 'completed',

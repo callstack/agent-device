@@ -6,22 +6,22 @@ import {
 } from '@agent-device/contracts/durable-resource';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import {
-  withDurableCaptureResourceFence,
-  type DurableCaptureResourceFenceLease,
-} from './durable-capture-resource-fence.ts';
-import type { DurableCaptureResourceDefinition } from './durable-capture-resource.ts';
-import { capitalizeDurableCaptureLabel } from './durable-capture-resource-labels.ts';
-import type { SessionStore } from './session-store.ts';
-import type { SessionState } from './types.ts';
+import { withDurableCaptureResourceFence, type DurableCaptureResourceFenceLease } from './fence.ts';
+import type {
+  DurableCaptureRecordDefinition,
+  DurableCaptureResourceDefinition,
+  DurableCaptureSessionStore,
+} from './definition.ts';
+import { capitalizeDurableCaptureLabel } from './labels.ts';
 
 export async function finishLiveDurableCapture<
   K extends string,
   H extends LiveResourceHandle<C>,
   C,
+  S,
 >(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
-  params: { session: SessionState; sessionName: string; sessionStore: SessionStore },
+  definition: DurableCaptureResourceDefinition<K, H, C, S>,
+  params: { session: S; sessionName: string; sessionStore: DurableCaptureSessionStore<S> },
   resourcePath: string,
 ): Promise<C> {
   const active = definition.sessionSlot.read(params.session);
@@ -48,7 +48,7 @@ export async function finishDurableCaptureHandle<
   H extends LiveResourceHandle<C>,
   C,
 >(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
+  definition: DurableCaptureRecordDefinition<K, C>,
   params: {
     handle: H;
     fence: DurableCaptureResourceFenceLease<K>['envelope']['fence'];
@@ -81,7 +81,7 @@ export async function finishDurableCaptureHandle<
 }
 
 async function compensateFailedFinish<K extends string, H extends LiveResourceHandle<C>, C>(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
+  definition: DurableCaptureRecordDefinition<K, C>,
   lease: DurableCaptureResourceFenceLease<K>,
   params: { handle: H; resourcePath: string },
   finishError: unknown,
@@ -134,8 +134,8 @@ function persistCleanupPendingBestEffort<K extends string>(
   }
 }
 
-function emitFailedFinishCleanupDiagnostic<K extends string, H extends LiveResourceHandle<C>, C>(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
+function emitFailedFinishCleanupDiagnostic<K extends string, C>(
+  definition: DurableCaptureRecordDefinition<K, C>,
   params: { resourcePath: string },
   finishError: unknown,
   cleanupError: unknown,
@@ -154,9 +154,9 @@ function emitFailedFinishCleanupDiagnostic<K extends string, H extends LiveResou
   });
 }
 
-function clearLiveSlot<K extends string, H extends LiveResourceHandle<C>, C>(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
-  params: { session: SessionState; sessionName: string; sessionStore: SessionStore },
+function clearLiveSlot<K extends string, H extends LiveResourceHandle<C>, C, S>(
+  definition: DurableCaptureResourceDefinition<K, H, C, S>,
+  params: { session: S; sessionName: string; sessionStore: DurableCaptureSessionStore<S> },
 ): void {
   params.sessionStore.set(
     params.sessionName,
@@ -172,12 +172,13 @@ export async function forceCleanupLiveDurableCapture<
   K extends string,
   H extends LiveResourceHandle<C>,
   C,
+  S,
 >(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
+  definition: DurableCaptureResourceDefinition<K, H, C, S>,
   params: {
-    session: SessionState;
+    session: S;
     sessionName?: string;
-    sessionStore?: SessionStore;
+    sessionStore?: DurableCaptureSessionStore<S>;
     resourcePath: string;
   },
 ): Promise<void> {
@@ -223,20 +224,14 @@ export function transitionCleanupOutcome<K extends string>(
 }
 
 export function requireConfirmedDurableCaptureCleanup(
-  definition: Pick<
-    DurableCaptureResourceDefinition<string, LiveResourceHandle<unknown>, unknown>,
-    'displayName' | 'messages'
-  >,
+  definition: Pick<DurableCaptureRecordDefinition<string, unknown>, 'displayName' | 'messages'>,
   outcome: CleanupOutcome,
 ): void {
   if (!isConfirmedCleanup(outcome)) throw cleanupPendingError(definition, outcome);
 }
 
 function cleanupPendingError(
-  definition: Pick<
-    DurableCaptureResourceDefinition<string, LiveResourceHandle<unknown>, unknown>,
-    'displayName' | 'messages'
-  >,
+  definition: Pick<DurableCaptureRecordDefinition<string, unknown>, 'displayName' | 'messages'>,
   outcome: Extract<CleanupOutcome, { status: 'cleanup-pending' }>,
 ): AppError {
   return new AppError(
@@ -251,8 +246,8 @@ function cleanupPendingError(
   );
 }
 
-export function transitionFinishOutcome<K extends string, H extends LiveResourceHandle<C>, C>(
-  definition: DurableCaptureResourceDefinition<K, H, C>,
+export function transitionFinishOutcome<K extends string, C>(
+  definition: DurableCaptureRecordDefinition<K, C>,
   lease: DurableCaptureResourceFenceLease<K>,
   outcome: FinishOutcome<C>,
 ): void {

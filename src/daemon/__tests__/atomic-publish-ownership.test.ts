@@ -24,7 +24,7 @@ test('simple same-directory publishers use the shared atomic publish owner', () 
 
 test('durable publishers share the host-kit durable publication owner', () => {
   const sourcePaths = [
-    new URL('../durable-capture-resource-store.ts', import.meta.url),
+    new URL('../../../packages/capture-kit/src/durable-capture/store.ts', import.meta.url),
     new URL('../../../packages/managed-allocation/src/store-filesystem.ts', import.meta.url),
   ];
   for (const sourcePath of sourcePaths) {

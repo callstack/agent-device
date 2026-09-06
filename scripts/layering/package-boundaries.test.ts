@@ -392,6 +392,7 @@ test('the real tree parses, declares, and passes R11', () => {
   );
   assert.deepEqual([...captureKitPackage.exportTargets.keys()].sort(), [
     '@agent-device/capture-kit',
+    '@agent-device/capture-kit/durable-capture',
     '@agent-device/capture-kit/durable-json',
     '@agent-device/capture-kit/ios-snapshot-acquisition',
     '@agent-device/capture-kit/ios-snapshot-engine',

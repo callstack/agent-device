@@ -1,4 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test, vi } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   makeDurableCaptureContext,
   makeDurableCaptureStartResult,
@@ -146,6 +149,51 @@ test('explicit recovery retains ownership-fence failures without attempting clea
     status: 'decoded',
     envelope: { lifecycle: 'open' },
   });
+});
+
+test('a confirmed failed-adoption cleanup lifts an earlier block on the device', async () => {
+  const context = makeDurableCaptureContext();
+  const start = makeDurableCaptureStartResult(context);
+  const cancellation = new AppError('CANCELED', 'request canceled');
+  context.admissionLedger.blockUndurableCleanup(context.device, 'an earlier unconfirmed cleanup');
+  expect(() => context.admissionLedger.assertStartAllowed(context.device)).toThrow(/process-local/);
+
+  await expect(
+    testCaptureResource.adoptStarted({
+      ...context,
+      ...start,
+      throwIfCanceled: () => {
+        throw cancellation;
+      },
+    }),
+  ).rejects.toBe(cancellation);
+  expect(() => context.admissionLedger.assertStartAllowed(context.device)).not.toThrow();
+});
+
+test('an unconfirmed failed-adoption cleanup blocks a replacement start in this process', async () => {
+  const context = makeDurableCaptureContext();
+  const start = makeDurableCaptureStartResult(context, {
+    cleanup: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
+  });
+  const primary = new AppError('CANCELED', 'request canceled');
+  const resourceDir = path.dirname(context.resourcePath);
+
+  try {
+    await expect(
+      testCaptureResource.adoptStarted({
+        ...context,
+        ...start,
+        throwIfCanceled: () => {
+          fs.chmodSync(resourceDir, 0o500);
+          throw primary;
+        },
+      }),
+    ).rejects.toBe(primary);
+  } finally {
+    fs.chmodSync(resourceDir, 0o700);
+  }
+
+  expect(() => context.admissionLedger.assertStartAllowed(context.device)).toThrow(/process-local/);
 });
 
 function testScope() {

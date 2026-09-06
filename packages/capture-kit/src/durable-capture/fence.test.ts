@@ -1,10 +1,10 @@
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { withDurableCaptureResourceFence } from '../durable-capture-resource-fence.ts';
-import { createDurableCaptureResourceStore } from '../durable-capture-resource-store.ts';
+import { createDurableResourceEnvelope } from '../durable-resource-envelope.ts';
+import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
+import { withDurableCaptureResourceFence } from './fence.ts';
+import { createDurableCaptureResourceStore } from './store.ts';
 
 const store = createDurableCaptureResourceStore({
   resourceKind: 'screen-recording',

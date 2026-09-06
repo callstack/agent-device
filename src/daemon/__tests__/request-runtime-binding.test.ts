@@ -19,7 +19,7 @@ import { screenRecordingRecoveryUse } from '@agent-device/contracts/screen-recor
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { acquireDurableCaptureRecoveryAuthorityBeforeDeadline } from '../durable-capture-recovery-authority.ts';
+import { acquireDurableCaptureRecoveryAuthorityBeforeDeadline } from '@agent-device/capture-kit/durable-capture';
 import {
   createRequestRuntimeBindings,
   ensureBoundDeviceReady,
