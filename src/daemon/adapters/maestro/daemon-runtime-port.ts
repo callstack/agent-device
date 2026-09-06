@@ -11,7 +11,10 @@ import {
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
 import { stripUndefined } from '@agent-device/kernel/record';
 import { executeRunScriptFile } from './run-script-execution.ts';
-import { mapMaestroSetPermissions } from './set-permissions-mapping.ts';
+import {
+  mapMaestroSetPermissions,
+  type MaestroPermissionMutation,
+} from './set-permissions-mapping.ts';
 import { waitForMaestroAnimationToEnd } from './wait-for-animation-to-end.ts';
 import {
   observeTypedMaestroCondition,
@@ -78,14 +81,15 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     context: MaestroRuntimeOperationContext,
     stability: 'none' | 'deferred' = 'none',
   ) => await withMutation(() => invoke(operation), context, stability);
-  // launchApp.permissions applies after the (possibly state-clearing) launch,
-  // so grants land on the fresh install rather than being wiped by it.
-  const applyPermissions = async (
+  // launchApp.permissions applies after state clearing but before launch, so
+  // startup code observes the requested state, and the map is validated before
+  // any mutation — a rejected map launches nothing. Splitting clear from open
+  // matches what open --clearAppState does (clear-app-state, then open).
+  const applyPermissionMutations = async (
     appId: string | undefined,
-    permissions: Readonly<Record<string, string>>,
+    mutations: ReadonlyArray<MaestroPermissionMutation>,
     context: MaestroRuntimeOperationContext,
   ): Promise<void> => {
-    const mutations = mapMaestroSetPermissions(permissions, platform);
     for (const mutation of mutations) {
       await invokeMutation(
         {
@@ -98,6 +102,13 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         context,
       );
     }
+  };
+  const applyPermissions = async (
+    appId: string | undefined,
+    permissions: Readonly<Record<string, string>>,
+    context: MaestroRuntimeOperationContext,
+  ): Promise<void> => {
+    await applyPermissionMutations(appId, mapMaestroSetPermissions(permissions, platform), context);
   };
   const typeTextAndSettle = async (
     text: string,
@@ -138,6 +149,25 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       ];
       const clearState = input.clearState === true;
       const relaunch = !clearState && input.stopApp !== false;
+      if (input.permissions) {
+        const mutations = mapMaestroSetPermissions(input.permissions, platform);
+        if (clearState) {
+          await invokeMutation({ kind: 'clearAppState', ...(appId ? { appId } : {}) }, context);
+        }
+        await applyPermissionMutations(appId, mutations, context);
+        await invokeMutation(
+          {
+            kind: 'launchApp',
+            ...(appId ? { appId } : {}),
+            relaunch,
+            clearState: false,
+            launchArgs,
+          },
+          context,
+          'deferred',
+        );
+        return;
+      }
       await invokeMutation(
         {
           kind: 'launchApp',
@@ -149,7 +179,6 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         context,
         'deferred',
       );
-      if (input.permissions) await applyPermissions(appId, input.permissions, context);
     },
     stopApp: async (input, context) => {
       const appId = input.appId ?? context.appId;

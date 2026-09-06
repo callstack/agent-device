@@ -12,6 +12,10 @@ export type MaestroPermissionMutation = {
  * Android; speech/usertracking/homekit on iOS; health everywhere; custom
  * Android IDs) fail loudly below instead of being silently skipped —
  * extending the platform backends is a separate, device-verified change.
+ *
+ * Explicit entries keep the full servable set so the backend stays the owner
+ * of the verdict: a name the runtime cannot serve (e.g. iOS camera on runtimes
+ * whose `simctl privacy help` lists no camera service) fails loudly there.
  */
 const EXPANDABLE_PERMISSIONS = {
   android: ['camera', 'contacts', 'microphone', 'notifications', 'photos'],
@@ -29,6 +33,20 @@ const EXPANDABLE_PERMISSIONS = {
     'siri',
   ],
 } as const;
+
+/**
+ * Names excluded from `all` expansion. `all` must succeed on the runtimes we
+ * ship, so it covers only the probe-supported subset: this host's
+ * `simctl privacy help` (the same source `getSimctlPrivacyServices` parses in
+ * the iOS backend) lists neither camera nor notifications, and the iOS backend
+ * rejects grant/deny for notifications with UNSUPPORTED_OPERATION — keeping
+ * either in `all` would stop the sequential mutations partway through.
+ * Explicit entries for those names still reach the backend above.
+ */
+const ALL_EXCLUDED_PERMISSIONS: Readonly<Record<'ios' | 'android', readonly string[]>> = {
+  android: [],
+  ios: ['camera', 'notifications'],
+};
 
 /** Per-platform hint for names the backends cannot serve yet. */
 const UNSUPPORTED_HINTS = {
@@ -54,7 +72,8 @@ const GRANULAR_MUTATIONS: Record<string, Record<string, MaestroPermissionMutatio
   location: {
     always: { state: 'grant', permission: 'location-always' },
     inuse: { state: 'grant', permission: 'location' },
-    never: { state: 'reset', permission: 'location' },
+    // never denies access; unset resets to the prompt state.
+    never: { state: 'deny', permission: 'location' },
   },
   photos: {
     limited: { state: 'grant', permission: 'photos', mode: 'limited' },
@@ -68,9 +87,11 @@ const GRANULAR_HINTS: Record<string, string> = {
 
 /**
  * Expand a Maestro `setPermissions` map into ordered `settings permission`
- * mutations. `all` expands to the platform's servable set first so specific
+ * mutations. `all` expands to the platform's servable subset first so specific
  * entries always override it regardless of authored order. Values arrive
  * lowercased from the Maestro runtime layer; anything else is refused.
+ * The expansion is fully validated here, so callers must map before issuing
+ * any mutation — a rejected map changes nothing.
  */
 export function mapMaestroSetPermissions(
   permissions: Readonly<Record<string, string>>,
@@ -81,6 +102,8 @@ export function mapMaestroSetPermissions(
     throw new AppError('INVALID_ARGS', 'Maestro setPermissions requires at least one permission.');
   }
   const expandable = new Set<string>(EXPANDABLE_PERMISSIONS[platform]);
+  const excluded = new Set<string>(ALL_EXCLUDED_PERMISSIONS[platform]);
+  const allExpansion = EXPANDABLE_PERMISSIONS[platform].filter((name) => !excluded.has(name));
   const specific = new Map<string, string>();
   let allValue: string | undefined;
   for (const [name, value] of entries) {
@@ -93,10 +116,7 @@ export function mapMaestroSetPermissions(
   const merged: Array<[string, string]> =
     allValue === undefined
       ? [...specific]
-      : [
-          ...EXPANDABLE_PERMISSIONS[platform].map((name): [string, string] => [name, allValue]),
-          ...specific,
-        ];
+      : [...allExpansion.map((name): [string, string] => [name, allValue]), ...specific];
   return merged.map(([name, value]) => mapMaestroPermission(name, value, platform, expandable));
 }
 

@@ -20,6 +20,7 @@ export type MaestroPublicOperation =
       launchArgs: string[];
     }
   | { kind: 'stopApp'; appId?: string }
+  | { kind: 'clearAppState'; appId?: string }
   | {
       kind: 'settingsPermission';
       appId?: string;
@@ -55,6 +56,7 @@ export function projectMaestroPublicOperation(
   if (isAppOperation(operation)) return projectAppOperation(operation);
   if (isCaptureOperation(operation)) return projectCaptureOperation(operation);
   if (operation.kind === 'settingsPermission') return projectSettingsPermission(operation);
+  if (operation.kind === 'clearAppState') return projectClearAppState(operation);
   return projectInputOperation(operation);
 }
 
@@ -104,6 +106,15 @@ function projectStopApp(
   };
 }
 
+function projectClearAppState(
+  operation: Extract<MaestroPublicOperation, { kind: 'clearAppState' }>,
+): ProjectedMaestroPublicOperation {
+  return {
+    command: 'settings',
+    positionals: operation.appId ? ['clear-app-state', operation.appId] : ['clear-app-state'],
+  };
+}
+
 function projectOpenLink(
   operation: Extract<MaestroAppOperation, { kind: 'openLink' }>,
 ): ProjectedMaestroPublicOperation {
@@ -131,7 +142,10 @@ function projectSettingsPermission(
 
 type MaestroInputOperation = Exclude<
   MaestroPublicOperation,
-  MaestroAppOperation | MaestroCaptureOperation | { kind: 'settingsPermission' }
+  | MaestroAppOperation
+  | MaestroCaptureOperation
+  | { kind: 'settingsPermission' }
+  | { kind: 'clearAppState' }
 >;
 
 function projectInputOperation(operation: MaestroInputOperation): ProjectedMaestroPublicOperation {

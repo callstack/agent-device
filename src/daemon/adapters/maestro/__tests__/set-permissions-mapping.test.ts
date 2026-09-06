@@ -30,19 +30,32 @@ describe('mapMaestroSetPermissions', () => {
       ios.map((mutation) => mutation.permission),
       [
         'calendar',
-        'camera',
         'contacts',
         'location',
         'media-library',
         'microphone',
         'motion',
-        'notifications',
         'photos',
         'reminders',
         'siri',
       ],
     );
     assert.ok(ios.every((mutation) => mutation.state === 'grant'));
+  });
+
+  test('ios all skips the probe-unsupported camera and notifications', () => {
+    // This host's `simctl privacy help` (the source the iOS backend probe
+    // parses) lists neither service, so `all` excludes them rather than
+    // stopping the sequential mutations partway through. Explicit entries
+    // still reach the backend for its loud verdict.
+    const permissions = mapMaestroSetPermissions({ all: 'deny' }, 'ios').map(
+      (mutation) => mutation.permission,
+    );
+    assert.ok(!permissions.includes('camera'));
+    assert.ok(!permissions.includes('notifications'));
+    assert.deepEqual(mapMaestroSetPermissions({ camera: 'allow' }, 'ios'), [
+      { state: 'grant', permission: 'camera' },
+    ]);
   });
 
   test('maps iOS granular values and the medialibrary alias', () => {
@@ -53,6 +66,10 @@ describe('mapMaestroSetPermissions', () => {
       { state: 'grant', permission: 'location' },
     ]);
     assert.deepEqual(mapMaestroSetPermissions({ location: 'never' }, 'ios'), [
+      { state: 'deny', permission: 'location' },
+    ]);
+    // never denies access while unset restores the prompt state.
+    assert.deepEqual(mapMaestroSetPermissions({ location: 'unset' }, 'ios'), [
       { state: 'reset', permission: 'location' },
     ]);
     assert.deepEqual(mapMaestroSetPermissions({ photos: 'limited' }, 'ios'), [

@@ -52,7 +52,7 @@ test('setPermissions fans out to one settings call per permission', async () => 
   ).toBe(true);
 });
 
-test('launchApp applies permissions after the state-clearing launch', async () => {
+test('launchApp applies permissions after clearing but before launch', async () => {
   const requests: DaemonRequest[] = [];
   const port = makePort(requests, 'android');
 
@@ -70,9 +70,56 @@ test('launchApp applies permissions after the state-clearing launch', async () =
     invalidateObservation() {},
   });
 
-  expect(requests.map(({ command }) => command)).toEqual(['open', 'settings']);
+  expect(requests.map(({ command }) => command)).toEqual(['settings', 'settings', 'open']);
+  expect(requests[0]?.positionals).toEqual(['clear-app-state', 'com.example.app']);
   expect(requests[1]?.positionals).toEqual(['permission', 'grant', 'camera']);
   expect(requests[1]?.internal?.settingsAppBundleId).toBe('com.example.app');
+  expect(requests[2]?.command).toBe('open');
+  expect(requests[2]?.flags).not.toMatchObject({ clearAppState: true });
+});
+
+test('launchApp without clearState applies permissions before launch', async () => {
+  const requests: DaemonRequest[] = [];
+  const port = makePort(requests, 'android');
+
+  await port.execute({
+    command: {
+      kind: 'launchApp',
+      source: { line: 3 },
+      appId: 'com.example.app',
+      permissions: { camera: 'allow' },
+    },
+    appId: 'com.example.app',
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(requests.map(({ command }) => command)).toEqual(['settings', 'open']);
+  expect(requests[0]?.positionals).toEqual(['permission', 'grant', 'camera']);
+  expect(requests[1]?.command).toBe('open');
+});
+
+test('launchApp with rejected permissions launches nothing', async () => {
+  const requests: DaemonRequest[] = [];
+  const port = makePort(requests, 'android');
+
+  await expect(
+    port.execute({
+      command: {
+        kind: 'launchApp',
+        source: { line: 3 },
+        appId: 'com.example.app',
+        clearState: true,
+        permissions: { bluetooth: 'allow' },
+      },
+      appId: 'com.example.app',
+      generation: 0,
+      env: {},
+      invalidateObservation() {},
+    }),
+  ).rejects.toThrow(/bluetooth.*not supported on android/i);
+  expect(requests).toEqual([]);
 });
 
 test('setPermissions without an appId leaves targeting to the session app', async () => {
