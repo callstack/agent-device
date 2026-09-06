@@ -1,6 +1,6 @@
 // Production-seam coverage for the real request-timeout route.
 //
-// src/daemon/client/__tests__/daemon-client.test.ts covers `resolveRequestTimeoutHint`
+// src/daemon-client/__tests__/daemon-client.test.ts covers `resolveRequestTimeoutHint`
 // as a pure formatter, but a pure-formatter test cannot catch a bug in
 // CLEANUP ELIGIBILITY: whether `cleanupTimedOutIosRunnerBuilds` (the Apple
 // xcodebuild pkill sweep) actually runs. This file spies on the real
@@ -40,9 +40,9 @@ vi.mock('@agent-device/host-kit/command', async () => {
 
 import { AppError } from '@agent-device/kernel/errors';
 import { sendRequest } from '../daemon-client-transport.ts';
-import type { DaemonRequest } from '../../daemon-request.ts';
+import type { DaemonRequest } from '../../daemon/daemon-request.ts';
 import type { DaemonInfo } from '../daemon-client-metadata.ts';
-import type { DaemonPaths } from '../../config.ts';
+import type { DaemonPaths } from '../../daemon/config.ts';
 
 const TIMEOUT_MS = 120;
 

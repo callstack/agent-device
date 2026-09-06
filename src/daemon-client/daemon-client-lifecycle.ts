@@ -3,8 +3,8 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { readReplayDivergenceResume } from '../../core/replay-divergence.ts';
-import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import { readReplayDivergenceResume } from '../core/replay-divergence.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
 import {
   runCmdDetachedMonitored,
   type ExecDetachedExit,
@@ -14,7 +14,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 import { readVersion } from '@agent-device/host-kit/version';
 
-import { findUnrecoveredRepairCommitFailure } from '../session-store.ts';
+import { findUnrecoveredRepairCommitFailure } from '../daemon/session-repair-tombstone.ts';
 import {
   resolveDaemonPaths,
   resolveDaemonServerMode,
@@ -22,7 +22,7 @@ import {
   type DaemonPaths,
   type DaemonServerMode,
   type DaemonTransportPreference,
-} from '../config.ts';
+} from '../daemon/config.ts';
 import { resolveDaemonLaunchSpec, resolveLocalDaemonCodeSignature } from './daemon-launch-spec.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 

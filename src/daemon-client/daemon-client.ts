@@ -2,7 +2,7 @@ import type { RequestProgressSink } from '@agent-device/contracts/progress';
 import type {
   DaemonRequest as SharedDaemonRequest,
   DaemonResponse as SharedDaemonResponse,
-} from '../daemon-request.ts';
+} from '../daemon/daemon-request.ts';
 import type { AgentDeviceDaemonTransportContext } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -13,7 +13,7 @@ import {
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/timeout-policy';
-import { prepareRemoteRequestArtifacts } from '../../remote/daemon-artifacts.ts';
+import { prepareRemoteRequestArtifacts } from '../remote/daemon-artifacts.ts';
 import {
   attachActiveSessionAddressHint,
   attachRepairSessionAddressHint,

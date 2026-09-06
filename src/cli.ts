@@ -7,11 +7,11 @@ import {
   throwDaemonError,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
-import { resolveRemoteRequestDiagnosticsPath } from './daemon/session-store.ts';
+import { resolveRemoteRequestDiagnosticsPath } from './daemon/session-artifact-paths.ts';
 import { exitAfterFlush } from './cli/process-exit.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import { pathToFileURL } from 'node:url';
-import { sendToDaemon } from './daemon/client/daemon-client.ts';
+import { sendToDaemon } from './daemon-client/daemon-client.ts';
 import fs from 'node:fs';
 import type { BatchStep } from '@agent-device/contracts/client';
 import type { ReplayTestReporterRuntime } from './cli/replay-test/reporting.ts';
