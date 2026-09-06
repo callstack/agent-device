@@ -1,6 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { PerfKind } from './facades/observability.ts';
-import { isPerfMemoryKind } from './perf.ts';
+import { isPerfMemoryKind, type PerfKind } from '@agent-device/contracts/observability';
 import {
   perfFramesUse,
   perfMemorySampleUse,
@@ -8,7 +7,7 @@ import {
   perfNativeCaptureRecoveryUse,
   perfNativeCaptureStartUse,
   perfProfileReportUse,
-} from './platform-runtime-operations.ts';
+} from '@agent-device/contracts/platform-runtime-operations';
 
 export type PerfRuntimeRequest =
   | Readonly<{ area: 'frames'; action: 'sample' }>

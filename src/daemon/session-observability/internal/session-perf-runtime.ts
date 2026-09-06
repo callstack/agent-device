@@ -4,7 +4,7 @@ import {
   resolvePerfRuntimePlan,
   type PerfRuntimePlan,
   type PerfRuntimeRequest,
-} from '@agent-device/contracts/perf-runtime-plan';
+} from '../../perf-runtime-plan.ts';
 import type {
   PerfData,
   PerfNativeCaptureSnapshot,

@@ -72,7 +72,7 @@ import {
 } from './screen-recording-admission-ledger.ts';
 import { resolveGenericRuntimeExecution } from './generic-runtime-execution.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
-import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
+import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API

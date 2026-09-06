@@ -9,7 +9,7 @@ import { finishLiveScreenRecording } from './screen-recording-session-resource.t
 import { finishLiveAudioProbe } from './audio-probe-session-resource.ts';
 import { finishLivePerfCapture } from './perf-capture-session-resource.ts';
 import { openWebSessionNames } from './web-session-names.ts';
-import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
+import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 
 export async function stopSessionAppLog(params: {
   session: SessionState;

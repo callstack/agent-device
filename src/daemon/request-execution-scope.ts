@@ -60,7 +60,7 @@ import {
 import { createDeviceClaimAdmission, type DeviceClaimAdmission } from './device-claim-admission.ts';
 import { createOwnerScopedDeviceClaimReconciler } from './device-claim-owner-recovery.ts';
 import { resolveCommandDeviceClaimPolicy } from '@agent-device/command-registry/registry';
-import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
+import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
 // test and embedded routers isolated without changing process-level serialization there.

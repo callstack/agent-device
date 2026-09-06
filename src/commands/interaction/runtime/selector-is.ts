@@ -13,7 +13,7 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { SelectorTarget } from '@agent-device/contracts/interaction';
-import { INTERACTION_ERROR_REASONS } from '@agent-device/contracts/interaction-error';
+import { INTERACTION_ERROR_REASONS } from '../../../core/interaction-error.ts';
 import type { RuntimeCommand } from '../../runtime-types.ts';
 import { assertExpectedResolvedTarget, type ExpectedResolvedTarget } from './resolution.ts';
 import {

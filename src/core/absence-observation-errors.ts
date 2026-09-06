@@ -1,5 +1,5 @@
 import { asAppError, AppError } from '@agent-device/kernel/errors';
-import { INTERACTION_ERROR_REASONS } from '@agent-device/contracts/interaction-error';
+import { INTERACTION_ERROR_REASONS } from './interaction-error.ts';
 import {
   absenceCaptureOptionMessage,
   type AbsenceCaptureOption,
