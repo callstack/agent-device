@@ -1,6 +1,26 @@
 import { expect, test } from 'vitest';
 import { resolveDaemonRequestTimeoutMs } from '../daemon-client-timeout.ts';
 
+test.each(['open', 'prepare'])(
+  '%s rejects a budget that overflows the cleanup envelope',
+  (command) => {
+    expect(() =>
+      resolveDaemonRequestTimeoutMs({
+        command,
+        session: 'cold-start',
+        flags: { timeoutMs: 2_147_453_648 },
+      }),
+    ).toThrow(/timeoutMs/);
+    expect(
+      resolveDaemonRequestTimeoutMs({
+        command,
+        session: 'cold-start',
+        flags: { timeoutMs: 2_147_453_647 },
+      }),
+    ).toBe(2_147_483_647);
+  },
+);
+
 test.each([
   [undefined, 90_000],
   [600_000, 630_000],

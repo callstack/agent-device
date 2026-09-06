@@ -1,7 +1,11 @@
 import { prepareAppleRunnerRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { PREPARE_REQUEST_TIMEOUT_MS } from '../../core/command-descriptor/timeout-policy.ts';
+import {
+  MAX_STARTUP_TIMEOUT_MS,
+  PREPARE_REQUEST_TIMEOUT_MS,
+} from '../../core/command-descriptor/timeout-policy.ts';
+import { readOptionalInteger } from '@agent-device/contracts/command';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { resolveRunnerLogicalLeaseContext } from '../lease-context.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
@@ -48,6 +52,7 @@ export async function handlePrepareCommand(params: {
   }
 
   const session = sessionStore.get(sessionName);
+  const timeoutMs = readPrepareIosRunnerTimeoutMs(req);
   const flags = req.flags ?? {};
   const guard = requireSessionOrExplicitSelector(PUBLIC_COMMANDS.prepare, session, flags);
   if (guard) return guard;
@@ -64,7 +69,7 @@ export async function handlePrepareCommand(params: {
 
   const startedAtMs = Date.now();
   const result = await admission.runtime.operations.prepareAppleRunner({
-    timeoutMs: readPrepareIosRunnerTimeoutMs(req),
+    timeoutMs,
     execution: {
       requestId: req.meta?.requestId,
       logPath,
@@ -84,10 +89,10 @@ export async function handlePrepareCommand(params: {
 }
 
 function readPrepareIosRunnerTimeoutMs(req: DaemonRequest): number {
-  const value = req.flags?.timeoutMs;
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-    ? value
-    : PREPARE_REQUEST_TIMEOUT_MS;
+  return (
+    readOptionalInteger(req.flags ?? {}, 'timeoutMs', { min: 1, max: MAX_STARTUP_TIMEOUT_MS }) ??
+    PREPARE_REQUEST_TIMEOUT_MS
+  );
 }
 
 function prepareIosRunnerResponseData(

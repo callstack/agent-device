@@ -6,6 +6,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { withOpenStartupDeadline } from '../session-open-deadline.ts';
 import type { DaemonRequest } from '../../../types.ts';
+import { MAX_STARTUP_TIMEOUT_MS } from '../../../../core/command-descriptor/timeout-policy.ts';
 
 const req: DaemonRequest = {
   token: 'test',
@@ -17,6 +18,17 @@ const req: DaemonRequest = {
 };
 
 afterEach(() => vi.useRealTimers());
+
+test.each([0, -1, 1.5, Number.NaN, MAX_STARTUP_TIMEOUT_MS + 1])(
+  'rejects an invalid startup timer before executing device work: %s',
+  async (timeoutMs) => {
+    const open = vi.fn();
+    await expect(
+      withOpenStartupDeadline({ ...req, flags: { timeoutMs } }, open),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+    expect(open).not.toHaveBeenCalled();
+  },
+);
 
 test('startup cancels only its request and waits for cleanup before reporting timeout', async () => {
   vi.useFakeTimers();

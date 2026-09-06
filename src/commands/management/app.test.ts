@@ -56,10 +56,32 @@ describe('open command metro session hints', () => {
     }
   });
 
-  test.each([0, -1, 1.5])('open rejects invalid structured startup timeout %s', (timeoutMs) => {
-    expect(() => openCommandFacet.metadata.readInput({ app: 'Settings', timeoutMs })).toThrow(
-      /timeoutMs/,
-    );
+  test.each([0, -1, 1.5, 2_147_453_648])(
+    'open rejects invalid structured startup timeout %s',
+    (timeoutMs) => {
+      expect(() => openCommandFacet.metadata.readInput({ app: 'Settings', timeoutMs })).toThrow(
+        /timeoutMs/,
+      );
+    },
+  );
+
+  test('CLI invocation rejects startup timer overflow before dispatch', async () => {
+    const parsed = parseArgs(['open', 'Settings', '--timeout', '2147453648'], {
+      strictFlags: true,
+    });
+    const stateDir = tempStateDir();
+    try {
+      const { client, calls } = createOpenClient({ stateDir, session: 'cold-start' });
+      await expect(
+        openCommandFacet.definition.invoke(
+          client,
+          openCommandFacet.cliReader(parsed.positionals, parsed.flags),
+        ),
+      ).rejects.toThrow(/timeoutMs/);
+      expect(calls).toHaveLength(0);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
   });
 
   test('CLI parser accepts --metro-host/--metro-port/--bundle-url/--launch-url on open', () => {

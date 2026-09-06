@@ -1,4 +1,6 @@
 import { markRequestCanceled } from '@agent-device/host-kit/request';
+import { readOptionalInteger } from '@agent-device/contracts/command';
+import { MAX_STARTUP_TIMEOUT_MS } from '../../../core/command-descriptor/timeout-policy.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import { errorResponse } from '../../response.ts';
@@ -8,7 +10,10 @@ export async function withOpenStartupDeadline(
   req: DaemonRequest,
   open: (req: DaemonRequest) => Promise<DaemonResponse>,
 ): Promise<DaemonResponse> {
-  const timeoutMs = req.flags?.timeoutMs;
+  const timeoutMs = readOptionalInteger(req.flags ?? {}, 'timeoutMs', {
+    min: 1,
+    max: MAX_STARTUP_TIMEOUT_MS,
+  });
   if (timeoutMs === undefined) return await open(req);
   const timedRequest = {
     ...req,

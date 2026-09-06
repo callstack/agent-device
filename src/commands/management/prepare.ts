@@ -1,4 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { MAX_STARTUP_TIMEOUT_MS } from '../../core/command-descriptor/timeout-policy.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { enumField, integerField, requiredField } from '../command-input.ts';
 import {
@@ -21,7 +22,7 @@ const prepareCommandMetadata = defineFieldCommandMetadata(
     action: requiredField(enumField(PREPARE_ACTION_VALUES)),
     timeoutMs: integerField(
       'Startup budget in milliseconds for device boot and runner preparation; the client allows additional cleanup time.',
-      { min: 1 },
+      { min: 1, max: MAX_STARTUP_TIMEOUT_MS },
     ),
   },
 );
