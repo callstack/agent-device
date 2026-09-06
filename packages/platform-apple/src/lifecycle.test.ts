@@ -433,3 +433,53 @@ test('a physical iOS relaunch still awaits the runner prewarm and ignores the pl
   expect(outcome.timing.runnerPrewarmWaited).toBe(true);
   expect(events).toEqual(['close', 'open', 'prewarm', 'reset']);
 });
+
+test('a Simulator open lets the launched app become observable instead of sleeping a fixed settle', async () => {
+  const events: string[] = [];
+  const { host } = simulatorHost({ events });
+  const sleep = vi.fn(async () => {
+    events.push('sleep');
+  });
+  const awaitObservable = vi.fn(async () => {
+    events.push('observe');
+    return 'observable' as const;
+  });
+  const signal = new AbortController().signal;
+  const lifecycle = bindAppleApplicationLifecycle({
+    host: { ...host, clock: { ...host.clock, sleep } } as unknown as PlatformRuntimeHost,
+    device: simulator,
+    signal,
+    observation: { awaitObservable },
+  });
+
+  const outcome = await lifecycle.openApplication({
+    ...openInput(),
+    execution: { plannedOperations: ['captureSnapshot'] },
+  });
+
+  expect(awaitObservable).toHaveBeenCalledWith(simulator, 'com.example.app', signal);
+  expect(outcome.timing.postOpenObservation).toBe('observable');
+  expect(events).toEqual(['open', 'observe']);
+});
+
+test('a Simulator whose bridge cannot answer keeps the fixed settle', async () => {
+  const events: string[] = [];
+  const { host } = simulatorHost({ events });
+  const sleep = vi.fn(async () => {
+    events.push('sleep');
+  });
+  const lifecycle = bindAppleApplicationLifecycle({
+    host: { ...host, clock: { ...host.clock, sleep } } as unknown as PlatformRuntimeHost,
+    device: simulator,
+    signal: new AbortController().signal,
+    observation: { awaitObservable: async () => 'unobservable' as const },
+  });
+
+  const outcome = await lifecycle.openApplication({
+    ...openInput(),
+    execution: { plannedOperations: ['captureSnapshot'] },
+  });
+
+  expect(outcome.timing.postOpenObservation).toBe('unobservable');
+  expect(events).toEqual(['open', 'sleep']);
+});

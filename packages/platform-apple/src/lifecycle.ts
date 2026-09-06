@@ -5,7 +5,6 @@ import {
   type CloseApplicationInput,
   type OpenApplicationInput,
   type OpenApplicationOutcome,
-  type OpenApplicationRunnerDemand,
   type PrepareAppleRunnerInput,
   type PrepareAppleRunnerResult,
   hasRuntimeTransportHintValues,
@@ -18,12 +17,16 @@ import {
 } from '@agent-device/contracts/application-lifecycle-interaction';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { ensureAppleReady } from './readiness/runtime.ts';
-import { resolveAppleSimulatorRunnerDemand } from './runner-demand.ts';
+import {
+  resolveRunnerPrewarmPolicy,
+  settleAppleOpen,
+  type MutableOpenTiming,
+} from './open-policy.ts';
+import type { LaunchObservationPort } from './snapshot-observability.ts';
 import { isApplePlatform, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 
 const POST_CLOSE_SETTLE_MS = 300;
-const POST_OPEN_SETTLE_MS = 300;
 
 /** The Apple package receives only the lazy tools and readiness ports it owns. */
 type AppleLifecycleHost = Pick<
@@ -37,14 +40,12 @@ type AppleLifecycleHost = Pick<
   | 'localInteractors'
 >;
 
-type MutableOpenTiming = {
-  -readonly [Key in keyof OpenApplicationOutcome['timing']]: OpenApplicationOutcome['timing'][Key];
-};
-
 type AppleLifecycleParams = Readonly<{
   host: AppleLifecycleHost;
   device: DeviceInfo;
   signal: AbortSignal;
+  /** The Simulator bridge's launch observation, when the runtime binds one (local Simulators). */
+  observation?: LaunchObservationPort;
 }>;
 
 /** Apple owns its lifecycle ordering; the root host exposes only lazy runner/tool ports. */
@@ -70,7 +71,8 @@ export function bindAppleApplicationLifecycle(
           : undefined,
       });
     },
-    openApplication: async (input) => await openAppleApplication(params.host, binding, input),
+    openApplication: async (input) =>
+      await openAppleApplication(params.host, binding, input, params.observation),
     applyRuntimeHints: async (input) =>
       await params.host.appleApplications.applyRuntimeHints(params.device, input),
     clearRuntimeHints: async (input) =>
@@ -86,43 +88,11 @@ export function bindAppleApplicationLifecycle(
 
 type BoundAppleInteractor = ReturnType<typeof bindLocalApplicationLifecycleInteractor>;
 
-type RunnerPrewarmPolicy = Readonly<{
-  runnerDemand?: OpenApplicationRunnerDemand;
-  shouldPrewarmRunner: boolean;
-  awaitPrewarmAfterOpen: boolean;
-}>;
-
-/**
- * Only a local Simulator has a runner-free observation path (the host AX bridge), so only it
- * consults the plan and never waits for runner readiness after the open: bridge observation does
- * not need it, and the first runner-dependent command awaits the same startup under the runner
- * session lock. Physical devices keep their runner lifecycle unchanged.
- */
-function resolveRunnerPrewarmPolicy(
-  device: DeviceInfo,
-  input: OpenApplicationInput,
-  localIosSimulator: boolean,
-): RunnerPrewarmPolicy {
-  const runnerDemand = localIosSimulator
-    ? resolveAppleSimulatorRunnerDemand(input.execution.plannedOperations)
-    : undefined;
-  const shouldPrewarmRunner =
-    isIosFamily(device) &&
-    input.surface === 'app' &&
-    input.positionals.length > 0 &&
-    Boolean(input.appBundleId) &&
-    runnerDemand !== 'none';
-  return {
-    ...(runnerDemand ? { runnerDemand } : {}),
-    shouldPrewarmRunner,
-    awaitPrewarmAfterOpen: input.relaunch && !localIosSimulator,
-  };
-}
-
 async function openAppleApplication(
   host: AppleLifecycleHost,
   binding: BoundAppleInteractor,
   input: OpenApplicationInput,
+  observation: LaunchObservationPort | undefined,
 ): Promise<OpenApplicationOutcome> {
   const timing: MutableOpenTiming = {};
   const localIosSimulator = isIosSimulator(binding.device);
@@ -158,7 +128,7 @@ async function openAppleApplication(
       runnerTargetPredatesOpen,
       retainRunnerForRelaunch,
     );
-    await settleAppleOpen(host, binding, localIosSimulator, timing);
+    await settleAppleOpen(host, binding, input, localIosSimulator, observation, timing);
     return { appBundleId: input.appBundleId, timing };
   } catch (error) {
     if (retainRunnerForRelaunch) {
@@ -304,17 +274,6 @@ async function notifyAppleRunnerRelaunch(
     input.execution,
     binding.signal,
   );
-}
-
-async function settleAppleOpen(
-  host: AppleLifecycleHost,
-  binding: BoundAppleInteractor,
-  localIosSimulator: boolean,
-  timing: MutableOpenTiming,
-): Promise<void> {
-  const startedAtMs = Date.now();
-  if (localIosSimulator) await host.clock.sleep(POST_OPEN_SETTLE_MS, binding.signal);
-  timing.postOpenSettleDurationMs = elapsed(startedAtMs);
 }
 
 function shouldCloseForAppleRelaunch(

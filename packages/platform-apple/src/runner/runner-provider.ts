@@ -75,10 +75,10 @@ export type AppleRunnerProvider = {
    */
   prewarm?: AppleRunnerPrewarmExecutor;
   /**
-   * Whether a command sent now is answered without waiting for a runner startup. A provider with
-   * no startup cost (scripted, request-scoped transports) omits this and counts as live.
+   * Whether a command sent now is answered without waiting for a runner startup. Every provider
+   * states it: registered is not ready, and a provider with no startup cost says so explicitly.
    */
-  hasLiveSession?: (device: DeviceInfo) => boolean;
+  hasLiveSession: (device: DeviceInfo) => boolean;
 };
 
 export type AppleRunnerProviderScopeOptions = {
@@ -96,7 +96,7 @@ const appleRunnerProviderScope = new AsyncLocalStorage<AppleRunnerProviderScope>
 
 export function createLocalAppleRunnerProvider(
   runCommand: AppleRunnerCommandExecutor,
-  lifecycle: Pick<AppleRunnerProvider, 'prepare' | 'prewarm' | 'hasLiveSession'> = {},
+  lifecycle: Pick<AppleRunnerProvider, 'prepare' | 'prewarm' | 'hasLiveSession'>,
 ): AppleRunnerProvider {
   return { runCommand, ...lifecycle };
 }
@@ -144,7 +144,8 @@ function normalizeAppleRunnerProvider(
   provider: AppleRunnerProvider | AppleRunnerCommandExecutor,
 ): AppleRunnerProvider {
   if (typeof provider === 'function') {
-    return { runCommand: provider };
+    // A bare executor has no session to start: every command it accepts is answered directly.
+    return { runCommand: provider, hasLiveSession: () => true };
   }
   return provider;
 }

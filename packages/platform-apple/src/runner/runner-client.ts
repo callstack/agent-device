@@ -188,8 +188,7 @@ export function hasLiveIosRunnerSession(
   options: { requestId?: string } = {},
 ): boolean {
   if (!isIosFamily(device)) return false;
-  const provider = resolveAppleRunnerRuntime(device, options);
-  return provider.hasLiveSession ? provider.hasLiveSession(device) : true;
+  return resolveAppleRunnerRuntime(device, options).hasLiveSession(device);
 }
 
 const LOCAL_APPLE_RUNNER_RUNTIME = createLocalAppleRunnerProvider(executeRunnerCommand, {

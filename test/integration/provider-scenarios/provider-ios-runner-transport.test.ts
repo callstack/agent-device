@@ -212,6 +212,7 @@ function createProviderRuntime(
   options: { requestScope: boolean },
 ): ProviderDeviceRuntime {
   const transport: AppleRunnerProvider = {
+    hasLiveSession: () => true,
     runCommand: async (_device, command, options) => {
       calls.runner.push({ command, options });
       return runnerResultFor(command);

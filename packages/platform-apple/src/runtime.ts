@@ -483,6 +483,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             host,
             device: request.device,
             signal: request.scope.signal,
+            observation: snapshotRoute,
           }),
           facts.operations,
         ),

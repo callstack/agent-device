@@ -1,10 +1,9 @@
-import type { RuntimeOperationKey } from './platform-runtime.ts';
+import type { RuntimeOperationFact, RuntimeOperationKey } from './platform-runtime.ts';
 import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
 import type { SessionSurface } from './session-surface.ts';
-import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { ProviderPortReverseOptions } from './provider-device-runtime.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
 
@@ -120,6 +119,8 @@ export type OpenApplicationTiming = Readonly<{
   openDispatchDurationMs?: number;
   launchUrlDurationMs?: number;
   postOpenSettleDurationMs?: number;
+  /** What a Simulator open learned about the launched app before returning (see the Apple owner). */
+  postOpenObservation?: 'observable' | 'unobservable' | 'not-eligible';
 }>;
 
 export type OpenApplicationOutcome = Readonly<{

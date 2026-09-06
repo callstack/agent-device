@@ -17,7 +17,7 @@ test('the local runner is live only while its session registry holds an alive se
   expect(hasLiveIosRunnerSession(simulator)).toBe(false);
 });
 
-test('a scoped provider without startup cost counts as live', async () => {
+test('a bare executor has no session to start and answers at once', async () => {
   await withAppleRunnerProvider(
     async () => ({}),
     { deviceId: simulator.id },

@@ -137,16 +137,20 @@ async function admitAppleNativeFind(
   if (isMacOs(request.device) && surface !== undefined && surface !== 'app') return undefined;
   const signal = input.signal ? AbortSignal.any([request.signal, input.signal]) : request.signal;
   signal.throwIfAborted();
-  if (await simulatorRunnerNotLive(host, request.device, input.execution)) return undefined;
+  if (!(await runnerCanAnswerNow(host, request.device, input.execution))) return undefined;
   return { appBundleId, signal };
 }
 
-/** A local iOS Simulator whose runner session is not alive; see the find-runtime doc above. */
-async function simulatorRunnerNotLive(
+/**
+ * Whether the runner can answer a native find without a startup wait. Off a local Simulator the
+ * runner is the only reader, so it always answers; on one, only a ready session does (see the
+ * find-runtime doc above).
+ */
+async function runnerCanAnswerNow(
   host: Pick<PlatformRuntimeHost, 'appleApplications'>,
   device: DeviceInfo,
   execution: Readonly<{ requestId?: string }> | undefined,
 ): Promise<boolean> {
-  if (!isIosFamily(device) || device.kind !== 'simulator') return false;
-  return !(await host.appleApplications.hasLiveRunnerSession(device, execution ?? {}));
+  if (!isIosFamily(device) || device.kind !== 'simulator') return true;
+  return await host.appleApplications.hasLiveRunnerSession(device, execution ?? {});
 }
