@@ -669,6 +669,7 @@ test('runner session starts xcodebuild through provider seams and reuses an aliv
   assert.deepEqual(getRunnerSessionSnapshot(device.id), {
     sessionId: session.sessionId,
     alive: true,
+    ready: session.ready,
   });
 });
 

@@ -421,12 +421,14 @@ function isBenignSimulatorRunnerUninstallResult(result: ExecResult): boolean {
 
 export function getRunnerSessionSnapshot(
   deviceId: string,
-): { sessionId: string; alive: boolean } | null {
+): { sessionId: string; alive: boolean; ready: boolean } | null {
   const session = runnerSessions.get(deviceId);
   if (!session) return null;
   return {
     sessionId: session.sessionId,
     alive: isRunnerProcessAlive(session.child.pid),
+    // A registered session whose runner has not answered yet is still starting.
+    ready: session.ready,
   };
 }
 

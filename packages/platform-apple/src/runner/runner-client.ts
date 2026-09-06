@@ -178,8 +178,10 @@ function resolveAppleRunnerRuntime(
 }
 
 /**
- * Whether asking this device's runner now would wait for a startup. Observation paths use it to
- * stay runner-free while no session is alive; a runner that is already up keeps answering.
+ * Whether asking this device's runner now would be answered without a startup wait. A session
+ * that is registered but has not answered yet is still starting, so it does not count: sending it
+ * a command would queue behind its connection retries, and a failed reset would even invalidate it.
+ * Observation paths use this to stay runner-free until the runner is ready.
  */
 export function hasLiveIosRunnerSession(
   device: DeviceInfo,
@@ -192,7 +194,10 @@ export function hasLiveIosRunnerSession(
 
 const LOCAL_APPLE_RUNNER_RUNTIME = createLocalAppleRunnerProvider(executeRunnerCommand, {
   prepare: prepareLocalIosRunner,
-  hasLiveSession: (device) => getRunnerSessionSnapshot(device.id)?.alive === true,
+  hasLiveSession: (device) => {
+    const session = getRunnerSessionSnapshot(device.id);
+    return session !== null && session.alive && session.ready;
+  },
   prewarm: async (device, options) => {
     const { healthCheck, ...runnerOptions } = options;
     if (healthCheck === false) {
