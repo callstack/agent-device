@@ -184,7 +184,7 @@ function shutdownCliOutput(result: CommandRequestResult): CliOutput {
 export async function doctorCliOutput(result: CommandRequestResult): Promise<CliOutput> {
   const { consumeDoctorProgressRendered } = await import('../../daemon/client/doctor-progress.ts');
   const { formatDoctorCheckDetailLines, formatDoctorCheckSummaryLine } =
-    await import('../../daemon/handlers/doctor-output.ts');
+    await import('../../core/doctor-output.ts');
   const data = result as Record<string, unknown>;
   const status = typeof data.status === 'string' ? data.status : 'unknown';
   const lines = [`Doctor: ${status}`];
