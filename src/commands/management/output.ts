@@ -17,6 +17,7 @@ import type {
 } from '@agent-device/contracts/observability';
 import { readCommandMessage } from '@agent-device/kernel/success-text';
 import { snapshotCliOutput } from '../capture/output.ts';
+import type { CommandProgressState } from '../command-progress.ts';
 import type { CliOutput } from '../command-contract.ts';
 import {
   type CliOutputFormatter,
@@ -181,8 +182,10 @@ function shutdownCliOutput(result: CommandRequestResult): CliOutput {
   return { data, text: `${status}: ${device} (${platform})` };
 }
 
-export async function doctorCliOutput(result: CommandRequestResult): Promise<CliOutput> {
-  const { consumeDoctorProgressRendered } = await import('../../daemon/client/doctor-progress.ts');
+export async function doctorCliOutput(
+  result: CommandRequestResult,
+  progress?: CommandProgressState,
+): Promise<CliOutput> {
   const { formatDoctorCheckDetailLines, formatDoctorCheckSummaryLine } =
     await import('../../core/doctor-output.ts');
   const data = result as Record<string, unknown>;
@@ -190,7 +193,9 @@ export async function doctorCliOutput(result: CommandRequestResult): Promise<Cli
   const lines = [`Doctor: ${status}`];
   const checks = readDoctorChecks(data.checks);
 
-  if (consumeDoctorProgressRendered()) {
+  // Progress streamed the per-check lines to stderr already; repeating them
+  // below the summary would print every check twice.
+  if (progress?.renderedToStderr) {
     const summary = typeof data.summary === 'string' ? data.summary : undefined;
     if (summary) lines.push(summary);
   } else if (checks.length === 0) {
@@ -210,7 +215,7 @@ export const managementCliOutputFormatters = {
   shutdown: resultOutput(shutdownCliOutput),
   devices: resultOutput(devicesCliOutput),
   capabilities: resultOutput(capabilitiesCliOutput),
-  doctor: resultOutput(doctorCliOutput),
+  doctor: ({ result, progress }) => doctorCliOutput(result as CommandRequestResult, progress),
   apps: ({ input, result }) =>
     appsCliOutput({
       result: result as Parameters<typeof appsCliOutput>[0]['result'],
