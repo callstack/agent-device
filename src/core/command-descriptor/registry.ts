@@ -946,7 +946,10 @@ export const RAW_COMMAND_DESCRIPTORS = [
       allowSessionlessDefaultDevice: allowAnyDeviceSessionless,
       saveScriptFlagOwner: true,
     },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    timeoutPolicy: {
+      ...DEFAULT_TIMEOUT_POLICY,
+      budget: { source: 'flag', envelope: 'budget-plus-margin' },
+    },
     batchable: true,
     platformExecution: { kind: 'device-runtime', uses: openApplicationRuntimePlanUses },
   },
@@ -958,9 +961,12 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'preserve' },
-    // Runner warm-up builds are the longest fixed envelope; --timeout overrides.
     timeoutPolicy: {
-      budget: { source: 'flag' },
+      budget: {
+        source: 'flag',
+        envelope: 'budget-plus-margin',
+        defaultBudgetMs: PREPARE_REQUEST_TIMEOUT_MS,
+      },
       envelopeMs: PREPARE_REQUEST_TIMEOUT_MS,
       onTimeout: 'reset-daemon',
     },

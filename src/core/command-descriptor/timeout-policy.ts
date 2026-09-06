@@ -16,6 +16,9 @@ export const INSTALL_REQUEST_TIMEOUT_MS = 180_000;
 // envelope below the command's declared base.
 export const REQUEST_TIMEOUT_BUDGET_MARGIN_MS = 30_000;
 
+/** Keep both startup and its cleanup envelope within Node's signed 32-bit timer range. */
+export const MAX_STARTUP_TIMEOUT_MS = 2_147_483_647 - REQUEST_TIMEOUT_BUDGET_MARGIN_MS;
+
 /**
  * How long a lease lifecycle provider may spend allocating one lease (cloud
  * device allocation: BrowserStack iOS ~45–90s, AWS remote access ~2 min to

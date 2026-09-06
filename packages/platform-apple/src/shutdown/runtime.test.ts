@@ -14,13 +14,16 @@ beforeEach(() => {
   run.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
 });
 
-test('an already-stopped simulator succeeds without native shutdown', async () => {
+test('a stale stopped inventory hint still dispatches native shutdown', async () => {
   const runtime = createAppleShutdownRuntime({ appleTools });
 
   await expect(runtime.shutdownTarget(appleDevice({ booted: false }), signal())).resolves.toEqual(
     success(),
   );
-  expect(run).not.toHaveBeenCalled();
+  expect(run).toHaveBeenCalledExactlyOnceWith(
+    { tool: 'simctl', args: ['shutdown', 'sim-1'], allowFailure: true, timeoutMs: 15_000 },
+    expect.any(AbortSignal),
+  );
 });
 
 test('a shutdown error is successful when final simulator state is Shutdown', async () => {

@@ -15,6 +15,17 @@ agent-device close
 
 The implicit `default` session is scoped to the caller's git worktree or current working directory.
 Independent agents in different worktrees do not attach to each other's default session.
+
+For a never-booted iOS simulator, give `open` a startup budget that covers first-boot initialization:
+
+```bash
+agent-device open Settings --platform ios --udid <simulator-udid> --timeout 600000
+```
+
+The device claim stays held through boot and Apple runner preparation, then belongs to the session
+until `close`. With `--timeout`, `open` waits for runner readiness before returning. The client
+allows cleanup time beyond this startup budget. Omitting the flag keeps the default startup behavior.
+
 When a session is established, human output includes a `Session state: <path>` line and JSON output includes `sessionStateDir`; this is the per-session artifact directory that can be inspected or removed after the run. JSON output also includes `runnerLogPath` and `requestLogPath` when available.
 
 Session artifact directories contain per-run evidence for concurrent agents:

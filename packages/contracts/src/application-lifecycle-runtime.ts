@@ -27,6 +27,8 @@ export function hasRuntimeTransportHintValues(values: RuntimeHintValues): boolea
 
 /** Request-scoped runner/diagnostic context, without daemon request types. */
 export type ApplicationLifecycleExecution = Readonly<{
+  /** Absolute daemon-owned deadline shared by boot and runner preparation. */
+  startupDeadlineAtMs?: number;
   requestId?: string;
   logPath?: string;
   traceLogPath?: string;

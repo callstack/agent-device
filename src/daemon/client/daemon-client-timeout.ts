@@ -1,11 +1,15 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { readOptionalInteger } from '@agent-device/contracts/command';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { resolveCommandTimeoutPolicy } from '../../core/command-descriptor/registry.ts';
-import { REQUEST_TIMEOUT_BUDGET_MARGIN_MS } from '../../core/command-descriptor/timeout-policy.ts';
+import {
+  MAX_STARTUP_TIMEOUT_MS,
+  REQUEST_TIMEOUT_BUDGET_MARGIN_MS,
+} from '../../core/command-descriptor/timeout-policy.ts';
 import type {
   CommandTimeoutBudget,
   CommandTimeoutPolicy,
@@ -78,11 +82,17 @@ function resolveFlagBudgetTimeoutMs(
   flags: RequestFlags,
 ): number | undefined {
   if (policy.budget.source !== 'flag') return undefined;
+  if (policy.budget.envelope === 'budget-plus-margin') {
+    const budgetMs =
+      readOptionalInteger(flags ?? {}, 'timeoutMs', { min: 1, max: MAX_STARTUP_TIMEOUT_MS }) ??
+      policy.budget.defaultBudgetMs;
+    return typeof budgetMs === 'number' ? widenToUserBudget(policy, budgetMs) : policy.envelopeMs;
+  }
   // 'widen' budgets (interaction --settle, #1101) bound an internal wait the
   // request must outlive after selector resolution/action overhead. They are
   // settle-gated for touch-command back-compat: a bare timeoutMs without
   // --settle was historically ignored. Plain 'bound' budgets (replay,
-  // prepare, snapshot) replace the envelope verbatim.
+  // snapshot) replace the envelope verbatim.
   if (policy.budget.envelope === 'widen') {
     return resolveWideningFlagBudget(policy, policy.budget, flags);
   }

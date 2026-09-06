@@ -1,4 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { MAX_STARTUP_TIMEOUT_MS } from '../../core/command-descriptor/timeout-policy.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { enumField, integerField, requiredField } from '../command-input.ts';
 import {
@@ -19,7 +20,10 @@ const prepareCommandMetadata = defineFieldCommandMetadata(
   'Prepare platform helper infrastructure. ios-runner builds/reuses, starts, and health-checks the XCTest runner so later Apple snapshots and interactions do not pay first-use startup cost. In JSON output, top-level buildMs/connectMs/healthCheckMs are diagnostic fields and may overlap; use timing.additiveParts for additive wall-clock phase totals. In CI, run it after boot/install and before replay/test; if replay/test starts a separate daemon, stop the prepare daemon before replay/test so it does not keep the prepared runner lease. It is not a recovery step for "runner already owned by another agent-device daemon"; stop the owning daemon on the Mac with simulator access instead. Runner build/start output is written to the session runner.log; daemon.log is for daemon lifecycle/startup issues.',
   {
     action: requiredField(enumField(PREPARE_ACTION_VALUES)),
-    timeoutMs: integerField('Maximum wall-clock time for the prepare command.'),
+    timeoutMs: integerField(
+      'Startup budget in milliseconds for device boot and runner preparation; the client allows additional cleanup time.',
+      { min: 1, max: MAX_STARTUP_TIMEOUT_MS },
+    ),
   },
 );
 

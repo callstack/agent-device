@@ -59,6 +59,7 @@ export function bindAppleApplicationLifecycle(
       await params.host.appleApplications.resolveOpenTarget(params.device, input),
     prepareApplicationOpen: async (input) => {
       await ensureAppleReady(params.host, params.device, params.signal, {
+        deadlineAtMs: input.execution.startupDeadlineAtMs,
         onColdBootStart: input.prewarmRunnerOnColdBoot
           ? () => {
               void params.host.appleApplications
@@ -102,7 +103,8 @@ async function openAppleApplication(
     input,
     localIosSimulator,
   );
-  if (localIosSimulator && shouldPrewarmRunner && !input.prewarmRunnerBeforeOpen) runner.schedule();
+  const requireRunnerReady = requiresRunnerReadiness(input);
+  if (localIosSimulator && shouldPrewarmRunner && !requireRunnerReady) runner.schedule();
   try {
     await closeAppleApplicationForRelaunch(
       host,
@@ -113,7 +115,7 @@ async function openAppleApplication(
       timing,
     );
     await applyAppleOpenRuntimeHints(input, timing);
-    await prewarmAppleRunnerBeforeOpen(runner, shouldPrewarmRunner, input.prewarmRunnerBeforeOpen);
+    await prewarmAppleRunnerBeforeOpen(runner, shouldPrewarmRunner, requireRunnerReady);
     const runnerTargetPredatesOpen = runner.wasAwaited();
     await dispatchAppleOpen(binding, input, localIosSimulator, timing);
     await finishAppleRunnerPrewarm(runner, shouldPrewarmRunner, input.relaunch);
@@ -133,6 +135,10 @@ async function openAppleApplication(
     }
     throw error;
   }
+}
+
+function requiresRunnerReadiness(input: OpenApplicationInput): boolean {
+  return input.prewarmRunnerBeforeOpen || input.execution.startupDeadlineAtMs !== undefined;
 }
 
 async function closeAppleApplicationForRelaunch(
@@ -343,8 +349,15 @@ async function prepareAppleRunner(
   signal: AbortSignal,
   input: PrepareAppleRunnerInput,
 ): Promise<PrepareAppleRunnerResult> {
-  await ensureAppleReady(host, device, signal);
-  return await host.appleApplications.prepareRunner(device, input, signal);
+  const deadlineAtMs = Date.now() + input.timeoutMs;
+  await ensureAppleReady(host, device, signal, { deadlineAtMs });
+  const timeoutMs = deadlineAtMs - Date.now();
+  if (timeoutMs <= 0) {
+    throw new AppError('COMMAND_FAILED', 'Apple runner preparation deadline exceeded', {
+      reason: 'startup_timeout',
+    });
+  }
+  return await host.appleApplications.prepareRunner(device, { ...input, timeoutMs }, signal);
 }
 
 type RunnerPrewarm = Readonly<{

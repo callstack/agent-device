@@ -46,9 +46,7 @@ import {
 import { resolveSessionLeaseForRequest } from '../../lease-lifecycle.ts';
 import { applicationLifecycleExecutionFromRequest } from '../../application-lifecycle-execution.ts';
 import {
-  abandonDeviceClaim,
   acquireDeviceClaim,
-  clearDeviceClaim,
   type DeviceClaimAcquireResult,
   type DeviceClaimSessionOwnership,
   type DeviceClaimReconciler,
@@ -59,6 +57,7 @@ import {
 } from '../../device-claim-conflict.ts';
 import { requireAllocatorHeldDeviceClaim } from '../../device-claim-allocator.ts';
 import { deviceClaimRuleForOwner } from '../../device-claim-rule.ts';
+import { rollbackNewSessionClaim } from './session-open-claim-rollback.ts';
 
 type OpenTiming = {
   totalDurationMs?: number;
@@ -450,12 +449,13 @@ export async function openNewSessionWithDeviceClaim(params: {
   if (ownerClaim.status === 'refused') return ownerClaim.response;
   const deviceClaim = ownerClaim.status === 'acquired' ? ownerClaim.ownership : undefined;
   const effects: NewSessionOpenEffects = { mayHaveStarted: false };
-  const rollbackClaim = async () =>
+  const rollbackClaim = async (error?: unknown) =>
     await rollbackNewSessionClaim({
       ownership: deviceClaim,
       effects,
       sessionName,
       sessionStore,
+      error,
     });
   try {
     const details = await prepareOpenCommandDetails({
@@ -506,28 +506,7 @@ export async function openNewSessionWithDeviceClaim(params: {
     if (!response.ok) await rollbackClaim();
     return response;
   } catch (error) {
-    await rollbackClaim();
+    await rollbackClaim(error);
     throw error;
   }
-}
-
-async function rollbackNewSessionClaim(params: {
-  ownership: DeviceClaimSessionOwnership | undefined;
-  effects: NewSessionOpenEffects;
-  sessionName: string;
-  sessionStore: SessionStore;
-}): Promise<void> {
-  const { ownership, effects, sessionName, sessionStore } = params;
-  if (!ownership) return;
-  if (!effects.mayHaveStarted) {
-    await clearDeviceClaim(ownership);
-    return;
-  }
-  if (sessionStore.get(sessionName)?.deviceClaim?.ownerToken === ownership.ownerToken) return;
-  const outcome = await abandonDeviceClaim(ownership);
-  emitDiagnostic({
-    level: 'warn',
-    phase: 'device_claim_open_effects_unconfirmed',
-    data: { deviceKey: ownership.deviceKey, outcome },
-  });
 }

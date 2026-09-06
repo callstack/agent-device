@@ -9,6 +9,7 @@ export function applicationLifecycleExecutionFromRequest(
   traceLogPath?: string,
 ): ApplicationLifecycleExecution {
   return {
+    startupDeadlineAtMs: req.internal?.startupDeadlineAtMs,
     requestId: req.meta?.requestId,
     logPath,
     traceLogPath,

@@ -100,10 +100,15 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
 test('budget sources deviating from the default are bounded, reviewed sets', () => {
   const flagBoundBudget: string[] = [];
   const flagWidenBudget: string[] = [];
+  const flagBudgetPlusMargin: string[] = [];
   const positionalBudget: string[] = [];
   for (const descriptor of commandDescriptors) {
     const budget = descriptor.timeoutPolicy.budget;
     if (budget.source === 'flag') {
+      if ('envelope' in budget && budget.envelope === 'budget-plus-margin') {
+        flagBudgetPlusMargin.push(descriptor.name);
+        continue;
+      }
       const widen = 'envelope' in budget && budget.envelope === 'widen';
       (widen ? flagWidenBudget : flagBoundBudget).push(descriptor.name);
     }
@@ -112,7 +117,8 @@ test('budget sources deviating from the default are bounded, reviewed sets', () 
     }
   }
   // --timeout bounds the request envelope for these commands only.
-  assert.deepEqual(flagBoundBudget.sort(), ['prepare', 'replay', 'snapshot']);
+  assert.deepEqual(flagBoundBudget.sort(), ['replay', 'snapshot']);
+  assert.deepEqual(flagBudgetPlusMargin.sort(), ['open', 'prepare']);
   // --timeout bounds the --settle wait on these commands (#1101); like wait's
   // positional budget it only ever widens the envelope, never shrinks it.
   assert.deepEqual(flagWidenBudget.sort(), settleObservationCommandNames());

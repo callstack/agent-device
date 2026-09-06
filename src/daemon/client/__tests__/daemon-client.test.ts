@@ -479,7 +479,7 @@ test('snapshot uses the standard daemon request timeout with an explicit overrid
       command: 'prepare',
       positionals: ['ios-runner'],
     }),
-    240_000,
+    270_000,
   );
   assert.equal(
     resolveDaemonRequestTimeoutMs({
@@ -488,7 +488,7 @@ test('snapshot uses the standard daemon request timeout with an explicit overrid
       positionals: ['ios-runner'],
       flags: { timeoutMs: 240_000 },
     }),
-    240_000,
+    270_000,
   );
   assert.equal(resolveDaemonRequestTimeoutMs({ ...base, command: 'test' }), undefined);
 });

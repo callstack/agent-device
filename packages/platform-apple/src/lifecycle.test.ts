@@ -5,6 +5,13 @@ import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runti
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { bindAppleApplicationLifecycle } from './lifecycle.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
 
 const device: DeviceInfo = {
   platform: 'apple',
@@ -259,3 +266,81 @@ function openInput(): OpenApplicationInput {
     execution: {},
   };
 }
+
+test('an explicit startup deadline waits for runner readiness before opening the app', async () => {
+  const baseHost = platformRuntimeHostFixture();
+  const ready = deferred<void>();
+  const prewarmStarted = deferred<void>();
+  const open = vi.fn(async () => {});
+  const prewarmRunnerSession = vi.fn<
+    PlatformRuntimeHost['appleApplications']['prewarmRunnerSession']
+  >(async () => {
+    prewarmStarted.resolve();
+    await ready.promise;
+  });
+  const lifecycle = bindAppleApplicationLifecycle({
+    device: { ...device, kind: 'simulator' },
+    signal: new AbortController().signal,
+    host: {
+      ...baseHost,
+      localInteractors: { resolve: async () => ({ open }) as unknown as Interactor },
+      appleApplications: { ...baseHost.appleApplications, prewarmRunnerSession },
+    },
+  });
+  const pending = lifecycle.openApplication({
+    ...openInput(),
+    relaunch: false,
+    hasExistingSession: false,
+    execution: { startupDeadlineAtMs: Date.now() + 600_000 },
+  });
+  await prewarmStarted.promise;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(open).not.toHaveBeenCalled();
+  ready.resolve();
+  await pending;
+  expect(open).toHaveBeenCalledOnce();
+  expect(prewarmRunnerSession.mock.calls[0]?.[3]).toBe(true);
+});
+
+test('prepare shares its timeout between simulator boot and runner preparation', async () => {
+  const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+  const baseHost = platformRuntimeHostFixture();
+  const prepareRunner = vi.fn(baseHost.appleApplications.prepareRunner);
+  const run = vi.fn<PlatformRuntimeHost['appleTools']['run']>(async (request) => {
+    if (request.args.includes('bootstatus')) now.mockReturnValue(301_000);
+    return {
+      stdout: request.args.includes('list')
+        ? JSON.stringify({
+            devices: {
+              ios: [{ udid: device.id, state: Date.now() === 1_000 ? 'Shutdown' : 'Booted' }],
+            },
+          })
+        : '',
+      stderr: '',
+      exitCode: 0,
+    };
+  });
+  try {
+    const lifecycle = bindAppleApplicationLifecycle({
+      host: {
+        ...baseHost,
+        appleTools: { ...baseHost.appleTools, run },
+        appleApplications: { ...baseHost.appleApplications, prepareRunner },
+      },
+      device: { ...device, kind: 'simulator' },
+      signal: new AbortController().signal,
+    });
+    await lifecycle.prepareAppleRunner({ timeoutMs: 600_000, execution: {} });
+    expect(run).toHaveBeenCalledWith(
+      expect.objectContaining({ args: ['bootstatus', device.id, '-b'], timeoutMs: 600_000 }),
+      expect.any(AbortSignal),
+    );
+    expect(prepareRunner).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ timeoutMs: 300_000 }),
+      expect.any(AbortSignal),
+    );
+  } finally {
+    now.mockRestore();
+  }
+});

@@ -1,6 +1,7 @@
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { emitRequestProgress } from '@agent-device/host-kit/request';
 import { getSimulatorState, simctlArgs } from '../simulator-state.ts';
 
 /** Readiness reads exactly these host ports; the lifecycle binding composes the same subset. */
@@ -13,6 +14,7 @@ const BOOT_TIMEOUT_MS = 120_000;
 const LIST_TIMEOUT_MS = 15_000;
 
 export type AppleReadinessOptions = Readonly<{
+  deadlineAtMs?: number;
   /**
    * Runs when this call is about to cold-boot the simulator. `open` uses it to start warming the
    * runner cache in parallel with the boot, which is the whole reason the hook exists.
@@ -39,8 +41,10 @@ export async function ensureAppleReady(
   if (state !== 'Booted') {
     options.onColdBootStart?.();
     host.deviceReadiness.appleAutomation.keepHot(device);
-    await bootSimulator(host, device, signal);
+    await bootSimulator(host, device, signal, options.deadlineAtMs);
     await showSimulator(host, signal);
+  } else if (options.deadlineAtMs !== undefined) {
+    await waitForSimulatorBoot(host, device, signal, options.deadlineAtMs);
   }
   host.deviceReadiness.appleAutomation.keepHot(device);
   // Publish the fresh observation so the boot checks later in this flow skip their own listing.
@@ -63,15 +67,18 @@ async function bootSimulator(
   host: AppleReadinessHost,
   device: DeviceInfo,
   signal: AbortSignal,
+  deadlineAtMs?: number,
 ): Promise<void> {
   let started = false;
   try {
+    signal.throwIfAborted();
+    started = true;
     const boot = await host.appleTools.run(
       {
         tool: 'simctl',
         args: simctlArgs(device, ['boot', device.id]),
         allowFailure: true,
-        timeoutMs: BOOT_TIMEOUT_MS,
+        timeoutMs: remainingBootBudget(deadlineAtMs),
       },
       signal,
     );
@@ -86,29 +93,49 @@ async function bootSimulator(
       });
     }
     started = !alreadyBooted;
-    const status = await host.appleTools.run(
-      {
-        tool: 'simctl',
-        args: simctlArgs(device, ['bootstatus', device.id, '-b']),
-        allowFailure: true,
-        timeoutMs: BOOT_TIMEOUT_MS,
-      },
-      signal,
-    );
-    if (status.exitCode !== 0) {
-      throw new AppError('COMMAND_FAILED', 'simctl bootstatus failed', {
-        stdout: status.stdout,
-        stderr: status.stderr,
-        exitCode: status.exitCode,
-      });
-    }
+    await waitForSimulatorBoot(host, device, signal, deadlineAtMs);
     if ((await simulatorState(host, device, signal)) !== 'Booted') {
       throw new AppError('COMMAND_FAILED', 'Simulator is still booting', { deviceId: device.id });
     }
   } catch (error) {
-    if (started && signal.aborted) scheduleSimulatorShutdown(host, device);
+    if (started && wasBootCanceled(signal, deadlineAtMs)) {
+      await shutdownCanceledSimulator(host, device);
+    }
     signal.throwIfAborted();
     throw error;
+  }
+}
+
+function wasBootCanceled(signal: AbortSignal, deadlineAtMs: number | undefined): boolean {
+  return signal.aborted || (deadlineAtMs !== undefined && Date.now() >= deadlineAtMs);
+}
+
+async function waitForSimulatorBoot(
+  host: AppleReadinessHost,
+  device: DeviceInfo,
+  signal: AbortSignal,
+  deadlineAtMs?: number,
+): Promise<void> {
+  emitRequestProgress({
+    type: 'command',
+    status: 'progress',
+    message: 'Waiting for iOS simulator boot initialization.',
+  });
+  const status = await host.appleTools.run(
+    {
+      tool: 'simctl',
+      args: simctlArgs(device, ['bootstatus', device.id, '-b']),
+      allowFailure: true,
+      timeoutMs: remainingBootBudget(deadlineAtMs),
+    },
+    signal,
+  );
+  if (status.exitCode !== 0) {
+    throw new AppError('COMMAND_FAILED', 'simctl bootstatus failed', {
+      stdout: status.stdout,
+      stderr: status.stderr,
+      exitCode: status.exitCode,
+    });
   }
 }
 
@@ -127,8 +154,39 @@ async function showSimulator(host: AppleReadinessHost, signal: AbortSignal): Pro
   );
 }
 
-function scheduleSimulatorShutdown(host: AppleReadinessHost, device: DeviceInfo): void {
-  void host.appleTools
-    .run({ tool: 'simctl', args: simctlArgs(device, ['shutdown', device.id]), allowFailure: true })
-    .catch(() => {});
+function remainingBootBudget(deadlineAtMs: number | undefined): number {
+  if (deadlineAtMs === undefined) return BOOT_TIMEOUT_MS;
+  const remainingMs = deadlineAtMs - Date.now();
+  if (remainingMs <= 0) {
+    throw new AppError('COMMAND_FAILED', 'Application startup deadline exceeded', {
+      reason: 'startup_timeout',
+    });
+  }
+  return remainingMs;
+}
+
+async function shutdownCanceledSimulator(
+  host: AppleReadinessHost,
+  device: DeviceInfo,
+): Promise<void> {
+  emitRequestProgress({
+    type: 'command',
+    status: 'progress',
+    message: 'Stopping the simulator started by the canceled request.',
+  });
+  try {
+    const result = await host.appleTools.run({
+      tool: 'simctl',
+      args: simctlArgs(device, ['shutdown', device.id]),
+      allowFailure: true,
+      timeoutMs: 15_000,
+    });
+    if (result.exitCode === 0) return;
+  } catch {
+    // The caller must retain ownership when shutdown cannot be confirmed.
+  }
+  throw new AppError('COMMAND_FAILED', 'Canceled simulator boot cleanup failed', {
+    reason: 'ios_boot_cleanup_failed',
+    deviceId: device.id,
+  });
 }
