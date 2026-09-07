@@ -10,7 +10,7 @@ import {
   findNodeByRef,
   normalizeRef,
   type RawSnapshotNode,
-  type SnapshotStateProvenance,
+  type SnapshotCaptureProvenance,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { resolveRefLabel } from '../core/snapshot-node-lookup.ts';
@@ -55,7 +55,7 @@ type SnapshotData = {
   truncated?: boolean;
   quality?: unknown;
 } & Omit<SnapshotCaptureAnnotations, 'quality'> &
-  SnapshotStateProvenance;
+  SnapshotCaptureProvenance;
 
 type SnapshotAttempt = {
   data: SnapshotData;

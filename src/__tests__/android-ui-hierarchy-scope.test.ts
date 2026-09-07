@@ -121,7 +121,10 @@ test('a scoped Android snapshot is not re-scoped after the wire', () => {
     'projection output: scoped root at depth 0, its children below it',
   );
 
-  const state = buildSnapshotState({ nodes, backend: 'android' }, { snapshotScope: 'panel' });
+  const state = buildSnapshotState(
+    { nodes, backend: 'android', producer: 'android-uiautomator' },
+    { snapshotScope: 'panel' },
+  );
   assert.deepEqual(
     state.nodes.map((node) => node.label ?? node.identifier),
     ['panel', 'Save', 'Cancel'],

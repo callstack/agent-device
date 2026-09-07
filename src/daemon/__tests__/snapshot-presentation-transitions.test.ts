@@ -5,9 +5,13 @@ import { buildSnapshotState } from '../../core/snapshot-state.ts';
 import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { navigationTitleWithAppProvidedDetailsAffordanceNodes } from '../../snapshot/snapshot-presentation/ios/transitions.fixtures.ts';
 
-test('iOS daemon presentation applies transitions without reapplying runner-owned scope', () => {
+test('the daemon publishes engine transitions without reapplying runner-owned scope', () => {
   const snapshot = buildSnapshotState(
-    { nodes: navigationTitleWithAppProvidedDetailsAffordanceNodes, backend: 'xctest' },
+    {
+      nodes: presentIosInteractiveSnapshot(navigationTitleWithAppProvidedDetailsAffordanceNodes),
+      backend: 'xctest',
+      producer: 'apple-runner',
+    },
     { snapshotInteractiveOnly: true, snapshotScope: 'DisplayNameTextField' },
   );
 

@@ -198,12 +198,24 @@ type OptionalProducerProvenance<Pair> = Pair extends {
   : never;
 
 /**
- * The provenance carrier for {@link SnapshotState}: the producer may be absent (legacy states
- * and fixtures predate it), but a present pair still has to come from the
- * {@link SnapshotProvenance} table — the channel may not carry a foreign producer.
+ * The provenance carrier for {@link SnapshotState}: the producer may be absent (a client-side
+ * fallback that rebuilds a state from a bare backend result knows the channel and nothing more),
+ * but a present pair still has to come from the {@link SnapshotProvenance} table — the channel
+ * may not carry a foreign producer.
  */
 export type SnapshotStateProvenance =
   | OptionalProducerProvenance<SnapshotProvenance>
+  | { backend?: undefined; producer?: undefined };
+
+/**
+ * The provenance a capture hands to the daemon snapshot assembly: either nothing is known about
+ * the origin, or the WHOLE pair is. A channel that arrived without its producer would leave the
+ * assembly guessing who presented the tree, which is exactly the backend-name presentation
+ * policy #2199 deleted — so it does not compile. Every production capture satisfies this: the
+ * interactor boundary (`SnapshotResult`) already carries {@link SnapshotProvenance}.
+ */
+export type SnapshotCaptureProvenance =
+  | SnapshotProvenance
   | { backend?: undefined; producer?: undefined };
 
 /**

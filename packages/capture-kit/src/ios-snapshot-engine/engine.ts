@@ -71,10 +71,6 @@ export function presentIosSnapshot(
   return presentIosRunnerSnapshot(input, request, foldPolicy);
 }
 
-export function compactIosInteractiveSnapshot(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
-  return buildIosInteractiveSnapshotPresentation(nodes).nodes;
-}
-
 function presentAcquiredSnapshot(
   acquisition: IosSnapshotAcquisition,
   request: IosSnapshotRequest,

@@ -10,7 +10,7 @@ import {
   snapshotPresentationOptionsFromFlags,
   type RawSnapshotNode,
   type SnapshotBackend,
-  type SnapshotStateProvenance,
+  type SnapshotCaptureProvenance,
   snapshotStateProvenance,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
@@ -21,8 +21,6 @@ import {
 import { coveredAndroidReplacementNodeIndexes } from '../snapshot/android-replacement-surface-occlusion.ts';
 import { scopeSnapshotNodes } from '@agent-device/capture-kit/snapshot-desktop-projection';
 import { normalizeSnapshotTree, pruneGroupNodes } from '../core/snapshot-tree-ingestion.ts';
-import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
-import { IOS_SNAPSHOT_PRODUCER_CAPABILITIES } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import { iosSnapshotComparisonIdentityKey } from '@agent-device/capture-kit/ios-snapshot-planning';
 import type { IosSnapshotComparisonIdentity } from '@agent-device/contracts/ios-snapshot';
 
@@ -33,6 +31,10 @@ import type { IosSnapshotComparisonIdentity } from '@agent-device/contracts/ios-
  * snapshot command, selector captures, settle observation, Android blocking-dialog recovery —
  * goes through here, so no two call sites can disagree about what a snapshot contains.
  *
+ * The assembly does not present. iOS acquisitions are presented exactly once, by the snapshot
+ * engine, before they reach here (#2199 / #2188 invariant 2), and a capture arrives with its
+ * whole provenance pair so no branch here can rediscover who presented it.
+ *
  * Kept below the daemon-server type cycle on purpose: it needs no session state.
  */
 export function buildSnapshotState(
@@ -41,7 +43,7 @@ export function buildSnapshotState(
     truncated?: boolean;
     quality?: unknown;
     comparisonIdentity?: IosSnapshotComparisonIdentity;
-  } & SnapshotStateProvenance,
+  } & SnapshotCaptureProvenance,
   flags:
     | (Pick<CommandFlags, 'snapshotDepth' | 'snapshotInteractiveOnly' | 'snapshotRaw'> &
         Partial<Pick<CommandFlags, 'snapshotScope'>>)
@@ -57,13 +59,10 @@ export function buildSnapshotState(
   const normalizedNodes = normalizeSnapshotTree(
     snapshotRaw ? backendAnnotatedNodes : pruneGroupNodes(backendAnnotatedNodes),
   );
-  const presentableNodes = shouldPresentLegacyIosInteractiveSnapshot(data, flags)
-    ? presentIosInteractiveSnapshot(normalizedNodes)
-    : normalizedNodes;
   const scopedNodes =
     flags?.snapshotScope && backendScopesAfterWire(data?.backend)
-      ? scopeSnapshotNodes(presentableNodes, flags.snapshotScope)
-      : presentableNodes;
+      ? scopeSnapshotNodes(normalizedNodes, flags.snapshotScope)
+      : normalizedNodes;
   const snapshotQuality = snapshotCaptureAnnotationsFrom(data).quality;
   const nodes = attachRefs(
     snapshotRaw
@@ -117,54 +116,21 @@ function annotateAndroidReplacementSurfaces(
 }
 
 /**
- * Scope resolves once per snapshot. Android and XCTest resolve it inside their projection (the
- * platform matchers implement the shared scope specification, `@agent-device/contracts/snapshot`),
- * and the macOS helper scopes at capture; a second pass here would re-match inside an already-scoped
- * tree and hand the two layers different no-match semantics (#1832 C2).
+ * Scope resolves once per snapshot, and this names the channels that still need the post-wire
+ * pass. Every other channel scopes inside its own projection — Android and the macOS helper at
+ * capture, iOS in the snapshot engine — and a second pass would re-match inside an already-scoped
+ * tree and hand the two layers different no-match semantics (#1832 C2). Naming the channels that
+ * need the pass rather than the ones that do not keeps iOS out of post-wire scope planning
+ * entirely, so the list shrinks as a channel takes ownership instead of growing by exclusion
+ * (#2199).
  */
 function backendScopesAfterWire(backend: SnapshotBackend | undefined): boolean {
-  return backend !== 'macos-helper' && backend !== 'android' && backend !== 'xctest';
-}
-
-function shouldPresentLegacyIosInteractiveSnapshot(
-  provenance: object & SnapshotStateProvenance,
-  flags:
-    | (Pick<CommandFlags, 'snapshotDepth' | 'snapshotInteractiveOnly' | 'snapshotRaw'> &
-        Partial<Pick<CommandFlags, 'snapshotScope'>>)
-    | undefined,
-): boolean {
   return (
-    provenance.backend === 'xctest' &&
-    iosSnapshotPresentationStage(provenance) === 'acquired' &&
-    iosSnapshotPresentationOwner(provenance) !== 'ios-snapshot-engine' &&
-    flags?.snapshotInteractiveOnly === true &&
-    flags.snapshotRaw !== true
+    backend === undefined ||
+    backend === 'linux-atspi' ||
+    backend === 'harmonyos-arkui' ||
+    backend === 'web'
   );
-}
-
-function iosSnapshotPresentationStage(
-  provenance: SnapshotStateProvenance,
-): 'acquired' | 'presented' | undefined {
-  if (provenance.backend !== 'xctest') return undefined;
-  if (provenance.producer === undefined) return 'acquired';
-  return iosSnapshotCapabilities(provenance)?.stage;
-}
-
-function iosSnapshotPresentationOwner(
-  provenance: SnapshotStateProvenance,
-): 'ios-snapshot-engine' | 'snapshot-state' | undefined {
-  return iosSnapshotCapabilities(provenance)?.presentationOwner;
-}
-
-function iosSnapshotCapabilities(provenance: SnapshotStateProvenance) {
-  if (provenance.backend !== 'xctest' || provenance.producer === undefined) return undefined;
-  return IOS_SNAPSHOT_PRODUCER_CAPABILITIES[
-    provenance.producer as
-      | 'apple-runner'
-      | 'simulator-ax-bridge'
-      | 'appium-source'
-      | 'limrun-ios-tree'
-  ];
 }
 
 function isAndroidComparisonSafeSnapshot(

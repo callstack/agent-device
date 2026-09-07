@@ -128,7 +128,7 @@ test('interactive Android snapshots keep a fixed sibling outside filtered scroll
 
   const parsed = parseUiHierarchy(xml, 800, { interactiveOnly: true });
   const snapshot = buildSnapshotState(
-    { nodes: parsed.nodes, backend: 'android' },
+    { nodes: parsed.nodes, backend: 'android', producer: 'android-uiautomator' },
     { snapshotInteractiveOnly: true },
   );
   const header = snapshot.nodes.find((node) => node.identifier === 'header-action');

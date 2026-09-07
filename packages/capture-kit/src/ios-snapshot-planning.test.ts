@@ -252,7 +252,6 @@ function acquiredProducer(
     viewportEvidence: 'available',
     hittabilityEvidence: 'available',
     truncationEvidence: 'available',
-    presentationOwner: 'snapshot-state',
     ...overrides,
   };
 }

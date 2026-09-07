@@ -13,9 +13,9 @@ import {
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { toIosSnapshotEngineErrorDetails } from './types.ts';
 import {
-  compactIosInteractiveSnapshot,
   createIosSnapshotEngine,
   IosSnapshotEngineError,
+  presentIosInteractiveSnapshot,
   presentIosSnapshot,
   publishIosSnapshot,
 } from './index.ts';
@@ -326,7 +326,7 @@ test('unavailable hittability never becomes regular actionability', () => {
 
 test('interactive compaction stays available through the engine boundary', () => {
   const rowRect = { x: 16, y: 80, width: 288, height: 52 };
-  const compacted = compactIosInteractiveSnapshot([
+  const compacted = presentIosInteractiveSnapshot([
     node(0, 'Application', 'App', viewport),
     node(1, 'Table', 'Settings', { x: 0, y: 40, width: 320, height: 200 }, 0),
     node(2, 'Cell', 'General', rowRect, 1, 2),

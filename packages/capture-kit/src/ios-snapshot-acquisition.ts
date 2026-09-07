@@ -22,7 +22,6 @@ const ACQUIRED_PRODUCER_CAPABILITY_DEFAULTS = {
   viewportEvidence: 'available',
   hittabilityEvidence: 'unavailable',
   truncationEvidence: 'unavailable',
-  presentationOwner: 'ios-snapshot-engine',
 } as const;
 
 const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
@@ -38,7 +37,6 @@ const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
     viewportEvidence: 'available',
     hittabilityEvidence: 'available',
     truncationEvidence: 'available',
-    presentationOwner: 'ios-snapshot-engine',
   },
   'simulator-ax-bridge': {
     ...ACQUIRED_PRODUCER_CAPABILITY_DEFAULTS,
@@ -49,7 +47,6 @@ const IOS_SNAPSHOT_PRODUCER_CAPABILITY_VALUES = {
     },
     hittabilityEvidence: 'available',
     truncationEvidence: 'available',
-    presentationOwner: 'snapshot-state',
   },
   'appium-source': {
     ...ACQUIRED_PRODUCER_CAPABILITY_DEFAULTS,

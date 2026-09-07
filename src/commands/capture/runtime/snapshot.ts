@@ -221,17 +221,16 @@ function snapshotAppFields(capture: SnapshotCapture): {
   };
 }
 
+/**
+ * A capture that reported nothing about truncation is only "not truncated" when its producer
+ * actually observes truncation. Producers that do not (Appium page source, the Limrun element
+ * tree) leave it unknown rather than having the absence upgraded to `false` (#2188 invariant 5).
+ */
 function snapshotTruncationForResult(snapshot: SnapshotState): boolean | undefined {
   if (snapshot.truncated !== undefined) return snapshot.truncated;
   if (snapshot.backend !== 'xctest' || snapshot.producer === undefined) return false;
   const capability = IOS_SNAPSHOT_PRODUCER_CAPABILITIES[snapshot.producer];
-  if (!capability) return false;
-  const acquisitionDepthUnknown =
-    capability.stage === 'acquired' &&
-    capability.presentationOwner === 'ios-snapshot-engine' &&
-    (capability.acquisitionDepth.rawTraversal.kind === 'incomplete' ||
-      capability.acquisitionDepth.regularPresented.kind === 'incomplete');
-  return acquisitionDepthUnknown ? undefined : false;
+  return capability.truncationEvidence === 'unavailable' ? undefined : false;
 }
 
 function buildSnapshotWarnings(params: {
