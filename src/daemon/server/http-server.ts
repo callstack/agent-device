@@ -755,17 +755,23 @@ export async function createDaemonHttpServer(options: {
           ...daemonRequest.meta,
           tenantId: tenantTrust.tenantId,
           // Attestation is what partitions the session namespace: only an attested
-          // tenant defaults this request to tenant isolation, so only then does
-          // `scopeRequestSession` name the session `<tenant>:...`. The diagnostics
-          // route reads the same distinction back out of `authorizeAuxiliaryHttpRequest`.
-          sessionIsolation: tenantTrust.attested
-            ? (daemonRequest.meta?.sessionIsolation ??
-              daemonRequest.flags?.sessionIsolation ??
-              'tenant')
-            : daemonRequest.meta?.sessionIsolation,
+          // tenant gets tenant isolation, so only then does `scopeRequestSession`
+          // name the session `<tenant>:...`. The diagnostics route reads the same
+          // distinction back out of `authorizeAuxiliaryHttpRequest`.
+          //
+          // When the hook attested the tenant, isolation is the SERVER's answer and
+          // the request does not get a say: honoring a client-supplied `'none'` here
+          // dropped the prefix and dropped the caller into the `cwd:<hash>:` namespace
+          // instead, which the client names and another tenant can name too.
+          sessionIsolation: tenantTrust.attested ? 'tenant' : daemonRequest.meta?.sessionIsolation,
         };
         if (daemonRequest.flags?.tenant !== undefined) {
           daemonRequest.flags = { ...daemonRequest.flags, tenant: tenantTrust.tenantId };
+        }
+        // Consumers that read the flag rather than the meta (`session-doctor-options.ts`)
+        // must not see the isolation the meta just overrode.
+        if (tenantTrust.attested && daemonRequest.flags?.sessionIsolation !== undefined) {
+          daemonRequest.flags = { ...daemonRequest.flags, sessionIsolation: 'tenant' };
         }
         daemonRequest = restrictRemoteHttpRequest(
           daemonRequest,

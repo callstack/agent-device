@@ -323,6 +323,35 @@ test('RPC: no hook configured keeps a client-declared flags.tenant unchanged (re
   });
 });
 
+test('RPC: an attested tenant cannot downgrade its own session isolation', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const root = mkdtempForTestSync('agent-device-tenant-trust-downgrade-');
+  try {
+    const hookPath = writeAttestingAuthHook(root);
+    await withRpcServer(hookPath, async ({ baseUrl, observedRequests }) => {
+      const response = await callRpc(baseUrl, {
+        jsonrpc: '2.0',
+        id: 'rpc-downgrade',
+        method: 'agent_device.command',
+        params: {
+          command: 'session_list',
+          positionals: [],
+          // Both carriers `scopeRequestSession` reads, and both the ones downstream
+          // consumers read: neither may survive as `none` under an attested tenant.
+          meta: { tenantId: ATTESTED_TENANT_ID, sessionIsolation: 'none' },
+          flags: { sessionIsolation: 'none' },
+        },
+      });
+      assert.equal(response.status, 200);
+      assert.equal(observedRequests[0]?.meta?.tenantId, ATTESTED_TENANT_ID);
+      assert.equal(observedRequests[0]?.meta?.sessionIsolation, 'tenant');
+      assert.equal(observedRequests[0]?.flags?.sessionIsolation, 'tenant');
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('aux route: a hook configured but silent on tenant refuses a client-declared header claiming another tenant', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const root = mkdtempForTestSync('agent-device-tenant-trust-aux-');
