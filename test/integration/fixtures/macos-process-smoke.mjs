@@ -49,6 +49,23 @@ if (mode === 'denied') {
       await exited;
     }
   }
+  const emptyArgv = spawn('/bin/sleep', ['30'], {
+    argv0: '',
+    env: { TEST_PROCESS_SENTINEL: 'synthetic-not-an-argument' },
+    stdio: 'ignore',
+  });
+  const emptyExit = once(emptyArgv, 'exit');
+  await once(emptyArgv, 'spawn');
+  try {
+    assert.deepEqual(readMacosProcesses([emptyArgv.pid]), []);
+    assert.equal(readProcessCommand(emptyArgv.pid), null);
+    assert(
+      !(await listHostProcesses({ timeoutMs: 5000 })).some((entry) => entry.pid === emptyArgv.pid),
+    );
+  } finally {
+    emptyArgv.kill();
+    await emptyExit;
+  }
   const holder = spawn(checker, ['zombie'], { stdio: ['pipe', 'pipe', 'inherit'] });
   const holderExit = once(holder, 'exit');
   const lines = createInterface({ input: holder.stdout });

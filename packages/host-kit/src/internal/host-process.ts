@@ -146,9 +146,12 @@ function readProcessField(pid: number, field: 'lstart=' | 'command=' | 'state=')
   }
   const observation = readMacosProcesses([pid])[0];
   if (!observation) return null;
-  if (field === 'lstart=') return observation.startTime;
-  if (field === 'state=') return observation.state;
-  return observation.command || null;
+  const fields = {
+    'lstart=': observation.startTime,
+    'state=': observation.state,
+    'command=': observation.command,
+  };
+  return fields[field] || null;
 }
 
 export function parseHostProcessList(stdout: string): HostProcessInfo[] {

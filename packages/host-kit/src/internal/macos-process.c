@@ -27,15 +27,20 @@ static bool same_identity(const struct proc_bsdinfo *a, const struct proc_bsdinf
     && (a->pbi_status == SZOMB) == (b->pbi_status == SZOMB);
 }
 
-static bool args_bounds(char *buffer, size_t length, char **start, char **finish, int *argc) {
+static bool args_bounds(char *buffer, size_t length, size_t pointer_size, char **start, char **finish, int *argc) {
   if (length <= sizeof(int)) return false;
   memcpy(argc, buffer, sizeof(int));
   if (*argc <= 0 || *argc > MAX_ARGS_BYTES) return false;
   char *cursor = buffer + sizeof(int), *end = buffer + length;
   size_t size = strnlen(cursor, (size_t)(end - cursor));
   if (size == 0 || size == (size_t)(end - cursor)) return false;
-  cursor += size;
-  while (cursor < end && *cursor == 0) cursor++;
+  /* XNU exec_extract_strings aligns executable_path= plus the path to the target pointer size. */
+  const size_t prefix = sizeof("executable_path=") - 1;
+  size_t offset = ((prefix + size + 1 + pointer_size - 1) / pointer_size) * pointer_size - prefix;
+  if (offset >= (size_t)(end - cursor)) return false;
+  for (size_t i = size; i < offset; i++) if (cursor[i] != 0) return false;
+  cursor += offset;
+  if (*cursor == 0) return false;
   *start = cursor;
   for (int i = 0; i < *argc; i++) {
     if (cursor >= end) return false;
@@ -58,7 +63,7 @@ static int observe(int pid) {
     size_t length = MAX_KERNEL_BYTES;
     int mib[] = {CTL_KERN, KERN_PROCARGS2, pid};
     if (!buffer || sysctl(mib, 3, buffer, &length, NULL, 0) != 0
-        || !args_bounds(buffer, length, &start, &finish, &argc)) {
+        || !args_bounds(buffer, length, (before.pbi_flags & PROC_FLAG_LP64) ? 8 : 4, &start, &finish, &argc)) {
       free(buffer);
       return 1;
     }

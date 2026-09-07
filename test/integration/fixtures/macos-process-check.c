@@ -35,17 +35,34 @@ int main(int argc, char **argv) {
   char buffer[256] = {0}, *start = NULL, *finish = NULL;
   int count = 3, parsed = 0;
   memcpy(buffer, &count, sizeof(count));
-  const char sample[] = "/bin/node\0\0node\0\0arg\0SECRET=not-an-argument\0";
+  const char sample[] = "/bin/node\0\0\0\0\0\0\0node\0\0arg\0SECRET=not-an-argument\0";
   memcpy(buffer + sizeof(count), sample, sizeof(sample));
   size_t length = sizeof(count) + sizeof(sample);
-  assert(args_bounds(buffer, length, &start, &finish, &parsed));
+  assert(args_bounds(buffer, length, 8, &start, &finish, &parsed));
   assert(parsed == 3 && finish - start == 10);
   assert(memcmp(start, "node\0\0arg\0", 10) == 0);
-  assert(!args_bounds(buffer, sizeof(count), &start, &finish, &parsed));
-  assert(!args_bounds(buffer, (size_t)(finish - buffer) - 1, &start, &finish, &parsed));
+  assert(!args_bounds(buffer, sizeof(count), 8, &start, &finish, &parsed));
+  assert(!args_bounds(buffer, (size_t)(finish - buffer) - 1, 8, &start, &finish, &parsed));
   count = INT_MAX;
   memcpy(buffer, &count, sizeof(count));
-  assert(!args_bounds(buffer, length, &start, &finish, &parsed));
+  assert(!args_bounds(buffer, length, 8, &start, &finish, &parsed));
+  for (size_t pointer = 4; pointer <= 8; pointer += 4) {
+    for (size_t path_length = 1; path_length <= 24; path_length++) {
+      memset(buffer, 0, sizeof(buffer));
+      count = 2;
+      memcpy(buffer, &count, sizeof(count));
+      memset(buffer + sizeof(count), 'x', path_length);
+      size_t offset = ((16 + path_length + 1 + pointer - 1) / pointer) * pointer - 16;
+      char *arguments = buffer + sizeof(count) + offset;
+      const char ordinary[] = "sleep\00030\000SECRET=not-an-argument\0";
+      memcpy(arguments, ordinary, sizeof(ordinary));
+      assert(args_bounds(buffer, sizeof(buffer), pointer, &start, &finish, &parsed));
+      assert(finish - start == 9 && parsed == 2);
+      const char empty_first[] = "\00030\000SECRET=not-an-argument\0";
+      memcpy(arguments, empty_first, sizeof(empty_first));
+      assert(!args_bounds(buffer, sizeof(buffer), pointer, &start, &finish, &parsed));
+    }
+  }
   puts("identity and argument bounds passed");
   return 0;
 }
