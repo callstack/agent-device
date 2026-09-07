@@ -26,7 +26,7 @@ import {
 } from '../../../core/selector-pipeline-policy.ts';
 import { resolvePressRecordingTarget } from '../../../core/press-retarget.ts';
 import { requireSnapshotSession } from './selector-read-shared.ts';
-import { findNodeByLabel, resolveRefLabel } from '../../../core/snapshot-node-lookup.ts';
+import { findNodeByLabel, resolveRefLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
 import { containsPoint } from '@agent-device/kernel/rect';
 import { createSnapshotVisibility, normalizeType } from '@agent-device/contracts/snapshot';
 import {

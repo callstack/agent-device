@@ -6,7 +6,7 @@ import {
   isSparseSnapshotQualityVerdict,
   preferredSnapshotBackendForVerdict,
 } from '@agent-device/capture-kit/snapshot-quality-verdict';
-import { summarizeAxEvidence } from '../../../snapshot/snapshot-evidence.ts';
+import { summarizeAxEvidence } from '@agent-device/capture-kit/snapshot-evidence';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { isLocalIosRunnerSession } from '../../direct-ios-selector.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';

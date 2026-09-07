@@ -17,11 +17,11 @@ import {
 import {
   annotateCoveredSnapshotNodes,
   annotateSnapshotNodesCoveredByPolicy,
-} from '@agent-device/capture-kit/snapshot-occlusion';
-import { coveredAndroidReplacementNodeIndexes } from '../snapshot/android-replacement-surface-occlusion.ts';
-import { scopeSnapshotNodes } from '@agent-device/capture-kit/snapshot-desktop-projection';
-import { normalizeSnapshotTree, pruneGroupNodes } from '../core/snapshot-tree-ingestion.ts';
-import { iosSnapshotComparisonIdentityKey } from '@agent-device/capture-kit/ios-snapshot-planning';
+} from './snapshot-occlusion.ts';
+import { coveredAndroidReplacementNodeIndexes } from './snapshot/android-replacement-surface-occlusion.ts';
+import { scopeSnapshotNodes } from './snapshot-desktop-projection.ts';
+import { normalizeSnapshotTree, pruneGroupNodes } from './snapshot-tree-ingestion.ts';
+import { iosSnapshotComparisonIdentityKey } from './ios-snapshot-planning.ts';
 import type { IosSnapshotComparisonIdentity } from '@agent-device/contracts/ios-snapshot';
 
 /**

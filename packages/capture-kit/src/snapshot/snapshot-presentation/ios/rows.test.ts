@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { elementClassicRoomListNodes, legitimatelyLabeledCellNodes } from './rows.fixtures.ts';
-import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
+import { presentIosInteractiveSnapshot } from '../../../ios-snapshot-engine/index.ts';
 
 test('iOS row presentation associates generic room cells with their descendant titles', () => {
   const nodes = presentIosInteractiveSnapshot(elementClassicRoomListNodes);

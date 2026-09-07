@@ -20,9 +20,9 @@ import type { AgentDeviceRuntime, CommandSessionRecord } from '../../../runtime-
 import {
   buildSnapshotDiff,
   countSnapshotComparableLines,
-} from '../../../snapshot/snapshot-diff.ts';
-import { renderSnapshotQualityWarnings } from '../../../snapshot/snapshot-presentation/quality-warnings.ts';
-import { buildSnapshotVisibility } from '../../../snapshot/snapshot-visibility.ts';
+} from '@agent-device/capture-kit/snapshot-diff';
+import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality-warnings';
+import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../../core/android-system-surface-disclosure.ts';
 import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';
 import { now } from '../../runtime-common.ts';

@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { formatSnapshotText } from './snapshot.ts';
-import { formatRole, formatSnapshotLine } from '../../snapshot/snapshot-lines.ts';
+import { formatRole, formatSnapshotLine } from '@agent-device/capture-kit/snapshot-lines';
 import { withNoColor } from '../../__tests__/test-utils/color.ts';
 
 test('formatRole falls back for object prototype role names', () => {

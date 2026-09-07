@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { buildSnapshotState } from '../snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { resolveActionableTouchResolution } from '../interaction-targeting.ts';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { attachSnapshotOcclusionContextEvidence } from '@agent-device/contracts/capture';

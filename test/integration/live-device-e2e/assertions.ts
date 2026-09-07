@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import { assertPngFile } from '../provider-scenarios/assertions.ts';
-import { isPlayableVideo } from '../../../src/recording/video.ts';
+import { isPlayableVideo } from '@agent-device/capture-kit/recording-video';
 import type { CliJsonResult } from '../cli-json.ts';
 import type { LiveDeviceContext } from './runtime.ts';
 

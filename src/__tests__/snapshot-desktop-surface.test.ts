@@ -11,7 +11,7 @@ const { captureLinuxSurfaceSnapshot, captureMacOsSurfaceSnapshot } = vi.hoisted(
 
 vi.mock('@agent-device/platform-linux', () => ({ captureLinuxSurfaceSnapshot }));
 
-import { createSnapshotRuntimeHost } from './snapshot-desktop-surface.ts';
+import { createSnapshotRuntimeHost } from '@agent-device/capture-kit/snapshot-desktop-surface';
 
 const macosDevice = {
   id: 'desktop',
@@ -41,8 +41,17 @@ function createHost() {
 }
 
 test('desktop snapshot host keeps iOS presentation outside its eager import closure', () => {
-  const closure = eagerClosureOf(path.join(import.meta.dirname, 'snapshot-desktop-surface.ts'));
-  expect(closure).not.toContain(path.join(import.meta.dirname, 'ios-snapshot-runtime.ts'));
+  const entry = path.resolve(
+    import.meta.dirname,
+    '../../packages/capture-kit/src/snapshot/snapshot-desktop-surface.ts',
+  );
+  const closure = eagerClosureOf(entry);
+  expect(closure).not.toContain(
+    path.resolve(
+      import.meta.dirname,
+      '../../packages/capture-kit/src/snapshot/ios-snapshot-runtime.ts',
+    ),
+  );
 });
 
 test('Apple snapshot host preserves non-app macOS surface capture and menubar identity', async () => {

@@ -5,7 +5,7 @@ import type { DaemonArtifact, DaemonRequest, DaemonResponse } from '../daemon/da
 import {
   appendRecordingExtensionWhenMissing,
   recordingExtensionForPlatform,
-} from '../recording/output-path.ts';
+} from '@agent-device/capture-kit/recording-output-path';
 import { uploadArtifact } from './upload-client.ts';
 import { createStderrUploadProgressReporter, type UploadProgressSink } from './upload-progress.ts';
 

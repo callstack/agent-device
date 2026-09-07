@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { findNodeByLabel, resolveRefLabel } from '../snapshot-node-lookup.ts';
+import { findNodeByLabel, resolveRefLabel } from './snapshot-node-lookup.ts';
 
 test('findNodeByLabel matches label, value, and identifier case-insensitively', () => {
   const nodes = attachRefs([

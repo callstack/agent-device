@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildSnapshotState } from '../core/snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { parseUiHierarchy } from './test-utils/android-ui-hierarchy-fixtures.ts';
 import {
   AndroidSnapshotPresentationFailure,

@@ -5,10 +5,13 @@ import type {
   CommandSessionRecord,
 } from '../../../runtime-contract.ts';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
-import { buildSnapshotDiff } from '../../../snapshot/snapshot-diff.ts';
-import { displayLabel, formatRole } from '../../../snapshot/snapshot-lines.ts';
-import { collectSettleChromeRefs, withoutSettleChrome } from '../../../core/snapshot-chrome.ts';
-import { summarizeAxEvidence } from '../../../snapshot/snapshot-evidence.ts';
+import { buildSnapshotDiff } from '@agent-device/capture-kit/snapshot-diff';
+import { displayLabel, formatRole } from '@agent-device/capture-kit/snapshot-lines';
+import {
+  collectSettleChromeRefs,
+  withoutSettleChrome,
+} from '@agent-device/capture-kit/snapshot-chrome';
+import { summarizeAxEvidence } from '@agent-device/capture-kit/snapshot-evidence';
 import type {
   InteractionEvidence,
   ResolvedInteractionTarget,

@@ -11,7 +11,7 @@ import {
   resetAndroidSnapshotHelperSessions,
 } from '@agent-device/platform-android/mechanics';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from './test-utils/android-snapshot-helper.ts';
-import { isAndroidSnapshotTimeoutError } from '../snapshot/snapshot-timeout-policy.ts';
+import { isAndroidSnapshotTimeoutError } from '@agent-device/capture-kit/snapshot-timeout-policy';
 import '../platform-runtime-android-adb-host.ts';
 
 /**

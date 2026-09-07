@@ -1,5 +1,5 @@
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
-import { dedupeInheritedSnapshotLabels } from '../../snapshot/snapshot-label-dedup.ts';
+import { dedupeInheritedSnapshotLabels } from '@agent-device/capture-kit/snapshot-label-dedup';
 import { formatSnapshotText } from '../output/snapshot.ts';
 import type { CliOutput } from '../command-contract.ts';
 import { messageOutput, type CliOutputFormatter } from '../output-common.ts';

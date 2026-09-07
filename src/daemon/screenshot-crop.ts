@@ -12,7 +12,7 @@ import {
   resolveScreenshotRectSpace,
   resolveSnapshotBounds,
 } from '@agent-device/capture-kit/snapshot-rect-projection';
-import { buildSnapshotState } from '../core/snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { SELECTOR_PIPELINE_POLICIES } from '../core/selector-pipeline-policy.ts';
 import { resolveSelectorPipeline } from '../core/selector-pipeline.ts';
 import type { DaemonCommandContext } from './context.ts';

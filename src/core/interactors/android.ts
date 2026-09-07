@@ -34,7 +34,7 @@ import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { withMethodScope } from '@agent-device/kernel/scoped-provider';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import { buildSnapshotState } from '../snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 
 /**
  * `appBundleId` is present exactly for app-backed daemon sessions, whose teardown releases the

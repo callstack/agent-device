@@ -7,7 +7,7 @@ import { setSessionSnapshot } from '../session-snapshot.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
-import { buildSnapshotState } from '../../core/snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 
 // #1638 `--settle` on the GENERIC daemon route (scroll/back): the settled diff,
 // its refs, and the ref-frame/generation dance are the same contract the touch

@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { attachRefs, type RawSnapshotNode, type SnapshotNode } from '@agent-device/kernel/snapshot';
-import { collectSettleChromeRefs } from '../snapshot-chrome.ts';
+import { collectSettleChromeRefs } from './snapshot-chrome.ts';
 
 function refFor(nodes: SnapshotNode[], label: string): string {
   const node = nodes.find((candidate) => candidate.label === label);

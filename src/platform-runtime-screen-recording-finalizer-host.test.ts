@@ -7,13 +7,15 @@ const video = vi.hoisted(() => ({
   isPlayable: vi.fn(async () => true),
 }));
 const telemetry = vi.hoisted(() => vi.fn(() => '/tmp/capture.telemetry.json'));
-vi.mock('./recording/video.ts', () => ({
+vi.mock('@agent-device/capture-kit/recording-video', () => ({
   waitForStableFile: video.stable,
   waitForPlayableVideo: video.playable,
   isPlayableVideo: video.isPlayable,
 }));
-vi.mock('./recording/telemetry.ts', () => ({ persistRecordingTelemetry: telemetry }));
-vi.mock('./recording/overlay.ts', () => ({
+vi.mock('@agent-device/capture-kit/recording-telemetry', () => ({
+  persistRecordingTelemetry: telemetry,
+}));
+vi.mock('@agent-device/capture-kit/recording-overlay', () => ({
   getRecordingOverlaySupportWarning: () => undefined,
   overlayRecordingTouches: vi.fn(async () => {}),
   trimRecordingStart: vi.fn(async () => {}),

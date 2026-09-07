@@ -10,7 +10,7 @@ import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory
 import { expireRefFrame } from '../../../ref-frame.ts';
 import { setSessionSnapshot, STALE_SNAPSHOT_REFS_WARNING } from '../../../session-snapshot.ts';
 import { handleInteractionCommands } from '../../index.ts';
-import { buildSnapshotState } from '../../../../core/snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import {
   contextFromFlags,
   makeSession,

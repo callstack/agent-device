@@ -26,7 +26,7 @@ import {
   type ScrollEdge,
   type ScrollEdgeState,
   type ScrollEdgeTarget,
-} from '../../../snapshot/scroll-edge-state.ts';
+} from '@agent-device/capture-kit/scroll-edge-state';
 import { successText } from '@agent-device/kernel/success-text';
 import { requireIntInRange } from '../../../core/validation.ts';
 import { toBackendContext } from '../../runtime-common.ts';

@@ -3,7 +3,7 @@ import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { displayLabel, formatRole } from '../../../snapshot/snapshot-lines.ts';
+import { displayLabel, formatRole } from '@agent-device/capture-kit/snapshot-lines';
 import {
   annotationLocalIdentity,
   formatDivergenceActionLabel,

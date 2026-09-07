@@ -4,7 +4,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { createInteractionRuntime, handleInteractionCommands } from '../../index.ts';
 import type { SessionStore } from '../../../session-store.ts';
 import type { SessionState } from '../../../session-state.ts';
-import { buildSnapshotState } from '../../../../core/snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { setSessionSnapshot } from '../../../session-snapshot.ts';
 import { activateCompleteRefFrame, expireRefFrame, refFrameState } from '../../../ref-frame.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';

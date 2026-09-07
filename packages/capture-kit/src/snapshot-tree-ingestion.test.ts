@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { normalizeSnapshotTree, pruneGroupNodes } from '../snapshot-tree-ingestion.ts';
+import { normalizeSnapshotTree, pruneGroupNodes } from './snapshot-tree-ingestion.ts';
 
 test('pruneGroupNodes drops unlabeled group wrappers and rebalances depth', () => {
   const raw = [

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { likelyPlayableWebmContainer } from '../__tests__/test-utils/video-fixtures.ts';
-import { mkdtempForTestSync } from '../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { isPlayableVideo } from './video.ts';
 
 const directory = mkdtempForTestSync('agent-device-video-webm-');

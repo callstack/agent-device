@@ -2,11 +2,8 @@ import {
   IosSnapshotEngineError,
   publishIosSnapshot,
   toIosSnapshotEngineErrorDetails,
-} from '@agent-device/capture-kit/ios-snapshot-engine';
-import {
-  createIosSnapshotRequest,
-  deriveIosCaptureHint,
-} from '@agent-device/capture-kit/ios-snapshot-planning';
+} from '../ios-snapshot-engine/index.ts';
+import { createIosSnapshotRequest, deriveIosCaptureHint } from '../ios-snapshot-planning.ts';
 import type {
   IosAcquisitionResidue,
   IosSnapshotFact,

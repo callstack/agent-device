@@ -1,8 +1,9 @@
 import type { Rect } from '@agent-device/kernel/snapshot';
 import fc from 'fast-check';
 import { expect, test } from 'vitest';
-import { PROPERTY_RUNS } from '../../__tests__/test-utils/property-arbitraries.ts';
 import { unionCoverage } from '../rect-coverage.ts';
+
+const PROPERTY_RUNS = 100;
 
 const smallRect = fc.record({
   x: fc.integer({ min: -4, max: 20 }),

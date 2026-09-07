@@ -1,6 +1,6 @@
 import type { FindLocator } from '@agent-device/selectors';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { formatSnapshotLine } from '../snapshot/snapshot-lines.ts';
+import { formatSnapshotLine } from '@agent-device/capture-kit/snapshot-lines';
 import type { ElementMatchCandidateDetails } from '@agent-device/kernel/errors';
 import type { DaemonResponse } from './daemon-request.ts';
 import { errorResponse } from './response.ts';

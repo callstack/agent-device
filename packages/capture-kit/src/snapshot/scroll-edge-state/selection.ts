@@ -1,4 +1,4 @@
-import { deriveMobileSnapshotHiddenContentHints } from '@agent-device/capture-kit/mobile-snapshot-semantics';
+import { deriveMobileSnapshotHiddenContentHints } from '../../mobile-snapshot-semantics.ts';
 import {
   createSnapshotVisibility,
   isScrollableNodeLike,

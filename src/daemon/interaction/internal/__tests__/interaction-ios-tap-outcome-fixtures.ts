@@ -1,5 +1,5 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { buildSnapshotState } from '../../../../core/snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 
 export const profileNodes: RawSnapshotNode[] = [
   {

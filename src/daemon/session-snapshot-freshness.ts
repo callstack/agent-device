@@ -10,7 +10,7 @@ import {
   type SnapshotFreshnessAttemptShape,
   type SnapshotFreshnessMode,
   type SnapshotFreshnessWindow,
-} from '../snapshot/snapshot-freshness/index.ts';
+} from '@agent-device/capture-kit/snapshot-freshness';
 import type { SessionState } from './session-state.ts';
 
 /**

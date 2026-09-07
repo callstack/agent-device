@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
+import { makeSnapshotState } from '../../snapshot-state.fixtures.ts';
 import {
   androidFreshnessReason,
   buildSnapshotSignatures,

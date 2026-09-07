@@ -15,7 +15,7 @@ import type {
 } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import type { SnapshotFreshnessWindow } from '../snapshot/snapshot-freshness/index.ts';
+import type { SnapshotFreshnessWindow } from '@agent-device/capture-kit/snapshot-freshness';
 import type { RefFrame } from './ref-frame-slot.ts';
 import type { SessionScriptPublicationState } from './session-script-publication-state.ts';
 

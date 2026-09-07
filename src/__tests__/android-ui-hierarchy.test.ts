@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { buildSnapshotState } from '../core/snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import {
   androidSnapshotPublicationInput,

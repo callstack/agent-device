@@ -3,9 +3,13 @@ import {
   getRecordingOverlaySupportWarning,
   overlayRecordingTouches,
   trimRecordingStart,
-} from './recording/overlay.ts';
-import { persistRecordingTelemetry } from './recording/telemetry.ts';
-import { isPlayableVideo, waitForPlayableVideo, waitForStableFile } from './recording/video.ts';
+} from '@agent-device/capture-kit/recording-overlay';
+import { persistRecordingTelemetry } from '@agent-device/capture-kit/recording-telemetry';
+import {
+  isPlayableVideo,
+  waitForPlayableVideo,
+  waitForStableFile,
+} from '@agent-device/capture-kit/recording-video';
 
 export function createScreenRecordingFinalizer(): ScreenRecordingRuntimeHost['finalize'] {
   return Object.freeze({ complete: finalizeScreenRecording });

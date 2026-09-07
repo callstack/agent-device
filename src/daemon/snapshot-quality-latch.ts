@@ -1,5 +1,5 @@
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import { recoveredSnapshotQualityWarning } from '../snapshot/snapshot-presentation/quality-warnings.ts';
+import { recoveredSnapshotQualityWarning } from '@agent-device/capture-kit/quality-warnings';
 import type { DaemonResponseData } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 

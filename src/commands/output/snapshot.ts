@@ -1,9 +1,12 @@
 import {
   buildAndroidHelperPresentationInput,
   type AndroidHelperPresentationInput,
-} from '../../snapshot/snapshot-presentation/android/helper.ts';
-import { detectPossibleRepeatedNavSubtree } from '../../snapshot/snapshot-presentation/repeated-nav-subtree.ts';
-import { buildSnapshotDisplayLines, formatSnapshotLine } from '../../snapshot/snapshot-lines.ts';
+} from '@agent-device/capture-kit/snapshot-presentation-android-helper';
+import { detectPossibleRepeatedNavSubtree } from '@agent-device/capture-kit/repeated-nav-subtree';
+import {
+  buildSnapshotDisplayLines,
+  formatSnapshotLine,
+} from '@agent-device/capture-kit/snapshot-lines';
 import {
   isSnapshotBackend,
   usesMobileSnapshotPresentation,

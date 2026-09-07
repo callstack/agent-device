@@ -10,7 +10,7 @@ export function createAndroidObservationHost(): AndroidObservationHost {
     },
     async readSnapshotNodes(device) {
       const { snapshotAndroid, androidSnapshotPublicationInput } = await loadAndroidMechanics();
-      const { buildSnapshotState } = await import('./core/snapshot-state.ts');
+      const { buildSnapshotState } = await import('@agent-device/capture-kit/snapshot-state');
       const rawSnapshot = await snapshotAndroid(device, { interactiveOnly: false });
       return buildSnapshotState(androidSnapshotPublicationInput(rawSnapshot), undefined).nodes;
     },

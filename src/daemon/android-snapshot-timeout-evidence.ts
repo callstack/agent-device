@@ -13,7 +13,7 @@ import {
   snapshotTimeoutEvidenceWithoutOverlaySource,
   type SnapshotTimeoutEvidence,
 } from './snapshot-timeout-evidence.ts';
-import { isAndroidSnapshotTimeoutError } from '../snapshot/snapshot-timeout-policy.ts';
+import { isAndroidSnapshotTimeoutError } from '@agent-device/capture-kit/snapshot-timeout-policy';
 import { contextFromFlags } from './context.ts';
 import { annotateScreenshotWithRefs } from '@agent-device/capture-kit/screenshot-overlay';
 import { screenshotExecutionFromContext } from './screenshot-runtime.ts';

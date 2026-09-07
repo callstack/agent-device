@@ -3,7 +3,7 @@ import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { buildNodes } from '../../../__tests__/test-utils/snapshot-builders.ts';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
-import { buildSnapshotSignatures } from '../../../snapshot/snapshot-freshness/index.ts';
+import { buildSnapshotSignatures } from '@agent-device/capture-kit/snapshot-freshness';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

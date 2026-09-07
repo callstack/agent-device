@@ -1,6 +1,6 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { extractNodeText, isMeaningfulLabel } from '@agent-device/contracts/snapshot';
-import { findNodeByLabel } from '../snapshot/snapshot-node-label.ts';
+import { findNodeByLabel } from './snapshot/snapshot-node-label.ts';
 
 export { findNodeByLabel };
 
