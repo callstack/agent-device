@@ -14,7 +14,7 @@ ledger honest from opposite sides.
 
 ## Why this boundary and not the local daemon
 
-A local daemon cannot skew. `isReusableDaemonInfo` (`src/daemon/client/daemon-client-lifecycle.ts`)
+A local daemon cannot skew. `isReusableDaemonInfo` (`src/daemon-client/daemon-client-lifecycle.ts`)
 takes over any daemon whose package version differs from the client's, so the two are always the
 same build.
 

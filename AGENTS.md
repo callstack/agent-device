@@ -105,7 +105,7 @@ under `contracts/fixtures/`.
 ## Runtime and diagnostics seams
 
 Diagnostics use `@agent-device/capture-kit/diagnostics`. Request diagnostics belong in the session request log;
-session artifact paths come from `src/daemon/session-store.ts`. App/device logs remain in `app.log`;
+session artifact paths come from `src/daemon/session-artifact-paths.ts`. App/device logs remain in `app.log`;
 Apple runner and xcodebuild output remains in `runner.log`.
 
 Normalize failures with `normalizeError` and preserve `hint`, `diagnosticId`, `logPath`, and typed

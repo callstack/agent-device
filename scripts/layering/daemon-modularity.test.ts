@@ -122,7 +122,14 @@ test('external daemon request/session-state importer membership changes require 
     REFERENCE,
   );
   assert.equal(violations.length, 1);
-  assert.match(violations[0]!.message, /may only shrink from the recorded 2/);
+  // The recorded list owns its own size (#2342 relocated five client files into it), so the
+  // message assertion reads it rather than pinning a literal that the baseline would outgrow.
+  assert.match(
+    violations[0]!.message,
+    new RegExp(
+      `may only shrink from the recorded ${DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters.length}`,
+    ),
+  );
 
   const removed = checkDaemonModularityRatchets(
     baselineDaemonTypesEdges().slice(1),

@@ -41,7 +41,7 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
     'Error-code vocabulary is carried as a plain string in DaemonError.code; adding a code cannot change the envelope a peer parses.',
   'packages/kernel/src/errors.ts#AppErrorDetails':
     'Local detail bag behind AppError; the wire form is DaemonError.details, typed as Record<string, unknown> and listed.',
-  'src/daemon/client/daemon-client-metadata.ts#DaemonInfo':
+  'src/daemon-client/daemon-client-metadata.ts#DaemonInfo':
     'Client-side record of where a daemon is listening (pid, ports, state dir). Never serialized into a request or response.',
   'src/daemon/daemon-request.ts#DaemonRequest':
     'Server-side narrowing of the listed kernel DaemonRequest; the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',

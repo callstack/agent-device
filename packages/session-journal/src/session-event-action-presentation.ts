@@ -3,7 +3,7 @@ import { DEVICE_ROTATIONS } from '@agent-device/contracts/device';
 import { BACK_MODES } from '@agent-device/contracts/back-mode';
 import { TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { isKeyboardAction } from '../core/keyboard-actions.ts';
+import { isKeyboardAction } from './keyboard-actions.ts';
 import {
   compactSessionEventDetails as compactDetails,
   readSessionEventBoolean as readBoolean,
@@ -14,7 +14,7 @@ import {
   readSessionEventNumber,
   readSessionEventString,
 } from './session-event-request.ts';
-import type { DaemonRequest } from './daemon-request.ts';
+import type { DaemonRequest } from '@agent-device/kernel/contracts';
 
 const SCROLL_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;
 const SCROLL_EDGES = ['top', 'bottom'] as const;

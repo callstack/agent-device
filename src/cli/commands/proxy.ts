@@ -4,7 +4,7 @@ import { buildDaemonHttpBaseUrl } from '@agent-device/contracts/daemon-http';
 import {
   ensureDaemon,
   resolveClientSettings,
-} from '../../daemon/client/daemon-client-lifecycle.ts';
+} from '../../daemon-client/daemon-client-lifecycle.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { colorize, supportsColor } from '../../commands/output/color.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
