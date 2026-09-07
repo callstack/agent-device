@@ -248,6 +248,10 @@
       "types": "./src/keyboard-runtime.ts",
       "default": "./src/keyboard-runtime.ts"
     },
+    "./lease-scope": {
+      "types": "./src/lease-scope.ts",
+      "default": "./src/lease-scope.ts"
+    },
     "./local-interactor-operation-set": {
       "types": "./src/local-interactor-operation-set.ts",
       "default": "./src/local-interactor-operation-set.ts"

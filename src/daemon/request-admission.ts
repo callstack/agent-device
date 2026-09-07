@@ -14,7 +14,7 @@ import {
   resolveLeaseScope,
   resolveRequestOrSessionLeaseScope,
 } from './lease-context.ts';
-import { leaseScopeToHeartbeatRequest } from '../core/lease-scope.ts';
+import { leaseScopeToHeartbeatRequest } from '@agent-device/contracts/lease-scope';
 import type { LeaseRegistry } from './lease-registry.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';

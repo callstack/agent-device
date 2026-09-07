@@ -14,7 +14,7 @@ import {
   leaseScopeFromRequest,
   leaseScopeToLeaseRpcParams,
   type LeaseRpcCommand,
-} from '../core/lease-scope.ts';
+} from '@agent-device/contracts/lease-scope';
 
 export function handleDaemonHttpResponseBody(
   body: string,

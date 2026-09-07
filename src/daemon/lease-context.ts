@@ -9,7 +9,7 @@ import {
   isProxyLeaseScope,
   leaseScopeFromRequest,
   type LeaseScope,
-} from '../core/lease-scope.ts';
+} from '@agent-device/contracts/lease-scope';
 
 export { DEFAULT_PROXY_LEASE_TTL_MS, findMissingProxyLeaseFields, isProxyLeaseScope };
 export type { LeaseScope };

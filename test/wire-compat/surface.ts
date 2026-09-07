@@ -185,7 +185,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       // `flags`/`input` bags, and ADR 0006 calls new flags additive.
       ...from('src/commands/cli-grammar/types.ts', 'DaemonCommandRequest'),
       // The lease method vocabulary the client and daemon must agree on.
-      ...from('src/core/lease-scope.ts', 'LeaseRpcCommand'),
+      ...from('packages/contracts/src/lease-scope.ts', 'LeaseRpcCommand'),
       // Producer side: the method vocabulary a released client sends, and the
       // projections that turn each method's params into a DaemonRequest.
       ...from(

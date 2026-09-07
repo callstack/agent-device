@@ -1,4 +1,4 @@
-import { leaseScopeToReleaseRequest } from '../../core/lease-scope.ts';
+import { leaseScopeToReleaseRequest } from '@agent-device/contracts/lease-scope';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { ExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';

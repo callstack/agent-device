@@ -307,9 +307,10 @@ const CLOSURE_PROBES: readonly { reachedFrom: string; omit: string }[] = [
     omit: 'packages/contracts/src/request-progress.ts#RequestProgressEvent',
   },
   {
-    // Plain relative import inside src/.
+    // Declaration moved into packages/contracts; the consumer reaches it through the
+    // package's exports map.
     reachedFrom: 'buildLeaseRpcParams',
-    omit: 'src/core/lease-scope.ts#LeaseRpcCommand',
+    omit: 'packages/contracts/src/lease-scope.ts#LeaseRpcCommand',
   },
   {
     // Workspace specifier resolved through the package's own exports map.

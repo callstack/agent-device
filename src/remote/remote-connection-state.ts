@@ -11,7 +11,7 @@ import {
   leaseScopeFromOptions,
   leaseScopeToCommandFlags,
   leaseScopeToConnectionMetadata,
-} from '../core/lease-scope.ts';
+} from '@agent-device/contracts/lease-scope';
 
 export type RemoteConnectionState = {
   version: 1;
