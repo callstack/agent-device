@@ -9,6 +9,7 @@ import {
   assertNonEmptyFile,
   createLiveDeviceAssertions,
 } from '../live-device-e2e/assertions.ts';
+import { createVisibilityScroll } from '../live-device-e2e/visibility-scroll.ts';
 import type { CliJsonResult } from '../cli-json.ts';
 import type { AndroidEmulatorBehaviorId } from './behavior-coverage.ts';
 import { type LiveContext, runStep, verifyCommand } from './live-harness.ts';
@@ -21,6 +22,11 @@ export const { assertElementText, assertWaitSelector, assertWaitText, capturePng
     verifyCommand,
     PUBLIC_COMMANDS.wait,
   );
+
+export const { scrollUntilVisible } = createVisibilityScroll<
+  AndroidEmulatorBehaviorId,
+  LiveContext
+>(runStep);
 
 export function assertDiffLine(
   result: CliJsonResult,

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { CliJsonResult } from './cli-json.ts';
-import { searchForVisibleElement } from './ios-simulator-e2e/live-assertions.ts';
+import { searchForVisibleElement } from './live-device-e2e/visibility-scroll.ts';
 
 function result(status: number, details?: Record<string, unknown>): CliJsonResult {
   return {

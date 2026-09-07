@@ -12,6 +12,7 @@ import {
   assertWaitText,
   capturePng,
   requireAndroidResourceId,
+  scrollUntilVisible,
 } from './live-assertions.ts';
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
@@ -126,7 +127,10 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
     'fixture automation-window value changed to landscape and back to portrait',
   );
 
-  await runStep(context, 'reveal input canaries', ['scroll', 'down', '0.7']);
+  // `scroll` is a gesture and app scroll physics decide the final offset, so a single blind
+  // amount cannot guarantee the canary is on screen — least of all right after a rotation
+  // round-trip has relaid the list out. Probe visibility and scroll again until it is.
+  await scrollUntilVisible(context, 'id="automation-press"');
   await runStep(context, 'press semantic canary', ['press', 'id="automation-press"']);
   await assertWaitText(context, 'Last input: press');
   verifyCommand(context, C.press, 'semantic press updates durable fixture input state');
@@ -175,7 +179,7 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
   verifyCommand(context, C.alert, 'alert wait/get/dismiss/accept produce fixture-visible results');
 
   await assertHomeAndRecentsRestoration(context);
-  await runStep(context, 'reveal Android alert canary for diff baseline', ['scroll', 'down', '1']);
+  await scrollUntilVisible(context, 'id="automation-open-alert"');
   await runStep(context, 'establish automation diff baseline', ['snapshot', '-i']);
   await runStep(context, 'return from automation route with Back', ['back']);
   const diff = await runStep(context, 'observe automation-to-settings diff', [
