@@ -6,6 +6,7 @@ import path from 'node:path';
 import { eagerClosureGraphOf } from '../../src/__tests__/eager-import-closure.fixtures.ts';
 import {
   createCommittedSourceTree,
+  headCommit,
   mergeBaseWithMain,
   renamedSince,
 } from './committed-source-tree.ts';
@@ -23,6 +24,7 @@ import {
   NEW_ENTRY_CEILINGS,
   PLATFORM_FACADE_CLOSURE,
   PLATFORM_IMPLEMENTATION_PATTERNS,
+  staleApprovalRows,
 } from './eager-closure-budgets.ts';
 
 /**
@@ -75,6 +77,32 @@ test('a first-introduced entry fits its category ceiling or carries an approval'
     /new vocabulary-facade entry evaluating 5 modules.*ceiling of 4/,
   );
   expect(classifyNewEntry('x.ts', 'vocabulary-facade', 5, true)).toBeNull();
+});
+
+test('a stale approval is reported on a branch and deferred where no row is readable', () => {
+  // The hole this closes: on a commit `main` already carries, the merge-base IS the head, so the
+  // introduced set is empty and every row reads as stale however live it is. That is the shape of
+  // the approving PR's own merge commit, which is why #2329 turned `main` red the moment it
+  // landed. Both directions are pinned here: a row that has really died is still reported on the
+  // branch that could have read it.
+  const ceiling = NEW_ENTRY_CEILINGS['domain-facade'];
+  const overCeiling = new Map([
+    ['new.ts', { category: 'domain-facade' as const, closureSize: ceiling + 1 }],
+  ]);
+  const underCeiling = new Map([
+    ['new.ts', { category: 'domain-facade' as const, closureSize: ceiling }],
+  ]);
+  expect(staleApprovalRows(['new.ts'], overCeiling, false), 'live: read by the ceiling').toEqual(
+    [],
+  );
+  expect(staleApprovalRows(['new.ts'], underCeiling, false), 'stale: now fits').toEqual(['new.ts']);
+  expect(staleApprovalRows(['gone.ts'], overCeiling, false), 'stale: not introduced').toEqual([
+    'gone.ts',
+  ]);
+  expect(
+    staleApprovalRows(['gone.ts'], new Map(), true),
+    'the merge-base is the head: nothing is first-introduced, so no row can be judged',
+  ).toEqual([]);
 });
 
 test('the category is derived from the path, never hand-listed', () => {
@@ -408,12 +436,22 @@ test.for(introduced)(
 test('no APPROVED_OVER_CEILING row is stale', () => {
   // Only a first-introduced entry consults a ceiling. Once the merge-base carries the entry, the
   // no-growth rule governs it and nothing reads the row again, so a carried entry's row is stale
-  // for the same reason a shrunk one is: it can no longer change any verdict.
-  const introducedById = new Map(introduced.map((entry) => [entry.entryFile, entry]));
-  const stale = Object.keys(APPROVED_OVER_CEILING).filter((id) => {
-    const entry = introducedById.get(id);
-    return !entry || eagerClosureGraphOf(absolute(id)).size <= NEW_ENTRY_CEILINGS[entry.category];
-  });
+  // for the same reason a shrunk one is: it can no longer change any verdict. Deferred where the
+  // merge-base is the head itself and no row is readable at all -- see `staleApprovalRows`.
+  const introducedById = new Map(
+    introduced.map((entry) => [
+      entry.entryFile,
+      {
+        category: entry.category,
+        closureSize: eagerClosureGraphOf(absolute(entry.entryFile)).size,
+      },
+    ]),
+  );
+  const stale = staleApprovalRows(
+    Object.keys(APPROVED_OVER_CEILING),
+    introducedById,
+    mergeBase === headCommit(repoRoot),
+  );
   expect(
     stale,
     'These approvals name an entry that no longer exists, that the merge-base now carries, or ' +
