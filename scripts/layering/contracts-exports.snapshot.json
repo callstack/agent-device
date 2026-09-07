@@ -59,6 +59,7 @@
   "@agent-device/contracts/is-predicate",
   "@agent-device/contracts/keyboard",
   "@agent-device/contracts/keyboard-runtime",
+  "@agent-device/contracts/lease-scope",
   "@agent-device/contracts/local-interactor-operation-set",
   "@agent-device/contracts/logs-runtime-plan",
   "@agent-device/contracts/managed-device-allocation",
