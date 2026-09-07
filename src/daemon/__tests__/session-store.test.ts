@@ -6,7 +6,7 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../session-state.ts';
-import { buildRequestFinishedEvent } from '../session-event-log.ts';
+import { buildRequestFinishedEvent } from '@agent-device/session-journal/session-event-log';
 import { HEAL_COMPLETE_SENTINEL } from '../session-script-writer.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';

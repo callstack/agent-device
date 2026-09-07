@@ -32,7 +32,7 @@ import {
   skipWhenLoopbackUnavailable,
 } from '../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { flushSessionEventLogWrites } from '../session-event-log.ts';
+import { flushSessionEventLogWrites } from '@agent-device/session-journal/session-event-log';
 
 const TOKEN = 'save-script-transport-token';
 const SESSION = 'save-script-transport';

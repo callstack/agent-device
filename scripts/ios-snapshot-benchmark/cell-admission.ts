@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { resolveDaemonPaths } from '../../src/daemon/config.ts';
-import { readDaemonInfo } from '../../src/daemon/client/daemon-client-metadata.ts';
+import { readDaemonInfo } from '../../src/daemon-client/daemon-client-metadata.ts';
 import { isAgentDeviceDaemonProcess } from '../../src/daemon/daemon-process.ts';
 import {
   openFixture,

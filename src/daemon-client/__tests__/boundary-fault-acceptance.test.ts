@@ -3,10 +3,10 @@ import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { assertRejectsAppError } from '../../../__tests__/test-utils/app-error.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
-import type { DaemonPaths } from '../../config.ts';
-import type { DaemonRequest } from '../../daemon-request.ts';
+import { assertRejectsAppError } from '../../__tests__/test-utils/app-error.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import type { DaemonPaths } from '../../daemon/config.ts';
+import type { DaemonRequest } from '../../daemon/daemon-request.ts';
 import { sendRequest } from '../daemon-client-transport.ts';
 
 type ProcessDeathCommand = 'press' | 'fill' | 'snapshot' | 'screenshot' | 'open' | 'close';

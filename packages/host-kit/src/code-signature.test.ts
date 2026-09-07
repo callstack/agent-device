@@ -134,3 +134,26 @@ test('the daemon source graph stamps the command descriptor registry package', (
     assert.ok(labels.includes(owned), `${owned} is missing from the daemon code graph`);
   }
 });
+
+/**
+ * The same claim for the ADR 0018 event journal (#2341). The daemon writes and reads
+ * `events.ndjson` only through this package's workspace subpaths, so a walk that stopped at the
+ * package boundary would report an unchanged signature after an entry-shape or retention-window
+ * edit, and a client would keep reusing a daemon writing the superseded journal. The manifest is
+ * asserted beside the sources because its `exports` map is what chose them.
+ */
+test('the daemon source graph stamps the session event journal package', () => {
+  const repoRoot = path.resolve(import.meta.dirname, '..', '..', '..');
+  const entryPath = path.join(repoRoot, 'src', 'daemon.ts');
+  if (!fs.existsSync(entryPath)) return;
+
+  const labels = labelsOf(entryPath, repoRoot);
+  for (const owned of [
+    'packages/session-journal/src/session-event-log.ts',
+    'packages/session-journal/src/session-event-log-window.ts',
+    'packages/session-journal/src/session-event-action.ts',
+    'packages/session-journal/package.json',
+  ]) {
+    assert.ok(labels.includes(owned), `${owned} is missing from the daemon code graph`);
+  }
+});

@@ -62,7 +62,7 @@ import {
   type DaemonCommandName,
 } from './commands/command-projection.ts';
 import type { CommandResult } from '@agent-device/command-registry/command-result';
-import { sendToDaemon } from './daemon/client/daemon-client.ts';
+import { sendToDaemon } from './daemon-client/daemon-client.ts';
 import { resolveDaemonPaths } from './daemon/config.ts';
 import { prepareMetroRuntime, reloadMetro } from './metro/client-metro.ts';
 import {

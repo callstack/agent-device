@@ -48,23 +48,23 @@
     "packages/kernel/src/errors.ts#readDiagnosticsRecordRef": "sha256:3a210f401221c0a15eb75d488450034885c7b73be39f5e93424c72874d14c395",
     "src/commands/cli-grammar/types.ts#DaemonCommandRequest": "sha256:ea3f4118244711f0eaec0e471f62b0de42ca97181c085df165d37b63301a4619",
     "src/core/lease-scope.ts#LeaseRpcCommand": "sha256:714f66efa725a5d0654e492a76daeb4059caad31b79562cfc9133029ea95bfe5",
-    "src/daemon/client/daemon-client-progress.ts#ProgressResponseFormat": "sha256:6d7a99ac13fd422671fd86f8fe093efa40ca369f4ae1f97c98d40a7132543637",
-    "src/daemon/client/daemon-client-progress.ts#createInvalidDaemonResponseError": "sha256:0af812346b667a23fdfef641b242cd86d07edaa05eb928c4c531628c09a4031b",
-    "src/daemon/client/daemon-client-progress.ts#shouldReadDaemonProgressStream": "sha256:6811404f41d8db3fa6fc751332c7186a2399ec7ecbc4e9c547d9cb9f14dbb350",
-    "src/daemon/client/daemon-client-rpc.ts#appErrorFromDaemonError": "sha256:ac4761006c71d93ccba9f8e37cbd4cf48283dbb22737c163dc9c1a878e154eea",
-    "src/daemon/client/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:efa9a5da4c7288cceae5656b468946ad3a2af0f0f0fb940f8a37987f922aa4b8",
-    "src/daemon/client/daemon-client-rpc.ts#buildLeaseRpcParams": "sha256:1755f46be8c62e7a8eb409e9a94d61781c96ccbef3306702121aa94264d63267",
-    "src/daemon/client/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:8f1c4bba1918545db6296ad29b95f0baa9f949e7c23bc04d59e261130f14611e",
-    "src/daemon/client/daemon-client-rpc.ts#isLeaseRpcCommand": "sha256:955dc1b73462d40593e5728dbcbaeec1307944b08262a22627e84cc5dc507e8f",
-    "src/daemon/client/daemon-client-rpc.ts#leaseRpcMethodForCommand": "sha256:3613555c6002c23ab5bec4b98bc1b4d6947014b52fa100176177f955cf762881",
-    "src/daemon/client/daemon-client-rpc.ts#parseDaemonHttpResponseBody": "sha256:0cbe39dbd09e321ec00854a1626a7d89b6344e59c6faabe2fe02504268b2d886",
-    "src/daemon/client/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:83b0312fe88bc3b3497de799e23d8d14455f665b7cf880f4617cd62b181351cd",
-    "src/daemon/client/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:296f9d376ce67c8cb20209bdf1c59c2423ffcfa35b5565a99e70271263149048",
-    "src/daemon/client/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
-    "src/daemon/client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:38fe712390d247de59a74b9dc209fdf407ff5f9b1e32b698ae71ebc57569b66d",
-    "src/daemon/client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:5e75af39e96045ce7faba986c900744cee76cdaa1e0df360ea38f3c020520711",
-    "src/daemon/client/daemon-client-transport.ts#readHealthPayload": "sha256:5b15e14319b16aebf32d07336986a7f1f2a6b13cec1823ca9aa7c9f01bf1b0b6",
-    "src/daemon/client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:b22111f693ecb65705195a66bce617e58441483ebfd67cf264d6900ba1dcb401",
+    "src/daemon-client/daemon-client-progress.ts#ProgressResponseFormat": "sha256:6d7a99ac13fd422671fd86f8fe093efa40ca369f4ae1f97c98d40a7132543637",
+    "src/daemon-client/daemon-client-progress.ts#createInvalidDaemonResponseError": "sha256:0af812346b667a23fdfef641b242cd86d07edaa05eb928c4c531628c09a4031b",
+    "src/daemon-client/daemon-client-progress.ts#shouldReadDaemonProgressStream": "sha256:6811404f41d8db3fa6fc751332c7186a2399ec7ecbc4e9c547d9cb9f14dbb350",
+    "src/daemon-client/daemon-client-rpc.ts#appErrorFromDaemonError": "sha256:ac4761006c71d93ccba9f8e37cbd4cf48283dbb22737c163dc9c1a878e154eea",
+    "src/daemon-client/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:efa9a5da4c7288cceae5656b468946ad3a2af0f0f0fb940f8a37987f922aa4b8",
+    "src/daemon-client/daemon-client-rpc.ts#buildLeaseRpcParams": "sha256:1755f46be8c62e7a8eb409e9a94d61781c96ccbef3306702121aa94264d63267",
+    "src/daemon-client/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:8f1c4bba1918545db6296ad29b95f0baa9f949e7c23bc04d59e261130f14611e",
+    "src/daemon-client/daemon-client-rpc.ts#isLeaseRpcCommand": "sha256:955dc1b73462d40593e5728dbcbaeec1307944b08262a22627e84cc5dc507e8f",
+    "src/daemon-client/daemon-client-rpc.ts#leaseRpcMethodForCommand": "sha256:3613555c6002c23ab5bec4b98bc1b4d6947014b52fa100176177f955cf762881",
+    "src/daemon-client/daemon-client-rpc.ts#parseDaemonHttpResponseBody": "sha256:0cbe39dbd09e321ec00854a1626a7d89b6344e59c6faabe2fe02504268b2d886",
+    "src/daemon-client/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:83b0312fe88bc3b3497de799e23d8d14455f665b7cf880f4617cd62b181351cd",
+    "src/daemon-client/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:296f9d376ce67c8cb20209bdf1c59c2423ffcfa35b5565a99e70271263149048",
+    "src/daemon-client/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
+    "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:38fe712390d247de59a74b9dc209fdf407ff5f9b1e32b698ae71ebc57569b66d",
+    "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:5e75af39e96045ce7faba986c900744cee76cdaa1e0df360ea38f3c020520711",
+    "src/daemon-client/daemon-client-transport.ts#readHealthPayload": "sha256:5b15e14319b16aebf32d07336986a7f1f2a6b13cec1823ca9aa7c9f01bf1b0b6",
+    "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:b22111f693ecb65705195a66bce617e58441483ebfd67cf264d6900ba1dcb401",
     "src/daemon/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "src/daemon/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
     "src/daemon/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:7f96d17b7c605230fb3cc21ceaa5b2e515d7445653ff95b2b0f6f15fa6214d4e",
@@ -201,7 +201,7 @@
       "rationale": "#2246 passes isDirectory only for the new test-artifacts type and uses the exact path the client materializer published. Existing screenshot and recording artifacts still report their requested file path; only the new directory response gains its suite-invocation segment."
     },
     {
-      "declaration": "src/daemon/client/daemon-client-rpc.ts#buildHttpRpcPayload",
+      "declaration": "src/daemon-client/daemon-client-rpc.ts#buildHttpRpcPayload",
       "digest": "sha256:efa9a5da4c7288cceae5656b468946ad3a2af0f0f0fb940f8a37987f922aa4b8",
       "rationale": "#2110 adds the optional providerApp parameter to lease allocation. A released protocol-2 daemon ignores unknown JSON-RPC parameters, while requests without an initial app retain the previous payload exactly."
     },
@@ -226,12 +226,12 @@
       "rationale": "#1801 and #1862 add optional fields to the normalized error the daemon serializes, most recently `cause`; they are omitted unless set, and a released client ignores them otherwise."
     },
     {
-      "declaration": "src/daemon/client/daemon-client-rpc.ts#handleDaemonHttpResponseBody",
+      "declaration": "src/daemon-client/daemon-client-rpc.ts#handleDaemonHttpResponseBody",
       "digest": "sha256:8f1c4bba1918545db6296ad29b95f0baa9f949e7c23bc04d59e261130f14611e",
       "rationale": "#1801 client-side only: the RPC error branch now runs through `rejectDaemonHttpRpcError`, which reads a superset of the fields it read before and, for a remote daemon, replaces the daemon-host `logPath` with a caller-local copy. Every field a released daemon sends is still accepted; nothing new is required of the daemon."
     },
     {
-      "declaration": "src/daemon/client/daemon-client-rpc.ts#toDaemonHttpRpcError",
+      "declaration": "src/daemon-client/daemon-client-rpc.ts#toDaemonHttpRpcError",
       "digest": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
       "rationale": "#1801 and #1862 client-side only: this reads optional daemon error metadata, most recently the structured `cause`. Parsing of every previously read field is unchanged, so a released daemon's error payload is accepted exactly as before."
     },
@@ -251,7 +251,7 @@
       "rationale": "#1801 and #1862 lift optional metadata onto the normalized error, most recently a redacted structured `cause`. No previously emitted field changes shape or value, and peers that do not know the field ignore it."
     },
     {
-      "declaration": "src/daemon/client/daemon-client-rpc.ts#appErrorFromDaemonError",
+      "declaration": "src/daemon-client/daemon-client-rpc.ts#appErrorFromDaemonError",
       "digest": "sha256:ac4761006c71d93ccba9f8e37cbd4cf48283dbb22737c163dc9c1a878e154eea",
       "rationale": "#1862 client-side only: this rehydrates the new optional structured `cause` when present. Released daemons that omit it follow the unchanged path, and no request field or existing response field is narrowed."
     }

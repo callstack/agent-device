@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 import {
   appendSessionEvent,
   flushSessionEventLogWrites,
