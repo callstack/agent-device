@@ -656,10 +656,10 @@ test('the real tree parses, declares, and passes R11', () => {
     (pkg) => pkg.name === '@agent-device/provider-webdriver',
   );
   assert.ok(providerWebDriverPackage, 'provider-webdriver package must exist');
-  assert.deepEqual(
-    [...providerWebDriverPackage.exportTargets.keys()],
-    ['@agent-device/provider-webdriver'],
-  );
+  assert.deepEqual([...providerWebDriverPackage.exportTargets.keys()].sort(), [
+    '@agent-device/provider-webdriver',
+    '@agent-device/provider-webdriver/providers',
+  ]);
   assert.deepEqual([...providerWebDriverPackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',
     '@agent-device/contracts',
