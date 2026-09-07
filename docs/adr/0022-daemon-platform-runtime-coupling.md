@@ -67,14 +67,15 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
    declarations (R7/R10) and are not ratcheted here.
 
 4. **The entry-to-platform hop trace was re-run with hop roles**
-   (policy / orchestration / translation / adapter / pass-through + terminal) and a deletion
-   test per pass-through/translation hop. The updated artifact is
-   [`0019-end-state-hop-trace.md`](0019-end-state-hop-trace.md): 44 hops for `press`/Android and
-   51/53 per arm for the now dual-arm `snapshot`/iOS route (shared 34 + AX bridge 17 / runner
-   fallback 19). The deletion test proves only three distinct removable hops
-   (`daemon-idle-reap.ts`, `session-snapshot-freshness.ts`, `commands/runtime-types.ts`); the
-   earlier ≤14 target is superseded and not reachable without folding cross-cutting
-   request-scope wrappers, which the audit does not endorse.
+    (policy / orchestration / translation / adapter / pass-through + terminal) and a deletion
+    test per pass-through/translation hop. The updated artifact is
+    [`0019-end-state-hop-trace.md`](0019-end-state-hop-trace.md): 41 hops for `press`/Android and
+    47/49 per arm for the now dual-arm `snapshot`/iOS route (shared 30 + AX bridge 17 / runner
+    fallback 19). The deletion test proves a single distinct removable hop
+    (`commands/runtime-types.ts`); the request-spine guards (auth comparison, cancellation gate,
+    idle-reap timer reset, Android freshness guard/clear) are side-calls, not hops. The earlier
+    ≤14 target is superseded and not reachable without folding cross-cutting request-scope
+    wrappers, which the audit does not endorse.
 
 5. **Per-audit-area decisions.** Apple selector/session observation: deepen an existing
    interface (#2332). Runtime lifecycle participation: deepen through the existing lifecycle
@@ -102,10 +103,10 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
   targets the exact regression #2278 flagged — handlers accreting state shape and store
   authority — and is the slice the fresh audit found unowned.
 - **The hop target is retired, not missed.** The 23/24 routes measured at `132ffe1da` grew to
-  44 / 51-53 because the request-scope wrapper layer, the AgentDevice command layer, the adb
+  41 / 47-49 because the request-scope wrapper layer, the AgentDevice command layer, the adb
   host split, and the dual-arm snapshot capture all landed on the traced paths. Every retained
   hop now carries a documented role and, for pass-through/translation hops, a kept-depth or
-  removable verdict; the three proven-removable hops are recorded as the only endorsed
+  removable verdict; the single proven-removable hop is recorded as the only endorsed
   collapse.
 
 ## 4. Enforced by

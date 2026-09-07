@@ -878,8 +878,8 @@ there, not about retiring the directory.
 **Entry-to-platform hop count.** Corrected 2026-09-03, re-measured for #2278 at `27a97ee619`:
 the counting definition, ordered chains, hop roles, and commit for this measurement are in
 [`0019-end-state-hop-trace.md`](./0019-end-state-hop-trace.md), which supersedes the numbers
-below. A file-by-file re-trace at HEAD measured 44 hops for `press`/Android and 51/53 hops
-(shared 34 plus 17/19 per arm) for `snapshot`/iOS, which is now a dual-arm route (in-simulator
+below. A file-by-file re-trace at HEAD measured 41 hops for `press`/Android and 47/49 hops
+(shared 30 plus 17/19 per arm) for `snapshot`/iOS, which is now a dual-arm route (in-simulator
 AX bridge primary, XCTest runner fallback). The previously stated 38/29 named no ordered chain,
 counting definition, or artifact and does not reproduce; treat it as superseded, not as a
 second data point. `src/platform-runtime.ts` (the immutable registry construction) and each
@@ -888,10 +888,11 @@ pass-through layers — they stay in any hop count regardless of target. Everyth
 traced path is a pass-through candidate only insofar as R13's named-facet enumeration and the
 `kernel < contracts < host-kit < capture-kit < provision-kit < platform/provider/daemon`
 direction already allow collapsing it; a hop that exists only to satisfy that direction is not
-waste. The deletion test at HEAD proves only three distinct removable hops across both routes;
-the ≤ 14 target derived at the earlier measurement is **superseded and not reachable** without
-a decision to fold cross-cutting request-scope wrappers, which is outside the traced routes'
-ownership. Treat 14 as a historical discussion anchor, not as a proposed commitment.
+waste. The deletion test at HEAD proves a single distinct removable hop across both routes
+(`commands/runtime-types.ts`); the ≤ 14 target derived at the earlier measurement is
+**superseded and not reachable** without a decision to fold cross-cutting request-scope
+wrappers, which is outside the traced routes' ownership. Treat 14 as a historical discussion
+anchor, not as a proposed commitment.
 
 **Zones still under `src/` that this ADR expects to leave, and their package status:**
 
