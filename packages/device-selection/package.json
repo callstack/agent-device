@@ -1,0 +1,27 @@
+{
+  "name": "@agent-device/device-selection",
+  "version": "0.0.0",
+  "private": true,
+  "sideEffects": false,
+  "type": "module",
+  "description": "Device selection for dispatched requests: flag-to-inventory request construction, the request-scoped device resolution cache, inventory-backed selection with installed-app narrowing, and the request-scoped device inventory context.",
+  "dependencies": {
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "exports": {
+    "./dispatch-resolve": {
+      "types": "./src/dispatch-resolve.ts",
+      "default": "./src/dispatch-resolve.ts"
+    },
+    "./device-selection-resolver": {
+      "types": "./src/device-selection-resolver.ts",
+      "default": "./src/device-selection-resolver.ts"
+    },
+    "./device-inventory-context": {
+      "types": "./src/device-inventory-context.ts",
+      "default": "./src/device-inventory-context.ts"
+    }
+  }
+}

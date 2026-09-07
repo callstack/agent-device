@@ -32,6 +32,9 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:packages/contracts
+      '@agent-device/device-selection':
+        specifier: workspace:*
+        version: link:packages/device-selection
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:packages/host-kit
@@ -240,6 +243,18 @@ importers:
 
   packages/contracts:
     dependencies:
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+
+  packages/device-selection:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
