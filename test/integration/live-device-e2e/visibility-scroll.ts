@@ -28,6 +28,7 @@ export async function searchForVisibleElement(
   selector: string,
   probeVisibility: (attempt: number) => Promise<CliJsonResult>,
   scrollAfterAttempt: (attempt: number) => Promise<void>,
+  probeForEvidence?: () => Promise<CliJsonResult>,
 ): Promise<void> {
   let stallRetriesLeft = SCROLL_SEARCH_STALL_RETRIES;
   let lastFailure: CliJsonResult | undefined;
@@ -49,6 +50,10 @@ export async function searchForVisibleElement(
       await scrollAfterAttempt(attempt - 1);
     }
   }
+  // The probes above run with `allowFailure`, so none of them reached the harness's failed-step
+  // evidence capture. Spend one more as a real step: it fails the same way and writes the
+  // screenshot, snapshot and device facts that say what was on screen instead.
+  await probeForEvidence?.();
   assert.fail(
     `${selector} did not become visible after scrolling\nlast visibility probe: ${JSON.stringify(lastFailure?.json ?? null)}`,
   );
@@ -78,6 +83,12 @@ export function createVisibilityScroll<
           'down',
           SCROLL_SEARCH_AMOUNT,
         ]).then(() => undefined),
+      () =>
+        runStep(context, `probe ${selector} after exhausting the scroll budget`, [
+          'is',
+          'visible',
+          selector,
+        ]),
     );
   }
 

@@ -129,7 +129,9 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
 
   // `scroll` is a gesture and app scroll physics decide the final offset, so a single blind
   // amount cannot guarantee the canary is on screen — least of all right after a rotation
-  // round-trip has relaid the list out. Probe visibility and scroll again until it is.
+  // round-trip has relaid the list out. Anchor first: the search only scrolls down, so a canary
+  // the rotation left ABOVE the viewport is unreachable without returning to a known position.
+  await runStep(context, 'restore automation route top after Android rotation', ['scroll', 'top']);
   await scrollUntilVisible(context, 'id="automation-press"');
   await runStep(context, 'press semantic canary', ['press', 'id="automation-press"']);
   await assertWaitText(context, 'Last input: press');
@@ -179,6 +181,10 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
   verifyCommand(context, C.alert, 'alert wait/get/dismiss/accept produce fixture-visible results');
 
   await assertHomeAndRecentsRestoration(context);
+  await runStep(context, 'restore automation route top before the diff baseline', [
+    'scroll',
+    'top',
+  ]);
   await scrollUntilVisible(context, 'id="automation-open-alert"');
   await runStep(context, 'establish automation diff baseline', ['snapshot', '-i']);
   await runStep(context, 'return from automation route with Back', ['back']);
