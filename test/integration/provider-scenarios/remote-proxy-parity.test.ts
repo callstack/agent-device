@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
@@ -228,7 +229,7 @@ async function runLeg(leg: ScenarioLeg, legName: string): Promise<DaemonResponse
 }
 
 async function withProxiedWorld<T>(
-  run: (context: { world: ParityWorld; proxied: ScenarioLeg }) => Promise<T>,
+  run: (context: { world: ParityWorld; proxied: ScenarioLeg; upstream: http.Server }) => Promise<T>,
   options: ParityWorldOptions = {},
 ): Promise<T> {
   const world = await createParityWorld(options);
@@ -259,7 +260,7 @@ async function withProxiedWorld<T>(
         return responseFromClientError(error);
       }
     };
-    return await run({ world, proxied });
+    return await run({ world, proxied, upstream });
   } finally {
     await closeLoopbackServer(proxy);
     await closeLoopbackServer(upstream);
@@ -267,6 +268,59 @@ async function withProxiedWorld<T>(
     fs.rmSync(clientStateDir, { recursive: true, force: true });
   }
 }
+
+/**
+ * Every request the proxy forwards upstream, in order. Registering a second `request`
+ * listener records without displacing the server's own handler, so the daemon behaves
+ * exactly as it does untraced.
+ */
+function recordUpstreamRequests(upstream: http.Server): { forwarded: ForwardedRequest[] } {
+  const forwarded: ForwardedRequest[] = [];
+  upstream.on('request', (req, res) => {
+    const route = (req.url ?? '').split('?', 1)[0] ?? '';
+    const entry: ForwardedRequest = { method: req.method ?? '', route, body: '' };
+    const end = res.end.bind(res);
+    const write = res.write.bind(res);
+    res.write = ((chunk: unknown, ...rest: unknown[]) => {
+      entry.body += textOf(chunk);
+      return (write as (...args: unknown[]) => boolean)(chunk, ...rest);
+    }) as typeof res.write;
+    res.end = ((chunk?: unknown, ...rest: unknown[]) => {
+      entry.body += textOf(chunk);
+      return (end as (...args: unknown[]) => http.ServerResponse)(chunk, ...rest);
+    }) as typeof res.end;
+    forwarded.push(entry);
+  });
+  return { forwarded };
+}
+
+/** One request the proxy forwarded, with the exact bytes the daemon answered it with. */
+type ForwardedRequest = { method: string; route: string; body: string };
+
+function textOf(chunk: unknown): string {
+  if (typeof chunk === 'string') return chunk;
+  if (chunk instanceof Uint8Array) return Buffer.from(chunk).toString('utf8');
+  return '';
+}
+
+/**
+ * What a published `snapshot --interactive-only` response is made of. #2198 forbids the
+ * internal acquired tree, lineage, target-generation facts and runner quality payload from
+ * crossing as wire payloads, so the guard is the KEY SET, not a size: an extra field is
+ * small, and one added inside the payload grows the wire and the client's copy together.
+ */
+const PUBLISHED_RPC_ENVELOPE_KEYS = ['id', 'jsonrpc', 'result'] as const;
+const PUBLISHED_SNAPSHOT_RESULT_KEYS = ['data', 'ok'] as const;
+const PUBLISHED_SNAPSHOT_DATA_KEYS = [
+  'appBundleId',
+  'appName',
+  'nodes',
+  'refsGeneration',
+  'snapshotDiagnostics',
+  'truncated',
+  'visibility',
+  'warnings',
+] as const;
 
 type LegRun = { responses: DaemonResponse[]; sessionRoot: string };
 
@@ -401,6 +455,79 @@ test(
     });
   },
   PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+/**
+ * #2198: "the regular-snapshot trace must prove the bridge adds no network round trip and
+ * transfers only the published response." That was previously read off the RTT benchmark —
+ * identical response bytes and an unchanged wall-clock slope — which is inference, not proof.
+ * This asserts it: one `snapshot -i` behind the proxy forwards exactly one upstream request,
+ * it is the RPC, and the bytes crossing are the published response and nothing else.
+ *
+ * The regression it guards is a second forwarded call per snapshot — a bridge, helper or
+ * admin round trip appearing on the wire, which #2198 forbids outright.
+ */
+test(
+  'a proxied snapshot forwards one upstream request and only the published response',
+  {
+    timeout: PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+  },
+  async (t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    await withProxiedWorld(async ({ world, proxied, upstream }) => {
+      const flags = { platform: 'ios', udid: SIM.id } as const;
+      await proxied({ session: 'default', command: 'open', positionals: [APP], flags });
+
+      // Record only the snapshot: the open above is setup and makes its own calls.
+      const { forwarded } = recordUpstreamRequests(upstream);
+      const response = await proxied({
+        session: 'default',
+        command: 'snapshot',
+        positionals: [],
+        flags: { snapshotInteractiveOnly: true },
+      });
+      assert.equal(response.ok, true);
+
+      // The WHOLE wire conversation, not just the RPC, so any new call of any kind breaks
+      // this. `GET /health` is the client's own ADR 0006 protocol-compatibility probe on the
+      // remote path (`ensureRemoteDaemon`); it is not the bridge, and it predates the bridge.
+      // The bridge itself contributes nothing: no helper, admin or acquisition route appears.
+      assert.deepEqual(
+        forwarded.map((entry) => `${entry.method} ${entry.route}`),
+        ['GET /health', 'POST /rpc'],
+        'a proxied snapshot must cross the wire only as the compat probe and the RPC',
+      );
+
+      // What crossed, read rather than sized, at every level of the payload. Comparing the
+      // wire's `result` against the client's response would prove nothing — the client
+      // publishes whatever `result` holds, so both sides move together — so each level is
+      // pinned against its declared key set instead.
+      const rpcBody = JSON.parse(forwarded.at(-1)?.body ?? '{}') as {
+        result?: { data?: Record<string, unknown> };
+      };
+      assert.deepEqual(
+        Object.keys(rpcBody).sort(),
+        [...PUBLISHED_RPC_ENVELOPE_KEYS],
+        'the upstream RPC body carried something beyond the JSON-RPC envelope',
+      );
+      assert.deepEqual(
+        Object.keys(rpcBody.result ?? {}).sort(),
+        [...PUBLISHED_SNAPSHOT_RESULT_KEYS],
+        'the RPC result carried something beyond the published response',
+      );
+      assert.deepEqual(
+        Object.keys(rpcBody.result?.data ?? {}).sort(),
+        [...PUBLISHED_SNAPSHOT_DATA_KEYS],
+        'the published snapshot payload carried a field it does not publish',
+      );
+      const sessionRoot = sessionRootOf(world.daemon);
+      assert.deepEqual(
+        stripVolatile(rpcBody.result, sessionRoot),
+        stripVolatile(response, sessionRoot),
+        'the result on the wire is not the response the client published',
+      );
+    });
+  },
 );
 
 const LEASE_SCOPE = {
