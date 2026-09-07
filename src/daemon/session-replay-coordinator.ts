@@ -4,7 +4,7 @@ import {
   type ReplayDivergenceResume,
   type ReplayRepairHint,
 } from '@agent-device/contracts/divergence';
-import { readReplayDivergenceResume } from '../core/replay-divergence.ts';
+import { readReplayDivergenceResume } from '@agent-device/ad-replay/divergence';
 import type { DaemonResponse } from './daemon-request.ts';
 import type { SessionRuntimeHints, SessionState } from './session-state.ts';
 import {

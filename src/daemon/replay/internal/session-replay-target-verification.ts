@@ -23,7 +23,7 @@ import {
   type ReplayDivergenceTargetCandidate,
   type ReplayDivergenceTargetIdentity,
 } from '@agent-device/contracts/divergence';
-import { createReplayDivergenceSanitizer } from '../../../core/replay-divergence.ts';
+import { createReplayDivergenceSanitizer } from '@agent-device/ad-replay/divergence';
 import {
   REPLAY_TARGET_GUARD_MISMATCH_REASON,
   WAIT_LANDMARK_MISMATCH_REASON,

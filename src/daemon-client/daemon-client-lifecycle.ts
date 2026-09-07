@@ -3,7 +3,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { readReplayDivergenceResume } from '../core/replay-divergence.ts';
+import { readReplayDivergenceResume } from '@agent-device/ad-replay/divergence';
 import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
 import {
   runCmdDetachedMonitored,

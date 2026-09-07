@@ -42,7 +42,7 @@ export function buildAndPersistReplayDivergenceResume(params: {
  * `failedIndex` would re-diverge on the step the agent already performed).
  * Every other repair hint (including a plain `action-failure`) resumes AT
  * `failedIndex` unchanged. This must agree with the text guidance rendered by
- * `formatReplayDivergenceReport` (`packages/contracts/src/replay-divergence.ts`) — both are
+ * `formatReplayDivergenceReport` (`packages/ad-replay/src/replay-divergence.ts`) — both are
  * derived from the same computed `from` value.
  *
  * `failedIndex` is always a valid 1-based index into `actions` (both call

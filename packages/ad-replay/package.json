@@ -15,6 +15,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./divergence": {
+      "types": "./src/replay-divergence.ts",
+      "default": "./src/replay-divergence.ts"
     }
   }
 }

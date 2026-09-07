@@ -5,7 +5,7 @@ import {
   type ErrorCandidateView,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
-import { formatReplayDivergenceReport } from '../../core/replay-divergence.ts';
+import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
 
 export function printHumanError(
   err: AppError | NormalizedError,
