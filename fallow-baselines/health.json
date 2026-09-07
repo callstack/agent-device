@@ -1,5 +1,10 @@
 {
   "finding_counts": {
+    "packages/command-registry/src/batch.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
     "src/__tests__/cli-config.test.ts": {
       "crap_high": {
         "count": 1
@@ -86,11 +91,6 @@
         "count": 2
       },
       "crap_moderate": {
-        "count": 1
-      }
-    },
-    "src/core/batch.ts": {
-      "complexity_moderate": {
         "count": 1
       }
     },
