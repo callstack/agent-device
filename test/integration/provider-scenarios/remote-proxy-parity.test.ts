@@ -492,3 +492,59 @@ test(
   },
   PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
 );
+
+test(
+  'Provider-backed integration proxy lease heartbeat renews the lease and keeps the session and its comparison state',
+  async (t) => {
+    if (await skipWhenLoopbackUnavailable(t, 'daemon proxy parity coverage')) return;
+
+    let now = 2_000_000;
+    const leaseRegistry = new LeaseRegistry({ now: () => now });
+    await withProxiedWorld(
+      async ({ world, proxied }) => {
+        const session = 'renewed';
+        const flags = { platform: 'ios', udid: SIM.id } as const;
+        const allocated = await proxied({
+          session,
+          command: 'lease_allocate',
+          positionals: [],
+          flags: {},
+          meta: LEASE_SCOPE,
+        });
+        assert.equal(allocated.ok, true, JSON.stringify(allocated));
+        const lease = (allocated.ok ? allocated.data : {})?.lease as { leaseId: string };
+        const meta = { ...LEASE_SCOPE, leaseId: lease.leaseId };
+        const run = async (
+          command: string,
+          positionals: string[],
+          stepFlags: DaemonRequest['flags'],
+        ) => await proxied({ session, command, positionals, flags: stepFlags, meta });
+
+        assert.equal((await run('open', [APP], flags)).ok, true);
+        assert.equal((await run('snapshot', [], { snapshotInteractiveOnly: true })).ok, true);
+        const heartbeatExpiry = async (): Promise<number> => {
+          const heartbeat = await run('lease_heartbeat', [], {});
+          assert.equal(heartbeat.ok, true, JSON.stringify(heartbeat));
+          const renewed = (heartbeat.ok ? heartbeat.data : {})?.lease as { expiresAt: number };
+          return renewed.expiresAt;
+        };
+
+        // One explicit heartbeat through the proxy just before the lease would lapse moves the
+        // expiry forward; a request past the old expiry but inside the new window still finds
+        // the session and its diff baseline.
+        const firstExpiry = await heartbeatExpiry();
+        now = firstExpiry - 1_000;
+        const renewedExpiry = await heartbeatExpiry();
+        assert.ok(renewedExpiry > firstExpiry, 'the heartbeat moved the expiry forward');
+        now = firstExpiry + 1_000;
+        const diff = await run('diff', ['snapshot'], { snapshotInteractiveOnly: true });
+        assert.equal(diff.ok, true, JSON.stringify(diff));
+        assert.equal(baselineInitialized(diff), false, 'the renewed session kept its baseline');
+        assert.notEqual(world.daemon.session(session), undefined);
+        assert.equal((await run('close', [], {})).ok, true);
+      },
+      { leaseRegistry },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
