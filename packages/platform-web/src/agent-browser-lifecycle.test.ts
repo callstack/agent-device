@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import { installFakeManagedAgentBrowser, mkdtempForTestSync } from './__tests__/test-utils.ts';
 
 const { runCmdMock } = vi.hoisted(() => ({
@@ -208,6 +209,9 @@ test('cleanup reads recorded browser identities without reconstructing a process
   const stateDir = mkdtempForTestSync('agent-device-web-life-');
   const originalIdleTimeout = process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS;
   process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS = '1';
+  const exitedPid = Number(
+    runCmdSync(process.execPath, ['-p', 'process.pid'], { timeoutMs: 1000 }).stdout.trim(),
+  );
   const ownedProcessRecords = {
     read: () => [
       {
@@ -216,7 +220,7 @@ test('cleanup reads recorded browser identities without reconstructing a process
         status: 'decoded' as const,
         records: [
           {
-            pid: 101,
+            pid: exitedPid,
             startTime: 'start-101',
             command: 'command-101',
             purpose: 'managed-web-browser',
@@ -235,7 +239,7 @@ test('cleanup reads recorded browser identities without reconstructing a process
       ownedProcessRecords,
     });
 
-    assert.deepEqual(result.pids, [101]);
+    assert.deepEqual(result.pids, [exitedPid]);
     assert.deepEqual(result.signalPids, []);
     assert.equal(mockRunCmd.mock.calls.length, 0);
     expect(ownedProcessRecords.clear).toHaveBeenCalledOnce();
