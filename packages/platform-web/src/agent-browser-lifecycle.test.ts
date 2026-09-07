@@ -206,12 +206,12 @@ test('cleanup does not treat the shared socket directory mtime as browser activi
 });
 
 test('cleanup reads recorded browser identities without reconstructing a process tree', async () => {
-  const stateDir = mkdtempForTestSync('agent-device-web-life-');
-  const originalIdleTimeout = process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS;
-  process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS = '1';
   const exitedPid = Number(
     runCmdSync(process.execPath, ['-p', 'process.pid'], { timeoutMs: 1000 }).stdout.trim(),
   );
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
+  const originalIdleTimeout = process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS;
+  process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS = '1';
   const ownedProcessRecords = {
     read: () => [
       {
