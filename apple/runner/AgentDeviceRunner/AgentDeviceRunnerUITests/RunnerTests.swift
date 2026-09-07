@@ -66,7 +66,11 @@ final class RunnerTests: XCTestCase {
   let minRecordingFps = 1
   let maxRecordingFps = 120
   var needsPostSnapshotInteractionDelay = false
-  var needsFirstInteractionDelay = false
+  /// When the first interaction after an activation may run, on the monotonic uptime clock.
+  /// The guarantee is a minimum gap *since the activation*, not a pause at the interaction:
+  /// a caller that already spent that gap elsewhere (an agent's round trip is 190-260 ms)
+  /// has satisfied it and waits for nothing. `nil` = no activation is pending stabilization.
+  var firstInteractionReadyUptime: TimeInterval?
   var runnerAccessibilityHealth: RunnerAccessibilityHealth = .unknown
   var activeRecording: ScreenRecorder?
   let commandJournal = RunnerCommandJournal()
