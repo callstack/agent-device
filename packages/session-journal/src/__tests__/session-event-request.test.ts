@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { buildRequestFinishedEvent, buildRequestStartedEvent } from '../session-event-log.ts';
-import type { DaemonRequest, DaemonResponseData } from '../daemon-request.ts';
+import type { DaemonRequest, DaemonResponseData } from '@agent-device/kernel/contracts';
 
 function buildSuccessEvent(
   command: string,

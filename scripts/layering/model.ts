@@ -46,6 +46,7 @@ const TARGET_DAG_RANK = new Map([
   ['request', 1],
   ['screenshot-diff', 1],
   ['selectors', 1],
+  ['session-journal', 1],
   ['snapshot', 1],
   ['core', 2],
   ['cli-schema', 3],
@@ -266,7 +267,8 @@ export function topFolder(file: string): string {
 }
 
 export function targetDagZone(file: string): string {
-  if (file.startsWith('src/daemon/client/')) return 'daemon-client';
+  // #2342 relocated the daemon client to its own `src/daemon-client/` folder, so the
+  // client zone now falls out of the folder itself; `src/daemon/` is server-only.
   if (file.startsWith('src/daemon/')) return 'daemon-server';
   return topFolder(file);
 }

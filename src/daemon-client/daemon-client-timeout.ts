@@ -2,10 +2,10 @@ import { AppError } from '@agent-device/kernel/errors';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
-import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
+import { isAgentDeviceDaemonProcess } from '../daemon/daemon-process.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
-import type { DaemonPaths } from '../config.ts';
+import type { DaemonPaths } from '../daemon/config.ts';
 import type { PlatformSelector } from '@agent-device/kernel/device';
 import {
   removeDaemonInfo,
@@ -104,7 +104,7 @@ export function shouldResetDaemonAfterRequestTimeout(command: string | undefined
 // real pkill/process-kill side effects, so its wording is verified through
 // this pure sub-function rather than the full timeout path (see also the
 // production-seam route tests in
-// src/daemon/client/__tests__/daemon-client-timeout-route.test.ts, which
+// src/daemon-client/__tests__/daemon-client-timeout-route.test.ts, which
 // prove the cleanup-eligibility side of this contract that a pure formatter
 // test cannot).
 export function resolveRequestTimeoutHint(params: {

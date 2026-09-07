@@ -35,13 +35,10 @@ import {
   buildRequestFinishedEvent,
   buildRequestStartedEvent,
   shouldRecordEventForRequest,
-} from './session-event-log.ts';
+} from '@agent-device/session-journal/session-event-log';
 import type { LeaseRegistry } from './lease-registry.ts';
-import {
-  resolveSessionRequestLog,
-  resolveSessionRunnerLogPath,
-  type SessionStore,
-} from './session-store.ts';
+import { type SessionStore } from './session-store.ts';
+import { resolveSessionRequestLog, resolveSessionRunnerLogPath } from './session-artifact-paths.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 import { teardownSessionResources } from './session-teardown.ts';

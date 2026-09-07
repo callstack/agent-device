@@ -10,7 +10,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   supportsLoopbackBind,
-} from '../../../__tests__/test-utils/loopback.ts';
+} from '../../__tests__/test-utils/loopback.ts';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import {
   isProcessAlive,
@@ -20,7 +20,7 @@ import {
 } from '@agent-device/host-kit/process';
 import { sendToDaemon } from '../daemon-client.ts';
 import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
-import { downloadRemoteArtifact } from '../../../remote/daemon-artifacts.ts';
+import { downloadRemoteArtifact } from '../../remote/daemon-artifacts.ts';
 import {
   cleanupFailedDaemonStartupMetadata,
   resolveDaemonStartupHint,
@@ -31,10 +31,10 @@ import {
   resolveRequestTimeoutHint,
   shouldResetDaemonAfterRequestTimeout,
 } from '../daemon-client-timeout.ts';
-import { resolveDaemonPaths } from '../../config.ts';
-import { stopProcessForTakeover } from '../../daemon-process.ts';
+import { resolveDaemonPaths } from '../../daemon/config.ts';
+import { stopProcessForTakeover } from '../../daemon/daemon-process.ts';
 import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 // readProcessStartTime/readProcessCommand shell out to `ps` with a 1s
 // timeout (see host-process.ts). isAgentDeviceDaemonProcess re-reads both for

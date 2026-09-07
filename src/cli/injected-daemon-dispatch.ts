@@ -1,4 +1,4 @@
-import type { DaemonResponse, sendToDaemon } from '../daemon/client/daemon-client.ts';
+import type { DaemonResponse, sendToDaemon } from '../daemon-client/daemon-client.ts';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import type {
   DescriptorCliCommandName,

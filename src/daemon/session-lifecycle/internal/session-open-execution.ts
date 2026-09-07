@@ -19,11 +19,11 @@ import {
 } from '../../session-script-publication-capability.ts';
 import { isRequestCanceled } from '@agent-device/host-kit/request';
 import { createRequestCanceledError } from '@agent-device/kernel/errors';
+import { SessionStore } from '../../session-store.ts';
 import {
   resolveSessionRequestLogPath,
   resolveSessionRunnerLogPath,
-  SessionStore,
-} from '../../session-store.ts';
+} from '../../session-artifact-paths.ts';
 import {
   countConfiguredRuntimeHints,
   runtimeHintValues,

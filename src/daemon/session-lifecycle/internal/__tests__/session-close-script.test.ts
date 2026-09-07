@@ -15,7 +15,7 @@ import {
   finalizeOrdinaryCloseScript,
 } from '../session-close-script.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import { flushSessionEventLogWrites } from '../../../session-event-log.ts';
+import { flushSessionEventLogWrites } from '@agent-device/session-journal/session-event-log';
 
 const roots: string[] = [];
 
