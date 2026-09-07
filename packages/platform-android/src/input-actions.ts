@@ -4,7 +4,10 @@
  */
 import { DEVICE_ROTATION_SURFACE_INDEX, type DeviceRotation } from '@agent-device/contracts/device';
 import { GESTURE_SAMPLE_INTERVAL_MS, buildGesturePlan } from '@agent-device/contracts/gesture-plan';
-import { GESTURE_DURATION_MIN_MS } from '@agent-device/contracts/gesture-plan-types';
+import {
+  GESTURE_DURATION_MAX_MS,
+  GESTURE_DURATION_MIN_MS,
+} from '@agent-device/contracts/gesture-plan-types';
 import type {
   GesturePlan,
   PointerTrajectorySample,
@@ -240,7 +243,7 @@ export async function scrollAndroid(
 const CONTROLLED_RELEASE_TAIL_MS = 160;
 
 /**
- * A short, quivering tail appended after a 'controlled' scroll's endpoint, adding
+ * A short, quivering tail appended after a 'controlled' scroll's endpoint, adding up to
  * `CONTROLLED_RELEASE_TAIL_MS` of real time to the gesture. AOSP's `InputConsumer::rewriteMessage`
  * collapses a MOVE that repeats the previous coordinates into a "resampled" sample, and
  * `VelocityTracker` skips resampled samples — so a truly stationary tail never reaches the
@@ -251,6 +254,10 @@ const CONTROLLED_RELEASE_TAIL_MS = 160;
  * vertical scrolls on a `RecyclerView` and an RN `ScrollView` (issue #2371); not independently
  * verified against every OEM skin or a Compose `LazyColumn`. An 'inertial' release (the
  * `scroll top`/`scroll bottom` edge passes) lifts at the pan's endpoint unchanged.
+ *
+ * The dispatched plan never exceeds `GESTURE_DURATION_MAX_MS` — the same ceiling every gesture
+ * plan is built under — so the tail shrinks (and, at the exact maximum, disappears) for a move
+ * already at or near that limit; the requested move itself is never shortened to make room.
  */
 function withControlledReleaseTail(
   plan: GesturePlan,
@@ -258,6 +265,12 @@ function withControlledReleaseTail(
   direction: ScrollDirection,
 ): GesturePlan {
   if (plan.topology !== 'single') return plan;
+  const tailMs = Math.max(
+    0,
+    Math.min(CONTROLLED_RELEASE_TAIL_MS, GESTURE_DURATION_MAX_MS - plan.durationMs),
+  );
+  const steps = Math.floor(tailMs / GESTURE_SAMPLE_INTERVAL_MS);
+  if (steps === 0) return plan;
   const [pointer] = plan.pointers;
   const end = pointer.samples.at(-1)!;
   const horizontal = direction === 'left' || direction === 'right';
@@ -265,7 +278,6 @@ function withControlledReleaseTail(
   const jitterMin = (horizontal ? viewport.y : viewport.x) + 1;
   const jitterMax = (horizontal ? viewport.y + viewport.height : viewport.x + viewport.width) - 1;
   const nudged = jitterBase + 1 <= jitterMax ? jitterBase + 1 : Math.max(jitterMin, jitterBase - 1);
-  const steps = CONTROLLED_RELEASE_TAIL_MS / GESTURE_SAMPLE_INTERVAL_MS;
   const tail: PointerTrajectorySample[] = Array.from({ length: steps }, (_, index) => {
     const jitter = index % 2 === 0 ? nudged : jitterBase;
     return {
@@ -281,7 +293,7 @@ function withControlledReleaseTail(
   ];
   return {
     ...plan,
-    durationMs: plan.durationMs + CONTROLLED_RELEASE_TAIL_MS,
+    durationMs: plan.durationMs + steps * GESTURE_SAMPLE_INTERVAL_MS,
     pointers: [{ ...pointer, samples }],
   };
 }
