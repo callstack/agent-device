@@ -538,12 +538,14 @@ test('the real tree parses, declares, and passes R11', () => {
   ]);
   const adReplayPackage = packages.find((pkg) => pkg.name === '@agent-device/ad-replay');
   assert.ok(adReplayPackage, 'ad-replay package must exist');
-  // Locks the "exports only `.`" boundary: the stage-A wide façade and the
-  // `./testing` subpath (the deleted in-memory selector adapter) are both gone
-  // as of the direct selectors-package cutover — a future
-  // `./testing` (or any other) subpath widens this key list and fails the
-  // assertion.
-  assert.deepEqual([...adReplayPackage.exportTargets.keys()], ['@agent-device/ad-replay']);
+  // Locks the export surface: `.` (the engine) and `./divergence` (the
+  // divergence report/sanitization vocabulary, off the engine entry so CLI/MCP
+  // surfaces don't load the step loop). Any other subpath widens this key
+  // list and fails the assertion.
+  assert.deepEqual(
+    [...adReplayPackage.exportTargets.keys()],
+    ['@agent-device/ad-replay', '@agent-device/ad-replay/divergence'],
+  );
   assert.deepEqual([...adReplayPackage.workspaceDependencies].sort(), [
     '@agent-device/ad-script',
     '@agent-device/contracts',
