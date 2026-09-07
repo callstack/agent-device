@@ -87,8 +87,7 @@ function boundedInteger(value: unknown, minimum: number, maximum: number): value
   );
 }
 
-function processArguments(value: Record<string, unknown>): string[] {
-  if (!boundedInteger(value.argc, 0, 32_768)) throw new Error('invalid argument count');
+function argumentBytes(value: Record<string, unknown>): string {
   if (
     typeof value.argvHex !== 'string' ||
     value.argvHex.length > 65_536 ||
@@ -98,7 +97,12 @@ function processArguments(value: Record<string, unknown>): string[] {
   const bytes = Buffer.from(value.argvHex, 'hex');
   const decoded = bytes.toString('utf8');
   if (!Buffer.from(decoded).equals(bytes)) throw new Error('invalid argument encoding');
-  const args = decoded.split('\0');
+  return decoded;
+}
+
+function processArguments(value: Record<string, unknown>): string[] {
+  if (!boundedInteger(value.argc, 0, 32_768)) throw new Error('invalid argument count');
+  const args = argumentBytes(value).split('\0');
   if (args.pop() !== '' || args.length !== value.argc)
     throw new Error('invalid argument boundaries');
   if (value.zombie ? args.length !== 0 : !args[0]) throw new Error('invalid process arguments');
