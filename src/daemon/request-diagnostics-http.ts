@@ -20,7 +20,10 @@ import { AppError, normalizeError, type DiagnosticsRecordRef } from '@agent-devi
 import type { DaemonRequest } from './daemon-request.ts';
 import { isSafeSessionSegment } from './session-paths.ts';
 import { decodeUriSegment } from './http-request-target.ts';
-import { isTenantOwnedSessionName } from './session-tenant-scope.ts';
+import {
+  isTenantAddressableSessionName,
+  type TenantSessionNamespace,
+} from './session-tenant-scope.ts';
 import { failStreamedHttpResponse, sendRestJsonError } from './http-errors.ts';
 
 const REQUEST_DIAGNOSTICS_CONTENT_TYPE = 'application/x-ndjson';
@@ -45,7 +48,7 @@ type RequestDiagnosticsHttpAuthorizer = (params: {
   req: http.IncomingMessage;
   res: http.ServerResponse;
   daemonRequest: Pick<DaemonRequest, 'command' | 'positionals'>;
-}) => Promise<{ tenantId?: string } | null>;
+}) => Promise<{ tenantId?: string; sessionNamespace?: TenantSessionNamespace } | null>;
 
 export type RequestDiagnosticsHttpOptions = {
   req: http.IncomingMessage;
@@ -116,7 +119,10 @@ async function handleRequestDiagnostics(
     });
     if (!auth) return;
 
-    if (auth.tenantId && !isTenantOwnedSessionName(auth.tenantId, ref.session)) {
+    if (
+      auth.sessionNamespace &&
+      !isTenantAddressableSessionName(auth.sessionNamespace, ref.session)
+    ) {
       sendRestJsonError(
         res,
         normalizeError(

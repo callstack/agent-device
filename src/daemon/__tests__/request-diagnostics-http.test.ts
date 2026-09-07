@@ -140,7 +140,15 @@ test('request diagnostics route rejects ids that do not name one record', async 
   });
 });
 
-test('request diagnostics route keeps a tenant inside its own session namespace', async (t) => {
+/**
+ * No auth hook is configured on this server, so every tenant here is a
+ * client-DECLARED label. `scopeRequestSession` partitions nothing for such a
+ * caller, and the same caller can already run any command in any session over
+ * `/rpc` (`http-server-tenant-trust.test.ts`, "no hook configured keeps a
+ * client-declared flags.tenant unchanged"). The prefix rule that does bite is
+ * proven against an ATTESTING hook in that file.
+ */
+test('request diagnostics route reads an unattested tenant as no session partition', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
@@ -153,7 +161,38 @@ test('request diagnostics route keeps a tenant inside its own session namespace'
     const otherTenant = await fetch(diagnosticsUrl(baseUrl, 'tenant-a:default', 'abc123'), {
       headers: { ...auth, 'x-agent-device-tenant': 'tenant-b' },
     });
-    assert.equal(otherTenant.status, 401);
-    assert.equal((await otherTenant.text()).includes('request_start'), false);
+    assert.equal(otherTenant.status, 200);
+  });
+});
+
+test('request diagnostics route serves a plain session to the tenant that ran the command', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
+    writeRecord(sessionsDir, 'default', 'abc123');
+    const response = await fetch(diagnosticsUrl(baseUrl, 'default', 'abc123'), {
+      headers: {
+        authorization: 'Bearer daemon-secret',
+        'x-agent-device-tenant': 'tenant-a',
+      },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), RECORD);
+  });
+});
+
+test('request diagnostics route serves the cwd-scoped session its owner ran in', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
+    writeRecord(sessionsDir, 'cwd:9f1:default', 'abc123');
+    const response = await fetch(diagnosticsUrl(baseUrl, 'cwd:9f1:default', 'abc123'), {
+      headers: {
+        authorization: 'Bearer daemon-secret',
+        'x-agent-device-tenant': 'tenant-a',
+      },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), RECORD);
   });
 });
