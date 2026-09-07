@@ -209,6 +209,8 @@ export async function scrollAndroid(
     options?.durationMs ?? DEFAULT_MOBILE_SCROLL_DURATION_MS,
     GESTURE_DURATION_MIN_MS,
   );
+  const releaseBehavior = options?.releaseBehavior ?? 'controlled';
+  if (releaseBehavior === 'controlled') assertRoomForControlledReleaseTail(durationMs);
   const gesturePlan = buildGesturePlan(
     {
       intent: 'pan',
@@ -222,7 +224,6 @@ export async function scrollAndroid(
     viewport,
     'android',
   );
-  const releaseBehavior = options?.releaseBehavior ?? 'controlled';
   const backend = await executeAndroidTouchPlan(
     device,
     releaseBehavior === 'controlled'
@@ -242,8 +243,28 @@ export async function scrollAndroid(
 // still differs — but would leave the release 1px off the requested endpoint).
 const CONTROLLED_RELEASE_TAIL_MS = 160;
 
+// The dispatched plan (move + tail) must never exceed GESTURE_DURATION_MAX_MS, the same ceiling
+// every gesture plan is built under. Rather than silently dropping the tail for a move that
+// leaves it no room, a controlled scroll's own accepted range stops short of the shared ceiling
+// by the tail's length — the full tail runs for every accepted controlled scroll, and a request
+// past this narrower range is rejected with the reason, not truncated.
+const CONTROLLED_RELEASE_MAX_MOVE_MS = GESTURE_DURATION_MAX_MS - CONTROLLED_RELEASE_TAIL_MS;
+
+function assertRoomForControlledReleaseTail(durationMs: number): void {
+  if (durationMs <= CONTROLLED_RELEASE_MAX_MOVE_MS) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    `scroll durationMs must be at most ${CONTROLLED_RELEASE_MAX_MOVE_MS} for a controlled release ` +
+      `(leaves room for the ${CONTROLLED_RELEASE_TAIL_MS}ms release tail within the ` +
+      `${GESTURE_DURATION_MAX_MS}ms gesture ceiling)`,
+    {
+      hint: "Pass a shorter durationMs, or releaseBehavior 'inertial' if the fling is acceptable.",
+    },
+  );
+}
+
 /**
- * A short, quivering tail appended after a 'controlled' scroll's endpoint, adding up to
+ * A short, quivering tail appended after a 'controlled' scroll's endpoint, adding
  * `CONTROLLED_RELEASE_TAIL_MS` of real time to the gesture. AOSP's `InputConsumer::rewriteMessage`
  * collapses a MOVE that repeats the previous coordinates into a "resampled" sample, and
  * `VelocityTracker` skips resampled samples — so a truly stationary tail never reaches the
@@ -255,9 +276,8 @@ const CONTROLLED_RELEASE_TAIL_MS = 160;
  * verified against every OEM skin or a Compose `LazyColumn`. An 'inertial' release (the
  * `scroll top`/`scroll bottom` edge passes) lifts at the pan's endpoint unchanged.
  *
- * The dispatched plan never exceeds `GESTURE_DURATION_MAX_MS` — the same ceiling every gesture
- * plan is built under — so the tail shrinks (and, at the exact maximum, disappears) for a move
- * already at or near that limit; the requested move itself is never shortened to make room.
+ * Callers must have already checked `assertRoomForControlledReleaseTail` on the move duration —
+ * this always appends the full tail.
  */
 function withControlledReleaseTail(
   plan: GesturePlan,
@@ -265,12 +285,7 @@ function withControlledReleaseTail(
   direction: ScrollDirection,
 ): GesturePlan {
   if (plan.topology !== 'single') return plan;
-  const tailMs = Math.max(
-    0,
-    Math.min(CONTROLLED_RELEASE_TAIL_MS, GESTURE_DURATION_MAX_MS - plan.durationMs),
-  );
-  const steps = Math.floor(tailMs / GESTURE_SAMPLE_INTERVAL_MS);
-  if (steps === 0) return plan;
+  const steps = CONTROLLED_RELEASE_TAIL_MS / GESTURE_SAMPLE_INTERVAL_MS;
   const [pointer] = plan.pointers;
   const end = pointer.samples.at(-1)!;
   const horizontal = direction === 'left' || direction === 'right';
@@ -293,7 +308,7 @@ function withControlledReleaseTail(
   ];
   return {
     ...plan,
-    durationMs: plan.durationMs + steps * GESTURE_SAMPLE_INTERVAL_MS,
+    durationMs: plan.durationMs + CONTROLLED_RELEASE_TAIL_MS,
     pointers: [{ ...pointer, samples }],
   };
 }

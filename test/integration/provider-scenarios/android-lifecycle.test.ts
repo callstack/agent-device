@@ -226,12 +226,7 @@ test(ANDROID_TOUCH_CONTRACT_EVIDENCE.testName, async () => {
       }));
       assert.deepEqual(touchCalls, [
         { topology: 'single', intent: 'longPress', pointerCount: 1, durationMs: 750 },
-        // `scroll down` has no edge, so it resolves to the default 'controlled' release: the
-        // requested 350ms move plus the 160ms release tail that defeats Android's fling (#2371).
-        // 'inertial' (the `scroll top`/`scroll bottom` edge passes, which lift at the pan's
-        // endpoint unchanged) is covered at the unit level in
-        // packages/platform-android/src/__tests__/input-actions.test.ts.
-        { topology: 'single', intent: 'pan', pointerCount: 1, durationMs: 510 },
+        { topology: 'single', intent: 'pan', pointerCount: 1, durationMs: 510 }, // 'controlled': 350ms move + 160ms tail (#2371)
         { topology: 'single', intent: 'pan', pointerCount: 1, durationMs: 300 },
         { topology: 'single', intent: 'pan', pointerCount: 1, durationMs: 500 },
         { topology: 'two', intent: 'pan', pointerCount: 2, durationMs: 500 },

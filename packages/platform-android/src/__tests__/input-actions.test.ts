@@ -158,9 +158,62 @@ test('scrollAndroid composes the duration floor with the default controlled-rele
   assert.equal(touchCalls[0]!.durationMs, GESTURE_SAMPLE_INTERVAL_MS + 160);
 });
 
-test('scrollAndroid caps the controlled-release tail at the maximum gesture duration without shortening the move', async () => {
+test('scrollAndroid runs the full controlled-release tail at the largest duration that still leaves it room', async () => {
   const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
+  const maxControlledMoveMs = GESTURE_DURATION_MAX_MS - 160;
   const result = await withAndroidAdbProvider(
+    {
+      exec: async () => {
+        throw new Error('adb must not run');
+      },
+      gestureViewport: async () => ({ x: 0, y: 0, width: 1080, height: 1920 }),
+      touch: async (request) => {
+        touchCalls.push(request);
+      },
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () =>
+      await scrollAndroid(ANDROID_EMULATOR, 'down', {
+        pixels: 1800,
+        durationMs: maxControlledMoveMs,
+      }),
+  );
+
+  // The requested move is honored in full, and the tail always runs at its full length — the
+  // dispatched plan lands exactly at GESTURE_DURATION_MAX_MS, never past it.
+  assert.equal(result.durationMs, maxControlledMoveMs);
+  const [touch] = touchCalls;
+  assert.equal(touch!.durationMs, GESTURE_DURATION_MAX_MS);
+  assert.equal(touch!.pointers[0]!.samples.at(-1)!.offsetMs, GESTURE_DURATION_MAX_MS);
+});
+
+test('scrollAndroid rejects a controlled-release durationMs that would leave the release tail no room, without shortening the move', async () => {
+  await withAndroidAdbProvider(
+    {
+      exec: async () => {
+        throw new Error('adb must not run');
+      },
+      gestureViewport: async () => ({ x: 0, y: 0, width: 1080, height: 1920 }),
+      touch: async () => {
+        throw new Error('touch must not run for a rejected request');
+      },
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      await assert.rejects(
+        scrollAndroid(ANDROID_EMULATOR, 'down', {
+          pixels: 1800,
+          durationMs: GESTURE_DURATION_MAX_MS - 159,
+        }),
+        /scroll durationMs must be at most 9840 for a controlled release/,
+      );
+    },
+  );
+});
+
+test("scrollAndroid accepts the full GESTURE_DURATION_MAX_MS for an 'inertial' release, which needs no tail", async () => {
+  const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
+  await withAndroidAdbProvider(
     {
       exec: async () => {
         throw new Error('adb must not run');
@@ -175,45 +228,12 @@ test('scrollAndroid caps the controlled-release tail at the maximum gesture dura
       await scrollAndroid(ANDROID_EMULATOR, 'down', {
         pixels: 1800,
         durationMs: GESTURE_DURATION_MAX_MS,
+        releaseBehavior: 'inertial',
       }),
   );
 
-  // The requested move is honored in full — never truncated to make room for the tail.
-  assert.equal(result.durationMs, GESTURE_DURATION_MAX_MS);
   const [touch] = touchCalls;
-  // At the exact ceiling there is no headroom left for a tail; the dispatched plan still never
-  // exceeds GESTURE_DURATION_MAX_MS, the same boundary every gesture plan is built under.
   assert.equal(touch!.durationMs, GESTURE_DURATION_MAX_MS);
-  assert.equal(touch!.pointers[0]!.samples.at(-1)!.offsetMs, GESTURE_DURATION_MAX_MS);
-});
-
-test('scrollAndroid shrinks (but keeps) the controlled-release tail just under the maximum gesture duration', async () => {
-  const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
-  const nearMaxDurationMs = GESTURE_DURATION_MAX_MS - 50;
-  const result = await withAndroidAdbProvider(
-    {
-      exec: async () => {
-        throw new Error('adb must not run');
-      },
-      gestureViewport: async () => ({ x: 0, y: 0, width: 1080, height: 1920 }),
-      touch: async (request) => {
-        touchCalls.push(request);
-      },
-    },
-    { serial: ANDROID_EMULATOR.id },
-    async () =>
-      await scrollAndroid(ANDROID_EMULATOR, 'down', {
-        pixels: 1800,
-        durationMs: nearMaxDurationMs,
-      }),
-  );
-
-  assert.equal(result.durationMs, nearMaxDurationMs);
-  const [touch] = touchCalls;
-  // Only 50ms of headroom below the ceiling: the tail shrinks to 3 whole 16ms steps (48ms)
-  // rather than pushing the plan past GESTURE_DURATION_MAX_MS.
-  assert.equal(touch!.durationMs, nearMaxDurationMs + 48);
-  assert.ok(touch!.durationMs <= GESTURE_DURATION_MAX_MS);
 });
 
 test('scrollAndroid jitters the axis orthogonal to a horizontal scroll, holding the scroll axis fixed', async () => {
