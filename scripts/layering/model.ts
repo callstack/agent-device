@@ -1,14 +1,17 @@
 import path from 'node:path';
 import { PLATFORMS } from '@agent-device/kernel/device';
 import { parseSync } from 'oxc-parser';
-import { visitAst } from './layering-ast.ts';
+import { destructuredDynamicImportBindings, visitAst } from './layering-ast.ts';
 
 export type ImportEdge = {
   spec: string;
   dynamic: boolean;
   typeOnly: boolean;
   line: number;
-  /** Named symbols imported from the target; empty for side-effect, namespace, and dynamic imports. */
+  /**
+   * Named symbols imported from the target; empty for side-effect and namespace imports, and for
+   * dynamic imports that do not destructure named bindings.
+   */
   symbols: readonly string[];
 };
 
@@ -151,16 +154,18 @@ function literalSpecifier(node: unknown): string | undefined {
 function scanDynamicImports(source: string): ImportEdge[] {
   const edges: ImportEdge[] = [];
   const parsed = parseSync('layering-imports.ts', source);
+  const destructured = destructuredDynamicImportBindings(parsed.program);
   visitAst(parsed.program, (node) => {
     if (node.type !== 'ImportExpression') return;
     const spec = literalSpecifier(node.source);
     if (spec === undefined) return;
+    const start = node.start as number | undefined;
     edges.push({
       spec,
       dynamic: true,
       typeOnly: false,
-      line: sourceLine(source, node.start as number | undefined),
-      symbols: [],
+      line: sourceLine(source, start),
+      symbols: typeof start === 'number' ? [...(destructured.get(start) ?? [])] : [],
     });
   });
   return edges;

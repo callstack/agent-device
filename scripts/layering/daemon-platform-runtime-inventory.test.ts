@@ -80,14 +80,47 @@ test('R74 rejects new symbols on a classified edge', () => {
   assert.match(found[0]!.message, /ensureLocalPlatformDeviceReady, extraReadiness/);
 });
 
-test('R74 matches a dynamic import by target with empty symbols', () => {
+test('R74 matches a destructured dynamic import by target with the recorded bindings', () => {
+  const sources = {
+    'src/platform-runtime-operation-host.ts':
+      'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n',
+    'src/daemon/server/daemon-runtime.ts':
+      "const { recoverLegacyAppLogMarkersAfterDaemonLock } = await import('../../platform-runtime-operation-host.ts');\n" +
+      'void recoverLegacyAppLogMarkersAfterDaemonLock;\n',
+  };
+  assert.deepEqual(edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts'), []);
+});
+
+test('R74 rejects an expanded destructured dynamic import on a classified edge', () => {
+  const sources = {
+    'src/platform-runtime-operation-host.ts':
+      'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n' +
+      'export async function extraLegacyMarkerSweep() { return {}; }\n',
+    'src/daemon/server/daemon-runtime.ts':
+      "const { recoverLegacyAppLogMarkersAfterDaemonLock, extraLegacyMarkerSweep } = await import('../../platform-runtime-operation-host.ts');\n" +
+      'void [recoverLegacyAppLogMarkersAfterDaemonLock, extraLegacyMarkerSweep];\n',
+  };
+  const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
+  assert.match(found[0]!.message, /classified symbols drifted/);
+  assert.match(
+    found[0]!.message,
+    /extraLegacyMarkerSweep, recoverLegacyAppLogMarkersAfterDaemonLock/,
+  );
+});
+
+test('R74 rejects a namespace-form dynamic import that hides the recorded bindings', () => {
   const sources = {
     'src/platform-runtime-operation-host.ts':
       'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n',
     'src/daemon/server/daemon-runtime.ts':
       "const mod = await import('../../platform-runtime-operation-host.ts');\nvoid mod;\n",
   };
-  assert.deepEqual(edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts'), []);
+  const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
+  assert.match(found[0]!.message, /classified symbols drifted/);
 });
 
 test('R74 treats the import and re-export of one classified pair as one entry', () => {

@@ -19,7 +19,11 @@ export type DaemonPlatformRuntimeClassification =
 export type DaemonPlatformRuntimeEdge = Readonly<{
   file: string;
   target: string;
-  /** Exact named symbols across every edge of the pair; empty for dynamic/side-effect imports. */
+  /**
+   * Exact named symbols across every edge of the pair; empty for side-effect imports and dynamic
+   * imports that do not destructure named bindings (a destructured dynamic import records its
+   * bindings, so widening the destructure is a drift, not a silent expansion).
+   */
   symbols: readonly string[];
   classification: DaemonPlatformRuntimeClassification;
   rationale: string;
@@ -95,7 +99,7 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
   {
     file: 'src/daemon/server/daemon-runtime.ts',
     target: 'src/platform-runtime-operation-host.ts',
-    symbols: [],
+    symbols: ['recoverLegacyAppLogMarkersAfterDaemonLock'],
     classification: 'leaked-platform-mechanics',
     rationale:
       'daemon startup names app-log legacy marker recovery, a platform process mechanic; ' +

@@ -68,6 +68,25 @@ test('parseImports resolves constant-template dynamic imports', () => {
   ]);
 });
 
+test('parseImports captures destructured named bindings of dynamic imports, keyed by export name', () => {
+  const edges = parseImports(
+    [
+      "const { a, 'b': c } = await import('./dyn.ts');",
+      "const mod = await import('./dyn.ts');",
+      "const wrapped = (await import('./dyn.ts')) as Mod;",
+    ].join('\n'),
+  );
+
+  assert.deepEqual(
+    edges.map(({ spec, symbols }) => ({ spec, symbols })),
+    [
+      { spec: './dyn.ts', symbols: ['a', 'b'] },
+      { spec: './dyn.ts', symbols: [] },
+      { spec: './dyn.ts', symbols: [] },
+    ],
+  );
+});
+
 test('parseImports retains named source symbols without changing edge-kind detection', () => {
   const edges = parseImports(
     [
