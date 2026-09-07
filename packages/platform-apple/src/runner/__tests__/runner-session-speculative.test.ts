@@ -178,3 +178,50 @@ test('releasing a speculative session stops it; a session a command asked for is
   assert.notEqual(getRunnerSessionSnapshot(demanded.id), null);
   assert.equal(await releaseSpeculativeIosRunnerSession('no-such-device'), false);
 });
+
+test('a release that arrives while the speculative start is still in flight stops it once it completes', async () => {
+  // The reviewer's race: a `possible` open's prewarm is blocked before the session is registered,
+  // a `none` open releases, and the runner must not survive as a retained speculative session.
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-deferred-release-sim' };
+  let openGate!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    openGate = resolve;
+  });
+  mockAcquireXcodebuildSimulatorSetRedirect.mockImplementation(async () => {
+    await gate;
+    return { release: mockRedirectRelease };
+  });
+
+  const starting = ensureRunnerSession(device, { speculative: true });
+  const releasing = releaseSpeculativeIosRunnerSession(device.id);
+  const settledEarly = await Promise.race([
+    releasing.then(() => 'settled'),
+    new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), 50)),
+  ]);
+  assert.equal(settledEarly, 'pending', 'the release waits for the start it cannot yet see');
+  assert.equal(getRunnerSessionSnapshot(device.id), null);
+
+  openGate();
+  await starting;
+  assert.equal(await releasing, true);
+  assert.equal(getRunnerSessionSnapshot(device.id), null, 'the completed start was stopped');
+});
+
+test('a release that waits out a demanded start leaves that runner alone', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-deferred-keep-sim' };
+  let openGate!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    openGate = resolve;
+  });
+  mockAcquireXcodebuildSimulatorSetRedirect.mockImplementation(async () => {
+    await gate;
+    return { release: mockRedirectRelease };
+  });
+
+  const starting = ensureRunnerSession(device, {});
+  const releasing = releaseSpeculativeIosRunnerSession(device.id);
+  openGate();
+  await starting;
+  assert.equal(await releasing, false);
+  assert.notEqual(getRunnerSessionSnapshot(device.id), null);
+});

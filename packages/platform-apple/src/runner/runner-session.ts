@@ -536,15 +536,19 @@ export function markRunnerSessionServed(session: RunnerSession, command: RunnerC
  * the session's working runner and stays under the idle-stop policy.
  */
 export async function releaseSpeculativeIosRunnerSession(deviceId: string): Promise<boolean> {
-  const session = runnerSessions.get(deviceId);
-  if (!session?.speculative) return false;
-  emitDiagnostic({
-    level: 'debug',
-    phase: 'ios_runner_speculative_released',
-    data: { deviceId, sessionId: session.sessionId, ready: session.ready },
+  // Under the session lock: a prewarm still starting holds it and registers its session only
+  // when the start completes, so the release queues behind that start instead of missing it.
+  return await withRunnerSessionLock(deviceId, async () => {
+    const session = runnerSessions.get(deviceId);
+    if (!session?.speculative) return false;
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'ios_runner_speculative_released',
+      data: { deviceId, sessionId: session.sessionId, ready: session.ready },
+    });
+    await stopIosRunnerSession(deviceId);
+    return true;
   });
-  await stopIosRunnerSession(deviceId);
-  return true;
 }
 
 export async function stopIosRunnerSession(deviceId: string): Promise<void> {
