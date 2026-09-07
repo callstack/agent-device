@@ -59,7 +59,7 @@ test('measureRatchets reports all ratchets from one tree', () => {
   });
   const withAuthority = tree({
     'src/daemon/handlers/fixture.ts':
-      "import type { SessionState } from '../types.ts';\n" +
+      "import type { SessionState } from '../session-state.ts';\n" +
       "import { SessionStore } from '../session-store.ts';",
     'src/daemon/session-store.ts': 'export class SessionStore {}',
   });

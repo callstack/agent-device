@@ -44,7 +44,7 @@ export function measureRatchets(
     typeInversions: typeInversionCounts(edges),
     largestTypeCycle: largestTypeCycleMembers(edges),
     sessionState: sessionStateWritePressure(sources),
-    sessionAuthority: measureSessionAuthorityOverlay(edges),
+    sessionAuthority: measureSessionAuthorityOverlay(sources, edges),
   };
 }
 
