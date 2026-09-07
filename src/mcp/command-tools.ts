@@ -12,7 +12,7 @@ import {
   type CommandName,
 } from '../commands/command-metadata.ts';
 import { mcpBody } from '../commands/command-text.ts';
-import { resolveStructuredBatchCommandName } from '../core/batch-policy.ts';
+import { resolveStructuredBatchCommandName } from '@agent-device/command-registry/batch-policy';
 import {
   resolveCommandRecordsSessionAction,
   resolveCommandTimeoutPolicy,

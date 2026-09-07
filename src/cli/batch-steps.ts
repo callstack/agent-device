@@ -9,7 +9,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   BATCH_AVAILABLE_COMMANDS_HINT,
   readStructuredBatchCommandName,
-} from '../core/batch-policy.ts';
+} from '@agent-device/command-registry/batch-policy';
 import { assertAllowedKeys } from '../commands/input-readers.ts';
 
 /**

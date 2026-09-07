@@ -231,6 +231,9 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors

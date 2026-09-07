@@ -1,4 +1,4 @@
-import { runBatch } from '../../core/batch.ts';
+import { runBatch } from '@agent-device/command-registry/batch';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 
 export async function runBatchCommands(
