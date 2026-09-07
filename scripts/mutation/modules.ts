@@ -61,8 +61,14 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
   {
     id: 'scroll-edge-state',
     label: 'Scroll edge-state detection',
-    mutate: ['src/snapshot/scroll-edge-state.ts', 'src/snapshot/scroll-edge-state/**/*.ts'],
-    owns: ['src/snapshot/scroll-edge-state.ts', 'src/snapshot/scroll-edge-state/'],
+    mutate: [
+      'packages/capture-kit/src/snapshot/scroll-edge-state.ts',
+      'packages/capture-kit/src/snapshot/scroll-edge-state/**/*.ts',
+    ],
+    owns: [
+      'packages/capture-kit/src/snapshot/scroll-edge-state.ts',
+      'packages/capture-kit/src/snapshot/scroll-edge-state/',
+    ],
   },
   {
     id: 'selectors',

@@ -456,7 +456,7 @@
         "count": 2
       }
     },
-    "src/snapshot/snapshot-lines.ts": {
+    "packages/capture-kit/src/snapshot/snapshot-lines.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -471,12 +471,12 @@
         "count": 1
       }
     },
-    "src/snapshot/scroll-edge-state.ts": {
+    "packages/capture-kit/src/snapshot/scroll-edge-state.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/snapshot/snapshot-presentation/text-surface.ts": {
+    "packages/capture-kit/src/snapshot/snapshot-presentation/text-surface.ts": {
       "crap_high": {
         "count": 1
       }
@@ -550,7 +550,7 @@
     "packages/kernel/src/success-text.ts:high impact",
     "src/cli.ts:complexity",
     "src/commands/interaction/output.ts:high impact",
-    "src/snapshot/snapshot-lines.ts:high impact",
+    "packages/capture-kit/src/snapshot/snapshot-lines.ts:high impact",
     "packages/kernel/src/rect-center.ts:high impact",
     "packages/platform-apple/src/core/app-launch.ts:complexity",
     "packages/kernel/src/record.ts:high impact",
@@ -562,7 +562,7 @@
     "src/client/screenshot-result.ts:high impact",
     "packages/platform-web/src/json-utils.ts:high impact",
     "packages/platform-android/src/settings.ts:complexity",
-    "src/snapshot/snapshot-presentation/text-surface.ts:high impact",
+    "packages/capture-kit/src/snapshot/snapshot-presentation/text-surface.ts:high impact",
     "src/daemon/handlers/session-test-sharding.ts:high impact",
     "src/daemon/replay/internal/native-command.ts:complexity",
     "packages/platform-apple/src/core/debug-symbols/utils.ts:high impact",

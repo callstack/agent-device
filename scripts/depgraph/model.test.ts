@@ -46,9 +46,9 @@ function authorityFixture(): Map<string, string> {
       "import { SessionStore } from './session-store.ts';",
     ].join('\n'),
     'src/daemon/type-consumer.ts': "import type { SessionStore } from './session-store.ts';\n",
-    'src/snapshot/policy-consumer.ts': [
-      "import type { SessionState } from '../daemon/session-state.ts';",
-      "import type { SessionRef } from '../daemon/session-state.ts';",
+    'packages/capture-kit/src/snapshot/policy-consumer.ts': [
+      "import type { SessionState } from '../../../../src/daemon/session-state.ts';",
+      "import type { SessionRef } from '../../../../src/daemon/session-state.ts';",
       "import './ordinary-target.ts';",
     ].join('\n'),
     'src/daemon/ordinary-consumer.ts': [
@@ -62,7 +62,7 @@ function authorityFixture(): Map<string, string> {
     'src/daemon/session-script-publication-capability.ts':
       'export function isSessionRecording() {}\n',
     'src/daemon/session-state-store.ts': 'export const SessionState = 1;\n',
-    'src/snapshot/ordinary-target.ts': 'export const ordinary = 1;\n',
+    'packages/capture-kit/src/snapshot/ordinary-target.ts': 'export const ordinary = 1;\n',
     'packages/contracts/src/facades/client.ts': 'export type ClientShape = string;\n',
     'packages/contracts/src/facades/capture.ts': 'export type CaptureShape = string;\n',
     'packages/contracts/src/facades/replay.ts': 'export type ReplayShape = string;\n',
@@ -108,7 +108,11 @@ test('authority overlay uses declared roots and symbols, keeps kind separate, an
     labels: ['live-state-authority'],
   });
   assert.deepEqual(
-    graphEdge(graph, 'src/snapshot/policy-consumer.ts', 'src/snapshot/ordinary-target.ts'),
+    graphEdge(
+      graph,
+      'packages/capture-kit/src/snapshot/policy-consumer.ts',
+      'packages/capture-kit/src/snapshot/ordinary-target.ts',
+    ),
     { kind: 'value', labels: ['executable-policy'] },
   );
   assert.deepEqual(
@@ -122,12 +126,16 @@ test('authority overlay uses declared roots and symbols, keeps kind separate, an
 
   const stateEdges = resolveImportEdges(files, authorityWorkspaceTargets()).filter(
     (edge) =>
-      edge.file === 'src/snapshot/policy-consumer.ts' &&
+      edge.file === 'packages/capture-kit/src/snapshot/policy-consumer.ts' &&
       edge.target === 'src/daemon/session-state.ts',
   );
   assert.equal(stateEdges.length, 2, 'the fixture must exercise raw same-pair imports');
   assert.deepEqual(
-    graphEdge(graph, 'src/snapshot/policy-consumer.ts', 'src/daemon/session-state.ts'),
+    graphEdge(
+      graph,
+      'packages/capture-kit/src/snapshot/policy-consumer.ts',
+      'src/daemon/session-state.ts',
+    ),
     {
       kind: 'type',
       labels: ['live-state-shape', 'executable-policy'],
