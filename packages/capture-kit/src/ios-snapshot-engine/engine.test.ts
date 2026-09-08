@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type {
   IosSnapshotAcquisition,
+  IosSnapshotEngine,
   IosSnapshotInput,
   IosSnapshotRequest,
   IosSnapshotValidationFacts,
@@ -13,7 +14,6 @@ import {
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { toIosSnapshotEngineErrorDetails } from './types.ts';
 import {
-  createIosSnapshotEngine,
   IosSnapshotEngineError,
   presentIosInteractiveSnapshot,
   presentIosSnapshot,
@@ -340,15 +340,26 @@ test('interactive compaction stays available through the engine boundary', () =>
   );
 });
 
-test('the configured engine keeps its fold policy and exposes the contract operations', () => {
-  const engine = createIosSnapshotEngine({ foldPolicy: 'plain-viewport' });
+/**
+ * `IosSnapshotEngine` has one operation because presentation happens once (#2188 invariant 2).
+ * Pinning `publishIosSnapshot` to it keeps the contract a description of the export production
+ * actually calls, rather than a shape only a factory ever satisfied (#2199).
+ */
+test('publishing satisfies the whole engine contract under an explicit fold policy', () => {
+  const engine: IosSnapshotEngine = {
+    publish: (input, request) =>
+      publishIosSnapshot(input, request, { foldPolicy: 'plain-viewport' }),
+  };
   const request = createIosSnapshotRequest();
   const presented = presentIosSnapshot(acquiredInput(request, nestedNodes()), request, {
     foldPolicy: 'plain-viewport',
   });
 
-  assert.equal(typeof engine.plan, 'function');
-  assert.equal(typeof engine.publish, 'function');
+  assert.deepEqual(Object.keys(engine), ['publish']);
+  assert.equal(
+    engine.publish(acquiredInput(request, nestedNodes()), request).payload.nodes.length,
+    presented.nodes.length,
+  );
   assert.equal(presented.stats.sourceNodeCount, nestedNodes().length);
 });
 

@@ -65,7 +65,7 @@ test('R74 rejects the assembly reading the producer capability table', () => {
   const result = violations(
     appended(
       assemblyFile,
-      `\nimport { IOS_SNAPSHOT_PRODUCER_CAPABILITIES } from '@agent-device/capture-kit/ios-snapshot-acquisition';\nvoid IOS_SNAPSHOT_PRODUCER_CAPABILITIES;\n`,
+      `\nimport { iosSnapshotTruncationEvidence } from '@agent-device/capture-kit/ios-snapshot-acquisition';\nvoid iosSnapshotTruncationEvidence;\n`,
     ),
   );
 

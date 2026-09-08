@@ -1,4 +1,4 @@
-export { createIosSnapshotEngine, presentIosSnapshot, publishIosSnapshot } from './engine.ts';
+export { presentIosSnapshot, publishIosSnapshot } from './engine.ts';
 export { presentIosRunnerSnapshot } from './runner-presentation.ts';
 export {
   buildIosInteractiveSnapshotPresentation,

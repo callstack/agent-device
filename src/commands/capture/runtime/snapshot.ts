@@ -26,7 +26,7 @@ import { buildSnapshotVisibility } from '../../../snapshot/snapshot-visibility.t
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../../core/android-system-surface-disclosure.ts';
 import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';
 import { now } from '../../runtime-common.ts';
-import { IOS_SNAPSHOT_PRODUCER_CAPABILITIES } from '@agent-device/capture-kit/ios-snapshot-acquisition';
+import { iosSnapshotTruncationEvidence } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type {
   DiffSnapshotCommandOptions,
   RuntimeCommand,
@@ -229,8 +229,7 @@ function snapshotAppFields(capture: SnapshotCapture): {
 function snapshotTruncationForResult(snapshot: SnapshotState): boolean | undefined {
   if (snapshot.truncated !== undefined) return snapshot.truncated;
   if (snapshot.backend !== 'xctest' || snapshot.producer === undefined) return false;
-  const capability = IOS_SNAPSHOT_PRODUCER_CAPABILITIES[snapshot.producer];
-  return capability.truncationEvidence === 'unavailable' ? undefined : false;
+  return iosSnapshotTruncationEvidence(snapshot.producer) === 'unavailable' ? undefined : false;
 }
 
 function buildSnapshotWarnings(params: {

@@ -5,6 +5,7 @@ import type {
   BackendSnapshotOptions,
   BackendSnapshotResult,
 } from '../../../backend.ts';
+import type { IosSnapshotProducer } from '@agent-device/contracts/ios-snapshot';
 import { createLocalArtifactAdapter } from '../../../io.ts';
 import {
   createAgentDevice,
@@ -55,6 +56,30 @@ test('runtime snapshot preserves unknown hierarchy completeness for engine-owned
   const result = await device.capture.snapshot({ session: 'default' });
 
   assert.equal(result.truncated, undefined);
+});
+
+/**
+ * An absent `truncated` is only "not truncated" when the producer would have noticed (#2188
+ * invariant 5). #2199 moved that answer out of the producer capability table into a truncation
+ * table of its own, so this pins the whole producer axis rather than the one Appium case above.
+ */
+test('runtime snapshot upgrades an absent truncation flag only for producers that observe it', async () => {
+  const expected = {
+    'apple-runner': false,
+    'simulator-ax-bridge': false,
+    'appium-source': undefined,
+    'limrun-ios-tree': undefined,
+  } as const satisfies Record<IosSnapshotProducer, boolean | undefined>;
+
+  for (const producer of Object.keys(expected) as IosSnapshotProducer[]) {
+    const device = createSnapshotOnlyDevice({
+      snapshot: { nodes: [], backend: 'xctest', producer, createdAt: 1 },
+    });
+
+    const result = await device.capture.snapshot({ session: 'default' });
+
+    assert.equal(result.truncated, expected[producer], producer);
+  }
 });
 
 test('runtime snapshot uses the Appium sparse-tree disclosure for Appium acquisition', async () => {
