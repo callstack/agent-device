@@ -4,7 +4,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
-import { DEFAULT_PROXY_LEASE_TTL_MS } from '../../../src/core/lease-scope.ts';
+import { DEFAULT_PROXY_LEASE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import { sendToDaemon } from '../../../src/daemon-client/daemon-client.ts';
 import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
 import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
