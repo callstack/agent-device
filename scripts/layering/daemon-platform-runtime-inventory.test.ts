@@ -153,7 +153,26 @@ test('R74 rejects a namespace-form dynamic import that hides the recorded bindin
   const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
   assert.equal(found.length, 1);
   assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
-  assert.match(found[0]!.message, /classified symbols drifted/);
+  assert.match(found[0]!.message, /open-ended dynamic import/);
+});
+
+test('R74 rejects a namespace import alongside the recorded named binding on the same pair', () => {
+  const sources = {
+    'src/platform-runtime-operation-host.ts':
+      'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n',
+    'src/daemon/server/daemon-runtime.ts':
+      "const { recoverLegacyAppLogMarkersAfterDaemonLock } = await import('../../platform-runtime-operation-host.ts');\n" +
+      "const operationHost = await import('../../platform-runtime-operation-host.ts');\n" +
+      'void [recoverLegacyAppLogMarkersAfterDaemonLock, operationHost];\n',
+  };
+  const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
+  assert.match(found[0]!.message, /open-ended dynamic import/);
+  assert.match(
+    found[0]!.message,
+    /src\/daemon\/server\/daemon-runtime\.ts -> src\/platform-runtime-operation-host\.ts/,
+  );
 });
 
 test('R74 treats the import and re-export of one classified pair as one entry', () => {

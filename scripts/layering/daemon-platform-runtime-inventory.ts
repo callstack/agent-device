@@ -20,11 +20,11 @@ export type DaemonPlatformRuntimeEdge = Readonly<{
   file: string;
   target: string;
   /**
-   * Exact named symbols across every edge of the pair; empty for side-effect imports and dynamic
-   * imports that do not destructure named bindings (a destructured dynamic import records its
-   * bindings, so widening the destructure is a drift, not a silent expansion). A rest or computed
-   * destructure binding cannot be recorded here: it exposes exports beyond this list and R74
-   * rejects the edge.
+   * Exact named symbols across every edge of the pair; empty for static side-effect imports (a
+   * destructured dynamic import records its bindings, so widening the destructure is a drift, not
+   * a silent expansion). Unnameable dynamic-import forms cannot be recorded here, and R74 rejects
+   * the edge: a rest or computed destructure binding, or a namespace/side-effect import() call —
+   * both expose exports beyond this list.
    */
   symbols: readonly string[];
   classification: DaemonPlatformRuntimeClassification;
@@ -205,9 +205,9 @@ function sorted(symbols: readonly string[]): string[] {
 /**
  * Catches: unclassified daemon-to-root platform-runtime coupling regrowing — a new edge (or a
  *   new symbol on an existing edge) that the #2278 audit never classified, the mirror failure, a
- *   classified edge that no longer exists and would silently admit its return, and a
- *   dynamic-import destructure holding a rest or computed binding, which exposes every export
- *   the inventory cannot name.
+ *   classified edge that no longer exists and would silently admit its return, and dynamic
+ *   imports whose binding set the inventory cannot name: a rest or computed destructure binding,
+ *   or a namespace/side-effect import() call exposed alongside (or instead of) the named ones.
  * Evidence: #2278 measured 14 production edges in 9 daemon files at origin/main 6e22e266d7;
  *   this table is that measurement, classified per ADR 0022.
  * Cost: attributed to the R74 rule registration in check.ts; not a standalone CI job.
@@ -218,7 +218,10 @@ function sorted(symbols: readonly string[]): string[] {
 export function checkDaemonPlatformRuntimeInventory(
   edges: readonly ResolvedImportEdge[],
 ): LayeringViolation[] {
-  const actual = new Map<string, { line: number; symbols: Set<string>; residue: boolean }>();
+  const actual = new Map<
+    string,
+    { line: number; symbols: Set<string>; residue: boolean; openEnded: boolean }
+  >();
   for (const edge of edges) {
     if (!edge.file.startsWith('src/daemon/')) continue;
     if (!isProductionSourceFile(edge.file)) continue;
@@ -228,9 +231,15 @@ export function checkDaemonPlatformRuntimeInventory(
       line: edge.line,
       symbols: new Set<string>(),
       residue: false,
+      openEnded: false,
     };
     for (const symbol of edge.symbols) entry.symbols.add(symbol);
     entry.residue = entry.residue || edge.bindingResidue;
+    // Validated per edge before the per-pair union: a dynamic import that names no binding
+    // exposes the whole module namespace, which sibling named edges of the same pair would
+    // otherwise mask inside the union.
+    entry.openEnded =
+      entry.openEnded || (edge.dynamic && !edge.bindingResidue && edge.symbols.length === 0);
     actual.set(key, entry);
   }
 
@@ -263,6 +272,19 @@ export function checkDaemonPlatformRuntimeInventory(
           `unnameable dynamic-import binding for ${key}: a rest or computed destructure exposes ` +
           `bindings the inventory cannot name. Destructure every binding explicitly and record it ` +
           `in DAEMON_PLATFORM_RUNTIME_EDGES (${DAEMON_PLATFORM_RUNTIME_RULE}), or remove the coupling.`,
+      });
+      continue;
+    }
+    if (entry.openEnded) {
+      violations.push({
+        rule: DAEMON_PLATFORM_RUNTIME_RULE,
+        file: key.split(' -> ')[0]!,
+        line: entry.line,
+        message:
+          `open-ended dynamic import for ${key}: a namespace or side-effect import() exposes the ` +
+          `whole module, which the inventory cannot name symbol by symbol. Destructure every ` +
+          `binding explicitly and record it in DAEMON_PLATFORM_RUNTIME_EDGES ` +
+          `(${DAEMON_PLATFORM_RUNTIME_RULE}), or remove the coupling.`,
       });
       continue;
     }
