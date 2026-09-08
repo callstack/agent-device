@@ -160,7 +160,7 @@ test('neutral ownership zones reject value imports into higher layers', () => {
     new Map([
       ['src/contracts/result.ts', "import '../core/result.ts';"],
       ['src/core/result.ts', 'export const result = true;'],
-      ['src/request/cancel.ts', "import '../commands/cancel.ts';"],
+      ['packages/device-selection/src/selection.ts', "import '@agent-device/commands/cancel';"],
       ['src/commands/cancel.ts', 'export const cancel = true;'],
       ['packages/selectors/src/internal/parse.ts', "import '../../../../src/client/client.ts';"],
       ['src/client/client.ts', 'export const client = true;'],
@@ -172,7 +172,9 @@ test('neutral ownership zones reject value imports into higher layers', () => {
   assert.deepEqual(collectBackEdges(edges), {
     'cli-schema -> cli': ['src/cli-schema/schema.ts -> src/cli/parser.ts'],
     'contracts -> core': ['src/contracts/result.ts -> src/core/result.ts'],
-    'request -> commands': ['src/request/cancel.ts -> src/commands/cancel.ts'],
+    'device-selection -> commands': [
+      'packages/device-selection/src/selection.ts -> src/commands/cancel.ts',
+    ],
     'selectors -> client': ['packages/selectors/src/internal/parse.ts -> src/client/client.ts'],
   });
 });

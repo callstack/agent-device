@@ -23,7 +23,7 @@ test('capture-kit rejects request-scoped async_hooks dispatch', () => {
   );
 });
 
-test('capture-kit policy ignores types, prose, tests, and root-runtime ALS', () => {
+test('capture-kit policy ignores types, prose, tests, and non-capture-kit ALS', () => {
   assert.deepEqual(
     messages(
       'packages/capture-kit/src/app-log-live-handle.ts',
@@ -44,7 +44,7 @@ test('capture-kit policy ignores types, prose, tests, and root-runtime ALS', () 
   );
   assert.deepEqual(
     messages(
-      'src/request/device-inventory-context.ts',
+      'packages/device-selection/src/device-inventory-context.ts',
       "import { AsyncLocalStorage } from 'node:async_hooks';\nconst store = new AsyncLocalStorage();\n",
     ),
     [],
