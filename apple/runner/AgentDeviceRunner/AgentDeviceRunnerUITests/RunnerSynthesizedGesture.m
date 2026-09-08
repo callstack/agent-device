@@ -1,4 +1,5 @@
 #import "RunnerSynthesizedGesture.h"
+#import "RunnerIssue84PreEventReadiness.h"
 #import "RunnerXCTestEventBridge.h"
 
 #import <CoreGraphics/CoreGraphics.h>
@@ -317,6 +318,9 @@ static NSString * _Nullable RunnerCreateEventRecord(
 ) {
   NSString *missing = RunnerResolveGestureEventBridge(application, bridge);
   if (missing != nil) return missing;
+
+  NSString *readinessError = RunnerIssue84WaitForPreEventReadiness(application);
+  if (readinessError != nil) return readinessError;
 
   NSInteger interfaceOrientation =
     ((RunnerMsgSendInteger)objc_msgSend)(application, bridge->interfaceOrientationSelector);
