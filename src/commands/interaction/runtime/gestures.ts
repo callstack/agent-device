@@ -128,10 +128,7 @@ export type { HoverCommandResult };
 export type GestureDirection = ScrollDirection;
 // The input vocabulary lives in contracts/scroll-gesture.ts beside the other scroll vocabularies,
 // so the public API can declare `ScrollOptions` without depending on this command runtime.
-export {
-  SCROLL_INPUT_DIRECTIONS,
-  type ScrollInputDirection,
-} from '@agent-device/contracts/scroll-gesture';
+export { type ScrollInputDirection } from '@agent-device/contracts/scroll-gesture';
 
 export type ScrollTarget =
   | InteractionTarget
