@@ -19,67 +19,85 @@ conventions, not localization.
 ## Setting up
 
 ```sh
-# 1. Build ripwire (C++23, no runtime dependencies)
-git clone https://github.com/redhat-et/ripwire && cd ripwire
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build
+# 1. Build ripwire (C++23, no runtime dependencies) somewhere OUTSIDE this repository.
+git clone https://github.com/redhat-et/ripwire /tmp/ripwire
+cmake -S /tmp/ripwire -B /tmp/ripwire/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build /tmp/ripwire/build          # the binary lands at /tmp/ripwire/build/ripwire
 
-# 2. Cut one leak-free clone per task, pinned at the parent commit.
-#    A shallow fetch of the parent SHA is what keeps the fix commit unreachable — a plain
-#    worktree shares .git with the main checkout and would hand the agent the answer.
-for pair in T1:1f9d940 T2:e0f8c55 T3:7bcbf13 T4:a9283fa T5:ff59309 T6:6768a04; do
-  id=${pair%%:*}; sha=${pair##*:}
-  mkdir -p /tmp/rw/$id && git -C /tmp/rw/$id init -q
-  git -C /tmp/rw/$id remote add origin "$PWD"
-  git -C /tmp/rw/$id fetch -q --no-tags --depth=20 origin "$sha"
-  git -C /tmp/rw/$id checkout -q --detach "$sha"
-done
+# 2. Cut one leak-free clone per task, pinned at its commit's parent. Run it from an
+#    agent-device checkout — `origin` for the task clones is THIS repository.
+scripts/ripwire-eval/setup-clones.sh /tmp/rw
 ```
+
+`setup-clones.sh` shallow-fetches each parent SHA into its own repository and then *proves* the
+fix commit is unreachable from it, failing rather than handing an agent the answer. A `git
+worktree` would not do: it shares `.git` with the main checkout, so the commit under test would be
+one `git log --all` away. The fetch names the full SHA because git refuses to fetch an abbreviated
+one, which is why `tasks.json` carries full SHAs.
 
 ## Running
 
-Deterministic halves — no model in the loop, so they are reproducible run to run:
+### The deterministic halves — reproducible run to run, no model in the loop
 
 ```sh
-node scripts/ripwire-eval/retrieval-bench.mjs --ripwire=<bin> --worktrees=/tmp/rw
-node scripts/ripwire-eval/affected-bench.mjs  --ripwire=<bin> --worktrees=/tmp/rw
+node scripts/ripwire-eval/retrieval-bench.mjs --ripwire=/tmp/ripwire/build/ripwire --worktrees=/tmp/rw
+node scripts/ripwire-eval/affected-bench.mjs  --ripwire=/tmp/ripwire/build/ripwire --worktrees=/tmp/rw
 ```
 
 `retrieval-bench` asks what a single ripwire call surfaces from the raw task text and what it
-costs. `affected-bench` feeds it the change's non-test files and checks whether the change's own
-test files come back.
+costs. Its recall is over the change's **existing** files only: a retrieval verb ranks what the
+tree contains, so a file the commit created is not a hit it could have scored.
 
-Agent half — two arms over the same six tasks, identical prompts except the tooling paragraph:
+`affected-bench` feeds it the change's non-test sources and checks whether the change's own test
+files come back. It scores **test files** (`*.test.ts`) only. Files that merely live in a test
+location — `__tests__/test-utils/fake-adb.ts`, `__tests__/runtime-port-fixtures.ts`, a
+provider-scenario world — are helpers: neither a source the change starts from nor a harness
+`--affected` could name. They are listed per task under `helpers_not_scored` and counted in
+neither column.
 
-1. Generate a brief per (task, arm) from `tasks.json` — the task prose, the pinned clone path,
-   the rules, and the JSON deliverable contract.
-2. Run each brief as a subagent. The **baseline** arm gets Read/Grep/Glob/Bash; the **ripwire**
-   arm gets the same plus the ripwire binary and its verb table.
-3. Save each answer as one JSON file per run: `{task, arm, rep, files, new_files, files_opened,
-   subagent_tokens, tool_uses, duration_ms, notes}`.
-4. Score them:
+Both write their result JSON next to this README. Run `pnpm format` afterwards; the scripts emit
+plain `JSON.stringify` output and oxfmt owns the checked-in shape.
+
+### The agent A/B — an archived observation, not a scripted experiment
+
+**Read the A/B numbers as a recorded result, not as something these commands will reproduce.**
+The two arms were driven by subagents inside a Claude Code session, not by a runner in this
+repository, so re-running them depends on an agent runtime this harness does not own and on a
+model that is not pinned here. What *is* preserved is everything that made the comparison fair,
+and it is enough to repeat the design or to audit the one that ran:
+
+- `arms/baseline.md` and `arms/ripwire.md` — the two tooling paragraphs, verbatim. They are the
+  **only** difference between the arms.
+- `make-briefs.mjs` — renders the 12 briefs from those two files and `tasks.json`. It reproduces
+  the briefs the recorded runs were given byte-for-byte:
+
+  ```sh
+  node scripts/ripwire-eval/make-briefs.mjs \
+    --worktrees=/tmp/rw --out=/tmp/rw-briefs --ripwire=/tmp/ripwire/build/ripwire
+  ```
+
+- `runs/` — the 24 answers as returned, one file per (task, arm, replicate), each carrying the
+  runtime's own `subagent_tokens`, `tool_uses` and `duration_ms` rather than a self-estimate.
+
+To repeat it: generate the briefs, run each as one agent with the tools its arm names, save each
+answer as `runs/<task>-<arm>-r<n>.json` in the shape those files already use, and score:
 
 ```sh
-node scripts/ripwire-eval/score.mjs --runs=<dir-of-run-json> --worktrees=/tmp/rw
+node scripts/ripwire-eval/score.mjs --runs=scripts/ripwire-eval/runs --worktrees=/tmp/rw
 ```
 
 `--worktrees` is optional; with it, each run also reports the byte size of the files it opened,
 measured from the pinned clone rather than taken from the agent's own account.
 
-`score.mjs` reports per-run and per-arm file-level recall, precision and F1 against ground truth,
-alongside the token, tool-call and wall-clock cost of producing the answer.
-
-## Caveats that travel with these numbers
-
-- Six tasks, two replicates. Enough to size an effect, not to make a small one significant.
-- Both arms run the same model. The result is about tooling, not about model choice.
-- The clones are shallow (20 commits), so ripwire's churn and co-change lenses see a truncated
-  history. That handicaps ripwire relative to a full checkout.
-- ripwire indexes were warm when the agents ran. Cold-index cost is measured and reported
-  separately rather than folded into per-run wall clock.
+Execution configuration behind the recorded runs: 24 runs (6 tasks x 2 arms x 2 replicates), one
+subagent per run with a fresh context, both arms on the same model, ripwire 0.5.0 built from
+`ef6168b18` with its index already warm for each clone.
 
 ## What is checked in here
 
 - `tasks.json` — the six tasks and their ground truth.
+- `arms/` — the two tooling paragraphs that define the A/B; `make-briefs.mjs` renders the briefs.
+- `bench-cli.mjs` — the flag reader, the tasks file and the one timed ripwire invocation.
 - `runs/` — the 24 raw subagent answers, one file per (task, arm, replicate).
 - `agent-results.json`, `retrieval-results.json`, `affected-results.json` — scored output of the
   three benches, regenerated by the commands above. Run `pnpm format` after regenerating; the

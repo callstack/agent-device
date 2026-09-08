@@ -1,0 +1,1 @@
+TOOLING — this arm has the standard agent toolbox only: Read, Grep, Glob, and Bash (`cat`, `rg`, `find`, `ls`). There is no code-intelligence or code-graph tool on this machine. Use them as you normally would.

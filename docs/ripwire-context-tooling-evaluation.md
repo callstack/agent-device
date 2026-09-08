@@ -77,7 +77,10 @@ a 52× reduction on "what do we already know about X".
 ## 1. Retrieval from raw task text (deterministic)
 
 One call per task, fed the task description verbatim, scored on how many ground-truth files it
-names. `for-idents` is the same `--for` verb fed only the identifiers the task text itself puts in
+names. **Recall here is over the change's existing files only** — a retrieval verb ranks what the
+tree contains, so a file the commit created is not a hit it could have scored. The agent A/B in
+§3 scores the whole change set, added files included, so the two denominators differ on purpose
+(the task table above lists the whole set). `for-idents` is the same `--for` verb fed only the identifiers the task text itself puts in
 backticks — a mechanical distillation, included to separate ranking quality from phrasing.
 
 | Verb | Mean recall | Mean bytes | Mean ms |
@@ -106,27 +109,33 @@ route, so when it finds anything it ranks it near the top.
 This repository's rule is that tests mirror source one-to-one, which makes "I changed these
 sources, which tests do I run" a question with a checkable answer. Each task's non-test
 ground-truth files were fed to `--affected`; the score is whether the commit's own test files came
-back. Files the commit *created* are excluded — a selector cannot name a file that does not exist.
+back.
 
-| Task | Expected tests found | Tests selected | Bytes |
-| --- | --- | --- | --- |
-| T1 | 2 / 5 | 65 | 9.0 KB |
-| T2 | 1 / 1 | 185 | 19.6 KB |
-| T3 | 1 / 2 | 7 | 2.8 KB |
-| T4 | 2 / 2 | 25 | 4.5 KB |
-| T5 | 2 / 2 | 18 | 3.7 KB |
-| T6 | 1 / 2 | 2 | 2.1 KB |
-| **Total** | **9 / 14 (64%)** | | |
+Two exclusions keep the denominator honest. Files the commit *created* are out — a selector cannot
+name a file that does not exist. And only **test files** (`*.test.ts`) count: a file that merely
+lives in a test location — `__tests__/test-utils/fake-adb.ts`, `__tests__/runtime-port-fixtures.ts`,
+a provider-scenario world — is a helper, neither a source the change starts from nor a harness
+`--affected` could name. Five such helpers appear across the six changes; each task's are listed
+under `helpers_not_scored`.
 
-Two of the five misses are not test files at all — `fake-adb.ts` and `runtime-port-fixtures.ts`
-are test *utilities*, which `--affected` reports as reached symbols rather than as `<test>` rows.
-The T6 miss is real: `snapshot-route.test.ts` covers the direct caller of the changed module and
-should have been a short hop.
+| Task | Expected tests found | Tests selected | Helpers not scored | Bytes |
+| --- | --- | --- | --- | --- |
+| T1 | 2 / 4 | 65 | 1 | 9.0 KB |
+| T2 | 1 / 1 | 185 | 0 | 19.6 KB |
+| T3 | 1 / 1 | 5 | 3 | 2.4 KB |
+| T4 | 2 / 2 | 24 | 1 | 4.4 KB |
+| T5 | 2 / 2 | 18 | 0 | 3.7 KB |
+| T6 | 1 / 2 | 2 | 0 | 2.1 KB |
+| **Total** | **9 / 12 (75%)** | | 5 | |
+
+Both misses are real. T1's are two `packages/maestro` harnesses the walk did not reach; T6's is
+`snapshot-route.test.ts`, which covers the direct caller of the changed module and should have
+been a short hop.
 
 Selection breadth is the sharper problem. T2 named **185** test files for a 5-file change: the
 seeds reach into `packages/kernel`, whose symbols are called from everywhere, and the walk has no
 notion of "this hub is not evidence". At that width the answer costs more to read than it saves.
-`--affected` is useful here at 2–25 selected files and not useful at 185.
+`--affected` is useful here at 2–24 selected files and not useful at 185.
 
 This does not overlap `pnpm check:affected`, which selects CI *lanes* from a diff. `--affected`
 selects test *files* from source files. They answer different questions.
@@ -143,6 +152,16 @@ paragraph:
 Both arms ran the same model. Each agent returned the change set it predicted; the harness scored
 it against the commit. Cost is the subagent's own token spend, tool-call count and wall clock as
 reported by the runtime, not self-estimated.
+
+**Read this half as an archived observation, not as a scripted experiment.** The two deterministic
+benches above re-run from one command each; this one does not. The arms were driven by subagents
+inside a Claude Code session rather than by a runner in this repository, so repeating it depends on
+an agent runtime the harness does not own and on a model that is not pinned here. What is preserved
+is everything that made the comparison fair and the recorded runs auditable: the two tooling
+paragraphs verbatim (`scripts/ripwire-eval/arms/`), the generator that renders the 12 briefs from
+them (`make-briefs.mjs`, which reproduces the briefs the recorded runs were given byte-for-byte),
+and the 24 answers as returned (`scripts/ripwire-eval/runs/`). `score.mjs --runs=… --worktrees=…`
+re-derives every number below from those files.
 
 ### Results
 
@@ -284,6 +303,9 @@ change once its seeds reach a hub module in `packages/kernel`.
 
 - Six tasks, two replicates. Enough to size an effect, not to make a small one significant. The
   arms are indistinguishable on half the tasks, which is itself the main result.
+- The agent A/B is an archived observation: its runs are checked in and re-scorable, but they are
+  not re-runnable from this repository (see §3). The retrieval and test-selection benches are, and
+  reproduce from the documented commands on freshly cut clones.
 - Both arms ran the same model; this measures tooling, not model choice.
 - The pinned clones are shallow (20 commits), so ripwire's churn and co-change lenses see a
   truncated history. That handicaps ripwire.

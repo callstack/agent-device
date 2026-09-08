@@ -6,6 +6,11 @@
 // real change touched, and what does the answer cost? Ranks come from the order paths first
 // appear in ripwire's output, which is its own ranking order.
 //
+// Recall here is over the change's EXISTING files only (`ground_truth`), not the whole change set:
+// a retrieval verb ranks what the tree contains, so a file the commit created is not a hit it
+// could have scored. The agent A/B scores the whole set, added files included, and the two
+// denominators are therefore different on purpose.
+//
 // Usage: node scripts/ripwire-eval/retrieval-bench.mjs --ripwire=<bin> --worktrees=<dir> [--out=<file>]
 
 import { writeFileSync } from 'node:fs';
@@ -73,6 +78,7 @@ for (const task of loadTasks()) {
       est_tokens: Math.round(call.bytes / 4),
       paths_mentioned: ranks.size,
       ground_truth: task.ground_truth.length,
+      ground_truth_basis: 'existing-files-only',
       hits: found.length,
       recall: Number((found.length / task.ground_truth.length).toFixed(3)),
       best_rank: found.length ? Math.min(...found.map((hit) => hit.rank)) : null,

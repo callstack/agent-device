@@ -18,18 +18,26 @@ const { ripwire, worktrees, out } = readArgs({
   optional: { out: join(harnessDir, 'affected-results.json') },
 });
 
-const isTest = (path) => /(\.test\.[cm]?[jt]sx?$)|(^|\/)__tests__\//.test(path);
+// A test FILE is a harness the runner executes. A file that merely lives in a test location —
+// `__tests__/test-utils/fake-adb.ts`, `__tests__/runtime-port-fixtures.ts`, a provider-scenario
+// world — is a helper: it is neither a source the change starts from nor a harness `--affected`
+// could name, so it is counted in neither column.
+const isTestFile = (path) => /\.test\.[cm]?[jt]sx?$/.test(path);
+const inTestLocation = (path) => /(^|\/)(__tests__|test)\//.test(path);
+const isHelper = (path) => !isTestFile(path) && inTestLocation(path);
+const isSource = (path) => !isTestFile(path) && !isHelper(path) && /\.[cm]?[jt]s$/.test(path);
 
 const results = [];
 
 for (const task of loadTasks()) {
   const added = new Set(task.added_files ?? []);
   const truth = [...task.ground_truth, ...added];
-  const sources = truth.filter((path) => !isTest(path) && /\.[cm]?[jt]s$/.test(path));
+  const sources = truth.filter(isSource);
   // A selector cannot name a file the change has not created yet, so files the commit ADDED are
   // reported separately rather than counted as misses.
-  const expected = truth.filter((path) => isTest(path) && !added.has(path));
-  const expectedAdded = truth.filter((path) => isTest(path) && added.has(path));
+  const expected = truth.filter((path) => isTestFile(path) && !added.has(path));
+  const expectedAdded = truth.filter((path) => isTestFile(path) && added.has(path));
+  const helpers = truth.filter(isHelper);
   if (sources.length === 0 || expected.length === 0) {
     results.push({ task: task.id, skipped: 'no source/test split in ground truth' });
     continue;
@@ -51,6 +59,7 @@ for (const task of loadTasks()) {
     selected: selected.length,
     expected: expected.length,
     expected_added_not_scorable: expectedAdded.length,
+    helpers_not_scored: helpers,
     hit: hit.length,
     recall: Number((hit.length / expected.length).toFixed(3)),
     // Of the tests it named, how many were actually touched — the cost of running the whole set.

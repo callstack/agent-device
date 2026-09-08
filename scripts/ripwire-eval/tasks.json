@@ -3,8 +3,8 @@
   "tasks": [
     {
       "id": "T1",
-      "commit": "d11c8cf",
-      "parent": "1f9d940",
+      "commit": "d11c8cf9d66917d34aece8b3f75d64beae0c107a",
+      "parent": "1f9d940bff4a8d28c83f5c5cf55f99e4402b5f0d",
       "area": "packages/maestro + daemon adapter",
       "prompt": "Maestro YAML flows can express a standalone `- clearState` or `- clearState: <appId>` command, which clears an app's state WITHOUT relaunching it (unlike `launchApp` with `clearState: true`, which clears then opens). agent-device currently rejects it with `Maestro command \"clearState\" is not supported`. Add support: accept both forms in the flow parser, carry the command through the intermediate representation, and project it onto the daemon's `settings clear-app-state` operation. Conformance corpus and support-matrix bookkeeping count as part of the change.",
       "ground_truth": [
@@ -30,8 +30,8 @@
     },
     {
       "id": "T2",
-      "commit": "f30328d",
-      "parent": "e0f8c55",
+      "commit": "f30328d086f43c4e51ec04a2487e0a5e343c81f1",
+      "parent": "e0f8c55f6e091b1757e54600fed71fdef015a12e",
       "area": "platform-android + kernel + daemon views",
       "prompt": "On Android, `get attrs --level digest` drops the editable-field observation metadata (`editable`, `password`, `hintShowing`, `selectionStart`, `selectionEnd`) that the full level keeps, so those facts vanish on the token-cheap route. Separately, the snapshot helper emits selection offsets only for nodes reported as editable, but read-only selectable text also exposes a selection. Fix both: keep the field facts on the digest route, and emit each nonnegative selection offset independently of editability (-1 stays absent).",
       "ground_truth": [
@@ -50,8 +50,8 @@
     },
     {
       "id": "T3",
-      "commit": "64b7cc4",
-      "parent": "7bcbf13",
+      "commit": "64b7cc45d45bc8044913534318a02efdcf264763",
+      "parent": "7bcbf1350b5a7c4b4c89ec06d56693c66b236707",
       "area": "platform-android input actions + provider scenarios",
       "prompt": "The Android `orientation` command writes the `accelerometer_rotation` and `user_rotation` settings and returns immediately, while the display actually rotates some time later. On a loaded emulator that takes seconds and accessibility reads hang meanwhile, so a `wait` issued right after `orientation` times out. Make the command poll `dumpsys display` for `mCurrentOrientation` until it matches the requested rotation before returning, each probe bounded by what is left of the settle budget. A display that never reaches the rotation fails the command with the observed rotation; a display that reports no rotation at all is left to the setting as before.",
       "ground_truth": [
@@ -66,8 +66,8 @@
     },
     {
       "id": "T4",
-      "commit": "367e795",
-      "parent": "a9283fa",
+      "commit": "367e795ee72458ef2a340a627e5e9a1680c03712",
+      "parent": "a9283fabc7daaec8de41d275cb01d1b3903f4e88",
       "area": "daemon HTTP server + tenant scope",
       "prompt": "`GET /sessions/<session>/requests/<requestId>/diagnostics` applies the `<tenant>:` session-name prefix rule to every caller carrying a tenant. But that prefix is only written under tenant isolation, which the daemon forces exactly when the auth hook ATTESTS the tenant. A client whose tenant is only DECLARED (the `x-agent-device-tenant` header on a daemon with no auth hook) therefore runs in a plain session such as `default` or `cwd:<hash>:default`, and is then refused 401 when reading the diagnostics record its own failed command wrote — directly and through `agent-device proxy`. Fix the addressability rule so the prefix rule applies only where the caller's session namespace is actually partitioned, and keep the attested case unchanged (an attested tenant is still refused any session outside its own prefix, with the same typed UNAUTHORIZED error).",
       "ground_truth": [
@@ -86,8 +86,8 @@
     },
     {
       "id": "T5",
-      "commit": "a78b6bb",
-      "parent": "ff59309",
+      "commit": "a78b6bb9a3495b727dbdebd0c004d855a7408b54",
+      "parent": "ff59309415e7a2c0dcc33247d6818bdc6e708477",
       "area": "commands/interaction wait runtime",
       "prompt": "A `wait` timeout reports only `reason`, `readableCaptures`, and `waitedMs`, so a failure cannot say where its budget went — a 10s budget spent on one slow poll reports the same `wait_capture_stalled` as a dead runner. Add a per-poll timeline to the timeout failure details: alongside the unchanged reason and request-log link, carry `captures` and `polls[]`, one entry per poll with a start offset on the wait's own clock, a duration, and a typed outcome (readable, unreadable, deadline, runner-restart). Keep the response compact on long waits by retaining only the first five and last twenty-five polls. The replayed-selector landmark-mismatch refusal should carry the same evidence.",
       "ground_truth": [
@@ -101,8 +101,8 @@
     },
     {
       "id": "T6",
-      "commit": "835af32",
-      "parent": "6768a04",
+      "commit": "835af32577c93869dba96a46df8e7e5d1b64fef1",
+      "parent": "6768a045a2d06434df51b62fb5ef5d18b0335d49",
       "area": "platform-apple snapshot target",
       "prompt": "Every eligible iOS Simulator capture resolves its AX-bridge target first, and a cache miss spawns `simctl launchctl list` through xcrun with a 3s timeout on the capture's own critical path. On a loaded host that spawn takes longer than 3s, the timeout is not remembered, and the next capture pays it again — a `wait` issued right after `open` loses its whole budget that way. Make discovery single-flight and detached from the capture that starts it: a capture waits a bounded 1.5s for it, then takes the XCTest fallback while the probe keeps running under its own longer budget, and later captures join the in-flight probe or reuse its result. One deadline covers the whole discovery, not each subprocess, and the resolver's error names its reason so the route diagnostic says why the fallback ran.",
       "ground_truth": [
