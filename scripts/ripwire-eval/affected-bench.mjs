@@ -28,9 +28,9 @@ const isHelper = (path) => !isTestFile(path) && inTestLocation(path);
 // Seeds are code files in a language ripwire builds a call graph for — this repository's ground
 // truth reaches TypeScript, .mjs and the Android helper's Java, and a walk seeded from only some
 // of a change's sources measures less than the change. Data files (.json, .yaml) carry no call
-// edges and are never seeds.
-const SEED_EXTENSIONS =
-  /\.(?:[cm]?[jt]sx?|java|swift|kt|mm?|c|cc|cpp|h|hpp|py|go|rs|rb|php|cs|sh)$/;
+// edges and are never seeds, and neither is Kotlin: ripwire does not parse it, so the Maestro
+// conformance JVM harness is dark to the graph (docs/ripwire-context-tooling-evaluation.md).
+const SEED_EXTENSIONS = /\.(?:[cm]?[jt]sx?|java|swift|mm?|c|cc|cpp|h|hpp|py|go|rs|rb|php|cs|sh)$/;
 const isSource = (path) => !isTestFile(path) && !isHelper(path) && SEED_EXTENSIONS.test(path);
 
 const results = [];

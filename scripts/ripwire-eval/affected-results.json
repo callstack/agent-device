@@ -1,10 +1,10 @@
 {
-  "generated": "2026-09-08T15:01:05.415Z",
+  "generated": "2026-09-08T16:04:40.961Z",
   "results": [
     {
       "task": "T1",
       "failed": null,
-      "ms": 5302,
+      "ms": 3972,
       "bytes": 8998,
       "seeds": 10,
       "selected": 65,
@@ -22,7 +22,7 @@
     {
       "task": "T2",
       "failed": null,
-      "ms": 2560,
+      "ms": 2757,
       "bytes": 19711,
       "seeds": 6,
       "selected": 185,
@@ -37,7 +37,7 @@
     {
       "task": "T3",
       "failed": null,
-      "ms": 2807,
+      "ms": 2484,
       "bytes": 2447,
       "seeds": 1,
       "selected": 5,
@@ -56,7 +56,7 @@
     {
       "task": "T4",
       "failed": null,
-      "ms": 3161,
+      "ms": 2524,
       "bytes": 4380,
       "seeds": 4,
       "selected": 24,
@@ -71,7 +71,7 @@
     {
       "task": "T5",
       "failed": null,
-      "ms": 3278,
+      "ms": 2840,
       "bytes": 3652,
       "seeds": 2,
       "selected": 18,
@@ -86,7 +86,7 @@
     {
       "task": "T6",
       "failed": null,
-      "ms": 2886,
+      "ms": 2179,
       "bytes": 2123,
       "seeds": 1,
       "selected": 2,
