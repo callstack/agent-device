@@ -1,0 +1,37 @@
+{
+  "task": "T5",
+  "arm": "ripwire",
+  "rep": 2,
+  "files": [
+    "src/commands/interaction/runtime/wait-polling.ts",
+    "src/commands/interaction/runtime/wait-selector.ts",
+    "packages/contracts/src/wait.ts",
+    "src/commands/interaction/runtime/wait-polling.test.ts",
+    "src/commands/interaction/runtime/wait-selector.test.ts",
+    "src/daemon/__tests__/wait-runtime.test.ts"
+  ],
+  "new_files": [],
+  "files_opened": [
+    "AGENTS.md",
+    "src/commands/interaction/runtime/wait-polling.ts",
+    "src/commands/interaction/runtime/wait-selector.ts",
+    "src/commands/interaction/runtime/wait-absent.ts",
+    "src/commands/interaction/runtime/wait-text.ts",
+    "src/commands/interaction/runtime/wait-polling.test.ts",
+    "packages/contracts/src/wait.ts",
+    "packages/contracts/src/replay.ts",
+    "packages/contracts/src/snapshot-timeout-evidence.ts",
+    "packages/contracts/package.json",
+    "packages/kernel/src/errors.ts",
+    "src/cli-schema/cli-help.ts",
+    "src/cli-schema/cli-help-topics.test.ts",
+    "src/daemon/wait-runtime.ts",
+    "src/daemon/wait-current-surface.ts",
+    "src/daemon/replay/internal/session-replay-target-verification.ts",
+    "src/daemon/__tests__/wait-runtime.test.ts"
+  ],
+  "subagent_tokens": 113441,
+  "tool_uses": 30,
+  "duration_ms": 330976,
+  "notes": "--grep on the literal detail keys pinned createWaitPolling as the sole owner of failure evidence; --uses proved every wait loop funnels through it and found the one throw that bypasses it."
+}

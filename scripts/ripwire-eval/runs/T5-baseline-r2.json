@@ -1,0 +1,50 @@
+{
+  "task": "T5",
+  "arm": "baseline",
+  "rep": 2,
+  "files": [
+    "src/commands/interaction/runtime/wait-polling.ts",
+    "src/commands/interaction/runtime/wait-selector.ts",
+    "packages/contracts/src/wait.ts",
+    "src/commands/interaction/runtime/wait-polling.test.ts",
+    "src/commands/interaction/runtime/wait-selector.test.ts",
+    "src/daemon/__tests__/wait-runtime.test.ts",
+    "src/cli-schema/cli-help.ts"
+  ],
+  "new_files": [
+    "src/commands/interaction/runtime/wait-poll-timeline.ts",
+    "src/commands/interaction/runtime/wait-poll-timeline.test.ts"
+  ],
+  "files_opened": [
+    "AGENTS.md",
+    "docs/agents/selector-capture.md",
+    "packages/contracts/src/wait.ts",
+    "packages/contracts/src/replay.ts",
+    "packages/contracts/src/snapshot-timeout-evidence.ts",
+    "packages/contracts/src/wait-runtime-plan.ts",
+    "packages/kernel/src/errors.ts",
+    "src/commands/interaction/runtime/wait-polling.ts",
+    "src/commands/interaction/runtime/wait-polling.test.ts",
+    "src/commands/interaction/runtime/wait-selector.ts",
+    "src/commands/interaction/runtime/wait-selector.test.ts",
+    "src/commands/interaction/runtime/wait-absent.ts",
+    "src/commands/interaction/runtime/wait-text.ts",
+    "src/commands/interaction/runtime/wait-stable.ts",
+    "src/commands/interaction/runtime/wait-deadline.ts",
+    "src/commands/interaction/runtime/selector-wait.ts",
+    "src/commands/interaction/runtime/selector-read.ts",
+    "src/core/selector-pipeline.ts",
+    "src/core/selector-pipeline-policy.ts",
+    "src/daemon/wait-runtime.ts",
+    "src/daemon/wait-current-surface.ts",
+    "src/daemon/__tests__/wait-runtime.test.ts",
+    "src/cli-schema/cli-help.ts",
+    "src/cli-schema/cli-help-topics.test.ts",
+    "fallow-baselines/health.json",
+    "website/docs/docs/commands.md"
+  ],
+  "subagent_tokens": 94145,
+  "tool_uses": 31,
+  "duration_ms": 293625,
+  "notes": "Grepped the wait_capture_stalled reason to the contract, then followed createWaitPolling to the single failure-evidence assembly point and the one throw that skips it."
+}

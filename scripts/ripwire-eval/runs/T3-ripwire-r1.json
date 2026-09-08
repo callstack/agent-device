@@ -1,0 +1,42 @@
+{
+  "task": "T3",
+  "arm": "ripwire",
+  "rep": 1,
+  "files": [
+    "packages/platform-android/src/input-actions.ts",
+    "packages/platform-android/src/__tests__/input-actions.test.ts",
+    "test/integration/provider-scenarios/android-world.ts"
+  ],
+  "new_files": [],
+  "files_opened": [
+    "AGENTS.md",
+    "packages/platform-android/src/input-actions.ts",
+    "packages/platform-android/src/adb.ts",
+    "packages/platform-android/src/adb-transport.ts",
+    "packages/platform-android/src/adb-executor.ts",
+    "packages/platform-android/src/window-state.ts",
+    "packages/platform-android/src/screenshot.ts",
+    "packages/platform-android/src/runtime.ts",
+    "packages/platform-android/src/runtime.test.ts",
+    "packages/platform-android/src/__tests__/input-actions.test.ts",
+    "packages/platform-android/src/__tests__/test-utils/fake-adb.ts",
+    "packages/contracts/src/orientation-runtime.ts",
+    "packages/contracts/src/device-rotation.ts",
+    "packages/host-kit/src/retry.ts",
+    "packages/host-kit/src/internal/retry.ts",
+    "src/core/interactors/android.ts",
+    "src/daemon/orientation-runtime.ts",
+    "src/commands/system/index.ts",
+    "test/integration/provider-scenarios/android-world.ts",
+    "test/integration/provider-scenarios/android-lifecycle.test.ts",
+    "test/integration/provider-scenarios/providers.ts",
+    "test/integration/android-emulator-e2e/live-automation-scenario.ts",
+    "test/integration/android-emulator-e2e/live-harness.ts",
+    "test/integration/live-device-e2e-failed-step-evidence.test.ts",
+    "test/integration/replays/android/fixture/02-selector-routes-covered-diagnosis.ad"
+  ],
+  "subagent_tokens": 106192,
+  "tool_uses": 38,
+  "duration_ms": 330569,
+  "notes": "ripwire put setAndroidOrientation at rank 1, its callers/affected walk gave the owning unit test, greps exposed the provider-scenario fake that must script the new probe."
+}

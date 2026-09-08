@@ -1,0 +1,41 @@
+{
+  "task": "T2",
+  "arm": "ripwire",
+  "rep": 1,
+  "files": [
+    "android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/AccessibilityTreeXml.java",
+    "packages/platform-android/src/ui-hierarchy.ts",
+    "packages/platform-android/src/ui-hierarchy-node.ts",
+    "packages/platform-android/src/ui-hierarchy-builder.ts",
+    "packages/kernel/src/snapshot.ts",
+    "src/daemon/response-views.ts",
+    "src/daemon/__tests__/response-views.test.ts",
+    "src/__tests__/android-ui-hierarchy.test.ts"
+  ],
+  "new_files": [],
+  "files_opened": [
+    "AGENTS.md",
+    "android/snapshot-helper/README.md",
+    "android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/AccessibilityTreeXml.java",
+    "android/snapshot-helper/src/test/java/com/callstack/agentdevice/snapshothelper/SnapshotHelperTestSuite.java",
+    "android/snapshot-helper/src/test/java/com/callstack/agentdevice/snapshothelper/BoundedUiAutomationConnectionTest.java",
+    "packages/contracts/src/snapshot-presentation.ts",
+    "packages/kernel/src/snapshot.ts",
+    "packages/platform-android/src/fill-diagnostics.ts",
+    "packages/platform-android/src/fill-verification.ts",
+    "packages/platform-android/src/ui-hierarchy.ts",
+    "packages/platform-android/src/ui-hierarchy-node.ts",
+    "packages/platform-android/src/ui-hierarchy-builder.ts",
+    "packages/platform-android/src/__tests__/ui-hierarchy-builder.test.ts",
+    "src/__tests__/android-ui-hierarchy.test.ts",
+    "src/commands/interaction/output.ts",
+    "src/commands/interaction/runtime/selector-read.ts",
+    "src/daemon/response-views.ts",
+    "src/daemon/__tests__/response-views.test.ts",
+    "src/snapshot/snapshot-presentation/android/helper.ts"
+  ],
+  "subagent_tokens": 143952,
+  "tool_uses": 59,
+  "duration_ms": 539724,
+  "notes": "ripwire's ranked lens and literal greps pinned the digest allowlist and the helper XML writer; following the metadata through the normalize boundary showed where the facts are dropped."
+}

@@ -1,46 +1,46 @@
 {
-  "generated": "2026-09-08T12:44:12.712Z",
+  "generated": "2026-09-08T12:52:18.925Z",
   "by_arm": {
     "baseline": {
-      "runs": 8,
-      "recall": 0.813,
-      "precision": 0.868,
-      "f1": 0.804,
-      "subagent_tokens": 100880.875,
-      "tool_uses": 39.125,
-      "duration_ms": 301837.875,
-      "files_opened": 25,
-      "files_opened_bytes": 325647.125
+      "runs": 12,
+      "recall": 0.834,
+      "precision": 0.85,
+      "f1": 0.807,
+      "subagent_tokens": 105232.833,
+      "tool_uses": 40.333,
+      "duration_ms": 323198.25,
+      "files_opened": 26.167,
+      "files_opened_bytes": 334431.083
     },
     "ripwire": {
-      "runs": 7,
-      "recall": 0.889,
-      "precision": 0.825,
-      "f1": 0.824,
-      "subagent_tokens": 108398,
-      "tool_uses": 34,
-      "duration_ms": 307891.857,
-      "files_opened": 19.571,
-      "files_opened_bytes": 197357.286
+      "runs": 12,
+      "recall": 0.861,
+      "precision": 0.855,
+      "f1": 0.83,
+      "subagent_tokens": 115447.917,
+      "tool_uses": 35.667,
+      "duration_ms": 339821.833,
+      "files_opened": 20.917,
+      "files_opened_bytes": 234439.75
     }
   },
   "by_task": {
     "T1": {
       "baseline": {
         "recall": 0.882,
-        "precision": 1,
-        "f1": 0.938,
-        "subagent_tokens": 132056,
-        "tool_uses": 65,
-        "duration_ms": 420794
+        "precision": 0.969,
+        "f1": 0.923,
+        "subagent_tokens": 135275,
+        "tool_uses": 59,
+        "duration_ms": 422489.5
       },
       "ripwire": {
-        "recall": 1,
-        "precision": 1,
-        "f1": 1,
-        "subagent_tokens": 127795,
-        "tool_uses": 52,
-        "duration_ms": 360367
+        "recall": 0.941,
+        "precision": 0.969,
+        "f1": 0.955,
+        "subagent_tokens": 145767,
+        "tool_uses": 52.5,
+        "duration_ms": 407472
       }
     },
     "T2": {
@@ -48,17 +48,17 @@
         "recall": 0.875,
         "precision": 0.875,
         "f1": 0.875,
-        "subagent_tokens": 114217,
-        "tool_uses": 53,
-        "duration_ms": 449460
+        "subagent_tokens": 115953,
+        "tool_uses": 52,
+        "duration_ms": 446680.5
       },
       "ripwire": {
         "recall": 0.875,
         "precision": 0.875,
         "f1": 0.875,
-        "subagent_tokens": 143952,
-        "tool_uses": 59,
-        "duration_ms": 539724
+        "subagent_tokens": 137133.5,
+        "tool_uses": 53,
+        "duration_ms": 512938.5
       }
     },
     "T3": {
@@ -74,9 +74,9 @@
         "recall": 0.6,
         "precision": 1,
         "f1": 0.75,
-        "subagent_tokens": 106192,
-        "tool_uses": 38,
-        "duration_ms": 330569
+        "subagent_tokens": 109296,
+        "tool_uses": 35,
+        "duration_ms": 316329
       }
     },
     "T4": {
@@ -84,35 +84,35 @@
         "recall": 0.75,
         "precision": 1,
         "f1": 0.857,
-        "subagent_tokens": 107179,
-        "tool_uses": 43,
-        "duration_ms": 351306
+        "subagent_tokens": 106299,
+        "tool_uses": 39.5,
+        "duration_ms": 326635.5
       },
       "ripwire": {
         "recall": 0.75,
         "precision": 1,
         "f1": 0.857,
-        "subagent_tokens": 112777,
-        "tool_uses": 24,
-        "duration_ms": 283230
+        "subagent_tokens": 109735.5,
+        "tool_uses": 26,
+        "duration_ms": 316027
       }
     },
     "T5": {
       "baseline": {
         "recall": 1,
-        "precision": 0.571,
-        "f1": 0.727,
-        "subagent_tokens": 112346,
-        "tool_uses": 42,
-        "duration_ms": 354297
+        "precision": 0.507,
+        "f1": 0.671,
+        "subagent_tokens": 103245.5,
+        "tool_uses": 36.5,
+        "duration_ms": 323961
       },
       "ripwire": {
         "recall": 1,
-        "precision": 0.4,
-        "f1": 0.571,
-        "subagent_tokens": 102356,
-        "tool_uses": 27,
-        "duration_ms": 296739
+        "precision": 0.534,
+        "f1": 0.685,
+        "subagent_tokens": 107898.5,
+        "tool_uses": 28.5,
+        "duration_ms": 313857.5
       }
     },
     "T6": {
@@ -160,6 +160,30 @@
       "spurious": []
     },
     {
+      "run": "T1-baseline-r2",
+      "task": "T1",
+      "arm": "baseline",
+      "rep": 2,
+      "ground_truth": 17,
+      "predicted": 16,
+      "hit": 15,
+      "recall": 0.882,
+      "precision": 0.938,
+      "f1": 0.909,
+      "new_files_expected": 1,
+      "new_files_hit": 0,
+      "subagent_tokens": 138494,
+      "tool_uses": 53,
+      "duration_ms": 424185,
+      "files_opened": 46,
+      "files_opened_bytes": 518343,
+      "missed": [
+        "scripts/maestro-conformance/build-manifest.mjs",
+        "scripts/maestro-conformance/corpus/authored/clear-state.yaml"
+      ],
+      "spurious": ["scripts/maestro-conformance/corpus/upstream/044_clear_state.yaml"]
+    },
+    {
       "run": "T1-ripwire-r1",
       "task": "T1",
       "arm": "ripwire",
@@ -179,6 +203,30 @@
       "files_opened_bytes": 443557,
       "missed": [],
       "spurious": []
+    },
+    {
+      "run": "T1-ripwire-r2",
+      "task": "T1",
+      "arm": "ripwire",
+      "rep": 2,
+      "ground_truth": 17,
+      "predicted": 16,
+      "hit": 15,
+      "recall": 0.882,
+      "precision": 0.938,
+      "f1": 0.909,
+      "new_files_expected": 1,
+      "new_files_hit": 0,
+      "subagent_tokens": 163739,
+      "tool_uses": 53,
+      "duration_ms": 454577,
+      "files_opened": 33,
+      "files_opened_bytes": 332650,
+      "missed": [
+        "scripts/maestro-conformance/build-manifest.mjs",
+        "scripts/maestro-conformance/corpus/authored/clear-state.yaml"
+      ],
+      "spurious": ["scripts/maestro-conformance/corpus/upstream/044_clear_state.yaml"]
     },
     {
       "run": "T2-baseline-r1",
@@ -202,6 +250,27 @@
       "spurious": ["src/__tests__/android-ui-hierarchy.test.ts"]
     },
     {
+      "run": "T2-baseline-r2",
+      "task": "T2",
+      "arm": "baseline",
+      "rep": 2,
+      "ground_truth": 8,
+      "predicted": 8,
+      "hit": 7,
+      "recall": 0.875,
+      "precision": 0.875,
+      "f1": 0.875,
+      "new_files_expected": 1,
+      "new_files_hit": 0,
+      "subagent_tokens": 117689,
+      "tool_uses": 51,
+      "duration_ms": 443901,
+      "files_opened": 21,
+      "files_opened_bytes": 201881,
+      "missed": ["packages/platform-android/src/__tests__/ui-hierarchy-field-metadata.test.ts"],
+      "spurious": ["src/__tests__/android-ui-hierarchy.test.ts"]
+    },
+    {
       "run": "T2-ripwire-r1",
       "task": "T2",
       "arm": "ripwire",
@@ -219,6 +288,27 @@
       "duration_ms": 539724,
       "files_opened": 19,
       "files_opened_bytes": 189905,
+      "missed": ["packages/platform-android/src/__tests__/ui-hierarchy-field-metadata.test.ts"],
+      "spurious": ["src/__tests__/android-ui-hierarchy.test.ts"]
+    },
+    {
+      "run": "T2-ripwire-r2",
+      "task": "T2",
+      "arm": "ripwire",
+      "rep": 2,
+      "ground_truth": 8,
+      "predicted": 8,
+      "hit": 7,
+      "recall": 0.875,
+      "precision": 0.875,
+      "f1": 0.875,
+      "new_files_expected": 1,
+      "new_files_hit": 0,
+      "subagent_tokens": 130315,
+      "tool_uses": 47,
+      "duration_ms": 486153,
+      "files_opened": 17,
+      "files_opened_bytes": 217570,
       "missed": ["packages/platform-android/src/__tests__/ui-hierarchy-field-metadata.test.ts"],
       "spurious": ["src/__tests__/android-ui-hierarchy.test.ts"]
     },
@@ -296,6 +386,30 @@
       "spurious": []
     },
     {
+      "run": "T3-ripwire-r2",
+      "task": "T3",
+      "arm": "ripwire",
+      "rep": 2,
+      "ground_truth": 5,
+      "predicted": 3,
+      "hit": 3,
+      "recall": 0.6,
+      "precision": 1,
+      "f1": 0.75,
+      "new_files_expected": 0,
+      "new_files_hit": 0,
+      "subagent_tokens": 112400,
+      "tool_uses": 32,
+      "duration_ms": 302089,
+      "files_opened": 25,
+      "files_opened_bytes": 364634,
+      "missed": [
+        "packages/platform-android/src/__tests__/test-utils/fake-adb.ts",
+        "test/integration/provider-scenarios/android-ime-lifecycle-world.ts"
+      ],
+      "spurious": []
+    },
+    {
       "run": "T4-baseline-r1",
       "task": "T4",
       "arm": "baseline",
@@ -320,6 +434,30 @@
       "spurious": []
     },
     {
+      "run": "T4-baseline-r2",
+      "task": "T4",
+      "arm": "baseline",
+      "rep": 2,
+      "ground_truth": 8,
+      "predicted": 6,
+      "hit": 6,
+      "recall": 0.75,
+      "precision": 1,
+      "f1": 0.857,
+      "new_files_expected": 1,
+      "new_files_hit": 0,
+      "subagent_tokens": 105419,
+      "tool_uses": 36,
+      "duration_ms": 301965,
+      "files_opened": 21,
+      "files_opened_bytes": 263820,
+      "missed": [
+        "test/wire-compat/surface.ts",
+        "test/integration/provider-scenarios/remote-proxy-request-diagnostics.test.ts"
+      ],
+      "spurious": []
+    },
+    {
       "run": "T4-ripwire-r1",
       "task": "T4",
       "arm": "ripwire",
@@ -337,6 +475,30 @@
       "duration_ms": 283230,
       "files_opened": 19,
       "files_opened_bytes": 209579,
+      "missed": [
+        "test/wire-compat/surface.ts",
+        "test/integration/provider-scenarios/remote-proxy-request-diagnostics.test.ts"
+      ],
+      "spurious": []
+    },
+    {
+      "run": "T4-ripwire-r2",
+      "task": "T4",
+      "arm": "ripwire",
+      "rep": 2,
+      "ground_truth": 8,
+      "predicted": 6,
+      "hit": 6,
+      "recall": 0.75,
+      "precision": 1,
+      "f1": 0.857,
+      "new_files_expected": 1,
+      "new_files_hit": 0,
+      "subagent_tokens": 106694,
+      "tool_uses": 28,
+      "duration_ms": 348824,
+      "files_opened": 22,
+      "files_opened_bytes": 232569,
       "missed": [
         "test/wire-compat/surface.ts",
         "test/integration/provider-scenarios/remote-proxy-request-diagnostics.test.ts"
@@ -369,6 +531,33 @@
       ]
     },
     {
+      "run": "T5-baseline-r2",
+      "task": "T5",
+      "arm": "baseline",
+      "rep": 2,
+      "ground_truth": 4,
+      "predicted": 9,
+      "hit": 4,
+      "recall": 1,
+      "precision": 0.444,
+      "f1": 0.615,
+      "new_files_expected": 0,
+      "new_files_hit": 0,
+      "subagent_tokens": 94145,
+      "tool_uses": 31,
+      "duration_ms": 293625,
+      "files_opened": 26,
+      "files_opened_bytes": 423952,
+      "missed": [],
+      "spurious": [
+        "packages/contracts/src/wait.ts",
+        "src/daemon/__tests__/wait-runtime.test.ts",
+        "src/cli-schema/cli-help.ts",
+        "src/commands/interaction/runtime/wait-poll-timeline.ts",
+        "src/commands/interaction/runtime/wait-poll-timeline.test.ts"
+      ]
+    },
+    {
       "run": "T5-ripwire-r1",
       "task": "T5",
       "arm": "ripwire",
@@ -395,6 +584,27 @@
         "src/daemon/__tests__/wait-runtime.test.ts",
         "src/daemon/handlers/__tests__/snapshot-handler.test.ts"
       ]
+    },
+    {
+      "run": "T5-ripwire-r2",
+      "task": "T5",
+      "arm": "ripwire",
+      "rep": 2,
+      "ground_truth": 4,
+      "predicted": 6,
+      "hit": 4,
+      "recall": 1,
+      "precision": 0.667,
+      "f1": 0.8,
+      "new_files_expected": 0,
+      "new_files_hit": 0,
+      "subagent_tokens": 113441,
+      "tool_uses": 30,
+      "duration_ms": 330976,
+      "files_opened": 17,
+      "files_opened_bytes": 284353,
+      "missed": [],
+      "spurious": ["packages/contracts/src/wait.ts", "src/daemon/__tests__/wait-runtime.test.ts"]
     },
     {
       "run": "T6-baseline-r1",

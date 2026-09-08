@@ -1,0 +1,42 @@
+{
+  "task": "T4",
+  "arm": "baseline",
+  "rep": 2,
+  "files": [
+    "src/daemon/request-diagnostics-http.ts",
+    "src/daemon/server/http-server.ts",
+    "src/daemon/server/tenant-trust.ts",
+    "src/daemon/session-tenant-scope.ts",
+    "src/daemon/__tests__/request-diagnostics-http.test.ts",
+    "src/daemon/__tests__/http-server-tenant-trust.test.ts",
+    "test/wire-compat/ledger.json"
+  ],
+  "new_files": [],
+  "files_opened": [
+    "AGENTS.md",
+    "src/daemon/request-diagnostics-http.ts",
+    "src/daemon/session-tenant-scope.ts",
+    "src/daemon/request-admission.ts",
+    "src/daemon/server/tenant-trust.ts",
+    "src/daemon/server/http-server.ts",
+    "src/daemon/resumable-upload.ts",
+    "src/daemon/artifact-tracking.ts",
+    "src/daemon/__tests__/request-diagnostics-http.test.ts",
+    "src/daemon/__tests__/http-server-tenant-trust.test.ts",
+    "src/remote/daemon-proxy.ts",
+    "src/remote/remote-request-diagnostics.ts",
+    "packages/contracts/src/daemon-http.ts",
+    "test/wire-compat/README.md",
+    "test/wire-compat/surface.ts",
+    "test/wire-compat/ledger.json",
+    "test/wire-compat/declaration-digest.ts",
+    "test/wire-compat/wire-compat.test.ts",
+    "test/wire-compat/wire-mutations.test.ts",
+    "test/integration/provider-scenarios/remote-proxy-parity.test.ts",
+    "test/integration/provider-scenarios/daemon-http-server.test.ts"
+  ],
+  "subagent_tokens": 105419,
+  "tool_uses": 36,
+  "duration_ms": 301965,
+  "notes": "Followed isTenantOwnedSessionName from its owning module to the route guard, back up to resolveTrustedTenant, then checked the tests and wire ledger that pin those declarations."
+}

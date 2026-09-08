@@ -1,0 +1,43 @@
+{
+  "task": "T2",
+  "arm": "baseline",
+  "rep": 2,
+  "files": [
+    "android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/AccessibilityTreeXml.java",
+    "packages/kernel/src/snapshot.ts",
+    "packages/platform-android/src/ui-hierarchy.ts",
+    "packages/platform-android/src/ui-hierarchy-node.ts",
+    "packages/platform-android/src/ui-hierarchy-builder.ts",
+    "src/daemon/response-views.ts",
+    "src/daemon/__tests__/response-views.test.ts",
+    "src/__tests__/android-ui-hierarchy.test.ts"
+  ],
+  "new_files": [],
+  "files_opened": [
+    "AGENTS.md",
+    "src/daemon/response-views.ts",
+    "android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/AccessibilityTreeXml.java",
+    "android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/AccessibilityTreeCapture.java",
+    "android/snapshot-helper/src/test/java/com/callstack/agentdevice/snapshothelper/SnapshotHelperTestSuite.java",
+    "android/snapshot-helper/src/test/java/com/callstack/agentdevice/snapshothelper/AccessibilityCaptureStabilizerTest.java",
+    "packages/platform-android/src/ui-hierarchy.ts",
+    "packages/platform-android/src/ui-hierarchy-node.ts",
+    "packages/platform-android/src/ui-hierarchy-builder.ts",
+    "packages/platform-android/src/fill-verification.ts",
+    "packages/platform-android/src/observation.ts",
+    "packages/platform-android/src/snapshot-helper-types.ts",
+    "packages/platform-android/src/__tests__/ui-hierarchy-builder.test.ts",
+    "packages/kernel/src/snapshot.ts",
+    "packages/contracts/src/snapshot-presentation.ts",
+    "src/snapshot/snapshot-presentation/android/predicates.ts",
+    "src/commands/interaction/output.ts",
+    "src/mcp/command-output-schemas.ts",
+    "src/__tests__/android-ui-hierarchy.test.ts",
+    "test/output-economy/fixtures.ts",
+    "test/output-economy/render-fixtures.ts"
+  ],
+  "subagent_tokens": 117689,
+  "tool_uses": 51,
+  "duration_ms": 443901,
+  "notes": "Grepped the digest level to the single node-field allowlist, then followed the Android facts backwards through the parse/normalize/build boundary to the helper's XML serializer."
+}

@@ -1,0 +1,35 @@
+{
+  "task": "T6",
+  "arm": "baseline",
+  "rep": 1,
+  "files": [
+    "packages/platform-apple/src/snapshot-target.ts",
+    "packages/platform-apple/src/snapshot-target.test.ts",
+    "packages/platform-apple/src/snapshot-route.ts",
+    "packages/platform-apple/src/snapshot-route.test.ts"
+  ],
+  "new_files": [],
+  "files_opened": [
+    "AGENTS.md",
+    "packages/platform-apple/src/snapshot-target.ts",
+    "packages/platform-apple/src/snapshot-target.test.ts",
+    "packages/platform-apple/src/snapshot-route.ts",
+    "packages/platform-apple/src/snapshot-route.test.ts",
+    "packages/platform-apple/src/snapshot-process.ts",
+    "packages/platform-apple/src/core/app-resolution.ts",
+    "packages/platform-apple/src/core/apps-simctl.ts",
+    "packages/platform-apple/src/runtime.ts",
+    "packages/platform-apple/src/runtime-snapshot.ts",
+    "packages/platform-apple/src/snapshot-source/adapter.ts",
+    "packages/platform-apple/src/snapshot-source/deadline.ts",
+    "packages/platform-apple/src/snapshot-source/limits.ts",
+    "packages/host-kit/src/retry.ts",
+    "packages/host-kit/src/internal/retry.ts",
+    "packages/host-kit/package.json",
+    "packages/kernel/src/errors.ts"
+  ],
+  "subagent_tokens": 91881,
+  "tool_uses": 28,
+  "duration_ms": 200993,
+  "notes": "Grepped for the launchctl spawn, followed createSimulatorSnapshotTargetResolver to its single consumer, confirmed by grep nothing else references the reason strings."
+}

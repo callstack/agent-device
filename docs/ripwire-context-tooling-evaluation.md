@@ -9,6 +9,29 @@ questions about it from the shell — no API key, no embeddings, no index server
 document answers is narrower than "is it good": **does handing it to an agent change what that
 agent produces on this repository, and at what cost?**
 
+## Verdict
+
+**Not worth adopting repo-wide today. Worth revisiting if its output gets cheaper.**
+
+Across 24 paired subagent runs on six replayed PRs, an agent given ripwire produced the same change
+set as one without it in **8 of 12 pairs**, and the aggregate accuracy difference (+3% F1) is
+smaller than the run-to-run variance inside either arm. It did read **30% fewer bytes of source**,
+which is the mechanism doing exactly what it claims — but it spent **10% more tokens** doing it,
+because the tool's own output is verbose enough to more than repay the file reads it replaces. On
+the one change this repository has already documented the answer for (threading a CLI flag), a
+maintained routing doc beat the call graph.
+
+What did show up, and is worth keeping in view:
+
+1. **It is consistent where grep is lucky.** On the one task with a non-obvious touch point — a
+   scripted provider fake that throws on unscripted calls — both ripwire runs found it and only one
+   of two baseline runs did.
+2. **The token cost is a fixable implementation detail, not a design limit.** ripwire's
+   self-documenting preamble is a *fixed* 1.6–3.1 KB per invocation, up to 62% of a small verb's
+   whole response, re-sent on every call. A terse mode would likely flip the token column.
+3. **The cheap deterministic verbs stand on their own.** `--recall` answers from 799 KB of markdown
+   in 15 KB; `--affected` names the right test files at 2–5 KB when the seed set is narrow.
+
 ## What was measured
 
 Three things, two of them with no model in the loop.
@@ -21,14 +44,15 @@ Three things, two of them with no model in the loop.
 The benchmark replays six merged `agent-device` PRs. Each task states the change's intent in prose
 with no file names; the agent works in a clone pinned at the commit's **parent**, cut with a
 shallow fetch so the fix commit is unreachable rather than merely off-limits. Ground truth is the
-commit's own file list, minus `CHANGELOG.md`, `website/` docs and generated ledgers.
+commit's own file list — files it modified plus files it created — minus `CHANGELOG.md`,
+`website/` docs and generated ledgers.
 
 | Task | Replays | Area | Ground-truth files |
 | --- | --- | --- | --- |
-| T1 | #2366 standalone Maestro `clearState` | `packages/maestro` + daemon adapter + conformance corpus | 16 |
-| T2 | #2290 editable-field metadata in digest snapshots | `platform-android` + `kernel` + daemon views + Java helper | 7 |
+| T1 | #2366 standalone Maestro `clearState` | `packages/maestro` + daemon adapter + conformance corpus | 17 |
+| T2 | #2290 editable-field metadata in digest snapshots | `platform-android` + `kernel` + daemon views + Java helper | 8 |
 | T3 | #2356 orientation waits for the display to rotate | `platform-android` + provider scenarios | 5 |
-| T4 | #2382 plain-session client reads its own failure record | daemon HTTP server + tenant scope | 7 |
+| T4 | #2382 plain-session client reads its own failure record | daemon HTTP server + tenant scope | 8 |
 | T5 | #2344 per-poll timeline in wait timeouts | `src/commands/interaction/runtime` | 4 |
 | T6 | #2331 detached single-flight Simulator target discovery | `platform-apple` | 3 |
 
@@ -39,6 +63,11 @@ disk. It reports **4,037 files, 33,002 symbols, 30,651 edges**. TypeScript, Swif
 are parsed; the gaps here are 52 `.ad` replay-compat scripts (this project's own DSL — fixture
 data, no call graph to lose) and 8 Kotlin files (the Maestro conformance JVM harness). Nothing
 load-bearing is dark.
+
+Its one-command quality lens, `--quality-panel`, ranks 105 of this tree's 16,097 function bodies
+in 16 KB and 6.3 s — but the head of that list is Swift and Objective-C runner *test* code, not the
+TypeScript the 300-line module rule is aimed at. Useful as a lens, not as a gate, which is what its
+own documentation says.
 
 For scale: `ripwire .` costs **22.6 KB** (~5.6K tokens) against 33 KB for `README.md` +
 `AGENTS.md` + `CONTEXT.md` and 63 KB with `docs/agents/` added. `--recall="<question>"` answers
@@ -104,15 +133,88 @@ selects test *files* from source files. They answer different questions.
 
 ## 3. Agent A/B: does an agent localize better with it?
 
-Two arms over the same six tasks, two replicates each. Identical briefs — the same prose, the same
-pinned clone, the same rules, the same JSON deliverable — differing in exactly one paragraph:
+Two arms over the same six tasks, two replicates each — 24 runs. Identical briefs (the same prose,
+the same pinned clone, the same rules, the same JSON deliverable) differing in exactly one
+paragraph:
 
 - **baseline**: Read, Grep, Glob, Bash. No code-intelligence tool on the machine.
 - **ripwire**: the same tools, plus the binary and its verb table, told to reach for it first.
 
 Both arms ran the same model. Each agent returned the change set it predicted; the harness scored
-it against the commit. Cost is the subagent's own token spend, tool-call count and wall clock, as
-reported by the runtime rather than self-estimated.
+it against the commit. Cost is the subagent's own token spend, tool-call count and wall clock as
+reported by the runtime, not self-estimated.
+
+### Results
+
+Per task, mean of two runs, shown as `baseline → ripwire`:
+
+| Task | F1 | tool calls | tokens | seconds |
+| --- | --- | --- | --- | --- |
+| T1 | 0.92 → 0.95 | 59 → 52 | 135K → 146K | 422 → 407 |
+| T2 | 0.88 → 0.88 | 52 → 53 | 116K → 137K | 447 → 513 |
+| T3 | 0.66 → 0.75 | 30 → 35 | 87K → 109K | 236 → 316 |
+| T4 | 0.86 → 0.86 | 40 → 26 | 106K → 110K | 327 → 316 |
+| T5 | 0.67 → 0.69 | 36 → 28 | 103K → 108K | 324 → 314 |
+| T6 | 0.86 → 0.86 | 24 → 19 | 83K → 83K | 183 → 172 |
+
+Means over all 12 runs per arm:
+
+| | baseline | ripwire | delta |
+| --- | --- | --- | --- |
+| Recall | 0.834 | 0.861 | **+3%** |
+| Precision | 0.850 | 0.855 | +1% |
+| F1 | 0.807 | 0.830 | **+3%** |
+| Source bytes opened | 334 KB | 234 KB | **-30%** |
+| Files opened | 26.2 | 20.9 | -20% |
+| Tool calls | 40.3 | 35.7 | -12% |
+| **Subagent tokens** | 105.2K | 115.4K | **+10%** |
+| Wall clock | 323 s | 340 s | +5% |
+
+Because the runs are paired (same task, same replicate index), the sign counts matter more than the
+means at this sample size:
+
+| Metric | ripwire lower | ripwire higher | identical |
+| --- | --- | --- | --- |
+| F1 | 1 | 3 | 8 |
+| Source bytes opened | 10 | 2 | 0 |
+| Tool calls | 7 | 4 | 1 |
+| Subagent tokens | 3 | 9 | 0 |
+| Wall clock | 4 | 8 | 0 |
+
+### Reading the result
+
+**Accuracy is a wash.** F1 moved +3%, and 8 of 12 pairs produced *identical* file sets. On T2, T4
+and T6 all four runs returned exactly the same answer — with and without the tool, twice each. The
+differences sit in two places:
+
+- **T3** is the one task where the arms genuinely separated, and it separated on *consistency*, not
+  on a ceiling. The change needs `test/integration/provider-scenarios/android-world.ts` edited,
+  because that scripted fake throws on any unscripted adb call and the fix adds a `dumpsys display`
+  probe. Both ripwire runs found it. Of the baseline runs, one found it and one did not (2/5 vs
+  3/5) — it read `fake-adb.ts` and `android-world.ts` and concluded neither needed a change.
+- **T1**, the 17-file Maestro change, produced the matrix's only perfect run — ripwire, 17/17,
+  including the conformance-corpus and fuzz-arbitrary bookkeeping. Its other three runs, both arms,
+  all landed 15/17.
+
+T5 is noise, not signal: recall was 1.00 in all four runs and precision swung 0.40–0.67 *within*
+both arms, because every run over-predicted a different set of contract and help files.
+
+**It does substitute for reading.** 10 of 12 pairs opened less source with ripwire — ~100 KB less
+per run on average, 30% by bytes across 20% fewer files. That is the mechanism working as
+advertised.
+
+**And it still cost more tokens.** 9 of 12 pairs spent *more* with ripwire, +10.2K on
+average. The saved file bytes did not pay for the tool's own output. Measured directly on this
+repository, ripwire's self-documenting XML comment preamble is **1.6 KB on `--for`, 1.7 KB on
+`--affected`, and 3.1 KB on `--callers` — 62% of that verb's entire 5.1 KB response**. It is a
+*fixed* cost per invocation, so an agent that calls six verbs pays it six times, and it lands
+hardest on exactly the cheap, narrow verbs that should be the tool's best value. Whole-file reads
+went down; total context did not.
+
+This is the single most actionable finding here, and it is a fixable one: the preamble is
+documentation aimed at a first-time reader, re-sent to an agent that has already read it. A
+`--terse` mode that emits the header once per session — or not at all — would likely flip the token
+column without touching the ranking.
 
 ## 4. The one question this repo has already answered in prose
 
@@ -138,32 +240,7 @@ wrote down, not by call edges: `PROJECT_CONFIG_FLAG_KEYS` is a positive allowlis
 routing doc stays the better answer to this particular question, and that is the shape of the
 boundary — ripwire finds what the code *does*, `AGENTS.md` records what the team *decided*.
 
-### Results
 
-8 baseline runs and 7 ripwire runs across the six tasks (per-run detail in
-[`scripts/ripwire-eval/agent-results.json`](../scripts/ripwire-eval/agent-results.json)).
-
-| | F1 base | F1 ripwire | calls base | calls rw | tokens base | tokens rw | sec base | sec rw |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | 0.94 | 1.00 | 65 | 52 | 132K | 128K | 421 | 360 |
-| T2 | 0.88 | 0.88 | 53 | 59 | 114K | 144K | 449 | 540 |
-| T3 | 0.66 | 0.75 | 30 | 38 | 87K | 106K | 236 | 331 |
-| T4 | 0.86 | 0.86 | 43 | 24 | 107K | 113K | 351 | 283 |
-| T5 | 0.73 | 0.57 | 42 | 27 | 112K | 102K | 354 | 297 |
-| T6 | 0.86 | 0.86 | 24 | 19 | 83K | 83K | 183 | 172 |
-
-| Mean over all runs | baseline | ripwire | delta |
-| --- | --- | --- | --- |
-| Recall | 0.813 | 0.889 | +9% |
-| Precision | 0.868 | 0.825 | -5% |
-| F1 | 0.804 | 0.824 | +2% |
-| Tool calls | 39.1 | 34.0 | -13% |
-| Subagent tokens | 101K | 108K | +7% |
-| Wall clock (s) | 302 | 308 | +2% |
-| Files opened | 25.0 | 19.6 | -22% |
-| Bytes of file opened | 326 KB | 197 KB | -39% |
-
-<!-- RESULTS-TABLE -->
 
 ## Adoption cost, if we wanted it
 
@@ -182,3 +259,35 @@ The cost that is not free is the agent's attention. The verb table given to the 
 MCP server's schemas cost more than the CLI's shell pipe. On a repo whose `AGENTS.md` already
 spends its budget on a routing table, adding a second routing surface is a real trade.
 
+## Recommendation
+
+**Do not add ripwire to the repository's agent setup as a default.** The evidence does not support
+spending `AGENTS.md` budget on a second routing surface, and the token column is currently
+negative. `AGENTS.md` plus `rg` is not the weak baseline this kind of tool is usually measured
+against — the declaration-site table, the one-to-one test topology and the typed registries already
+do much of the work a call graph would otherwise supply.
+
+**Do keep it as an individual, opt-in tool.** It is a single Apache-2.0 binary, installs in one
+line, sends nothing anywhere and needs no key, so the cost of one engineer trying it is a minute.
+The verbs worth trying first here are `--recall` (52× cheaper than the doc corpus it searches) and
+`--affected` on a narrow seed set.
+
+**Re-run this harness if ripwire ships a terse output mode.** `scripts/ripwire-eval/` is written to
+be re-run against a new binary with two commands; the token result is the one number most likely to
+move, and it is the one currently deciding the verdict.
+
+**Two findings are worth sending upstream**, since both are measured rather than impressionistic:
+the fixed preamble cost per invocation, and `--affected` selecting 185 test files for a 5-file
+change once its seeds reach a hub module in `packages/kernel`.
+
+## Caveats
+
+- Six tasks, two replicates. Enough to size an effect, not to make a small one significant. The
+  arms are indistinguishable on half the tasks, which is itself the main result.
+- Both arms ran the same model; this measures tooling, not model choice.
+- The pinned clones are shallow (20 commits), so ripwire's churn and co-change lenses see a
+  truncated history. That handicaps ripwire.
+- ripwire indexes were warm when the agents ran; the 4.9 s cold index is reported separately rather
+  than folded into per-run wall clock.
+- Change-set localization is one job among many. This says nothing about ripwire's refactoring,
+  security or quality lenses beyond the single `--quality-panel` run noted above.

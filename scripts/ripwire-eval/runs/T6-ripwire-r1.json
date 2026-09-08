@@ -1,0 +1,31 @@
+{
+  "task": "T6",
+  "arm": "ripwire",
+  "rep": 1,
+  "files": [
+    "packages/platform-apple/src/snapshot-target.ts",
+    "packages/platform-apple/src/snapshot-route.ts",
+    "packages/platform-apple/src/snapshot-target.test.ts",
+    "packages/platform-apple/src/snapshot-route.test.ts"
+  ],
+  "new_files": [],
+  "files_opened": [
+    "AGENTS.md",
+    "packages/platform-apple/src/snapshot-target.ts",
+    "packages/platform-apple/src/snapshot-route.ts",
+    "packages/platform-apple/src/snapshot-process.ts",
+    "packages/platform-apple/src/snapshot-source/deadline.ts",
+    "packages/platform-apple/src/snapshot-source/limits.ts",
+    "packages/platform-apple/src/snapshot-target.test.ts",
+    "packages/platform-apple/src/snapshot-route.test.ts",
+    "packages/platform-apple/src/core/config.ts",
+    "packages/platform-apple/src/index.ts",
+    "packages/host-kit/src/retry.ts",
+    "docs/agents/selector-capture.md",
+    "oxlint.config.ts"
+  ],
+  "subagent_tokens": 84840,
+  "tool_uses": 16,
+  "duration_ms": 136165,
+  "notes": "ripwire's conceptual lens surfaced resolveSimulatorSnapshotTarget in snapshot-target.ts, --impact showed its only non-test reach is snapshot-route.ts, greps confirmed nothing else observes the behavior."
+}

@@ -1,0 +1,39 @@
+{
+  "task": "T2",
+  "arm": "ripwire",
+  "rep": 2,
+  "files": [
+    "android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/AccessibilityTreeXml.java",
+    "packages/platform-android/src/ui-hierarchy.ts",
+    "packages/platform-android/src/ui-hierarchy-node.ts",
+    "packages/platform-android/src/ui-hierarchy-builder.ts",
+    "packages/kernel/src/snapshot.ts",
+    "src/daemon/response-views.ts",
+    "src/daemon/__tests__/response-views.test.ts",
+    "src/__tests__/android-ui-hierarchy.test.ts"
+  ],
+  "new_files": [],
+  "files_opened": [
+    "src/daemon/response-views.ts",
+    "src/daemon/__tests__/response-views.test.ts",
+    "packages/kernel/src/snapshot.ts",
+    "packages/platform-android/src/ui-hierarchy.ts",
+    "packages/platform-android/src/ui-hierarchy-node.ts",
+    "packages/platform-android/src/ui-hierarchy-builder.ts",
+    "packages/platform-android/src/snapshot-types.ts",
+    "packages/platform-android/src/fill-verification.ts",
+    "packages/platform-android/src/device-input-state.ts",
+    "packages/platform-android/src/observation.ts",
+    "android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/AccessibilityTreeXml.java",
+    "android/snapshot-helper/src/test/java/com/callstack/agentdevice/snapshothelper/SnapshotHelperTestSuite.java",
+    "src/commands/interaction/runtime/selector-read.ts",
+    "packages/contracts/src/snapshot-presentation.ts",
+    "src/mcp/command-output-schemas.ts",
+    "src/snapshot/snapshot-lines.ts",
+    "src/__tests__/android-ui-hierarchy.test.ts"
+  ],
+  "subagent_tokens": 130315,
+  "tool_uses": 47,
+  "duration_ms": 486153,
+  "notes": "--grep on the literal field names showed where they live; --for on the digest concept surfaced selectorReadView; followed the typed field list back to the Java serializer."
+}

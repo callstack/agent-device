@@ -1,0 +1,41 @@
+{
+  "task": "T4",
+  "arm": "baseline",
+  "rep": 1,
+  "files": [
+    "src/daemon/request-diagnostics-http.ts",
+    "src/daemon/server/tenant-trust.ts",
+    "src/daemon/server/http-server.ts",
+    "src/daemon/session-tenant-scope.ts",
+    "src/daemon/__tests__/request-diagnostics-http.test.ts",
+    "src/daemon/__tests__/http-server-tenant-trust.test.ts",
+    "test/wire-compat/ledger.json"
+  ],
+  "new_files": [],
+  "files_opened": [
+    "AGENTS.md",
+    "src/daemon/request-diagnostics-http.ts",
+    "src/daemon/session-tenant-scope.ts",
+    "src/daemon/request-admission.ts",
+    "src/daemon/server/http-server.ts",
+    "src/daemon/server/tenant-trust.ts",
+    "src/daemon/tenant-owned-entry.ts",
+    "src/daemon/upload-http.ts",
+    "src/daemon/downloadable-artifact-http.ts",
+    "src/daemon/__tests__/request-diagnostics-http.test.ts",
+    "src/daemon/__tests__/http-server-tenant-trust.test.ts",
+    "src/remote/daemon-proxy.ts",
+    "src/remote/remote-request-diagnostics.ts",
+    "src/__tests__/daemon-proxy.test.ts",
+    "packages/contracts/src/daemon-http.ts",
+    "test/wire-compat/surface.ts",
+    "test/wire-compat/ledger.json",
+    "test/wire-compat/README.md",
+    "test/wire-compat/declaration-digest.ts",
+    "test/integration/provider-scenarios/remote-proxy-parity.test.ts"
+  ],
+  "subagent_tokens": 107179,
+  "tool_uses": 43,
+  "duration_ms": 351306,
+  "notes": "Grepped from the route path to the diagnostics module, followed the tenant guard back to scopeRequestSession, checked which tests and ledger digests pin current behavior."
+}
