@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.5dcb68c73c.js"></script>
+<script defer src="/agent-device/static/js/index.80c39e0491.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -68,12 +68,12 @@ attempts own cleanup, and it is rejected for Maestro YAML because that runtime o
 <ul>
 <li>Flows: <code>launchApp</code>; <code>runFlow</code> file/inline with platform, visibility, and limited boolean conditions; <code>onFlowStart</code>/<code>onFlowComplete</code>; <code>repeat.times</code> and retry.</li>
 <li>Interactions: <code>tapOn</code>, <code>doubleTapOn</code>, <code>longPressOn</code>, <code>inputText</code> on the focused element, <code>eraseText</code>, <code>openLink</code>, <code>hideKeyboard</code>, basic <code>pressKey</code>, and <code>back</code>; selector targets poll until available and support recursive <code>index</code>, <code>childOf</code>, <code>above</code>, <code>below</code>, <code>leftOf</code>, <code>rightOf</code>, <code>containsChild</code>, <code>containsDescendants</code>, points, and <code>optional</code>; outer command labels are metadata, not target selectors.</li>
-<li>Assertions and navigation: <code>assertVisible</code>, <code>assertNotVisible</code>, <code>assertTrue</code> (literal values and <code>${VAR}</code> lookups only; <code>&quot;&quot;</code>, <code>&quot;false&quot;</code>, <code>&quot;0&quot;</code>, <code>&quot;null&quot;</code>, and <code>&quot;undefined&quot;</code> are falsy, everything else is truthy), <code>extendedWaitUntil</code>, <code>scroll</code>, <code>scrollUntilVisible</code>, absolute/percentage/target <code>swipe</code>, <code>takeScreenshot</code>, <code>waitForAnimationToEnd</code>, and <code>stopApp</code>.</li>
+<li>Assertions and navigation: <code>assertVisible</code>, <code>assertNotVisible</code>, <code>assertTrue</code> (literal values and <code>${VAR}</code> lookups only; <code>&quot;&quot;</code>, <code>&quot;false&quot;</code>, <code>&quot;0&quot;</code>, <code>&quot;null&quot;</code>, and <code>&quot;undefined&quot;</code> are falsy, everything else is truthy), <code>extendedWaitUntil</code>, <code>scroll</code>, <code>scrollUntilVisible</code>, absolute/percentage/target <code>swipe</code>, <code>takeScreenshot</code>, <code>waitForAnimationToEnd</code>, <code>clearState</code>, and <code>stopApp</code>.</li>
 <li>Scripts: ordered <code>runScript</code> file/env scripts with <code>http.post</code>, <code>json</code>, and <code>output</code> variables.</li>
 </ul>
 <p>Boundaries:</p>
 <ul>
-<li>Runtime: iOS and Android only; <code>launchApp.clearState</code> supports Android and iOS simulators, launch arguments are Apple-only, and standalone device utility/state commands are unsupported.</li>
+<li>Runtime: iOS and Android only; <code>launchApp.clearState</code> and standalone <code>clearState</code> support Android and iOS simulators, launch arguments are Apple-only, and other standalone device utility/state commands are unsupported.</li>
 <li>Expressions: <code>when.true</code> supports boolean literals and <code>maestro.platform</code> comparisons; <code>assertTrue</code> supports literal values and <code>${VAR}</code> lookups only; <code>repeat.while</code>, <code>evalScript</code>, and broader JavaScript expressions are unsupported.</li>
 <li>Environment: flow <code>env</code> is the default, <code>AD_VAR_*</code> overrides it, and CLI <code>-e KEY=VALUE</code> wins over both.</li>
 <li>Failure diagnostics: resolved targets and <code>runFlow</code> paths are rendered, while <code>inputText</code> payloads remain hidden; do not place secrets in diagnostic identifiers.</li>
