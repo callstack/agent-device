@@ -25,7 +25,13 @@ const { ripwire, worktrees, out } = readArgs({
 const isTestFile = (path) => /\.test\.[cm]?[jt]sx?$/.test(path);
 const inTestLocation = (path) => /(^|\/)(__tests__|test)\//.test(path);
 const isHelper = (path) => !isTestFile(path) && inTestLocation(path);
-const isSource = (path) => !isTestFile(path) && !isHelper(path) && /\.[cm]?[jt]s$/.test(path);
+// Seeds are code files in a language ripwire builds a call graph for — this repository's ground
+// truth reaches TypeScript, .mjs and the Android helper's Java, and a walk seeded from only some
+// of a change's sources measures less than the change. Data files (.json, .yaml) carry no call
+// edges and are never seeds.
+const SEED_EXTENSIONS =
+  /\.(?:[cm]?[jt]sx?|java|swift|kt|mm?|c|cc|cpp|h|hpp|py|go|rs|rb|php|cs|sh)$/;
+const isSource = (path) => !isTestFile(path) && !isHelper(path) && SEED_EXTENSIONS.test(path);
 
 const results = [];
 

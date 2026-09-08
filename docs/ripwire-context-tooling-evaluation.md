@@ -108,8 +108,9 @@ route, so when it finds anything it ranks it near the top.
 
 This repository's rule is that tests mirror source one-to-one, which makes "I changed these
 sources, which tests do I run" a question with a checkable answer. Each task's non-test
-ground-truth files were fed to `--affected`; the score is whether the commit's own test files came
-back.
+ground-truth files were fed to `--affected` — every one ripwire builds a call graph for, this
+change set's Android helper Java included, not just its TypeScript; the score is whether the
+commit's own test files came back.
 
 Two exclusions keep the denominator honest. Files the commit *created* are out — a selector cannot
 name a file that does not exist. And only **test files** (`*.test.ts`) count: a file that merely
@@ -121,7 +122,7 @@ under `helpers_not_scored`.
 | Task | Expected tests found | Tests selected | Helpers not scored | Bytes |
 | --- | --- | --- | --- | --- |
 | T1 | 2 / 4 | 65 | 1 | 9.0 KB |
-| T2 | 1 / 1 | 185 | 0 | 19.6 KB |
+| T2 | 1 / 1 | 185 | 0 | 19.7 KB |
 | T3 | 1 / 1 | 5 | 3 | 2.4 KB |
 | T4 | 2 / 2 | 24 | 1 | 4.4 KB |
 | T5 | 2 / 2 | 18 | 0 | 3.7 KB |
