@@ -374,7 +374,7 @@ function report(
         `manufacture narrowed runtime proof (R66); R65 keeps production src/daemon free of ` +
         `concrete platform imports in every executable and type-only form; ` +
         `${DAEMON_PLATFORM_RUNTIME_EDGES.length} daemon-to-root platform-runtime edges hold ` +
-        `their #2278 classification (R74); and the handler-owned SessionState/SessionStore ` +
+        `their #2278 classification (R76); and the handler-owned SessionState/SessionStore ` +
         `authority overlay holds at or under the merge-base (R75, ` +
         `${handlerOwnedShapeFiles} shape / ${handlerOwnedAuthorityFiles} authority files).\n`,
     );

@@ -20,7 +20,7 @@ function edgeViolations(sources: Record<string, string>, file: string): Layering
   return violations(sources).filter((violation) => violation.file === file);
 }
 
-test('R74 accepts a classified edge with the exact recorded symbols', () => {
+test('R76 accepts a classified edge with the exact recorded symbols', () => {
   const sources = {
     [DEVICE_READY_TARGET]: DEVICE_READY_STUB,
     'src/daemon/device-ready.ts':
@@ -30,7 +30,7 @@ test('R74 accepts a classified edge with the exact recorded symbols', () => {
   assert.deepEqual(edgeViolations(sources, 'src/daemon/device-ready.ts'), []);
 });
 
-test('R74 reports every classified edge missing from the tree as stale, not the other way around', () => {
+test('R76 reports every classified edge missing from the tree as stale, not the other way around', () => {
   const sources = {
     [DEVICE_READY_TARGET]: DEVICE_READY_STUB,
     'src/daemon/device-ready.ts':
@@ -48,7 +48,7 @@ test('R74 reports every classified edge missing from the tree as stale, not the 
   assert.equal(deviceReadyStale, undefined);
 });
 
-test('R74 rejects an unclassified edge with the pair and its line', () => {
+test('R76 rejects an unclassified edge with the pair and its line', () => {
   const sources = {
     'src/platform-runtime-android-tool-host.ts': 'export function createAndroidToolHost() {}\n',
     'src/daemon/fixture.ts':
@@ -66,7 +66,7 @@ test('R74 rejects an unclassified edge with the pair and its line', () => {
   );
 });
 
-test('R74 rejects new symbols on a classified edge', () => {
+test('R76 rejects new symbols on a classified edge', () => {
   const sources = {
     [DEVICE_READY_TARGET]: DEVICE_READY_STUB + 'export function extraReadiness() {}\n',
     'src/daemon/device-ready.ts':
@@ -80,7 +80,7 @@ test('R74 rejects new symbols on a classified edge', () => {
   assert.match(found[0]!.message, /ensureLocalPlatformDeviceReady, extraReadiness/);
 });
 
-test('R74 matches a destructured dynamic import by target with the recorded bindings', () => {
+test('R76 matches a destructured dynamic import by target with the recorded bindings', () => {
   const sources = {
     'src/platform-runtime-operation-host.ts':
       'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n',
@@ -91,7 +91,7 @@ test('R74 matches a destructured dynamic import by target with the recorded bind
   assert.deepEqual(edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts'), []);
 });
 
-test('R74 rejects an expanded destructured dynamic import on a classified edge', () => {
+test('R76 rejects an expanded destructured dynamic import on a classified edge', () => {
   const sources = {
     'src/platform-runtime-operation-host.ts':
       'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n' +
@@ -110,7 +110,7 @@ test('R74 rejects an expanded destructured dynamic import on a classified edge',
   );
 });
 
-test('R74 rejects a rest binding next to a recorded dynamic-import binding', () => {
+test('R76 rejects a rest binding next to a recorded dynamic-import binding', () => {
   const sources = {
     'src/platform-runtime-operation-host.ts':
       'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n' +
@@ -129,7 +129,7 @@ test('R74 rejects a rest binding next to a recorded dynamic-import binding', () 
   );
 });
 
-test('R74 rejects a computed destructure key on a classified dynamic import', () => {
+test('R76 rejects a computed destructure key on a classified dynamic import', () => {
   const sources = {
     'src/platform-runtime-operation-host.ts':
       'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n',
@@ -143,7 +143,7 @@ test('R74 rejects a computed destructure key on a classified dynamic import', ()
   assert.match(found[0]!.message, /unnameable dynamic-import binding/);
 });
 
-test('R74 rejects a namespace-form dynamic import that hides the recorded bindings', () => {
+test('R76 rejects a namespace-form dynamic import that hides the recorded bindings', () => {
   const sources = {
     'src/platform-runtime-operation-host.ts':
       'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n',
@@ -156,7 +156,7 @@ test('R74 rejects a namespace-form dynamic import that hides the recorded bindin
   assert.match(found[0]!.message, /open-ended dynamic import/);
 });
 
-test('R74 rejects a namespace import alongside the recorded named binding on the same pair', () => {
+test('R76 rejects a namespace import alongside the recorded named binding on the same pair', () => {
   const sources = {
     'src/platform-runtime-operation-host.ts':
       'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n',
@@ -175,7 +175,7 @@ test('R74 rejects a namespace import alongside the recorded named binding on the
   );
 });
 
-test('R74 treats the import and re-export of one classified pair as one entry', () => {
+test('R76 treats the import and re-export of one classified pair as one entry', () => {
   const sources = {
     'src/platform-runtime-open-target.ts':
       'export async function resolveSoleForegroundIosApp() { return undefined; }\n',
@@ -187,7 +187,7 @@ test('R74 treats the import and re-export of one classified pair as one entry', 
   assert.deepEqual(edgeViolations(sources, 'src/daemon/ios-app-session-hint.ts'), []);
 });
 
-test('R74 ignores test-shaped and non-daemon importers', () => {
+test('R76 ignores test-shaped and non-daemon importers', () => {
   const sources = {
     'src/platform-runtime-android-tool-host.ts': 'export function createAndroidToolHost() {}\n',
     'src/daemon/__tests__/fixture.test.ts':
@@ -205,7 +205,7 @@ test('R74 ignores test-shaped and non-daemon importers', () => {
   );
 });
 
-test('R74 ignores retired-zone targets, which R65 owns', () => {
+test('R76 ignores retired-zone targets, which R65 owns', () => {
   const sources = {
     'src/platforms/android.ts': 'export const legacy = 1;\n',
     'src/daemon/fixture.ts': 'import { legacy } from "../platforms/android.ts";\nvoid legacy;\n',

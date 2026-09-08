@@ -9,7 +9,7 @@ import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
 // and a recorded edge that no longer exists is stale — both fail, so the inventory and the
 // tree cannot drift apart in either direction.
 
-export const DAEMON_PLATFORM_RUNTIME_RULE = 'R74 daemon-platform-runtime-inventory';
+export const DAEMON_PLATFORM_RUNTIME_RULE = 'R76 daemon-platform-runtime-inventory';
 
 export type DaemonPlatformRuntimeClassification =
   | 'composition-essential'
@@ -22,7 +22,7 @@ export type DaemonPlatformRuntimeEdge = Readonly<{
   /**
    * Exact named symbols across every edge of the pair; empty for static side-effect imports (a
    * destructured dynamic import records its bindings, so widening the destructure is a drift, not
-   * a silent expansion). Unnameable dynamic-import forms cannot be recorded here, and R74 rejects
+   * a silent expansion). Unnameable dynamic-import forms cannot be recorded here, and R76 rejects
    * the edge: a rest or computed destructure binding, or a namespace/side-effect import() call —
    * both expose exports beyond this list.
    */
@@ -210,7 +210,7 @@ function sorted(symbols: readonly string[]): string[] {
  *   or a namespace/side-effect import() call exposed alongside (or instead of) the named ones.
  * Evidence: #2278 measured 14 production edges in 9 daemon files at origin/main 6e22e266d7;
  *   this table is that measurement, classified per ADR 0022.
- * Cost: attributed to the R74 rule registration in check.ts; not a standalone CI job.
+ * Cost: attributed to the R76 rule registration in check.ts; not a standalone CI job.
  * Kill criterion: the daemon reaches the platform only through the gateway and declared
  *   contract capabilities (the inventory empty), or a maintainer decision retires the
  *   classification requirement.
