@@ -3,7 +3,7 @@ import {
   createActionableTouchResolver,
   isRootInteractionContainer,
   resolveActionableTouchResolution,
-} from '../../../core/interaction-targeting.ts';
+} from '@agent-device/selectors/interaction-targeting';
 
 /**
  * How `find` orders the candidates its locator matched, before the ambiguity

@@ -16,8 +16,8 @@ import type { SelectorChainMatchList } from '@agent-device/selectors';
 import {
   resolveSelectorPipeline,
   type SelectorPipelineOutcome,
-} from '../../../core/selector-pipeline.ts';
-import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
+} from '@agent-device/selectors/selector-pipeline';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { deriveSelectorCapturePolicy } from './selector-capture-policy.ts';
 import type {
   SelectorWaitOperations,

@@ -170,7 +170,7 @@ test('rect-requiring rows skip rectless nodes; read and wait rows accept them', 
  * revision carried occlusion / off-screen / promotion / poll columns that no
  * code consumed, so changing them left both behavior and the suite green —
  * an unverifiable claim reading as truth. Those four stages belong to the
- * structural table (`src/core/selector-pipeline-policy.ts`, #1656), where
+ * structural table (`packages/selectors/src/selector-pipeline-policy.ts`, #1656), where
  * runners consume them; this still fails if such a field appears HERE, where
  * the selectors package has nothing to enforce it with.
  */

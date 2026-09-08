@@ -5,8 +5,8 @@ import {
   parseFindSelectorExpression,
   type FindLocator,
 } from '@agent-device/selectors';
-import { runNodePipelineStages } from '../../../core/selector-pipeline.ts';
-import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
+import { runNodePipelineStages } from '@agent-device/selectors/selector-pipeline';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { centerOfRect, type SnapshotState } from '@agent-device/kernel/snapshot';
 import { expireRefFrame } from '../../ref-frame.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';

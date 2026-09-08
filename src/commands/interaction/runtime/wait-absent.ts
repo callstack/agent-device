@@ -4,14 +4,14 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   absenceCaptureOptionRefusal,
   type AbsenceObservation,
-} from '../../../core/absence-observation.ts';
+} from '@agent-device/selectors/absence-observation';
 import {
   absenceCaptureOptionError,
   absenceObservationError,
   absenceUnreadableError,
-} from '../../../core/absence-observation-errors.ts';
-import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
-import { resolveAbsenceObservationState } from '../../../core/absence-observation-resolution.ts';
+} from '@agent-device/selectors/absence-observation-errors';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
+import { resolveAbsenceObservationState } from '@agent-device/selectors/absence-observation-resolution';
 import { deriveSelectorCapturePolicy } from './selector-capture-policy.ts';
 import type {
   SelectorWaitOperations,

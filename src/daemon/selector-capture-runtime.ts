@@ -15,7 +15,7 @@ import { getActiveAndroidSnapshotFreshness } from './session-snapshot-freshness.
 import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
 import type { BoundSelectorCapture } from './selector-capture-binding.ts';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
-import { isLegacySparseIosInteractiveSnapshot } from '../core/absence-observation.ts';
+import { isLegacySparseIosInteractiveSnapshot } from '@agent-device/selectors/absence-observation';
 
 const SELECTOR_CAPTURE_CACHE_TTL_MS = 750;
 

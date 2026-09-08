@@ -18,13 +18,13 @@ import {
   resolveSelectorPipeline,
   runNodePipelineStages,
   type SelectorPipelineHooks,
-} from '../../../core/selector-pipeline.ts';
+} from '@agent-device/selectors/selector-pipeline';
 import {
   SELECTOR_PIPELINE_POLICIES,
   type ActingPipelinePolicy,
   type SelectorPipelinePolicy,
-} from '../../../core/selector-pipeline-policy.ts';
-import { resolvePressRecordingTarget } from '../../../core/press-retarget.ts';
+} from '@agent-device/selectors/selector-pipeline-policy';
+import { resolvePressRecordingTarget } from '@agent-device/selectors/press-retarget';
 import { requireSnapshotSession } from './selector-read-shared.ts';
 import { findNodeByLabel, resolveRefLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
 import { containsPoint } from '@agent-device/kernel/rect';
@@ -43,7 +43,7 @@ import type {
   ResolutionDisclosure,
   ResolvedInteractionTarget,
 } from '@agent-device/contracts/interaction';
-import { INTERACTION_ERROR_REASONS } from '../../../core/interaction-error.ts';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import type {
   BackendActionResult,
   BackendCommandContext,
@@ -51,7 +51,7 @@ import type {
 } from '../../../backend.ts';
 import { now, toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult } from '../../runtime-types.ts';
-import { resolveInteractionTouchPoint } from '../../../core/interaction-touch-point.ts';
+import { resolveInteractionTouchPoint } from '@agent-device/selectors/interaction-touch-point';
 import {
   localIdentitiesEqual,
   readNodeLocalIdentity,

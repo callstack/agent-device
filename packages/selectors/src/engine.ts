@@ -11,7 +11,7 @@
  *
  * So they live behind a subpath of their own rather than on the root façade,
  * and R19 selector-pipeline-ownership admits exactly one importer:
- * `src/core/selector-pipeline.ts`. A specifier is what the import graph
+ * `packages/selectors/src/selector-pipeline.ts`. A specifier is what the import graph
  * resolves, so namespace imports, dynamic imports, and re-exports are all the
  * same edge and all equally refused — which a name-shaped check could not say.
  *

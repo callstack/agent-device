@@ -155,11 +155,11 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   // predicate it applies (and the annotation contract it reads).
   occlusion: {
     kind: 'runtime',
-    via: 'src/core/selector-pipeline.ts#runNodePipelineStages',
+    via: 'packages/selectors/src/selector-pipeline.ts#runNodePipelineStages',
   },
   parentOwnedTouchPoint: {
     kind: 'runtime',
-    via: 'src/core/interaction-touch-point.ts#resolveInteractionTouchPoint',
+    via: 'packages/selectors/src/interaction-touch-point.ts#resolveInteractionTouchPoint',
   },
   // #1542: the base decision is the contracts-owned snapshot visibility resolver (bulk accessibility
   // tree), but throwIfOffscreenInteractionTarget is the actual end-to-end
@@ -178,7 +178,7 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   // is still resolveActionableTouchResolution.
   nonHittable: {
     kind: 'runtime',
-    via: 'src/core/selector-pipeline.ts#runNodePipelineStages',
+    via: 'packages/selectors/src/selector-pipeline.ts#runNodePipelineStages',
   },
   responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
   responseIdentity: {
@@ -254,11 +254,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       occlusion: {
         kind: 'runtime',
-        via: 'src/core/selector-pipeline.ts#runNodePipelineStages',
+        via: 'packages/selectors/src/selector-pipeline.ts#runNodePipelineStages',
       },
       parentOwnedTouchPoint: {
         kind: 'runtime',
-        via: 'src/core/interaction-touch-point.ts#resolveInteractionTouchPoint',
+        via: 'packages/selectors/src/interaction-touch-point.ts#resolveInteractionTouchPoint',
       },
       offscreen: {
         kind: 'runtime',
@@ -312,7 +312,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       occlusion: {
         kind: 'runtime',
-        via: 'src/core/selector-pipeline.ts#runNodePipelineStages',
+        via: 'packages/selectors/src/selector-pipeline.ts#runNodePipelineStages',
       },
       parentOwnedTouchPoint: {
         kind: 'inapplicable',

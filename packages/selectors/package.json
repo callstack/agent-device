@@ -4,9 +4,10 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
-  "description": "Shared selector matching, argument, and replay semantics for agent-device. `.` is string-only; `./ast` is the published parser surface behind `agent-device/selectors`; `./engine` is the resolve/list surface reserved for the selector-pipeline owner (R19); `./parameterized-recorded-fill` parameterizes recorded fill payloads against their selectors.",
+  "description": "Shared selector matching, argument, and replay semantics for agent-device. `.` is string-only; `./ast` is the published parser surface behind `agent-device/selectors`; `./engine` is the resolve/list surface reserved for the selector-pipeline owner (R19); `./parameterized-recorded-fill` parameterizes recorded fill payloads against their selectors; the interaction-resolution subpaths (`./selector-pipeline`, `./interaction-targeting`, `./interaction-touch-point`, `./press-retarget`, `./absence-observation*`, …) host the engine execution surface owned by the pipeline.",
   "dependencies": {
     "@agent-device/ad-script": "workspace:*",
+    "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*"
   },
@@ -26,6 +27,54 @@
     "./parameterized-recorded-fill": {
       "types": "./src/parameterized-recorded-fill.ts",
       "default": "./src/parameterized-recorded-fill.ts"
+    },
+    "./absence-observation": {
+      "types": "./src/absence-observation.ts",
+      "default": "./src/absence-observation.ts"
+    },
+    "./absence-observation-errors": {
+      "types": "./src/absence-observation-errors.ts",
+      "default": "./src/absence-observation-errors.ts"
+    },
+    "./absence-observation-resolution": {
+      "types": "./src/absence-observation-resolution.ts",
+      "default": "./src/absence-observation-resolution.ts"
+    },
+    "./interaction-error": {
+      "types": "./src/interaction-error.ts",
+      "default": "./src/interaction-error.ts"
+    },
+    "./interaction-positionals": {
+      "types": "./src/interaction-positionals.ts",
+      "default": "./src/interaction-positionals.ts"
+    },
+    "./interaction-targeting": {
+      "types": "./src/interaction-targeting.ts",
+      "default": "./src/interaction-targeting.ts"
+    },
+    "./interaction-targeting-fixtures": {
+      "types": "./src/interaction-targeting.fixtures.ts",
+      "default": "./src/interaction-targeting.fixtures.ts"
+    },
+    "./interaction-touch-point": {
+      "types": "./src/interaction-touch-point.ts",
+      "default": "./src/interaction-touch-point.ts"
+    },
+    "./press-retarget": {
+      "types": "./src/press-retarget.ts",
+      "default": "./src/press-retarget.ts"
+    },
+    "./selector-pipeline": {
+      "types": "./src/selector-pipeline.ts",
+      "default": "./src/selector-pipeline.ts"
+    },
+    "./selector-pipeline-policy": {
+      "types": "./src/selector-pipeline-policy.ts",
+      "default": "./src/selector-pipeline-policy.ts"
+    },
+    "./touch-semantics": {
+      "types": "./src/touch-semantics.ts",
+      "default": "./src/touch-semantics.ts"
     }
   },
   "devDependencies": {

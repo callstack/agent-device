@@ -1,11 +1,11 @@
 import { AppError, type AppErrorDetails } from '@agent-device/kernel/errors';
 import { WAIT_REASONS, type WaitReason } from '@agent-device/contracts/wait';
 import { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
-import { selectorPollBudget } from '../../../core/selector-pipeline.ts';
+import { selectorPollBudget } from '@agent-device/selectors/selector-pipeline';
 import {
   SELECTOR_PIPELINE_POLICIES,
   type SelectorPipelinePolicy,
-} from '../../../core/selector-pipeline-policy.ts';
+} from '@agent-device/selectors/selector-pipeline-policy';
 import { runWithinWaitDeadline } from './wait-deadline.ts';
 
 /**

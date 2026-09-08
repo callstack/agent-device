@@ -7,13 +7,13 @@ import {
   selectorFailureHint,
   type IsPredicate,
 } from '@agent-device/selectors';
-import { resolveSelectorPipeline } from '../../../core/selector-pipeline.ts';
-import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
+import { resolveSelectorPipeline } from '@agent-device/selectors/selector-pipeline';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { SelectorTarget } from '@agent-device/contracts/interaction';
-import { INTERACTION_ERROR_REASONS } from '../../../core/interaction-error.ts';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import type { RuntimeCommand } from '../../runtime-types.ts';
 import { assertExpectedResolvedTarget, type ExpectedResolvedTarget } from './resolution.ts';
 import {
@@ -22,12 +22,12 @@ import {
   captureSelectorSnapshot,
 } from './selector-read-shared.ts';
 import { deriveSelectorCapturePolicy } from './selector-capture-policy.ts';
-import { absenceCaptureOptionRefusal } from '../../../core/absence-observation.ts';
+import { absenceCaptureOptionRefusal } from '@agent-device/selectors/absence-observation';
 import {
   absenceCaptureOptionError,
   absenceUnreadableError,
-} from '../../../core/absence-observation-errors.ts';
-import { resolveAbsenceObservation } from '../../../core/absence-observation-resolution.ts';
+} from '@agent-device/selectors/absence-observation-errors';
+import { resolveAbsenceObservation } from '@agent-device/selectors/absence-observation-resolution';
 
 export type IsCommandOptions = CommandContext &
   SelectorSnapshotOptions & {

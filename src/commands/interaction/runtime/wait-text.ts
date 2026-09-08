@@ -6,7 +6,7 @@ import type {
   WaitCommandResult,
 } from './selector-wait.ts';
 import { findNodeByLabel } from './selector-read-utils.ts';
-import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { createWaitPolling, type WaitPollDeadline, waitTimeoutError } from './wait-polling.ts';
 
 export async function waitForText<Runtime extends SelectorWaitRuntime>(

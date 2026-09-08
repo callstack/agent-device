@@ -13,8 +13,8 @@ import {
   resolveSnapshotBounds,
 } from '@agent-device/capture-kit/snapshot-rect-projection';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
-import { SELECTOR_PIPELINE_POLICIES } from '../core/selector-pipeline-policy.ts';
-import { resolveSelectorPipeline } from '../core/selector-pipeline.ts';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
+import { resolveSelectorPipeline } from '@agent-device/selectors/selector-pipeline';
 import type { DaemonCommandContext } from './context.ts';
 import { captureSnapshotData } from './snapshot-capture.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';

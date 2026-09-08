@@ -3,10 +3,10 @@ import {
   type FindLocator,
   type SelectorResolutionPolicy,
 } from '@agent-device/selectors';
-import { listSelectorPipelineMatches } from '../../../core/selector-pipeline.ts';
-import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
+import { listSelectorPipelineMatches } from '@agent-device/selectors/selector-pipeline';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { isRootInteractionContainer } from '../../../core/interaction-targeting.ts';
+import { isRootInteractionContainer } from '@agent-device/selectors/interaction-targeting';
 import { preferOnscreenMatches } from './find-match-ranking.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';

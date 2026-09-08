@@ -4,7 +4,7 @@ import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapsho
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { computeTargetEvidence } from '../../../session-target-evidence.ts';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
-import { resolvePressRecordingTarget } from '../../../../core/press-retarget.ts';
+import { resolvePressRecordingTarget } from '@agent-device/selectors/press-retarget';
 import { classifyReplayTarget } from '../session-replay-target-classification.ts';
 import {
   bottomTabsRealCaptureFixture,

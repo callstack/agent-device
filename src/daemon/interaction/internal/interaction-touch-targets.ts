@@ -8,7 +8,7 @@ import {
   readFillTargetFromPositionals,
   stripAtPrefix,
   type DecodedFillTarget,
-} from '../../../core/interaction-positionals.ts';
+} from '@agent-device/selectors/interaction-positionals';
 import type { DaemonResponse } from '../../daemon-request.ts';
 import { parseCoordinateTarget } from './interaction-targeting.ts';
 import { errorResponse } from '../../response.ts';

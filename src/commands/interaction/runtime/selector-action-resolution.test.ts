@@ -4,8 +4,8 @@ import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builde
 import {
   ELEMENT14_DISTINCT_SUBTREE_NODES,
   EQUIVALENT_WRAPPER_CHAIN_NODES,
-} from '../../../core/interaction-targeting.fixtures.ts';
-import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
+} from '@agent-device/selectors/interaction-targeting-fixtures';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { resolveActionSelector } from './selector-action-resolution.ts';
 
 test('mutating selector collapses a wrapper chain that resolves to one actionable node', () => {

@@ -12,8 +12,8 @@ import {
   listSelectorPipelineMatches,
   resolveSelectorPipeline,
   type SelectorPipelineHooks,
-} from '../../../core/selector-pipeline.ts';
-import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
+} from '@agent-device/selectors/selector-pipeline';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';

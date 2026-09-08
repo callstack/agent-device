@@ -1,6 +1,6 @@
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
-import { stripAtPrefix } from '../interaction-positionals.ts';
+import { stripAtPrefix } from '@agent-device/selectors/interaction-positionals';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { resolveWebProvider, type WebProvider } from '@agent-device/platform-web';
 import { createUnsupportedInteractor } from './unsupported-interactor.ts';

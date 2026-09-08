@@ -1,4 +1,4 @@
-import { INTERACTION_ERROR_REASONS } from '../../../../core/interaction-error.ts';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import { expect, test } from 'vitest';
 import type { DaemonRequest } from '../../../daemon-request.ts';

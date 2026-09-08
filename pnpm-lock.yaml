@@ -490,6 +490,9 @@ importers:
       '@agent-device/ad-script':
         specifier: workspace:*
         version: link:../ad-script
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts

@@ -1,7 +1,7 @@
 import { asAppError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { absenceCaptureOptionError } from '../core/absence-observation-errors.ts';
-import { absenceCaptureOptionRefusal } from '../core/absence-observation.ts';
+import { absenceCaptureOptionError } from '@agent-device/selectors/absence-observation-errors';
+import { absenceCaptureOptionRefusal } from '@agent-device/selectors/absence-observation';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import { errorResponse } from './response.ts';
 import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from './session-snapshot.ts';

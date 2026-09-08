@@ -19,8 +19,8 @@ import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { messageOutput } from '../output-common.ts';
 import { WAIT_KIND_VALUES } from './wait-command-contract.ts';
-import { absenceCaptureOptionRefusal } from '../../core/absence-observation.ts';
-import { absenceCaptureOptionError } from '../../core/absence-observation-errors.ts';
+import { absenceCaptureOptionRefusal } from '@agent-device/selectors/absence-observation';
+import { absenceCaptureOptionError } from '@agent-device/selectors/absence-observation-errors';
 
 const WAIT_COMMAND_NAME = 'wait';
 

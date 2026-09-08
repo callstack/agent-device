@@ -14,7 +14,7 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   readFillTargetFromPositionals,
   readInteractionTargetFromPositionals,
-} from '../../core/interaction-positionals.ts';
+} from '@agent-device/selectors/interaction-positionals';
 import {
   commonInputFromFlags,
   direct,
