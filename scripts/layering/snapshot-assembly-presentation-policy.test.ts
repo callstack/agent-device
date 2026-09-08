@@ -12,7 +12,7 @@ import { workspaceSpecifierTargets } from './package-boundaries.ts';
 import { listTrackedProductionSources } from './tracked-sources.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
-const assemblyFile = 'src/core/snapshot-state.ts';
+const assemblyFile = 'packages/capture-kit/src/snapshot-state.ts';
 const producerAdapter = 'packages/platform-apple/src/snapshot-source/adapter.ts';
 
 function currentSources(overrides: ReadonlyMap<string, string> = new Map()): Map<string, string> {

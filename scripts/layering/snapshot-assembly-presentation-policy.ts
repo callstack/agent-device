@@ -25,7 +25,7 @@ export const SNAPSHOT_ASSEMBLY_PRESENTATION_RULE = 'R74 snapshot-assembly-presen
  * refs; it does not present, and it does not know which channel it is holding.
  */
 export const SNAPSHOT_ASSEMBLY_FILES: readonly string[] = [
-  'src/core/snapshot-state.ts',
+  'packages/capture-kit/src/snapshot-state.ts',
   'src/daemon/snapshot-capture.ts',
 ];
 
