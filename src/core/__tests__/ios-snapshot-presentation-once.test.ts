@@ -6,8 +6,8 @@ import type {
 } from '@agent-device/contracts/ios-snapshot';
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
-import { presentIosSnapshotAcquisition } from '../../snapshot/ios-snapshot-runtime.ts';
-import { buildSnapshotState } from '../snapshot-state.ts';
+import { presentIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-runtime';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 
 /**
  * #2188 invariant 2: geometric presentation happens exactly ONCE per capture. Before #2199 the
