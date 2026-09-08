@@ -6,6 +6,7 @@
   "@agent-device/contracts/android-observation",
   "@agent-device/contracts/android-snapshot-quality",
   "@agent-device/contracts/android-system-chrome",
+  "@agent-device/contracts/android-system-surface-disclosure",
   "@agent-device/contracts/app-deployment-runtime",
   "@agent-device/contracts/app-deployment-runtime-plan",
   "@agent-device/contracts/app-event-runtime",
