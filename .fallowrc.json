@@ -20,6 +20,12 @@
     "packages/capture-kit/src/png-worker.ts",
     "scripts/patch-xcuitest-runner-icon.ts",
     "scripts/runner-request-count/run.ts",
+    // The ripwire-eval benches are operator-run CLIs (docs/ripwire-context-tooling-evaluation.md),
+    // invoked by hand rather than imported, so nothing in the tree references them; without these
+    // roots their shared bench-cli.mjs reads as dead too.
+    "scripts/ripwire-eval/retrieval-bench.mjs",
+    "scripts/ripwire-eval/affected-bench.mjs",
+    "scripts/ripwire-eval/score.mjs",
     "packages/capture-kit/src/ios-snapshot-engine/replay.ts",
     // #1596 regression fixture: runs as a real `node --experimental-strip-types`
     // subprocess (test/integration/daemon-replace-exit-flush.test.ts), so
