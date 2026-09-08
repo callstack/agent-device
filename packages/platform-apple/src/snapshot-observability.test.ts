@@ -2,6 +2,7 @@ import { expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLaunchObservationProbe } from './snapshot-observability.ts';
 import type { SnapshotSourceFailure, SnapshotSourceOutcome } from './snapshot-source-facade.ts';
+import type { SimulatorSnapshotTarget } from './snapshot-target.ts';
 
 const simulator = {
   platform: 'apple',
@@ -42,16 +43,19 @@ const acquired = (): SnapshotSourceOutcome => ({
 function probe(
   outcomes: readonly SnapshotSourceOutcome[],
   clock: { now(): number; sleep(ms: number): Promise<void> },
+  isBridgeDisabled: (probed: SimulatorSnapshotTarget) => boolean = () => false,
 ) {
   let index = 0;
   const acquire = vi.fn(async () => outcomes[Math.min(index++, outcomes.length - 1)]!);
   const sleep = vi.fn(clock.sleep);
+  const gate = vi.fn(isBridgeDisabled);
   const observe = createLaunchObservationProbe({
     source: { acquire, close: async () => {} },
     resolveTarget: async () => target,
     clock: { now: clock.now, sleep },
+    isBridgeDisabled: gate,
   });
-  return { observe, acquire, sleep };
+  return { observe, acquire, sleep, gate };
 }
 
 test('a launched app is observable as soon as the bridge publishes it', async () => {
@@ -138,15 +142,30 @@ test('a failure outside the launch transition ends the wait at once', async () =
   expect(sleep).not.toHaveBeenCalled();
 });
 
+test('a generation whose bridge circuit is open is unobservable without a bridge round trip', async () => {
+  const { observe, acquire, sleep, gate } = probe(
+    [acquired()],
+    { now: () => 0, sleep: async () => {} },
+    () => true,
+  );
+  await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toBe(
+    'unobservable',
+  );
+  expect(gate).toHaveBeenCalledWith(target);
+  expect(acquire).not.toHaveBeenCalled();
+  expect(sleep).not.toHaveBeenCalled();
+});
+
 test.each([
   ['a physical iOS device', { ...simulator, kind: 'device' as const }],
   ['a tvOS Simulator', { ...simulator, appleOs: 'tvos' as const, target: 'tv' as const }],
 ])('%s has no bridge and is not eligible', async (_name, device) => {
-  const { observe, acquire } = probe([acquired()], { now: () => 0, sleep: async () => {} });
+  const { observe, acquire, gate } = probe([acquired()], { now: () => 0, sleep: async () => {} });
   await expect(observe.awaitObservable(device, 'com.example.app', signal())).resolves.toBe(
     'not-eligible',
   );
   expect(acquire).not.toHaveBeenCalled();
+  expect(gate).not.toHaveBeenCalled();
 });
 
 function signal(): AbortSignal {

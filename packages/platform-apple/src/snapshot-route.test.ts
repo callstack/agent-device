@@ -269,6 +269,64 @@ test('a slow app discovery yields to a live runner within its wait slice, then s
   }
 });
 
+test('an open whose generation already failed the bridge skips the launch-observation poll', async () => {
+  // #2199: `application-server-unavailable` is a launch-transition code, so an ungated probe would
+  // re-read the bridge every 150 ms for its whole 5 s window on a generation the circuit already
+  // gave up on — ~33 acquisitions per `open`, each a fresh connect.
+  const source = sourceReturning({
+    stage: 'failed',
+    failure: { kind: 'transport-failure', code: 'application-server-unavailable' },
+  });
+  const route = createAppleSnapshotRoute(
+    { ...platformRuntimeHostFixture(), clock: steppingClock() },
+    { source, resolveTarget: vi.fn(async () => target) },
+  );
+
+  await route.capture(ios, input, signal(), async () => runnerResult());
+  expect(source.acquire).toHaveBeenCalledOnce();
+
+  await expect(route.awaitObservable(ios, input.options.appBundleId, signal())).resolves.toBe(
+    'unobservable',
+  );
+  expect(source.acquire).toHaveBeenCalledOnce();
+});
+
+test('a relaunched generation rebaselines the circuit and observes the launch', async () => {
+  const outcomes: SnapshotSourceOutcome[] = [
+    { stage: 'failed', failure: { kind: 'transport-failure', code: 'bridge-disconnected' } },
+    bridgeAcquisition(),
+  ];
+  let acquisitions = 0;
+  const source = {
+    acquire: vi.fn(async () => outcomes[Math.min(acquisitions++, outcomes.length - 1)]!),
+    close: vi.fn(async () => {}),
+  };
+  const relaunched = { ...target, pid: 84, generation: '84:launch-b' };
+  const resolveTarget = vi.fn().mockResolvedValueOnce(target).mockResolvedValue(relaunched);
+  const route = createAppleSnapshotRoute(
+    { ...platformRuntimeHostFixture(), clock: steppingClock() },
+    { source, resolveTarget },
+  );
+
+  await route.capture(ios, input, signal(), async () => runnerResult());
+
+  await expect(route.awaitObservable(ios, input.options.appBundleId, signal())).resolves.toBe(
+    'observable',
+  );
+  expect(source.acquire).toHaveBeenCalledTimes(2);
+});
+
+/** A clock the launch-observation loop can run to its deadline instead of spinning forever. */
+function steppingClock() {
+  let now = 0;
+  return {
+    now: () => now,
+    sleep: async (ms: number) => {
+      now += ms;
+    },
+  };
+}
+
 function bridgeAcquisition(): Extract<SnapshotSourceOutcome, { stage: 'acquired' }> {
   return {
     stage: 'acquired',

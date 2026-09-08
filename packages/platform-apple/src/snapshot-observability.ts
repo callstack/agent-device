@@ -5,7 +5,10 @@ import {
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SimulatorSnapshotSource } from './snapshot-source-facade.ts';
-import type { SimulatorSnapshotTargetResolver } from './snapshot-target.ts';
+import type {
+  SimulatorSnapshotTarget,
+  SimulatorSnapshotTargetResolver,
+} from './snapshot-target.ts';
 
 /**
  * What an `open` learned about the app it just launched on a local Simulator: `observable` means
@@ -51,6 +54,7 @@ export function createLaunchObservationProbe(
     source: SimulatorSnapshotSource;
     resolveTarget: SimulatorSnapshotTargetResolver;
     clock: PlatformRuntimeHost['clock'];
+    isBridgeDisabled: (target: SimulatorSnapshotTarget) => boolean;
   }>,
 ): LaunchObservationPort {
   const hint = deriveIosCaptureHint(createIosSnapshotRequest({ depth: 1, interactiveOnly: true }));
@@ -62,6 +66,10 @@ export function createLaunchObservationProbe(
         const target = await deps.resolveTarget(device, appBundleId, signal).catch(() => undefined);
         signal.throwIfAborted();
         if (!target) return 'unobservable';
+        // A generation whose bridge already failed a capture fails this probe the same way, and
+        // the codes it fails with are the ones this loop re-reads for seconds. Ask the circuit
+        // first; a relaunch carries a new generation, which rebaselines and observes as usual.
+        if (deps.isBridgeDisabled(target)) return 'unobservable';
         const outcome = await deps.source.acquire({ target, hint, signal });
         if (outcome.stage !== 'failed') return 'observable';
         signal.throwIfAborted();

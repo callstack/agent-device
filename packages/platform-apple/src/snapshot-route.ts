@@ -57,7 +57,22 @@ export function createAppleSnapshotRoute(
   const resolveTarget = options.resolveTarget ?? createSimulatorSnapshotTargetResolver();
   const disabledGenerations = new Set<string>();
   const latestGeneration = new Map<string, string>();
-  const observation = createLaunchObservationProbe({ source, resolveTarget, clock: host.clock });
+  /**
+   * Records `target` as the newest generation of its app — which clears the circuit an earlier
+   * generation opened — and reports whether the bridge is disabled for it. Both a capture and the
+   * launch-observation probe ask before they spend a bridge round trip, so one generation's
+   * failure is paid once rather than once per route (#2198, #2199).
+   */
+  const isBridgeDisabled = (target: SimulatorSnapshotTarget): boolean => {
+    rebaselineGeneration(target, latestGeneration, disabledGenerations);
+    return disabledGenerations.has(generationKey(target));
+  };
+  const observation = createLaunchObservationProbe({
+    source,
+    resolveTarget,
+    clock: host.clock,
+    isBridgeDisabled,
+  });
 
   return Object.freeze({
     awaitObservable: observation.awaitObservable,
@@ -79,9 +94,7 @@ export function createAppleSnapshotRoute(
           [unknownGenerationResidue()],
         );
       }
-      rebaselineGeneration(target, latestGeneration, disabledGenerations);
-      const circuitKey = generationKey(target);
-      if (disabledGenerations.has(circuitKey)) {
+      if (isBridgeDisabled(target)) {
         return await runFallback(input, fallback, target, requestFor(input), 'circuit-disabled');
       }
 
