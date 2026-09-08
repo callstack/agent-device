@@ -3,6 +3,7 @@
 import type { DeviceCommandBaseOptions } from './client-connection.ts';
 
 export type PermissionTarget =
+  | 'all'
   | 'camera'
   | 'microphone'
   | 'photos'

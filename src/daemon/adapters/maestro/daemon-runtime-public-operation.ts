@@ -20,6 +20,14 @@ export type MaestroPublicOperation =
       launchArgs: string[];
     }
   | { kind: 'stopApp'; appId?: string }
+  | { kind: 'clearAppState'; appId?: string }
+  | {
+      kind: 'settingsPermission';
+      appId?: string;
+      state: 'grant' | 'deny' | 'reset';
+      permission: string;
+      mode?: 'full' | 'limited';
+    }
   | { kind: 'openLink'; appId?: string; link: string; prewarmRunner: boolean }
   | { kind: 'typeText'; text: string }
   | {
@@ -47,6 +55,8 @@ export function projectMaestroPublicOperation(
 ): ProjectedMaestroPublicOperation {
   if (isAppOperation(operation)) return projectAppOperation(operation);
   if (isCaptureOperation(operation)) return projectCaptureOperation(operation);
+  if (operation.kind === 'settingsPermission') return projectSettingsPermission(operation);
+  if (operation.kind === 'clearAppState') return projectClearAppState(operation);
   return projectInputOperation(operation);
 }
 
@@ -96,6 +106,15 @@ function projectStopApp(
   };
 }
 
+function projectClearAppState(
+  operation: Extract<MaestroPublicOperation, { kind: 'clearAppState' }>,
+): ProjectedMaestroPublicOperation {
+  return {
+    command: 'settings',
+    positionals: operation.appId ? ['clear-app-state', operation.appId] : ['clear-app-state'],
+  };
+}
+
 function projectOpenLink(
   operation: Extract<MaestroAppOperation, { kind: 'openLink' }>,
 ): ProjectedMaestroPublicOperation {
@@ -106,9 +125,27 @@ function projectOpenLink(
   };
 }
 
+function projectSettingsPermission(
+  operation: Extract<MaestroPublicOperation, { kind: 'settingsPermission' }>,
+): ProjectedMaestroPublicOperation {
+  return {
+    command: 'settings',
+    positionals: [
+      'permission',
+      operation.state,
+      operation.permission,
+      ...(operation.mode ? [operation.mode] : []),
+    ],
+    ...(operation.appId ? { internal: { settingsAppBundleId: operation.appId } } : {}),
+  };
+}
+
 type MaestroInputOperation = Exclude<
   MaestroPublicOperation,
-  MaestroAppOperation | MaestroCaptureOperation
+  | MaestroAppOperation
+  | MaestroCaptureOperation
+  | { kind: 'settingsPermission' }
+  | { kind: 'clearAppState' }
 >;
 
 function projectInputOperation(operation: MaestroInputOperation): ProjectedMaestroPublicOperation {

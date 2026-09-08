@@ -285,48 +285,32 @@ async function runIosPrivacyCommand(
   }
 
   const args = ['privacy', device.id, action, target, appBundleId];
-  const isNotificationsTarget = target === 'notifications';
-  if (!(action === 'reset' && isNotificationsTarget)) {
-    try {
-      await runSimctl(device, args);
-      return;
-    } catch (error) {
-      if (!(isNotificationsTarget && isNotificationsOperationNotPermitted(error))) {
-        throw error;
-      }
-      throw new AppError(
-        'UNSUPPORTED_OPERATION',
-        'iOS simulator does not support setting notifications permission via simctl privacy on this runtime.',
-        {
-          deviceId: device.id,
-          appBundleId,
-          hint: 'Use reset notifications for reprompt behavior, or toggle notifications manually in Settings.',
-        },
-      );
-    }
-  }
-
   try {
     await runSimctl(device, args);
     return;
   } catch (error) {
-    if (!isNotificationsOperationNotPermitted(error)) {
+    if (!(target === 'notifications' && isNotificationsOperationNotPermitted(error))) {
       throw error;
     }
-  }
-
-  try {
-    await runSimctl(device, ['privacy', device.id, 'reset', 'all', appBundleId]);
-  } catch (error) {
+    if (action === 'reset') {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        'iOS simulator does not support resetting notifications permission via simctl privacy on this runtime.',
+        {
+          deviceId: device.id,
+          appBundleId,
+          hint: 'Use reinstall to force a fresh notifications prompt, or reset simulator content and settings.',
+        },
+      );
+    }
     throw new AppError(
-      'COMMAND_FAILED',
-      'iOS simulator blocked direct notifications reset. Fallback reset-all also failed.',
+      'UNSUPPORTED_OPERATION',
+      'iOS simulator does not support setting notifications permission via simctl privacy on this runtime.',
       {
         deviceId: device.id,
         appBundleId,
-        hint: 'Use reinstall to force a fresh notifications prompt, or reset simulator content and settings.',
+        hint: 'Use reset notifications for reprompt behavior, or toggle notifications manually in Settings.',
       },
-      error instanceof Error ? error : undefined,
     );
   }
 }
@@ -399,6 +383,7 @@ function parseIosPermissionTarget(
       `Permission mode is only supported for photos. Received: ${permissionMode}.`,
     );
   }
+  if (normalized === 'all') return 'all';
   if (normalized === 'camera') return 'camera';
   if (normalized === 'microphone') return 'microphone';
   if (normalized === 'contacts') return 'contacts';
@@ -419,7 +404,7 @@ function parseIosPermissionTarget(
   }
   throw new AppError(
     'INVALID_ARGS',
-    `Unsupported permission target: ${permissionTarget}. Use camera|microphone|photos|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri.`,
+    `Unsupported permission target: ${permissionTarget}. Use all|camera|microphone|photos|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri.`,
   );
 }
 

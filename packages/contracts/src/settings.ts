@@ -2,6 +2,7 @@ import { AppError } from '@agent-device/kernel/errors';
 
 export type PermissionAction = 'grant' | 'deny' | 'reset';
 export type PermissionTarget =
+  | 'all'
   | 'camera'
   | 'microphone'
   | 'photos'
@@ -22,6 +23,7 @@ export type SettingOptions = {
   longitude?: number;
 };
 const PERMISSION_TARGETS: readonly PermissionTarget[] = [
+  'all',
   'camera',
   'microphone',
   'photos',
@@ -47,7 +49,7 @@ const SETTINGS_FINGERPRINT_USAGE = 'fingerprint <match|nonmatch>';
 const SETTINGS_CLEAR_APP_STATE_USAGE = 'clear-app-state [app-id]';
 const SETTINGS_RESET_KEYCHAIN_USAGE = 'reset-keychain clear';
 const SETTINGS_PERMISSION_USAGE =
-  'permission <grant|deny|reset> <camera|microphone|photos|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri> [full|limited]';
+  'permission <grant|deny|reset> <all|camera|microphone|photos|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri> [full|limited]';
 const SETTINGS_MACOS_PERMISSION_USAGE =
   'permission <grant|reset> <accessibility|screen-recording|input-monitoring>';
 const SETTINGS_MACOS_SUPPORTED_MESSAGE = `macOS supports only settings ${SETTINGS_APPEARANCE_USAGE} and settings ${SETTINGS_MACOS_PERMISSION_USAGE}. wifi|airplane|location|animations remain unsupported on macOS.`;
@@ -88,6 +90,7 @@ export function parsePermissionAction(action: string): PermissionAction {
 export function parsePermissionTarget(value: string | undefined): PermissionTarget {
   const normalized = value?.trim().toLowerCase();
   if (
+    normalized === 'all' ||
     normalized === 'camera' ||
     normalized === 'microphone' ||
     normalized === 'photos' ||

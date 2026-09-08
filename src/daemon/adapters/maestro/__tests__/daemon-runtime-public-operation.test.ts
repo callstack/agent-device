@@ -49,6 +49,14 @@ describe('Maestro public operation projection', () => {
       expected: { command: 'close', positionals: [], internal: { closeAppOnly: true } },
     },
     {
+      operation: { kind: 'clearAppState', appId: 'com.example' },
+      expected: { command: 'settings', positionals: ['clear-app-state', 'com.example'] },
+    },
+    {
+      operation: { kind: 'clearAppState' },
+      expected: { command: 'settings', positionals: ['clear-app-state'] },
+    },
+    {
       operation: {
         kind: 'openLink',
         appId: 'com.example',
@@ -173,6 +181,31 @@ describe('Maestro public operation projection', () => {
         command: 'snapshot',
         positionals: [],
         flags: { noRecord: true },
+      },
+    },
+    {
+      operation: {
+        kind: 'settingsPermission',
+        appId: 'com.example',
+        state: 'grant',
+        permission: 'camera',
+      },
+      expected: {
+        command: 'settings',
+        positionals: ['permission', 'grant', 'camera'],
+        internal: { settingsAppBundleId: 'com.example' },
+      },
+    },
+    {
+      operation: {
+        kind: 'settingsPermission',
+        state: 'grant',
+        permission: 'photos',
+        mode: 'limited',
+      },
+      expected: {
+        command: 'settings',
+        positionals: ['permission', 'grant', 'photos', 'limited'],
       },
     },
   ])('projects $operation.kind', ({ operation, expected }) => {

@@ -156,6 +156,7 @@ const BIOMETRIC_STATES = setOf<BiometricState>('match', 'nonmatch', 'enroll', 'u
 const FINGERPRINT_STATES = setOf<FingerprintState>('match', 'nonmatch');
 const PERMISSION_STATES = setOf<PermissionState>('grant', 'deny', 'reset');
 const PERMISSION_TARGETS = setOf<PermissionTarget>(
+  'all',
   'camera',
   'microphone',
   'photos',
