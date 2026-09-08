@@ -325,7 +325,7 @@ gets built.
   inconsistency, and three write paths. Kept as the migration's first independently useful step
   instead.
 - **Merge `upload-progress` and `app-events` in:** rejected. Upload progress is a local
-  byte-counter callback that never crosses the request scope; `core/app-events.ts` is a deep-link
+  byte-counter callback that never crosses the request scope; `src/daemon/app-events.ts` is a deep-link
   builder for the `trigger-app-event` command, not an event channel.
 
 ## Validation required for implementation

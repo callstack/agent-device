@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { readFillBackendResult } from '../fill-backend-result.ts';
+import { readFillBackendResult } from './fill-backend-result.ts';
 
 test('readFillBackendResult preserves a complete unconfirmed verification', () => {
   assert.deepEqual(

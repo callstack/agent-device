@@ -1,6 +1,6 @@
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { stopMetroCompanion } from './client-metro-companion.ts';
-import { resolveRuntimeTransportHints } from '../core/runtime-transport-hints.ts';
+import { resolveRuntimeTransportHints } from '@agent-device/host-kit/runtime-transport-hints';
 
 export type { MetroBridgeDescriptor } from './metro-types.ts';
 

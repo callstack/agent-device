@@ -28,7 +28,7 @@ import {
   detectProjectRuntimeKindFromPackageJson,
   readProjectPackageJson,
   type PackageJsonShape,
-} from '../core/project-runtime.ts';
+} from '@agent-device/host-kit/project-runtime';
 import { normalizeBaseUrl } from '../client/base-url.ts';
 import { buildBundleUrl } from './bundle-url.ts';
 import {

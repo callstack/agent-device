@@ -12,7 +12,7 @@ import { parseTvRemoteButton } from '@agent-device/contracts/tv-remote';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
 import { isKeyboardAction } from '@agent-device/session-journal/keyboard-actions';
-import { requireIntInRange } from '../../../core/validation.ts';
+import { requireIntInRange } from '@agent-device/kernel/validation';
 import {
   toBackendResult,
   type BackendResultEnvelope,

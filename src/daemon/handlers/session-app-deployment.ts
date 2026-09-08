@@ -5,14 +5,14 @@ import {
   readySendPushNotificationUse,
 } from '@agent-device/contracts/app-deployment-runtime-plan';
 import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
-import { readNotificationPayload } from '../../core/dispatch-payload.ts';
+import { readNotificationPayload } from '../dispatch-payload.ts';
 import { cleanupUploadedArtifact, prepareUploadedArtifact } from '../artifact-tracking.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
-import { resolvePayloadInput } from '../../core/payload-input.ts';
+import { resolvePayloadInput } from '../payload-input.ts';
 import { resolveDeployResultTarget } from '../../core/deploy-result-target.ts';
 import { withSuccessText } from '@agent-device/kernel/success-text';
 import { recordSessionAction } from '../session-action-recorder.ts';

@@ -126,7 +126,7 @@ export const MACOS_PLATFORM_COVERAGE = {
     'Apple deployment facts close push delivery on the macOS host',
   ),
   [C.triggerAppEvent]: contract(
-    'src/core/__tests__/app-event-delivery.test.ts',
+    'src/daemon/app-event-delivery.test.ts',
     'trigger-app-event supports macOS and prefers macOS template',
     'macOS app-event dispatch selects the macOS URL template',
   ),

@@ -2,7 +2,7 @@ import type { AppEventInput } from '@agent-device/contracts/app-event-runtime';
 import { appEventRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { parseTriggerAppEventArgs, resolveAppEventUrl } from '../core/app-events.ts';
+import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
 import { successText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from './runtime-admission.ts';

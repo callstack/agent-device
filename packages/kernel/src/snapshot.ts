@@ -274,7 +274,7 @@ export type SnapshotState = {
   /**
    * Android: the capture is an occluding system surface (notification shade, quick settings)
    * rather than app content. Consumers that surface this tree to the agent must disclose the
-   * occlusion (see core/android-system-surface-disclosure.ts).
+   * occlusion (see `@agent-device/contracts/android-system-surface-disclosure`).
    */
   systemSurfaceOnly?: boolean;
 } & SnapshotStateProvenance;

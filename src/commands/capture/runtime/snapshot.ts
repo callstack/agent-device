@@ -23,7 +23,7 @@ import {
 } from '@agent-device/capture-kit/snapshot-diff';
 import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality-warnings';
 import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
-import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../../core/android-system-surface-disclosure.ts';
+import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
 import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';
 import { now } from '../../runtime-common.ts';
 import { iosSnapshotTruncationEvidence } from '@agent-device/capture-kit/ios-snapshot-acquisition';

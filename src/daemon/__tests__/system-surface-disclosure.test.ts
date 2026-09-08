@@ -5,7 +5,7 @@ import { getRuntimeBindings } from './interaction-get-runtime-fixture.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
 import { dispatchWaitViaRuntime } from '../wait-runtime.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
-import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../core/android-system-surface-disclosure.ts';
+import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';

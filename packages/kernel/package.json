@@ -84,6 +84,10 @@
     "./ttl-memo": {
       "types": "./src/ttl-memo.ts",
       "default": "./src/ttl-memo.ts"
+    },
+    "./validation": {
+      "types": "./src/validation.ts",
+      "default": "./src/validation.ts"
     }
   }
 }

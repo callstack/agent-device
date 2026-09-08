@@ -1,5 +1,5 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { systemSurfaceDisclosure } from '../core/android-system-surface-disclosure.ts';
+import { systemSurfaceDisclosure } from '@agent-device/contracts/android-system-surface-disclosure';
 import type { DaemonResponse } from './daemon-request.ts';
 
 /**

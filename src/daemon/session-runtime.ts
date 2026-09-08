@@ -8,7 +8,7 @@ import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/devi
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionRuntimeHints, SessionState } from './session-state.ts';
 import { SessionStore } from './session-store.ts';
-import { trimRuntimeValue } from '../core/runtime-transport-hints.ts';
+import { trimRuntimeValue } from '@agent-device/host-kit/runtime-transport-hints';
 import { isAndroidEmulator, isIosSimulator } from './device-targets.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';
 

@@ -36,6 +36,10 @@
       "types": "./src/android-system-chrome.ts",
       "default": "./src/android-system-chrome.ts"
     },
+    "./android-system-surface-disclosure": {
+      "types": "./src/android-system-surface-disclosure.ts",
+      "default": "./src/android-system-surface-disclosure.ts"
+    },
     "./app-deployment-runtime": {
       "types": "./src/app-deployment-runtime.ts",
       "default": "./src/app-deployment-runtime.ts"

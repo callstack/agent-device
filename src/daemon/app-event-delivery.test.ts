@@ -4,15 +4,15 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { parseTriggerAppEventArgs, resolveAppEventUrl } from '../app-events.ts';
-import { getInteractor } from '../interactors.ts';
+import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
+import { getInteractor } from '../core/interactors.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   ANDROID_EMULATOR,
   IOS_DEVICE,
   MACOS_DEVICE,
-} from '../../__tests__/test-utils/device-fixtures.ts';
-import { mkdtempForTest } from '../../__tests__/test-utils/tmp-dir.ts';
+} from '../__tests__/test-utils/device-fixtures.ts';
+import { mkdtempForTest } from '../__tests__/test-utils/tmp-dir.ts';
 
 /**
  * The composed `trigger-app-event` path as R57 left it: the daemon's own policy resolves the

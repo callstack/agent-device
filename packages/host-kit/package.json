@@ -51,6 +51,10 @@
       "types": "./src/process.ts",
       "default": "./src/process.ts"
     },
+    "./project-runtime": {
+      "types": "./src/project-runtime.ts",
+      "default": "./src/project-runtime.ts"
+    },
     "./request": {
       "types": "./src/request.ts",
       "default": "./src/request.ts"
@@ -58,6 +62,10 @@
     "./retry": {
       "types": "./src/retry.ts",
       "default": "./src/retry.ts"
+    },
+    "./runtime-transport-hints": {
+      "types": "./src/runtime-transport-hints.ts",
+      "default": "./src/runtime-transport-hints.ts"
     },
     "./transport": {
       "types": "./src/transport.ts",
