@@ -31,7 +31,7 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
    - **Leaked platform mechanics** — platform-family operations or state that should be owned
      behind a deeper runtime interface or adapter; only this category creates implementation
      work (child issues below).
-   The gate rule **R74 `daemon-platform-runtime-inventory`** (in `scripts/layering/check.ts`)
+   The gate rule **R76 `daemon-platform-runtime-inventory`** (in `scripts/layering/check.ts`)
    fails the layering check on any unclassified edge, on symbol-set drift between a file and its
    inventory entry, and on stale entries. Observed red against a planted unclassified import
    before acceptance.
@@ -111,7 +111,7 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
 
 ## 4. Enforced by
 
-- R74 `daemon-platform-runtime-inventory` and R75 `session-authority-overlay` in
+- R76 `daemon-platform-runtime-inventory` and R75 `session-authority-overlay` in
   `scripts/layering/check.ts` (both observed red against planted violations before acceptance).
 - R7 `session-state-ownership` and the R10 merge-base ratchet for the owning-module slice.
 - R65 for the concrete-platform-import ban this audit builds on.
