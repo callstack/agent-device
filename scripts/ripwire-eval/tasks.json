@@ -1,0 +1,117 @@
+{
+  "$comment": "Held-out change-set localization benchmark. Each task replays a real merged agent-device commit: the agent works in a worktree at the commit's PARENT and predicts the files the change must touch. Ground truth is the commit's own file list, minus CHANGELOG.md, website/ docs, and generated fixtures/ledgers.",
+  "tasks": [
+    {
+      "id": "T1",
+      "commit": "d11c8cf",
+      "parent": "1f9d940",
+      "area": "packages/maestro + daemon adapter",
+      "prompt": "Maestro YAML flows can express a standalone `- clearState` or `- clearState: <appId>` command, which clears an app's state WITHOUT relaunching it (unlike `launchApp` with `clearState: true`, which clears then opens). agent-device currently rejects it with `Maestro command \"clearState\" is not supported`. Add support: accept both forms in the flow parser, carry the command through the intermediate representation, and project it onto the daemon's `settings clear-app-state` operation. Conformance corpus and support-matrix bookkeeping count as part of the change.",
+      "ground_truth": [
+        "packages/maestro/src/internal/__tests__/program-ir-parser.test.ts",
+        "packages/maestro/src/internal/__tests__/runtime-port-fixtures.ts",
+        "packages/maestro/src/internal/__tests__/runtime-port.test.ts",
+        "packages/maestro/src/internal/conformance-normalize.ts",
+        "packages/maestro/src/internal/program-ir-command-parser.ts",
+        "packages/maestro/src/internal/program-ir.ts",
+        "packages/maestro/src/internal/runtime-port-commands.ts",
+        "packages/maestro/src/internal/runtime-port-types.ts",
+        "packages/maestro/src/internal/support-matrix.ts",
+        "scripts/fuzz/validation-arbitraries-maestro.ts",
+        "scripts/maestro-conformance/build-manifest.mjs",
+        "scripts/maestro-conformance/corpus/manifest.json",
+        "src/daemon/adapters/maestro/__tests__/daemon-runtime-port.test.ts",
+        "src/daemon/adapters/maestro/__tests__/daemon-runtime-public-operation.test.ts",
+        "src/daemon/adapters/maestro/daemon-runtime-port.ts",
+        "src/daemon/adapters/maestro/daemon-runtime-public-operation.ts"
+      ],
+      "added_files": ["scripts/maestro-conformance/corpus/authored/clear-state.yaml"],
+      "excluded": ["scripts/maestro-conformance/fixtures/layer1-parser.json"]
+    },
+    {
+      "id": "T2",
+      "commit": "f30328d",
+      "parent": "e0f8c55",
+      "area": "platform-android + kernel + daemon views",
+      "prompt": "On Android, `get attrs --level digest` drops the editable-field observation metadata (`editable`, `password`, `hintShowing`, `selectionStart`, `selectionEnd`) that the full level keeps, so those facts vanish on the token-cheap route. Separately, the snapshot helper emits selection offsets only for nodes reported as editable, but read-only selectable text also exposes a selection. Fix both: keep the field facts on the digest route, and emit each nonnegative selection offset independently of editability (-1 stays absent).",
+      "ground_truth": [
+        "android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/AccessibilityTreeXml.java",
+        "packages/kernel/src/snapshot.ts",
+        "packages/platform-android/src/ui-hierarchy-builder.ts",
+        "packages/platform-android/src/ui-hierarchy-node.ts",
+        "packages/platform-android/src/ui-hierarchy.ts",
+        "src/daemon/__tests__/response-views.test.ts",
+        "src/daemon/response-views.ts"
+      ],
+      "added_files": [
+        "packages/platform-android/src/__tests__/ui-hierarchy-field-metadata.test.ts"
+      ],
+      "excluded": []
+    },
+    {
+      "id": "T3",
+      "commit": "64b7cc4",
+      "parent": "7bcbf13",
+      "area": "platform-android input actions + provider scenarios",
+      "prompt": "The Android `orientation` command writes the `accelerometer_rotation` and `user_rotation` settings and returns immediately, while the display actually rotates some time later. On a loaded emulator that takes seconds and accessibility reads hang meanwhile, so a `wait` issued right after `orientation` times out. Make the command poll `dumpsys display` for `mCurrentOrientation` until it matches the requested rotation before returning, each probe bounded by what is left of the settle budget. A display that never reaches the rotation fails the command with the observed rotation; a display that reports no rotation at all is left to the setting as before.",
+      "ground_truth": [
+        "packages/platform-android/src/__tests__/input-actions.test.ts",
+        "packages/platform-android/src/__tests__/test-utils/fake-adb.ts",
+        "packages/platform-android/src/input-actions.ts",
+        "test/integration/provider-scenarios/android-ime-lifecycle-world.ts",
+        "test/integration/provider-scenarios/android-world.ts"
+      ],
+      "added_files": [],
+      "excluded": []
+    },
+    {
+      "id": "T4",
+      "commit": "367e795",
+      "parent": "a9283fa",
+      "area": "daemon HTTP server + tenant scope",
+      "prompt": "`GET /sessions/<session>/requests/<requestId>/diagnostics` applies the `<tenant>:` session-name prefix rule to every caller carrying a tenant. But that prefix is only written under tenant isolation, which the daemon forces exactly when the auth hook ATTESTS the tenant. A client whose tenant is only DECLARED (the `x-agent-device-tenant` header on a daemon with no auth hook) therefore runs in a plain session such as `default` or `cwd:<hash>:default`, and is then refused 401 when reading the diagnostics record its own failed command wrote — directly and through `agent-device proxy`. Fix the addressability rule so the prefix rule applies only where the caller's session namespace is actually partitioned, and keep the attested case unchanged (an attested tenant is still refused any session outside its own prefix, with the same typed UNAUTHORIZED error).",
+      "ground_truth": [
+        "src/daemon/__tests__/http-server-tenant-trust.test.ts",
+        "src/daemon/__tests__/request-diagnostics-http.test.ts",
+        "src/daemon/request-diagnostics-http.ts",
+        "src/daemon/server/http-server.ts",
+        "src/daemon/server/tenant-trust.ts",
+        "src/daemon/session-tenant-scope.ts",
+        "test/wire-compat/surface.ts"
+      ],
+      "added_files": [
+        "test/integration/provider-scenarios/remote-proxy-request-diagnostics.test.ts"
+      ],
+      "excluded": ["test/wire-compat/ledger.json"]
+    },
+    {
+      "id": "T5",
+      "commit": "a78b6bb",
+      "parent": "ff59309",
+      "area": "commands/interaction wait runtime",
+      "prompt": "A `wait` timeout reports only `reason`, `readableCaptures`, and `waitedMs`, so a failure cannot say where its budget went — a 10s budget spent on one slow poll reports the same `wait_capture_stalled` as a dead runner. Add a per-poll timeline to the timeout failure details: alongside the unchanged reason and request-log link, carry `captures` and `polls[]`, one entry per poll with a start offset on the wait's own clock, a duration, and a typed outcome (readable, unreadable, deadline, runner-restart). Keep the response compact on long waits by retaining only the first five and last twenty-five polls. The replayed-selector landmark-mismatch refusal should carry the same evidence.",
+      "ground_truth": [
+        "src/commands/interaction/runtime/wait-polling.test.ts",
+        "src/commands/interaction/runtime/wait-polling.ts",
+        "src/commands/interaction/runtime/wait-selector.test.ts",
+        "src/commands/interaction/runtime/wait-selector.ts"
+      ],
+      "added_files": [],
+      "excluded": []
+    },
+    {
+      "id": "T6",
+      "commit": "835af32",
+      "parent": "6768a04",
+      "area": "platform-apple snapshot target",
+      "prompt": "Every eligible iOS Simulator capture resolves its AX-bridge target first, and a cache miss spawns `simctl launchctl list` through xcrun with a 3s timeout on the capture's own critical path. On a loaded host that spawn takes longer than 3s, the timeout is not remembered, and the next capture pays it again — a `wait` issued right after `open` loses its whole budget that way. Make discovery single-flight and detached from the capture that starts it: a capture waits a bounded 1.5s for it, then takes the XCTest fallback while the probe keeps running under its own longer budget, and later captures join the in-flight probe or reuse its result. One deadline covers the whole discovery, not each subprocess, and the resolver's error names its reason so the route diagnostic says why the fallback ran.",
+      "ground_truth": [
+        "packages/platform-apple/src/snapshot-route.test.ts",
+        "packages/platform-apple/src/snapshot-target.test.ts",
+        "packages/platform-apple/src/snapshot-target.ts"
+      ],
+      "added_files": [],
+      "excluded": []
+    }
+  ]
+}
