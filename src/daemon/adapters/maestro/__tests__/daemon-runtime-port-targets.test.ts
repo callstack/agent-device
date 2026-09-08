@@ -1,6 +1,8 @@
 import { expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { PNG } from '@agent-device/capture-kit/png';
+import { executeMaestroFlow, inspectMaestroFlow } from '@agent-device/maestro';
+import { noMaestroIncludeSources } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon-request.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
@@ -401,3 +403,78 @@ function solidPng(value: number): Buffer {
   image.data.fill(value);
   return PNG.sync.write(image);
 }
+
+test('the differential settle flow excludes a slow launch boundary from tap metrics', async () => {
+  const flowPath = 'packages/maestro/test/conformance/differential/flows/settle-after-tap.yaml';
+  const source = await fs.readFile(flowPath, 'utf8');
+  const clock = { value: 0 };
+  let captures = 0;
+  let clicked = false;
+  const screenshot = PNG.sync.write(new PNG({ width: 1, height: 1 }));
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    platform: 'ios',
+    dependencies: makeDependencies(clock),
+    invoke: async (request) => {
+      if (request.command === 'click') clicked = true;
+      if (request.command === 'screenshot') {
+        await fs.writeFile(request.positionals[0]!, screenshot);
+      }
+      if (request.command !== 'snapshot') return { ok: true, data: {} };
+      captures += 1;
+      clock.value += 2_100;
+      return {
+        ok: true,
+        data: {
+          createdAt: captures,
+          nodes: [
+            { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
+            {
+              index: 1,
+              parentIndex: 0,
+              type: 'Text',
+              label: 'Agent Device Tester',
+              rect: { x: 0, y: 0, width: 300, height: 30 },
+            },
+            {
+              index: 2,
+              parentIndex: 0,
+              type: 'Button',
+              label: 'Settings',
+              rect: { x: 20, y: 40, width: 120, height: 44 },
+            },
+            {
+              index: 3,
+              parentIndex: 0,
+              type: 'Text',
+              value: clicked ? 'ready' : `launch frame ${captures}`,
+            },
+            ...(clicked
+              ? [
+                  {
+                    index: 4,
+                    parentIndex: 0,
+                    type: 'Button',
+                    identifier: 'open-inert-surface',
+                    rect: { x: 20, y: 100, width: 120, height: 44 },
+                  },
+                ]
+              : []),
+          ],
+        },
+      };
+    },
+  });
+  let tapMetrics: unknown;
+  const result = await executeMaestroFlow(inspectMaestroFlow(source, flowPath), port, {
+    readSource: noMaestroIncludeSources,
+    observer: {
+      actionCompleted: (event) => {
+        if (event.action === 'tapOn') tapMetrics = event.runtimeMetrics;
+      },
+    },
+  });
+  expect(result, JSON.stringify(result)).toMatchObject({ ok: true });
+  expect(clicked).toBe(true);
+  expect(tapMetrics).toMatchObject({ hierarchyCaptures: 2, settleLatches: 1, settleTimeouts: 0 });
+});

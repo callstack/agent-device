@@ -7,6 +7,8 @@ appId: com.callstack.agentdevicelab
 - launchApp:
     clearState: true
 - assertVisible: Agent Device Tester
+# Discharge launch stabilization before measuring the inline post-tap settle.
+- waitForAnimationToEnd
 - tapOn:
     text: Settings
     retryTapIfNoChange: true
