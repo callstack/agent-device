@@ -1087,6 +1087,9 @@ extension RunnerTests {
     plan: RunnerGesturePlan
   ) -> RunnerInteractionOutcome {
 #if os(iOS)
+    if plan.intent == "pan", plan.topology == "single", plan.executionProfile == "timed-pan" {
+      return issue84PublicXCTestDrag(app: app, plan: plan)
+    }
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     // The portable planner and validation use this exact viewport. Using app.frame here can
     // diverge when XCTest unions transformed/off-screen descendants into the application frame.
