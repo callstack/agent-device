@@ -567,7 +567,7 @@
     "src/daemon/replay/internal/native-command.ts:complexity",
     "packages/platform-apple/src/core/debug-symbols/utils.ts:high impact",
     "packages/platform-linux/src/snapshot.ts:high impact",
-    "src/core/interaction-targeting.ts:high impact",
+    "packages/selectors/src/interaction-targeting.ts:high impact",
     "packages/maestro/src/internal/runtime-targets.ts:high impact",
     "packages/kernel/src/source-value.ts:high impact",
     "src/request/cancel.ts:high impact",

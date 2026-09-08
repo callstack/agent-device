@@ -19,25 +19,31 @@ import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
  *
  * The structural stages of selector resolution — occlusion, off-screen,
  * hittable-ancestor promotion, the poll budget — are declared per caller in
- * `src/core/selector-pipeline-policy.ts` and executed by
- * `src/core/selector-pipeline.ts`. That only means something while the owner is
- * the ONLY way in: a route that reaches the matching engine itself still gets a
- * row's ambiguity contract while silently skipping every structural stage,
- * which is how a declared cell turns back into an unverifiable claim (the
- * failure #1649 caught in the first matrix and #1656's review caught in the
- * second).
+ * `packages/selectors/src/selector-pipeline-policy.ts` and executed by
+ * `packages/selectors/src/selector-pipeline.ts`. That only means something
+ * while the owner is the ONLY way in: a route that reaches the matching engine
+ * itself still gets a row's ambiguity contract while silently skipping every
+ * structural stage, which is how a declared cell turns back into an
+ * unverifiable claim (the failure #1649 caught in the first matrix and
+ * #1656's review caught in the second).
  *
  * The engine therefore lives behind its own package subpath, and this rule
  * admits one importer. Enforcing on the SPECIFIER, over the resolved import
  * graph, is what makes the boundary hold in every import form: a namespace
  * import, a re-export, and a deferred `import()` are all the same edge, and
- * none of them mentions the symbol a name-shaped check would look for.
+ * none of them mentions the symbol a name-shaped check would look for. Since
+ * the owner now lives in the same package as the engine, a relative import of
+ * the engine file is a second door — so the resolved TARGET is admitted as an
+ * equivalent edge, closing that in-package route.
  */
 
 export const SELECTOR_ENGINE_SPECIFIER = '@agent-device/selectors/engine';
 
+/** The engine file: the target every admitted route must resolve to. */
+export const SELECTOR_ENGINE_FILE = 'packages/selectors/src/engine.ts';
+
 /** The pipeline owner: the one module that may hold the engine. */
-export const SELECTOR_ENGINE_OWNER = 'src/core/selector-pipeline.ts';
+export const SELECTOR_ENGINE_OWNER = 'packages/selectors/src/selector-pipeline.ts';
 
 /**
  * `resolveImportEdges` DROPS an edge whose specifier resolves to nothing, so a
@@ -65,7 +71,9 @@ export function selectorPipelineOwnershipViolations(
   }
   return edges
     .filter(
-      (edge) => edge.spec === SELECTOR_ENGINE_SPECIFIER && edge.file !== SELECTOR_ENGINE_OWNER,
+      (edge) =>
+        edge.file !== SELECTOR_ENGINE_OWNER &&
+        (edge.spec === SELECTOR_ENGINE_SPECIFIER || edge.target === SELECTOR_ENGINE_FILE),
     )
     .map((edge) => ({
       rule: 'R19 selector-pipeline-ownership',

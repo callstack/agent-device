@@ -617,23 +617,41 @@ test('the real tree parses, declares, and passes R11', () => {
   );
   const selectorsPackage = packages.find((pkg) => pkg.name === '@agent-device/selectors');
   assert.ok(selectorsPackage, 'selectors package must exist');
-  // Four subpaths, and each split is the point: `.` is the string-only façade
+  // Subpaths, and each split is the point: `.` is the string-only façade
   // every in-repo consumer uses, `./ast` is the published parser surface that
   // `agent-device/selectors` has shipped since before the engine moved into
   // this package, `./engine` is the resolve/list surface reserved for the
   // selector-pipeline owner (R19, #1656) — a route reaching it skips the
   // structural stages its policy row declares — and
   // `./parameterized-recorded-fill` is the recorded-fill parameterization the
-  // daemon used to own (#2340). A fifth subpath, or the AST leaking into `.`,
-  // fails here.
+  // daemon used to own (#2340). The per-file subpaths under `./interaction-*`,
+  // `./selector-pipeline*`, `./press-retarget`, `./touch-semantics` are the
+  // execution surface the core selector pipeline moved into this package —
+  // one subpath per module so consumers pull only the stage they run; the
+  // `-fixtures` entry is the test-fixture surface (host-kit's
+  // `./audio-probe-fixtures` precedent). Any other subpath, or the AST
+  // leaking into `.`, fails here.
   assert.deepEqual([...selectorsPackage.exportTargets.keys()].sort(), [
     '@agent-device/selectors',
+    '@agent-device/selectors/absence-observation',
+    '@agent-device/selectors/absence-observation-errors',
+    '@agent-device/selectors/absence-observation-resolution',
     '@agent-device/selectors/ast',
     '@agent-device/selectors/engine',
+    '@agent-device/selectors/interaction-error',
+    '@agent-device/selectors/interaction-positionals',
+    '@agent-device/selectors/interaction-targeting',
+    '@agent-device/selectors/interaction-targeting-fixtures',
+    '@agent-device/selectors/interaction-touch-point',
     '@agent-device/selectors/parameterized-recorded-fill',
+    '@agent-device/selectors/press-retarget',
+    '@agent-device/selectors/selector-pipeline',
+    '@agent-device/selectors/selector-pipeline-policy',
+    '@agent-device/selectors/touch-semantics',
   ]);
   assert.deepEqual([...selectorsPackage.workspaceDependencies].sort(), [
     '@agent-device/ad-script',
+    '@agent-device/capture-kit',
     '@agent-device/contracts',
     '@agent-device/kernel',
   ]);
