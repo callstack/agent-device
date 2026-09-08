@@ -110,6 +110,39 @@ test('R74 rejects an expanded destructured dynamic import on a classified edge',
   );
 });
 
+test('R74 rejects a rest binding next to a recorded dynamic-import binding', () => {
+  const sources = {
+    'src/platform-runtime-operation-host.ts':
+      'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n' +
+      'export async function sweepLegacyAppLogMarkers() { return {}; }\n',
+    'src/daemon/server/daemon-runtime.ts':
+      "const { recoverLegacyAppLogMarkersAfterDaemonLock, ...operationHost } = await import('../../platform-runtime-operation-host.ts');\n" +
+      'void [recoverLegacyAppLogMarkersAfterDaemonLock, operationHost];\n',
+  };
+  const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
+  assert.match(found[0]!.message, /unnameable dynamic-import binding/);
+  assert.match(
+    found[0]!.message,
+    /src\/daemon\/server\/daemon-runtime\.ts -> src\/platform-runtime-operation-host\.ts/,
+  );
+});
+
+test('R74 rejects a computed destructure key on a classified dynamic import', () => {
+  const sources = {
+    'src/platform-runtime-operation-host.ts':
+      'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n',
+    'src/daemon/server/daemon-runtime.ts':
+      "const markerName = 'recoverLegacyAppLogMarkersAfterDaemonLock';\n" +
+      'const { [markerName]: recover } = await import("../../platform-runtime-operation-host.ts");\n' +
+      'void recover;\n',
+  };
+  const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
+  assert.equal(found.length, 1);
+  assert.match(found[0]!.message, /unnameable dynamic-import binding/);
+});
+
 test('R74 rejects a namespace-form dynamic import that hides the recorded bindings', () => {
   const sources = {
     'src/platform-runtime-operation-host.ts':

@@ -22,7 +22,9 @@ export type DaemonPlatformRuntimeEdge = Readonly<{
   /**
    * Exact named symbols across every edge of the pair; empty for side-effect imports and dynamic
    * imports that do not destructure named bindings (a destructured dynamic import records its
-   * bindings, so widening the destructure is a drift, not a silent expansion).
+   * bindings, so widening the destructure is a drift, not a silent expansion). A rest or computed
+   * destructure binding cannot be recorded here: it exposes exports beyond this list and R74
+   * rejects the edge.
    */
   symbols: readonly string[];
   classification: DaemonPlatformRuntimeClassification;
@@ -202,8 +204,10 @@ function sorted(symbols: readonly string[]): string[] {
 
 /**
  * Catches: unclassified daemon-to-root platform-runtime coupling regrowing — a new edge (or a
- *   new symbol on an existing edge) that the #2278 audit never classified, and the mirror
- *   failure, a classified edge that no longer exists and would silently admit its return.
+ *   new symbol on an existing edge) that the #2278 audit never classified, the mirror failure, a
+ *   classified edge that no longer exists and would silently admit its return, and a
+ *   dynamic-import destructure holding a rest or computed binding, which exposes every export
+ *   the inventory cannot name.
  * Evidence: #2278 measured 14 production edges in 9 daemon files at origin/main 6e22e266d7;
  *   this table is that measurement, classified per ADR 0022.
  * Cost: attributed to the R74 rule registration in check.ts; not a standalone CI job.
@@ -214,14 +218,19 @@ function sorted(symbols: readonly string[]): string[] {
 export function checkDaemonPlatformRuntimeInventory(
   edges: readonly ResolvedImportEdge[],
 ): LayeringViolation[] {
-  const actual = new Map<string, { line: number; symbols: Set<string> }>();
+  const actual = new Map<string, { line: number; symbols: Set<string>; residue: boolean }>();
   for (const edge of edges) {
     if (!edge.file.startsWith('src/daemon/')) continue;
     if (!isProductionSourceFile(edge.file)) continue;
     if (!isRootPlatformRuntimeTarget(edge.target)) continue;
     const key = keyOf(edge.file, edge.target);
-    const entry = actual.get(key) ?? { line: edge.line, symbols: new Set<string>() };
+    const entry = actual.get(key) ?? {
+      line: edge.line,
+      symbols: new Set<string>(),
+      residue: false,
+    };
     for (const symbol of edge.symbols) entry.symbols.add(symbol);
+    entry.residue = entry.residue || edge.bindingResidue;
     actual.set(key, entry);
   }
 
@@ -245,6 +254,18 @@ export function checkDaemonPlatformRuntimeInventory(
       continue;
     }
     seen.add(key);
+    if (entry.residue) {
+      violations.push({
+        rule: DAEMON_PLATFORM_RUNTIME_RULE,
+        file: key.split(' -> ')[0]!,
+        line: entry.line,
+        message:
+          `unnameable dynamic-import binding for ${key}: a rest or computed destructure exposes ` +
+          `bindings the inventory cannot name. Destructure every binding explicitly and record it ` +
+          `in DAEMON_PLATFORM_RUNTIME_EDGES (${DAEMON_PLATFORM_RUNTIME_RULE}), or remove the coupling.`,
+      });
+      continue;
+    }
     const expected = sorted(declaration.symbols);
     const measured = sorted([...entry.symbols]);
     if (expected.join('\u0000') !== measured.join('\u0000')) {

@@ -66,15 +66,24 @@ function unwrapImportInit(node: unknown): Record<string, unknown> | null {
   return null;
 }
 
+export type DestructuredDynamicImport = Readonly<{
+  /** Export names captured from static (non-computed) property keys. */
+  symbols: readonly string[];
+  /** True when the pattern also holds a rest element or a computed key: the import surface is wider than `symbols`. */
+  residue: boolean;
+}>;
+
 /**
- * Named bindings captured by destructuring a dynamic import
+ * Bindings captured by destructuring a dynamic import
  * (`const { a, b: local } = await import('...')` captures `a` and `b`), keyed by the import
- * expression's source offset. Namespace-form and bare dynamic imports capture nothing.
+ * expression's source offset. A rest element or a computed key is a binding the scanner cannot
+ * name and is reported as residue, never dropped: it exposes exports beyond `symbols`.
+ * Namespace-form and bare dynamic imports capture nothing.
  */
 export function destructuredDynamicImportBindings(
   program: unknown,
-): ReadonlyMap<number, readonly string[]> {
-  const bindings = new Map<number, readonly string[]>();
+): ReadonlyMap<number, DestructuredDynamicImport> {
+  const captures = new Map<number, DestructuredDynamicImport>();
   const visit = (node: unknown): void => {
     if (node === null || typeof node !== 'object') return;
     if (Array.isArray(node)) {
@@ -92,26 +101,32 @@ export function destructuredDynamicImportBindings(
         typeof id === 'object' &&
         (id as Record<string, unknown>).type === 'ObjectPattern'
       ) {
-        const names: string[] = [];
+        const symbols: string[] = [];
+        let residue = false;
         const properties = (id as Record<string, unknown>).properties;
-        if (Array.isArray(properties)) {
+        if (!Array.isArray(properties)) {
+          residue = true;
+        } else {
           for (const property of properties) {
             if (
-              property !== null &&
-              typeof property === 'object' &&
-              (property as Record<string, unknown>).type === 'Property' &&
-              (property as Record<string, unknown>).computed !== true
+              property === null ||
+              typeof property !== 'object' ||
+              (property as Record<string, unknown>).type !== 'Property' ||
+              (property as Record<string, unknown>).computed === true
             ) {
-              const name = propertyName((property as Record<string, unknown>).key);
-              if (name) names.push(name);
+              residue = true;
+              continue;
             }
+            const name = propertyName((property as Record<string, unknown>).key);
+            if (name) symbols.push(name);
+            else residue = true;
           }
         }
-        bindings.set(init.start, names);
+        captures.set(init.start, { symbols, residue });
       }
     }
     for (const child of Object.values(record)) visit(child);
   };
   visit(program);
-  return bindings;
+  return captures;
 }

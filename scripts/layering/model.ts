@@ -13,6 +13,11 @@ export type ImportEdge = {
    * dynamic imports that do not destructure named bindings.
    */
   symbols: readonly string[];
+  /**
+   * True when a dynamic-import destructure holds a binding the scanner cannot name (a rest element
+   * or a computed key); `symbols` then does not enumerate the full imported surface.
+   */
+  bindingResidue: boolean;
 };
 
 export type ResolvedImportEdge = ImportEdge & {
@@ -160,12 +165,14 @@ function scanDynamicImports(source: string): ImportEdge[] {
     const spec = literalSpecifier(node.source);
     if (spec === undefined) return;
     const start = node.start as number | undefined;
+    const capture = typeof start === 'number' ? destructured.get(start) : undefined;
     edges.push({
       spec,
       dynamic: true,
       typeOnly: false,
       line: sourceLine(source, start),
-      symbols: typeof start === 'number' ? [...(destructured.get(start) ?? [])] : [],
+      symbols: capture ? [...capture.symbols] : [],
+      bindingResidue: capture?.residue ?? false,
     });
   });
   return edges;
@@ -174,7 +181,14 @@ function scanDynamicImports(source: string): ImportEdge[] {
 function scanSideEffectImport(line: string, lineNo: number): ImportEdge | null {
   const match = /^\s*import\s+['"]([^'"]+)['"]/.exec(line);
   return match
-    ? { spec: match[1]!, dynamic: false, typeOnly: false, line: lineNo, symbols: [] }
+    ? {
+        spec: match[1]!,
+        dynamic: false,
+        typeOnly: false,
+        line: lineNo,
+        symbols: [],
+        bindingResidue: false,
+      }
     : null;
 }
 
@@ -238,6 +252,7 @@ function scanFromImport(lines: string[], index: number): ImportEdge | null {
     typeOnly: statementIsTypeOnly(normalizedStatement),
     line: start + 1,
     symbols: importedSymbols(normalizedStatement),
+    bindingResidue: false,
   };
 }
 

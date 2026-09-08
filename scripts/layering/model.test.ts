@@ -56,7 +56,14 @@ test('parseImports detects multiline dynamic imports', () => {
   const edges = parseImports(['void import(', "  '../multiline.ts'", ');'].join('\n'));
 
   assert.deepEqual(edges, [
-    { spec: '../multiline.ts', dynamic: true, typeOnly: false, line: 1, symbols: [] },
+    {
+      spec: '../multiline.ts',
+      dynamic: true,
+      typeOnly: false,
+      line: 1,
+      symbols: [],
+      bindingResidue: false,
+    },
   ]);
 });
 
@@ -64,7 +71,14 @@ test('parseImports resolves constant-template dynamic imports', () => {
   const edges = parseImports('void import(`../template.ts`);');
 
   assert.deepEqual(edges, [
-    { spec: '../template.ts', dynamic: true, typeOnly: false, line: 1, symbols: [] },
+    {
+      spec: '../template.ts',
+      dynamic: true,
+      typeOnly: false,
+      line: 1,
+      symbols: [],
+      bindingResidue: false,
+    },
   ]);
 });
 
@@ -74,15 +88,19 @@ test('parseImports captures destructured named bindings of dynamic imports, keye
       "const { a, 'b': c } = await import('./dyn.ts');",
       "const mod = await import('./dyn.ts');",
       "const wrapped = (await import('./dyn.ts')) as Mod;",
+      'const { a, ...rest } = await import("./dyn.ts");',
+      'const { [keyExpr]: named } = await import("./dyn.ts");',
     ].join('\n'),
   );
 
   assert.deepEqual(
-    edges.map(({ spec, symbols }) => ({ spec, symbols })),
+    edges.map(({ spec, symbols, bindingResidue }) => ({ spec, symbols, bindingResidue })),
     [
-      { spec: './dyn.ts', symbols: ['a', 'b'] },
-      { spec: './dyn.ts', symbols: [] },
-      { spec: './dyn.ts', symbols: [] },
+      { spec: './dyn.ts', symbols: ['a', 'b'], bindingResidue: false },
+      { spec: './dyn.ts', symbols: [], bindingResidue: false },
+      { spec: './dyn.ts', symbols: [], bindingResidue: false },
+      { spec: './dyn.ts', symbols: ['a'], bindingResidue: true },
+      { spec: './dyn.ts', symbols: [], bindingResidue: true },
     ],
   );
 });

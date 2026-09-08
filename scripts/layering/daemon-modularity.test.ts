@@ -20,6 +20,7 @@ function importEdge(file: string, target: string): ResolvedImportEdge {
     dynamic: false,
     typeOnly: true,
     symbols: [],
+    bindingResidue: false,
     fromZone: targetDagZone(file),
     toZone: targetDagZone(target),
   };
